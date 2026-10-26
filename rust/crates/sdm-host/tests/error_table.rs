@@ -19,7 +19,7 @@ use sdm_contract::run::{FetchOutcome, FetchReply, ReplyId, StartRun};
 use sdm_contract::test_ops::{TestFetch, TestOperation};
 use sdm_contract::{
     CONTRACT_VERSION, Code, ControlMessage, CoreError, Detail, ErrorCode, ErrorKind, HostFacts,
-    Scalar, Sentence, Unit,
+    Scalar, Sentence, TimestampUnit,
 };
 use sdm_core::{Attachment, Run};
 use sdm_host::{Attachments, HostRun, Outgoing, ZoneResolver, encode, read};
@@ -29,7 +29,7 @@ fn start_message(operation: TestOperation) -> Vec<u8> {
         contract: CONTRACT_VERSION,
         facts: HostFacts {
             now: Scalar::Timestamp {
-                unit: Unit::Us,
+                unit: TimestampUnit::Us,
                 zone: Some("UTC".into()),
                 value: 0,
             },

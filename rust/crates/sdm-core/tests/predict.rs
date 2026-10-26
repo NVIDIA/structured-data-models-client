@@ -35,7 +35,7 @@ use sdm_contract::ops::{
 use sdm_contract::run::{Endpoint, StartRun};
 use sdm_contract::{
     CONTRACT_VERSION, CoreError, Detail, ErrorCode, ErrorKind, HostFacts, Scalar, Sentence, Step,
-    Unit,
+    TimestampUnit,
 };
 use sdm_core::{
     Attachment, Attachments, CompositionRoot, ModelResult, Run, UnknownZone, Zones, start,
@@ -55,7 +55,7 @@ const CANARY: &str = "CANARY-pr3d";
 fn facts() -> HostFacts {
     HostFacts {
         now: Scalar::Timestamp {
-            unit: Unit::Us,
+            unit: TimestampUnit::Us,
             zone: Some("UTC".into()),
             value: 0,
         },

@@ -177,16 +177,19 @@ The user accepted the bounded-first-package audit plan on 2026-10-25.
 T4.2 remains one canonical package, with these explicit implementation substeps:
 
 1. First constructor consumer: Native-endian NumPy-backed signed/unsigned integer, Float32/Float64 and Boolean DataFrame columns, including numeric NaN, empty/all-null numeric columns, with ordinary built-in table/override/relationship arguments.
-   Working contract 31 supplies a run-local manifest and fixed Table/Schema describe stages; core inference, key/link assembly and notices consume the detached values.
+   Working contract 32 supplies a run-local manifest and fixed Table/Schema describe stages; core inference, key/link assembly and notices consume the detached values.
    Each Table call returns an owned Arrow stream for fresh binding in the final Schema call; public tables retain original DataFrame references and metadata retains no attachment ids.
    Native override-map order and scalar/sequence key form are carried separately from SourceSpec's value maps.
    The frame result and held-schema facts preserve key form; explicit frame relationships use one ordered typed slot list validated after overrides, including malformed built-in values at their consumed position.
 2. Native-family completion: text/date, object, Decimal, pandas nullable/other extension arrays and custom argument/hooks need their own conversion and stage facts before they join the development seam.
    The next bounded constructor substep admits the complete built-in pandas masked `Int8/16/32/64`, `UInt8/16/32/64`, `Float32/64` and Boolean family through the same Table/Schema consumer.
    Frozen public paired inputs prove Arrow validity already distinguishes masked-null and present-NaN values; a fixed core frame equality mode preserves present NaNs, equal NaN payloads and equal signed zeros, without native-origin metadata or a wire amendment.
-   The next temporal constructor substep admits native datetime64/DatetimeTZ at us/ns resolution through the same owned Table/Schema stages and shared whole-frame Rust time-choice rules.
+   The temporal constructor substeps admit native datetime64/DatetimeTZ at s/ms/us/ns resolution through the same owned Table/Schema stages and shared whole-frame Rust time-choice rules.
    Original units, timezone presentation, NaT validity and complete submicrosecond/negative counts stay intact; timestamp-shaped names cannot nominate an unsupported timestamp key.
-   Native s/ms remain on the old default route: the existing source admission's coarse-unit overflow promotion can collapse distinct native constructor values, so their full lossless frame representation is a separate concrete obligation.
+   Native frame admission preserves original timestamp units, raw i64 counts, zones and validity through the shared declared-schema, wrapper, capacity and detachment checks, avoiding the provider-only DT14 overflow promotion.
+   Contract32 gives timestamps a dedicated s/ms/us/ns unit domain while Duration and Time64 retain us/ns.
+   Source SQL admission and its historical coverage cells retain DT14 unchanged; all default routes remain old.
+   Java only receives compatible explicit timestamp-unit rendering for representable existing scalar paths; no Java frame API or extra-wide Java.time value domain is added.
    Other extension arrays, text/date-like text, object, Decimal and custom hooks remain explicit open families.
    These remaining native families stay outside the development seam by type, with no content-based date detector, host semantic fallback, new SDK refusal policy or compatibility exception.
 3. Complete frame/index/mutation/edit behavior and the real large-offset admission cases listed below before claiming T4.2 complete or switching defaults.

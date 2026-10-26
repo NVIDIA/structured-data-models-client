@@ -11,7 +11,7 @@ use std::time::Duration;
 use sdm_contract::data::DataRequest;
 use sdm_contract::ops::{OperationResult, ProfileName, ProfileSpec, QuerySchema};
 use sdm_contract::test_ops::{PanicAt, TestFetch, TestOperation, TestResult};
-use sdm_contract::{CoreError, CoreWarning, Detail, HostFacts, Scalar, Sentence, Unit};
+use sdm_contract::{CoreError, CoreWarning, Detail, HostFacts, Scalar, Sentence, TimestampUnit};
 use sdm_engine::time::Zones;
 
 use crate::attached::take_json;
@@ -192,12 +192,22 @@ pub(crate) fn run(
         TestOperation::Zone { zone, at } => Run::new(move |_| async move {
             let instant = match at {
                 Scalar::Timestamp {
-                    unit: Unit::Us,
+                    unit: TimestampUnit::S,
+                    value,
+                    ..
+                } => jiff::Timestamp::from_second(value),
+                Scalar::Timestamp {
+                    unit: TimestampUnit::Ms,
+                    value,
+                    ..
+                } => jiff::Timestamp::from_millisecond(value),
+                Scalar::Timestamp {
+                    unit: TimestampUnit::Us,
                     value,
                     ..
                 } => jiff::Timestamp::from_microsecond(value),
                 Scalar::Timestamp {
-                    unit: Unit::Ns,
+                    unit: TimestampUnit::Ns,
                     value,
                     ..
                 } => jiff::Timestamp::from_nanosecond(i128::from(value)),

@@ -18,7 +18,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use arrow_buffer::i256;
-use sdm_contract::{Scalar, Unit};
+use sdm_contract::{Scalar, TimestampUnit, Unit};
 use serde_json::{Map, Value, json};
 
 fn edges() -> Vec<(&'static str, Scalar)> {
@@ -90,7 +90,7 @@ fn edges() -> Vec<(&'static str, Scalar)> {
         (
             "ts_i64_min",
             Scalar::Timestamp {
-                unit: Unit::Ns,
+                unit: TimestampUnit::Ns,
                 zone: None,
                 value: i64::MIN,
             },
@@ -98,7 +98,7 @@ fn edges() -> Vec<(&'static str, Scalar)> {
         (
             "ts_i64_max",
             Scalar::Timestamp {
-                unit: Unit::Us,
+                unit: TimestampUnit::Us,
                 zone: Some("America/New_York".into()),
                 value: i64::MAX,
             },
@@ -220,7 +220,7 @@ fn malformed_and_overflowing_values_are_refused() {
         r#"{"t":"d256","p":77,"s":0,"v":"1"}"#,
         r#"{"t":"d256","p":3,"s":0,"v":"+12"}"#,
         r#"{"t":"binary","v":"not base64!"}"#,
-        r#"{"t":"ts","unit":"ms","zone":null,"v":"0"}"#,
+        r#"{"t":"ts","unit":"h","zone":null,"v":"0"}"#,
         r#"{"t":"ts","unit":"us","zone":"","v":"0"}"#,
         r#"{"t":"i64","v":"1","extra":true}"#,
         r#"{"t":"i128","v":"1"}"#,
@@ -268,7 +268,7 @@ fn the_widest_finite_floats_are_kept() {
 fn unencodable() -> Vec<Scalar> {
     vec![
         Scalar::Timestamp {
-            unit: Unit::Us,
+            unit: TimestampUnit::Us,
             zone: Some(String::new()),
             value: 0,
         },

@@ -32,7 +32,7 @@ use sdm_contract::ops::{
 use sdm_contract::run::StartRun;
 use sdm_contract::{
     CONTRACT_VERSION, ColumnType, CoreError, Detail, ErrorCode, HeldState, HostFacts, Scalar, Step,
-    Unit,
+    TimestampUnit,
 };
 use sdm_core::{
     ArrowData, Attachment, Attachments, CompositionRoot, FetchResult, Run, UnknownZone, Zones,
@@ -50,7 +50,7 @@ impl Zones for NoZones {
 fn facts() -> HostFacts {
     HostFacts {
         now: Scalar::Timestamp {
-            unit: Unit::Us,
+            unit: TimestampUnit::Us,
             zone: Some("UTC".into()),
             value: 0,
         },
@@ -88,7 +88,7 @@ fn column(
 /// `user_id`; each key unique, the foreign key not.
 fn shop() -> SourceDescription {
     let ts = ColumnType::Timestamp {
-        unit: Unit::Us,
+        unit: TimestampUnit::Us,
         zone: None,
     };
     SourceDescription {
@@ -214,7 +214,7 @@ fn materialize_start(
         query: AttachmentId(2),
         indices: Some(AttachmentId(3)),
         anchor_time: Some(Scalar::Timestamp {
-            unit: Unit::Ns,
+            unit: TimestampUnit::Ns,
             zone: None,
             value: ANCHOR,
         }),
@@ -1471,7 +1471,7 @@ fn a_date_a_zoned_timestamp_and_text_are_read_to_their_instants() {
         ),
         (
             ColumnType::Timestamp {
-                unit: Unit::Us,
+                unit: TimestampUnit::Us,
                 zone: Some("America/New_York".into()),
             },
             Dtype::Date,
@@ -2094,7 +2094,7 @@ fn a_failure_after_the_check_keeps_it() {
         unreachable!()
     };
     start.anchor_time = Some(Scalar::Timestamp {
-        unit: Unit::Ns,
+        unit: TimestampUnit::Ns,
         zone: None,
         value: 0,
     });
@@ -2228,7 +2228,7 @@ fn shop_born() -> SourceDescription {
     born.tables[1].columns.push(column(
         "born",
         ColumnType::Timestamp {
-            unit: Unit::Us,
+            unit: TimestampUnit::Us,
             zone: None,
         },
         Dtype::Date,

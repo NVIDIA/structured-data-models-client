@@ -19,7 +19,7 @@ use sdm_contract::ops::{ProfileName, ProfileSpec, QuerySchema};
 use sdm_contract::pql::{
     LogicalOp, MAX_JSON_DEPTH, NodeKind, PqlNode, ReadError, ValidatedQuery, read_validated_query,
 };
-use sdm_contract::{HostFacts, Scalar, Unit};
+use sdm_contract::{HostFacts, Scalar, TimestampUnit};
 use sdm_core::pql::{on_adapter_stack, resolve};
 use sdm_core::profiles::Profile;
 use serde_json::json;
@@ -36,7 +36,7 @@ impl sdm_core::Zones for NoZones {
 fn facts() -> HostFacts {
     HostFacts {
         now: Scalar::Timestamp {
-            unit: Unit::Us,
+            unit: TimestampUnit::Us,
             zone: Some("UTC".into()),
             value: 1_767_225_600_000_000,
         },

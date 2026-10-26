@@ -27,7 +27,7 @@ use sdm_contract::run::{
 };
 use sdm_contract::{
     CONTRACT_VERSION, ControlMessage, CoreError, CoreWarning, Detail, ErrorCode, ErrorKind,
-    HostFacts, Scalar, Sentence, Step, Unit,
+    HostFacts, Scalar, Sentence, Step, TimestampUnit,
 };
 use sdm_core::{ArrowData, Attachment, FetchResult, ModelResult, Reply, Run, RunState};
 use sdm_host::{
@@ -37,7 +37,7 @@ use sdm_host::{
 fn facts(zone_roots: Vec<ZoneRootFact>) -> HostFacts {
     HostFacts {
         now: Scalar::Timestamp {
-            unit: Unit::Us,
+            unit: TimestampUnit::Us,
             zone: Some("UTC".into()),
             value: 1_767_225_600_000_000,
         },

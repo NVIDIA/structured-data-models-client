@@ -18,7 +18,7 @@ use sdm_contract::ops::{
 };
 use sdm_contract::run::StartRun;
 use sdm_contract::{
-    CONTRACT_VERSION, CoreError, ErrorCode, ErrorKind, HostFacts, Scalar, Step, Unit,
+    CONTRACT_VERSION, CoreError, ErrorCode, ErrorKind, HostFacts, Scalar, Step, TimestampUnit,
 };
 use sdm_core::profiles::{Mode, Profile, QueryFeatures, check_capabilities, codes as model};
 use sdm_core::{
@@ -51,7 +51,7 @@ fn root() -> CompositionRoot {
 fn facts() -> HostFacts {
     HostFacts {
         now: Scalar::Timestamp {
-            unit: Unit::Us,
+            unit: TimestampUnit::Us,
             zone: Some("UTC".into()),
             value: 0,
         },
@@ -165,7 +165,7 @@ fn another_contract_version_is_refused_before_a_run_exists() {
 #[test]
 fn a_clock_that_is_not_a_timestamp_in_utc_is_refused() {
     let at = |zone: Option<&str>| Scalar::Timestamp {
-        unit: Unit::Us,
+        unit: TimestampUnit::Us,
         zone: zone.map(str::to_owned),
         value: 0,
     };

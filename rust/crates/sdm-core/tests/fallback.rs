@@ -25,7 +25,9 @@ use sdm_contract::data::{
     SeedBound, TableColumn, TableKey, TieBreak, TieTerm, Window,
 };
 use sdm_contract::ops::{OperationResult, QueryValidation};
-use sdm_contract::{ColumnType, CoreError, Detail, ErrorCode, ErrorKind, Scalar, Step, Unit};
+use sdm_contract::{
+    ColumnType, CoreError, Detail, ErrorCode, ErrorKind, Scalar, Step, TimestampUnit,
+};
 use sdm_core::{ArrowData, Asker, Attachment, CompositionRoot, FetchResult, Reply, Run};
 
 const US: i64 = 1_000_000;
@@ -281,7 +283,7 @@ fn key_set(batch: &RecordBatch) -> KeySet {
     columns.push(sdm_contract::data::field(
         "upper",
         ColumnType::Timestamp {
-            unit: Unit::Ns,
+            unit: TimestampUnit::Ns,
             zone: None,
         },
         true,

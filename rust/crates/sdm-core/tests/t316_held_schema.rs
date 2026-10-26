@@ -31,7 +31,9 @@ use sdm_contract::ops::{
     Materialize, Operation, OperationResult, SchemaEdit, SourceFacts, Stype,
 };
 use sdm_contract::run::StartRun;
-use sdm_contract::{CONTRACT_VERSION, ColumnType, CoreError, HostFacts, Scalar, Step, Unit};
+use sdm_contract::{
+    CONTRACT_VERSION, ColumnType, CoreError, HostFacts, Scalar, Step, TimestampUnit,
+};
 use sdm_core::{
     ArrowData, Attachment, Attachments, CompositionRoot, FetchResult, Run, UnknownZone, Zones,
     start,
@@ -48,7 +50,7 @@ impl Zones for NoZones {
 fn facts() -> HostFacts {
     HostFacts {
         now: Scalar::Timestamp {
-            unit: Unit::Us,
+            unit: TimestampUnit::Us,
             zone: Some("UTC".into()),
             value: 0,
         },
@@ -102,7 +104,7 @@ fn link(from: (&str, &str), to: (&str, &str)) -> Vec<ColumnRef> {
 /// `users.ghost`, which the source lacks, when `ghost` is true.
 fn shop(country_facts: bool, ghost: bool) -> HeldSchema {
     let ts = ColumnType::Timestamp {
-        unit: Unit::Us,
+        unit: TimestampUnit::Us,
         zone: None,
     };
     let mut users = vec![
@@ -226,7 +228,7 @@ fn materialize(held: &HeldSchema) -> Run {
         query: AttachmentId(2),
         indices: Some(AttachmentId(3)),
         anchor_time: Some(Scalar::Timestamp {
-            unit: Unit::Ns,
+            unit: TimestampUnit::Ns,
             zone: None,
             value: 1_709_251_200_000_000_000,
         }),

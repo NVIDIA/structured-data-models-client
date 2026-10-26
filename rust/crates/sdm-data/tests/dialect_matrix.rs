@@ -29,7 +29,7 @@ use sdm_contract::data::{
     TableKey, TieBreak, TieTerm, Window, field,
 };
 use sdm_contract::ops::Dtype;
-use sdm_contract::{ColumnType, Field, Scalar, Unit};
+use sdm_contract::{ColumnType, Field, Scalar, TimestampUnit};
 use sdm_data::Data;
 use serde_json::{Value, json};
 
@@ -68,7 +68,7 @@ fn with(mut field: Field, key: &str, value: &str) -> Field {
 
 fn timestamp() -> ColumnType {
     ColumnType::Timestamp {
-        unit: Unit::Ns,
+        unit: TimestampUnit::Ns,
         zone: None,
     }
 }

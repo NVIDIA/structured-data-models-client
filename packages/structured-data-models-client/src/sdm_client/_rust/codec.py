@@ -54,6 +54,7 @@ _INTEGERS = {
 _DECIMALS = {'d128': 38, 'd256': 76}
 _TEMPORAL = ('ts', 'duration', 'time64')
 _UNITS = ('ns', 'us')
+_TIMESTAMP_UNITS = ('s', 'ms', 'us', 'ns')
 _DIGITS = re.compile(r'(0|-?[1-9][0-9]*)\Z')
 _FLOAT = re.compile(r'(NaN|inf|-inf|-?[0-9]+(\.[0-9]+)?([eE][+-]?[0-9]+)?)\Z')
 
@@ -149,7 +150,10 @@ def decode_scalar(scalar: Any) -> Any:
         unit, zone = scalar.get('unit'), scalar.get('zone')
         number = _digits(tag, value)
         low, high = _INTEGERS['i64']
-        if unit not in _UNITS or not low <= number <= high:
+        if (
+            unit not in (_TIMESTAMP_UNITS if tag == 'ts' else _UNITS)
+            or not low <= number <= high
+        ):
             raise CodecError(f'{tag}: unit or value out of range')
         if tag == 'ts':
             if zone is not None and (not isinstance(zone, str) or not zone):
@@ -243,7 +247,7 @@ def integer(tag: str, value: int) -> dict[str, Any]:
 def timestamp(value: int, unit: str, zone: str | None) -> dict[str, Any]:
     r"""A ``ts`` scalar: ``value`` in ``unit`` since the epoch, in ``zone``,
     which is none or non-empty text."""
-    if unit not in _UNITS or (
+    if unit not in _TIMESTAMP_UNITS or (
         zone is not None and (not isinstance(zone, str) or not zone)
     ):
         raise CodecError('ts: unit or zone out of range')

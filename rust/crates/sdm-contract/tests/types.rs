@@ -53,6 +53,8 @@ fn accepted() -> Vec<DataType> {
         DataType::Utf8,
         DataType::Binary,
         DataType::Date32,
+        DataType::Timestamp(TimeUnit::Second, None),
+        DataType::Timestamp(TimeUnit::Millisecond, Some("UTC".into())),
         DataType::Timestamp(TimeUnit::Nanosecond, None),
         DataType::Timestamp(TimeUnit::Microsecond, Some("Europe/Berlin".into())),
         DataType::Duration(TimeUnit::Nanosecond),
@@ -88,8 +90,6 @@ fn refused() -> Vec<DataType> {
         DataType::BinaryView,
         DataType::FixedSizeBinary(16),
         DataType::Date64,
-        DataType::Timestamp(TimeUnit::Second, None),
-        DataType::Timestamp(TimeUnit::Millisecond, Some("UTC".into())),
         DataType::Time32(TimeUnit::Second),
         DataType::Time64(TimeUnit::Second),
         DataType::Duration(TimeUnit::Millisecond),
@@ -223,7 +223,7 @@ fn a_type_outside_the_limits_is_not_written() {
             scale: 0,
         },
         ColumnType::Timestamp {
-            unit: sdm_contract::Unit::Us,
+            unit: sdm_contract::TimestampUnit::Us,
             zone: Some(String::new()),
         },
     ];
@@ -267,7 +267,7 @@ fn arrow_decimals_outside_the_limits_are_refused_and_an_empty_zone_is_none() {
     assert_eq!(
         ColumnType::from_arrow("t", &empty).unwrap(),
         ColumnType::Timestamp {
-            unit: sdm_contract::Unit::Us,
+            unit: sdm_contract::TimestampUnit::Us,
             zone: None
         }
     );

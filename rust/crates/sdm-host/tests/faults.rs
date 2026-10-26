@@ -36,7 +36,7 @@ use sdm_contract::run::{FetchOutcome, FetchReply, ModelOutcome, ModelReply, Repl
 use sdm_contract::test_ops::{PanicAt, TestFetch, TestOperation};
 use sdm_contract::{
     CONTRACT_VERSION, ColumnType, ControlMessage, CoreError, Detail, ErrorCode, ErrorKind,
-    Field as ContractField, HostFacts, Scalar, Sentence, Unit,
+    Field as ContractField, HostFacts, Scalar, Sentence, TimestampUnit,
 };
 use sdm_core::{ArrowData, Attachment, Attachments, RunState};
 use sdm_host::{HostRun, Outgoing, Unreadable, Unreadables, encode, read};
@@ -46,7 +46,7 @@ fn start_message(operation: Operation) -> Vec<u8> {
         contract: CONTRACT_VERSION,
         facts: HostFacts {
             now: Scalar::Timestamp {
-                unit: Unit::Us,
+                unit: TimestampUnit::Us,
                 zone: Some("UTC".into()),
                 value: 1_767_225_600_000_000,
             },
@@ -834,7 +834,7 @@ fn a_test_only_panic_s_payload_is_the_canary() {
             contract: CONTRACT_VERSION,
             facts: HostFacts {
                 now: Scalar::Timestamp {
-                    unit: Unit::Us,
+                    unit: TimestampUnit::Us,
                     zone: Some("UTC".into()),
                     value: 0,
                 },

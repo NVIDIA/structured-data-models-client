@@ -388,14 +388,24 @@ public final class Wording {
   }
 
   private static long nanos(long count, String unit) {
-    return "us".equals(unit) ? Math.multiplyExact(count, 1_000L) : count;
+    return switch (unit) {
+      case "us" -> Math.multiplyExact(count, 1_000L);
+      case "ns" -> count;
+      default -> throw new IllegalArgumentException("unknown duration or time-of-day unit");
+    };
   }
 
   private static Object timestamp(long count, String unit, String zone) {
-    long seconds = Math.floorDiv(count, "us".equals(unit) ? 1_000_000L : 1_000_000_000L);
-    long fraction = Math.floorMod(count, "us".equals(unit) ? 1_000_000L : 1_000_000_000L);
-    Instant instant =
-        Instant.ofEpochSecond(seconds, "us".equals(unit) ? fraction * 1_000L : fraction);
+    long perSecond = switch (unit) {
+      case "s" -> 1L;
+      case "ms" -> 1_000L;
+      case "us" -> 1_000_000L;
+      case "ns" -> 1_000_000_000L;
+      default -> throw new IllegalArgumentException("unknown timestamp unit");
+    };
+    long seconds = Math.floorDiv(count, perSecond);
+    long fraction = Math.floorMod(count, perSecond);
+    Instant instant = Instant.ofEpochSecond(seconds, fraction * (1_000_000_000L / perSecond));
     if (zone == null) {
       return LocalDateTime.ofInstant(instant, ZoneOffset.UTC);
     }

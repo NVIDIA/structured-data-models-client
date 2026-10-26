@@ -11,13 +11,13 @@ use sdm_contract::data::AttachmentId;
 use sdm_contract::facts::{InstantRange, LocalZone, PlatformFacts};
 use sdm_contract::ops::{Operation, ProfileName, ProfileSpec, ValidateQuery};
 use sdm_contract::run::StartRun;
-use sdm_contract::{CONTRACT_VERSION, ControlMessage, HostFacts, Scalar, Unit};
+use sdm_contract::{CONTRACT_VERSION, ControlMessage, HostFacts, Scalar, TimestampUnit};
 use serde_json::{Value, json};
 
 fn facts(range: Option<InstantRange>) -> HostFacts {
     HostFacts {
         now: Scalar::Timestamp {
-            unit: Unit::Us,
+            unit: TimestampUnit::Us,
             zone: Some("UTC".into()),
             value: 1_790_000_000_000_000,
         },

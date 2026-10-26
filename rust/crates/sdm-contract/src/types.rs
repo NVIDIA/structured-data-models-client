@@ -7,8 +7,9 @@
 //! [`ColumnType::from_arrow`] is the only way in: an Arrow type outside the
 //! set is refused with `kind: unsupported, code: UNSUPPORTED_TYPE`, naming the
 //! column and the Arrow type. Converting the forms a host may hand over
-//! (`large_*`, `timestamp[s]` and `[ms]`, `large_list`, `fixed_size_list`)
-//! into the set is admission, which lives in `sdm-host`.
+//! (`large_*`, `large_list`, `fixed_size_list`) into the set is admission,
+//! which lives in `sdm-host`. Native frame timestamps retain all four units;
+//! provider admission still promotes seconds/milliseconds under DT-14.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -22,7 +23,7 @@ use crate::scalar::{
     DECIMAL128_MAX_PRECISION, DECIMAL256_MAX_PRECISION, decimal_type_rule, zone_rule,
 };
 
-/// The unit of a timestamp, duration or time of day.
+/// The admitted unit of a duration or time of day.
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
 )]
@@ -30,6 +31,41 @@ use crate::scalar::{
 pub enum Unit {
     Ns,
     Us,
+}
+
+/// A timestamp's physical count unit. Unlike durations and times of day,
+/// native frame timestamps retain seconds and milliseconds without scaling.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "lowercase")]
+pub enum TimestampUnit {
+    S,
+    Ms,
+    Us,
+    Ns,
+}
+
+impl From<TimeUnit> for TimestampUnit {
+    fn from(unit: TimeUnit) -> Self {
+        match unit {
+            TimeUnit::Second => Self::S,
+            TimeUnit::Millisecond => Self::Ms,
+            TimeUnit::Microsecond => Self::Us,
+            TimeUnit::Nanosecond => Self::Ns,
+        }
+    }
+}
+
+impl From<TimestampUnit> for TimeUnit {
+    fn from(unit: TimestampUnit) -> Self {
+        match unit {
+            TimestampUnit::S => Self::Second,
+            TimestampUnit::Ms => Self::Millisecond,
+            TimestampUnit::Us => Self::Microsecond,
+            TimestampUnit::Ns => Self::Nanosecond,
+        }
+    }
 }
 
 /// The index type of a dictionary.
@@ -93,7 +129,7 @@ pub enum ColumnType {
     Binary,
     Date32,
     Timestamp {
-        unit: Unit,
+        unit: TimestampUnit,
         zone: Option<String>,
     },
     Duration {
@@ -121,10 +157,11 @@ pub enum ColumnType {
     },
 }
 
-/// The cell vocabulary of the scope manifests: one name per type, with
-/// timestamps split by unit and zone (`phase-0/scope-format.md`). Generated
+/// The provider-admitted cell vocabulary of the scope manifests: one name
+/// per type, with timestamps split by admitted unit and zone (`phase-0/scope-format.md`). Generated
 /// from [`ColumnType::cell_type`], so the manifests and the code cannot
-/// disagree.
+/// disagree. Native constructor timestamps preserve their original coarse
+/// units outside this provider vocabulary; source admission still applies DT-14.
 pub fn cell_types() -> Vec<&'static str> {
     let item = || {
         Box::new(Field {
@@ -158,19 +195,19 @@ pub fn cell_types() -> Vec<&'static str> {
         ColumnType::Binary,
         ColumnType::Date32,
         ColumnType::Timestamp {
-            unit: Unit::Ns,
+            unit: TimestampUnit::Ns,
             zone: None,
         },
         ColumnType::Timestamp {
-            unit: Unit::Us,
+            unit: TimestampUnit::Us,
             zone: None,
         },
         ColumnType::Timestamp {
-            unit: Unit::Ns,
+            unit: TimestampUnit::Ns,
             zone: zone(),
         },
         ColumnType::Timestamp {
-            unit: Unit::Us,
+            unit: TimestampUnit::Us,
             zone: zone(),
         },
         ColumnType::Duration { unit: Unit::Ns },
@@ -218,19 +255,35 @@ impl ColumnType {
             C::Binary => "binary",
             C::Date32 => "date32",
             C::Timestamp {
-                unit: Unit::Ns,
+                unit: TimestampUnit::S,
+                zone: None,
+            } => "timestamp-s",
+            C::Timestamp {
+                unit: TimestampUnit::Ms,
+                zone: None,
+            } => "timestamp-ms",
+            C::Timestamp {
+                unit: TimestampUnit::S,
+                zone: Some(_),
+            } => "timestamp-s-tz",
+            C::Timestamp {
+                unit: TimestampUnit::Ms,
+                zone: Some(_),
+            } => "timestamp-ms-tz",
+            C::Timestamp {
+                unit: TimestampUnit::Ns,
                 zone: None,
             } => "timestamp-ns",
             C::Timestamp {
-                unit: Unit::Us,
+                unit: TimestampUnit::Us,
                 zone: None,
             } => "timestamp-us",
             C::Timestamp {
-                unit: Unit::Ns,
+                unit: TimestampUnit::Ns,
                 zone: Some(_),
             } => "timestamp-ns-tz",
             C::Timestamp {
-                unit: Unit::Us,
+                unit: TimestampUnit::Us,
                 zone: Some(_),
             } => "timestamp-us-tz",
             C::Duration { unit: Unit::Ns } => "duration-ns",
@@ -322,12 +375,9 @@ impl ColumnType {
             DataType::Date32 => C::Date32,
             // Arrow reads an empty zone as no zone (Schema.fbs), and so does
             // the set.
-            DataType::Timestamp(u, zone) => match unit(u) {
-                Some(unit) => C::Timestamp {
-                    unit,
-                    zone: zone.as_deref().filter(|z| !z.is_empty()).map(str::to_owned),
-                },
-                None => return refuse(),
+            DataType::Timestamp(u, zone) => C::Timestamp {
+                unit: (*u).into(),
+                zone: zone.as_deref().filter(|z| !z.is_empty()).map(str::to_owned),
             },
             DataType::Duration(u) => match unit(u) {
                 Some(unit) => C::Duration { unit },
@@ -405,7 +455,7 @@ impl ColumnType {
             C::Binary => DataType::Binary,
             C::Date32 => DataType::Date32,
             C::Timestamp { unit: u, zone } => {
-                DataType::Timestamp(unit(u), zone.as_deref().map(Arc::from))
+                DataType::Timestamp((*u).into(), zone.as_deref().map(Arc::from))
             }
             C::Duration { unit: u } => DataType::Duration(unit(u)),
             C::Time64 { unit: u } => DataType::Time64(unit(u)),

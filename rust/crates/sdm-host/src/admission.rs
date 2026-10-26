@@ -56,6 +56,11 @@
 //! them is refused, with `VALUE_OUT_OF_RANGE` naming the column and the
 //! type received (registers P1B-79 and P1B-80).
 //!
+//! Native frame constructor inputs use these same schema/wrapper/capacity
+//! checks, but preserve timestamp unit and raw counts instead of applying
+//! provider DT-14 scaling. They are detached before the run reads them;
+//! fetched provider rows keep the admission table above unchanged.
+//!
 //! Native-to-Arrow conversion (pandas dtypes, JDBC types) stays in each host.
 
 use std::sync::Arc;
@@ -93,15 +98,31 @@ fn unsupported(column: &str, received: &DataType) -> CoreError {
 /// The closed-set type `received` is admitted as, or its refusal by name,
 /// naming the type received.
 pub fn admitted_type(column: &str, received: &DataType) -> Result<DataType, CoreError> {
-    let admitted = convert_type(column, received)?;
+    admitted_type_with(column, received, Timestamps::Provider)
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Timestamps {
+    Provider,
+    NativeFrame,
+}
+
+fn admitted_type_with(
+    column: &str,
+    received: &DataType,
+    timestamps: Timestamps,
+) -> Result<DataType, CoreError> {
+    let admitted = convert_type(column, received, timestamps)?;
     // The whole, nested, type: a map's shape, say.
     ColumnType::from_arrow(column, &admitted).map_err(|_| unsupported(column, received))?;
     Ok(admitted)
 }
 
-fn convert_field(parent: &str, field: &Field) -> Result<Field, CoreError> {
+fn convert_field(parent: &str, field: &Field, timestamps: Timestamps) -> Result<Field, CoreError> {
     let path = format!("{parent}.{}", field.name());
-    admitted_field(&path, field, convert_type)
+    admitted_field(&path, field, |path, received| {
+        convert_type(path, received, timestamps)
+    })
 }
 
 /// The canonical extension type naming an `int8` that holds booleans.
@@ -124,7 +145,7 @@ fn is_bool8(field: &Field) -> bool {
 fn admitted_field(
     path: &str,
     field: &Field,
-    convert: fn(&str, &DataType) -> Result<DataType, CoreError>,
+    convert: impl FnOnce(&str, &DataType) -> Result<DataType, CoreError>,
 ) -> Result<Field, CoreError> {
     if field.extension_type_name() == Some(BOOL8) && !is_bool8(field) {
         return Err(unsupported(path, field.data_type()));
@@ -154,7 +175,11 @@ fn is_nested(data_type: &DataType) -> bool {
     )
 }
 
-fn convert_type(column: &str, received: &DataType) -> Result<DataType, CoreError> {
+fn convert_type(
+    column: &str,
+    received: &DataType,
+    timestamps: Timestamps,
+) -> Result<DataType, CoreError> {
     use DataType as D;
     let admitted = match received {
         D::LargeUtf8 | D::Utf8View => D::Utf8,
@@ -163,7 +188,9 @@ fn convert_type(column: &str, received: &DataType) -> Result<DataType, CoreError
         D::Decimal32(precision, scale) | D::Decimal64(precision, scale) => {
             D::Decimal128(*precision, *scale)
         }
-        D::Timestamp(TimeUnit::Second | TimeUnit::Millisecond, zone) => {
+        D::Timestamp(TimeUnit::Second | TimeUnit::Millisecond, zone)
+            if timestamps == Timestamps::Provider =>
+        {
             D::Timestamp(TimeUnit::Microsecond, zone.clone())
         }
         D::Duration(TimeUnit::Second | TimeUnit::Millisecond) => D::Duration(TimeUnit::Microsecond),
@@ -173,21 +200,24 @@ fn convert_type(column: &str, received: &DataType) -> Result<DataType, CoreError
         | D::LargeList(item)
         | D::FixedSizeList(item, _)
         | D::ListView(item)
-        | D::LargeListView(item) => D::List(Arc::new(convert_field(column, item)?)),
+        | D::LargeListView(item) => D::List(Arc::new(convert_field(column, item, timestamps)?)),
         D::Struct(fields) => D::Struct(
             fields
                 .iter()
-                .map(|f| convert_field(column, f))
+                .map(|f| convert_field(column, f, timestamps))
                 .collect::<Result<Fields, _>>()?,
         ),
-        D::Map(entries, sorted) => D::Map(Arc::new(convert_field(column, entries)?), *sorted),
+        D::Map(entries, sorted) => D::Map(
+            Arc::new(convert_field(column, entries, timestamps)?),
+            *sorted,
+        ),
         D::Dictionary(index, values)
             if matches!(**values, D::Utf8 | D::LargeUtf8 | D::Utf8View) =>
         {
             D::Dictionary(index.clone(), Box::new(D::Utf8))
         }
         // Any other dictionary is decoded to its values.
-        D::Dictionary(_, values) => convert_type(column, values)?,
+        D::Dictionary(_, values) => convert_type(column, values, timestamps)?,
         // A run-end array is decoded to its values (E17); values tagged
         // `arrow.bool8` are booleans, as the same column unencoded is
         // (admitted_field), the tag on any other storage refused (T2.12, FR
@@ -198,7 +228,7 @@ fn convert_type(column: &str, received: &DataType) -> Result<DataType, CoreError
             }
             D::Boolean
         }
-        D::RunEndEncoded(_, values) => convert_type(column, values.data_type())?,
+        D::RunEndEncoded(_, values) => convert_type(column, values.data_type(), timestamps)?,
         other => other.clone(),
     };
     if !is_nested(&admitted) {
@@ -234,19 +264,27 @@ pub fn admit(data: &ArrowData) -> Result<ArrowData, CoreError> {
 /// register P1B-43); one naming another vendor or none is admitted by its
 /// storage, as before.
 pub fn admit_from(data: &ArrowData, vendor: Option<&str>) -> Result<ArrowData, CoreError> {
-    admitted(data, OFFSET_CAPACITY, vendor)
+    admitted(data, OFFSET_CAPACITY, vendor, Timestamps::Provider)
+}
+
+/// Native constructor inputs retain timestamp counts in their original unit.
+/// All schema, extension, wrapper, capacity and value checks are shared with
+/// provider admission; only timestamp scaling differs (provider DT-14).
+pub(crate) fn admit_frame(data: &ArrowData) -> Result<ArrowData, CoreError> {
+    admitted(data, OFFSET_CAPACITY, None, Timestamps::NativeFrame)
 }
 
 /// [`admit`], with offsets bounded by `capacity` instead of int32's, so
 /// tests can split and refuse without gigabytes of data.
 pub fn admit_with_capacity(data: &ArrowData, capacity: usize) -> Result<ArrowData, CoreError> {
-    admitted(data, capacity, None)
+    admitted(data, capacity, None, Timestamps::Provider)
 }
 
 fn admitted(
     data: &ArrowData,
     capacity: usize,
     vendor: Option<&str>,
+    timestamps: Timestamps,
 ) -> Result<ArrowData, CoreError> {
     let capacity = capacity.min(OFFSET_CAPACITY);
     for batch in &data.batches {
@@ -259,7 +297,11 @@ fn admitted(
     let fields: Vec<Field> = read
         .fields()
         .iter()
-        .map(|f| admitted_field(f.name(), f, admitted_type))
+        .map(|f| {
+            admitted_field(f.name(), f, |name, data_type| {
+                admitted_type_with(name, data_type, timestamps)
+            })
+        })
         .collect::<Result<_, CoreError>>()?;
     let schema: SchemaRef = Arc::new(Schema::new_with_metadata(fields, read.metadata().clone()));
     let admit = Admit { capacity };

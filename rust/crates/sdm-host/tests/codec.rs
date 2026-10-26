@@ -18,7 +18,7 @@ use sdm_contract::ops::{
 use sdm_contract::run::StartRun;
 use sdm_contract::{
     CONTRACT_VERSION, ColumnType, ControlMessage, CoreError, CoreWarning, Detail, ErrorCode,
-    ErrorKind, HostFacts, Scalar, Sentence, Step, Unit,
+    ErrorKind, HostFacts, Scalar, Sentence, Step, TimestampUnit,
 };
 use sdm_core::Attachment;
 use sdm_host::{CONTROL_CAP, Outgoing, decode, encode, read, write, write_error};
@@ -30,7 +30,7 @@ fn start(model: String) -> ControlMessage {
         contract: CONTRACT_VERSION,
         facts: HostFacts {
             now: Scalar::Timestamp {
-                unit: Unit::Us,
+                unit: TimestampUnit::Us,
                 zone: Some("UTC".into()),
                 value: 0,
             },

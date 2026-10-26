@@ -18,7 +18,7 @@ use std::path::Path;
 
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::ops::{ProfileSpec, QuerySchema, Severity, Span};
-use sdm_contract::{HostFacts, Scalar, Unit};
+use sdm_contract::{HostFacts, Scalar, TimestampUnit};
 use sdm_core::pql::resolve;
 use sdm_core::profiles::Profile;
 use serde_json::Value;
@@ -35,7 +35,7 @@ impl sdm_core::Zones for NoZones {
 fn facts() -> HostFacts {
     HostFacts {
         now: Scalar::Timestamp {
-            unit: Unit::Us,
+            unit: TimestampUnit::Us,
             zone: Some("UTC".into()),
             value: 1_767_225_600_000_000,
         },

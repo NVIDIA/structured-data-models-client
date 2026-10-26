@@ -13,7 +13,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::ops::{ColumnRef, ProfileSpec, QueryColumn, QuerySchema, QueryTable, Severity};
-use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, HostFacts, Scalar, Unit};
+use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, HostFacts, Scalar, TimestampUnit};
 use sdm_core::pql::resolve;
 use sdm_core::profiles::Profile;
 use serde_json::{Map, Value, json};
@@ -32,7 +32,7 @@ impl sdm_core::Zones for NoZones {
 pub fn facts() -> HostFacts {
     HostFacts {
         now: Scalar::Timestamp {
-            unit: Unit::Us,
+            unit: TimestampUnit::Us,
             zone: Some("UTC".into()),
             value: 1_767_225_600_000_000,
         },

@@ -29,7 +29,9 @@ use sdm_contract::ops::{
     DescribeSource, Given, NamedTable, Operation, OperationResult, SourceDescription, SourceSpec,
 };
 use sdm_contract::run::StartRun;
-use sdm_contract::{CONTRACT_VERSION, ColumnType, ErrorCode, HostFacts, Scalar, Step, Unit};
+use sdm_contract::{
+    CONTRACT_VERSION, ColumnType, ErrorCode, HostFacts, Scalar, Step, TimestampUnit,
+};
 use sdm_core::{
     ArrowData, Attachment, Attachments, CompositionRoot, FetchResult, UnknownZone, Zones, start,
 };
@@ -51,7 +53,7 @@ impl Zones for Utc {
 fn facts() -> HostFacts {
     HostFacts {
         now: Scalar::Timestamp {
-            unit: Unit::Us,
+            unit: TimestampUnit::Us,
             zone: Some("UTC".into()),
             value: 1_761_264_000_000_000,
         },
@@ -896,7 +898,7 @@ fn materialize_query(
                 query: AttachmentId(2),
                 indices: Some(AttachmentId(3)),
                 anchor_time: Some(Scalar::Timestamp {
-                    unit: Unit::Ns,
+                    unit: TimestampUnit::Ns,
                     zone: None,
                     value: 1_709_251_200_000_000_000,
                 }),

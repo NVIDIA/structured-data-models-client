@@ -87,7 +87,9 @@ use sdm_contract::data::{
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::ops::{DescribeSource, Operation, OperationResult, SourceDescription};
 use sdm_contract::run::StartRun;
-use sdm_contract::{CONTRACT_VERSION, CoreError, Detail, ErrorCode, HostFacts, Scalar, Step, Unit};
+use sdm_contract::{
+    CONTRACT_VERSION, CoreError, Detail, ErrorCode, HostFacts, Scalar, Step, TimestampUnit,
+};
 use sdm_core::{ArrowData, Attachment, FetchResult};
 use sdm_host::{ZoneResolver, admit, admitted_type};
 use serde_json::{Value, json};
@@ -800,7 +802,7 @@ fn host_provider() -> ProviderChoice {
 fn facts() -> HostFacts {
     HostFacts {
         now: Scalar::Timestamp {
-            unit: Unit::Us,
+            unit: TimestampUnit::Us,
             zone: Some("UTC".into()),
             value: 1_767_225_600_000_000,
         },

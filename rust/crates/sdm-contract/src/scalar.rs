@@ -20,7 +20,7 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use schemars::{JsonSchema, Schema, SchemaGenerator};
 use serde::{Deserialize, Serialize};
 
-use crate::types::Unit;
+use crate::types::{TimestampUnit, Unit};
 
 /// The largest precision of a `decimal128`.
 pub const DECIMAL128_MAX_PRECISION: u8 = 38;
@@ -62,7 +62,7 @@ pub enum Scalar {
     Date32(i32),
     /// A count of `unit` since the epoch, with the zone it is shown in.
     Timestamp {
-        unit: Unit,
+        unit: TimestampUnit,
         zone: Option<String>,
         value: i64,
     },
@@ -147,7 +147,7 @@ enum ScalarWire {
     Date32 { v: Digits },
     #[serde(rename = "ts")]
     Ts {
-        unit: Unit,
+        unit: TimestampUnit,
         zone: Option<String>,
         v: Digits,
     },

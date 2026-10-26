@@ -42,7 +42,7 @@ fn column(name: &str, dtype: Dtype, stype: Stype) -> DescribedColumn {
             Dtype::String => ColumnType::Utf8,
             Dtype::Float => ColumnType::Float64,
             Dtype::Date => ColumnType::Timestamp {
-                unit: sdm_contract::Unit::Us,
+                unit: sdm_contract::TimestampUnit::Us,
                 zone: None,
             },
             _ => ColumnType::Int64,
