@@ -1,6 +1,6 @@
 # Phase 3 validation tracker
 
-Updated 2026-10-26, 16:00 UTC.
+Updated 2026-10-26, 16:08 UTC.
 Phase 3 / T3.10 is unfinished.
 Phase 4 is paused by the owner.
 The coordinator alone edits this tracker; agents report results and next actions.
@@ -44,13 +44,13 @@ Counts describe existing cases only.
 | R1 | **DONE: Databricks foreign-key metadata fix landed** | Pushed and independently verified `dd5b3f37ef`; both exact carry approvals and normal 188-second package handoff passed | Coordinator consumed handoff; original native producer IDs retained |
 | R2 | **DONE: execute all nine affected originals** | Genuine d90: 9/9 observed, zero operator failures, SDK0 cleanup; corrected key32 and odd-name cases succeed, metric warning restored, negative-neighbor has zero strict differences; 186 raw differences remain for finite attribution | Coordinator consumes actual results and exact owner-approved key32 support; final comparison acceptance remains R8 |
 | R3 | Finish Spark comparison assembly | **300/300 original executions terminal**, final 24 cleanup verified; authentic raw results retained | Cloud author assembles heterogeneous historical receipts without replay and closes finite differences/source applicability |
-| R4 | Complete Java Databricks SQL and timezone comparisons on x86 and ARM | Both genuine d90 attempts failed when AWS terminated their Spot drivers; no completed case chunks recovered; only two verified owned empty schemas removed and leases released | Cloud author freezes capacity-only carry using an on-demand driver, obtains both code confirmations, then retries the original 249 SQL plus 18 J2 cases per architecture |
+| R4 | Complete Java Databricks SQL and timezone comparisons on x86 and ARM | Both genuine d90 attempts failed when AWS terminated their Spot drivers; no completed case chunks recovered; only two verified owned empty schemas removed and leases released | Capacity-only manifest `787fef32` is frozen and both independent reviewers are active; cloud author retries the original 249 SQL plus 18 J2 cases per architecture only after approvals |
 | R5 | **DONE: original Lakebase notebook** | Parent `1028333862593563` passed all 32 original commands on genuine 7e41; full 173106-row data and PK/FK post-check exact; read lease released | Coordinator consumed authentic success/export/fixture receipt; both source-impact approvals retain original IDs |
 | R6 | **DONE: original Databricks notebook** | Parent `435766366545516` passed all 39 original commands on genuine 7e41; source/export verified; only the verified owned metric view removed, SDK0 cleanup | Coordinator consumed authentic success and cleanup receipt; original failed attempts retained |
 | R7 | Run the existing Databricks generated-source and provider checks | Reviewed original 20 generated-source campaign is actively running old then core; all 33 provider cases and two existing fault controls follow after cleanup | Sole cloud author collects terminal results and verifies cleanup before the next original tool; no concurrent fixture writer |
-| R8 | Finalize finite Databricks/Snowflake comparison acceptance and scoped compatibility metadata | Earlier 23-case metadata landed at d90; final narrow decimal/lag/clock/UTC/FK metadata candidate `ebd02c1a5` awaits renewed code confirmations after removing two unsupported field masks; failed validation retained | Coordinator lands only after both exact approvals, register validation and normal handoff; human finite proofs retain raw printed-result/order/warning differences |
+| R8 | Finalize finite Databricks/Snowflake comparison acceptance and scoped compatibility metadata | Earlier 23-case metadata landed at d90; final narrow decimal/lag/clock/UTC/FK records landed and verified at `42dbb880f9` after both exact renewed approvals, register validation and normal 173-second handoff; original schema failure retained | Compatibility records complete; final human finite acceptance retains raw printed-result/order/warning differences and the separate sampling accuracy blocker |
 | R9 | **DONE: two reviews approve bounded retention of completed cohorts** | Both independently approve retaining all 255 model questions, 18 census questions, 20 memory controls and 600 local generated-source results with original IDs; model warning/raw-FK equality is not claimed | Nine affected originals remain in R2; final finite comparison acceptance remains in R8 |
-| R10 | Obtain green full CI on the final integrated branch | Run `40336101930` is terminal with 79 successful jobs and two failures: one stale generated FK snapshot plus a missing-artifact cross-host cascade; canonical 11-row repair is landed at `1637948d6a` after two reviews and passing whole-matrix/normal checks | Coordinator collects final CI results and fixes any remaining failure under normal review rules; cloud author uses official artifacts as producers finish |
+| R10 | Obtain green full CI on the final integrated branch | Full integrated [run 40355886004](https://github.com/NVIDIA/structured-data-models-client/actions/runs/40355886004) dispatched at 16:06 UTC on exact `42dbb880f9`, locked dependencies; both earlier failures are repaired in this source; previous run had 79 successful jobs and two failures | Coordinator collects final CI results and fixes any remaining failure under normal review rules; cloud author uses official artifacts as producers finish |
 | R11 | **BLOCKER: Snowflake sampled-case accuracy and pending context design** | Pinned model26 gives old RMSE 2.0116299440 versus core 2.5448948430: 26.51% worse; independent audits prove both clients cap before exclusion, leaving only 6 old/8 core examples despite 99/100 eligible candidates already fetched | Two independently reviewed design proposals are complete; owner has asked for explanations but has not approved the semantic change; no sampler implementation, favorable resample or accuracy waiver |
 | R12 | Run locked acceptance `3a` and assemble pre-heldout evidence | Receipt audit found no completed Phase 3 locked run or pre-heldout pack; the only old 3a receipt is a failed stub dry-run | Coordinator uses existing final gate/evidence tools with authentic final native artifacts; retain all required checks and do not open/run the sealed bundle early |
 | R13 | Close final acceptance, run the sealed check last, merge and push Phase 3 into `rust-core` | Not started; protected `rust-core` remains Phase 2; sealed started marker absent | Coordinator obtains both final evidence approvals, closes performance dispositions, runs the sealed check last, then merges and pushes |
@@ -63,8 +63,8 @@ The original performance reports still contain incomplete pairs and missing stoc
 
 ## Current execution and integration
 
-- Pushed Phase 3 head: `1637948d6a26b1000e7d23b201ba8331e6ae7e4d`.
-- The generated FK matrix repair landed there: 11 alias-only rows updated by its documented writer, 2961 other rows unchanged; both CODE approvals, whole matrix 2/2 and normal 157-second handoff passed.
+- Pushed and explicitly verified Phase 3 head: `42dbb880f9b95aec806f99e0735075c79c3e595a`.
+- The generated FK matrix repair previously landed at `1637948d6a`: 11 alias-only rows updated by its documented writer, 2961 other rows unchanged; both CODE approvals, whole matrix 2/2 and normal 157-second handoff passed.
   Product code, build inputs and dependencies are unchanged from d90.
 - Exact 23-case compatibility metadata and both owner approvals previously landed at `d90ac9e3e7` after both independent CODE approvals, passing register validation and a normal 192-second handoff.
   Both landings have terminal explicit verification.
@@ -75,7 +75,8 @@ The original performance reports still contain incomplete pairs and missing stoc
 - Prior CI `40315122377` on `ad28ef4287` finished with 80 successful jobs and one contract-tooling timeout; its 201 other contract tests passed.
 - Earlier integrated [CI 40336101930](https://github.com/NVIDIA/structured-data-models-client/actions/runs/40336101930) runs the whole workflow on integrated `d90ac9e3e7`, dispatched once with locked dependencies at 14:03:35 UTC.
   The run is terminal: 79 jobs succeeded and two failed; Rust stopped on the stale generated matrix and the cross-host job lacked its artifact.
-  All eight official d90 producer groups, Java/JNI and source publication are authenticated and retained; the snapshot correction requires renewed final CI.
+  All eight official d90 producer groups, Java/JNI and source publication are authenticated and retained.
+  Renewed full CI `40355886004` runs on integrated `42dbb880f9` with the generated snapshot and final compatibility records, without topic-level CI or reduced scope.
   The sole cloud collector retains all artifact identities and starts dependent runs as producers finish, without waiting for full CI to complete.
 - Superseded `7e41bb73a5` CI `40322768900` was cancelled after preserving its 78 successful jobs, remaining job states and all eight authenticated official artifact groups.
   It lacked the timeout repair and FK fix; cancellation released workflow concurrency so the corrected run started without the previous 36-minute queue.
@@ -87,6 +88,7 @@ The original performance reports still contain incomplete pairs and missing stoc
 - Maximum three active package lanes, two heavy local slots, Cargo jobs capped at two.
   Both independent Sol High code approvals precede package tests and builds; changed code requires renewed approvals.
 
+The final compatibility records landed at `42dbb880f9` on passing exact `ebd02c1a5` evidence; no product/build/dependency changes or sampler approval are implied.
 The owner reported reminders arriving repeatedly.
 The coordinator disabled the reminder script and removed its exact cron entry at 15:59 UTC; the independent nightly CI entry is unchanged.
 Do not re-enable reminders automatically.
