@@ -3337,9 +3337,58 @@ class _CapturedSnowflake(_CapturedWarehouse):
     reads (RE/backend/snow/table.py:200,319); a pandas read is kept as the
     Arrow it converts from."""
 
-    __slots__ = ()
+    __slots__ = ('_recoverable_fetch',)
 
     _READS = ('fetch_arrow_all', 'fetch_pandas_all')
+
+    def __init__(self, driver: Any, log: DriverLog) -> None:
+        super().__init__(driver, log)
+        object.__setattr__(self, '_recoverable_fetch', None)
+
+    def _fetch(self, method: str, *arguments: Any, **keywords: Any) -> Any:
+        from snowflake.connector.errors import NotSupportedError
+
+        statement = self._statement
+        previous = statement['error'] if statement is not None else None
+        fallback = (
+            self._recoverable_fetch is statement and statement is not None
+        )
+        try:
+            return super()._fetch(method, *arguments, **keywords)
+        except BaseException as error:
+            recoverable = None
+            if statement is not None:
+                statement.setdefault('fetch_errors', []).append(
+                    {'method': method, 'error': type(error).__name__}
+                )
+                # A failed execute or an earlier fatal fetch cannot become a
+                # successful statement by reading the driver's stale result.
+                if previous is not None and not fallback:
+                    statement['error'] = previous
+                if (
+                    previous is None
+                    and not statement['results']
+                    and method == 'fetch_arrow_all'
+                    and isinstance(error, NotSupportedError)
+                ):
+                    recoverable = statement
+            object.__setattr__(self, '_recoverable_fetch', recoverable)
+            raise
+
+    def _read(self, method: str, *arguments: Any, **keywords: Any) -> Any:
+        pending = self._recoverable_fetch
+        answer = super()._read(method, *arguments, **keywords)
+        if (
+            method == 'fetchall'
+            and pending is self._statement
+            and pending is not None
+            and pending['error'] == 'NotSupportedError'
+        ):
+            # This is the provider's rows-only SHOW/DESCRIBE fallback, after
+            # the same execution's successful read has been recorded whole.
+            pending['error'] = None
+        object.__setattr__(self, '_recoverable_fetch', None)
+        return answer
 
     def _recorded_read(
         self, name: str, *arguments: Any, **keywords: Any
@@ -3351,8 +3400,10 @@ class _CapturedSnowflake(_CapturedWarehouse):
             self._recorded_arrow(
                 name, pa.Table.from_pandas(answer, preserve_index=False)
             )
-            return answer
-        return self._recorded_arrow(name, answer)
+        else:
+            self._recorded_arrow(name, answer)
+        object.__setattr__(self, '_recoverable_fetch', None)
+        return answer
 
     def _recorded_arrow(self, method: str, answer: Any) -> Any:
         statement = self._statement

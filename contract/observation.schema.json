@@ -56,7 +56,7 @@
           "required": ["statements", "bindings", "events", "incomplete", "passed_through", "cursors"],
           "properties": {
             "statements": {
-              "description": "Each statement the driver ran, in order: the handle it ran on (0 the connection the source was given, then each derived cursor in the order made), the public call it ran in (stage; on rust-host, from_source for describe_source), its SQL text, its typed parameters, every result read from it and the class of any error it raised.",
+              "description": "Each statement the driver ran, in order: the handle it ran on (0 the connection the source was given, then each derived cursor in the order made), the public call it ran in (stage; on rust-host, from_source for describe_source), its SQL text, its typed parameters, every result read from it, its terminal error class, and failed fetch attempts retained separately when an admitted fallback succeeds.",
               "type": "array",
               "items": {
                 "type": "object",
@@ -69,6 +69,19 @@
                   "parameters": {"type": ["array", "null"], "items": {"$ref": "#/$defs/parameter"}},
                   "results": {"type": "array", "items": {"$ref": "#/$defs/result"}},
                   "error": {"type": ["string", "null"]},
+                  "fetch_errors": {
+                    "description": "Failed fetch attempts in order, retained when a supported row fallback later completes the same execution; error above is the terminal statement status.",
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["method", "error"],
+                      "properties": {
+                        "method": {"enum": ["fetch_arrow_all", "fetch_pandas_all", "fetchall", "fetchmany", "fetchone", "to_arrow_table", "fetch_arrow_table"]},
+                        "error": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"}
+                      }
+                    }
+                  },
                   "purpose": {"description": "The purpose of the core's fetch the statement answers, where the core gave one (FetchStep.purpose): locate, plan B's read of a table as it stands (T3.4).", "enum": ["locate"]}
                 }
               }
