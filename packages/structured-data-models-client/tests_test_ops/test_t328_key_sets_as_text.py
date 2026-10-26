@@ -147,7 +147,7 @@ LOOKUP = {
     'key': ['user_id'],
     'columns': ['user_id'],
 }
-_OFFSET = re.compile(r'\bpos \+ (\d+) AS\b')
+_OFFSET = re.compile(r'\b(?:CAST\(pos AS BIGINT\)|pos) \+ (\d+) AS\b')
 
 
 class _Cursor:
@@ -193,9 +193,13 @@ def _posexplode(operation: str, parameters: Any) -> pa.Table:
     seeds = json.loads(parameters[0])
     found = _OFFSET.search(operation)
     offset = int(found.group(1)) if found else 0
+    # POSEXPLODE's position is int32; the SQL projection may widen it.
+    batch_type = (
+        pa.int64() if 'CAST(pos AS BIGINT)' in operation else pa.int32()
+    )
     return pa.table(
         {
-            BATCH: pa.array(range(offset, offset + len(seeds)), pa.int32()),
+            BATCH: pa.array(range(offset, offset + len(seeds)), batch_type),
             'user_id': pa.array(seeds, pa.int64()),
         }
     )
@@ -229,7 +233,9 @@ def test_a_databricks_key_set_past_the_budget_is_one_fetch_per_chunk_joined() ->
         sum(len(chunk) for chunk in expected[:at])
         for at in range(1, len(expected))
     ]
-    # The answers joined in order: every seed at its place.
+    # The answers joined in order: every seed at its place, in the
+    # shared fetch contract's int64 batch column.
+    assert data.column(BATCH).type == pa.int64()
     assert data.column(BATCH).to_pylist() == list(range(len(keys)))
     assert data.column('user_id').to_pylist() == keys
 
