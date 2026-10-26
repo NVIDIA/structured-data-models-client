@@ -1061,7 +1061,9 @@ def test_public_schema_records_successful_rows_only_metadata(
         ]
         assert statement['results'][0]['method'] == 'fetchall'
     assert log.incomplete == []
-    assert log.passed == []
+    # Driver parameter style and result-column metadata are property reads,
+    # not unrecorded SQL or fetch methods. No other access passes through.
+    assert set(log.passed) == {'_paramstyle', 'description'}
     assert any(event['event'] == 'close' for event in log.events)
 
 
