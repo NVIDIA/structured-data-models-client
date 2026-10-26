@@ -62,6 +62,17 @@ class _MetricProvider:
             item['dialect'] == 'databricks'
             for item in step['plan']['statements']
         )
+        if request['request'] == 'key_counts':
+            # Every key in this fixed three-row source is unique and held.
+            count = len(request['keys'])
+            return pa.table(
+                {
+                    'k': list(range(count)),
+                    'n': [3] * count,
+                    'd': [3] * count,
+                    'z': [0] * count,
+                }
+            )
         if request['request'] == 'describe':
             part = request['part']
             if part == 'view_definition':
