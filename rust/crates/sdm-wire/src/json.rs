@@ -716,3 +716,26 @@ pub fn is_integer_token(token: &str) -> bool {
     let digits = token.strip_prefix('-').unwrap_or(token);
     !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit())
 }
+
+#[cfg(test)]
+mod option_attachment_tests {
+    use super::{Value, read, read_options};
+
+    #[test]
+    fn nonfinite_tokens_belong_only_to_the_option_decoder() {
+        let bytes = br#"{"lag_timesteps":NaN,"text":"NaN","nested":[Infinity,-Infinity]}"#;
+        assert!(read(bytes).is_err());
+        let value = read_options(bytes).unwrap();
+        assert_eq!(value.get("lag_timesteps"), Some(&Value::Number("NaN".into())));
+        assert_eq!(value.get("text"), Some(&Value::Text("NaN".into())));
+        assert!(!value.get("nested").unwrap().all_finite());
+        assert!(read_options(br#"{"lag_timesteps":NaNa}"#).is_err());
+    }
+
+    #[test]
+    fn options_do_not_inherit_endpoint_encoding_or_surrogate_repair() {
+        assert!(read_options(b"\xff\xfe{\0}\0").is_err());
+        assert!(read_options(br#"{"lag_timesteps":NaN,"text":"\ud800"}"#).is_err());
+        assert!(read_options(br#"{"lag_timesteps":NaN,"text":"\uE000NaN"}"#).is_ok());
+    }
+}
