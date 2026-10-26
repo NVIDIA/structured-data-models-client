@@ -283,3 +283,19 @@ fn every_request_has_its_contract_name() {
         assert_eq!(serde_json::to_value(optional).unwrap(), optional.name());
     }
 }
+
+#[test]
+fn neighbor_limits_preserve_unsigned_width_signed_values_and_caller_expressions() {
+    use sdm_contract::data::NeighborLimit;
+    let largest = NeighborLimit::Unsigned(u64::MAX);
+    assert_eq!(serde_json::to_string(&largest).unwrap(), u64::MAX.to_string());
+    for limit in [
+        largest,
+        NeighborLimit::Negative { value: "-1".into() },
+        NeighborLimit::Negative { value: "-0.5".into() },
+        NeighborLimit::SqlExpression { sql: "3 OR TRUE".into() },
+    ] {
+        let bytes = serde_json::to_vec(&limit).unwrap();
+        assert_eq!(serde_json::from_slice::<NeighborLimit>(&bytes).unwrap(), limit);
+    }
+}

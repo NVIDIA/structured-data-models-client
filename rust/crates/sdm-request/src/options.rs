@@ -1853,6 +1853,22 @@ mod tests {
     }
 
     #[test]
+    fn owner_admitted_neighbor_values_keep_their_distinct_meanings() {
+        let values = asked(r#"{"num_neighbors": [-1, -0.5, "-2", "3 OR TRUE", "nonsense", 18446744073709551615]}"#);
+        assert_eq!(
+            neighbors(&values, RunMode::Fast).unwrap(),
+            vec![
+                Hop::Negative("-1".into()),
+                Hop::Negative("-0.5".into()),
+                Hop::Negative("-2".into()),
+                Hop::SqlExpression("3 OR TRUE".into()),
+                Hop::SqlExpression("nonsense".into()),
+                Hop::Keep(u64::MAX),
+            ]
+        );
+    }
+
+    #[test]
     fn num_hops_is_said_to_be_ignored_beside_num_neighbors_unless_two() {
         let ignored = |text: &str| hops_ignored(&asked(text));
         assert_eq!(
