@@ -100,6 +100,22 @@ fn the_converted_time_warning_respects_the_final_choice_and_window_scope() {
     }
 }
 
+#[test]
+fn a_different_link_fallback_does_not_inherit_a_raw_columns_reason() {
+    let mut source = converted_date(&["month"]);
+    source.time.fallback = Some("day".into());
+    let settled = source.time.for_links(false);
+    assert_eq!(settled.column.as_deref(), Some("day"));
+    assert!(settled.instead_of.is_empty());
+    source.time = settled;
+    source.time_column = Some("day".into());
+    let made = made_of(vec![source, users()], vec![]);
+    assert!(!made.warnings.iter().any(|w| matches!(
+        w.sentence,
+        Sentence::TimeColumnsTakenInsteadOf | Sentence::TimeColumnsTakenInsteadOfMany
+    )));
+}
+
 fn column(name: &str, dtype: Dtype, stype: Stype) -> InferredColumn {
     InferredColumn {
         name: name.into(),
