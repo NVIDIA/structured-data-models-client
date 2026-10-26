@@ -579,14 +579,25 @@ fn foreign_key_partial_links_are_merged_per_source_row() {
         sampled.tables[0].columns[0].1 = array(Int64Array::from(vec![0, 1, 2, 3, 4]));
         let edge = sampled.links[0].clone();
         sampled.links = vec![
-            SampledLink { pairs: vec![(0, 0), (2, 1)], ..edge.clone() },
-            SampledLink { pairs: vec![(1, 0), (3, 3)], ..edge },
+            SampledLink {
+                pairs: vec![(0, 0), (2, 1)],
+                ..edge.clone()
+            },
+            SampledLink {
+                pairs: vec![(1, 0), (3, 3)],
+                ..edge
+            },
         ];
-        if reverse { sampled.links.reverse(); }
+        if reverse {
+            sampled.links.reverse();
+        }
         let payload = built(&sampled);
         assert_eq!(foreign_keys(&payload, "context"), json!([0, 0, 1]));
         assert_eq!(foreign_keys(&payload, "predict"), json!([3]));
-        assert_eq!(payload["schema"]["relationships"].as_array().unwrap().len(), 2);
+        assert_eq!(
+            payload["schema"]["relationships"].as_array().unwrap().len(),
+            2
+        );
     }
 }
 
@@ -596,8 +607,14 @@ fn foreign_key_overlap_keeps_first_valid_pair_for_each_row() {
     sampled.tables[0].columns[0].1 = array(Int64Array::from(vec![0, 1, 2, 3, 4]));
     let edge = sampled.links[0].clone();
     sampled.links = vec![
-        SampledLink { pairs: vec![(99, 0), (0, 99), (0, 1), (1, 0)], ..edge.clone() },
-        SampledLink { pairs: vec![(0, 2), (1, 0), (2, 1), (3, 3)], ..edge },
+        SampledLink {
+            pairs: vec![(99, 0), (0, 99), (0, 1), (1, 0)],
+            ..edge.clone()
+        },
+        SampledLink {
+            pairs: vec![(0, 2), (1, 0), (2, 1), (3, 3)],
+            ..edge
+        },
     ];
     let payload = built(&sampled);
     assert_eq!(foreign_keys(&payload, "context"), json!([1, 0, 1]));
@@ -610,18 +627,70 @@ fn empty_and_invalid_partial_maps_do_not_hide_later_valid_rows() {
     sampled.tables[0].columns[0].1 = array(Int64Array::from(vec![0, 1, 2, 3, 4]));
     let edge = sampled.links[0].clone();
     sampled.links = vec![
-        SampledLink { pairs: vec![], ..edge.clone() },
-        SampledLink { pairs: vec![(99, 0), (0, 99)], ..edge.clone() },
-        SampledLink { pairs: vec![(1, 0), (3, 3)], ..edge },
+        SampledLink {
+            pairs: vec![],
+            ..edge.clone()
+        },
+        SampledLink {
+            pairs: vec![(99, 0), (0, 99)],
+            ..edge.clone()
+        },
+        SampledLink {
+            pairs: vec![(1, 0), (3, 3)],
+            ..edge
+        },
     ];
     let payload = built(&sampled);
     assert_eq!(foreign_keys(&payload, "context"), json!([null, 0.0, null]));
     assert_eq!(foreign_keys(&payload, "predict"), json!([3.0]));
-    assert_eq!(payload["schema"]["related_tables"]["orders"]["columns"]["user_id"]["dtype"], json!("float64"));
+    assert_eq!(
+        payload["schema"]["related_tables"]["orders"]["columns"]["user_id"]["dtype"],
+        json!("float64")
+    );
 }
 
 fn foreign_keys(payload: &Value, half: &str) -> Value {
     let table = &payload[half]["related_tables"]["orders"];
-    let at = table["columns"].as_array().unwrap().iter().position(|name| name == "user_id").unwrap();
-    Value::Array(table["rows"].as_array().unwrap().iter().map(|row| row[at].clone()).collect())
+    let at = table["columns"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .position(|name| name == "user_id")
+        .unwrap();
+    Value::Array(
+        table["rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|row| row[at].clone())
+            .collect(),
+    )
+}
+
+#[test]
+fn entirely_invalid_partial_maps_leave_the_edge_absent() {
+    let mut sampled = shop();
+    let edge = sampled.links[0].clone();
+    sampled.links = vec![
+        SampledLink {
+            pairs: vec![],
+            ..edge.clone()
+        },
+        SampledLink {
+            pairs: vec![(99, 0), (0, 99)],
+            ..edge
+        },
+    ];
+    let payload = built(&sampled);
+    assert_eq!(
+        payload["schema"]["relationships"].as_array().unwrap().len(),
+        1
+    );
+    assert!(
+        payload["context"]["related_tables"]["orders"]["columns"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|name| name != "user_id")
+    );
 }
