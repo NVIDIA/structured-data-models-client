@@ -6196,7 +6196,6 @@ entries:
     - 'public.payloads/*/2/schema/instance_table/columns/__kumo_entity_ref_0/dtype'
     - 'public.payloads/*/2/schema/related_tables/users/columns/user_id/dtype'
     - 'public.payloads/*/2/schema/related_tables/orders/columns/user_id/dtype'
-    - 'public.result_text'
   - case: databricks.key.decimal-scales@databricks-sql
     runners: [python-core]
     fields:
@@ -6208,7 +6207,6 @@ entries:
     - 'public.payloads/*/2/schema/instance_table/columns/__kumo_entity_ref_0/dtype'
     - 'public.payloads/*/2/schema/related_tables/users/columns/user_id/dtype'
     - 'public.payloads/*/2/schema/related_tables/orders/columns/user_id/dtype'
-    - 'public.result_text'
   - case: key.decimal-38-10@databricks-sql
     runners: [python-core]
     fields:
@@ -6244,7 +6242,8 @@ entries:
     implementer's proposal, listed for the owner; T3.11's S0 precedent).
     The finite Databricks carry was measured against frozen43e with actual B049/native917d94e0 provenance.
     Exact original decimal coefficients and scales prove nearest-binary64 features, unchanged rational key identities and exact sums read once as binary32; proof SHA256 536caf43f44303b8bfa4c72dc451399355efd27b23f22435a7be3a294e3052af.
-    Only the listed decimal scalar fields, their declared key types and corresponding typed-result digests/text are admitted; no numeric tolerance, schema-order rule, payload wildcard, row-count or warning exemption is added.
+    Only the listed decimal scalar fields, their declared key types and corresponding typed-result digests are admitted; no numeric tolerance, schema-order rule, payload wildcard, row-count or warning exemption is added.
+    The two printed-result text hashes remain finite human evidence of those same decimal key representations: the existing field grammar names no public.result_text mask, so their raw differences are retained rather than widening the grammar.
     The java.databricks-sql.types case here is its Python SQL execution, not a Java run.
   case_outcomes:
   - {case: decimal.class-target-38-18, cell: ref-pandas3, runner: python-core, old: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', new: 'success at predict', summary: 'T2.0c exact decimals: a decimal class target answered, as the reference at 6298913c answers it'}
