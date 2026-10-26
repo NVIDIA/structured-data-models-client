@@ -18,8 +18,8 @@ use std::collections::BTreeSet;
 use std::sync::{Arc, Mutex};
 
 use arrow_array::cast::AsArray;
-use arrow_array::types::Int32Type;
-use arrow_array::{Array, Int32Array, Int64Array, RecordBatch};
+use arrow_array::types::Int64Type;
+use arrow_array::{Array, Int64Array, RecordBatch};
 use arrow_schema::{DataType, Field, Schema, SchemaRef};
 use sdm_contract::catalog::CatalogAnswer;
 use sdm_contract::data::{
@@ -128,9 +128,9 @@ fn cell(attachment: Option<Attachment>) -> String {
 }
 
 /// The offset a chunk's statement adds to each seed's position: none, or
-/// the `pos + <n>` it writes.
+/// the `CAST(pos AS BIGINT) + <n>` it writes.
 fn offset(text: &str) -> usize {
-    text.split_once("pos + ")
+    text.split_once("CAST(pos AS BIGINT) + ")
         .map(|(_, rest)| {
             rest.split_once(' ')
                 .map(|(n, _)| n.parse().unwrap())
@@ -145,17 +145,19 @@ fn answer(step: &FetchStep, payload: &str) -> FetchResult {
     let FetchPlan::Sql { statements, .. } = &step.plan else {
         panic!("not SQL")
     };
-    let moved = offset(&statements.last().unwrap().text);
+    let text = &statements.last().unwrap().text;
+    assert!(text.contains("CAST(pos AS BIGINT)"), "{text}");
+    let moved = offset(text);
     let keys: Vec<i64> = serde_json::from_str(payload).unwrap();
     let schema: SchemaRef = Arc::new(Schema::new(vec![
-        Field::new("__kumo_batch__", DataType::Int32, false),
+        Field::new("__kumo_batch__", DataType::Int64, false),
         Field::new("seed", DataType::Int64, true),
     ]));
     let batch = RecordBatch::try_new(
         Arc::clone(&schema),
         vec![
-            Arc::new(Int32Array::from_iter_values(
-                (0..keys.len()).map(|at| i32::try_from(at + moved).unwrap()),
+            Arc::new(Int64Array::from_iter_values(
+                (0..keys.len()).map(|at| i64::try_from(at + moved).unwrap()),
             )),
             Arc::new(Int64Array::from(keys)),
         ],
@@ -229,12 +231,12 @@ fn a_key_set_past_the_budget_is_asked_as_chunks_in_one_hop_and_joined_in_order()
     let Reply::Fetch(FetchResult::Data(data)) = reply else {
         panic!("not data: {reply:?}")
     };
-    let batches: Vec<i32> = data
+    let batches: Vec<i64> = data
         .batches
         .iter()
-        .flat_map(|b| b.column(0).as_primitive::<Int32Type>().values().to_vec())
+        .flat_map(|b| b.column(0).as_primitive::<Int64Type>().values().to_vec())
         .collect();
-    let expected: Vec<i32> = (0..i32::try_from(keys.len()).unwrap()).collect();
+    let expected: Vec<i64> = (0..i64::try_from(keys.len()).unwrap()).collect();
     assert_eq!(batches, expected, "each seed at its place in the key set");
     let found: Vec<i64> = data
         .batches
@@ -620,7 +622,7 @@ fn timestamp_preflight_binds_empty_keys_then_preserves_the_original_lookup() {
         (
             "data_type",
             Arc::new(StringArray::from(vec![
-                "int",
+                "bigint",
                 "bigint",
                 "timestamp_ntz",
                 "bigint",
@@ -743,7 +745,7 @@ fn both_timestamp_kinds_survive_first_and_later_key_text_chunks_without_reprojec
         (
             "data_type",
             Arc::new(StringArray::from(vec![
-                "int",
+                "bigint",
                 "bigint",
                 "timestamp_ntz",
                 "timestamp",

@@ -39,6 +39,12 @@ from sdm_client import Schema, _routing
 ROOT = Path(__file__).resolve().parents[3]
 CAPTURE = ROOT / 'contract' / 'fixtures' / 'databricks' / 'capture.json'
 
+# Both routes project posexplode's position, with the core widening it to i64.
+_SEED_PREFIXES = (
+    'WITH TMP AS ( SELECT pos AS ',
+    'WITH TMP AS ( SELECT CAST(pos AS BIGINT) AS ',
+)
+
 
 def _normal(text: str) -> str:
     return ' '.join(text.split())
@@ -741,7 +747,7 @@ class _CompletingWarehouse(_SessionWarehouse):
                 found = self._db.execute(text).to_arrow_table()
                 self.calls[-1] = (_normal(operation), list(parameters))
                 return found
-            if not text.startswith('WITH TMP AS ( SELECT pos AS '):
+            if not text.startswith(_SEED_PREFIXES):
                 raise
             found = _seeded_over(self._db, text, parameters)
             self.calls[-1] = (_normal(operation), list(parameters))
@@ -1688,7 +1694,7 @@ class _DroppingWarehouse(_CompletingWarehouse):
         import pyarrow.compute as pc
 
         text = _normal(operation)
-        if self.dropped and text.startswith('WITH TMP AS ( SELECT pos AS '):
+        if self.dropped and text.startswith(_SEED_PREFIXES):
             self.calls.append((text, list(parameters)))
             return _seeded_over(self._db, text, parameters)
         found = super().answer(operation, parameters)
@@ -1877,7 +1883,7 @@ class _RepeatedKeyWarehouse(_CompletingWarehouse):
 
     def answer(self, operation: str, parameters: list[Any]) -> pa.Table:
         text = _normal(operation)
-        if text.startswith('WITH TMP AS ( SELECT pos AS '):
+        if text.startswith(_SEED_PREFIXES):
             self.calls.append((text, list(parameters)))
             return _seeded_over(self._db, text, parameters)
         if (

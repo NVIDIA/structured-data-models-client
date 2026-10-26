@@ -85,7 +85,7 @@ class _MetricWarehouse(_warehouse._CompletingWarehouse):
         if 'information_schema' in text or 'ORDER BY p.o' in text:
             return super().answer(operation, parameters)
         self.calls.append((text, list(parameters)))
-        if text.startswith('WITH TMP AS ( SELECT pos AS '):
+        if text.startswith(_warehouse._SEED_PREFIXES):
             return _warehouse._seeded_over(self._db, text, parameters)
         local = re.sub(r'`main`\.`shop`\.', '', text).replace('`', '"')
         return self._db.execute(local, parameters).to_arrow_table()
