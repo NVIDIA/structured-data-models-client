@@ -7,8 +7,10 @@ package com.nvidia.sdm.internal;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.math.BigInteger;
+import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,6 +24,32 @@ import org.junit.jupiter.api.Test;
  * fill yet is the defect, named.
  */
 class WordingTest {
+  @Test
+  void timestampUnitsUseTheirExactCountsIncludingNegativeFractions() {
+    String[] units = {"s", "ms", "us", "ns"};
+    int[] nanos = {0, 999_000_000, 999_999_000, 999_999_999};
+    for (int i = 0; i < units.length; i++) {
+      Object value = Wording.scalar(Map.of("t", "ts", "v", "-1", "unit", units[i]));
+      assertEquals(LocalDateTime.of(1969, 12, 31, 23, 59, 59, nanos[i]), value);
+    }
+    assertEquals(LocalDateTime.of(2024, 1, 1, 0, 0),
+        Wording.scalar(Map.of("t", "ts", "v", "1704067200", "unit", "s")));
+  }
+
+  @Test
+  void unknownTimestampAndCoarseNonTimestampUnitsCannotMasqueradeAsNanoseconds() {
+    for (String unit : List.of("", "h", "MS", "US")) {
+      assertThrows(IllegalArgumentException.class,
+          () -> Wording.scalar(Map.of("t", "ts", "v", "1", "unit", unit)));
+    }
+    for (String tag : List.of("duration", "time64")) {
+      for (String unit : List.of("s", "ms")) {
+        assertThrows(IllegalArgumentException.class,
+            () -> Wording.scalar(Map.of("t", tag, "v", "1", "unit", unit)));
+      }
+    }
+  }
+
   /**
    * Every sentence a {@code validate_query} run can end with or warn with: the start's checks
    * ({@code sdm_core::dispatch::start}, {@code attached}, {@code sdm_host::runs}), the validation's
