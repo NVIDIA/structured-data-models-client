@@ -34,6 +34,7 @@ from sdm_client import (
     Schema,
 )
 from sdm_client.client import FittedModel, _empty_answer
+from sdm_client.core.backend import NimBackend
 from sdm_client.core.transport import _build_retry
 from sdm_client.errors import (
     NimRequestError,
@@ -166,7 +167,7 @@ class Transport:
 
 class Client:
     def __init__(self, transport: Transport) -> None:
-        self._transport = transport
+        self._backend = NimBackend(transport)
 
 
 class Adapter:

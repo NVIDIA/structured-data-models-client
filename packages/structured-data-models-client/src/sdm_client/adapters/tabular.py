@@ -24,11 +24,12 @@ from __future__ import annotations
 
 import uuid
 import warnings
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from typing import Any
 
 import pandas as pd
 from sdm_api.generated.tfm_api import (
+    PredictionItem,
     PredictionResponse,
     ResponseContractError,
 )
@@ -49,6 +50,7 @@ from sdm_client.wire import (
     widen_tfm_dtype,
 )
 from sdm_client.wire.answers import as_declared_target
+from sdm_client.wire.inference import typed_inference
 
 # Output fields to ask for when the caller named none, by task kind. Asking for
 # everything would make a regression request carry probabilities it cannot
@@ -140,14 +142,30 @@ class TabularAdapter:
                 f'match the contract: {error}',
                 code='INVALID_RESPONSE',
             ) from error
-        return PredictionResult(
+        return self.answered(
+            parsed.predictions,
+            outputs,
+            payload,
             model=parsed.model,
             request_id=parsed.id,
-            items=as_declared_target(
-                _named_entities(parsed.predictions, payload),
-                payload,
-            ),
             metadata=parsed.metadata,
+        )
+
+    def answered(
+        self,
+        items: Sequence[PredictionItem],
+        outputs: tuple[str, ...],
+        payload: dict[str, Any] | None,
+        *,
+        model: str,
+        request_id: str = '',
+        metadata: Mapping[str, Any] | None = None,
+    ) -> PredictionResult:
+        return PredictionResult(
+            model=model,
+            request_id=request_id,
+            items=as_declared_target(_named_entities(items, payload), payload),
+            metadata=dict(metadata or {}),
             outputs=outputs,
         )
 
@@ -272,7 +290,9 @@ class TabularAdapter:
             'metadata': {'request_id': _request_id()},
         }
         if request.inference:
-            envelope['inference'] = json_ready(request.inference)
+            envelope['inference'] = typed_inference(
+                json_ready(request.inference)
+            )
         return envelope
 
     @staticmethod
@@ -435,7 +455,7 @@ def _key_named_by(value: str) -> str | None:
 
 
 def _named_entities(
-    items: tuple[Any, ...], payload: dict[str, Any] | None
+    items: Sequence[Any], payload: dict[str, Any] | None
 ) -> list[Any]:
     r"""Put the caller's key back on each row, and check it belongs there.
 

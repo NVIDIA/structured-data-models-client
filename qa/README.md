@@ -43,6 +43,7 @@ python probe_tabular.py       # kumo-tabular on Adult, Wine, Titanic, Bank, Stud
 python probe_relational.py    # kumo-relational on Northwind
 python probe_connectors.py    # local files, SQLite, DuckDB
 python probe_edges.py         # awkward values, shapes, the error contract
+python probe_in_process.py    # SDMClient.in_process() against the NIMs, request for request
 python probe_cloud.py         # S3   (needs AWS credentials and /tmp/qa_bucket)
 python probe_warehouse.py     # Snowflake and Databricks (needs SNOWFLAKE_*, DATABRICKS_*)
 ```

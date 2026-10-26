@@ -186,7 +186,7 @@ def test_the_endpoint_scores_what_this_client_says_it_does(client, query):
         list(rows[i % len(rows)]) for i in range(cap + 1)
     ]
     with pytest.raises(StructuredDataError) as refused:
-        client._transport.predict(payload)
+        client._backend.transport.predict(payload)
     assert str(cap) in str(refused.value)
 
 

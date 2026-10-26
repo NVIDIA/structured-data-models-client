@@ -24,7 +24,7 @@ not own query-shape validation. The profile does.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, fields
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -33,6 +33,8 @@ from predictive_query import Capabilities, Profile
 from sdm_client.errors import UnsupportedRequestError
 
 if TYPE_CHECKING:  # pragma: no cover - imported for typing only.
+    from sdm_api.generated.tfm_api import PredictionItem
+
     from sdm_client.request import Request
     from sdm_client.result import PredictionResult
 
@@ -167,6 +169,23 @@ class ModelAdapter(Protocol):
         ``payload`` is the request that produced it. A batch's answers are
         indexed within that batch, so mapping them back to what the caller
         asked about needs the request beside the response.
+        """
+        ...
+
+    def answered(
+        self,
+        items: Sequence[PredictionItem],
+        outputs: tuple[str, ...],
+        payload: dict[str, Any] | None,
+        *,
+        model: str,
+        request_id: str = '',
+        metadata: Mapping[str, Any] | None = None,
+    ) -> PredictionResult:
+        r"""The result for one call's answers, whichever backend gave them.
+
+        Each answer is put under the key the caller asked about, read from
+        ``payload``, and checked to belong to the row it names.
         """
         ...
 
