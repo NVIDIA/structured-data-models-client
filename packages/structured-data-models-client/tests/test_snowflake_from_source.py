@@ -1137,6 +1137,9 @@ def test_public_wide_decimal_feature_keeps_the_reference_journey(
     for route in ('old', 'core'):
         warehouse = Warehouse()
         schema = _described(route, monkeypatch, warehouse, **_NAMED)
+        if route == 'core':
+            # Exercise the production default through materialize and predict.
+            monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
         projections[route] = _projection(schema)
         request = _materialize(
             schema,
