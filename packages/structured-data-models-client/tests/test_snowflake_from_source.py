@@ -1113,8 +1113,11 @@ def test_public_wide_decimal_feature_keeps_the_reference_journey(
             assert column.type == pa.decimal128(38, 0)
             original = column.buffers()[1]
             storage = pa.allocate_buffer(original.size + 16)
-            copied = storage.slice(8 if misaligned else 0, original.size)
-            memoryview(copied).cast('B')[:] = memoryview(original).cast('B')
+            offset = 8 if misaligned else 0
+            memoryview(storage).cast('B')[offset : offset + original.size] = (
+                memoryview(original).cast('B')
+            )
+            copied = storage.slice(offset, original.size)
             assert copied.address % 16 == (8 if misaligned else 0)
             replacement = pa.Array.from_buffers(
                 column.type,

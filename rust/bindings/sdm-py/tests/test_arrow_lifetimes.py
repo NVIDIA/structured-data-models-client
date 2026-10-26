@@ -274,10 +274,10 @@ def test_valid_unaligned_decimal_keeps_exact_values_metadata_and_nulls(
         [decimal.Decimal(value), None, decimal.Decimal(-value)], decimal_type
     )
     storage = pa.allocate_buffer(canonical.buffers()[1].size + 16)
+    memoryview(storage).cast('B')[8 : 8 + canonical.buffers()[1].size] = (
+        memoryview(canonical.buffers()[1]).cast('B')
+    )
     unaligned = storage.slice(8, canonical.buffers()[1].size)
-    memoryview(unaligned).cast('B')[:] = memoryview(
-        canonical.buffers()[1]
-    ).cast('B')
     assert unaligned.address % 16 == 8
     array = pa.Array.from_buffers(
         decimal_type,
