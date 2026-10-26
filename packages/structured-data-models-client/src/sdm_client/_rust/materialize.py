@@ -397,7 +397,12 @@ def gather(
     # (decision E52); the run leaves its own in its place, done or failed.
     # A semantic model's, as the core's refusal of a table or column the
     # model no longer gives names it (T3.5, plan B).
-    with errors.holding(**errors.source_values(schema.source)):
+    with errors.holding(
+        **errors.source_values(schema.source),
+        inference_option=lambda fields: options['inference_config'][
+            fields['key']
+        ],
+    ):
         finished = run(
             operation,
             attachments,

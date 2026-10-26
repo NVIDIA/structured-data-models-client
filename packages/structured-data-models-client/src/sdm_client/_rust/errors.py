@@ -289,7 +289,7 @@ class _Words(string.Formatter):
                         {
                             'type': 'finite_number',
                             'loc': (self._fields['key'],),
-                            'input': value,
+                            'input': self._host.get('inference_option', value),
                         }
                     ],
                 )
