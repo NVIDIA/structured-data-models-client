@@ -406,7 +406,8 @@ def on_database(path: str, database: str) -> str:
 
 def routes_on(case: dict[str, Any], database: str) -> list[str]:
     r"""The routes python-core forces for ``case`` on ``database``: on DuckDB
-    the case's own; elsewhere the case's own over ``database``
+    the case's own with source aliases normalized; elsewhere those routes
+    over ``database``
     (:func:`on_database`) and every route of each public call the case
     makes, through its ``until`` (T2.1d). Off DuckDB the old route is not
     the reference's (python-old runs on DuckDB only, T2.1a fix 4), so no
