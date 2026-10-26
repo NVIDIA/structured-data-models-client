@@ -769,6 +769,22 @@ fn batch_select(offset: usize) -> String {
     }
 }
 
+#[cfg(test)]
+mod batch_transport_tests {
+    use super::batch_select;
+
+    #[test]
+    fn batch_positions_are_i64_before_any_chunk_offset_arithmetic() {
+        assert_eq!(batch_select(0), "CAST(pos AS BIGINT) AS `batch`");
+        for offset in [1, 300_000, i32::MAX as usize + 1] {
+            assert_eq!(
+                batch_select(offset),
+                format!("CAST(pos AS BIGINT) + {offset} AS `batch`")
+            );
+        }
+    }
+}
+
 /// A Databricks answer to a `describe` of `part`, read as the reference
 /// reads it, each column by its position in the statement's select list.
 /// The source's namespace, one row per part, outermost first: each part

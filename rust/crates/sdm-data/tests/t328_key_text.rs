@@ -368,11 +368,15 @@ fn a_databricks_key_set_past_the_budget_is_split_as_the_old_client_splits_it() {
             assert_eq!(last, original);
         } else {
             assert!(
-                last.contains(&format!("pos + {offset} AS `batch`")),
+                last.contains(&format!("CAST(pos AS BIGINT) + {offset} AS `batch`")),
                 "chunk at {offset}: {last}"
             );
             assert_eq!(
-                last.replacen(&format!("pos + {offset} AS"), "pos AS", 1),
+                last.replacen(
+                    &format!("CAST(pos AS BIGINT) + {offset} AS"),
+                    "CAST(pos AS BIGINT) AS",
+                    1,
+                ),
                 *original
             );
         }

@@ -136,3 +136,62 @@ def test_cross_warehouse_cases_have_no_unimplemented_lakebase_alias(
 def test_other_explicit_source_kinds_keep_their_route(backend: str) -> None:
     path = 'schema.from-source/all-tables/' + backend
     assert RUNNER.on_database(path, 'lakebase') == path
+
+
+@pytest.mark.parametrize(
+    'leg,given,parts,kind,keywords',
+    [
+        ('lakebase', {}, ['sch'], 'PostgresSource', {'schema': 'sch'}),
+        (
+            'snowflake',
+            {},
+            ['cat', 'sch'],
+            'SnowflakeSource',
+            {'database': 'cat', 'schema': 'sch'},
+        ),
+        (
+            'databricks-sql',
+            {},
+            ['cat', 'sch'],
+            'DatabricksSource',
+            {'catalog': 'cat', 'schema': 'sch'},
+        ),
+        (
+            'databricks-spark',
+            {'named_part': 'schema'},
+            [None, 'sch'],
+            'DatabricksSource',
+            {'schema': 'sch'},
+        ),
+        (
+            'snowflake',
+            {'named_part': 'catalog'},
+            ['cat', None],
+            'SnowflakeSource',
+            {'database': 'cat'},
+        ),
+        ('lakebase', {'connect': 'lakebase'}, [], 'Source', {}),
+    ],
+)
+def test_warehouse_namespace_facts_are_the_real_source_arguments(
+    monkeypatch: pytest.MonkeyPatch,
+    leg: str,
+    given: dict,
+    parts: list,
+    kind: str,
+    keywords: dict,
+) -> None:
+    import sdm_connectors
+
+    connection = object()
+    received = []
+
+    def construct(value, **named):
+        received.append((value, named))
+        return connection
+
+    monkeypatch.setattr(sdm_connectors, kind, construct)
+    names = {'catalog': 'cat', 'schema': 'sch'}
+    assert RUNNER.warehouse_namespace(leg, names, given) == parts
+    assert RUNNER.warehouse_source(leg, connection, names, given) is connection
+    assert received == [(connection, keywords)]

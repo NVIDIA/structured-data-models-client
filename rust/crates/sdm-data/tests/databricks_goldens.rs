@@ -148,19 +148,19 @@ const GOLDENS: goldens::Goldens = &[
     (
         r##"{"columns":["user_id","age","country"],"key":["user_id"],"request":"lookup","seeds":{"attachment":2,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["main","shop","users"]}}"##,
         &[
-            "WITH TMP AS (\n  SELECT pos AS `batch`, col AS `key`\n  FROM posexplode(from_json(?, 'array<bigint>'))\n)\nSELECT s.`batch` AS `__kumo_batch__`, t.`user_id`, t.`age`, t.`country`, COUNT(*) OVER (PARTITION BY s.`batch`) AS `__kumo_matches__`\nFROM TMP s\nJOIN `main`.`shop`.`users` t\n  ON t.`user_id` = s.`key`\nQUALIFY ROW_NUMBER() OVER (PARTITION BY s.`batch` ORDER BY t.`user_id`) = 1",
+            "WITH TMP AS (\n  SELECT CAST(pos AS BIGINT) AS `batch`, col AS `key`\n  FROM posexplode(from_json(?, 'array<bigint>'))\n)\nSELECT s.`batch` AS `__kumo_batch__`, t.`user_id`, t.`age`, t.`country`, COUNT(*) OVER (PARTITION BY s.`batch`) AS `__kumo_matches__`\nFROM TMP s\nJOIN `main`.`shop`.`users` t\n  ON t.`user_id` = s.`key`\nQUALIFY ROW_NUMBER() OVER (PARTITION BY s.`batch` ORDER BY t.`user_id`) = 1",
         ],
     ),
     (
         r##"{"columns":["order_id","user_id","price","ts"],"key":["user_id"],"order":[{"as_timestamp":true,"column":"ts","descending":true,"nulls_last":false},{"as_timestamp":false,"column":"order_id","descending":false,"nulls_last":false}],"per_seed":32,"request":"neighbors","seeds":{"attachment":3,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}},{"name":"time","nullable":false,"type":{"type":"timestamp","unit":"ns","zone":null}},{"name":"start","nullable":false,"type":{"type":"timestamp","unit":"ns","zone":null}}]},"table":{"source":["main","shop","orders"]},"window":{"column":"ts","lower":{"inclusive":false,"seed_column":"start"},"upper":{"inclusive":true,"seed_column":"time"}}}"##,
         &[
-            "WITH TMP AS (\n  SELECT pos AS `batch`, col.id AS `key`, col.e AS `time`, col.s AS `start`\n  FROM posexplode(from_json(?, 'array<struct<id:bigint,e:string,s:string>>'))\n)\nSELECT s.`batch` AS `__kumo_batch__`, t.`order_id`, t.`user_id`, t.`price`, t.`ts`\nFROM TMP s\nJOIN `main`.`shop`.`orders` t\n  ON t.`user_id` = s.`key`\n AND t.`ts` <= s.`time`\n AND t.`ts` > s.`start`\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.`batch`\n  ORDER BY t.`ts` DESC, t.`order_id`\n) <= 32\nORDER BY s.`batch`, t.`ts` DESC, t.`order_id`",
+            "WITH TMP AS (\n  SELECT CAST(pos AS BIGINT) AS `batch`, col.id AS `key`, col.e AS `time`, col.s AS `start`\n  FROM posexplode(from_json(?, 'array<struct<id:bigint,e:string,s:string>>'))\n)\nSELECT s.`batch` AS `__kumo_batch__`, t.`order_id`, t.`user_id`, t.`price`, t.`ts`\nFROM TMP s\nJOIN `main`.`shop`.`orders` t\n  ON t.`user_id` = s.`key`\n AND t.`ts` <= s.`time`\n AND t.`ts` > s.`start`\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.`batch`\n  ORDER BY t.`ts` DESC, t.`order_id`\n) <= 32\nORDER BY s.`batch`, t.`ts` DESC, t.`order_id`",
         ],
     ),
     (
         r##"{"columns":["ts"],"key":["user_id"],"order":null,"per_seed":null,"request":"neighbors","seeds":{"attachment":4,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}},{"name":"end","nullable":false,"type":{"type":"timestamp","unit":"ns","zone":null}},{"name":"start","nullable":false,"type":{"type":"timestamp","unit":"ns","zone":null}}]},"table":{"source":["main","shop","orders"]},"window":{"column":"ts","lower":{"inclusive":false,"seed_column":"start"},"upper":{"inclusive":true,"seed_column":"end"}}}"##,
         &[
-            "WITH TMP AS (\n  SELECT pos AS `batch`, col.id AS `key`, col.e AS `end`, col.s AS `start`\n  FROM posexplode(from_json(?, 'array<struct<id:bigint,e:string,s:string>>'))\n)\nSELECT s.`batch` AS `__kumo_batch__`, t.`ts`\nFROM TMP s\nJOIN `main`.`shop`.`orders` t\n  ON t.`user_id` = s.`key`\n AND t.`ts` <= s.`end`\n AND t.`ts` > s.`start`",
+            "WITH TMP AS (\n  SELECT CAST(pos AS BIGINT) AS `batch`, col.id AS `key`, col.e AS `end`, col.s AS `start`\n  FROM posexplode(from_json(?, 'array<struct<id:bigint,e:string,s:string>>'))\n)\nSELECT s.`batch` AS `__kumo_batch__`, t.`ts`\nFROM TMP s\nJOIN `main`.`shop`.`orders` t\n  ON t.`user_id` = s.`key`\n AND t.`ts` <= s.`end`\n AND t.`ts` > s.`start`",
         ],
     ),
     (

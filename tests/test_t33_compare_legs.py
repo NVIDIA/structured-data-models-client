@@ -127,3 +127,216 @@ def test_t33_a_stand_in_verdict_is_no_longer_an_observation_field(
     # Not set aside as live only: the verdict is refused and the result
     # still differs.
     assert report.failures
+
+
+def _provider_report(
+    tmp: Path,
+    database: str,
+    provider: dict[str, Any],
+    *,
+    given: dict[str, Any] | None = None,
+    pinned: dict[str, Any] | None = None,
+    changed: tuple[str, Any] | None = None,
+) -> Any:
+    """Synthetic start arguments, judged through compare, not live evidence.
+
+    Expected providers below are independent literals from the source contract.
+    Keep the committed generic core specifications rather than learning them
+    from the runner's inputs or deleting them as the older Leg fixture does.
+    """
+    case = json.loads((ROOT / f'contract/cases/s1/{SOURCE}.json').read_text())
+    case.update(id=CASE, until='materialize')
+    case['expect'] = {'outcome': 'success', 'stage': 'materialize'}
+    case['core'].pop('predict')
+    case['input'].update(given or {})
+    if database in ('duckdb', 'sqlite', 'postgres'):
+        case['databases'] = [database]
+    else:
+        case.update(slice='S2', warehouses=[database])
+    if pinned is not None:
+        for spec in case['core'].values():
+            spec['provider'] = copy.deepcopy(pinned)
+    cases = tmp / 'cases'
+    cases.mkdir()
+    data = json.dumps(case).encode()
+    (cases / f'{CASE}.json').write_bytes(data)
+    [reference] = sorted((ROOT / 'contract/reference').glob('*.jsonl'))
+    line = next(
+        json.loads(text)
+        for text in reference.read_text().splitlines()
+        if json.loads(text)['case'] == SOURCE
+    )
+    line['case'] = CASE if database == 'duckdb' else f'{CASE}@{database}'
+    line['identity'].update(
+        runner='python-core',
+        reference=None,
+        native={'sha256': '0' * 64},
+        native_loaded=True,
+        operations=['describe_source', 'materialize'],
+    )
+    line['identity']['inputs']['case'] = hashlib.sha256(data).hexdigest()
+    line['outcome'] = {
+        'result': 'success',
+        'stage': 'materialize',
+        'error': None,
+        'code': None,
+    }
+    line['public'].update(payloads=[], result=None)
+    described = {'tables': [], 'links': []}
+    starts = [
+        {'op': op, **copy.deepcopy(spec), 'provider': copy.deepcopy(provider)}
+        for op, spec in case['core'].items()
+    ]
+    starts[1].update(schema=described, query=case['input']['pql'])
+    if changed is not None:
+        field, value = changed
+        if field.startswith('provider.'):
+            name = field.removeprefix('provider.')
+            for start in starts:
+                if value is None:
+                    start['provider'].pop(name, None)
+                else:
+                    start['provider'][name] = value
+        else:
+            starts[1][field] = value
+    line['core'] = {
+        'inputs': starts,
+        'fetches': [{'request': {}, 'plan': {}}],
+        'accepted': None,
+        'described': described,
+        'materialized': {
+            'version': 1,
+            'query': case['input']['pql'],
+            'payload': {},
+        },
+        'predicted': None,
+        'error': None,
+    }
+    observed = tmp / 'python-core.jsonl'
+    observed.write_text(json.dumps(line) + '\n')
+    return _compare().compare([cases], None, [observed], database=database)
+
+
+@pytest.mark.parametrize(
+    'database,given,provider',
+    [
+        ('duckdb', {}, {'provider': 'sql', 'dialect': 'duckdb'}),
+        ('postgres', {}, {'provider': 'sql', 'dialect': 'postgres'}),
+        (
+            'lakebase',
+            {},
+            {
+                'provider': 'sql',
+                'dialect': 'postgres',
+                'namespace': ['{schema}'],
+            },
+        ),
+        (
+            'snowflake',
+            {},
+            {
+                'provider': 'sql',
+                'dialect': 'snowflake',
+                'namespace': ['{catalog}', '{schema}'],
+            },
+        ),
+        (
+            'databricks-sql',
+            {},
+            {
+                'provider': 'sql',
+                'dialect': 'databricks',
+                'namespace': ['{catalog}', '{schema}'],
+            },
+        ),
+        (
+            'databricks-spark',
+            {},
+            {
+                'provider': 'sql',
+                'dialect': 'databricks',
+                'namespace': ['{catalog}', '{schema}'],
+            },
+        ),
+        (
+            'snowflake',
+            {'named_part': 'schema'},
+            {
+                'provider': 'sql',
+                'dialect': 'snowflake',
+                'namespace': [None, '{schema}'],
+            },
+        ),
+        (
+            'databricks-sql',
+            {'named_part': 'catalog'},
+            {
+                'provider': 'sql',
+                'dialect': 'databricks',
+                'namespace': ['{catalog}', None],
+            },
+        ),
+        (
+            'lakebase',
+            {'connect': 'lakebase'},
+            {'provider': 'sql', 'dialect': 'postgres'},
+        ),
+        (
+            'snowflake',
+            {'connect': 'snowpark'},
+            {'provider': 'sql', 'dialect': 'snowflake'},
+        ),
+    ],
+)
+def test_generic_provider_inputs_follow_declared_source_names(
+    tmp_path: Path,
+    database: str,
+    given: dict[str, Any],
+    provider: dict[str, Any],
+) -> None:
+    report = _provider_report(tmp_path, database, provider, given=given)
+    assert report.failures == [], report.texts
+
+
+@pytest.mark.parametrize(
+    'changed',
+    [
+        ('provider.dialect', 'lakebase'),
+        ('provider.dialect', None),
+        ('provider.namespace', None),
+        ('provider.namespace', ['wrong_schema']),
+        ('provider.namespace', ['{catalog}', '{schema}']),
+        ('indices', [{'t': 'i64', 'v': '999'}]),
+        ('anchor_time', None),
+        ('query', 'PREDICT users.age FOR EACH users.user_id'),
+    ],
+)
+def test_provider_adaptation_does_not_copy_or_excuse_changed_inputs(
+    tmp_path: Path, changed: tuple[str, Any]
+) -> None:
+    report = _provider_report(
+        tmp_path,
+        'lakebase',
+        {'provider': 'sql', 'dialect': 'postgres', 'namespace': ['{schema}']},
+        changed=changed,
+    )
+    assert not any('runner failure' in text for _, text in report.failures), (
+        report.texts
+    )
+    assert any(
+        rule == 'inputs' and 'core.inputs' in text
+        for rule, text in report.failures
+    ), report.texts
+
+
+def test_explicit_provider_and_view_fields_are_not_rewritten(
+    tmp_path: Path,
+) -> None:
+    provider = {
+        'provider': 'sql',
+        'dialect': 'postgres',
+        'namespace': ['pinned'],
+        'view': {'name': 'pinned_view', 'trust_expressions': False},
+    }
+    report = _provider_report(tmp_path, 'lakebase', provider, pinned=provider)
+    assert report.failures == [], report.texts
