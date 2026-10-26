@@ -322,7 +322,10 @@ pub(crate) fn scalar(array: &dyn Array, row: usize) -> Option<Scalar> {
         DataType::Date32 => Scalar::Date32(array.as_primitive::<D>().value(row)),
         DataType::Timestamp(unit, zone) => Scalar::Timestamp {
             unit: (*unit).into(),
-            zone: zone.as_ref().map(ToString::to_string),
+            zone: zone
+                .as_deref()
+                .filter(|zone| !zone.is_empty())
+                .map(str::to_owned),
             value: match unit {
                 TimeUnit::Second => array.as_primitive::<TimestampSecondType>().value(row),
                 TimeUnit::Millisecond => {
