@@ -1,6 +1,6 @@
 # Phase 3 validation tracker
 
-Updated 2026-10-26, 18:55 UTC.
+Updated 2026-10-26, 20:41 UTC.
 Phase 3 / T3.10 is unfinished.
 Phase 4 is paused by the owner.
 The coordinator alone edits this tracker; agents report results and next actions.
@@ -28,9 +28,9 @@ Completed results below retain their actual producing sources; bounded source ap
 | Area | Data comparison | Model comparison and accuracy | Remaining |
 |---|---|---|---|
 | Databricks SQL | All 302 originals executed; nine affected originals rerun on genuine d90 with zero operator failures; raw differences retained | Original model profiles have exact predictions/payloads or approved matching refusals; diamond has 0% degradation | Final integrated evidence sign-off; generated/provider checks complete with both finite source opinions |
-| Databricks Spark | All 300 original executions terminal; final batch cleanup verified | Original runtime model comparison complete; stress-case aggregate RMSE +0.0002943%, within 5%; final single-row batch +11.4946% diagnostic retained | Both finite opinions complete with explicit read-attribution limits; original four-request model comparison completed |
+| Databricks Spark | All 300 original executions terminal; final batch cleanup verified | Original runtime model comparison complete; stress-case aggregate RMSE +0.0002943%, within 5%; final single-row batch +11.4946% diagnostic retained | Both finite opinions complete with explicit read-attribution limits; existing live provider kit complete in R14 |
 | Snowflake | All 304 originals captured; exact finite reconciliation packet assembled; raw strict failures retained | Ordinary/semantic pairs and diamond pass; historical independent-draw stress pair is 26.51% worse | Identical-input control passes with all 10001 predictions exact; both finite opinions complete, with historical-error-body and read-evidence limits retained |
-| Lakebase | All 282 originals reconciled historically; 281 retained through final source; original notebook passed all 32 commands | All six runtime profiles included in the completed paired matrix; exact predictions/payloads or approved matching refusals | Rerun only the original negative-neighbor case affected by the later shared fix, with fixture ownership/cleanup/restoration verified |
+| Lakebase | All 282 originals reconciled historically; 281 retained through final source; original notebook passed all 32 commands | All six runtime profiles included in the completed paired matrix; exact predictions/payloads or approved matching refusals | Affected negative-neighbor original completed on final source; full fixture restored; existing live provider kit complete in R14 |
 | Databricks metric views | SQL smoke exact; original cases remain included in SQL/Spark coverage | All three original SQL model questions have exact payloads and exact predictions or matching refusals | Finish comparison assembly and source-impact assessment of the completed Spark batches |
 | Snowflake semantic views | Original cases captured; wide-decimal and semantic-twin boundaries repaired | Five original semantic model pairs have exact payloads/predictions | Final finite acceptance; measured latency cost already accepted |
 
@@ -44,22 +44,29 @@ Counts describe existing cases only.
 | R1 | **DONE: Databricks foreign-key metadata fix landed** | Pushed and independently verified `dd5b3f37ef`; both exact carry approvals and normal 188-second package handoff passed | Coordinator consumed handoff; original native producer IDs retained |
 | R2 | **DONE: execute all nine affected originals** | Genuine d90: 9/9 observed, zero operator failures, SDK0 cleanup; corrected key32 and odd-name cases succeed, metric warning restored, negative-neighbor has zero strict differences; 186 raw differences remain for finite attribution | Coordinator consumes actual results and exact owner-approved key32 support; final comparison acceptance remains R8 |
 | R3 | **DONE: Spark comparison assembly and finite review** | All 300 original executions assembled; both independent opinions support observed product semantics and aggregate quality, retaining raw read-attribution limits and final single-row diagnostic regression | Original producer IDs and all 4780 raw differences retained; no strict comparator PASS claimed |
-| R4 | Complete Java Databricks SQL and timezone comparisons on x86 and ARM | Both on-demand jobs FAILED with Java heap exhaustion in ContractRunner observation JSON serialization; each retained 96/249 Python and 72/249 Java cases, all 72 paired outcomes/codes match; 0/18 timezone checks completed | M1 source and exact execution binding both have two CODE approvals; 23 controls pass; x86 parent120022043914990/task337355881848558 and ARM parent51753183712613/task292780554884823 accepted once; both await cluster startup at 18:55; no new completed cases yet |
+| R4 | Complete Java Databricks SQL and timezone comparisons on x86 and ARM | Both M2 32 GiB jobs genuinely passed resource admission and completed the first missing 24 Java cases with cleanup: 96/249 Java and 96/249 Python per architecture; next 24 Python are also complete, Java advancing | Sole source author prepares disjoint residual ranges 120:144, 144:192 and 192:249; sole cloud owner freezes configs for both CODE reviews, then launches three jobs per architecture while retaining completed original ranges and one J2 run per architecture |
 | R5 | **DONE: original Lakebase notebook** | Parent `1028333862593563` passed all 32 original commands on genuine 7e41; full 173106-row data and PK/FK post-check exact; read lease released | Coordinator consumed authentic success/export/fixture receipt; both source-impact approvals retain original IDs |
 | R6 | **DONE: original Databricks notebook** | Parent `435766366545516` passed all 39 original commands on genuine 7e41; source/export verified; only the verified owned metric view removed, SDK0 cleanup | Coordinator consumed authentic success and cleanup receipt; original failed attempts retained |
 | R7 | **DONE: Databricks generated-source and provider checks** | Both finite opinions accept all 20 classified generated journeys; after both CODE approvals, corrected directCountRows oracle rechecked all 99 complete saved live answers: normal 33/33, truncate detected, silent-capability detected | Receipt `712a0c21`; all 99 original judgments reproduced first, only direct count-header judgment changed per pass; original failures preserved, no new queries |
-| R8 | Finalize finite warehouse comparison acceptance and scoped metadata | Java diagnostic-budget fix and all metadata landed; no proposed entries remain; final source `15ec2ad916`; both SF304 final finite opinions accept bounded evidence, including fresh original rank error and exact controlled sampling | Both final DK302 opinions accept bounded evidence; Lakebase 281 results and ten model pairs retain scope, with one affected original negative-neighbor case requiring final-source rerun; reviewed concrete fixture binding is being completed |
+| R8 | **DONE: finite warehouse comparison evidence and affected Lakebase original** | Both final DK302/SF304 opinions accept bounded evidence; final15e Lakebase negative-neighbor original now actually returns PostgreSQL PROVIDER_ERROR/2201W under P2I-4, with one observed case and no operator failure | Full original AW173106 typed rows, ordered columns/types and PK/FK restored exactly; SDK0 between case and restoration, lease released; receipt `4ff68507` retained for final pack sign-off |
 | R9 | **DONE: two reviews approve bounded retention of completed cohorts** | Both independently approve retaining all 255 model questions, 18 census questions, 20 memory controls and 600 local generated-source results with original IDs; model warning/raw-FK equality is not claimed | All nine affected originals are executed in R2; final finite comparison acceptance remains in R8 |
-| R10 | Obtain green full CI on final integrated source | **Previous full run 40355886004 GREEN: 81 successful jobs**; fresh [final-source run 40375303944](https://github.com/NVIDIA/structured-data-models-client/actions/runs/40375303944) started at 18:10 UTC on `15ec2ad916`; 74 passed, zero failures at 18:55 snapshot | All eight official artifact groups authenticated and published; collect complete final CI result, fix actual failures if any |
+| R10 | **DONE: green full CI on final integrated source** | [Run 40375303944](https://github.com/NVIDIA/structured-data-models-client/actions/runs/40375303944) completed SUCCESS on exact `15ec2ad916`: 81 successful jobs, two intentional skips, zero failures; raw run SHA `6a9ede69` | Authenticated final producer artifacts, root978 and contract202 passing checks retained; no repeated full CI needed while product source stays unchanged |
 | R11 | **DONE: Snowflake identical-input comparison** | Full 10101-row source and original 10000-row draw verified; both complete current requests match the originals; all 10001 actual model26 predictions exactly equal old, RMSE ratio 1.0 on both batches and aggregate; SDK0 cleanup | Coordinator consumed receipt `8f48d1c7`; sampling unchanged; historical independent-draw 26.51% loss and failed recorder-mode attempt preserved |
-| R12 | Run locked acceptance `3a` and assemble pre-heldout evidence | Fresh authentic final15e cells prepared; final-source acceptance session71947 ACTIVE; step1 passed, all 315 cases recorded per host, ratchet/compare/boundary/coverage/runners passed; mandatory Rust L1 active | Coordinator owns one heavy slot, Cargo2 and explicit SDM_PYTHON; warm dependency cache reused with old processes verified absent; sealed untouched |
+| R12 | Assemble pre-heldout evidence after passed locked acceptance `3a` | Genuine final-source gate PASSED all ten steps, 364 fault tests and 452 guard controls; later wrapper packaging failed only because observations correctly reported an untracked cache symlink | Original failure retained; clean final-source observations regenerated in all seven cells, each 315 cases; stock ratchet/compare continuation running without repeating the passed gate or CI |
 | R13 | Close final acceptance, run the sealed check last, merge and push Phase 3 into `rust-core` | Not started; protected `rust-core` remains Phase 2; sealed started marker absent | Coordinator obtains both final evidence approvals, closes performance dispositions, runs the sealed check last, then merges and pushes |
+| R14 | **DONE: existing Spark and Lakebase live provider kits** | Spark saved-answer correction has both CODE approvals, five controls and actual 99-answer readjudication PASS; Lakebase actually completed all 99 normal/fault cases on final15e, normal33 clean and both faults detected | Spark receipt `08a8d2c7`, Lakebase `d3f3825e`; original failures, all driver captures and source IDs preserved; cleanup verified and lease released |
 
 R9 supplies the two independent applicability opinions; R2 now supplies the actual nine affected reruns.
 Their execution is complete; finite acceptance of the remaining raw differences stays in R8.
 R4 uses 249 SQL cases plus six existing J2 shapes in three timezones on each architecture.
+Explicit design scope requires 20 generated sources for Databricks SQL and Snowflake; those are complete.
+It does not require new Spark or Lakebase generated-source campaigns.
+The existing provider kit is required live on all four warehouse legs; R14 has closed the two missing receipts found in the exit audit.
 There is no new requirement to rerun accepted performance measurements or optimize their accepted costs before closure.
 The original performance reports still contain incomplete pairs and missing stock-report inputs; final acceptance must account for them explicitly rather than calling those reports blanket PASS.
+
+The owner requested a two-hour completion focus, targeting approximately 22:15 UTC.
+Java runtime is the remaining critical path; finishing by that time is not grounds to omit coverage or lower correctness requirements.
 
 ## Current execution and integration
 
@@ -80,13 +87,17 @@ The original performance reports still contain incomplete pairs and missing stoc
   The sole cloud collector retains all artifact identities and starts dependent runs as producers finish, without waiting for full CI to complete.
 - Superseded `7e41bb73a5` CI `40322768900` was cancelled after preserving its 78 successful jobs, remaining job states and all eight authenticated official artifact groups.
   It lacked the timeout repair and FK fix; cancellation released workflow concurrency so the corrected run started without the previous 36-minute queue.
-- Cloud author owns both submitted missing-only Java recovery jobs and bounded startup/progress/result collection; both prior failed jobs remain terminal and cleaned.
+- Cloud author owns Java configs, publication and jobs; a separate author owns only the thin residual-shard notebook and controls.
+  Two independent CODE reviews precede new shard execution; completed ranges are retained and never restarted for convenience.
+  All four live provider kits are complete; prior failures and duplicate Spark attempt remain preserved with owned cleanup verified.
 - The original Snowflake rank diagnostic completed after both CODE approvals and four passing controls: actual old int8 index overflow precedes lookup; all seven materialization SQL texts match the historical capture.
   It is fresh corroboration, with exact historical body unknown; cleanup verified zero tables/views.
-- Java missing-only recovery source and execution binding have both CODE approvals and 23 passing controls; both selected jobs are submitted once and await cluster startup.
-- Both final Databricks SQL finite opinions are complete; the exact one-case Lakebase fixture transition requires concrete renewed review before execution.
+- Java missing-only recovery source and execution binding had both CODE approvals and 23 passing controls.
+  Failed 8 GiB attempts honestly stopped at memory admission; current reviewed 32 GiB jobs pass the unchanged fixed 2 GiB heap and resource guards.
+- Both final Databricks SQL finite opinions are complete; the one affected Lakebase original and full fixture restoration are complete after renewed reviews.
 - Provider oracle controls and actual saved-answer re-adjudication passed after both approvals.
-- Coordinator owns active final-source locked acceptance session71947, integration and this tracker; superseded session6081 is terminal and its results remain preserved.
+- Coordinator owns the final packaging continuation, integration and this tracker.
+  Session71947 is terminal: its locked gate passed, and its subsequent packaging failure is preserved; no successful wrapper return is claimed.
 - Java diagnostic-budget repair landed at `17db946bc3`; complete package checks passed after both CODE approvals.
 - Reference-validator optimization landed at `02c733594f`; one local read replaces three reads of the same 60 MB input, with unchanged outputs and approximately 44% lower measured local elapsed time.
 - Final empty freeze `15ec2ad916` has the same tree as `02c733594f`; both mechanical CODE approvals and the normal handoff passed.
@@ -110,7 +121,7 @@ Do not re-enable reminders automatically.
   Actual source/native identity is `8a7323cb66`; receipt: `ac73037cf1b3c96f6bfeee4e56ec26dc173e754251abdab5c4469c4ba4b9c0f5`.
 - All 20 native/host memory and ownership controls pass on their recorded source.
 - All three local 200-source campaigns complete; finite decimal/date, SQL numbering and text-time evidence remains attached to the raw reports for final review.
-- Snowflake's original 20 generated-source checks and 33 provider cases plus both existing fault controls are complete; Databricks's corresponding executions also completed, with final independent acceptance pending.
+- Snowflake's original 20 generated-source checks and 33 provider cases plus both existing fault controls are complete; Databricks's corresponding executions also completed, with both finite acceptance opinions complete.
 - Original Databricks 10001-entity multicall accuracy comparison passes: aggregate RMSE 2.6043078493 old versus 2.6043036069 Rust; the one affected row improves by 14.91%.
   The first 10000 predictions and their eight context examples are identical; the final single-row call differs slightly, so the complete paired requests are not claimed identical.
 - Original Spark 10001-entity saved-input comparison passes the aggregate limit: RMSE ratio 1.00000294257; first 10000 predictions exact, final single-row error 11.4946% worse, explicitly retained.
@@ -135,8 +146,9 @@ Local performance campaigns completed 178 DuckDB, 160 SQLite and 176 PostgreSQL 
 DuckDB's raw deepest-case 1.241 ratio used mixed legacy routing; the actual default-core diagnostic is faster than the old client, without overwriting the original result.
 Only the three affected original negative-neighbor scenarios were rerun with five repetitions on genuine corrected native artifacts.
 DuckDB CPU ratio 0.897 and SQLite 0.384 meet their scenario limits; PostgreSQL remains a refusal/incomplete pair on both sides and is not a timing PASS.
-Twenty local performance pairs remain unjudged: 15 ordinary incomplete/refusal pairs and five non-comparable approved support improvements; none is promoted to a numerical PASS.
+Twenty local performance pairs remain explicitly non-comparable: 15 ordinary incomplete/refusal pairs and five non-comparable approved support improvements; none is promoted to a numerical PASS.
 No new warehouse CPU recorder or replay machinery is required on the critical path.
+Both final auditors accept the shipping-default DuckDB deepest-case diagnostic CPU ratio 0.6354, preserving the earlier mixed-route raw failure.
 
 ## Evidence and history
 
