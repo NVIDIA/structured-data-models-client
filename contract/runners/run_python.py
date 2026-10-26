@@ -3968,6 +3968,25 @@ def connect_leg(
     raise RunnerFailure(f'{leg} is not a warehouse leg')
 
 
+def warehouse_namespace(
+    leg: str, names: Mapping[str, str], given: Mapping[str, Any]
+) -> list[str | None]:
+    """The source's explicit ordered namespace, before private-name binding.
+
+    Connect cases use their session's current namespace instead.
+    The comparator uses the same source arguments with symbolic names.
+    """
+    if 'connect' in given:
+        return []
+    if leg == 'lakebase':
+        return [names.get('schema')]
+    named = given.get('named_part')
+    return [
+        names.get('catalog') if named in (None, 'catalog') else None,
+        names.get('schema') if named in (None, 'schema') else None,
+    ]
+
+
 def warehouse_source(
     leg: str, captured: Any, names: Mapping[str, str], given: Mapping[str, Any]
 ) -> Any:
@@ -3981,28 +4000,29 @@ def warehouse_source(
 
     if 'connect' in given:
         return sdm_connectors.Source(captured)
-    catalog, schema = names.get('catalog'), names.get('schema')
-    named = given.get('named_part')
-    parts = {
-        'catalog': catalog if named in (None, 'catalog') else None,
-        'schema': schema if named in (None, 'schema') else None,
-    }
+    parts = warehouse_namespace(leg, names, given)
     if leg in ('databricks-sql', 'databricks-spark'):
         source = sdm_connectors.DatabricksSource(
             captured,
-            **{key: value for key, value in parts.items() if value},
+            **{
+                key: value
+                for key, value in zip(('catalog', 'schema'), parts, strict=True)
+                if value
+            },
         )
     elif leg == 'snowflake':
         source = sdm_connectors.SnowflakeSource(
             captured,
             **{
-                ('database' if key == 'catalog' else key): value
-                for key, value in parts.items()
+                key: value
+                for key, value in zip(
+                    ('database', 'schema'), parts, strict=True
+                )
                 if value
             },
         )
     else:
-        return sdm_connectors.PostgresSource(captured, schema=schema)
+        return sdm_connectors.PostgresSource(captured, schema=parts[0])
     view = given.get('view')
     if view is None:
         return source

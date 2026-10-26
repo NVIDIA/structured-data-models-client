@@ -759,13 +759,15 @@ fn seed_cte(d: &Databricks, read: &SeedRead<'_>) -> Result<String, CoreError> {
 }
 
 /// The unpacked key set's batch, its position in the JSON array moved by
-/// `offset`, the seeds of the chunks before its own.
+/// `offset`, the seeds of the chunks before its own. `posexplode` gives an
+/// int32 position; widen before addition so every chunk's batch has the
+/// contract's int64 transport type, even across the int32 boundary.
 fn batch_select(offset: usize) -> String {
     let batch = identifier(SEED_BATCH);
     if offset == 0 {
-        format!("pos AS {batch}")
+        format!("CAST(pos AS BIGINT) AS {batch}")
     } else {
-        format!("pos + {offset} AS {batch}")
+        format!("CAST(pos AS BIGINT) + {offset} AS {batch}")
     }
 }
 

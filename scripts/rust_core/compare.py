@@ -3269,18 +3269,31 @@ def compare(
         on_duckdb = database == 'duckdb'
         case = {**case, 'id': runner.case_key(case['id'], database)}
         if not on_duckdb:
-            # The core is started on this database's dialect.
-            case['core'] = {
-                op: (
-                    {
-                        **spec,
-                        'provider': {**spec['provider'], 'dialect': database},
-                    }
-                    if (spec.get('provider') or {}).get('dialect') == 'duckdb'
-                    else spec
-                )
-                for op, spec in case.get('core', {}).items()
-            }
+            # Adapt the generic case's source from declared leg/input facts,
+            # never from a runner's recorded starts. Capability IDs and SQL
+            # dialects differ on Lakebase and the two Databricks legs.
+            adapted = {}
+            for op, spec in case.get('core', {}).items():
+                provider = spec.get('provider') or {}
+                if provider.get('dialect') != 'duckdb':
+                    adapted[op] = spec
+                    continue
+                choice = {
+                    **provider,
+                    'dialect': _loader().ENGINE.get(database, database),
+                }
+                if on_warehouse:
+                    parts = runner.warehouse_namespace(
+                        database,
+                        {'catalog': '{catalog}', 'schema': '{schema}'},
+                        case['input'],
+                    )
+                    if any(part is not None for part in parts):
+                        choice['namespace'] = parts
+                    else:
+                        choice.pop('namespace', None)
+                adapted[op] = {**spec, 'provider': choice}
+            case['core'] = adapted
         before = len(report.failures)
         ref = reference.get(case['id'])
         stops: dict[str, str | None] = {}
