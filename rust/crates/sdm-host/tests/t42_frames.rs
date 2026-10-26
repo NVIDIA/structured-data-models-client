@@ -951,3 +951,117 @@ fn text_frame_is_an_explicit_unfinished_input_family() {
     };
     assert_eq!(failure.code, ErrorCode::UnsupportedRequest);
 }
+
+#[test]
+fn text_frame_table_and_schema_rebind_utf8_large_utf8_and_chunked_values() {
+    use arrow_array::{ArrayRef, LargeStringArray, StringArray};
+    use arrow_schema::{DataType, Field, Schema};
+    use sdm_contract::ops::{Dtype, SourceDescription, Stype};
+
+    for large in [false, true] {
+        for variant in ["ordinary", "empty", "all_null", "text"] {
+            let values: Vec<Option<String>> = match variant {
+                "empty" => vec![],
+                "all_null" => vec![None, None],
+                "text" => (0..65).map(|n| Some(format!("value{n}"))).collect(),
+                _ => vec![Some("é\0😺".into()), None, Some("other".into())],
+            };
+            let array = |values: &[Option<String>]| -> ArrayRef {
+                if large {
+                    Arc::new(LargeStringArray::from(values.to_vec()))
+                } else {
+                    Arc::new(StringArray::from(values.to_vec()))
+                }
+            };
+            let schema = Arc::new(Schema::new(vec![Field::new(
+                "value",
+                if large {
+                    DataType::LargeUtf8
+                } else {
+                    DataType::Utf8
+                },
+                true,
+            )]));
+            let split = values.len() / 2;
+            let batches = [&values[..split], &values[split..]]
+                .into_iter()
+                .map(|part| RecordBatch::try_new(schema.clone(), vec![array(part)]).unwrap())
+                .collect();
+            let mut rows = Some(ArrowData::new(schema, batches));
+            for (stage, id) in [("table", 3), ("schema", 7)] {
+                let mut attached = inputs();
+                attached.remove(&AttachmentId(3));
+                attached.insert(
+                    AttachmentId(2),
+                    bytes(
+                        json!({"stage":stage,"tables":[{"source":{"source":["users"]},"rows":id}]}),
+                    ),
+                );
+                attached.insert(AttachmentId(id), Attachment::Arrow(rows.take().unwrap()));
+                let run = HostRun::start(&sdm_host::default_root(), &message(), attached)
+                    .unwrap_or_else(|out| panic!("{stage}/{large}/{variant}: {:?}", error(out)));
+                loop {
+                    match sdm_host::read(&run.next().unwrap()).unwrap() {
+                        ControlMessage::Warnings { .. } => {}
+                        ControlMessage::Step(Step::Done {
+                            result: OperationResult::DescribeSource(result),
+                            ..
+                        }) => {
+                            let Attachment::Bytes(data) =
+                                run.take_attachment(result.description).unwrap().unwrap()
+                            else {
+                                panic!("description bytes")
+                            };
+                            let described: SourceDescription =
+                                serde_json::from_slice(&data).unwrap();
+                            let column = &described.tables[0].columns[0];
+                            assert_eq!(column.dtype, Dtype::String);
+                            assert_eq!(
+                                column.stype,
+                                if variant == "text" {
+                                    Stype::Text
+                                } else {
+                                    Stype::Categorical
+                                }
+                            );
+                            assert!(described.tables[0].primary_key.is_empty());
+                            assert!(described.tables[0].time_column.is_none());
+                            if stage == "table" {
+                                let Attachment::Arrow(owned) = run
+                                    .take_attachment(result.frame_rows.unwrap())
+                                    .unwrap()
+                                    .unwrap()
+                                else {
+                                    panic!("owned string rows")
+                                };
+                                assert_eq!(owned.schema.field(0).data_type(), &DataType::Utf8);
+                                let actual: Vec<Option<String>> = owned
+                                    .batches
+                                    .iter()
+                                    .flat_map(|batch| {
+                                        batch
+                                            .column(0)
+                                            .as_any()
+                                            .downcast_ref::<StringArray>()
+                                            .unwrap()
+                                            .iter()
+                                            .map(|v| v.map(str::to_owned))
+                                            .collect::<Vec<_>>()
+                                    })
+                                    .collect();
+                                assert_eq!(actual, values);
+                                rows = Some(owned);
+                            } else {
+                                assert!(result.frame_rows.is_none());
+                            }
+                            break;
+                        }
+                        other => {
+                            panic!("text constructor must not fetch or call a model: {other:?}")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
