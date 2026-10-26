@@ -253,7 +253,7 @@ FUNCTIONS = frozenset(
         'CAST', 'TRY_CAST', 'PARSE_JSON', 'HEX_DECODE_STRING', 'TO_BINARY',
         'FROM_JSON', 'COALESCE',
         # Text and time.
-        'LOWER', 'UPPER', 'TRIM', 'REPLACE', 'CONCAT', 'CHR', 'DATE_TRUNC', 'DATEADD',
+        'LOWER', 'UPPER', 'TRIM', 'REPLACE', 'CONCAT', 'CHR', 'MD5', 'DATE_TRUNC', 'DATEADD',
         'EXTRACT', 'TIMESTAMPDIFF', 'CONVERT_TIMEZONE',
         # Core-planned lossless Databricks instant and civil-wall transport.
         'UNIX_MICROS', 'DATEDIFF', 'HOUR', 'MINUTE',
@@ -648,6 +648,9 @@ class WriteGuard:
                 raise WriteRefused(f'{what}: a method called')
             if (
                 word in FUNCTIONS
+                # The original Databricks notebook's pure conditional count;
+                # it is not a PostgreSQL builtin or a new qualified call.
+                or (self.dialect == 'databricks' and word == 'COUNT_IF')
                 or word in RESERVED
                 or (word in AFTER_CLOSE and before == _CLOSE)
                 or (word == 'BY' and _upper(before) in AFTER_BY)
