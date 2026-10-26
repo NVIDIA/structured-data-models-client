@@ -6068,6 +6068,7 @@
         "inference_option_unknown",
         "inference_option_not_a_boolean",
         "inference_option_not_one_to_four",
+        "inference_option_not_finite",
         "inference_option_not_transforms",
         "inference_option_not_an_output_type",
         "sampler_state_unread",
