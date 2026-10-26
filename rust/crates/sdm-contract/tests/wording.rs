@@ -354,6 +354,7 @@ fn a_sentence_that_relays_a_host_library_is_marked_host_owned() {
             ("dates_read_day_first", Owner::HostDates),
             ("date_literal_day_first", Owner::HostDates),
             ("float32_overflow", Owner::HostCast),
+            ("inference_option_not_finite", Owner::HostCast),
             (
                 "max_pq_iterations_not_a_whole_number",
                 Owner::HostComparison
