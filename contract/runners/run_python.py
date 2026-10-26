@@ -413,8 +413,22 @@ def routes_on(case: dict[str, Any], database: str) -> list[str]:
     the reference's (python-old runs on DuckDB only, T2.1a fix 4), so no
     call of a core leg takes it: a case that routes only its DuckDB stop
     (S0's validation, a source refused at ``from_source``) still runs on
-    the core where the database lets the call go further."""
-    routes = [on_database(route, database) for route in case['routes']]
+    the core where the database lets the call go further.
+
+    The three source-opening paths present in the cases' ``routes`` are
+    host-owned in scope-python, so stay coverage facts rather than core
+    selections. Other unknown paths still reach the routing refusal.
+    """
+    routes = [
+        on_database(route, database)
+        for route in case['routes']
+        if route
+        not in {
+            'source.connect-databricks/warehouse/databricks-sql',
+            'source.open/auto/databricks-sql',
+            'source.open/auto/databricks-spark',
+        }
+    ]
     if database == 'duckdb':
         return routes
     from sdm_client import _routing
