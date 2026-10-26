@@ -966,6 +966,7 @@ sentences! {
     InferenceOptionUnknown = "inference_option_unknown", E::InvalidRequest;
     InferenceOptionNotABoolean = "inference_option_not_a_boolean", E::InvalidRequest;
     InferenceOptionNotOneToFour = "inference_option_not_one_to_four", E::InvalidRequest;
+    InferenceOptionNotFinite = "inference_option_not_finite", E::InvalidRequest;
     InferenceOptionNotTransforms = "inference_option_not_transforms", E::InvalidRequest;
     InferenceOptionNotAnOutputType = "inference_option_not_an_output_type", E::InvalidRequest;
     SamplerStateUnread = "sampler_state_unread", E::InvalidRequest;

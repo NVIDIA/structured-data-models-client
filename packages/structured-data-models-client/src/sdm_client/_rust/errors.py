@@ -190,7 +190,8 @@ ADVICE: dict[str, Callable[..., str]] = {
 #: library's words, which this host says in place of the shared sentence:
 #: pandas' day-first dates (as the reference's ``pd.to_datetime`` gives
 #: them), NumPy's cast that overflows (FX-1), and Python's comparison of a
-#: count with a value of another type (the engine's ``TypeError``).
+#: count with a value of another type (the engine's ``TypeError``), and
+#: the inference validator's finite-number diagnostic.
 _DAY_FIRST = (
     'Parsing dates in {format} format when dayfirst=False (the default) was '
     'specified. Pass `dayfirst=True` or specify a format to silence this '

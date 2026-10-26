@@ -60,7 +60,7 @@ pub enum Owner {
     Shared,
     /// The host's date parser's own message, of dates read day first.
     HostDates,
-    /// The host's numeric library's own message, of a cast that overflows.
+    /// The host's numeric validation or cast library's own message.
     HostCast,
     /// The host language's own message, of a comparison of unlike types.
     HostComparison,
@@ -821,6 +821,10 @@ pub fn template(sentence: Sentence) -> Template {
         ),
         S::InferenceOptionNotABoolean => said(
             r#"inference_config's {key!r} is true or false: a boolean, 0 or 1, or text such as 'true', 'yes', 'on' or 'off'"#,
+        ),
+        S::InferenceOptionNotFinite => owned(
+            r#"inference_config's {key!r} for {task} must be a finite number, got {given!r}"#,
+            Owner::HostCast,
         ),
         S::InferenceOptionNotOneToFour => {
             said(r#"inference_config's {key!r} is a whole number from 1 to 4"#)
