@@ -382,8 +382,8 @@ pub fn final_notices(
 }
 
 /// Whole-table frame inference, not preview-sized SQL inference. This first
-/// consumer accepts NumPy/pandas masked numeric/Boolean arrays and native
-/// us/ns timestamp arrays, without text, object or Decimal conversion. Native
+/// consumer accepts NumPy/pandas masked numeric/Boolean arrays, native
+/// timestamp arrays and built-in pandas text, without object or Decimal conversion. Native
 /// conversion has already encoded missingness in Arrow validity.
 pub fn read(
     name: &str,
@@ -419,6 +419,7 @@ pub fn read(
             DataType::Float32 => Dtype::Float32,
             DataType::Float64 => Dtype::Float64,
             DataType::Timestamp(_, _) => Dtype::Date,
+            DataType::Utf8 => Dtype::String,
             _ => return Err(crate::not_yet("frame_native_family")),
         };
         let stype = match dtype {
