@@ -13,6 +13,14 @@ import org.junit.jupiter.api.Test;
 /** The existing Java decoder keeps the new opaque state beside an unchanged result. */
 class T44FrameCheckpointDecodeTest {
   @Test
+  void warningBoundaryRemainsAReplyFreeControlStep() {
+    try (NativeMessage message = new NativeMessage(
+        "{\"message\":\"step\",\"step\":\"warnings\"}".getBytes(StandardCharsets.UTF_8),
+        new int[0], new Object[0])) {
+      assertEquals(Map.of("message", "step", "step", "warnings"), Messages.read(message));
+    }
+  }
+  @Test
   @SuppressWarnings("unchecked")
   void attachedMaterializedResultStillDecodesWithAnOpaqueFrameCheckpoint() {
     byte[] whole = """

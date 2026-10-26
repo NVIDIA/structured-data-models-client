@@ -745,6 +745,7 @@ warning_codes! {
     ViewReadInPart = "VIEW_READ_IN_PART",
     SeedIgnored = "SEED_IGNORED",
     FrameSchema = "FRAME_SCHEMA",
+    FrameRowsDropped = "FRAME_ROWS_DROPPED",
 }
 
 sentences! {
@@ -1015,6 +1016,7 @@ sentences! {
     FrameTaskReferences = "frame_task_references", E::InvalidRequest;
     FrameNoValidRows = "frame_no_valid_rows", E::InvalidRequest;
     FrameNeighborDtype = "frame_neighbor_dtype", E::InternalError;
+    FrameRowsDropped = "frame_rows_dropped", W::FrameRowsDropped;
     LinkHistoryMissing = "link_history_missing", E::InvalidRequest;
     LinkTargetNotForeignKey = "link_target_not_foreign_key", E::UnsupportedRequest;
     SubgraphPastTables = "subgraph_past_tables", E::InvalidRequest;

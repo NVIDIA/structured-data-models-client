@@ -64,3 +64,13 @@ Temporal constructor files remain owned by their author; this consumer uses sepa
 The subsequent bounded source trace located the existing approval in register DF-1 and reference fix `d1590a170eb8d10afb43d3a85e13afcba15f3d04`.
 The numeric static consumer therefore uses a shared stable destination-row sort, not an unproved emulation of legacy SIMD or Torch ordering.
 The legacy graph-store blob is identical in Phase 3 L and Phase 4's base; repairing that existing difference remains outside this implementation's scope.
+
+## Failed-call and warning boundary amendment
+
+An incoming checkpoint is validated against its frozen logical description and Arrow values, then its owners and memo are published at Run construction before the body can fail or be cancelled before its first poll.
+Explicit refused-state/drop-held behavior remains authoritative; a genuinely failed first graph build still publishes no snapshot.
+Sanitization retains null/duplicate counts and reports the frozen graph's removals on each materialize call, including cached calls.
+Working33 adds a fixed reply-free `Step::Warnings` boundary using existing take_warnings and host presentation, so warning-as-error stops before gathering or RNG consumption while preserving the built checkpoint.
+Python, Java and the shared test host resume with next only after presenting those notices; no host callback decides graph semantics.
+Genuine frozen43e public construction rejects a Boolean primary key with INVALID_REQUEST because bool cannot identify a row, so Boolean identifiers are outside the admitted numeric-key contract.
+The same public constructor refusal remains unchanged; a direct Host Frames materialize with such a held schema is declined before a Run/snapshot is created, while Boolean feature columns and default routes remain unchanged.

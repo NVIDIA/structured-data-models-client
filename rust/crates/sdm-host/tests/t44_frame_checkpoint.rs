@@ -117,6 +117,9 @@ fn terminal(run: &HostRun) -> Result<sdm_contract::ops::Materialized, Outgoing> 
                 ..
             }) => return Ok(result),
             ControlMessage::Warnings { .. } => {}
+            ControlMessage::Step(Step::Warnings) => {
+                let _ = run.take_warnings().unwrap();
+            }
             other => panic!("frame materialization must not fetch or call a model: {other:?}"),
         }
     }
@@ -452,4 +455,74 @@ fn resumed_early_failure_and_pre_next_cancel_retain_the_incoming_checkpoint() {
         assert_eq!(after["source"], before["source"]);
         assert_ne!(after["neighbors"], before["neighbors"]);
     }
+}
+
+#[test]
+fn sanitization_warning_boundary_can_cancel_before_any_neighbor_draw() {
+    let mut attached = inputs(3);
+    attached.insert(
+        AttachmentId(8),
+        data(&[
+            ("user_id", vec![1, 1, 2, 3]),
+            ("age", vec![20, 999, 30, 40]),
+        ]),
+    );
+    let run = HostRun::start(&sdm_host::default_root(), &message(), attached).unwrap();
+    assert!(matches!(
+        sdm_host::read(&run.next().unwrap()).unwrap(),
+        ControlMessage::Step(Step::Warnings)
+    ));
+    let warning = run
+        .take_warnings()
+        .unwrap()
+        .expect("real sanitization warning");
+    let ControlMessage::Warnings { warnings } = sdm_host::read(&warning).unwrap() else {
+        panic!("warnings")
+    };
+    assert_eq!(warnings.len(), 1);
+    assert_eq!(
+        warnings[0].sentence,
+        sdm_contract::Sentence::FrameRowsDropped
+    );
+    assert_eq!(
+        warnings[0].fields["detail"],
+        sdm_contract::Detail::text("[users: 1 of 4 rows dropped (1 with a repeated primary key)]")
+    );
+    run.cancel().unwrap();
+    let (state, owned) = checkpoint(&run);
+    let metadata = metadata(&state, &owned);
+    assert_eq!(metadata["neighbors"]["position"], 624);
+    assert_eq!(metadata["neighbors"]["words"][0], 123);
+}
+
+#[test]
+fn boolean_key_capability_is_refused_before_a_frame_run_is_created() {
+    use arrow_array::BooleanArray;
+    let mut attached = inputs(3);
+    let Attachment::Bytes(raw) = &attached[&AttachmentId(1)] else {
+        panic!("schema")
+    };
+    let mut schema: Value = serde_json::from_slice(raw).unwrap();
+    schema["tables"][0]["columns"][0]["dtype"] = json!("bool");
+    attached.insert(AttachmentId(1), bytes(schema));
+    let batch = RecordBatch::try_from_iter([
+        (
+            "user_id",
+            Arc::new(BooleanArray::from(vec![false, true])) as ArrayRef,
+        ),
+        ("age", Arc::new(Int64Array::from(vec![20, 30])) as ArrayRef),
+    ])
+    .unwrap();
+    attached.insert(
+        AttachmentId(8),
+        Attachment::Arrow(ArrowData::new(batch.schema(), vec![batch])),
+    );
+    let failed = HostRun::start(&sdm_host::default_root(), &message(), attached)
+        .err()
+        .expect("unsupported numeric-key capability");
+    assert_eq!(decoded(&failed)["error"]["code"], "UNSUPPORTED_REQUEST");
+    assert_eq!(
+        decoded(&failed)["error"]["fields"]["rule"],
+        json!({"t":"utf8","v":"frame_boolean_key"})
+    );
 }

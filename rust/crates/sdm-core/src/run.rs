@@ -9,7 +9,8 @@
 //! model call. [`Run::next`] polls the body once; the requests it stopped on
 //! become the step, and requests awaited together (with a join) are asked in
 //! one fetch step. No executor and no thread is involved: the body only ever
-//! waits on its own requests, so one poll per step is enough.
+//! waits on its own requests or an explicit warning boundary, so one
+//! poll per step is enough.
 //!
 //! States are `Ready`, `AwaitingFetch`, `AwaitingModel`, `Finished`,
 //! `Cancelled` and `Poisoned`. A call the state does not allow returns a
@@ -157,6 +158,7 @@ struct Shared {
     /// host.
     attachments: BTreeMap<AttachmentId, Attachment>,
     warnings: Vec<CoreWarning>,
+    warning_boundary: bool,
     /// The sampler memo the operation leaves for the host (decision E52),
     /// as it last kept it.
     memo: Option<SamplerMemo>,
@@ -643,6 +645,22 @@ impl Asker {
     /// Gives a warning, after every warning given before it.
     pub fn warn(&self, warning: CoreWarning) {
         lock(&self.shared).warnings.push(warning);
+    }
+
+    /// Stop before the next semantic action so the host can apply its
+    /// warning policy. Continuing requires only another next(), not a reply.
+    pub fn flush_warnings(&self) -> impl Future<Output = ()> + Send + 'static {
+        let shared = Arc::clone(&self.shared);
+        let mut yielded = false;
+        std::future::poll_fn(move |_| {
+            if yielded {
+                Poll::Ready(())
+            } else {
+                yielded = true;
+                lock(&shared).warning_boundary = true;
+                Poll::Pending
+            }
+        })
     }
 
     /// Keeps `memo` as what the run leaves the host, in place of any kept
@@ -1329,6 +1347,16 @@ impl Run {
                     drop(shared);
                     self.state = State::Finished;
                     return Err(err);
+                }
+                if mem::take(&mut shared.warning_boundary) {
+                    if !shared.fetches.is_empty() || !shared.calls.is_empty() {
+                        self.state = State::Finished;
+                        return Err(internal("a warning boundary also asked for data"));
+                    }
+                    drop(shared);
+                    self.state = State::Ready;
+                    self.body = Some(body);
+                    return Ok(Step::Warnings);
                 }
                 let fetches = mem::take(&mut shared.fetches);
                 let mut calls = mem::take(&mut shared.calls);

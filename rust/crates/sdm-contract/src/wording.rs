@@ -962,6 +962,9 @@ pub fn template(sentence: Sentence) -> Template {
         S::FrameNeighborDtype => said(
             r#"the relational engine failed while building this request: RuntimeError: Type '{edge}' in num_neighbors must have dtype int64."#,
         ),
+        S::FrameRowsDropped => said(
+            r#"the graph was built without some of the rows given to it {detail}. Those rows are not in the context the model sees; fill the missing values or drop the rows yourself if that is not what you meant."#,
+        ),
         S::LinkHistoryMissing => said(
             "Cannot perform link prediction on subgraphs without any historical target entities. Please increase the number of hops and try again.",
         ),

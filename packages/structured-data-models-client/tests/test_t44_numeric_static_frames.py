@@ -342,23 +342,17 @@ def test_sanitization_warning_as_error_retains_snapshot_before_any_draw(core):
     ]
 
 
-def test_opt_in_numeric_consumer_declines_boolean_primary_keys_before_caching(
-    monkeypatch,
-):
-    monkeypatch.setenv('SDM_CORE_ROUTES', CORE)
+def test_boolean_primary_keys_keep_the_existing_constructor_refusal(core):
     frames = {
         'users': pd.DataFrame({'user_id': [False, True], 'age': [21, 22]})
     }
-    question = PredictiveQuery(
-        'PREDICT users.age FOR EACH users.user_id',
+    with pytest.raises(
+        StructuredDataError, match='cannot identify a row'
+    ) as failed:
         Schema.from_data(
             frames, primary_keys={'users': 'user_id'}, time_columns={}
-        ),
-    )
-    with pytest.raises(StructuredDataError) as failed:
-        materialize(question, indices=[True])
-    assert failed.value.code == 'UNSUPPORTED_REQUEST'
-    assert failed.value.fields['rule'] == 'frame_boolean_key'
+        )
+    assert failed.value.code == 'INVALID_REQUEST'
 
 
 @pytest.mark.parametrize('aggregation', ['COUNT', 'SUM'])

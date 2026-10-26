@@ -354,6 +354,8 @@ def _steps(
                 )
             if step['step'] == 'done':
                 return Finished(step['result'], handle)
+            if step['step'] == 'warnings':
+                continue
             if step['step'] == 'call_model' and model is not None:
                 refused = _call(core, handle, step, model)
                 continue
