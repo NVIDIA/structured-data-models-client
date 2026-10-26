@@ -273,3 +273,127 @@ def test_string_invalid_unicode_retains_native_conversion_failure(monkeypatch):
             describe(monkeypatch, {'rows': frame}, core=core)
         outcomes.append(str(error.value))
     assert outcomes[1] == outcomes[0]
+
+
+def test_string_date_advice_warning_as_error_stops_later_advice(
+    monkeypatch, string_dtype
+):
+    import sdm_client.schema as schema_module
+
+    original = schema_module._warn_dates_stored_as_text
+    frames = {
+        name: pd.DataFrame(
+            {
+                'date': pd.Series(
+                    ['2024-01-01', '2024-01-02'], dtype=string_dtype
+                )
+            }
+        )
+        for name in ('first', 'second')
+    }
+    outcomes = []
+    for core in (False, True):
+        touched = []
+
+        def observe(table):
+            touched.append(table.name)
+            return original(table)
+
+        monkeypatch.setattr(
+            schema_module, '_warn_dates_stored_as_text', observe
+        )
+        monkeypatch.setenv('SDM_CORE_ROUTES', PATHS if core else '')
+        with warnings.catch_warnings():
+            warnings.simplefilter('error', SDMWarning)
+            with pytest.raises(SDMWarning) as error:
+                Schema.from_data(frames)
+        outcomes.append((str(error.value), touched))
+    assert outcomes[1] == outcomes[0]
+    assert outcomes[0][1] == ['first']
+
+
+@pytest.mark.parametrize('label_elsewhere', [False, True])
+def test_string_date_advice_prunes_only_diagnostic_key_candidates(
+    monkeypatch, string_dtype, label_elsewhere
+):
+    dates = ['2024-01-01', '2024-01-02']
+    frames = {
+        'first': pd.DataFrame(
+            {
+                'date': pd.Series(dates, dtype=string_dtype),
+                'label': pd.Series(['a', 'b'], dtype=string_dtype),
+            }
+        ),
+        'second': pd.DataFrame({'date': pd.Series(dates, dtype=string_dtype)}),
+    }
+    if label_elsewhere:
+        frames['third'] = pd.DataFrame(
+            {'label': pd.Series(['a', 'b'], dtype=string_dtype)}
+        )
+    schema, notices = paired(monkeypatch, frames)
+    assert all(table.primary_key is None for table in schema.tables.values())
+    assert not schema.relationships
+    key_advice = [
+        notice for notice in notices if 'has no primary key' in notice
+    ]
+    if label_elsewhere:
+        assert len(key_advice) == 2
+        assert all("'label' identifies" in notice for notice in key_advice)
+        assert all('another table too' in notice for notice in key_advice)
+    else:
+        assert not key_advice
+
+
+def test_string_advice_keeps_link_validation_and_grouped_time_notice_order(
+    monkeypatch, string_dtype
+):
+    frames = {
+        'users': pd.DataFrame(
+            {'user_id': pd.Series(['a', 'b'], dtype=string_dtype)}
+        ),
+        'orders': pd.DataFrame(
+            {
+                'order_id': [10, 11],
+                'user_id': [1, 2],
+                'date': pd.Series(
+                    ['2024-01-01', '2024-01-02'], dtype=string_dtype
+                ),
+            }
+        ),
+        'earlier': pd.DataFrame(
+            {
+                'one': pd.to_datetime(['2024-01-01', '2024-01-02']),
+                'two': pd.to_datetime(['2025-01-01', '2025-01-02']),
+            }
+        ),
+        'later': pd.DataFrame(
+            {
+                'one': pd.to_datetime(['2024-01-01', '2024-01-02']),
+                'two': pd.to_datetime(['2025-01-01', '2025-01-02']),
+            }
+        ),
+    }
+    paired(monkeypatch, frames)
+
+
+def test_string_advice_never_reenters_python_schema_inference(
+    monkeypatch, string_dtype
+):
+    import sdm_client.schema as schema_module
+
+    frame = pd.DataFrame(
+        {'date': pd.Series(['2024-01-01', '2024-01-02'], dtype=string_dtype)}
+    )
+    old, old_notices = describe(monkeypatch, {'rows': frame}, core=False)
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError('native advice reentered Python schema inference')
+
+    monkeypatch.setattr(
+        schema_module, '_infer_table_and_time_column', forbidden
+    )
+    monkeypatch.setattr(schema_module, '_infer_primary_key', forbidden)
+    monkeypatch.setattr(schema_module, '_infer_relationships', forbidden)
+    new, new_notices = describe(monkeypatch, {'rows': frame}, core=True)
+    assert projection(new) == projection(old)
+    assert new_notices == old_notices
