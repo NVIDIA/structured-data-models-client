@@ -42,14 +42,15 @@ class Leg:
     r"""A warehouse-only copy of an S1 case, the reference line recorded on
     ``LEG`` and python-core's line equal to it, under ``tmp``."""
 
-    def __init__(self, tmp: Path) -> None:
+    def __init__(self, tmp: Path, database: str = LEG) -> None:
+        self.database = database
         case = json.loads(
             (ROOT / f'contract/cases/s1/{SOURCE}.json').read_text(
                 encoding='utf-8'
             )
         )
         case.pop('core')
-        case.update(id=CASE, slice='S2', warehouses=[LEG])
+        case.update(id=CASE, slice='S2', warehouses=[database])
         self.cases = tmp / 'cases'
         self.cases.mkdir()
         data = json.dumps(case, indent=2).encode()
@@ -60,7 +61,7 @@ class Leg:
             for text in path.read_text(encoding='utf-8').splitlines()
             if json.loads(text)['case'] == SOURCE
         )
-        line['case'] = f'{CASE}@{LEG}'
+        line['case'] = f'{CASE}@{database}'
         line['identity']['inputs']['case'] = hashlib.sha256(data).hexdigest()
         self.reference = tmp / 'reference.jsonl'
         self.reference.write_text(json.dumps(line) + '\n', encoding='utf-8')
@@ -81,7 +82,10 @@ class Leg:
     def judge(self, line: dict[str, Any]) -> Any:
         self.observed.write_text(json.dumps(line) + '\n', encoding='utf-8')
         return _compare().compare(
-            [self.cases], self.reference, [self.observed], database=LEG
+            [self.cases],
+            self.reference,
+            [self.observed],
+            database=self.database,
         )
 
 
@@ -340,3 +344,90 @@ def test_explicit_provider_and_view_fields_are_not_rewritten(
     }
     report = _provider_report(tmp_path, 'snowflake', provider, pinned=provider)
     assert report.failures == [], report.texts
+
+
+def _with_unused_count(
+    leg: Leg, *, suffix: str = '', parameters: Any = None
+) -> None:
+    """Seed the exact existing KO2-58 policy shape in this private pair."""
+    reference = json.loads(leg.reference.read_text())
+    statements = reference['driver']['capture']['statements']
+    count = copy.deepcopy(
+        next(s for s in statements if s['stage'] == 'materialize')
+    )
+    count.update(
+        sql='SELECT COUNT(*) FROM "owned"."users"' + suffix,
+        parameters=parameters,
+    )
+    statements.insert(
+        next(
+            i for i, s in enumerate(statements) if s['stage'] == 'materialize'
+        ),
+        count,
+    )
+    reference['driver']['query_log']['statements'] += 1
+    leg.reference.write_text(json.dumps(reference) + '\n')
+
+
+def test_lakebase_uses_only_the_existing_unused_postgres_count_policy(
+    tmp_path: Path,
+) -> None:
+    leg = Leg(tmp_path, 'lakebase')
+    _with_unused_count(leg)
+    report = leg.judge(copy.deepcopy(leg.core))
+    assert report.failures == [], report.texts
+
+
+@pytest.mark.parametrize(
+    'suffix,parameters',
+    [
+        (' WHERE user_id > 0', None),
+        (' UNION ALL SELECT 1', None),
+        ('', [{'type': 'str', 'value': 'bound'}]),
+    ],
+)
+def test_lakebase_does_not_filter_other_or_parameterized_counts(
+    tmp_path: Path,
+    suffix: str,
+    parameters: Any,
+) -> None:
+    leg = Leg(tmp_path, 'lakebase')
+    _with_unused_count(leg, suffix=suffix, parameters=parameters)
+    report = leg.judge(copy.deepcopy(leg.core))
+    assert any(rule == 'sql.count' for rule, _ in report.failures), report.texts
+
+
+def test_other_warehouse_does_not_inherit_postgres_unused_read_policy(
+    tmp_path: Path,
+) -> None:
+    leg = Leg(tmp_path)
+    _with_unused_count(leg)
+    report = leg.judge(copy.deepcopy(leg.core))
+    assert any(rule == 'sql.count' for rule, _ in report.failures), report.texts
+
+
+@pytest.mark.parametrize('mutation', ['missing', 'changed_result'])
+def test_lakebase_unused_count_policy_keeps_every_real_read_strict(
+    tmp_path: Path,
+    mutation: str,
+) -> None:
+    leg = Leg(tmp_path, 'lakebase')
+    _with_unused_count(leg)
+    line = copy.deepcopy(leg.core)
+    statements = line['driver']['capture']['statements']
+    at = next(
+        i
+        for i, s in enumerate(statements)
+        if s['stage'] == 'materialize' and s['results']
+    )
+    if mutation == 'missing':
+        statements.pop(at)
+        line['driver']['query_log']['statements'] -= 1
+        expected = 'sql.count'
+    else:
+        values = statements[at]['results'][0]['values']
+        assert values['ordered'] != '0' * 64 and values['unordered'] != '0' * 64
+        values.update(ordered='0' * 64, unordered='0' * 64)
+        expected = 'sql.result'
+    report = leg.judge(line)
+    assert any(rule == expected for rule, _ in report.failures), report.texts
