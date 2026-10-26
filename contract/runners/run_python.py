@@ -3346,16 +3346,20 @@ class _CapturedSnowflake(_CapturedWarehouse):
         object.__setattr__(self, '_recoverable_fetch', None)
 
     def _fetch(self, method: str, *arguments: Any, **keywords: Any) -> Any:
-        from snowflake.connector.errors import NotSupportedError
-
         statement = self._statement
         previous = statement['error'] if statement is not None else None
         fallback = (
-            self._recoverable_fetch is statement and statement is not None
+            self._recoverable_fetch is not None
+            and self._recoverable_fetch[0] is statement
         )
         try:
             return super()._fetch(method, *arguments, **keywords)
         except BaseException as error:
+            # A real driver's exception class is already loaded when raised.
+            # Fake cursors need no optional connector installed, and an
+            # unrelated same-name exception is not this supported fallback.
+            driver_errors = sys.modules.get('snowflake.connector.errors')
+            unsupported = getattr(driver_errors, 'NotSupportedError', None)
             recoverable = None
             if statement is not None:
                 statement.setdefault('fetch_errors', []).append(
@@ -3369,9 +3373,10 @@ class _CapturedSnowflake(_CapturedWarehouse):
                     previous is None
                     and not statement['results']
                     and method == 'fetch_arrow_all'
-                    and isinstance(error, NotSupportedError)
+                    and isinstance(unsupported, type)
+                    and isinstance(error, unsupported)
                 ):
-                    recoverable = statement
+                    recoverable = (statement, type(error).__name__)
             object.__setattr__(self, '_recoverable_fetch', recoverable)
             raise
 
@@ -3380,13 +3385,13 @@ class _CapturedSnowflake(_CapturedWarehouse):
         answer = super()._read(method, *arguments, **keywords)
         if (
             method == 'fetchall'
-            and pending is self._statement
             and pending is not None
-            and pending['error'] == 'NotSupportedError'
+            and pending[0] is self._statement
+            and pending[0]['error'] == pending[1]
         ):
             # This is the provider's rows-only SHOW/DESCRIBE fallback, after
             # the same execution's successful read has been recorded whole.
-            pending['error'] = None
+            pending[0]['error'] = None
         object.__setattr__(self, '_recoverable_fetch', None)
         return answer
 
