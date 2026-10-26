@@ -253,7 +253,7 @@ FUNCTIONS = frozenset(
         'CAST', 'TRY_CAST', 'PARSE_JSON', 'HEX_DECODE_STRING', 'TO_BINARY',
         'FROM_JSON', 'COALESCE',
         # Text and time.
-        'LOWER', 'UPPER', 'TRIM', 'REPLACE', 'CHR', 'DATE_TRUNC', 'DATEADD',
+        'LOWER', 'UPPER', 'TRIM', 'REPLACE', 'CONCAT', 'CHR', 'DATE_TRUNC', 'DATEADD',
         'EXTRACT', 'TIMESTAMPDIFF', 'CONVERT_TIMEZONE',
         # Core-planned lossless Databricks instant and civil-wall transport.
         'UNIX_MICROS', 'DATEDIFF', 'HOUR', 'MINUTE',
