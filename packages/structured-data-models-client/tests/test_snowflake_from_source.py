@@ -1084,6 +1084,6 @@ def test_public_materialize_keeps_the_reference_large_key_refusal(
             anchor_time=pd.Timestamp('2024-03-01'),
         )
     assert raised.value.code == 'INVALID_REQUEST'
-    assert raised.value._sentence == 'snowflake_integer_key_range'
-    assert 'Snowflake' in str(raised.value)
+    assert raised.value._sentence == 'key_set_integer_range'
+    assert 'SQL key binding' in str(raised.value)
     assert 'signed 64-bit range' in str(raised.value)

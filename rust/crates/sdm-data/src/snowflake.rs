@@ -1350,11 +1350,11 @@ mod tests {
                 .unwrap();
             let error = bound_keys(Arc::new(column)).unwrap_err();
             assert_eq!(error.code, ErrorCode::InvalidRequest, "{value}");
-            assert_eq!(error.sentence, Sentence::SnowflakeIntegerKeyRange);
+            assert_eq!(error.sentence, Sentence::KeySetIntegerRange);
         }
         let error = bound_keys(Arc::new(UInt64Array::from(vec![u64::MAX]))).unwrap_err();
         assert_eq!(error.code, ErrorCode::InvalidRequest);
-        assert_eq!(error.sentence, Sentence::SnowflakeIntegerKeyRange);
+        assert_eq!(error.sentence, Sentence::KeySetIntegerRange);
     }
 
     #[test]
