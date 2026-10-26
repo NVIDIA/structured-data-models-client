@@ -392,10 +392,16 @@ def _indices(given: dict[str, Any]) -> str | None:
 
 
 def on_database(path: str, database: str) -> str:
-    r"""A case's DuckDB route or path as the same operation and mode over
-    ``database``'s source; any other is itself."""
+    r"""Force actual source kinds, retaining the warehouse's observation key.
+
+    Lakebase opens a PostgresSource, including when a cross-warehouse case
+    explicitly lists its legacy Lakebase alias beside another active leg.
+    """
     head, _, backend = path.rpartition('/')
-    return f'{head}/{database}' if backend == 'duckdb' else path
+    if backend in ('duckdb', 'lakebase'):
+        actual = database if backend == 'duckdb' else backend
+        return f'{head}/{provider_for_leg(actual)}'
+    return path
 
 
 def routes_on(case: dict[str, Any], database: str) -> list[str]:
