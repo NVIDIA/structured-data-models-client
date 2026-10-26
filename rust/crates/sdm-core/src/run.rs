@@ -649,7 +649,7 @@ impl Asker {
 
     /// Stop before the next semantic action so the host can apply its
     /// warning policy. Continuing requires only another next(), not a reply.
-    pub fn flush_warnings(&self) -> impl Future<Output = ()> + Send + 'static {
+    pub(crate) fn flush_warnings(&self) -> impl Future<Output = ()> + Send + 'static {
         let shared = Arc::clone(&self.shared);
         let mut yielded = false;
         std::future::poll_fn(move |_| {
@@ -1302,8 +1302,8 @@ impl Run {
         }
     }
 
-    /// What the run needs next: a batch of fetches, a model call, or its
-    /// result. An error finishes the run.
+    /// What the run needs next: fetches, a model call, warning presentation,
+    /// or its result. An error finishes the run.
     // The run protocol names this call `next`; a run is not an iterator.
     #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> Result<Step, CoreError> {
