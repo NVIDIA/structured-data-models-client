@@ -210,6 +210,11 @@ def run(
     core = native()
     core.reset_log_cache()
     owned_frame = operation.get('provider', {}).get('provider') == 'frames'
+    warning_presentation: errors.WarningPresentation = 'coded'
+    if owned_frame and operation['op'] == 'describe_source':
+        warning_presentation = 'frame_schema'
+    elif owned_frame and operation['op'] == 'materialize':
+        warning_presentation = 'frame_graph'
     held = None if state is None else state.get('held')
     if held is not None:
         memo = max(attachments, default=0) + 1
@@ -256,7 +261,7 @@ def run(
             given,
             kept,
             owned_frame,
-            operation['op'] == 'describe_source' and owned_frame,
+            warning_presentation,
         )
     except BaseException:
         if owned_frame:
@@ -318,7 +323,7 @@ def _steps(
     given: set[str] | None,
     kept: list[dict[str, Any]] | None = None,
     owned_frame: bool = False,
-    frame_constructor: bool = False,
+    warning_presentation: errors.WarningPresentation = 'coded',
 ) -> Finished:
     r"""The run's steps, each answered, to its result."""
     try:
@@ -329,7 +334,7 @@ def _steps(
             try:
                 control, sent = handle.next()
             except core.CoreError as failed:
-                _warn(handle, quiet, given, kept, frame_constructor)
+                _warn(handle, quiet, given, kept, warning_presentation)
                 error = errors.error_from_core(
                     failed.control,
                     failed.attachments,
@@ -345,7 +350,7 @@ def _steps(
                     _of_the_part(error, refused.raised)
                     raise refused.raised
                 raise error from None
-            _warn(handle, quiet, given, kept, frame_constructor)
+            _warn(handle, quiet, given, kept, warning_presentation)
             step = codec.read(control, sent)
             if step['message'] != 'step':
                 raise StructuredDataError(
@@ -568,7 +573,7 @@ def _warn(
     quiet: frozenset[str],
     given: set[str] | None,
     kept: list[dict[str, Any]] | None = None,
-    frame_constructor: bool = False,
+    warning_presentation: errors.WarningPresentation = 'coded',
 ) -> None:
     taken = handle.take_warnings()
     # Warning filters may raise and retain this frame in a traceback. The
@@ -582,5 +587,5 @@ def _warn(
             quiet=quiet,
             given=given,
             held=kept,
-            frame_constructor=frame_constructor,
+            presentation=warning_presentation,
         )

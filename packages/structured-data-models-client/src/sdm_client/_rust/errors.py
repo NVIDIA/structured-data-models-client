@@ -21,8 +21,9 @@ class (:data:`ERRORS`), and a test iterates every code the core has. One
 narrow exception (:data:`AS_THE_BASE_CLASS`, T2.8c fix 2): the refusals the
 reference raises as ``StructuredDataError`` under their code, by the rule
 the core names, keep the reference's class. A warning's class is chosen by
-its code alone (:data:`WARNINGS`); warnings given one after another that
-the table groups are shown as one.
+its code (:data:`WARNINGS`), except frame schema and graph notices retain
+the reference's SDMWarning presentation without a code prefix.
+Warnings given one after another that the table groups are shown as one.
 
 ``details`` holds the error's ``fields``, decoded, with its ``kind`` and
 ``retryable``; a provider error also names the driver's exception class
@@ -43,7 +44,7 @@ import warnings
 from collections.abc import Callable, Iterator, Mapping
 from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import Any, NoReturn
+from typing import Any, Literal, NoReturn
 
 from sdm_client._rust import codec
 from sdm_client.core.warnings import SDMWarning, caller_stacklevel
@@ -708,6 +709,11 @@ def numpy_warns_on_cast_overflow() -> bool:
     return (int(found.group(1)), int(found.group(2))) >= (1, 24)
 
 
+# The frame reference presents schema notices and graph sanitization as
+# SDMWarning without a code prefix; other warnings keep their code policy.
+WarningPresentation = Literal['coded', 'frame_schema', 'frame_graph']
+
+
 def warn_from_core(
     control: bytes,
     attachments: dict[int, Any],
@@ -715,7 +721,7 @@ def warn_from_core(
     given: set[str] | None = None,
     held: list[dict[str, Any]] | None = None,
     *,
-    frame_constructor: bool = False,
+    presentation: WarningPresentation = 'coded',
 ) -> None:
     r"""Shows each warning of a ``warnings`` control message, in order, but
     those whose code ``quiet`` names: one the caller has shown already, or
@@ -768,10 +774,14 @@ def warn_from_core(
                 + words['between'].join(said(w) for w in together)
                 + words['closing']
             )
+        frame_notice = presentation == 'frame_schema' or (
+            presentation == 'frame_graph'
+            and first['code'] == 'FRAME_ROWS_DROPPED'
+        )
         warnings.warn(
-            text if frame_constructor else f'[{first["code"]}] {text}',
+            text if frame_notice else f'[{first["code"]}] {text}',
             category=SDMWarning
-            if frame_constructor
+            if frame_notice
             else WARNINGS.get(first['code'], SDMWarning),
             stacklevel=caller_stacklevel(),
         )
