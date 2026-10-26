@@ -17,7 +17,6 @@ from pathlib import Path
 from types import ModuleType
 
 import pytest
-
 from sdm_client import _routing
 
 ROOT = Path(__file__).resolve().parents[2]

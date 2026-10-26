@@ -91,7 +91,7 @@ def test_zoned_seed_timestamp_conversion_is_a_pure_read() -> None:
     DATABRICKS.check(
         'WITH tmp AS (SELECT col.id, '
         "CAST(CONCAT(col.anchor, 'Z') AS TIMESTAMP) AS anchor "
-        "FROM (SELECT POSEXPLODE(FROM_JSON(?, "
+        'FROM (SELECT POSEXPLODE(FROM_JSON(?, '
         "'array<struct<id:bigint,anchor:string>>')))) "
         'SELECT * FROM tmp'
     )
