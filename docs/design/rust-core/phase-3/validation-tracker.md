@@ -1,6 +1,6 @@
 # Phase 3 validation tracker
 
-Updated 2026-10-26, 11:16 UTC.
+Updated 2026-10-26, 11:28 UTC.
 Phase 4 is paused at the owner's request; current agents focus on Phase 3.
 
 ## Acceptance
@@ -33,10 +33,13 @@ Use the existing common cases, pinned data, seeds, anchors and model settings ac
 
 ## Active blockers and next steps
 
-1. Current Phase 3 head is `aff7e32d2e353153197badeb863faa659f9e6d4e`, pushed and explicitly verified after two exact code approvals and normal unscoped handoff checks.
+1. Current Phase 3 head is `ad28ef4287fe0fa7674f05dad14839d7709b4013`, pushed and explicitly verified after two exact code approvals and normal unscoped handoff checks.
    `80c763a7be` landed the inference-option wording/register correction and explicit Pydantic dependency; `2d073d5b57` registered three already-reviewed Python bridge fingerprints.
    `aff7e32d2e` admits the PostgreSQL builtin ARRAY_AGG in guarded read queries, fixing the original Lakebase notebook metadata read without permitting writes.
    Its lint and whole write-guard test module passed in the normal 258-second handoff.
+   `ad28ef4287` then landed the seven-file CI fixture correction after both exact code approvals and a passing normal 172-second handoff, including all three whole Rust SQL golden targets.
+   Canonical baseline generation changes one negative-neighbor outcome each for Python and Rust; the three SQL pins come from actual pre-fix CI observations, and two moved source citations are corrected.
+   No product, dependency, case, comparator, register policy or gate implementation changed in that correction.
    The protected `rust-core` branch remains Phase 2 until every exit requirement passes.
    `451aa3bde4` landed the minimal Databricks key-overflow classification repair; both original wide-key public cases now return the same named invalid request as the frozen client.
    `b2b447c4fb` lands T3.9's approved NaN lag, SQL-expression and negative-neighbor support with explicit typed boundaries.
@@ -64,14 +67,15 @@ Use the existing common cases, pinned data, seeds, anchors and model settings ac
    There are 114 positive prediction pairs with 7485 typed-exact rows, 141 approved matching endpoint refusals, exact logical payloads, zero actual differences and zero operator errors.
    Receipt SHA256 is `cfabf1853ccc01d722da21d0f9261d7a970d95cbd6f3566ad9a8ee2b380e28ce`.
    All 42 cloud executions are terminal; actual `76eb785b91` source/build identities and 147 stricter diagnostics remain preserved.
-5. Full locked-dependency CI [40313141056](https://github.com/NVIDIA/structured-data-models-client/actions/runs/40313141056) was dispatched once at 11:11 UTC on exact integrated `aff7e32d2e`, then cancelled while still queued with zero jobs after the preceding run exposed additional failures.
-   Avoid running the known-bad source again; dispatch the next full CI after the reviewed fixture correction lands.
-   Previous run [40308222963](https://github.com/NVIDIA/structured-data-models-client/actions/runs/40308222963) on `80c763a7be` is not green: 10 jobs have failed while root tooling remains active.
-   The three missing bridge registrations are already corrected at `2d073d5b57`.
-   The remaining diagnosed failures are missing approved negative-neighbor SQL in statement/golden expectations, an incorrect phase-checkpoint value in the register, and a stale refusal-map source-line citation; the cross-host failure cascades from the missing Rust observation artifact.
-   Contract tooling also ended with a runner shutdown before producing complete assertion details.
-   The runtime agent owns the narrow correction and actual public-path reproduction, with canonical regeneration for generated files and both reviews before checks.
-   No dependency or Pydantic runtime failure was identified in these logs.
+5. Fresh full locked-dependency CI [40315122377](https://github.com/NVIDIA/structured-data-models-client/actions/runs/40315122377) was dispatched once at 11:26:47 UTC on exact integrated `ad28ef4287`.
+   The earlier queued `aff7e32d2e` run [40313141056](https://github.com/NVIDIA/structured-data-models-client/actions/runs/40313141056) was cancelled before any jobs started after the preceding run exposed additional failures.
+   Previous run [40308222963](https://github.com/NVIDIA/structured-data-models-client/actions/runs/40308222963) on `80c763a7be` had ten failed jobs; all failed-job logs and all official producer artifacts are retained.
+   The coordinator requested cancellation of its sole remaining long root-tooling job because branch-level workflow concurrency was blocking the corrected final run.
+   This avoids waiting for another known-red source; every check still runs in the new full CI.
+   The missing bridge registrations are corrected at `2d073d5b57`; the negative-neighbor statement/golden expectations, canonical baseline outcomes and two stale source citations are corrected at `ad28ef4287`.
+   The cross-host failure cascaded from the missing Rust observation artifact.
+   Contract tooling ended with a runner shutdown before complete assertion details; that incomplete diagnostic is preserved and the new complete run is required.
+   No dependency or Pydantic runtime failure was identified in the retrieved logs.
    The older `91b7f348f8` run is terminal failure; its option-formatting and invalid-register failures were repaired at `80c763a7be`.
    Official `80c763a7be` x86/ARM production/test-ops artifacts, complete Java/JNI and the full source bootstrap are authenticated and published with original producer IDs.
    The Spark serverless process ran out of memory after 108 complete original cases; all 108 are retained and the automatic retry was stopped without duplicate case execution.
@@ -86,7 +90,8 @@ Use the existing common cases, pinned data, seeds, anchors and model settings ac
    The Java warehouse cohort is exactly 249 existing SQL cases, not the earlier incorrect shorthand of 157: 215 S1 plus 34 S2, with identical IDs and case blobs across the inspected sources.
    Each architecture also requires the existing six J2 shapes in three zones.
    The Databricks agent froze bounded execution with fresh Python/Java child processes, retaining all cases and avoiding the same monolithic-memory failure.
-   One focused code approval is complete; the independent broad review is active, and no changed runner has executed before both approvals.
+   Both independent B1 code approvals are complete and all eight approved controls passed.
+   A tiny B2 carry derives an omitted JDK path from the actual job JAVA_HOME and retains the strict Java 17 check before fixture access; its two reviews are active and no changed carry code has executed.
    The sole artifact collector retains original producer IDs for all proven unchanged reused assets.
    No completed model or SQL campaign is relabeled as final-source execution.
 6. The runtime agent owns missing original local generated-source checks for DuckDB, SQLite and PostgreSQL, plus full-data census and memory readiness.
@@ -99,7 +104,7 @@ Use the existing common cases, pinned data, seeds, anchors and model settings ac
    The original pinned census caches are present and verified, with no download or disk-space blocker.
    The full census completed all six original questions on both DuckDB and SQLite, with no ordinary refusal-control hits; only the deliberate invalid control fires.
    Do not repeat either completed backend.
-   The original full PostgreSQL census remains active on its owned local database, with no lock wait or duplicate run; the runtime agent owns collection.
+   The original full PostgreSQL census remains active on its owned local database, with no lock wait or duplicate run; advancement to a new article-key fixture confirms forward progress, and the runtime agent owns collection.
    The separate SQLite indexing draft passed its bounded controls but is off the critical path because the original unindexed census finished; no indexed full-data retry was run or claimed.
    All 20 existing native and host memory/ownership controls passed.
    The coordinator owns final CI dispatch, finite Databricks reconciliation, integration, performance disposition and this tracker.
@@ -108,7 +113,7 @@ Use the existing common cases, pinned data, seeds, anchors and model settings ac
    The fix keeps warning selection in Rust after final table/time overrides; Python remains a formatting adapter.
    The inference-wording/register repair is landed at `80c763a7be`, with a passing 291-second normal handoff and both exact reviews.
    Its Python formatter uses the actual installed Pydantic library; the explicit client requirement is `pydantic>=2.7`, and all 149 resolved dependency identities and artifacts remain unchanged.
-   Active lanes are the runtime agent for original PostgreSQL census and CI diagnosis, the Databricks agent for bounded cloud validation and original notebooks, and the Snowflake agent for independent review and source-impact evidence.
+   Active lanes are the runtime agent for original PostgreSQL census and final-source publication, the Databricks agent for bounded cloud validation and original notebooks, and the Snowflake agent for finite Snowflake comparison assessment and independent reviews.
    The coordinator owns integration, finite comparison assessment and this tracker.
    Phase 4 stays paused.
 7. Three owner policy decisions remain unanswered: the measured latency/native-size/boundary performance costs; extending the existing one-case Snowflake random-sampling comparison rule to the original multicall case; and reuse of proven-unaffected completed live results after later client changes.
