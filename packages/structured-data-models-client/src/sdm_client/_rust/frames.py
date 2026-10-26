@@ -504,9 +504,10 @@ def from_data(
                 relationships=slots,
                 held_notices=held_notices,
             )
-        except BaseException:
-            # A failed Schema stage never reaches the native final hint.
-            # Preserve any core notices that preceded its failure.
+        except StructuredDataError:
+            # Preserve preceding notices on a real core refusal. A warning
+            # filter or presentation failure must propagate immediately:
+            # held final advice has not been reached at that boundary.
             with _presentation(native_types):
                 _show_held(held_notices)
             raise
