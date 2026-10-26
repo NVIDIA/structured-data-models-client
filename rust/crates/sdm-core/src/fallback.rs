@@ -375,7 +375,8 @@ async fn answered(held: &mut Held<'_>, seeds: Option<ArrowData>) -> Result<Arrow
                         request,
                         "per_seed",
                         "the in-memory fallback does not execute caller-authored SQL expressions",
-                    ));
+                    )
+                    .into());
                 }
             };
             named(request, "columns", columns)?;
