@@ -209,3 +209,32 @@ def test_another_cursor_cannot_recover_the_failed_cursor() -> None:
         'NotSupportedError',
         None,
     ]
+
+
+def test_failed_fetch_evidence_is_checked_as_part_of_the_whole_recording() -> (
+    None
+):
+    import copy
+
+    case, line, tables = OWN._capture()
+    evidence = [{'method': 'fetch_arrow_all', 'error': 'NotSupportedError'}]
+    line['statements'][0]['fetch_errors'] = copy.deepcopy(evidence)
+    captured = line['observation']['driver']['capture']['statements'][0]
+    captured['fetch_errors'] = copy.deepcopy(evidence)
+    assert OWN.check.capture_problems(line, case, tables) == []
+    del line['statements'][0]['fetch_errors']
+    assert any(
+        'fetch_errors is not what its reference line captured' in problem
+        for problem in OWN.check.capture_problems(line, case, tables)
+    )
+
+
+@pytest.mark.parametrize('field', ['method', 'error'])
+def test_malformed_failed_fetch_evidence_does_not_validate(field: str) -> None:
+    case, line, tables = OWN._capture()
+    evidence = {'method': 'fetch_arrow_all', 'error': 'NotSupportedError'}
+    del evidence[field]
+    line['observation']['driver']['capture']['statements'][0][
+        'fetch_errors'
+    ] = [evidence]
+    assert OWN.check.capture_problems(line, case, tables)
