@@ -116,6 +116,131 @@ def test_lossless_timestamp_function_names_do_not_allow_other_calls_or_writes(
         DATABRICKS.check(template.format(function=function))
 
 
+#: Sampling reads from the original notebook analysis cells, with fixed names.
+_NOTEBOOK_HASH_READS = (
+    (
+        'postgres',
+        'SELECT "CustomerID", count(*) FILTER (WHERE "OrderDate" > %(past)s) '
+        'AS orders FROM other.adventureworks_sales_order_headers '
+        'GROUP BY "CustomerID" ORDER BY md5("CustomerID"::text) LIMIT 1000',
+    ),
+    (
+        'postgres',
+        'SELECT "ProductID", "Name" AS product, trim("ProductLine") AS recorded '
+        'FROM other.adventureworks_products WHERE "ProductLine" IS NOT NULL '
+        'ORDER BY md5("ProductID"::text) LIMIT 60',
+    ),
+    (
+        'databricks',
+        "SELECT CustomerID, count_if(OrderDate > '2014-01-01') AS orders, "
+        "coalesce(sum(SubTotal) FILTER (WHERE OrderDate > '2014-01-01'), 0) "
+        "AS revenue, datediff('2014-01-01', max(OrderDate)) AS days_since_order "
+        'FROM other.adventureworks_sales_order_headers GROUP BY CustomerID '
+        "HAVING count_if(OrderDate > '2013-01-01') > 0 "
+        'ORDER BY md5(cast(CustomerID AS string)) LIMIT 1000',
+    ),
+    (
+        'databricks',
+        'SELECT ProductID, Name AS product, trim(ProductLine) AS recorded '
+        'FROM other.adventureworks_products WHERE ProductLine IS NOT NULL '
+        'ORDER BY md5(cast(ProductID AS string)) LIMIT 60',
+    ),
+    (
+        'databricks',
+        "SELECT CustomerID, count_if(OrderDate > '2014-01-01' "
+        "AND OrderDate <= '2014-04-01') AS orders "
+        'FROM other.adventureworks_sales_order_headers GROUP BY CustomerID',
+    ),
+)
+
+
+@pytest.mark.parametrize(('dialect', 'sql'), _NOTEBOOK_HASH_READS)
+def test_original_notebook_sampling_and_counts_are_builtin_reads(
+    dialect: str, sql: str
+) -> None:
+    GUARDS[dialect].check(sql)
+
+
+@pytest.mark.parametrize('dialect', ['postgres', 'snowflake', 'databricks'])
+def test_md5_uses_only_existing_builtin_qualification_rules(
+    dialect: str,
+) -> None:
+    GUARDS[dialect].check("SELECT MD5('original sampling key')")
+    if dialect == 'postgres':
+        POSTGRES.check("SELECT pg_catalog.md5('original sampling key')")
+    else:
+        with pytest.raises(wg.WriteRefused):
+            GUARDS[dialect].check("SELECT pg_catalog.md5('key')")
+
+
+@pytest.mark.parametrize('dialect', ['postgres', 'snowflake', 'databricks'])
+def test_count_if_is_admitted_only_on_the_needed_databricks_route(
+    dialect: str,
+) -> None:
+    sql = 'SELECT count_if(a > 0) FROM other.t'
+    if dialect == 'databricks':
+        DATABRICKS.check(sql)
+    else:
+        with pytest.raises(wg.WriteRefused):
+            GUARDS[dialect].check(sql)
+
+
+@pytest.mark.parametrize('function', ['md5', 'count_if'])
+@pytest.mark.parametrize('dialect', ['postgres', 'snowflake', 'databricks'])
+def test_notebook_builtins_do_not_admit_other_calls_or_writes(
+    function: str, dialect: str
+) -> None:
+    quote = '`' if dialect == 'databricks' else '"'
+    for sql in (
+        f'SELECT other.{function}(a) FROM other.t',
+        f'SELECT {quote}{function}{quote}(a) FROM other.t',
+        f'SELECT {function}_writes(a) FROM other.t',
+        f'SELECT {function}(a) FROM other.t; DELETE FROM outside.t',
+        f'SELECT {function}(a) INTO outside.t FROM other.t',
+        f'WITH changed AS (DELETE FROM outside.t RETURNING a) '
+        f'SELECT {function}(a) FROM changed',
+        f'CREATE FUNCTION live_tests.{function}(text) RETURNS text '
+        "LANGUAGE SQL AS 'SELECT $1'",
+    ):
+        with pytest.raises(wg.WriteRefused):
+            GUARDS[dialect].check(sql)
+    if function == 'count_if':
+        with pytest.raises(wg.WriteRefused):
+            GUARDS[dialect].check('SELECT pg_catalog.count_if(a) FROM other.t')
+
+
+def test_original_notebook_md5_read_reaches_only_the_guarded_cursor() -> None:
+    import psycopg
+
+    seen: list[tuple[str, Any]] = []
+
+    class NotebookCursor(psycopg.Cursor):
+        def execute(self, query: str, params: Any = None, **kwargs: Any) -> Any:
+            seen.append((query, params))
+            return self
+
+    cursor = object.__new__(NotebookCursor)
+    cursor._closed = True
+    sql = _NOTEBOOK_HASH_READS[0][1]
+    parameters = {'past': '2014-01-01'}
+    undo = wg.install({'postgres': POSTGRES})
+    try:
+        assert cursor.execute(sql, parameters) is cursor
+        assert seen == [(sql, parameters)]
+        for refused in (
+            sql + '; DELETE FROM outside.t',
+            'SELECT live_tests.md5(a) FROM other.t',
+            'SELECT "pg_catalog".md5(a) FROM other.t',
+            'SELECT pg_catalog."md5"(a) FROM other.t',
+            'SELECT count_if(a > 0) FROM other.t',
+        ):
+            with pytest.raises(wg.WriteRefused):
+                cursor.execute(refused, parameters)
+        assert seen == [(sql, parameters)]
+    finally:
+        undo()
+
+
 #: The unchanged metadata read from the original Lakebase notebook setup.
 _ARRAY_AGG_CATALOG = (
     'SELECT table_name, array_agg(column_name::text ORDER BY ordinal_position) '
