@@ -1,6 +1,6 @@
 # Phase 3 validation tracker
 
-Updated 2026-10-26, 11:13 UTC.
+Updated 2026-10-26, 11:16 UTC.
 Phase 4 is paused at the owner's request; current agents focus on Phase 3.
 
 ## Acceptance
@@ -64,22 +64,29 @@ Use the existing common cases, pinned data, seeds, anchors and model settings ac
    There are 114 positive prediction pairs with 7485 typed-exact rows, 141 approved matching endpoint refusals, exact logical payloads, zero actual differences and zero operator errors.
    Receipt SHA256 is `cfabf1853ccc01d722da21d0f9261d7a970d95cbd6f3566ad9a8ee2b380e28ce`.
    All 42 cloud executions are terminal; actual `76eb785b91` source/build identities and 147 stricter diagnostics remain preserved.
-5. Fresh full locked-dependency CI [40313141056](https://github.com/NVIDIA/structured-data-models-client/actions/runs/40313141056) was dispatched once at 11:11 UTC on exact integrated `aff7e32d2e`.
+5. Full locked-dependency CI [40313141056](https://github.com/NVIDIA/structured-data-models-client/actions/runs/40313141056) was dispatched once at 11:11 UTC on exact integrated `aff7e32d2e`, then cancelled while still queued with zero jobs after the preceding run exposed additional failures.
+   Avoid running the known-bad source again; dispatch the next full CI after the reviewed fixture correction lands.
    Previous run [40308222963](https://github.com/NVIDIA/structured-data-models-client/actions/runs/40308222963) on `80c763a7be` is not green: 10 jobs have failed while root tooling remains active.
-   The three missing bridge registrations are already corrected at `2d073d5b57`; the runtime agent is collecting the other exact failing assertions now.
+   The three missing bridge registrations are already corrected at `2d073d5b57`.
+   The remaining diagnosed failures are missing approved negative-neighbor SQL in statement/golden expectations, an incorrect phase-checkpoint value in the register, and a stale refusal-map source-line citation; the cross-host failure cascades from the missing Rust observation artifact.
+   Contract tooling also ended with a runner shutdown before producing complete assertion details.
+   The runtime agent owns the narrow correction and actual public-path reproduction, with canonical regeneration for generated files and both reviews before checks.
+   No dependency or Pydantic runtime failure was identified in these logs.
    The older `91b7f348f8` run is terminal failure; its option-formatting and invalid-register failures were repaired at `80c763a7be`.
    Official `80c763a7be` x86/ARM production/test-ops artifacts, complete Java/JNI and the full source bootstrap are authenticated and published with original producer IDs.
    The Spark serverless process ran out of memory after 108 complete original cases; all 108 are retained and the automatic retry was stopped without duplicate case execution.
    Both reviewers approved fresh 24-case processes for only the remaining original positions 108–299, using actual `80c763a7be` artifacts and unchanged original cases.
    The first of eight serial jobs is `818601119704735`; the Databricks agent owns its exclusive fixture lease and immediate continuation.
    The original Lakebase notebook failed before its data/model journey because the read guard rejected ARRAY_AGG in its original metadata query.
+   Its failed job is terminal and its read lease is explicitly released; no competing Lakebase reader remains.
    That narrow guard defect is now fixed at `aff7e32d2e`; rerun the original notebook through a fresh immutable output prefix with proper source identity.
    The original Databricks notebook is reviewed and staged, and waits for the Spark fixture lease.
    The read-only local Java comparison completed on genuine `91b7f348f8`: all 18 request pairs are exact after the existing request-ID exception; 15 endpoint-refusal code pairs match, and 75 ordered prediction rows with 150 binary64 probabilities are exact.
    Python DataFrame probability columns and Java probability maps are fully accounted for in finite evidence; the original strict report remains preserved for final independent review.
    The Java warehouse cohort is exactly 249 existing SQL cases, not the earlier incorrect shorthand of 157: 215 S1 plus 34 S2, with identical IDs and case blobs across the inspected sources.
    Each architecture also requires the existing six J2 shapes in three zones.
-   The Databricks agent is preparing bounded execution with fresh Python/Java child processes, retaining all cases and avoiding the same monolithic-memory failure; two code reviews are required before execution.
+   The Databricks agent froze bounded execution with fresh Python/Java child processes, retaining all cases and avoiding the same monolithic-memory failure.
+   One focused code approval is complete; the independent broad review is active, and no changed runner has executed before both approvals.
    The sole artifact collector retains original producer IDs for all proven unchanged reused assets.
    No completed model or SQL campaign is relabeled as final-source execution.
 6. The runtime agent owns missing original local generated-source checks for DuckDB, SQLite and PostgreSQL, plus full-data census and memory readiness.
@@ -173,7 +180,8 @@ The next landing must derive every changed protected path from the actual Git di
   SQLite completed 160 scenarios and 150 complete pairs: median CPU ratio 0.345 with no individual slowdown, but five ranking cases exceed the 2 ms boundary budget, worst 2.403 ms.
   PostgreSQL completed 176 scenarios and 167 complete pairs: median CPU ratio 0.524, no individual CPU or boundary failures, and import/control/provider checks pass.
   Its stock report still explicitly lacks native baseline and statement inputs, so this is not an overall performance PASS.
-  The fresh official `91b7f348f8` production native is 15863640 bytes against the immutable recorded Phase 1 baseline 9562016, ratio 1.659 above the 1.25 limit; no synthetic baseline wheel or size waiver is used.
+  The fresh official `91b7f348f8` production native is 15863640 bytes against the immutable recorded Phase 1 baseline 9562016, ratio 1.659 above the 1.25 limit; the current official `80c763a7be` x86 native is 15876472 bytes and also exceeds that limit.
+  No synthetic baseline wheel or size waiver is used.
 - Also finish existing model/runtime comparisons, original notebook/provider checks, direct paired performance checks, memory checks and the sealed final check, then final evidence review and merge/push.
 
 ## Finish sequence
