@@ -551,15 +551,30 @@ SAMPLING = 'SELECT * FROM "orders" SAMPLE ROW (5 ROWS)'
 
 def _sampled_line(sampled_rows: int, result_rows: int) -> dict[str, Any]:
     statements = [
-        {'stage': 'materialize', 'sql': 'SELECT 1', 'results': [{'rows': 1}]},
+        {
+            'stage': 'materialize',
+            'sql': 'SELECT 1',
+            'parameters': None,
+            'error': None,
+            'results': [{'rows': 1}],
+        },
         {
             'stage': 'materialize',
             'sql': SAMPLING,
+            'parameters': None,
+            'error': None,
             'results': [{'rows': sampled_rows}],
         },
     ]
     return {
-        'driver': {'capture': {'statements': statements, 'bindings': []}},
+        'driver': {
+            'capture': {
+                'statements': statements,
+                'bindings': [],
+                'incomplete': [],
+            },
+            'query_log': {'statements': 2, 'bindings': 0, 'differing': []},
+        },
         'public': {'result': {'rows': result_rows, 'digest': str(result_rows)}},
     }
 
@@ -576,7 +591,12 @@ def test_the_sampled_case_is_held_to_its_sampling_statement_and_row_count(
     document = yaml.safe_load(
         (ROOT / 'contract/compare-policy.yaml').read_text()
     )
-    assert document['sampled'] == {}
+    assert document['sampled'] == {
+        'snowflake.sampled.entity-table': {
+            **entry,
+            'statement': 3,
+        }
+    }
     path = tmp_path / 'compare-policy.yaml'
     for sampled, ok in (
         ({'s.sampled': entry}, True),
@@ -618,6 +638,141 @@ def test_the_sampled_case_is_held_to_its_sampling_statement_and_row_count(
             reference,
         )  # fmt: skip
         assert [r for r, _ in report.failures] == [rule], report.failures
+
+
+def _sampled_report(line: dict[str, Any], reference: dict[str, Any]) -> Any:
+    report = COMPARE.Report(dict(CHECK.policy()['rules']))
+    COMPARE.sampled_judgment(
+        report,
+        0,
+        's.sampled@snowflake',
+        {
+            'leg': 'snowflake',
+            'stage': 'materialize',
+            'statement': 1,
+            'decision': OPTION_C,
+        },
+        {'python-core': line},
+        reference,
+    )
+    return report
+
+
+def test_a_sample_read_is_matched_after_freshness_queries_in_the_same_call() -> (
+    None
+):
+    reference = _sampled_line(5, 5)
+    line = _sampled_line(5, 5)
+    statements = line['driver']['capture']['statements']
+    statements.insert(1, copy.deepcopy(statements[0]))
+    line['driver']['query_log']['statements'] = len(statements)
+    statements[2]['sql'] = '\n  ' + SAMPLING + '  \n'
+    assert not _sampled_report(line, reference).failures
+
+
+@pytest.mark.parametrize(
+    'fault',
+    ['missing', 'ambiguous', 'other-stage', 'query', 'parameters', 'failed'],
+)
+def test_the_sample_match_refuses_missing_ambiguous_or_changed_reads(
+    fault: str,
+) -> None:
+    reference = _sampled_line(5, 5)
+    line = _sampled_line(5, 5)
+    statements = line['driver']['capture']['statements']
+    if fault == 'missing':
+        statements.pop()
+    elif fault == 'ambiguous':
+        statements.append(copy.deepcopy(statements[1]))
+    elif fault == 'other-stage':
+        statements[1]['stage'] = 'from_source'
+    elif fault == 'query':
+        statements[1]['sql'] = SAMPLING.replace('5 ROWS', '6 ROWS')
+    elif fault == 'parameters':
+        statements[1]['parameters'] = [{'type': 'builtins.int', 'value': '5'}]
+    else:
+        statements[1]['error'] = 'ProgrammingError'
+    line['driver']['query_log']['statements'] = len(statements)
+    assert any(
+        rule == 'sql.result'
+        for rule, _ in _sampled_report(line, reference).failures
+    )
+
+
+def test_sample_query_matching_preserves_literal_whitespace_and_parameter_types() -> (
+    None
+):
+    reference = _sampled_line(5, 5)
+    line = _sampled_line(5, 5)
+    for item in (line, reference):
+        statement = item['driver']['capture']['statements'][1]
+        statement['sql'] += " WHERE 'a b' = ?"
+        statement['parameters'] = [{'type': 'builtins.str', 'value': "'a b'"}]
+    assert not _sampled_report(line, reference).failures
+    changed = copy.deepcopy(line)
+    changed['driver']['capture']['statements'][1]['sql'] = changed['driver'][
+        'capture'
+    ]['statements'][1]['sql'].replace("'a b'", "'ab'")
+    assert _sampled_report(changed, reference).failures
+    changed = copy.deepcopy(line)
+    changed['driver']['capture']['statements'][1]['parameters'] = [
+        {'type': 'builtins.bytes', 'value': "b'a b'"}
+    ]
+    assert _sampled_report(changed, reference).failures
+
+
+@pytest.mark.parametrize('rows', [None, True, -1])
+def test_sample_counts_need_actual_nonnegative_integer_evidence(
+    rows: Any,
+) -> None:
+    reference = _sampled_line(5, 5)
+    line = _sampled_line(5, 5)
+    for item in (line, reference):
+        item['driver']['capture']['statements'][1]['results'][0]['rows'] = rows
+    assert _sampled_report(line, reference).failures
+
+
+@pytest.mark.parametrize(
+    'fault', ['capture-off', 'incomplete', 'query-log', 'missing-result']
+)
+def test_sampled_input_completeness_and_public_result_counts_stay_strict(
+    fault: str,
+) -> None:
+    reference = _sampled_line(5, 5)
+    line = _sampled_line(5, 5)
+    if fault == 'capture-off':
+        line['driver']['capture'] = None
+    elif fault == 'incomplete':
+        line['driver']['capture']['incomplete'] = ['an unrecorded read']
+    elif fault == 'query-log':
+        line['driver']['query_log'] = None
+    else:
+        line['public']['result'] = None
+    assert _sampled_report(line, reference).failures
+
+
+@pytest.mark.parametrize(
+    'rule', ['outcome', 'route', 'inputs', 'reach', 'schema', 'warnings']
+)
+def test_all_original_sampled_case_semantic_rules_keep_gating(
+    rule: str,
+) -> None:
+    report = COMPARE.Report(dict(CHECK.policy()['rules']))
+    report.fail('retained semantic difference', rule)
+    COMPARE.sampled_judgment(
+        report,
+        0,
+        's.sampled@snowflake',
+        {
+            'leg': 'snowflake',
+            'stage': 'materialize',
+            'statement': 1,
+            'decision': OPTION_C,
+        },
+        {'python-core': _sampled_line(5, 5)},
+        _sampled_line(5, 5),
+    )
+    assert (rule, 'retained semantic difference') in report.failures
 
 
 def test_the_test_author_template_names_the_gate_module_pattern() -> None:
