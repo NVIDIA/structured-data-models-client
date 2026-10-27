@@ -91,13 +91,6 @@ def _frame_timestamp(
     # timezone implementation and unit. No original frame values are read.
     value = fields['value']
     dtype = native_types[fields['table']][fields['column']]
-    if type(dtype) is pd.ArrowDtype:
-        import pyarrow as pa
-
-        native = pd.arrays.ArrowExtensionArray(
-            pa.array([value.value], type=dtype.pyarrow_dtype)
-        )
-        return str(native[0])
     if type(dtype) is pd.DatetimeTZDtype:
         stamp = pd.Timestamp(value.value, unit=value.unit, tz='UTC').tz_convert(
             dtype.tz
@@ -262,26 +255,25 @@ def _convert(name: str, frame: pd.DataFrame) -> tuple[Any, dict[str, Any]]:
                 or pa.types.is_boolean(physical)
                 or pa.types.is_string(physical)
                 or pa.types.is_large_string(physical)
-                or (
-                    pa.types.is_timestamp(physical)
-                    and physical.unit in ('s', 'ms', 'us', 'ns')
-                )
             )
             # Arrow float nunique distinguishes zero/NaN bit patterns while
             # pandas duplicate-key equality can merge them. The current
             # frame contract does not represent both native facts, so that
             # whole family remains outside this development route.
+            # Arrow timestamps also remain unfinished: native scalar
+            # boxing can overflow or turn a present ns MIN into NaT, which
+            # affects time choice at its consumed row and constructor stage.
         if not (primitive or masked or temporal or text or arrow):
             raise RouteError(
-                f'the partial frame constructor supports only NumPy or pandas masked numeric and Boolean columns, native datetimes, built-in pandas strings, or built-in Arrow integer, Boolean, string or timestamp columns: {name}.{column}'
+                f'the partial frame constructor supports only NumPy or pandas masked numeric and Boolean columns, native datetimes, built-in pandas strings, or built-in Arrow integer, Boolean or string columns: {name}.{column}'
             )
         # Convert values only. DataFrame export may add a non-Range index
         # column, which the public schema constructor never describes.
         # Native conversion supplies validity: NumPy NaNs become null;
         # a masked float's unmasked NaN remains a present Arrow value.
         # An exact built-in Arrow array already carries native validity,
-        # chunks, units and zones. Do not reconstruct
-        # it from Python values or apply pandas missing-value inference.
+        # chunks and widths. Do not reconstruct it from Python values or
+        # apply pandas missing-value inference.
         arrays.append(
             series.array.__arrow_array__()
             if arrow
