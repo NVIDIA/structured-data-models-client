@@ -18,7 +18,6 @@ arraydeque 0.5.1  MIT/Apache-2.0  https://github.com/andylokandy/arraydeque
 arrow-array 58.4.0  Apache-2.0 AND MIT  https://github.com/apache/arrow-rs
 arrow-buffer 58.4.0  Apache-2.0  https://github.com/apache/arrow-rs
 arrow-data 58.4.0  Apache-2.0  https://github.com/apache/arrow-rs
-arrow-pyarrow 58.4.0  Apache-2.0  https://github.com/apache/arrow-rs
 arrow-row 58.4.0  Apache-2.0  https://github.com/apache/arrow-rs
 arrow-schema 58.4.0  Apache-2.0  https://github.com/apache/arrow-rs
 arrow-select 58.4.0  Apache-2.0  https://github.com/apache/arrow-rs
@@ -692,18 +691,6 @@ Licence: Apache-2.0
 arrow-data 58.4.0
 =================
 Licence: Apache-2.0
-
---- LICENSE.txt ---
-(the same text as LICENSE.txt of arrow-array 58.4.0 above)
-
---- NOTICE.txt ---
-(the same text as NOTICE.txt of arrow-array 58.4.0 above)
-
-
-arrow-pyarrow 58.4.0
-====================
-Licence: Apache-2.0
-Its package carries no terms files; these are the same project's, as arrow-schema 58.4.0 ships them.
 
 --- LICENSE.txt ---
 (the same text as LICENSE.txt of arrow-array 58.4.0 above)
@@ -4030,3 +4017,52 @@ Copyright (c) The Rust Project Contributors. Its copyright notices, those of
 the code it bundles included, are in the Rust repository's COPYRIGHT file at
 that version: https://github.com/rust-lang/rust/blob/1.97.0/COPYRIGHT.
 The texts of both licences are reproduced in the crate sections above.
+
+
+Unicode lowercase data
+======================
+
+The core includes lowercase mappings and case/whitespace properties derived from the official Unicode Character Database versions 13.0.0, 14.0.0, 15.0.0, 15.1.0, 16.0.0, 17.0.0.
+Copyright (c) 1991-2026 Unicode, Inc. Licensed under Unicode-3.0.
+scripts/rust_core/generate_text_unicode.py records official input URLs, pinned hashes, generator/helper hashes and derived bytes in rust/crates/sdm-engine/data/CASING-PROVENANCE.json.
+The lowercase algorithm is first-party Rust; no third-party implementation code is vendored.
+
+UNICODE LICENSE V3
+
+COPYRIGHT AND PERMISSION NOTICE
+
+Copyright © 1991-2026 Unicode, Inc.
+
+NOTICE TO USER: Carefully read the following legal agreement. BY
+DOWNLOADING, INSTALLING, COPYING OR OTHERWISE USING DATA FILES, AND/OR
+SOFTWARE, YOU UNEQUIVOCALLY ACCEPT, AND AGREE TO BE BOUND BY, ALL OF THE
+TERMS AND CONDITIONS OF THIS AGREEMENT. IF YOU DO NOT AGREE, DO NOT
+DOWNLOAD, INSTALL, COPY, DISTRIBUTE OR USE THE DATA FILES OR SOFTWARE.
+
+Permission is hereby granted, free of charge, to any person obtaining a
+copy of data files and any associated documentation (the "Data Files") or
+software and any associated documentation (the "Software") to deal in the
+Data Files or Software without restriction, including without limitation
+the rights to use, copy, modify, merge, publish, distribute, and/or sell
+copies of the Data Files or Software, and to permit persons to whom the
+Data Files or Software are furnished to do so, provided that either (a)
+this copyright and permission notice appear with all copies of the Data
+Files or Software, or (b) this copyright and permission notice appear in
+associated Documentation.
+
+THE DATA FILES AND SOFTWARE ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY
+KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT OF
+THIRD PARTY RIGHTS.
+
+IN NO EVENT SHALL THE COPYRIGHT HOLDER OR HOLDERS INCLUDED IN THIS NOTICE
+BE LIABLE FOR ANY CLAIM, OR ANY SPECIAL INDIRECT OR CONSEQUENTIAL DAMAGES,
+OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS,
+WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION,
+ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THE DATA
+FILES OR SOFTWARE.
+
+Except as contained in this notice, the name of a copyright holder shall
+not be used in advertising or otherwise to promote the sale, use or other
+dealings in these Data Files or Software without prior written
+authorization of the copyright holder.
