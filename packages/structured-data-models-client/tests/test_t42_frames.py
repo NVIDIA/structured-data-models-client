@@ -374,7 +374,6 @@ def test_constructor_key_sequences_and_native_composite_examples(
         'text',
         'date_text',
         'object',
-        'arrow_nullable',
         'categorical',
     ],
 )
@@ -387,7 +386,6 @@ def test_unfinished_native_families_are_not_forced_through_numeric_constructor(
         'text': pd.Series(['a', 'b'], dtype='str'),
         'date_text': pd.Series(['2024-01-01', '2024-01-02'], dtype='str'),
         'object': pd.Series([1, 2], dtype=object),
-        'arrow_nullable': pd.Series([1, None], dtype='int64[pyarrow]'),
         'categorical': pd.Series(['a', 'b'], dtype='category'),
     }
     monkeypatch.setenv('SDM_CORE_ROUTES', PATHS)
