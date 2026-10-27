@@ -1,0 +1,58 @@
+{
+  "reference": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+  "producer_sha256": "e3b40a39fc769e8ba2de4ebe0001d6f28dcada11e40f2b4b23a21fee4fbf4f48",
+  "receipt_sha256": {
+    "310": "c477e4fc8bb91f7e88a9431b2ff1b8e651329eb67d1fcc0aedda516d880107b8",
+    "312": "8a5fa60f1cc3bfa7562cbd19a295960e8f8627a749ae9db92c55264938a08991"
+  },
+  "records": {
+    "actual-base": {
+      "case": "actual-base",
+      "outcome": "error",
+      "type": "StructuredDataError",
+      "module": "sdm_client.errors",
+      "code": "INVALID_REQUEST",
+      "message": "[INVALID_REQUEST] actual native relational failure",
+      "details": {},
+      "cause_is_native": true,
+      "cause_type": "KumoRelationalError",
+      "warnings": [],
+      "events": [
+        "note.astype"
+      ]
+    },
+    "actual-subclass": {
+      "case": "actual-subclass",
+      "outcome": "error",
+      "type": "StructuredDataError",
+      "module": "sdm_client.errors",
+      "code": "INVALID_REQUEST",
+      "message": "[INVALID_REQUEST] actual native relational failure",
+      "details": {},
+      "cause_is_native": true,
+      "cause_type": "ObservedRelational",
+      "warnings": [],
+      "events": [
+        "note.astype",
+        "native.str",
+        "native.str"
+      ]
+    },
+    "forged-name": {
+      "case": "forged-name",
+      "outcome": "error",
+      "type": "StructuredDataError",
+      "module": "sdm_client.errors",
+      "code": "INTERNAL_ERROR",
+      "message": "[INTERNAL_ERROR] the relational engine failed while building this request: KumoRelationalError: actual native relational failure",
+      "details": {},
+      "cause_is_native": true,
+      "cause_type": "KumoRelationalError",
+      "warnings": [],
+      "events": [
+        "note.astype",
+        "native.str"
+      ]
+    }
+  }
+}

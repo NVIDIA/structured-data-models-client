@@ -17,6 +17,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from types import MappingProxyType, TracebackType
 from typing import Any, Iterator, NoReturn, cast
+import sys
 import unicodedata
 
 import pandas as pd
@@ -82,6 +83,16 @@ class NativeFrameFailure:
     def capture(
         cls, error: Exception, relational_type: type[Exception] | None = None
     ) -> NativeFrameFailure:
+        if relational_type is None:
+            loaded = sys.modules.get('sdm_relational_engine')
+            if loaded is not None:
+                # A caller can raise the optional library's real exception
+                # only after loading it. Read that actual exported class;
+                # qualified names alone are not native class identity.
+                relational_type = cast(
+                    'type[Exception] | None',
+                    vars(loaded).get('KumoRelationalError'),
+                )
         traceback = BaseException.__getattribute__(error, '__traceback__')
         deepest = traceback
         while deepest is not None and deepest.tb_next is not None:
