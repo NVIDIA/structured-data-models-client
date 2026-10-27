@@ -43,6 +43,8 @@ use sdm_host::{
     read,
 };
 
+mod frame_advice;
+mod frame_keys;
 mod frame_objects;
 mod native_values;
 
@@ -845,6 +847,10 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<FramePayload>()?;
     module.add_class::<frame_objects::FrameObjectConstructor>()?;
     module.add_class::<frame_objects::FrameKeyCandidates>()?;
+    module.add_class::<frame_keys::FrameKeyAdoption>()?;
+    module.add_class::<frame_advice::FrameKeyAdvice>()?;
+    module.add_function(wrap_pyfunction!(frame_advice::frame_sample_facts, module)?)?;
+    module.add_function(wrap_pyfunction!(frame_keys::check_frame_cell, module)?)?;
     module.add_class::<Run>()?;
     module.add_function(wrap_pyfunction!(reset_log_cache, module)?)?;
     module.add_function(wrap_pyfunction!(templates, module)?)?;

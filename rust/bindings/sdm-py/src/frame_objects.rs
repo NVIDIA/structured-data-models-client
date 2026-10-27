@@ -37,12 +37,12 @@ impl FrameKeyCandidates {
         crate::core_call(py, || held.column().map(str::to_owned))
     }
 
-    fn observe(&mut self, py: Python<'_>, distinct: u64) -> PyResult<()> {
+    fn observe(&mut self, py: Python<'_>, distinct: u64, rows: u64) -> PyResult<()> {
         let held = self
             .candidates
             .as_mut()
             .ok_or_else(|| PyValueError::new_err("native key populations have been consumed"))?;
-        crate::core_call(py, || held.observe(distinct))?.map_err(|_| {
+        crate::core_call(py, || held.observe(distinct, rows))?.map_err(|_| {
             PyValueError::new_err("native key cardinality is outside its selected population")
         })
     }

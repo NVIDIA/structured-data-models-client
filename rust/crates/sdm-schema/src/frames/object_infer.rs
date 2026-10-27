@@ -8,6 +8,24 @@ use sdm_contract::frames::NativeObjectMeaning;
 use sdm_contract::ops::Dtype;
 use sdm_contract::{CoreError, Sentence};
 
+pub fn check_cell(described: &str, kind: &str, native_type: &str) -> Result<(), CoreError> {
+    use sdm_contract::Detail;
+    let (sentence, shape) = match kind {
+        "scalar" => return Ok(()),
+        "bytes" => (Sentence::FrameCellBytes, ""),
+        "mapping" => (Sentence::FrameCellContainer, "a mapping"),
+        "container" => (Sentence::FrameCellContainer, "a container"),
+        _ => return Err(invalid("native cell classification has an unknown kind")),
+    };
+    Err(
+        CoreError::new(sentence, "a native source cell is not scalar").with_fields(vec![
+            ("described", Detail::text(described)),
+            ("native_type", Detail::text(native_type)),
+            ("shape", Detail::text(shape)),
+        ]),
+    )
+}
+
 fn invalid(message: &str) -> CoreError {
     CoreError::protocol(Sentence::InvalidMessage, message)
 }
@@ -133,7 +151,7 @@ impl Constructor {
     }
 
     pub fn distinct(&mut self, distinct: u64) -> Result<(), CoreError> {
-        if self.next != Read::Distinct || distinct > self.rows as u64 {
+        if self.next != Read::Distinct {
             return Err(invalid(
                 "native Decimal cardinality arrived outside its selected read",
             ));

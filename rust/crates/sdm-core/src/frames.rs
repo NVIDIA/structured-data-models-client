@@ -240,12 +240,20 @@ pub(crate) async fn run(
     }
     let completed = match inference {
         Some(FrameInference::Inferred(values))
-            if matches!(manifest.stage, FrameStage::Schema | FrameStage::Assemble)
-                && values.len() == named.len() =>
+            if matches!(
+                manifest.stage,
+                FrameStage::Schema | FrameStage::Assemble | FrameStage::AssembleNative
+            ) && values.len() == named.len() =>
         {
             Some(values)
         }
-        None if manifest.stage != FrameStage::Assemble => None,
+        None if !matches!(
+            manifest.stage,
+            FrameStage::Assemble | FrameStage::AssembleNative
+        ) =>
+        {
+            None
+        }
         _ => {
             return Err(invalid(
                 "frame schema requires a complete inferred-table set",
@@ -391,7 +399,9 @@ pub(crate) async fn run(
     for warning in link_notices {
         asker.warn(warning);
     }
-    let notices = if manifest.stage == FrameStage::Assemble {
+    let notices = if manifest.stage == FrameStage::AssembleNative {
+        vec![]
+    } else if manifest.stage == FrameStage::Assemble {
         sdm_schema::frames::key_notices(
             &reads,
             &assembled.description,
@@ -404,7 +414,10 @@ pub(crate) async fn run(
             manifest.relationships.is_none(),
         )?
     };
-    if manifest.stage == FrameStage::Assemble {
+    if matches!(
+        manifest.stage,
+        FrameStage::Assemble | FrameStage::AssembleNative
+    ) {
         let samples = assembled
             .description
             .tables
@@ -426,6 +439,12 @@ pub(crate) async fn run(
         return finish_inference(
             &asker,
             FrameInference::Schema(Box::new(FrameSchema {
+                advice: (manifest.stage == FrameStage::AssembleNative).then(|| {
+                    sdm_contract::frames::FrameKeyAdvicePlan {
+                        description: assembled.description.clone(),
+                        infer_links: manifest.relationships.is_none(),
+                    }
+                }),
                 description: assembled.description,
                 samples,
                 key_notices: notices

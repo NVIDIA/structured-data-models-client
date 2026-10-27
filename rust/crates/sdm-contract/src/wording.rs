@@ -413,6 +413,12 @@ pub fn template(sentence: Sentence) -> Template {
             r#"{table}.{columns!d} identifies a row {repeats:,} time(s) it has already been used, e.g. {example!p}. Those rows are indistinguishable to the model. Name a different primary key if this column is a foreign key rather than an identifier."#,
         ),
         S::FrameNameEmpty => said(r#"The name {name!r} must be a non-empty string."#),
+        S::FrameCellBytes => said(
+            r#"{described} holds raw bytes ({native_type}), and the contract has no cell that carries them. It is already one value per row, so what it needs is a reading rather than a flattening: decode the column to text, or leave it out of the schema"#,
+        ),
+        S::FrameCellContainer => said(
+            r#"{described} holds {shape} ({native_type}), and a nested column is not something this client can send. Multi-label targets are not supported by these models; for a feature, give one value per row"#,
+        ),
         S::FrameNameCharacters => {
             said(r#"The name {name!r} contains one or more invalid characters: {characters!r}."#)
         }

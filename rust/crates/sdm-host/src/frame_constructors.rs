@@ -8,6 +8,52 @@
 use sdm_contract::frames::FrameInference;
 use sdm_contract::{CoreError, Sentence};
 
+pub fn key_advice(
+    bytes: &[u8],
+    dates: std::collections::BTreeMap<String, String>,
+) -> Result<sdm_core::FrameKeyAdvice, CoreError> {
+    Ok(sdm_core::FrameKeyAdvice::new(
+        serde_json::from_slice(bytes)
+            .map_err(|_| invalid("native key advice requires a completed schema population"))?,
+        dates,
+    ))
+}
+
+pub fn notices_bytes(notices: &[sdm_contract::CoreWarning]) -> Result<Vec<u8>, CoreError> {
+    serde_json::to_vec(notices).map_err(|_| invalid("native schema notices cannot be serialized"))
+}
+
+pub fn native_sample(bytes: &[u8]) -> Result<Vec<u8>, CoreError> {
+    let sample = serde_json::from_slice(bytes)
+        .map_err(|_| invalid("native sample observations are not a typed population"))?;
+    notices_bytes(&sdm_core::native_frame_sample(sample)?)
+}
+
+pub fn key_adoption(bytes: &[u8]) -> Result<sdm_core::FrameKeyAdoption, CoreError> {
+    sdm_core::FrameKeyAdoption::new(
+        serde_json::from_slice(bytes)
+            .map_err(|_| invalid("native key adoption requires a completed constructor product"))?,
+    )
+}
+
+pub fn key_quality(bytes: &[u8]) -> Result<sdm_contract::frames::NativeKeyQuality, CoreError> {
+    serde_json::from_slice(bytes)
+        .map_err(|_| invalid("native key quality is not a typed observation"))
+}
+
+pub fn finish_key_adoption(
+    adoption: sdm_core::FrameKeyAdoption,
+    rows: Option<u64>,
+) -> Result<(Vec<u8>, Vec<u8>), CoreError> {
+    let (product, notices) = adoption.finish(rows)?;
+    Ok((
+        serde_json::to_vec(&product)
+            .map_err(|_| invalid("native key adoption serialization failed"))?,
+        serde_json::to_vec(&notices)
+            .map_err(|_| invalid("native key adoption notice serialization failed"))?,
+    ))
+}
+
 pub fn object_meaning_bytes(
     meaning: sdm_contract::frames::NativeObjectMeaning,
 ) -> Result<Vec<u8>, CoreError> {
