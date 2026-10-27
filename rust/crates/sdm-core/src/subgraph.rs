@@ -860,23 +860,46 @@ fn first_of_each_key(
 
 /// A text feature's values as the reference's words.
 fn words(array: &ArrayRef) -> Result<Vec<Vec<String>>, CoreError> {
-    use arrow_array::Array;
-    use arrow_array::cast::AsArray;
     if array.data_type() != &arrow_schema::DataType::Utf8 {
         // The schema's consistency check holds a text feature to text.
         return Err(internal("a text feature's values are not text"));
     }
-    let text = array.as_string::<i32>();
-    Ok((0..text.len())
-        .map(|i| sdm_engine::words::normalize((!text.is_null(i)).then(|| text.value(i))))
-        .collect())
+    words_with(array, sdm_engine::words::normalize)
+}
+
+/// A native frame's selected strings, using its reached lowercase profile.
+/// Offset widths remain physical facts; neither path narrows or casts arrays.
+pub(crate) fn frame_words(
+    array: &ArrayRef,
+    profile: sdm_engine::words::CasingProfile,
+) -> Result<Vec<Vec<String>>, CoreError> {
+    words_with(array, |value| {
+        sdm_engine::words::normalize_with_profile(value, profile)
+    })
+}
+
+fn words_with(
+    array: &ArrayRef,
+    normalize: impl Fn(Option<&str>) -> Vec<String>,
+) -> Result<Vec<Vec<String>>, CoreError> {
+    use arrow_array::cast::AsArray;
+
+    match array.data_type() {
+        arrow_schema::DataType::Utf8 => {
+            Ok(array.as_string::<i32>().iter().map(normalize).collect())
+        }
+        arrow_schema::DataType::LargeUtf8 => {
+            Ok(array.as_string::<i64>().iter().map(normalize).collect())
+        }
+        _ => Err(internal("a text feature's values are not text")),
+    }
 }
 
 #[cfg(test)]
 mod frame_words_tests {
     use std::sync::Arc;
 
-    use arrow_array::{Array, ArrayRef, LargeStringArray, StringArray};
+    use arrow_array::{ArrayRef, LargeStringArray, StringArray};
     use sdm_engine::words::{CasingProfile, UnicodeDataVersion};
 
     #[test]

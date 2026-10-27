@@ -3914,17 +3914,19 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
 
         // The neighbors of each example's entity, hop by hop.
         let walked = if let Some(frames) = &frames {
-            crate::frame_materialize::lock(frames).walk(
-                asker,
-                &graph,
-                entity,
-                &all_keys,
-                &anchors,
-                &walk_hops,
-                deferred.neighbors.as_deref(),
-                &excluded,
-                (!unseeded).then(|| seed.to_u128()).flatten(),
-            )?
+            crate::frame_materialize::lock(frames)
+                .walk(
+                    asker,
+                    &graph,
+                    entity,
+                    &all_keys,
+                    &anchors,
+                    &walk_hops,
+                    deferred.neighbors.as_deref(),
+                    &excluded,
+                    (!unseeded).then(|| seed.to_u128()).flatten(),
+                )?
+                .into_walked(&memo.memo.source)?
         } else {
             crate::subgraph::Walk {
                 asker,
