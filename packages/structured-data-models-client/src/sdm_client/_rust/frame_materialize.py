@@ -40,7 +40,7 @@ def native_inputs(
         typed_table,
     )
     from sdm_client._rust.frames import _check_header
-    from sdm_client._rust.spec import _links
+    from sdm_client._rust.spec import held_schema, held_table
 
     checkpoint = state.get('held', {}).get('frame_checkpoint')
     if checkpoint is not None and 'owner' in checkpoint:
@@ -63,16 +63,20 @@ def native_inputs(
                 'frame materialization requires built-in DataFrames'
             )
         frame = typed_table(table, state)
-        _check_header(name, frame)
-        held = table_meaning(name, table, frame, state)
-        held_tables.append(held)
-        prepared_tables.append((name, frame, held))
-    graph_schema = source_meaning(
-        {'tables': held_tables, 'links': _links(schema)}, state
-    )
+        prepared_tables.append((name, frame, held_table(name, table)))
+    # Graph.from_data constructs its physical tables only after ALL declared
+    # casts. Keep their dtype declarations, but delay physical admission to
+    # this boundary so an earlier table cannot skip a later cast's effects.
     for name, frame, held in prepared_tables:
-        # This is the original native sanitization ownership boundary.
-        # All tables' declared casts and metadata precede these native casts.
+        _check_header(name, frame)
+        held_tables.append(table_meaning(held, frame, state))
+    # _build_graph applies live key/time/stype metadata after construction.
+    # LocalGraphStore sanitization follows, using those fixed graph facts;
+    # its native timestamp callbacks cannot rewrite that graph's metadata.
+    graph_schema = source_meaning(held_schema(schema), held_tables, state)
+    for (name, frame, _), held in zip(
+        prepared_tables, graph_schema['tables'], strict=True
+    ):
         frame = frame.copy(deep=False).reset_index(drop=True)
         arrays = []
         origins = []

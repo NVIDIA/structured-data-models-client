@@ -411,7 +411,11 @@ pub struct MaterializedFrames {
 #[serde(tag = "stage", rename_all = "snake_case", deny_unknown_fields)]
 pub enum FramePreparation {
     SourceMeaning {
+        /// Live logical declarations after physical table admission and before
+        /// GraphStore-style native sanitization.
         schema: AttachmentId,
+        /// Cast-time dtype facts from those same ordered physical tables.
+        typed_tables: Vec<FrameTableMeaning>,
     },
     TableMeaning {
         input: FrameTableInputs,

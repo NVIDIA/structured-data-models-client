@@ -1,0 +1,3560 @@
+{
+  "reference": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+  "cell": "310",
+  "producer_sha256": "df810a0f326fc2e8d8f6ec395bea6838dd0cbb29f73eb7a83238989daf946ee9",
+  "driver_sha256": "81d87cb88cd7152c2b2e58e6a87af6516aa981a3832fb323b3a07c585d229b8d",
+  "capture_sha256": "b9d030f97c96aa4b3bd891d2b52257db4de68150c53a08c495d8a0f50bffaca0",
+  "records": [
+    {
+      "declared": "float64",
+      "mutation": false,
+      "calls": [
+        {
+          "outcome": {
+            "kind": "success",
+            "inspection": {
+              "payloads": [
+                {
+                  "model": "kumo-relational",
+                  "task": {
+                    "kind": "regression",
+                    "target": {
+                      "column_name": "TARGET",
+                      "dtype": "int64"
+                    },
+                    "entity_table_names": [
+                      "users"
+                    ],
+                    "anchor_time_column": "__kumo_anchor_time"
+                  },
+                  "schema": {
+                    "instance_table": {
+                      "columns": {
+                        "instance_id": {
+                          "dtype": "int64",
+                          "stype": "ID",
+                          "nullable": false
+                        },
+                        "__kumo_entity_ref_0": {
+                          "dtype": "int64",
+                          "stype": "ID"
+                        },
+                        "__kumo_anchor_time": {
+                          "dtype": "timestamp[us]",
+                          "stype": "timestamp",
+                          "nullable": false
+                        },
+                        "TARGET": {
+                          "dtype": "int64",
+                          "stype": "numerical"
+                        }
+                      },
+                      "primary_key": "instance_id"
+                    },
+                    "related_tables": {
+                      "users": {
+                        "columns": {
+                          "instance_id": {
+                            "dtype": "int64",
+                            "stype": "ID",
+                            "nullable": false
+                          },
+                          "user_id": {
+                            "dtype": "int64",
+                            "nullable": false
+                          },
+                          "category": {
+                            "dtype": "string",
+                            "stype": "categorical"
+                          },
+                          "note": {
+                            "dtype": "string",
+                            "stype": "categorical"
+                          },
+                          "signal": {
+                            "dtype": "int64",
+                            "stype": "numerical"
+                          }
+                        },
+                        "primary_key": [
+                          "instance_id",
+                          "user_id"
+                        ]
+                      },
+                      "orders": {
+                        "columns": {
+                          "instance_id": {
+                            "dtype": "int64",
+                            "stype": "ID",
+                            "nullable": false
+                          },
+                          "__node_id": {
+                            "dtype": "int64",
+                            "stype": "ID",
+                            "nullable": false
+                          },
+                          "marker": {
+                            "dtype": "int64",
+                            "stype": "numerical"
+                          },
+                          "note": {
+                            "dtype": "string",
+                            "stype": "categorical"
+                          },
+                          "amount": {
+                            "dtype": "float64",
+                            "stype": "numerical"
+                          },
+                          "user_id": {
+                            "dtype": "int64",
+                            "stype": "ID"
+                          }
+                        },
+                        "primary_key": [
+                          "instance_id",
+                          "__node_id"
+                        ]
+                      }
+                    },
+                    "relationships": [
+                      {
+                        "source_columns": [
+                          "__kumo_entity_ref_0"
+                        ],
+                        "target_table": "users",
+                        "target_columns": [
+                          "user_id"
+                        ]
+                      },
+                      {
+                        "source_table": "orders",
+                        "source_columns": [
+                          "user_id"
+                        ],
+                        "target_table": "users",
+                        "target_columns": [
+                          "user_id"
+                        ]
+                      }
+                    ]
+                  },
+                  "context": {
+                    "instance_table": {
+                      "format": "arrays",
+                      "columns": [
+                        "instance_id",
+                        "__kumo_entity_ref_0",
+                        "__kumo_anchor_time",
+                        "TARGET"
+                      ],
+                      "rows": [
+                        [
+                          0,
+                          1,
+                          "2262-04-11T23:47:16.709551Z",
+                          21
+                        ]
+                      ]
+                    },
+                    "related_tables": {
+                      "users": {
+                        "format": "arrays",
+                        "columns": [
+                          "instance_id",
+                          "user_id",
+                          "category",
+                          "note",
+                          "signal"
+                        ],
+                        "rows": [
+                          [
+                            0,
+                            1,
+                            "red",
+                            "",
+                            100
+                          ]
+                        ]
+                      },
+                      "orders": {
+                        "format": "arrays",
+                        "columns": [
+                          "instance_id",
+                          "__node_id",
+                          "marker",
+                          "note",
+                          "amount",
+                          "user_id"
+                        ],
+                        "rows": [
+                          [
+                            0,
+                            0,
+                            3,
+                            "\ud83d\ude3a",
+                            3.25,
+                            1
+                          ],
+                          [
+                            0,
+                            1,
+                            6,
+                            "red",
+                            6.25,
+                            1
+                          ],
+                          [
+                            0,
+                            2,
+                            1,
+                            null,
+                            1.25,
+                            1
+                          ]
+                        ]
+                      }
+                    }
+                  },
+                  "predict": {
+                    "instance_table": {
+                      "format": "arrays",
+                      "columns": [
+                        "instance_id",
+                        "__kumo_entity_ref_0",
+                        "__kumo_anchor_time"
+                      ],
+                      "rows": [
+                        [
+                          3,
+                          7,
+                          "2262-04-11T23:47:16.709551Z"
+                        ],
+                        [
+                          4,
+                          8,
+                          "2262-04-11T23:47:16.709551Z"
+                        ]
+                      ]
+                    },
+                    "related_tables": {
+                      "users": {
+                        "format": "arrays",
+                        "columns": [
+                          "instance_id",
+                          "user_id",
+                          "category",
+                          "note",
+                          "signal"
+                        ],
+                        "rows": [
+                          [
+                            3,
+                            7,
+                            "blue",
+                            "red",
+                            106
+                          ],
+                          [
+                            4,
+                            8,
+                            "red",
+                            "blue",
+                            107
+                          ]
+                        ]
+                      },
+                      "orders": {
+                        "format": "arrays",
+                        "columns": [
+                          "instance_id",
+                          "__node_id",
+                          "marker",
+                          "note",
+                          "amount",
+                          "user_id"
+                        ],
+                        "rows": [
+                          [
+                            3,
+                            9,
+                            53,
+                            "\u6771\u4eac",
+                            53.25,
+                            7
+                          ],
+                          [
+                            3,
+                            10,
+                            51,
+                            "\ud83d\ude3a",
+                            51.25,
+                            7
+                          ],
+                          [
+                            3,
+                            11,
+                            55,
+                            "blue",
+                            55.25,
+                            7
+                          ],
+                          [
+                            4,
+                            12,
+                            58,
+                            "\u00e9",
+                            58.25,
+                            8
+                          ],
+                          [
+                            4,
+                            13,
+                            57,
+                            null,
+                            57.25,
+                            8
+                          ],
+                          [
+                            4,
+                            14,
+                            62,
+                            "red",
+                            62.25,
+                            8
+                          ]
+                        ]
+                      }
+                    }
+                  },
+                  "output": {
+                    "fields": [
+                      "prediction"
+                    ]
+                  },
+                  "inference": {
+                    "run_mode": "fast",
+                    "use_prediction_time": false,
+                    "inference_config": {
+                      "kind": "regression",
+                      "num_estimators": 1,
+                      "column_shuffle": false,
+                      "category_shuffle": false,
+                      "hop_shuffle": false,
+                      "target_transforms": [
+                        "quantile"
+                      ],
+                      "output_type": "median"
+                    }
+                  },
+                  "metadata": {
+                    "source_query": "PREDICT users.age FOR EACH users.user_id",
+                    "num_context_examples": 3,
+                    "num_prediction_examples": 2
+                  }
+                }
+              ],
+              "context_rows": 1,
+              "predict_rows": 2
+            },
+            "sent": [
+              {
+                "model": "kumo-relational",
+                "task": {
+                  "kind": "regression",
+                  "target": {
+                    "column_name": "TARGET",
+                    "dtype": "int64"
+                  },
+                  "entity_table_names": [
+                    "users"
+                  ],
+                  "anchor_time_column": "__kumo_anchor_time"
+                },
+                "schema": {
+                  "instance_table": {
+                    "columns": {
+                      "instance_id": {
+                        "dtype": "int64",
+                        "stype": "ID",
+                        "nullable": false
+                      },
+                      "__kumo_entity_ref_0": {
+                        "dtype": "int64",
+                        "stype": "ID"
+                      },
+                      "__kumo_anchor_time": {
+                        "dtype": "timestamp[us]",
+                        "stype": "timestamp",
+                        "nullable": false
+                      },
+                      "TARGET": {
+                        "dtype": "int64",
+                        "stype": "numerical"
+                      }
+                    },
+                    "primary_key": "instance_id"
+                  },
+                  "related_tables": {
+                    "users": {
+                      "columns": {
+                        "instance_id": {
+                          "dtype": "int64",
+                          "stype": "ID",
+                          "nullable": false
+                        },
+                        "user_id": {
+                          "dtype": "int64",
+                          "nullable": false
+                        },
+                        "category": {
+                          "dtype": "string",
+                          "stype": "categorical"
+                        },
+                        "note": {
+                          "dtype": "string",
+                          "stype": "categorical"
+                        },
+                        "signal": {
+                          "dtype": "int64",
+                          "stype": "numerical"
+                        }
+                      },
+                      "primary_key": [
+                        "instance_id",
+                        "user_id"
+                      ]
+                    },
+                    "orders": {
+                      "columns": {
+                        "instance_id": {
+                          "dtype": "int64",
+                          "stype": "ID",
+                          "nullable": false
+                        },
+                        "__node_id": {
+                          "dtype": "int64",
+                          "stype": "ID",
+                          "nullable": false
+                        },
+                        "marker": {
+                          "dtype": "int64",
+                          "stype": "numerical"
+                        },
+                        "note": {
+                          "dtype": "string",
+                          "stype": "categorical"
+                        },
+                        "amount": {
+                          "dtype": "float64",
+                          "stype": "numerical"
+                        },
+                        "user_id": {
+                          "dtype": "int64",
+                          "stype": "ID"
+                        }
+                      },
+                      "primary_key": [
+                        "instance_id",
+                        "__node_id"
+                      ]
+                    }
+                  },
+                  "relationships": [
+                    {
+                      "source_columns": [
+                        "__kumo_entity_ref_0"
+                      ],
+                      "target_table": "users",
+                      "target_columns": [
+                        "user_id"
+                      ]
+                    },
+                    {
+                      "source_table": "orders",
+                      "source_columns": [
+                        "user_id"
+                      ],
+                      "target_table": "users",
+                      "target_columns": [
+                        "user_id"
+                      ]
+                    }
+                  ]
+                },
+                "context": {
+                  "instance_table": {
+                    "format": "arrays",
+                    "columns": [
+                      "instance_id",
+                      "__kumo_entity_ref_0",
+                      "__kumo_anchor_time",
+                      "TARGET"
+                    ],
+                    "rows": [
+                      [
+                        0,
+                        1,
+                        "2262-04-11T23:47:16.709551Z",
+                        21
+                      ]
+                    ]
+                  },
+                  "related_tables": {
+                    "users": {
+                      "format": "arrays",
+                      "columns": [
+                        "instance_id",
+                        "user_id",
+                        "category",
+                        "note",
+                        "signal"
+                      ],
+                      "rows": [
+                        [
+                          0,
+                          1,
+                          "red",
+                          "",
+                          100
+                        ]
+                      ]
+                    },
+                    "orders": {
+                      "format": "arrays",
+                      "columns": [
+                        "instance_id",
+                        "__node_id",
+                        "marker",
+                        "note",
+                        "amount",
+                        "user_id"
+                      ],
+                      "rows": [
+                        [
+                          0,
+                          0,
+                          3,
+                          "\ud83d\ude3a",
+                          3.25,
+                          1
+                        ],
+                        [
+                          0,
+                          1,
+                          6,
+                          "red",
+                          6.25,
+                          1
+                        ],
+                        [
+                          0,
+                          2,
+                          1,
+                          null,
+                          1.25,
+                          1
+                        ]
+                      ]
+                    }
+                  }
+                },
+                "predict": {
+                  "instance_table": {
+                    "format": "arrays",
+                    "columns": [
+                      "instance_id",
+                      "__kumo_entity_ref_0",
+                      "__kumo_anchor_time"
+                    ],
+                    "rows": [
+                      [
+                        3,
+                        7,
+                        "2262-04-11T23:47:16.709551Z"
+                      ],
+                      [
+                        4,
+                        8,
+                        "2262-04-11T23:47:16.709551Z"
+                      ]
+                    ]
+                  },
+                  "related_tables": {
+                    "users": {
+                      "format": "arrays",
+                      "columns": [
+                        "instance_id",
+                        "user_id",
+                        "category",
+                        "note",
+                        "signal"
+                      ],
+                      "rows": [
+                        [
+                          3,
+                          7,
+                          "blue",
+                          "red",
+                          106
+                        ],
+                        [
+                          4,
+                          8,
+                          "red",
+                          "blue",
+                          107
+                        ]
+                      ]
+                    },
+                    "orders": {
+                      "format": "arrays",
+                      "columns": [
+                        "instance_id",
+                        "__node_id",
+                        "marker",
+                        "note",
+                        "amount",
+                        "user_id"
+                      ],
+                      "rows": [
+                        [
+                          3,
+                          9,
+                          53,
+                          "\u6771\u4eac",
+                          53.25,
+                          7
+                        ],
+                        [
+                          3,
+                          10,
+                          51,
+                          "\ud83d\ude3a",
+                          51.25,
+                          7
+                        ],
+                        [
+                          3,
+                          11,
+                          55,
+                          "blue",
+                          55.25,
+                          7
+                        ],
+                        [
+                          4,
+                          12,
+                          58,
+                          "\u00e9",
+                          58.25,
+                          8
+                        ],
+                        [
+                          4,
+                          13,
+                          57,
+                          null,
+                          57.25,
+                          8
+                        ],
+                        [
+                          4,
+                          14,
+                          62,
+                          "red",
+                          62.25,
+                          8
+                        ]
+                      ]
+                    }
+                  }
+                },
+                "output": {
+                  "fields": [
+                    "prediction"
+                  ],
+                  "prediction_statistic": "median"
+                },
+                "inference": {
+                  "run_mode": "fast",
+                  "use_prediction_time": false
+                },
+                "metadata": {
+                  "source_query": "PREDICT users.age FOR EACH users.user_id",
+                  "num_context_examples": 3,
+                  "num_prediction_examples": 2,
+                  "request_id": "sdm-2a25d2d54711"
+                }
+              }
+            ],
+            "result": {
+              "columns": [
+                "row_index",
+                "id",
+                "prediction"
+              ],
+              "index": [
+                0,
+                1
+              ],
+              "data": [
+                [
+                  0,
+                  7,
+                  101.0
+                ],
+                [
+                  1,
+                  8,
+                  101.0
+                ]
+              ]
+            },
+            "merged": {
+              "columns": [
+                "row_index",
+                "id",
+                "prediction",
+                "user_id",
+                "age",
+                "category",
+                "note",
+                "signal"
+              ],
+              "index": [
+                0,
+                1
+              ],
+              "data": [
+                [
+                  0,
+                  7,
+                  101.0,
+                  7,
+                  27,
+                  "blue",
+                  "red",
+                  106
+                ],
+                [
+                  1,
+                  8,
+                  101.0,
+                  8,
+                  28,
+                  "red",
+                  "blue",
+                  107
+                ]
+              ]
+            }
+          },
+          "trace": [
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            }
+          ],
+          "warnings": [
+            {
+              "type": "UserWarning",
+              "message": "Received custom 'num_neighbors' option; ignoring custom 'num_hops=1' option"
+            },
+            {
+              "type": "SDMWarning",
+              "message": "2 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it."
+            },
+            {
+              "type": "SDMWarning",
+              "message": "every context row has the same users.age, so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ."
+            }
+          ],
+          "schema_after": {
+            "dtype": "int64",
+            "stype": "numerical",
+            "physical": "int64"
+          }
+        },
+        {
+          "outcome": {
+            "kind": "success",
+            "inspection": {
+              "payloads": [
+                {
+                  "model": "kumo-relational",
+                  "task": {
+                    "kind": "regression",
+                    "target": {
+                      "column_name": "TARGET",
+                      "dtype": "int64"
+                    },
+                    "entity_table_names": [
+                      "users"
+                    ],
+                    "anchor_time_column": "__kumo_anchor_time"
+                  },
+                  "schema": {
+                    "instance_table": {
+                      "columns": {
+                        "instance_id": {
+                          "dtype": "int64",
+                          "stype": "ID",
+                          "nullable": false
+                        },
+                        "__kumo_entity_ref_0": {
+                          "dtype": "int64",
+                          "stype": "ID"
+                        },
+                        "__kumo_anchor_time": {
+                          "dtype": "timestamp[us]",
+                          "stype": "timestamp",
+                          "nullable": false
+                        },
+                        "TARGET": {
+                          "dtype": "int64",
+                          "stype": "numerical"
+                        }
+                      },
+                      "primary_key": "instance_id"
+                    },
+                    "related_tables": {
+                      "users": {
+                        "columns": {
+                          "instance_id": {
+                            "dtype": "int64",
+                            "stype": "ID",
+                            "nullable": false
+                          },
+                          "user_id": {
+                            "dtype": "int64",
+                            "nullable": false
+                          },
+                          "category": {
+                            "dtype": "string",
+                            "stype": "categorical"
+                          },
+                          "note": {
+                            "dtype": "string",
+                            "stype": "categorical"
+                          },
+                          "signal": {
+                            "dtype": "int64",
+                            "stype": "numerical"
+                          }
+                        },
+                        "primary_key": [
+                          "instance_id",
+                          "user_id"
+                        ]
+                      },
+                      "orders": {
+                        "columns": {
+                          "instance_id": {
+                            "dtype": "int64",
+                            "stype": "ID",
+                            "nullable": false
+                          },
+                          "__node_id": {
+                            "dtype": "int64",
+                            "stype": "ID",
+                            "nullable": false
+                          },
+                          "marker": {
+                            "dtype": "int64",
+                            "stype": "numerical"
+                          },
+                          "note": {
+                            "dtype": "string",
+                            "stype": "categorical"
+                          },
+                          "amount": {
+                            "dtype": "float64",
+                            "stype": "numerical"
+                          },
+                          "user_id": {
+                            "dtype": "int64",
+                            "stype": "ID"
+                          }
+                        },
+                        "primary_key": [
+                          "instance_id",
+                          "__node_id"
+                        ]
+                      }
+                    },
+                    "relationships": [
+                      {
+                        "source_columns": [
+                          "__kumo_entity_ref_0"
+                        ],
+                        "target_table": "users",
+                        "target_columns": [
+                          "user_id"
+                        ]
+                      },
+                      {
+                        "source_table": "orders",
+                        "source_columns": [
+                          "user_id"
+                        ],
+                        "target_table": "users",
+                        "target_columns": [
+                          "user_id"
+                        ]
+                      }
+                    ]
+                  },
+                  "context": {
+                    "instance_table": {
+                      "format": "arrays",
+                      "columns": [
+                        "instance_id",
+                        "__kumo_entity_ref_0",
+                        "__kumo_anchor_time",
+                        "TARGET"
+                      ],
+                      "rows": [
+                        [
+                          0,
+                          1,
+                          "2262-04-11T23:47:16.709551Z",
+                          21
+                        ]
+                      ]
+                    },
+                    "related_tables": {
+                      "users": {
+                        "format": "arrays",
+                        "columns": [
+                          "instance_id",
+                          "user_id",
+                          "category",
+                          "note",
+                          "signal"
+                        ],
+                        "rows": [
+                          [
+                            0,
+                            1,
+                            "red",
+                            "",
+                            100
+                          ]
+                        ]
+                      },
+                      "orders": {
+                        "format": "arrays",
+                        "columns": [
+                          "instance_id",
+                          "__node_id",
+                          "marker",
+                          "note",
+                          "amount",
+                          "user_id"
+                        ],
+                        "rows": [
+                          [
+                            0,
+                            0,
+                            3,
+                            "\ud83d\ude3a",
+                            3.25,
+                            1
+                          ],
+                          [
+                            0,
+                            1,
+                            6,
+                            "red",
+                            6.25,
+                            1
+                          ],
+                          [
+                            0,
+                            2,
+                            1,
+                            null,
+                            1.25,
+                            1
+                          ]
+                        ]
+                      }
+                    }
+                  },
+                  "predict": {
+                    "instance_table": {
+                      "format": "arrays",
+                      "columns": [
+                        "instance_id",
+                        "__kumo_entity_ref_0",
+                        "__kumo_anchor_time"
+                      ],
+                      "rows": [
+                        [
+                          3,
+                          7,
+                          "2262-04-11T23:47:16.709551Z"
+                        ],
+                        [
+                          4,
+                          8,
+                          "2262-04-11T23:47:16.709551Z"
+                        ]
+                      ]
+                    },
+                    "related_tables": {
+                      "users": {
+                        "format": "arrays",
+                        "columns": [
+                          "instance_id",
+                          "user_id",
+                          "category",
+                          "note",
+                          "signal"
+                        ],
+                        "rows": [
+                          [
+                            3,
+                            7,
+                            "blue",
+                            "red",
+                            106
+                          ],
+                          [
+                            4,
+                            8,
+                            "red",
+                            "blue",
+                            107
+                          ]
+                        ]
+                      },
+                      "orders": {
+                        "format": "arrays",
+                        "columns": [
+                          "instance_id",
+                          "__node_id",
+                          "marker",
+                          "note",
+                          "amount",
+                          "user_id"
+                        ],
+                        "rows": [
+                          [
+                            3,
+                            9,
+                            53,
+                            "\u6771\u4eac",
+                            53.25,
+                            7
+                          ],
+                          [
+                            3,
+                            10,
+                            51,
+                            "\ud83d\ude3a",
+                            51.25,
+                            7
+                          ],
+                          [
+                            3,
+                            11,
+                            55,
+                            "blue",
+                            55.25,
+                            7
+                          ],
+                          [
+                            4,
+                            12,
+                            58,
+                            "\u00e9",
+                            58.25,
+                            8
+                          ],
+                          [
+                            4,
+                            13,
+                            57,
+                            null,
+                            57.25,
+                            8
+                          ],
+                          [
+                            4,
+                            14,
+                            62,
+                            "red",
+                            62.25,
+                            8
+                          ]
+                        ]
+                      }
+                    }
+                  },
+                  "output": {
+                    "fields": [
+                      "prediction"
+                    ]
+                  },
+                  "inference": {
+                    "run_mode": "fast",
+                    "use_prediction_time": false,
+                    "inference_config": {
+                      "kind": "regression",
+                      "num_estimators": 1,
+                      "column_shuffle": false,
+                      "category_shuffle": false,
+                      "hop_shuffle": false,
+                      "target_transforms": [
+                        "quantile"
+                      ],
+                      "output_type": "median"
+                    }
+                  },
+                  "metadata": {
+                    "source_query": "PREDICT users.age FOR EACH users.user_id",
+                    "num_context_examples": 3,
+                    "num_prediction_examples": 2
+                  }
+                }
+              ],
+              "context_rows": 1,
+              "predict_rows": 2
+            },
+            "sent": [
+              {
+                "model": "kumo-relational",
+                "task": {
+                  "kind": "regression",
+                  "target": {
+                    "column_name": "TARGET",
+                    "dtype": "int64"
+                  },
+                  "entity_table_names": [
+                    "users"
+                  ],
+                  "anchor_time_column": "__kumo_anchor_time"
+                },
+                "schema": {
+                  "instance_table": {
+                    "columns": {
+                      "instance_id": {
+                        "dtype": "int64",
+                        "stype": "ID",
+                        "nullable": false
+                      },
+                      "__kumo_entity_ref_0": {
+                        "dtype": "int64",
+                        "stype": "ID"
+                      },
+                      "__kumo_anchor_time": {
+                        "dtype": "timestamp[us]",
+                        "stype": "timestamp",
+                        "nullable": false
+                      },
+                      "TARGET": {
+                        "dtype": "int64",
+                        "stype": "numerical"
+                      }
+                    },
+                    "primary_key": "instance_id"
+                  },
+                  "related_tables": {
+                    "users": {
+                      "columns": {
+                        "instance_id": {
+                          "dtype": "int64",
+                          "stype": "ID",
+                          "nullable": false
+                        },
+                        "user_id": {
+                          "dtype": "int64",
+                          "nullable": false
+                        },
+                        "category": {
+                          "dtype": "string",
+                          "stype": "categorical"
+                        },
+                        "note": {
+                          "dtype": "string",
+                          "stype": "categorical"
+                        },
+                        "signal": {
+                          "dtype": "int64",
+                          "stype": "numerical"
+                        }
+                      },
+                      "primary_key": [
+                        "instance_id",
+                        "user_id"
+                      ]
+                    },
+                    "orders": {
+                      "columns": {
+                        "instance_id": {
+                          "dtype": "int64",
+                          "stype": "ID",
+                          "nullable": false
+                        },
+                        "__node_id": {
+                          "dtype": "int64",
+                          "stype": "ID",
+                          "nullable": false
+                        },
+                        "marker": {
+                          "dtype": "int64",
+                          "stype": "numerical"
+                        },
+                        "note": {
+                          "dtype": "string",
+                          "stype": "categorical"
+                        },
+                        "amount": {
+                          "dtype": "float64",
+                          "stype": "numerical"
+                        },
+                        "user_id": {
+                          "dtype": "int64",
+                          "stype": "ID"
+                        }
+                      },
+                      "primary_key": [
+                        "instance_id",
+                        "__node_id"
+                      ]
+                    }
+                  },
+                  "relationships": [
+                    {
+                      "source_columns": [
+                        "__kumo_entity_ref_0"
+                      ],
+                      "target_table": "users",
+                      "target_columns": [
+                        "user_id"
+                      ]
+                    },
+                    {
+                      "source_table": "orders",
+                      "source_columns": [
+                        "user_id"
+                      ],
+                      "target_table": "users",
+                      "target_columns": [
+                        "user_id"
+                      ]
+                    }
+                  ]
+                },
+                "context": {
+                  "instance_table": {
+                    "format": "arrays",
+                    "columns": [
+                      "instance_id",
+                      "__kumo_entity_ref_0",
+                      "__kumo_anchor_time",
+                      "TARGET"
+                    ],
+                    "rows": [
+                      [
+                        0,
+                        1,
+                        "2262-04-11T23:47:16.709551Z",
+                        21
+                      ]
+                    ]
+                  },
+                  "related_tables": {
+                    "users": {
+                      "format": "arrays",
+                      "columns": [
+                        "instance_id",
+                        "user_id",
+                        "category",
+                        "note",
+                        "signal"
+                      ],
+                      "rows": [
+                        [
+                          0,
+                          1,
+                          "red",
+                          "",
+                          100
+                        ]
+                      ]
+                    },
+                    "orders": {
+                      "format": "arrays",
+                      "columns": [
+                        "instance_id",
+                        "__node_id",
+                        "marker",
+                        "note",
+                        "amount",
+                        "user_id"
+                      ],
+                      "rows": [
+                        [
+                          0,
+                          0,
+                          3,
+                          "\ud83d\ude3a",
+                          3.25,
+                          1
+                        ],
+                        [
+                          0,
+                          1,
+                          6,
+                          "red",
+                          6.25,
+                          1
+                        ],
+                        [
+                          0,
+                          2,
+                          1,
+                          null,
+                          1.25,
+                          1
+                        ]
+                      ]
+                    }
+                  }
+                },
+                "predict": {
+                  "instance_table": {
+                    "format": "arrays",
+                    "columns": [
+                      "instance_id",
+                      "__kumo_entity_ref_0",
+                      "__kumo_anchor_time"
+                    ],
+                    "rows": [
+                      [
+                        3,
+                        7,
+                        "2262-04-11T23:47:16.709551Z"
+                      ],
+                      [
+                        4,
+                        8,
+                        "2262-04-11T23:47:16.709551Z"
+                      ]
+                    ]
+                  },
+                  "related_tables": {
+                    "users": {
+                      "format": "arrays",
+                      "columns": [
+                        "instance_id",
+                        "user_id",
+                        "category",
+                        "note",
+                        "signal"
+                      ],
+                      "rows": [
+                        [
+                          3,
+                          7,
+                          "blue",
+                          "red",
+                          106
+                        ],
+                        [
+                          4,
+                          8,
+                          "red",
+                          "blue",
+                          107
+                        ]
+                      ]
+                    },
+                    "orders": {
+                      "format": "arrays",
+                      "columns": [
+                        "instance_id",
+                        "__node_id",
+                        "marker",
+                        "note",
+                        "amount",
+                        "user_id"
+                      ],
+                      "rows": [
+                        [
+                          3,
+                          9,
+                          53,
+                          "\u6771\u4eac",
+                          53.25,
+                          7
+                        ],
+                        [
+                          3,
+                          10,
+                          51,
+                          "\ud83d\ude3a",
+                          51.25,
+                          7
+                        ],
+                        [
+                          3,
+                          11,
+                          55,
+                          "blue",
+                          55.25,
+                          7
+                        ],
+                        [
+                          4,
+                          12,
+                          58,
+                          "\u00e9",
+                          58.25,
+                          8
+                        ],
+                        [
+                          4,
+                          13,
+                          57,
+                          null,
+                          57.25,
+                          8
+                        ],
+                        [
+                          4,
+                          14,
+                          62,
+                          "red",
+                          62.25,
+                          8
+                        ]
+                      ]
+                    }
+                  }
+                },
+                "output": {
+                  "fields": [
+                    "prediction"
+                  ],
+                  "prediction_statistic": "median"
+                },
+                "inference": {
+                  "run_mode": "fast",
+                  "use_prediction_time": false
+                },
+                "metadata": {
+                  "source_query": "PREDICT users.age FOR EACH users.user_id",
+                  "num_context_examples": 3,
+                  "num_prediction_examples": 2,
+                  "request_id": "sdm-962b7ed50251"
+                }
+              }
+            ],
+            "result": {
+              "columns": [
+                "row_index",
+                "id",
+                "prediction"
+              ],
+              "index": [
+                0,
+                1
+              ],
+              "data": [
+                [
+                  0,
+                  7,
+                  101.0
+                ],
+                [
+                  1,
+                  8,
+                  101.0
+                ]
+              ]
+            },
+            "merged": {
+              "columns": [
+                "row_index",
+                "id",
+                "prediction",
+                "user_id",
+                "age",
+                "category",
+                "note",
+                "signal"
+              ],
+              "index": [
+                0,
+                1
+              ],
+              "data": [
+                [
+                  0,
+                  7,
+                  101.0,
+                  7,
+                  27,
+                  "blue",
+                  "red",
+                  106
+                ],
+                [
+                  1,
+                  8,
+                  101.0,
+                  8,
+                  28,
+                  "red",
+                  "blue",
+                  107
+                ]
+              ]
+            }
+          },
+          "trace": [],
+          "warnings": [
+            {
+              "type": "UserWarning",
+              "message": "Received custom 'num_neighbors' option; ignoring custom 'num_hops=1' option"
+            },
+            {
+              "type": "SDMWarning",
+              "message": "2 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it."
+            },
+            {
+              "type": "SDMWarning",
+              "message": "every context row has the same users.age, so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ."
+            }
+          ],
+          "schema_after": {
+            "dtype": "int64",
+            "stype": "numerical",
+            "physical": "int64"
+          }
+        }
+      ],
+      "effect_reached": false
+    },
+    {
+      "declared": "float64",
+      "mutation": true,
+      "calls": [
+        {
+          "outcome": {
+            "kind": "success",
+            "inspection": {
+              "payloads": [
+                {
+                  "model": "kumo-relational",
+                  "task": {
+                    "kind": "regression",
+                    "target": {
+                      "column_name": "TARGET",
+                      "dtype": "int64"
+                    },
+                    "entity_table_names": [
+                      "users"
+                    ],
+                    "anchor_time_column": "__kumo_anchor_time"
+                  },
+                  "schema": {
+                    "instance_table": {
+                      "columns": {
+                        "instance_id": {
+                          "dtype": "int64",
+                          "stype": "ID",
+                          "nullable": false
+                        },
+                        "__kumo_entity_ref_0": {
+                          "dtype": "int64",
+                          "stype": "ID"
+                        },
+                        "__kumo_anchor_time": {
+                          "dtype": "timestamp[us]",
+                          "stype": "timestamp",
+                          "nullable": false
+                        },
+                        "TARGET": {
+                          "dtype": "int64",
+                          "stype": "numerical"
+                        }
+                      },
+                      "primary_key": "instance_id"
+                    },
+                    "related_tables": {
+                      "users": {
+                        "columns": {
+                          "instance_id": {
+                            "dtype": "int64",
+                            "stype": "ID",
+                            "nullable": false
+                          },
+                          "user_id": {
+                            "dtype": "int64",
+                            "nullable": false
+                          },
+                          "category": {
+                            "dtype": "string",
+                            "stype": "categorical"
+                          },
+                          "note": {
+                            "dtype": "string",
+                            "stype": "categorical"
+                          },
+                          "signal": {
+                            "dtype": "int64",
+                            "stype": "categorical"
+                          }
+                        },
+                        "primary_key": [
+                          "instance_id",
+                          "user_id"
+                        ]
+                      },
+                      "orders": {
+                        "columns": {
+                          "instance_id": {
+                            "dtype": "int64",
+                            "stype": "ID",
+                            "nullable": false
+                          },
+                          "__node_id": {
+                            "dtype": "int64",
+                            "stype": "ID",
+                            "nullable": false
+                          },
+                          "marker": {
+                            "dtype": "int64",
+                            "stype": "numerical"
+                          },
+                          "note": {
+                            "dtype": "string",
+                            "stype": "categorical"
+                          },
+                          "amount": {
+                            "dtype": "float64",
+                            "stype": "numerical"
+                          },
+                          "user_id": {
+                            "dtype": "int64",
+                            "stype": "ID"
+                          }
+                        },
+                        "primary_key": [
+                          "instance_id",
+                          "__node_id"
+                        ]
+                      }
+                    },
+                    "relationships": [
+                      {
+                        "source_columns": [
+                          "__kumo_entity_ref_0"
+                        ],
+                        "target_table": "users",
+                        "target_columns": [
+                          "user_id"
+                        ]
+                      },
+                      {
+                        "source_table": "orders",
+                        "source_columns": [
+                          "user_id"
+                        ],
+                        "target_table": "users",
+                        "target_columns": [
+                          "user_id"
+                        ]
+                      }
+                    ]
+                  },
+                  "context": {
+                    "instance_table": {
+                      "format": "arrays",
+                      "columns": [
+                        "instance_id",
+                        "__kumo_entity_ref_0",
+                        "__kumo_anchor_time",
+                        "TARGET"
+                      ],
+                      "rows": [
+                        [
+                          0,
+                          1,
+                          "2262-04-11T23:47:16.709551Z",
+                          21
+                        ]
+                      ]
+                    },
+                    "related_tables": {
+                      "users": {
+                        "format": "arrays",
+                        "columns": [
+                          "instance_id",
+                          "user_id",
+                          "category",
+                          "note",
+                          "signal"
+                        ],
+                        "rows": [
+                          [
+                            0,
+                            1,
+                            "red",
+                            "",
+                            100
+                          ]
+                        ]
+                      },
+                      "orders": {
+                        "format": "arrays",
+                        "columns": [
+                          "instance_id",
+                          "__node_id",
+                          "marker",
+                          "note",
+                          "amount",
+                          "user_id"
+                        ],
+                        "rows": [
+                          [
+                            0,
+                            0,
+                            3,
+                            "\ud83d\ude3a",
+                            3.25,
+                            1
+                          ],
+                          [
+                            0,
+                            1,
+                            6,
+                            "red",
+                            6.25,
+                            1
+                          ],
+                          [
+                            0,
+                            2,
+                            1,
+                            null,
+                            1.25,
+                            1
+                          ]
+                        ]
+                      }
+                    }
+                  },
+                  "predict": {
+                    "instance_table": {
+                      "format": "arrays",
+                      "columns": [
+                        "instance_id",
+                        "__kumo_entity_ref_0",
+                        "__kumo_anchor_time"
+                      ],
+                      "rows": [
+                        [
+                          3,
+                          7,
+                          "2262-04-11T23:47:16.709551Z"
+                        ],
+                        [
+                          4,
+                          8,
+                          "2262-04-11T23:47:16.709551Z"
+                        ]
+                      ]
+                    },
+                    "related_tables": {
+                      "users": {
+                        "format": "arrays",
+                        "columns": [
+                          "instance_id",
+                          "user_id",
+                          "category",
+                          "note",
+                          "signal"
+                        ],
+                        "rows": [
+                          [
+                            3,
+                            7,
+                            "blue",
+                            "red",
+                            106
+                          ],
+                          [
+                            4,
+                            8,
+                            "red",
+                            "blue",
+                            107
+                          ]
+                        ]
+                      },
+                      "orders": {
+                        "format": "arrays",
+                        "columns": [
+                          "instance_id",
+                          "__node_id",
+                          "marker",
+                          "note",
+                          "amount",
+                          "user_id"
+                        ],
+                        "rows": [
+                          [
+                            3,
+                            9,
+                            53,
+                            "\u6771\u4eac",
+                            53.25,
+                            7
+                          ],
+                          [
+                            3,
+                            10,
+                            51,
+                            "\ud83d\ude3a",
+                            51.25,
+                            7
+                          ],
+                          [
+                            3,
+                            11,
+                            55,
+                            "blue",
+                            55.25,
+                            7
+                          ],
+                          [
+                            4,
+                            12,
+                            58,
+                            "\u00e9",
+                            58.25,
+                            8
+                          ],
+                          [
+                            4,
+                            13,
+                            57,
+                            null,
+                            57.25,
+                            8
+                          ],
+                          [
+                            4,
+                            14,
+                            62,
+                            "red",
+                            62.25,
+                            8
+                          ]
+                        ]
+                      }
+                    }
+                  },
+                  "output": {
+                    "fields": [
+                      "prediction"
+                    ]
+                  },
+                  "inference": {
+                    "run_mode": "fast",
+                    "use_prediction_time": false,
+                    "inference_config": {
+                      "kind": "regression",
+                      "num_estimators": 1,
+                      "column_shuffle": false,
+                      "category_shuffle": false,
+                      "hop_shuffle": false,
+                      "target_transforms": [
+                        "quantile"
+                      ],
+                      "output_type": "median"
+                    }
+                  },
+                  "metadata": {
+                    "source_query": "PREDICT users.age FOR EACH users.user_id",
+                    "num_context_examples": 3,
+                    "num_prediction_examples": 2
+                  }
+                }
+              ],
+              "context_rows": 1,
+              "predict_rows": 2
+            },
+            "sent": [
+              {
+                "model": "kumo-relational",
+                "task": {
+                  "kind": "regression",
+                  "target": {
+                    "column_name": "TARGET",
+                    "dtype": "int64"
+                  },
+                  "entity_table_names": [
+                    "users"
+                  ],
+                  "anchor_time_column": "__kumo_anchor_time"
+                },
+                "schema": {
+                  "instance_table": {
+                    "columns": {
+                      "instance_id": {
+                        "dtype": "int64",
+                        "stype": "ID",
+                        "nullable": false
+                      },
+                      "__kumo_entity_ref_0": {
+                        "dtype": "int64",
+                        "stype": "ID"
+                      },
+                      "__kumo_anchor_time": {
+                        "dtype": "timestamp[us]",
+                        "stype": "timestamp",
+                        "nullable": false
+                      },
+                      "TARGET": {
+                        "dtype": "int64",
+                        "stype": "numerical"
+                      }
+                    },
+                    "primary_key": "instance_id"
+                  },
+                  "related_tables": {
+                    "users": {
+                      "columns": {
+                        "instance_id": {
+                          "dtype": "int64",
+                          "stype": "ID",
+                          "nullable": false
+                        },
+                        "user_id": {
+                          "dtype": "int64",
+                          "nullable": false
+                        },
+                        "category": {
+                          "dtype": "string",
+                          "stype": "categorical"
+                        },
+                        "note": {
+                          "dtype": "string",
+                          "stype": "categorical"
+                        },
+                        "signal": {
+                          "dtype": "int64",
+                          "stype": "categorical"
+                        }
+                      },
+                      "primary_key": [
+                        "instance_id",
+                        "user_id"
+                      ]
+                    },
+                    "orders": {
+                      "columns": {
+                        "instance_id": {
+                          "dtype": "int64",
+                          "stype": "ID",
+                          "nullable": false
+                        },
+                        "__node_id": {
+                          "dtype": "int64",
+                          "stype": "ID",
+                          "nullable": false
+                        },
+                        "marker": {
+                          "dtype": "int64",
+                          "stype": "numerical"
+                        },
+                        "note": {
+                          "dtype": "string",
+                          "stype": "categorical"
+                        },
+                        "amount": {
+                          "dtype": "float64",
+                          "stype": "numerical"
+                        },
+                        "user_id": {
+                          "dtype": "int64",
+                          "stype": "ID"
+                        }
+                      },
+                      "primary_key": [
+                        "instance_id",
+                        "__node_id"
+                      ]
+                    }
+                  },
+                  "relationships": [
+                    {
+                      "source_columns": [
+                        "__kumo_entity_ref_0"
+                      ],
+                      "target_table": "users",
+                      "target_columns": [
+                        "user_id"
+                      ]
+                    },
+                    {
+                      "source_table": "orders",
+                      "source_columns": [
+                        "user_id"
+                      ],
+                      "target_table": "users",
+                      "target_columns": [
+                        "user_id"
+                      ]
+                    }
+                  ]
+                },
+                "context": {
+                  "instance_table": {
+                    "format": "arrays",
+                    "columns": [
+                      "instance_id",
+                      "__kumo_entity_ref_0",
+                      "__kumo_anchor_time",
+                      "TARGET"
+                    ],
+                    "rows": [
+                      [
+                        0,
+                        1,
+                        "2262-04-11T23:47:16.709551Z",
+                        21
+                      ]
+                    ]
+                  },
+                  "related_tables": {
+                    "users": {
+                      "format": "arrays",
+                      "columns": [
+                        "instance_id",
+                        "user_id",
+                        "category",
+                        "note",
+                        "signal"
+                      ],
+                      "rows": [
+                        [
+                          0,
+                          1,
+                          "red",
+                          "",
+                          100
+                        ]
+                      ]
+                    },
+                    "orders": {
+                      "format": "arrays",
+                      "columns": [
+                        "instance_id",
+                        "__node_id",
+                        "marker",
+                        "note",
+                        "amount",
+                        "user_id"
+                      ],
+                      "rows": [
+                        [
+                          0,
+                          0,
+                          3,
+                          "\ud83d\ude3a",
+                          3.25,
+                          1
+                        ],
+                        [
+                          0,
+                          1,
+                          6,
+                          "red",
+                          6.25,
+                          1
+                        ],
+                        [
+                          0,
+                          2,
+                          1,
+                          null,
+                          1.25,
+                          1
+                        ]
+                      ]
+                    }
+                  }
+                },
+                "predict": {
+                  "instance_table": {
+                    "format": "arrays",
+                    "columns": [
+                      "instance_id",
+                      "__kumo_entity_ref_0",
+                      "__kumo_anchor_time"
+                    ],
+                    "rows": [
+                      [
+                        3,
+                        7,
+                        "2262-04-11T23:47:16.709551Z"
+                      ],
+                      [
+                        4,
+                        8,
+                        "2262-04-11T23:47:16.709551Z"
+                      ]
+                    ]
+                  },
+                  "related_tables": {
+                    "users": {
+                      "format": "arrays",
+                      "columns": [
+                        "instance_id",
+                        "user_id",
+                        "category",
+                        "note",
+                        "signal"
+                      ],
+                      "rows": [
+                        [
+                          3,
+                          7,
+                          "blue",
+                          "red",
+                          106
+                        ],
+                        [
+                          4,
+                          8,
+                          "red",
+                          "blue",
+                          107
+                        ]
+                      ]
+                    },
+                    "orders": {
+                      "format": "arrays",
+                      "columns": [
+                        "instance_id",
+                        "__node_id",
+                        "marker",
+                        "note",
+                        "amount",
+                        "user_id"
+                      ],
+                      "rows": [
+                        [
+                          3,
+                          9,
+                          53,
+                          "\u6771\u4eac",
+                          53.25,
+                          7
+                        ],
+                        [
+                          3,
+                          10,
+                          51,
+                          "\ud83d\ude3a",
+                          51.25,
+                          7
+                        ],
+                        [
+                          3,
+                          11,
+                          55,
+                          "blue",
+                          55.25,
+                          7
+                        ],
+                        [
+                          4,
+                          12,
+                          58,
+                          "\u00e9",
+                          58.25,
+                          8
+                        ],
+                        [
+                          4,
+                          13,
+                          57,
+                          null,
+                          57.25,
+                          8
+                        ],
+                        [
+                          4,
+                          14,
+                          62,
+                          "red",
+                          62.25,
+                          8
+                        ]
+                      ]
+                    }
+                  }
+                },
+                "output": {
+                  "fields": [
+                    "prediction"
+                  ],
+                  "prediction_statistic": "median"
+                },
+                "inference": {
+                  "run_mode": "fast",
+                  "use_prediction_time": false
+                },
+                "metadata": {
+                  "source_query": "PREDICT users.age FOR EACH users.user_id",
+                  "num_context_examples": 3,
+                  "num_prediction_examples": 2,
+                  "request_id": "sdm-e7f4e360c3ef"
+                }
+              }
+            ],
+            "result": {
+              "columns": [
+                "row_index",
+                "id",
+                "prediction"
+              ],
+              "index": [
+                0,
+                1
+              ],
+              "data": [
+                [
+                  0,
+                  7,
+                  101.0
+                ],
+                [
+                  1,
+                  8,
+                  101.0
+                ]
+              ]
+            },
+            "merged": {
+              "columns": [
+                "row_index",
+                "id",
+                "prediction",
+                "user_id",
+                "age",
+                "category",
+                "note",
+                "signal"
+              ],
+              "index": [
+                0,
+                1
+              ],
+              "data": [
+                [
+                  0,
+                  7,
+                  101.0,
+                  7,
+                  27,
+                  "blue",
+                  "red",
+                  106
+                ],
+                [
+                  1,
+                  8,
+                  101.0,
+                  8,
+                  28,
+                  "red",
+                  "blue",
+                  107
+                ]
+              ]
+            }
+          },
+          "trace": [
+            {
+              "event": "float"
+            },
+            {
+              "event": "effect",
+              "stype": "categorical",
+              "dtype": "string"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            },
+            {
+              "event": "float"
+            }
+          ],
+          "warnings": [
+            {
+              "type": "UserWarning",
+              "message": "Received custom 'num_neighbors' option; ignoring custom 'num_hops=1' option"
+            },
+            {
+              "type": "SDMWarning",
+              "message": "2 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it."
+            },
+            {
+              "type": "SDMWarning",
+              "message": "every context row has the same users.age, so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ."
+            }
+          ],
+          "schema_after": {
+            "dtype": "string",
+            "stype": "categorical",
+            "physical": "int64"
+          }
+        },
+        {
+          "outcome": {
+            "kind": "success",
+            "inspection": {
+              "payloads": [
+                {
+                  "model": "kumo-relational",
+                  "task": {
+                    "kind": "regression",
+                    "target": {
+                      "column_name": "TARGET",
+                      "dtype": "int64"
+                    },
+                    "entity_table_names": [
+                      "users"
+                    ],
+                    "anchor_time_column": "__kumo_anchor_time"
+                  },
+                  "schema": {
+                    "instance_table": {
+                      "columns": {
+                        "instance_id": {
+                          "dtype": "int64",
+                          "stype": "ID",
+                          "nullable": false
+                        },
+                        "__kumo_entity_ref_0": {
+                          "dtype": "int64",
+                          "stype": "ID"
+                        },
+                        "__kumo_anchor_time": {
+                          "dtype": "timestamp[us]",
+                          "stype": "timestamp",
+                          "nullable": false
+                        },
+                        "TARGET": {
+                          "dtype": "int64",
+                          "stype": "numerical"
+                        }
+                      },
+                      "primary_key": "instance_id"
+                    },
+                    "related_tables": {
+                      "users": {
+                        "columns": {
+                          "instance_id": {
+                            "dtype": "int64",
+                            "stype": "ID",
+                            "nullable": false
+                          },
+                          "user_id": {
+                            "dtype": "int64",
+                            "nullable": false
+                          },
+                          "category": {
+                            "dtype": "string",
+                            "stype": "categorical"
+                          },
+                          "note": {
+                            "dtype": "string",
+                            "stype": "categorical"
+                          },
+                          "signal": {
+                            "dtype": "int64",
+                            "stype": "categorical"
+                          }
+                        },
+                        "primary_key": [
+                          "instance_id",
+                          "user_id"
+                        ]
+                      },
+                      "orders": {
+                        "columns": {
+                          "instance_id": {
+                            "dtype": "int64",
+                            "stype": "ID",
+                            "nullable": false
+                          },
+                          "__node_id": {
+                            "dtype": "int64",
+                            "stype": "ID",
+                            "nullable": false
+                          },
+                          "marker": {
+                            "dtype": "int64",
+                            "stype": "numerical"
+                          },
+                          "note": {
+                            "dtype": "string",
+                            "stype": "categorical"
+                          },
+                          "amount": {
+                            "dtype": "float64",
+                            "stype": "numerical"
+                          },
+                          "user_id": {
+                            "dtype": "int64",
+                            "stype": "ID"
+                          }
+                        },
+                        "primary_key": [
+                          "instance_id",
+                          "__node_id"
+                        ]
+                      }
+                    },
+                    "relationships": [
+                      {
+                        "source_columns": [
+                          "__kumo_entity_ref_0"
+                        ],
+                        "target_table": "users",
+                        "target_columns": [
+                          "user_id"
+                        ]
+                      },
+                      {
+                        "source_table": "orders",
+                        "source_columns": [
+                          "user_id"
+                        ],
+                        "target_table": "users",
+                        "target_columns": [
+                          "user_id"
+                        ]
+                      }
+                    ]
+                  },
+                  "context": {
+                    "instance_table": {
+                      "format": "arrays",
+                      "columns": [
+                        "instance_id",
+                        "__kumo_entity_ref_0",
+                        "__kumo_anchor_time",
+                        "TARGET"
+                      ],
+                      "rows": [
+                        [
+                          0,
+                          1,
+                          "2262-04-11T23:47:16.709551Z",
+                          21
+                        ]
+                      ]
+                    },
+                    "related_tables": {
+                      "users": {
+                        "format": "arrays",
+                        "columns": [
+                          "instance_id",
+                          "user_id",
+                          "category",
+                          "note",
+                          "signal"
+                        ],
+                        "rows": [
+                          [
+                            0,
+                            1,
+                            "red",
+                            "",
+                            100
+                          ]
+                        ]
+                      },
+                      "orders": {
+                        "format": "arrays",
+                        "columns": [
+                          "instance_id",
+                          "__node_id",
+                          "marker",
+                          "note",
+                          "amount",
+                          "user_id"
+                        ],
+                        "rows": [
+                          [
+                            0,
+                            0,
+                            3,
+                            "\ud83d\ude3a",
+                            3.25,
+                            1
+                          ],
+                          [
+                            0,
+                            1,
+                            6,
+                            "red",
+                            6.25,
+                            1
+                          ],
+                          [
+                            0,
+                            2,
+                            1,
+                            null,
+                            1.25,
+                            1
+                          ]
+                        ]
+                      }
+                    }
+                  },
+                  "predict": {
+                    "instance_table": {
+                      "format": "arrays",
+                      "columns": [
+                        "instance_id",
+                        "__kumo_entity_ref_0",
+                        "__kumo_anchor_time"
+                      ],
+                      "rows": [
+                        [
+                          3,
+                          7,
+                          "2262-04-11T23:47:16.709551Z"
+                        ],
+                        [
+                          4,
+                          8,
+                          "2262-04-11T23:47:16.709551Z"
+                        ]
+                      ]
+                    },
+                    "related_tables": {
+                      "users": {
+                        "format": "arrays",
+                        "columns": [
+                          "instance_id",
+                          "user_id",
+                          "category",
+                          "note",
+                          "signal"
+                        ],
+                        "rows": [
+                          [
+                            3,
+                            7,
+                            "blue",
+                            "red",
+                            106
+                          ],
+                          [
+                            4,
+                            8,
+                            "red",
+                            "blue",
+                            107
+                          ]
+                        ]
+                      },
+                      "orders": {
+                        "format": "arrays",
+                        "columns": [
+                          "instance_id",
+                          "__node_id",
+                          "marker",
+                          "note",
+                          "amount",
+                          "user_id"
+                        ],
+                        "rows": [
+                          [
+                            3,
+                            9,
+                            53,
+                            "\u6771\u4eac",
+                            53.25,
+                            7
+                          ],
+                          [
+                            3,
+                            10,
+                            51,
+                            "\ud83d\ude3a",
+                            51.25,
+                            7
+                          ],
+                          [
+                            3,
+                            11,
+                            55,
+                            "blue",
+                            55.25,
+                            7
+                          ],
+                          [
+                            4,
+                            12,
+                            58,
+                            "\u00e9",
+                            58.25,
+                            8
+                          ],
+                          [
+                            4,
+                            13,
+                            57,
+                            null,
+                            57.25,
+                            8
+                          ],
+                          [
+                            4,
+                            14,
+                            62,
+                            "red",
+                            62.25,
+                            8
+                          ]
+                        ]
+                      }
+                    }
+                  },
+                  "output": {
+                    "fields": [
+                      "prediction"
+                    ]
+                  },
+                  "inference": {
+                    "run_mode": "fast",
+                    "use_prediction_time": false,
+                    "inference_config": {
+                      "kind": "regression",
+                      "num_estimators": 1,
+                      "column_shuffle": false,
+                      "category_shuffle": false,
+                      "hop_shuffle": false,
+                      "target_transforms": [
+                        "quantile"
+                      ],
+                      "output_type": "median"
+                    }
+                  },
+                  "metadata": {
+                    "source_query": "PREDICT users.age FOR EACH users.user_id",
+                    "num_context_examples": 3,
+                    "num_prediction_examples": 2
+                  }
+                }
+              ],
+              "context_rows": 1,
+              "predict_rows": 2
+            },
+            "sent": [
+              {
+                "model": "kumo-relational",
+                "task": {
+                  "kind": "regression",
+                  "target": {
+                    "column_name": "TARGET",
+                    "dtype": "int64"
+                  },
+                  "entity_table_names": [
+                    "users"
+                  ],
+                  "anchor_time_column": "__kumo_anchor_time"
+                },
+                "schema": {
+                  "instance_table": {
+                    "columns": {
+                      "instance_id": {
+                        "dtype": "int64",
+                        "stype": "ID",
+                        "nullable": false
+                      },
+                      "__kumo_entity_ref_0": {
+                        "dtype": "int64",
+                        "stype": "ID"
+                      },
+                      "__kumo_anchor_time": {
+                        "dtype": "timestamp[us]",
+                        "stype": "timestamp",
+                        "nullable": false
+                      },
+                      "TARGET": {
+                        "dtype": "int64",
+                        "stype": "numerical"
+                      }
+                    },
+                    "primary_key": "instance_id"
+                  },
+                  "related_tables": {
+                    "users": {
+                      "columns": {
+                        "instance_id": {
+                          "dtype": "int64",
+                          "stype": "ID",
+                          "nullable": false
+                        },
+                        "user_id": {
+                          "dtype": "int64",
+                          "nullable": false
+                        },
+                        "category": {
+                          "dtype": "string",
+                          "stype": "categorical"
+                        },
+                        "note": {
+                          "dtype": "string",
+                          "stype": "categorical"
+                        },
+                        "signal": {
+                          "dtype": "int64",
+                          "stype": "categorical"
+                        }
+                      },
+                      "primary_key": [
+                        "instance_id",
+                        "user_id"
+                      ]
+                    },
+                    "orders": {
+                      "columns": {
+                        "instance_id": {
+                          "dtype": "int64",
+                          "stype": "ID",
+                          "nullable": false
+                        },
+                        "__node_id": {
+                          "dtype": "int64",
+                          "stype": "ID",
+                          "nullable": false
+                        },
+                        "marker": {
+                          "dtype": "int64",
+                          "stype": "numerical"
+                        },
+                        "note": {
+                          "dtype": "string",
+                          "stype": "categorical"
+                        },
+                        "amount": {
+                          "dtype": "float64",
+                          "stype": "numerical"
+                        },
+                        "user_id": {
+                          "dtype": "int64",
+                          "stype": "ID"
+                        }
+                      },
+                      "primary_key": [
+                        "instance_id",
+                        "__node_id"
+                      ]
+                    }
+                  },
+                  "relationships": [
+                    {
+                      "source_columns": [
+                        "__kumo_entity_ref_0"
+                      ],
+                      "target_table": "users",
+                      "target_columns": [
+                        "user_id"
+                      ]
+                    },
+                    {
+                      "source_table": "orders",
+                      "source_columns": [
+                        "user_id"
+                      ],
+                      "target_table": "users",
+                      "target_columns": [
+                        "user_id"
+                      ]
+                    }
+                  ]
+                },
+                "context": {
+                  "instance_table": {
+                    "format": "arrays",
+                    "columns": [
+                      "instance_id",
+                      "__kumo_entity_ref_0",
+                      "__kumo_anchor_time",
+                      "TARGET"
+                    ],
+                    "rows": [
+                      [
+                        0,
+                        1,
+                        "2262-04-11T23:47:16.709551Z",
+                        21
+                      ]
+                    ]
+                  },
+                  "related_tables": {
+                    "users": {
+                      "format": "arrays",
+                      "columns": [
+                        "instance_id",
+                        "user_id",
+                        "category",
+                        "note",
+                        "signal"
+                      ],
+                      "rows": [
+                        [
+                          0,
+                          1,
+                          "red",
+                          "",
+                          100
+                        ]
+                      ]
+                    },
+                    "orders": {
+                      "format": "arrays",
+                      "columns": [
+                        "instance_id",
+                        "__node_id",
+                        "marker",
+                        "note",
+                        "amount",
+                        "user_id"
+                      ],
+                      "rows": [
+                        [
+                          0,
+                          0,
+                          3,
+                          "\ud83d\ude3a",
+                          3.25,
+                          1
+                        ],
+                        [
+                          0,
+                          1,
+                          6,
+                          "red",
+                          6.25,
+                          1
+                        ],
+                        [
+                          0,
+                          2,
+                          1,
+                          null,
+                          1.25,
+                          1
+                        ]
+                      ]
+                    }
+                  }
+                },
+                "predict": {
+                  "instance_table": {
+                    "format": "arrays",
+                    "columns": [
+                      "instance_id",
+                      "__kumo_entity_ref_0",
+                      "__kumo_anchor_time"
+                    ],
+                    "rows": [
+                      [
+                        3,
+                        7,
+                        "2262-04-11T23:47:16.709551Z"
+                      ],
+                      [
+                        4,
+                        8,
+                        "2262-04-11T23:47:16.709551Z"
+                      ]
+                    ]
+                  },
+                  "related_tables": {
+                    "users": {
+                      "format": "arrays",
+                      "columns": [
+                        "instance_id",
+                        "user_id",
+                        "category",
+                        "note",
+                        "signal"
+                      ],
+                      "rows": [
+                        [
+                          3,
+                          7,
+                          "blue",
+                          "red",
+                          106
+                        ],
+                        [
+                          4,
+                          8,
+                          "red",
+                          "blue",
+                          107
+                        ]
+                      ]
+                    },
+                    "orders": {
+                      "format": "arrays",
+                      "columns": [
+                        "instance_id",
+                        "__node_id",
+                        "marker",
+                        "note",
+                        "amount",
+                        "user_id"
+                      ],
+                      "rows": [
+                        [
+                          3,
+                          9,
+                          53,
+                          "\u6771\u4eac",
+                          53.25,
+                          7
+                        ],
+                        [
+                          3,
+                          10,
+                          51,
+                          "\ud83d\ude3a",
+                          51.25,
+                          7
+                        ],
+                        [
+                          3,
+                          11,
+                          55,
+                          "blue",
+                          55.25,
+                          7
+                        ],
+                        [
+                          4,
+                          12,
+                          58,
+                          "\u00e9",
+                          58.25,
+                          8
+                        ],
+                        [
+                          4,
+                          13,
+                          57,
+                          null,
+                          57.25,
+                          8
+                        ],
+                        [
+                          4,
+                          14,
+                          62,
+                          "red",
+                          62.25,
+                          8
+                        ]
+                      ]
+                    }
+                  }
+                },
+                "output": {
+                  "fields": [
+                    "prediction"
+                  ],
+                  "prediction_statistic": "median"
+                },
+                "inference": {
+                  "run_mode": "fast",
+                  "use_prediction_time": false
+                },
+                "metadata": {
+                  "source_query": "PREDICT users.age FOR EACH users.user_id",
+                  "num_context_examples": 3,
+                  "num_prediction_examples": 2,
+                  "request_id": "sdm-9eeffb2e959a"
+                }
+              }
+            ],
+            "result": {
+              "columns": [
+                "row_index",
+                "id",
+                "prediction"
+              ],
+              "index": [
+                0,
+                1
+              ],
+              "data": [
+                [
+                  0,
+                  7,
+                  101.0
+                ],
+                [
+                  1,
+                  8,
+                  101.0
+                ]
+              ]
+            },
+            "merged": {
+              "columns": [
+                "row_index",
+                "id",
+                "prediction",
+                "user_id",
+                "age",
+                "category",
+                "note",
+                "signal"
+              ],
+              "index": [
+                0,
+                1
+              ],
+              "data": [
+                [
+                  0,
+                  7,
+                  101.0,
+                  7,
+                  27,
+                  "blue",
+                  "red",
+                  106
+                ],
+                [
+                  1,
+                  8,
+                  101.0,
+                  8,
+                  28,
+                  "red",
+                  "blue",
+                  107
+                ]
+              ]
+            }
+          },
+          "trace": [],
+          "warnings": [
+            {
+              "type": "UserWarning",
+              "message": "Received custom 'num_neighbors' option; ignoring custom 'num_hops=1' option"
+            },
+            {
+              "type": "SDMWarning",
+              "message": "2 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it."
+            },
+            {
+              "type": "SDMWarning",
+              "message": "every context row has the same users.age, so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ."
+            }
+          ],
+          "schema_after": {
+            "dtype": "string",
+            "stype": "categorical",
+            "physical": "int64"
+          }
+        }
+      ],
+      "effect_reached": true
+    },
+    {
+      "declared": "string",
+      "mutation": false,
+      "calls": [
+        {
+          "outcome": {
+            "kind": "error",
+            "error": {
+              "chain": [
+                {
+                  "module": "sdm_client.errors",
+                  "type": "StructuredDataError",
+                  "message": "[INVALID_REQUEST] column 'amount' holds 'string', which cannot mean 'numerical'",
+                  "code": "INVALID_REQUEST"
+                }
+              ]
+            }
+          },
+          "trace": [],
+          "warnings": [],
+          "schema_after": {
+            "dtype": "int64",
+            "stype": "numerical",
+            "physical": "int64"
+          }
+        },
+        {
+          "outcome": {
+            "kind": "error",
+            "error": {
+              "chain": [
+                {
+                  "module": "sdm_client.errors",
+                  "type": "StructuredDataError",
+                  "message": "[INVALID_REQUEST] column 'amount' holds 'string', which cannot mean 'numerical'",
+                  "code": "INVALID_REQUEST"
+                }
+              ]
+            }
+          },
+          "trace": [],
+          "warnings": [],
+          "schema_after": {
+            "dtype": "int64",
+            "stype": "numerical",
+            "physical": "int64"
+          }
+        }
+      ],
+      "effect_reached": false
+    },
+    {
+      "declared": "string",
+      "mutation": true,
+      "calls": [
+        {
+          "outcome": {
+            "kind": "error",
+            "error": {
+              "chain": [
+                {
+                  "module": "sdm_client.errors",
+                  "type": "StructuredDataError",
+                  "message": "[INVALID_REQUEST] column 'amount' holds 'string', which cannot mean 'numerical'",
+                  "code": "INVALID_REQUEST"
+                }
+              ]
+            }
+          },
+          "trace": [],
+          "warnings": [],
+          "schema_after": {
+            "dtype": "int64",
+            "stype": "numerical",
+            "physical": "int64"
+          }
+        },
+        {
+          "outcome": {
+            "kind": "error",
+            "error": {
+              "chain": [
+                {
+                  "module": "sdm_client.errors",
+                  "type": "StructuredDataError",
+                  "message": "[INVALID_REQUEST] column 'amount' holds 'string', which cannot mean 'numerical'",
+                  "code": "INVALID_REQUEST"
+                }
+              ]
+            }
+          },
+          "trace": [],
+          "warnings": [],
+          "schema_after": {
+            "dtype": "int64",
+            "stype": "numerical",
+            "physical": "int64"
+          }
+        }
+      ],
+      "effect_reached": false
+    }
+  ]
+}
