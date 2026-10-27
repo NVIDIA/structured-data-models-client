@@ -264,15 +264,42 @@ def test_string_table_notice_survives_later_error_but_date_notice_does_not(
     assert 'have no value' in outcomes[0][2][0][0]
 
 
-def test_string_invalid_unicode_retains_native_conversion_failure(monkeypatch):
+@pytest.mark.parametrize(
+    'values',
+    [
+        ['\ud800'],
+        ['\udfff'],
+        ['valid', '\ud800', None],
+        ['é', '😺', 'a\0b'],
+    ],
+)
+def test_string_native_unicode_keeps_exact_constructor_outcome(monkeypatch, values):
     frame = pd.DataFrame(
-        {'value': pd.Series(['\ud800'], dtype=pd.StringDtype(storage='python'))}
+        {'value': pd.Series(values, dtype=pd.StringDtype(storage='python'))}
     )
     outcomes = []
     for core in (False, True):
-        with pytest.raises(UnicodeEncodeError) as error:
-            describe(monkeypatch, {'rows': frame}, core=core)
-        outcomes.append(str(error.value))
+        monkeypatch.setenv('SDM_CORE_ROUTES', PATHS if core else '')
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            try:
+                schema = Schema.from_data({'rows': frame})
+            except UnicodeEncodeError as error:
+                outcome = ('error', type(error), str(error))
+            else:
+                snapshot = schema.snapshot()
+                assert schema['rows'].data is frame
+                assert snapshot['rows'].data is frame
+                pd.testing.assert_series_equal(
+                    schema['rows'].data['value'], frame['value']
+                )
+                outcome = ('schema', projection(schema), projection(snapshot))
+        outcomes.append(
+            (outcome, [(str(n.message), n.category) for n in caught])
+        )
+    # Frozen CP310/pandas2 accepts these exact native values. Other supported
+    # native execution cells can reach an actual later UTF8 conversion failure.
+    # Both successes and genuine failures must keep their complete outcome.
     assert outcomes[1] == outcomes[0]
 
 
