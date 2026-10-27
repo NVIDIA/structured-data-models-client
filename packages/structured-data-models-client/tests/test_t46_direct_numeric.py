@@ -110,7 +110,12 @@ def outcome(
             if warning_error:
                 from sdm_client.core.warnings import SDMWarning
 
-                warnings.simplefilter('error', SDMWarning)
+                warnings.simplefilter(
+                    'error',
+                    warning_error
+                    if isinstance(warning_error, type)
+                    else SDMWarning,
+                )
             if on_warning is not None:
 
                 def show(
@@ -1190,3 +1195,58 @@ def test_direct_literal_data_is_distinguished_from_invalid_syntax(
     assert len(new[2]) == int(syntax_warning)
     if syntax_warning:
         assert 'escape sequence' in new[2][0][0]
+
+
+@pytest.mark.parametrize(
+    'identifier',
+    [
+        r"[-None, '\q']",
+        r"[4+1, '\q']",
+        r"[4*1, '\q']",
+        r"[func(), '\q']",
+        r"[func('\q')]",
+        r"[4,, '\q']",
+        r"['\q', 4,,]",
+        r"[4 +, '\q']",
+        r"['\q']",
+    ],
+)
+@pytest.mark.parametrize('promoted', [False, True])
+def test_direct_literal_parse_diagnostics_precede_opaque_id_decision(
+    monkeypatch, identifier, promoted
+):
+    class Identified(Scripted):
+        def predict(self, payload):
+            answer = super().predict(payload)
+            answer['predictions'][0]['id'] = identifier
+            answer['predictions'][1]['id'] = '[5]'
+            return answer
+
+    frames = (
+        pd.DataFrame({'user_id': [1, 2, 3], 'target': [2, 4, 6]}),
+        pd.DataFrame({'user_id': [4, 5]}),
+    )
+    baseline = outcome(monkeypatch, frames, core=False, transport=Identified())
+    # Use the actual runtime's category, including older DeprecationWarning.
+    category = baseline[2][0][1] if baseline[2] else Warning
+    options = {
+        'transport': Identified(),
+        'warning_error': category if promoted else False,
+    }
+    old = outcome(monkeypatch, frames, core=False, **options)
+    options['transport'] = Identified()
+    new = outcome(monkeypatch, frames, core=True, **options)
+    assert new == old
+    assert len(new[3]) == 1
+    if promoted:
+        assert new[1][0] == 'ok'
+        assert not new[2]
+        assert new[1][1][0]['id'] == [4, 5]
+    elif identifier == r"['\q']":
+        assert new[1][2] == 'INVALID_RESPONSE'
+        assert len(new[2]) == 1
+    else:
+        assert new[1][0] == 'ok'
+        assert bool(new[2]) == (
+            identifier not in [r"[4,, '\q']", r"[4 +, '\q']"]
+        )
