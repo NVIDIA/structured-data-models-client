@@ -59,7 +59,7 @@
 
 mod task;
 
-use task::{BatchLayout, EntityDraw, LabelDraw, entity_sample, label_context};
+use task::{BatchLayout, EntityDraw, LabelDraw, TaskRows, entity_sample, label_context};
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -3455,7 +3455,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     let labelled = labelled.narrow(asked_examples);
     let num_train = labelled.keys.len();
     let train_keys = labelled.keys;
-    let mut anchors = labelled.anchors;
+    let anchors = labelled.anchors;
     let labels = labelled.labels;
     #[cfg(feature = "test-ops")]
     if labels_only {
@@ -3566,20 +3566,20 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     let mut gathered = Vec::with_capacity(layout.calls);
     let mut sent = BTreeSet::new();
     let mut answering = 0;
+    let task_rows = TaskRows::new(Arc::clone(&train_keys), anchors, indices, anchor)?;
     // Each call's payload, in order: the context's examples and labels, the
     // same for every call, with the call's own entities, and the subgraph
     // walked from both, as the reference's engine builds each batch
     // (`_iter_task_requests`: `narrow_prediction`, then `_get_context`),
     // every one before any is sent.
     for range in layout.ranges() {
-        let start = range.start;
-        let scored = indices.slice(start, range.len());
+        let batch = task_rows.batch(range)?;
+        let start = batch.range.start;
+        let scored = batch.predicted;
         let num_test = scored.len();
         let examples_total = num_train + num_test;
-        let all_keys = arrow_select::concat::concat(&[train_keys.as_ref(), scored.as_ref()])
-            .map_err(|_| internal("the examples' keys do not concatenate"))?;
-        anchors.truncate(train_anchors);
-        anchors.extend(std::iter::repeat_n(anchor, num_test));
+        let all_keys = batch.keys;
+        let mut anchors = batch.anchors;
 
         // The subgraph: each example's entity row.
         let looked_up = if let Some(frames) = &frames {
