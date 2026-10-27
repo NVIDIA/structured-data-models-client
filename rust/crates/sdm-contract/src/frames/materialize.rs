@@ -10,8 +10,8 @@
 mod native;
 
 pub use native::{
-    ConvertedFrameText, FramePredictionValues, NativeConstructionDiagnostic,
-    NativeFrameConstruction, NativeFrameText, UncastableFrameInput,
+    ConvertedFrameText, FramePredictionValues, FrameReferenceValues, NativeConstructionDiagnostic,
+    NativeFrameConstruction, NativeFrameStrings, NativeFrameText, UncastableFrameInput,
 };
 
 use crate::data::strings::StringEncoding;
