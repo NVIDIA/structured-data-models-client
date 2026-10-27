@@ -59,3 +59,5 @@ pub use sdm_engine::time::{UnknownZone, Zones};
 /// (`capabilities()`), re-exported so a host reaches the request crate's
 /// table through the core (decision E30).
 pub use sdm_request::predict::{Capabilities, capabilities};
+/// Owned logical payload data, before JSON escaping or native presentation.
+pub use sdm_wire::json::Value as LogicalValue;

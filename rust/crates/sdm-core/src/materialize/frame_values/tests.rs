@@ -173,10 +173,12 @@ fn mixed_native_string_buffers_align_without_merging_adjacent_surrogate_points()
 fn encoded_part_identity_binds_its_plan_context_range_summary_and_wire_bytes() {
     let tables = vec!["users".to_owned()];
     let range = FrameBatchRange { start: 0, stop: 2 };
-    let original = encoded_identity("plan", "context", range, 1, &tables, b"body").unwrap();
+    let logical = Value::text("logical body");
+    let original =
+        encoded_identity("plan", "context", range, 1, &tables, b"body", &logical).unwrap();
     for changed in [
-        encoded_identity("other", "context", range, 1, &tables, b"body").unwrap(),
-        encoded_identity("plan", "other", range, 1, &tables, b"body").unwrap(),
+        encoded_identity("other", "context", range, 1, &tables, b"body", &logical).unwrap(),
+        encoded_identity("plan", "other", range, 1, &tables, b"body", &logical).unwrap(),
         encoded_identity(
             "plan",
             "context",
@@ -184,11 +186,22 @@ fn encoded_part_identity_binds_its_plan_context_range_summary_and_wire_bytes() {
             1,
             &tables,
             b"body",
+            &logical,
         )
         .unwrap(),
-        encoded_identity("plan", "context", range, 0, &tables, b"body").unwrap(),
-        encoded_identity("plan", "context", range, 1, &[], b"body").unwrap(),
-        encoded_identity("plan", "context", range, 1, &tables, b"changed").unwrap(),
+        encoded_identity("plan", "context", range, 0, &tables, b"body", &logical).unwrap(),
+        encoded_identity("plan", "context", range, 1, &[], b"body", &logical).unwrap(),
+        encoded_identity("plan", "context", range, 1, &tables, b"changed", &logical).unwrap(),
+        encoded_identity(
+            "plan",
+            "context",
+            range,
+            1,
+            &tables,
+            b"body",
+            &Value::text("other logical body"),
+        )
+        .unwrap(),
     ] {
         assert_ne!(original, changed);
     }

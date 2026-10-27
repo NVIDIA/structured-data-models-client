@@ -38,6 +38,7 @@
 //! is [`Built::answering`], which the core gives as its notice.
 
 use std::collections::BTreeSet;
+use std::sync::Arc;
 
 use arrow_array::cast::AsArray;
 use arrow_array::types::{
@@ -241,6 +242,9 @@ pub struct Sampled {
 #[derive(Debug, Clone)]
 pub struct Built {
     pub bytes: Vec<u8>,
+    /// The exact logical data encoded into bytes, retained before any JSON
+    /// escaping or native presentation. No JSON-body read reconstructs it.
+    pub logical: Arc<Value>,
     pub answering: usize,
 }
 
@@ -1226,7 +1230,7 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
         num_prediction_examples: sampled.num_test as u64,
     };
     let model = "kumo-relational".to_owned();
-    let bytes = if kind == Kind::TemporalLink {
+    let logical = if kind == Kind::TemporalLink {
         StatePayload {
             model,
             task: sdm_wire::payload::TemporalLinkTask {
@@ -1246,7 +1250,7 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
             inference: inference!(crate::options::base(&sampled.options)),
             metadata,
         }
-        .to_bytes()
+        .logical()
     } else if kind.is_classification() {
         StatePayload {
             model,
@@ -1263,7 +1267,7 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
             inference: inference!(crate::options::classification(&sampled.options)),
             metadata,
         }
-        .to_bytes()
+        .logical()
     } else {
         StatePayload {
             model,
@@ -1278,8 +1282,11 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
             inference: inference!(crate::options::regression(&sampled.options)),
             metadata,
         }
-        .to_bytes()
+        .logical()
     };
+    let logical =
+        Arc::new(logical.map_err(|_| internal("the typed request values do not serialize"))?);
+    let bytes = logical.to_bytes();
     // The limit counts the bytes the request sends, as written (PD-2).
     // The refusal names what to change, as the reference's client words
     // its engine's (`_said_in_this_client_s_terms`, `main`'s 1fc5a686): a
@@ -1317,6 +1324,7 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
     }
     Ok(Built {
         bytes,
+        logical,
         answering: answered.len(),
     })
 }

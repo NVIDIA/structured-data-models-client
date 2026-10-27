@@ -47,6 +47,43 @@ impl Identity {
         Ok(())
     }
 
+    /// Exact logical data, before model JSON escaping. Explicit node tags,
+    /// lengths and native text bytes prevent different logical values from
+    /// being identified merely because a JSON reader combines their text.
+    pub fn logical(&mut self, value: &sdm_wire::json::Value) {
+        use sdm_wire::json::Value;
+        match value {
+            Value::Null => self.bytes(b"null"),
+            Value::Bool(value) => {
+                self.bytes(b"bool");
+                self.bytes(&[u8::from(*value)]);
+            }
+            Value::Number(token) => {
+                self.bytes(b"number");
+                self.bytes(token.as_bytes());
+            }
+            Value::Text(text) => {
+                self.bytes(b"text");
+                self.bytes(text.as_bytes());
+            }
+            Value::Array(items) => {
+                self.bytes(b"array");
+                self.bytes(&(items.len() as u64).to_le_bytes());
+                for item in items {
+                    self.logical(item);
+                }
+            }
+            Value::Object(members) => {
+                self.bytes(b"object");
+                self.bytes(&(members.len() as u64).to_le_bytes());
+                for (name, member) in members {
+                    self.bytes(name.as_bytes());
+                    self.logical(member);
+                }
+            }
+        }
+    }
+
     /// Hash the same Arrow RowConverter value bytes used for graph snapshots.
     /// Feeding logical rows across batch boundaries avoids joining or copying
     /// complete source frames and makes empty/repartitioned chunks irrelevant.

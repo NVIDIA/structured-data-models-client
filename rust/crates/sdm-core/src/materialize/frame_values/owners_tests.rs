@@ -271,9 +271,18 @@ fn encoded_part_bodies_remain_independent_until_one_final_assembly() {
             answering: 0,
             tables: vec!["users".into()],
         };
-        let bytes = vec![b'x'; 16_384];
+        let logical = Arc::new(Value::text(&"x".repeat(16_384)));
+        let bytes = logical.to_bytes();
         let allocation = bytes.as_ptr();
-        let owner = RetainedFramePayload::new(&plan, &part, bytes);
+        let owner = RetainedFramePayload::new(
+            &plan,
+            &part,
+            payload::Built {
+                bytes,
+                logical,
+                answering: 0,
+            },
+        );
         assert_eq!(owner.wire().as_ptr(), allocation);
         owners.push((part, owner));
     }

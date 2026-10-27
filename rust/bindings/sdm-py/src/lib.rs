@@ -43,6 +43,8 @@ use sdm_host::{
     read,
 };
 
+mod native_values;
+
 create_exception!(
     sdm_client._native,
     CoreError,
@@ -266,6 +268,10 @@ struct FramePayload {
 impl FramePayload {
     fn wire(&self, py: Python<'_>) -> Py<PyBytes> {
         PyBytes::new(py, self.owner.wire()).unbind()
+    }
+
+    fn value(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        native_values::present(py, self.owner.logical())
     }
 }
 

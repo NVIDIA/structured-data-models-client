@@ -2029,10 +2029,12 @@ fn encoded_identity(
     answering: u64,
     tables: &[String],
     bytes: &[u8],
+    logical: &Value,
 ) -> Result<String, CoreError> {
     let mut identity = Identity::new("encoded-request-part");
     identity.value(&(plan, context, range, answering, tables))?;
     identity.bytes(bytes);
+    identity.logical(logical);
     Ok(identity.finish())
 }
 
@@ -2041,8 +2043,7 @@ pub(crate) struct EncodedCall {
     plan: BoundPlan,
     context_identity: String,
     range: FrameBatchRange,
-    bytes: Vec<u8>,
-    answering: u64,
+    built: payload::Built,
     tables: Vec<String>,
 }
 
@@ -2163,8 +2164,7 @@ pub(crate) fn payload_part(
         plan: context.plan,
         context_identity: context.value.identity,
         range: context.value.range,
-        bytes: built.bytes,
-        answering: built.answering as u64,
+        built,
         tables,
     })
 }
@@ -2176,19 +2176,20 @@ fn publish_part(asker: &Asker, next: EncodedCall) -> Result<EncodedFramePart, Co
         &next.plan.value.identity,
         &next.context_identity,
         next.range,
-        next.answering,
+        next.built.answering as u64,
         &next.tables,
-        &next.bytes,
+        &next.built.bytes,
+        &next.built.logical,
     )?;
     let mut part = EncodedFramePart {
         identity,
         context_identity: next.context_identity,
         range: next.range,
         payload: AttachmentId(0),
-        answering: next.answering,
+        answering: next.built.answering as u64,
         tables: next.tables,
     };
-    let owner = RetainedFramePayload::new(&next.plan, &part, next.bytes);
+    let owner = RetainedFramePayload::new(&next.plan, &part, next.built);
     part.payload = asker.attach(Attachment::FramePayload(owner))?;
     Ok(part)
 }
@@ -2221,6 +2222,7 @@ pub(crate) fn finish_parts(
     )?;
     let mut sent = BTreeSet::new();
     let mut answering = 0_u64;
+    let mut native_payloads = Vec::with_capacity(parts.len());
     for part in &mut parts {
         let Some(Attachment::FramePayload(owner)) = attachments.remove(&part.payload) else {
             return Err(protocol(
@@ -2232,10 +2234,15 @@ pub(crate) fn finish_parts(
             .checked_add(part.answering)
             .ok_or_else(|| protocol("frame request answering count exceeds UInt64"))?;
         sent.extend(part.tables.iter().cloned());
-        // One final ordinary RequestState byte attachment per body. The
-        // native logical-value companion must be emitted from this same
-        // immutable payload owner when its composition is complete.
+        // One final ordinary RequestState body plus its genuine logical
+        // owner. Both originate from the same existing typed encoder.
         part.payload = asker.attach(Attachment::Bytes(owner.wire().to_vec()))?;
+        native_payloads.push(sdm_contract::scalar::native_value::NativePayload {
+            version: sdm_contract::scalar::native_value::NATIVE_VALUE_VERSION,
+            identity: part.identity.clone(),
+            value: asker.attach(Attachment::FramePayload(owner))?,
+            wire: part.payload,
+        });
     }
     let excluded = selected_exclusions(&bound.task, &bound.deferred, true)?
         .into_iter()
@@ -2267,16 +2274,19 @@ pub(crate) fn finish_parts(
                 .collect(),
         )
     };
-    Ok(PreparedFrameValue::Request(Materialized {
-        state: RequestState {
-            version: REQUEST_STATE_VERSION,
-            payload: first.payload,
-            query,
-            forecast: None,
-            batches,
-            ranking: None,
+    Ok(PreparedFrameValue::Request(MaterializedFrames {
+        request: Materialized {
+            state: RequestState {
+                version: REQUEST_STATE_VERSION,
+                payload: first.payload,
+                query,
+                forecast: None,
+                batches,
+                ranking: None,
+            },
+            query: Some(bound.task.value.labelled.meaning.facts.clone()),
         },
-        query: Some(bound.task.value.labelled.meaning.facts.clone()),
+        payloads: native_payloads,
     }))
 }
 

@@ -167,20 +167,27 @@ The graph's continuing neighbor checkpoint is not a source of fresh per-call ent
 The current source stages one closed PrepareFrames operation, both core/host ownership alternatives, Python fixed-result decoding and Java ownership compatibility handling.
 No state-version allocation, canonical generated schema or contract lock publication occurs here.
 
-The existing encoder returns only wire bytes, so the complete logical NativePayload attachment and RequestState coherence still require the same logical Value to be exposed before encoding.
-Reparsing model JSON would lose the distinction between adjacent surrogate points and a supplementary scalar and is not a valid implementation of this requirement.
+The existing typed model schema now feeds an ordinary serde value serializer that captures its owned logical values before encoding.
+Built retains that logical Value and encodes bytes from it, without reparsing a JSON body or duplicating the model field/schema policy.
+Native FramePayload ownership retains this exact Built value and exposes primitive native presentation through the existing host/binding type boundary.
+Source tests compare existing serde bytes against captured field order, flattening, omitted options, enum shapes and large/exact numeric tokens.
+This foundation currently retains ordinary UTF-8 text; full Value::Text/Words/labels UnicodeText propagation remains required before exceptional native Unicode fidelity can be claimed.
+Reparsing model JSON would lose the distinction between adjacent surrogate points and a supplementary scalar and remains invalid.
 Each encoded call binds its complete wire bytes, context identity, ordered range and summary to its plan and task through a private immutable RetainedFramePayload factory.
 Native exact FramePayload objects retain those bodies without PyBytes export/import at every subsequent batch.
 Final assembly validates small immutable metadata and copies each body only once to the existing ordinary RequestState bytes attachment.
 The earlier ever-growing previous-parts argument, repeated body hashing and repeated export/import were source-proven quadratic and are removed.
-The same-logical-value native payload companion and complete validity checks remain required before this path can be enabled.
+Final assembly publishes each native companion with its genuine immutable payload owner, complete encoded RequestState body and an identity binding both logical data and encoded bytes.
+MaterializedFrames carries the existing request state plus these ordered NativePayload companions.
+Native presentation reads the same actual core-owned Value directly rather than constructing a second point-JSON tree.
+The consuming facade and later prediction/request ownership still need to preserve and validate those companions, and exceptional Unicode propagation remains unfinished.
 
 The written native word consumer still requires full single UnicodeText propagation through `SampledColumn::Words`, wire `Value::Text`, labels, schema and display.
 The native engine kernel and contract-native failure types are linked in this isolated source.
 Key::Text now has one UnicodeText meaning, with explicit native Utf8 or surrogatepass Binary facts and the ordinary UTF-8 borrowed view.
 Generic binary keys without explicit native string facts remain refused.
-The retained graph/host/binding wiring is staged, but the complete native facade and full request logical-value ownership remain unfinished.
-The data-only RelationalOptions definition still requires the request-owned re-export described in the preserved facade composition delta.
+The retained graph/host/binding wiring is staged, but the complete native facade, exceptional Unicode consumers and later prediction/request logical ownership remain unfinished.
+The data-only RelationalOptions definition now has its request-owned re-export, defaults, validation and config rendering functions.
 The source now aligns mixed native string offset/byte representations after the actual constructor, retaining the ordinary matching-buffer fast path and preserving distinct surrogate points.
 Their wire/request/schema/display consumers must preserve that same logical meaning at final composition.
 
