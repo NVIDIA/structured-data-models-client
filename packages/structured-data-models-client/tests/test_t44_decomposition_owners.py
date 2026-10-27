@@ -25,13 +25,23 @@ from sdm_client.materializers.relational import RelationalMaterializer
 REFERENCE = json.loads(
     Path(__file__).with_name('t44_decomposition_reference.json').read_text()
 )['families']
+ROUTES = ','.join(
+    (
+        'schema.from-data/frames/frames',
+        'schema.from-data/mapping/frames',
+        'query.materialize/indices-binary/frames',
+        'query.materialize/indices-regression/frames',
+        'query.materialize/indices-ranking/frames',
+        'query.materialize/indices-forecast/frames',
+    )
+)
 
 
 @pytest.fixture(params=[False, True], ids=['original', 'core'])
 def core(request, monkeypatch):
     monkeypatch.setenv(
         'SDM_CORE_ROUTES',
-        'schema.from-data,query.materialize' if request.param else '',
+        ROUTES if request.param else '',
     )
     if request.param:
 
