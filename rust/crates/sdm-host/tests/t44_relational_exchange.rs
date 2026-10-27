@@ -340,7 +340,10 @@ fn exchange_prediction(
             dtype_truth: classification.then_some(true),
             numeric_prefix: classification.then(|| {
                 ["int", "float", "bool"].iter().any(|prefix| {
-                    payload["task"]["target"]["dtype"].as_str().unwrap().starts_with(prefix)
+                    payload["task"]["target"]["dtype"]
+                        .as_str()
+                        .unwrap()
+                        .starts_with(prefix)
                 })
             }),
         },

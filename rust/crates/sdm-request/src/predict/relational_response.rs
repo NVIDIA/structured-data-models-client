@@ -11,7 +11,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use sdm_contract::prepare::relational_response::*;
-use sdm_contract::scalar::native_value::{NativeMember, NativeObjectKey, NativeValue};
+use sdm_contract::scalar::native_value::{
+    NativeObjectKey, NativeTreeMember, NativeTreeNode, NativeValue,
+};
 use sdm_contract::scalar::unicode::UnicodeText;
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 use sdm_wire::json::{Value, is_integer_token};
@@ -55,23 +57,67 @@ pub fn native(value: &Value) -> Result<NativeValue, CoreError> {
         Value::Text(text) => NativeValue::Unicode {
             points: text.points().collect(),
         },
-        Value::Array(items) => NativeValue::Array {
-            items: items.iter().map(native).collect::<Result<_, _>>()?,
-        },
-        Value::Object(members) => NativeValue::Object {
-            members: members
-                .iter()
-                .map(|(key, value)| {
-                    Ok(NativeMember {
-                        key: NativeObjectKey::Unicode {
-                            points: key.chars().map(u32::from).collect(),
-                        },
-                        value: native(value)?,
-                    })
-                })
-                .collect::<Result<_, CoreError>>()?,
-        },
+        Value::Array(_) | Value::Object(_) => native_tree(value)?,
     })
+}
+
+/// Flatten actual decoded containers without doubling their JSON nesting.
+/// This is a postorder value tree, not a parser or a native action protocol.
+fn native_tree(value: &Value) -> Result<NativeValue, CoreError> {
+    enum Visit<'a> {
+        Value(&'a Value),
+        Array(usize),
+        Object(&'a [(String, Value)]),
+    }
+    let mut pending = vec![Visit::Value(value)];
+    let mut roots = Vec::new();
+    let mut nodes = Vec::new();
+    while let Some(visit) = pending.pop() {
+        let node =
+            match visit {
+                Visit::Value(Value::Array(items)) => {
+                    pending.push(Visit::Array(items.len()));
+                    pending.extend(items.iter().rev().map(Visit::Value));
+                    continue;
+                }
+                Visit::Value(Value::Object(members)) => {
+                    pending.push(Visit::Object(members));
+                    pending.extend(members.iter().rev().map(|(_, value)| Visit::Value(value)));
+                    continue;
+                }
+                Visit::Value(value) => NativeTreeNode::Scalar {
+                    value: native(value)?,
+                },
+                Visit::Array(length) => NativeTreeNode::Array {
+                    children: roots.split_off(roots.len().checked_sub(length).ok_or_else(
+                        || protocol("decoded native array has inconsistent child data"),
+                    )?),
+                },
+                Visit::Object(members) => {
+                    let children =
+                        roots.split_off(roots.len().checked_sub(members.len()).ok_or_else(
+                            || protocol("decoded native object has inconsistent member data"),
+                        )?);
+                    NativeTreeNode::Object {
+                        members: members
+                            .iter()
+                            .zip(children)
+                            .map(|((key, _), value)| NativeTreeMember {
+                                key: NativeObjectKey::Unicode {
+                                    points: key.chars().map(u32::from).collect(),
+                                },
+                                value,
+                            })
+                            .collect(),
+                    }
+                }
+            };
+        let ordinal = u32::try_from(nodes.len())
+            .map_err(|_| protocol("decoded native tree exceeds local node ordinals"))?;
+        nodes.push(node);
+        roots.push(ordinal);
+    }
+    Ok(NativeValue::Tree { nodes })
 }
 
 fn text(points: &[u32]) -> Result<UnicodeText, CoreError> {
@@ -128,7 +174,117 @@ pub fn logical(value: &NativeValue) -> Result<Value, CoreError> {
                 })
                 .collect::<Result<_, CoreError>>()?,
         ),
+        NativeValue::Tree { nodes } => logical_tree(nodes)?,
     })
+}
+
+fn logical_tree(nodes: &[NativeTreeNode]) -> Result<Value, CoreError> {
+    if nodes
+        .last()
+        .is_none_or(|node| matches!(node, NativeTreeNode::Scalar { .. }))
+    {
+        return Err(protocol(
+            "native container tree lacks its final container root",
+        ));
+    }
+    let mut values: Vec<Option<Value>> = Vec::with_capacity(nodes.len());
+    let mut depths = Vec::with_capacity(nodes.len());
+    let mut starts = Vec::with_capacity(nodes.len());
+    for (ordinal, node) in nodes.iter().enumerate() {
+        let children = match node {
+            NativeTreeNode::Scalar { value } => {
+                if matches!(
+                    value,
+                    NativeValue::Array { .. }
+                        | NativeValue::Object { .. }
+                        | NativeValue::Tree { .. }
+                ) {
+                    return Err(protocol(
+                        "native tree scalar contains another container owner",
+                    ));
+                }
+                values.push(Some(logical(value)?));
+                depths.push(0usize);
+                starts.push(ordinal);
+                continue;
+            }
+            NativeTreeNode::Array { children } => children.clone(),
+            NativeTreeNode::Object { members } => {
+                members.iter().map(|member| member.value).collect()
+            }
+        };
+        if children.windows(2).any(|pair| pair[0] >= pair[1])
+            || children.iter().any(|child| *child as usize >= ordinal)
+        {
+            return Err(protocol(
+                "native tree children are not an ordered earlier population",
+            ));
+        }
+        let start = children
+            .first()
+            .map_or(ordinal, |child| starts[*child as usize]);
+        let mut next = start;
+        for child in &children {
+            if starts[*child as usize] != next {
+                return Err(protocol(
+                    "native tree interleaves separate child populations",
+                ));
+            }
+            next = *child as usize + 1;
+        }
+        if next != ordinal {
+            return Err(protocol(
+                "native tree omits an intervening child population",
+            ));
+        }
+        let depth = 1 + children
+            .iter()
+            .map(|child| depths[*child as usize])
+            .max()
+            .unwrap_or(0);
+        if depth > sdm_wire::json::MAX_DEPTH {
+            return Err(protocol(
+                "native tree exceeds the existing logical value depth",
+            ));
+        }
+        let items = children
+            .iter()
+            .map(|child| {
+                values[*child as usize].take().ok_or_else(|| {
+                    protocol("native tree reuses a consumed child or mixes container owners")
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let value = match node {
+            NativeTreeNode::Array { .. } => Value::Array(items),
+            NativeTreeNode::Object { members } => Value::Object(
+                members
+                    .iter()
+                    .zip(items)
+                    .map(|(member, value)| {
+                        let NativeObjectKey::Unicode { points } = &member.key;
+                        let key = text(points)?;
+                        let key = key.utf8().ok_or_else(|| {
+                            protocol("decoded native member has exceptional text")
+                        })?;
+                        Ok((key.to_owned(), value))
+                    })
+                    .collect::<Result<_, CoreError>>()?,
+            ),
+            NativeTreeNode::Scalar { .. } => unreachable!("scalar handled before child reads"),
+        };
+        values.push(Some(value));
+        depths.push(depth);
+        starts.push(start);
+    }
+    let root = values
+        .pop()
+        .flatten()
+        .ok_or_else(|| protocol("native tree has no final root"))?;
+    if values.iter().any(Option::is_some) {
+        return Err(protocol("native tree contains unreachable node owners"));
+    }
+    Ok(root)
 }
 
 pub fn decode(
@@ -823,6 +979,14 @@ mod tests {
             let decoded: NativeValue = serde_json::from_slice(&bytes).unwrap();
             assert_eq!(logical(&decoded).unwrap(), value);
         }
+        let mixed = Value::Object(vec![
+            (
+                "second".into(),
+                Value::Array(vec![Value::Bool(true), Value::Null]),
+            ),
+            ("first".into(), Value::Object(vec![])),
+        ]);
+        assert_eq!(logical(&native(&mixed).unwrap()).unwrap(), mixed);
     }
 
     #[test]
@@ -835,7 +999,48 @@ mod tests {
             let response = format!(
                 "{{\"id\":\"depth\",\"model\":\"kumo-relational\",\"metadata\":{{}},\"predictions\":[{{\"row_index\":0,\"id\":\"3\",\"prediction\":{prediction}}}]}}"
             );
-            assert_eq!(sdm_wire::json::read_answer(response.as_bytes()).is_ok(), accepted);
+            assert_eq!(
+                sdm_wire::json::read_answer(response.as_bytes()).is_ok(),
+                accepted
+            );
         }
+    }
+
+    #[test]
+    fn flat_container_children_are_one_local_ordered_tree() {
+        let scalar = || NativeTreeNode::Scalar {
+            value: NativeValue::Null,
+        };
+        let array = |children| NativeTreeNode::Array { children };
+        for nodes in [
+            vec![],
+            vec![scalar()],
+            vec![array(vec![0])],
+            vec![scalar(), array(vec![0, 0])],
+            vec![scalar(), scalar(), array(vec![0])],
+            vec![scalar(), scalar(), array(vec![0]), array(vec![1, 2])],
+            vec![
+                NativeTreeNode::Scalar {
+                    value: NativeValue::Array { items: vec![] },
+                },
+                array(vec![0]),
+            ],
+        ] {
+            assert!(logical(&NativeValue::Tree { nodes }).is_err());
+        }
+        let mut nodes = vec![scalar()];
+        for ordinal in 0..sdm_wire::json::MAX_DEPTH {
+            nodes.push(array(vec![u32::try_from(ordinal).unwrap()]));
+        }
+        assert!(
+            logical(&NativeValue::Tree {
+                nodes: nodes.clone()
+            })
+            .is_ok()
+        );
+        nodes.push(array(vec![
+            u32::try_from(sdm_wire::json::MAX_DEPTH).unwrap(),
+        ]));
+        assert!(logical(&NativeValue::Tree { nodes }).is_err());
     }
 }
