@@ -6785,6 +6785,8 @@
         "frame_key_not_unique",
         "frame_name_empty",
         "frame_name_characters",
+        "frame_cell_bytes",
+        "frame_cell_container",
         "frame_categorical_sample",
         "frame_key_ambiguous",
         "frame_keyless_shared",
@@ -7477,6 +7479,10 @@
           "items": {
             "type": "string"
           }
+        },
+        "missing": {
+          "description": "Actual inferred-key isna.any result, before its possible warning.",
+          "type": "boolean"
         }
       },
       "additionalProperties": false,
@@ -7999,6 +8005,16 @@
           "items": {
             "$ref": "#/$defs/CoreWarning"
           }
+        },
+        "advice": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FrameKeyAdvicePlan"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false,
@@ -8054,6 +8070,23 @@
         "code",
         "sentence",
         "message"
+      ]
+    },
+    "FrameKeyAdvicePlan": {
+      "description": "Final declared schema populations before native keyless advice reads.",
+      "type": "object",
+      "properties": {
+        "description": {
+          "$ref": "#/$defs/SourceDescription"
+        },
+        "infer_links": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "description",
+        "infer_links"
       ]
     },
     "FrameSample": {
@@ -8154,6 +8187,7 @@
         "edit",
         "stated_key",
         "assemble",
+        "assemble_native",
         "sample",
         "table",
         "schema"
@@ -10686,6 +10720,27 @@
         },
         "owner": {
           "$ref": "#/$defs/AttachmentId"
+        },
+        "native_target": {
+          "description": "Original source dtype for the actual list-label pointwise result.\nThe native category conversion consumes these already computed rows.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FrameNativeColumnRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "target_encoding": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StringEncoding"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false,
