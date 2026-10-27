@@ -16,9 +16,9 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
+from t45_frame_routes import FRAME_ROUTES
 
 from sdm_client import PredictiveQuery, Schema
-from sdm_client._routing import CORE_ROUTED
 from sdm_client.materializers.relational import RelationalMaterializer
 
 PANDAS = int(pd.__version__.split('.')[0])
@@ -165,9 +165,7 @@ def values(storage, shape, indexes, callback):
 def test_declared_decimal_materialize_matches_frozen_native_behavior(
     monkeypatch, core, case
 ):
-    monkeypatch.setenv(
-        'SDM_CORE_ROUTES', ','.join(sorted(CORE_ROUTED)) if core else ''
-    )
+    monkeypatch.setenv('SDM_CORE_ROUTES', FRAME_ROUTES if core else '')
     if core:
 
         def legacy_model(*args, **kwargs):

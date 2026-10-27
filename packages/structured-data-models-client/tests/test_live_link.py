@@ -17,9 +17,9 @@ import os
 import numpy as np
 import pandas as pd
 import pytest
+from t45_frame_routes import FRAME_ROUTES
 
 from sdm_client import KumoRelational, PredictiveQuery, Schema, SDMClient
-from sdm_client._routing import CORE_ROUTED
 from sdm_client.materializers.relational import RelationalMaterializer
 
 pytestmark = pytest.mark.live_nim
@@ -72,7 +72,7 @@ def test_live_link_preserves_request_entities_and_ranked_items(
         with monkeypatch.context() as selected:
             selected.setenv(
                 'SDM_CORE_ROUTES',
-                ','.join(sorted(CORE_ROUTED)) if core else '',
+                FRAME_ROUTES if core else '',
             )
             if core:
                 selected.setattr(
