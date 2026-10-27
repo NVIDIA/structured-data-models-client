@@ -16,7 +16,8 @@ The kernel is not an alternative implementation of SIMD dispatch.
 
 The first tests precede the implementation and retain exact native scalar duplicate permutations at lengths 30, 65 and 257.
 An independent subsequent native acquisition records 184 scalar controls and 184 native AVX2 controls over identical inputs.
-The scalar controls include signed and unsigned widths, Boolean values, finite floating extrema, signed zero, subnormals, infinities, padding-sensitive maximum keys, lengths around 16 and 256, sorted/equal arrays and an organ-pipe input.
+The scalar controls include signed and unsigned widths, Boolean values, signed zero, subnormals, infinities, padding-sensitive maximum keys, lengths around 16 and 256, sorted/equal arrays and an organ-pipe input.
+Finite floating extrema are covered separately by the typed order-isomorphic Rust test.
 Their 184 exact scalar permutations are retained in `sdm-engine/tests/data/t46_scalar_kernel_controls.json` and consumed without adding a crate dependency.
 The acquisition checks that every native answer is a permutation and leaves input bytes unchanged.
 It imports no SDM package and supplies no candidate-execution credit.
