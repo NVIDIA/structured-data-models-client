@@ -1787,6 +1787,8 @@ def test_direct_lossless_int64_cells_reach_transport_in_both_halves(
         'null-target',
         'drop-target',
         'empty-context',
+        'duplicate-present',
+        'duplicate-null',
         'warning-error',
     ],
 )
@@ -1841,6 +1843,15 @@ def test_direct_constructor_schema_advice_precedes_fresh_frame_guards(
                     context.drop(columns=['target'], inplace=True)
                 elif change == 'empty-context':
                     context.drop(index=context.index, inplace=True)
+                elif change in ('duplicate-present', 'duplicate-null'):
+                    context.insert(
+                        len(context.columns),
+                        'target',
+                        pd.Series([None] * 100, dtype='Int64')
+                        if change == 'duplicate-null'
+                        else range(200, 300),
+                        allow_duplicates=True,
+                    )
 
             warnings.showwarning = show
             try:
@@ -1863,6 +1874,9 @@ def test_direct_constructor_schema_advice_precedes_fresh_frame_guards(
         assert observed[0][0][2] == 'INVALID_REQUEST'
     elif change == 'drop-target':
         assert observed[0][0][1] is KeyError
+    elif change == 'duplicate-present':
+        assert observed[0][0][1] is ValueError
+        assert 'truth value of a Series is ambiguous' in observed[0][0][-1]
     elif change == 'warning-error':
         assert observed[0][0][1] is SDMWarning
         assert not observed[0][1]
@@ -2047,3 +2061,51 @@ def test_direct_constructor_task_reads_native_schema_after_constant_advice(
     else:
         assert observed[1][0][2] == 'INVALID_REQUEST'
         assert "table 'instance' has no column 'target'" in observed[1][0][-1]
+
+
+@pytest.mark.parametrize('null_target', [False, True])
+def test_direct_constructor_wrong_schema_table_follows_known_target_guard(
+    monkeypatch, null_target
+):
+    from sdm_client import Schema
+
+    observed = []
+    for core in (False, True):
+        monkeypatch.setenv('SDM_CORE_ROUTES', CORE if core else '')
+        context = pd.DataFrame(
+            {
+                'feature': [1, 2, 3],
+                'target': pd.Series(
+                    [None] * 3 if null_target else [2, 4, 6], dtype='Int64'
+                ),
+            }
+        )
+        predict = pd.DataFrame({'feature': [4, 5]})
+        schema = Schema.from_data({'other': context}, relationships=())
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            with pytest.raises(Exception) as raised:
+                Request(
+                    context,
+                    predict,
+                    target='target',
+                    task='regression',
+                    schema=schema,
+                )
+        error = raised.value
+        observed.append(
+            (
+                type(error),
+                getattr(error, 'code', None),
+                str(error),
+                [(str(w.message), w.category) for w in caught],
+            )
+        )
+    assert observed[1] == observed[0]
+    assert observed[1][1] == 'INVALID_REQUEST'
+    assert not observed[1][3]
+    assert (
+        'at least one row with a known target'
+        if null_target
+        else "no table 'instance' in this schema; it has ['other']"
+    ) in observed[1][2]
