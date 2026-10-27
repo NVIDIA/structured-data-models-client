@@ -11,6 +11,7 @@ use arrow_array::{ArrayRef, Decimal128Array, Decimal256Array, RecordBatch};
 use arrow_buffer::i256;
 use sdm_contract::data::AttachmentId;
 use sdm_contract::facts::PlatformFacts;
+use sdm_contract::frames::NativeDecimal;
 use sdm_contract::ops::{Dtype, Operation, OperationResult, SourceDescription, Stype};
 use sdm_contract::run::StartRun;
 use sdm_contract::{CONTRACT_VERSION, ControlMessage, HostFacts, Scalar, Step, TimestampUnit};
@@ -18,6 +19,10 @@ use sdm_host::{ArrowData, Attachment, Attachments, HostRun};
 use serde_json::json;
 
 fn start(column: ArrayRef) -> SourceDescription {
+    start_native(column, None)
+}
+
+fn start_native(column: ArrayRef, native: Option<NativeDecimal>) -> SourceDescription {
     let operation: Operation = serde_json::from_value(json!({
         "op":"describe_source", "provider":{"provider":"frames","manifest":2},
         "source":1,"check_keys":true
@@ -43,6 +48,12 @@ fn start(column: ArrayRef) -> SourceDescription {
     })))
     .unwrap();
     let batch = RecordBatch::try_from_iter([("value_id", column)]).unwrap();
+    let mut input = json!({"source":{"source":["rows"]},"rows":3});
+    if let Some(native) = native {
+        input["decimals"] = json!([{
+            "column":0,"name":"value_id","decimal":native
+        }]);
+    }
     let attached = Attachments::from([
         (
             AttachmentId(1),
@@ -59,7 +70,7 @@ fn start(column: ArrayRef) -> SourceDescription {
             Attachment::Bytes(
                 serde_json::to_vec(&json!({
                     "stage":"schema",
-                    "tables":[{"source":{"source":["rows"]},"rows":3}]
+                    "tables":[input]
                 }))
                 .unwrap(),
             ),
@@ -177,4 +188,49 @@ fn declared_precision_fast_path_does_not_become_a_new_value_refusal() {
         .unwrap();
     let description = start(Arc::new(array));
     assert_eq!(description.tables[0].columns[0].dtype, Dtype::Int64);
+}
+
+#[test]
+fn native_scale_outside_arrow_i8_and_above_precision_reaches_the_public_host() {
+    for scale in [-129, -128, -1, 0, 1, 2, 129] {
+        for wide in [false, true] {
+            let (array, native): (ArrayRef, NativeDecimal) = if wide {
+                (
+                    Arc::new(
+                        Decimal256Array::from(vec![i256::from_i128(0), i256::from_i128(1)])
+                            .with_precision_and_scale(1, 0)
+                            .unwrap(),
+                    ),
+                    NativeDecimal::Decimal256 {
+                        precision: 1,
+                        scale,
+                    },
+                )
+            } else {
+                (
+                    Arc::new(
+                        Decimal128Array::from(vec![0, 1])
+                            .with_precision_and_scale(1, 0)
+                            .unwrap(),
+                    ),
+                    NativeDecimal::Decimal128 {
+                        precision: 1,
+                        scale,
+                    },
+                )
+            };
+            let description = start_native(array, Some(native));
+            let table = &description.tables[0];
+            assert_eq!(
+                table.columns[0].dtype,
+                if scale > 0 {
+                    Dtype::Float64
+                } else {
+                    Dtype::Int64
+                }
+            );
+            assert_eq!(table.primary_key, ["value_id"]);
+            assert_eq!(table.columns[0].stype, Stype::Id);
+        }
+    }
 }
