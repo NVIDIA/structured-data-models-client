@@ -1479,6 +1479,11 @@
             "attributed": {
               "$ref": "#/$defs/AttachmentId"
             },
+            "decimal_limit": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
             "stage": {
               "type": "string",
               "const": "layout_response"
@@ -1488,7 +1493,8 @@
           "required": [
             "stage",
             "data",
-            "attributed"
+            "attributed",
+            "decimal_limit"
           ]
         },
         {
@@ -1640,6 +1646,88 @@
             "context",
             "predict",
             "entity_table"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "schema": {
+              "$ref": "#/$defs/ConstructorSchema"
+            },
+            "context": {
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "predict": {
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "context_header": {
+              "$ref": "#/$defs/FrameHeader"
+            },
+            "predict_header": {
+              "$ref": "#/$defs/FrameHeader"
+            },
+            "target_context": {
+              "$ref": "#/$defs/NativeLookup"
+            },
+            "context_predict": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/NativeLookup"
+              }
+            },
+            "stage": {
+              "type": "string",
+              "const": "finish_constructor"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "schema",
+            "context",
+            "predict",
+            "context_header",
+            "predict_header",
+            "target_context",
+            "context_predict"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "prepared": {
+              "$ref": "#/$defs/PreparedDirectRequest"
+            },
+            "entity_table": {
+              "type": "string"
+            },
+            "tables": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/HeaderName"
+              }
+            },
+            "table": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ConstructorTaskTable"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "stage": {
+              "type": "string",
+              "const": "constructor_task"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "prepared",
+            "entity_table",
+            "tables"
           ]
         },
         {
@@ -3440,45 +3528,8 @@
         "predict_context"
       ]
     },
-    "PreparedValue": {
-      "description": "The closed data value answered by one fixed preparation stage.",
-      "anyOf": [
-        {
-          "$ref": "#/$defs/ConstructorArguments"
-        },
-        {
-          "$ref": "#/$defs/ConstructorHeaders"
-        },
-        {
-          "$ref": "#/$defs/PreparedDirectRequest"
-        },
-        {
-          "$ref": "#/$defs/CallPreparation"
-        },
-        {
-          "$ref": "#/$defs/DirectOverlap"
-        },
-        {
-          "$ref": "#/$defs/TabularEnvelope"
-        },
-        {
-          "$ref": "#/$defs/EncodedDirectBody"
-        },
-        {
-          "$ref": "#/$defs/DirectResponseData"
-        },
-        {
-          "$ref": "#/$defs/CheckedDirectRows"
-        },
-        {
-          "$ref": "#/$defs/SelectedDirectMember"
-        },
-        {
-          "$ref": "#/$defs/AttributedDirectRow"
-        }
-      ]
-    },
-    "PreparedDirectRequest": {
+    "ConstructorSchema": {
+      "description": "Settled inferred or supplied meaning, before later native frame observations.",
       "type": "object",
       "properties": {
         "version": {
@@ -3490,6 +3541,9 @@
           "type": "string"
         },
         "target": {
+          "type": "string"
+        },
+        "entity_table": {
           "type": "string"
         },
         "description": {
@@ -3504,6 +3558,7 @@
         "version",
         "task",
         "target",
+        "entity_table",
         "description",
         "schema"
       ]
@@ -3664,6 +3719,127 @@
         "stype",
         "nullable",
         "unique"
+      ]
+    },
+    "PreparedDirectRequest": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "task": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        },
+        "description": {
+          "$ref": "#/$defs/SourceDescription"
+        },
+        "schema": {
+          "$ref": "#/$defs/HeldSchema"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "task",
+        "target",
+        "description",
+        "schema"
+      ]
+    },
+    "ConstructorTaskTable": {
+      "description": "Only the selected native table's names and selected target's dtype.",
+      "type": "object",
+      "properties": {
+        "columns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/HeaderName"
+          }
+        },
+        "target_dtype": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "columns"
+      ]
+    },
+    "PreparedValue": {
+      "description": "The closed data value answered by one fixed preparation stage.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ConstructorArguments"
+        },
+        {
+          "$ref": "#/$defs/ConstructorHeaders"
+        },
+        {
+          "$ref": "#/$defs/ConstructorSchema"
+        },
+        {
+          "$ref": "#/$defs/PreparedDirectRequest"
+        },
+        {
+          "$ref": "#/$defs/PreparedDirectTask"
+        },
+        {
+          "$ref": "#/$defs/CallPreparation"
+        },
+        {
+          "$ref": "#/$defs/DirectOverlap"
+        },
+        {
+          "$ref": "#/$defs/TabularEnvelope"
+        },
+        {
+          "$ref": "#/$defs/EncodedDirectBody"
+        },
+        {
+          "$ref": "#/$defs/DirectResponseData"
+        },
+        {
+          "$ref": "#/$defs/CheckedDirectRows"
+        },
+        {
+          "$ref": "#/$defs/SelectedDirectMember"
+        },
+        {
+          "$ref": "#/$defs/AttributedDirectRow"
+        }
+      ]
+    },
+    "PreparedDirectTask": {
+      "description": "Model-neutral task metadata, resolved after constructor advice effects.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        },
+        "table": {
+          "type": "string"
+        },
+        "dtype": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "target",
+        "table",
+        "dtype"
       ]
     },
     "EncodedDirectBody": {
