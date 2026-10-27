@@ -454,6 +454,10 @@ pub struct DescribedSource {
     /// present in SQL/Schema results or persistent schema metadata.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub frame_rows: Option<AttachmentId>,
+    /// Table-stage rows only: JSON NativeDecimalColumn declarations needed
+    /// when rebinding owned scale-zero mantissas under fresh attachment ids.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub frame_decimals: Option<AttachmentId>,
     /// What a semantic model's conversion notes of the schema it gave
     /// (contract v28, T3.27): each measure as the predictive query it is,
     /// each time column taken in place of the view's own, each parameter
@@ -1557,6 +1561,8 @@ pub struct Attachments {
     pub describe_source_source: SourceSpec,
     #[schemars(rename = "DescribedSource.description")]
     pub described_source_description: SourceDescription,
+    #[schemars(rename = "DescribedSource.frame_decimals")]
+    pub described_source_frame_decimals: Vec<crate::frames::NativeDecimalColumn>,
     #[schemars(rename = "EditSchema.schema")]
     pub edit_schema_schema: HeldSchema,
     #[schemars(rename = "EditSchema.edit")]

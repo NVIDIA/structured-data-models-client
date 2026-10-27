@@ -12,8 +12,8 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 
-from sdm_client._rust.frame_decimals import native_decimal_column
 from sdm_client import StructuredDataError
+from sdm_client._rust.frame_decimals import native_decimal_column
 
 
 def arrays(bits, precision, scale):
@@ -87,12 +87,19 @@ def test_table_result_preserves_logical_type_attachment_with_owned_rows():
     from sdm_client._rust import results
 
     table = results.expect(
-        {'op': 'describe_source', 'description': 1, 'frame_rows': 2, 'frame_decimals': 3},
+        {
+            'op': 'describe_source',
+            'description': 1,
+            'frame_rows': 2,
+            'frame_decimals': 3,
+        },
         results.Described,
     )
     assert table.frame_rows == 2
     assert table.frame_decimals == 3
-    sql = results.expect({'op': 'describe_source', 'description': 1}, results.Described)
+    sql = results.expect(
+        {'op': 'describe_source', 'description': 1}, results.Described
+    )
     assert sql.frame_rows is None
     assert sql.frame_decimals is None
 
@@ -101,8 +108,15 @@ def test_table_result_preserves_logical_type_attachment_with_owned_rows():
 def test_table_result_rejects_malformed_logical_type_attachment(value):
     from sdm_client._rust import results
 
-    with pytest.raises(StructuredDataError, match='frame_decimals is not a count'):
+    with pytest.raises(
+        StructuredDataError, match='frame_decimals is not a count'
+    ):
         results.expect(
-            {'op': 'describe_source', 'description': 1, 'frame_rows': 2, 'frame_decimals': value},
+            {
+                'op': 'describe_source',
+                'description': 1,
+                'frame_rows': 2,
+                'frame_decimals': value,
+            },
             results.Described,
         )

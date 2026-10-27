@@ -15,6 +15,7 @@ import pandas as pd
 
 from sdm_client._routing import RouteError
 from sdm_client._rust import codec
+from sdm_client._rust.frame_decimals import native_decimal_type
 from sdm_client._rust.frames import _convert
 
 
@@ -33,6 +34,17 @@ def inputs(schema: Any, state: dict[str, Any]) -> dict[int, Any]:
                     'the partial frame materializer requires built-in DataFrames'
                 )
             rows, native_types = _convert(name, frame)
+            # Constructor mantissas require logical Decimal consumption in
+            # the materializer before this development seam can take them.
+            # This whole native family was already outside this unfinished
+            # route; never let scale-zero storage become a model value.
+            if any(
+                native_decimal_type(dtype) is not None
+                for dtype in native_types.values()
+            ):
+                raise RouteError(
+                    'native Arrow Decimal columns remain unfinished in the partial frame materializer'
+                )
             # Exact Arrow LargeUTF8 has a frozen native-engine failure;
             # StringDtype exports can use the same physical offset width.
             # Keep this native family unfinished after generic conversion

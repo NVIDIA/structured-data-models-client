@@ -2,7 +2,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Lossless native Decimal buffers, unlinked pending shared composition.
+"""Lossless native Decimal buffers and their original logical descriptors.
 
 The native scale is an i32 property; Arrow Rust's Decimal type has an i8
 scale. Export typed scale-zero mantissas and retain the original descriptor.
@@ -13,6 +13,24 @@ from __future__ import annotations
 
 import pandas as pd
 import pyarrow as pa
+
+
+def native_decimal_type(dtype: object) -> dict[str, str | int] | None:
+    """Original immutable built-in native type facts, without reading cells."""
+    if type(dtype) is not pd.ArrowDtype:
+        return None
+    physical = dtype.pyarrow_dtype
+    if pa.types.is_decimal128(physical):
+        tag = 'decimal128'
+    elif pa.types.is_decimal256(physical):
+        tag = 'decimal256'
+    else:
+        return None
+    return {
+        'type': tag,
+        'precision': physical.precision,
+        'scale': physical.scale,
+    }
 
 
 def native_decimal_column(
@@ -34,15 +52,15 @@ def native_decimal_column(
         or type(native) is not pd.arrays.ArrowExtensionArray
     ):
         return None
-    physical = dtype.pyarrow_dtype
-    if pa.types.is_decimal128(physical):
-        tag = 'decimal128'
-        storage_type = pa.decimal128(physical.precision, 0)
-    elif pa.types.is_decimal256(physical):
-        tag = 'decimal256'
-        storage_type = pa.decimal256(physical.precision, 0)
-    else:
+    descriptor = native_decimal_type(dtype)
+    if descriptor is None:
         return None
+    physical = dtype.pyarrow_dtype
+    storage_type = (
+        pa.decimal128(physical.precision, 0)
+        if descriptor['type'] == 'decimal128'
+        else pa.decimal256(physical.precision, 0)
+    )
     original = native.__arrow_array__()
     chunks = [
         pa.Array.from_buffers(
@@ -55,8 +73,4 @@ def native_decimal_column(
         for chunk in original.chunks
     ]
     storage = pa.chunked_array(chunks, type=storage_type)
-    return storage, {
-        'type': tag,
-        'precision': physical.precision,
-        'scale': physical.scale,
-    }
+    return storage, descriptor

@@ -2,13 +2,12 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! Native Arrow Decimal constructor facts, before shared-reader composition.
+//! Exact native Arrow Decimal constructor facts.
 //!
 //! Frozen public source: wire/dtypes.py::infer_tfm_dtype/_decimal_dtype and
 //! schema.py::_column/_stype_of/_infer_primary_key at 43e55f4f.
 //! Constructor distinctness uses native Decimal equality; it does not use
 //! the SQL preview's scaled-decimal-to-float inference conversion.
-//! This module is deliberately unlinked until the shared reader is composed.
 
 use arrow_array::cast::AsArray;
 use arrow_array::types::{Decimal128Type, Decimal256Type};

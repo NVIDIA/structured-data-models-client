@@ -30,9 +30,13 @@ public final class Results {
   public record Validated(boolean accepted, List<Diagnostic> diagnostics, QueryFacts query) {}
 
   /** {@code describe_source}'s result: the attachment of the {@code SourceDescription}. */
-  public record Described(int description, List<ViewNote> notes, Integer frameRows) {
+  public record Described(
+      int description, List<ViewNote> notes, Integer frameRows, Integer frameDecimals) {
     public Described(int description, List<ViewNote> notes) {
-      this(description, notes, null);
+      this(description, notes, null, null);
+    }
+    public Described(int description, List<ViewNote> notes, Integer frameRows) {
+      this(description, notes, frameRows, null);
     }
   }
 
@@ -108,7 +112,8 @@ public final class Results {
       }
     }
     return new Described(count(read, "description"), List.copyOf(notes),
-        read.get("frame_rows") == null ? null : count(read, "frame_rows"));
+        read.get("frame_rows") == null ? null : count(read, "frame_rows"),
+        read.get("frame_decimals") == null ? null : count(read, "frame_decimals"));
   }
 
   private static Validated validated(Map<String, Object> read) {

@@ -147,27 +147,24 @@ pub(crate) async fn run(
         let Some(Attachment::Arrow(rows)) = attachments.remove(&binding.rows) else {
             return Err(invalid("inference requires current Arrow rows"));
         };
+        let columns =
+            sdm_schema::frames::Columns::new(&rows.schema, &rows.batches, &binding.decimals)?;
         let (value, notices) = match (manifest.stage, inference) {
             (FrameStage::Nominate, None) => {
-                let (value, notices) = sdm_schema::frames::nominate(
-                    &table.name,
-                    &table.source,
-                    &rows.schema,
-                    &rows.batches,
-                )?;
+                let (value, notices) =
+                    sdm_schema::frames::nominate_from(&table.name, &table.source, &columns)?;
                 (FrameInference::Nomination(Box::new(value)), notices)
             }
             (FrameStage::Adopt, Some(FrameInference::Nomination(value)))
                 if value.table.name == table.name && value.table.source == table.source =>
             {
-                let (value, notices) =
-                    sdm_schema::frames::adopt(*value, &rows.schema, &rows.batches)?;
+                let (value, notices) = sdm_schema::frames::adopt_from(*value, &columns)?;
                 (FrameInference::Adoption(Box::new(value)), notices)
             }
             (FrameStage::Time, Some(FrameInference::Adoption(value)))
                 if value.table.name == table.name && value.table.source == table.source =>
             {
-                let value = sdm_schema::frames::choose_time(*value, &rows.schema, &rows.batches)?;
+                let value = sdm_schema::frames::choose_time_from(*value, &columns)?;
                 (FrameInference::Inferred(vec![value]), vec![])
             }
             (FrameStage::StatedKey, Some(FrameInference::Inferred(mut values)))
@@ -175,18 +172,14 @@ pub(crate) async fn run(
                     && values[0].table.name == table.name
                     && values[0].table.source == table.source =>
             {
-                let (value, notices) = sdm_schema::frames::adopt_stated(
-                    values.remove(0),
-                    &rows.schema,
-                    &rows.batches,
-                )?;
+                let (value, notices) =
+                    sdm_schema::frames::adopt_stated_from(values.remove(0), &columns)?;
                 (FrameInference::Inferred(vec![value]), notices)
             }
             (FrameStage::Sample, Some(FrameInference::SampleColumn(column)))
                 if column.table == table.name =>
             {
-                let (value, notices) =
-                    sdm_schema::frames::sample(*column, &rows.schema, &rows.batches)?;
+                let (value, notices) = sdm_schema::frames::sample_from(*column, &columns)?;
                 (FrameInference::Sample(Box::new(value)), notices)
             }
             _ => {
@@ -230,37 +223,29 @@ pub(crate) async fn run(
         let Some(Attachment::Arrow(rows)) = attachments.remove(&bound.rows) else {
             return Err(invalid("a frame binding does not name admitted Arrow data"));
         };
+        let columns =
+            sdm_schema::frames::Columns::new(&rows.schema, &rows.batches, &bound.decimals)?;
         let read = if let Some(values) = &completed {
             let value = values
                 .iter()
                 .find(|v| v.table.name == table.name && v.table.source == table.source)
                 .ok_or_else(|| invalid("completed table facts do not match named frames"))?;
-            sdm_schema::frames::observe(
-                &value.table,
-                value.time.clone(),
-                &rows.schema,
-                &rows.batches,
-            )?
+            sdm_schema::frames::observe_from(&value.table, value.time.clone(), &columns)?
         } else {
             // Compatibility callers own this immutable buffer throughout.
-            let (nomination, first) = sdm_schema::frames::nominate(
-                &table.name,
-                &table.source,
-                &rows.schema,
-                &rows.batches,
-            )?;
-            let (adopted, second) =
-                sdm_schema::frames::adopt(nomination, &rows.schema, &rows.batches)?;
-            let value = sdm_schema::frames::choose_time(adopted, &rows.schema, &rows.batches)?;
+            let (nomination, first) =
+                sdm_schema::frames::nominate_from(&table.name, &table.source, &columns)?;
+            let (adopted, second) = sdm_schema::frames::adopt_from(nomination, &columns)?;
+            let value = sdm_schema::frames::choose_time_from(adopted, &columns)?;
             if manifest.stage == FrameStage::Table {
                 for notice in first.into_iter().chain(second) {
                     asker.warn(notice);
                 }
             }
-            sdm_schema::frames::observe(&value.table, value.time, &rows.schema, &rows.batches)?
+            sdm_schema::frames::observe_from(&value.table, value.time, &columns)?
         };
         if manifest.stage == FrameStage::Table {
-            snapshot = Some(rows);
+            snapshot = Some((rows, bound.decimals.clone()));
         }
         reads.push(read);
     }
@@ -421,17 +406,30 @@ fn finish_inference(asker: &Asker, value: FrameInference) -> Result<OperationRes
 fn finish(
     asker: &Asker,
     description: SourceDescription,
-    rows: Option<crate::ArrowData>,
+    rows: Option<(
+        crate::ArrowData,
+        Vec<sdm_contract::frames::NativeDecimalColumn>,
+    )>,
 ) -> Result<OperationResult, CoreError> {
     let bytes = serde_json::to_vec(&description)
         .map_err(|_| internal("a frame description does not serialize"))?;
     let description = asker.attach(Attachment::Bytes(bytes))?;
-    let frame_rows = rows
-        .map(|rows| asker.attach(Attachment::Arrow(rows)))
-        .transpose()?;
+    let (frame_rows, frame_decimals) = if let Some((rows, decimals)) = rows {
+        let logical = if decimals.is_empty() {
+            None
+        } else {
+            let bytes = serde_json::to_vec(&decimals)
+                .map_err(|_| internal("owned frame Decimal declarations do not serialize"))?;
+            Some(asker.attach(Attachment::Bytes(bytes))?)
+        };
+        (Some(asker.attach(Attachment::Arrow(rows))?), logical)
+    } else {
+        (None, None)
+    };
     Ok(OperationResult::DescribeSource(DescribedSource {
         description,
         frame_rows,
+        frame_decimals,
         notes: vec![],
     }))
 }

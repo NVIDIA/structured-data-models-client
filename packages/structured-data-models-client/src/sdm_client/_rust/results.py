@@ -267,6 +267,7 @@ class Described:
     description: int
     notes: tuple[ViewNote, ...] = ()
     frame_rows: int | None = None
+    frame_decimals: int | None = None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -308,6 +309,7 @@ def _described(read: dict[str, Any]) -> Described:
     return Described(
         description=_int(read['description'], 'description'),
         frame_rows=_maybe(read.get('frame_rows'), _int, 'frame_rows'),
+        frame_decimals=_maybe(read.get('frame_decimals'), _int, 'frame_decimals'),
         # Left out where there is none, which the reading gives as None.
         notes=tuple(
             _note(note) for note in _list(read.get('notes') or [], 'notes')
@@ -541,7 +543,11 @@ _RESULTS: dict[str, tuple[tuple[str, ...], tuple[str, ...], Any]] = {
         (),
         lambda read: InferredFrames(_int(read['value'], 'value')),
     ),
-    'describe_source': (('description',), ('notes', 'frame_rows'), _described),
+    'describe_source': (
+        ('description',),
+        ('notes', 'frame_rows', 'frame_decimals'),
+        _described,
+    ),
     'edit_schema': (('schema',), ('declared',), _edited),
     'materialize': (
         ('state',),

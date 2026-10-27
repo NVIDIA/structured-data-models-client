@@ -2,7 +2,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Public Decimal constructor journeys, before serialized composition.
+"""Public Decimal constructor journeys over the shared staged core reader.
 
 Frozen source: schema.py:1919/2022 and wire/dtypes.py:198/307 at 43e55f4f.
 The paired route exercises the public constructor; it does not call the new
@@ -219,7 +219,9 @@ def raw_series(bits, precision, scale, values):
 @pytest.mark.parametrize('bits', [128, 256])
 @pytest.mark.parametrize('scale', [-129, -128, -1, 0, 1, 2, 129])
 @pytest.mark.parametrize('key', [False, True])
-def test_full_native_scale_descriptor_is_not_narrowed(monkeypatch, bits, scale, key):
+def test_full_native_scale_descriptor_is_not_narrowed(
+    monkeypatch, bits, scale, key
+):
     # Both frozen runtime cells accept these descriptors, including native
     # scale outside i8 and scale greater than precision.
     name = 'value_id' if key else 'value'
@@ -279,14 +281,20 @@ def test_repeated_key_error_uses_original_native_decimal_scalar(
 
 
 @pytest.mark.parametrize('bits', [128, 256])
-def test_missing_key_advice_can_change_later_decimal_scale_and_example(monkeypatch, bits):
+def test_missing_key_advice_can_change_later_decimal_scale_and_example(
+    monkeypatch, bits
+):
     outcomes = []
     make = pa.decimal128 if bits == 128 else pa.decimal256
     for core in (False, True):
-        frame = pd.DataFrame({
-            'value_id': series([None] + [Decimal(i) for i in range(1, 100)], make(3, 0)),
-            'measurement': np.arange(100, dtype='float64'),
-        })
+        frame = pd.DataFrame(
+            {
+                'value_id': series(
+                    [None] + [Decimal(i) for i in range(1, 100)], make(3, 0)
+                ),
+                'measurement': np.arange(100, dtype='float64'),
+            }
+        )
         changed = False
         monkeypatch.setenv('SDM_CORE_ROUTES', PATHS if core else '')
         with warnings.catch_warnings(record=True) as caught:
@@ -298,7 +306,9 @@ def test_missing_key_advice_can_change_later_decimal_scale_and_example(monkeypat
                 if not changed:
                     assert 'have no value for it' in str(message)
                     changed = True
-                    frame['value_id'] = raw_series(bits, 3, 129, [1, 1] + list(range(2, 100)))
+                    frame['value_id'] = raw_series(
+                        bits, 3, 129, [1, 1] + list(range(2, 100))
+                    )
                 show(message, *args, **kwargs)
 
             warnings.showwarning = mutate
@@ -314,7 +324,9 @@ def test_missing_key_advice_can_change_later_decimal_scale_and_example(monkeypat
 
 @pytest.mark.parametrize('bits', [128, 256])
 @pytest.mark.parametrize('scale', [-129, 129])
-def test_decimal_public_inspection_edits_and_snapshot_ownership(monkeypatch, bits, scale):
+def test_decimal_public_inspection_edits_and_snapshot_ownership(
+    monkeypatch, bits, scale
+):
     outcomes = []
     for core in (False, True):
         frame = pd.DataFrame({'value_id': raw_series(bits, 1, scale, [0, 1])})
@@ -334,18 +346,26 @@ def test_decimal_public_inspection_edits_and_snapshot_ownership(monkeypatch, bit
 
 @pytest.mark.parametrize('bits', [128, 256])
 @pytest.mark.parametrize('scale', [-129, 129])
-def test_decimal_constructor_rereads_mutated_native_buffers(monkeypatch, bits, scale):
+def test_decimal_constructor_rereads_mutated_native_buffers(
+    monkeypatch, bits, scale
+):
     outcomes = []
     make = pa.decimal128 if bits == 128 else pa.decimal256
     for core in (False, True):
         width = bits // 8
-        backing = bytearray(width) + bytearray((1).to_bytes(width, 'little', signed=True))
-        array = pa.Array.from_buffers(make(1, scale), 2, [None, pa.py_buffer(backing)])
-        frame = pd.DataFrame({'value_id': pd.Series(pd.arrays.ArrowExtensionArray(array))})
+        backing = bytearray(width) + bytearray(
+            (1).to_bytes(width, 'little', signed=True)
+        )
+        array = pa.Array.from_buffers(
+            make(1, scale), 2, [None, pa.py_buffer(backing)]
+        )
+        frame = pd.DataFrame(
+            {'value_id': pd.Series(pd.arrays.ArrowExtensionArray(array))}
+        )
         monkeypatch.setenv('SDM_CORE_ROUTES', PATHS if core else '')
         before = Schema.from_data({'rows': frame})
         snapshot = before.snapshot()
-        backing[width:2 * width] = bytes(width)
+        backing[width : 2 * width] = bytes(width)
         after = Schema.from_data({'rows': frame})
         assert snapshot['rows'].primary_key == 'value_id'
         assert after['rows'].primary_key is None

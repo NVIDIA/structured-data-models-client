@@ -58,6 +58,14 @@ fn bound_tables(
     bindings
         .into_iter()
         .map(|binding| {
+            // This unfinished materializer has not implemented logical
+            // native Decimal values. Never silently treat a constructor's
+            // scale-zero mantissa attachment as its model-input values.
+            if !binding.decimals.is_empty() {
+                return Err(invalid(
+                    "native Decimal declarations require a materializer logical-value consumer",
+                ));
+            }
             let Some(Attachment::Arrow(data)) = attachments.remove(&binding.rows) else {
                 return Err(invalid("a frame binding lacks its Arrow rows"));
             };

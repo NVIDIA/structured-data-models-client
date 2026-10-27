@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! Typed native Decimal descriptor/storage binding, unlinked until composition.
+//! Typed native Decimal descriptor/storage binding.
 //! Physical buffers use the existing closed scale-zero Decimal128/256 types.
 //! The original logical scale remains a signed-i32 fact, never an Arrow cast.
 

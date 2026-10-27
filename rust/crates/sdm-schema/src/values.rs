@@ -52,6 +52,9 @@ pub(crate) enum Value {
     /// as the float64 the reference's cast gives it.
     Float(u64),
     Text(String),
+    /// Exact native Decimal comparison key within a fixed-type frame field.
+    /// Provider/SQL preview Decimal inference retains its existing branch.
+    Decimal(crate::frames::decimal::Unscaled),
 }
 
 /// The values of column `index` of `batches`, in row order.
@@ -343,7 +346,7 @@ pub(crate) fn instants(batches: &[RecordBatch], index: usize) -> Vec<Option<i128
 /// decimal, text, a date, a timestamp or a time of day; `None` when null or
 /// of another type.
 pub(crate) fn scalar(array: &dyn Array, row: usize) -> Option<Scalar> {
-    use arrow_array::types::{Date32Type as D, Decimal128Type as Dec};
+    use arrow_array::types::{Date32Type as D, Decimal128Type as Dec, Decimal256Type as WideDec};
     if row >= array.len() || array.is_null(row) {
         return None;
     }
@@ -363,6 +366,11 @@ pub(crate) fn scalar(array: &dyn Array, row: usize) -> Option<Scalar> {
             precision: *precision,
             scale: *scale,
             value: array.as_primitive::<Dec>().value(row),
+        },
+        DataType::Decimal256(precision, scale) => Scalar::Decimal256 {
+            precision: *precision,
+            scale: *scale,
+            value: array.as_primitive::<WideDec>().value(row),
         },
         DataType::Utf8 => Scalar::Utf8(array.as_string::<i32>().value(row).to_owned()),
         DataType::Date32 => Scalar::Date32(array.as_primitive::<D>().value(row)),

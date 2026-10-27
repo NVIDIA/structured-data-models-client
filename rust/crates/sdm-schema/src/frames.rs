@@ -5,13 +5,17 @@
 //! Primitive native-frame inference, distinct from SQL catalog/preview
 //! inference. Shared value/equality and schema assembly rules stay shared.
 
+pub(crate) mod decimal;
+mod decimal_storage;
+
 use std::collections::{BTreeMap, BTreeSet};
 
 use arrow_array::RecordBatch;
 use arrow_schema::{DataType, Schema};
 use sdm_contract::data::Relation;
 use sdm_contract::frames::{
-    FrameAdoption, FrameInferred, FrameNomination, FrameSample, FrameSampleColumn, TimeChoice,
+    FrameAdoption, FrameInferred, FrameNomination, FrameSample, FrameSampleColumn, NativeDecimal,
+    NativeDecimalColumn, TimeChoice,
 };
 use sdm_contract::ops::DescribedTable;
 use sdm_contract::ops::{Dtype, SourceDescription, Stype};
@@ -21,12 +25,74 @@ use crate::infer::{InferredColumn, InferredTable};
 use crate::keys::{Counted, KEY_UNIQUENESS};
 use crate::values::{self, Floats, Value};
 
+/// One stage's borrowed physical columns and original logical Decimal facts.
+/// Shared host admission has already checked and detached the Arrow buffers.
+pub struct Columns<'a> {
+    schema: &'a Schema,
+    batches: &'a [RecordBatch],
+    decimals: BTreeMap<usize, &'a NativeDecimal>,
+}
+
+impl<'a> Columns<'a> {
+    pub fn new(
+        schema: &'a Schema,
+        batches: &'a [RecordBatch],
+        decimals: &'a [NativeDecimalColumn],
+    ) -> Result<Self, CoreError> {
+        Ok(Self {
+            schema,
+            batches,
+            decimals: decimal_storage::bindings(schema, decimals)?,
+        })
+    }
+
+    fn read(&self, at: usize) -> Result<(Vec<Option<Value>>, Dtype), CoreError> {
+        let native = if let Some(native) = self.decimals.get(&at) {
+            Some(decimal_storage::read(self.batches, at, native)?)
+        } else {
+            decimal::read(self.batches, at, self.schema.field(at).data_type())
+        };
+        if let Some(native) = native {
+            Ok((
+                native
+                    .values
+                    .into_iter()
+                    .map(|v| v.map(Value::Decimal))
+                    .collect(),
+                native.dtype,
+            ))
+        } else {
+            let values = values::column(self.batches, at, Floats::Frame)?;
+            let dtype = column_dtype(self.schema.field(at).data_type(), &values)?;
+            Ok((values, dtype))
+        }
+    }
+
+    fn values(&self, at: usize) -> Result<Vec<Option<Value>>, CoreError> {
+        self.read(at).map(|(values, _)| values)
+    }
+
+    fn scales(&self) -> BTreeMap<usize, i32> {
+        self.decimals
+            .iter()
+            .map(|(&at, native)| {
+                let scale = match native {
+                    NativeDecimal::Decimal128 { scale, .. }
+                    | NativeDecimal::Decimal256 { scale, .. } => *scale,
+                };
+                (at, scale)
+            })
+            .collect()
+    }
+}
+
 /// One table's primitive inference and call-local row statistics.
 pub struct Read {
     pub table: InferredTable,
     values: Vec<Vec<Option<Value>>>,
     batches: Vec<RecordBatch>,
     bindings: Vec<Option<usize>>,
+    decimal_scales: BTreeMap<usize, i32>,
     pub rows: usize,
 }
 
@@ -89,14 +155,31 @@ impl Read {
 
     fn fields(&self, key: &[String], count: &Counted) -> Vec<(&'static str, Detail)> {
         let examples = count.example.clone().unwrap_or_default();
-        vec![
+        let mut fields = vec![
             ("table", Detail::text(&self.table.name)),
             ("key", Detail::text(key.join("."))),
             ("columns", texts(key)),
             ("repeats", number(count.repeats())),
             ("rows", number(count.rows)),
             ("example", Detail::List(examples)),
-        ]
+        ];
+        let scales: Vec<_> = key
+            .iter()
+            .map(|name| {
+                self.table
+                    .columns
+                    .iter()
+                    .position(|c| &c.name == name)
+                    .and_then(|at| self.bindings[at])
+                    .and_then(|at| self.decimal_scales.get(&at).copied())
+                    .map(Scalar::Int32)
+                    .unwrap_or(Scalar::Null)
+            })
+            .collect();
+        if scales.iter().any(|scale| !matches!(scale, Scalar::Null)) {
+            fields.push(("example_decimal_scales", Detail::List(scales)));
+        }
+        fields
     }
 
     fn repeated(&self, key: &[String], count: &Counted) -> CoreWarning {
@@ -409,6 +492,14 @@ pub fn sample(
     schema: &Schema,
     batches: &[RecordBatch],
 ) -> Result<(FrameSample, Vec<CoreWarning>), CoreError> {
+    sample_from(column, &Columns::new(schema, batches, &[])?)
+}
+
+pub fn sample_from(
+    column: FrameSampleColumn,
+    input: &Columns<'_>,
+) -> Result<(FrameSample, Vec<CoreWarning>), CoreError> {
+    let schema = input.schema;
     if column.column.dtype != Dtype::String || column.column.stype != Stype::Categorical {
         return Err(CoreError::protocol(
             Sentence::InvalidMessage,
@@ -431,7 +522,7 @@ pub fn sample(
         .iter()
         .position(|field| field.name() == &column.column.name);
     let values = at
-        .map(|at| values::column(batches, at, Floats::Frame))
+        .map(|at| input.values(at))
         .transpose()?
         .unwrap_or_default();
     let distinct = values::distinct(&values) as u64;
@@ -453,11 +544,18 @@ pub fn sample(
 /// A fresh stated-key check/adoption after the metadata edit, without
 /// renominating columns or reselecting the earlier inferred time choice.
 pub fn adopt_stated(
-    mut value: FrameInferred,
+    value: FrameInferred,
     schema: &Schema,
     batches: &[RecordBatch],
 ) -> Result<(FrameInferred, Vec<CoreWarning>), CoreError> {
-    let read = observe(&value.table, value.time.clone(), schema, batches)?;
+    adopt_stated_from(value, &Columns::new(schema, batches, &[])?)
+}
+
+pub fn adopt_stated_from(
+    mut value: FrameInferred,
+    input: &Columns<'_>,
+) -> Result<(FrameInferred, Vec<CoreWarning>), CoreError> {
+    let read = observe_from(&value.table, value.time.clone(), input)?;
     let notices = read.hold_stated(&value.table.primary_key)?;
     value.table.duplicate_keys = Some(Scalar::UInt64(
         read.count(&value.table.primary_key).repeats(),
@@ -473,20 +571,16 @@ pub fn adopt_stated(
 
 /// Whole-table frame inference, not preview-sized SQL inference. This first
 /// consumer accepts NumPy/pandas masked numeric/Boolean arrays, native
-/// timestamp arrays and built-in pandas text, without object or Decimal conversion. Native
-/// conversion has already encoded missingness in Arrow validity.
-fn read_columns(
-    name: &str,
-    source: &Relation,
-    schema: &Schema,
-    batches: &[RecordBatch],
-) -> Result<Read, CoreError> {
+/// timestamp arrays, built-in pandas text and exact native Arrow Decimals.
+/// Native conversion has already encoded missingness in Arrow validity.
+fn read_columns(name: &str, source: &Relation, input: &Columns<'_>) -> Result<Read, CoreError> {
+    let schema = input.schema;
+    let batches = input.batches;
     let rows = batches.iter().map(RecordBatch::num_rows).sum();
     let mut columns = Vec::new();
     let mut all_values = Vec::new();
     for (at, field) in schema.fields().iter().enumerate() {
-        let values = values::column(batches, at, Floats::Frame)?;
-        let dtype = column_dtype(field.data_type(), &values)?;
+        let (values, dtype) = input.read(at)?;
         let stype = match dtype {
             Dtype::Int64 | Dtype::Float32 | Dtype::Float64 => Stype::Numerical,
             Dtype::Bool => Stype::Categorical,
@@ -531,6 +625,7 @@ fn read_columns(
         values: all_values,
         batches: batches.to_vec(),
         bindings: (0..schema.fields().len()).map(Some).collect(),
+        decimal_scales: input.scales(),
         table: InferredTable {
             name: name.into(),
             source: source.clone(),
@@ -555,7 +650,15 @@ pub fn nominate(
     schema: &Schema,
     batches: &[RecordBatch],
 ) -> Result<(FrameNomination, Vec<CoreWarning>), CoreError> {
-    let mut read = read_columns(name, source, schema, batches)?;
+    nominate_from(name, source, &Columns::new(schema, batches, &[])?)
+}
+
+pub fn nominate_from(
+    name: &str,
+    source: &Relation,
+    input: &Columns<'_>,
+) -> Result<(FrameNomination, Vec<CoreWarning>), CoreError> {
+    let mut read = read_columns(name, source, input)?;
     let nominated_key = std::mem::take(&mut read.table.primary_key);
     let count = read.count(&nominated_key);
     let notices = if count.missing > 0 {
@@ -621,6 +724,16 @@ pub fn observe(
     schema: &Schema,
     batches: &[RecordBatch],
 ) -> Result<Read, CoreError> {
+    observe_from(table, time, &Columns::new(schema, batches, &[])?)
+}
+
+pub fn observe_from(
+    table: &DescribedTable,
+    time: TimeChoice,
+    input: &Columns<'_>,
+) -> Result<Read, CoreError> {
+    let schema = input.schema;
+    let batches = input.batches;
     let bindings: Vec<_> = table
         .columns
         .iter()
@@ -629,7 +742,7 @@ pub fn observe(
     let values = bindings
         .iter()
         .map(|at| match at {
-            Some(at) => values::column(batches, *at, Floats::Frame),
+            Some(at) => input.values(*at),
             None => Ok(vec![]),
         })
         .collect::<Result<_, _>>()?;
@@ -639,19 +752,27 @@ pub fn observe(
         values,
         bindings,
         batches: batches.to_vec(),
+        decimal_scales: input.scales(),
     })
 }
 
 /// Adopt the fixed nominee using current rows, then fix repeat count/advice.
 pub fn adopt(
-    mut nomination: FrameNomination,
+    nomination: FrameNomination,
     schema: &Schema,
     batches: &[RecordBatch],
+) -> Result<(FrameAdoption, Vec<CoreWarning>), CoreError> {
+    adopt_from(nomination, &Columns::new(schema, batches, &[])?)
+}
+
+pub fn adopt_from(
+    mut nomination: FrameNomination,
+    input: &Columns<'_>,
 ) -> Result<(FrameAdoption, Vec<CoreWarning>), CoreError> {
     nomination.table.primary_key = nomination.nominated_key;
     nomination.table.frame_key_form = (!nomination.table.primary_key.is_empty())
         .then_some(sdm_contract::frames::FrameKeyForm::Scalar);
-    let read = observe(&nomination.table, TimeChoice::default(), schema, batches)?;
+    let read = observe_from(&nomination.table, TimeChoice::default(), input)?;
     let count = read.count(&nomination.table.primary_key);
     nomination.table.duplicate_keys =
         Some(Scalar::UInt64(if nomination.table.primary_key.is_empty() {
@@ -683,7 +804,15 @@ pub fn choose_time(
     schema: &Schema,
     batches: &[RecordBatch],
 ) -> Result<FrameInferred, CoreError> {
-    let read = observe(&adopted.table, TimeChoice::default(), schema, batches)?;
+    choose_time_from(adopted, &Columns::new(schema, batches, &[])?)
+}
+
+pub fn choose_time_from(
+    adopted: FrameAdoption,
+    input: &Columns<'_>,
+) -> Result<FrameInferred, CoreError> {
+    let batches = input.batches;
+    let read = observe_from(&adopted.table, TimeChoice::default(), input)?;
     for (at, c) in read.table.columns.iter().enumerate() {
         if c.stype == Stype::Timestamp
             && !read.table.primary_key.contains(&c.name)

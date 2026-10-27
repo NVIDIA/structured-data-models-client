@@ -12,6 +12,7 @@ import json
 import warnings
 from collections.abc import Mapping, Sequence
 from contextlib import AbstractContextManager
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
@@ -20,6 +21,10 @@ import pandas as pd
 from sdm_client._routing import RouteError
 from sdm_client._rust import codec, errors, results
 from sdm_client._rust import schema as schemas
+from sdm_client._rust.frame_decimals import (
+    native_decimal_column,
+    native_decimal_type,
+)
 from sdm_client._rust.run import Finished, run
 from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.errors import StructuredDataError
@@ -51,7 +56,16 @@ def _frame_example(
     # A mixed numeric pandas row can widen its components; typed Arrow
     # scalar repr alone would not reproduce that presentation.
     pieces = []
-    for name, value in zip(columns, fields['example'], strict=True):
+    scales = fields.get('example_decimal_scales', [None] * len(columns))
+    for name, value, scale in zip(
+        columns, fields['example'], scales, strict=True
+    ):
+        if scale is not None:
+            # The core selected the mantissa and original logical scale.
+            # Reconstruct its actual native representation from digits,
+            # without Decimal arithmetic or context rounding.
+            parts = value.as_tuple()
+            value = Decimal((parts.sign, parts.digits, -scale))
         dtype = types[name]
         if type(dtype) in (pd.Float32Dtype, pd.Float64Dtype):
             # The core selected a present scalar. Construct its native
@@ -247,6 +261,7 @@ def _convert(
     for column in frame.columns:
         series = frame[column]
         dtype = series.dtype
+        decimal = native_decimal_column(series)
         numeric = _numeric_physical(dtype) is not None
         temporal = (
             isinstance(dtype, np.dtype)
@@ -283,9 +298,9 @@ def _convert(
             # Arrow timestamps also remain unfinished: native scalar
             # boxing can overflow or turn a present ns MIN into NaT, which
             # affects time choice at its consumed row and constructor stage.
-        if not (numeric or temporal or text or arrow):
+        if not (numeric or temporal or text or arrow or decimal is not None):
             raise RouteError(
-                f'the partial frame constructor supports only NumPy or pandas masked numeric and Boolean columns, native datetimes, built-in pandas strings, or built-in Arrow integer, Boolean or string columns: {name}.{column}'
+                f'the partial frame constructor supports only NumPy or pandas masked numeric and Boolean columns, native datetimes, built-in pandas strings, or built-in Arrow integer, Boolean, string or Decimal columns: {name}.{column}'
             )
         # Convert values only. DataFrame export may add a non-Range index
         # column, which the public schema constructor never describes.
@@ -295,7 +310,9 @@ def _convert(
         # chunks and widths. Do not reconstruct it from Python values or
         # apply pandas missing-value inference.
         arrays.append(
-            series.array.__arrow_array__()
+            decimal[0]
+            if decimal is not None
+            else series.array.__arrow_array__()
             if arrow
             else _primitive_array(series)
         )
@@ -329,9 +346,18 @@ def _describe(
     attached: dict[int, Any] = {1: codec.attachment(spec)}
     try:
         for ordinal, (name, rows) in enumerate(frames.items(), 3):
-            manifest['tables'].append(
-                {'source': codec.relation(name), 'rows': ordinal}
-            )
+            entry: dict[str, Any] = {
+                'source': codec.relation(name),
+                'rows': ordinal,
+            }
+            decimals = [
+                {'column': at, 'name': column, 'decimal': descriptor}
+                for at, (column, dtype) in enumerate(native_types[name].items())
+                if (descriptor := native_decimal_type(dtype)) is not None
+            ]
+            if decimals:
+                entry['decimals'] = decimals
+            manifest['tables'].append(entry)
             attached[ordinal] = rows
         if inference is not None:
             inference_id = max(2, max(attached)) + 1

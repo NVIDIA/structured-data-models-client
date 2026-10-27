@@ -65,6 +65,28 @@ pub enum FrameStage {
 pub struct FrameInput {
     pub source: Relation,
     pub rows: AttachmentId,
+    /// Original native Decimal types of this attachment's typed mantissas.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub decimals: Vec<NativeDecimalColumn>,
+}
+
+/// Original logical type beside scale-zero Decimal128/256 mantissa storage.
+/// Native scale is the complete signed-i32 fact, including scale greater
+/// than precision; it is not narrowed to Arrow Rust's physical i8 scale.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+pub enum NativeDecimal {
+    Decimal128 { precision: u8, scale: i32 },
+    Decimal256 { precision: u8, scale: i32 },
+}
+
+/// One logical native Decimal type bound to the same FrameInput field.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct NativeDecimalColumn {
+    pub column: usize,
+    pub name: String,
+    pub decimal: NativeDecimal,
 }
 
 /// The first frame materializer's ordered, call-local Arrow bindings.
