@@ -4,6 +4,8 @@
 
 //! The fixed model-neutral constructor and per-call native observation boundary.
 
+mod relational;
+
 use crate::run::{ArrowData, Asker, Attachment, Attachments};
 use arrow_array::{RecordBatch, RecordBatchOptions};
 use arrow_schema::{Field, Schema};
@@ -280,6 +282,7 @@ pub(crate) async fn run(
     mut attached: Attachments,
 ) -> Result<OperationResult, CoreError> {
     let value = match input {
+        Preparation::Relational { input } => serde_json::to_value(relational::prepare(&asker, input)?),
         Preparation::EncodeBody { input } => return encode_body(&asker, input, attached),
         Preparation::CheckResponseRows {
             scope,

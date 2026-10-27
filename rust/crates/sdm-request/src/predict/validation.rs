@@ -7,6 +7,55 @@
 //! reached boundaries; neither source determines limits or warning policy.
 
 use super::*;
+use sdm_contract::prepare::{RelationalTargetNaming, RelationalTargetRole, RelationalTaskMeaning};
+use sdm_contract::scalar::unicode::UnicodeText;
+
+pub fn wire_target_name() -> Vec<u32> {
+    WIRE_TARGET.chars().map(u32::from).collect()
+}
+
+pub fn task_meaning(kind: Vec<u32>) -> Result<RelationalTaskMeaning, CoreError> {
+    let value = UnicodeText::from_points(kind.iter().copied()).map_err(|_| {
+        CoreError::protocol(Sentence::InvalidMessage, "native task has invalid Unicode points")
+    })?;
+    let classification = value
+        .as_bytes()
+        .windows(b"classification".len())
+        .any(|window| window == b"classification");
+    let regression = value.utf8() == Some("regression");
+    Ok(RelationalTaskMeaning {
+        kind,
+        role: if classification {
+            RelationalTargetRole::Classification
+        } else if regression {
+            RelationalTargetRole::Regression
+        } else {
+            RelationalTargetRole::Other
+        },
+        summarized: regression || value.utf8() == Some("forecasting"),
+    })
+}
+
+pub fn target_naming(wire_target: bool, query: &UnicodeText) -> RelationalTargetNaming {
+    if !wire_target {
+        return RelationalTargetNaming::Column;
+    }
+    // Only an ordinary prefix can match the existing identifier grammar.
+    // The shared matcher requires a following whitespace character, so an
+    // exceptional point cannot become an invented end-of-input boundary.
+    let prefix = match std::str::from_utf8(query.as_bytes()) {
+        Ok(text) => text,
+        Err(error) => std::str::from_utf8(&query.as_bytes()[..error.valid_up_to()])
+            .expect("UTF-8 error identifies a valid prefix"),
+    };
+    if let Some(value) = predicted_column(prefix) {
+        RelationalTargetNaming::Predicted { value: value.to_owned() }
+    } else if query.is_empty() {
+        RelationalTargetNaming::Answer
+    } else {
+        RelationalTargetNaming::Question
+    }
+}
 
 pub fn context_empty(empty: bool, model: &str) -> Result<(), CoreError> {
     if empty {
@@ -41,8 +90,15 @@ pub fn variation(
     if answered_classes != 1 || (!classifies(kind) && kind != "regression") {
         return Ok(None);
     }
-    let constant = constant_context(column, query);
-    if classifies(kind) {
+    constant(classifies(kind), constant_context(column, query), model)
+}
+
+pub fn constant(
+    classification: bool,
+    constant: Notice,
+    model: &str,
+) -> Result<Option<Notice>, CoreError> {
+    if classification {
         let sentence = match constant.sentence {
             Sentence::ContextConstantColumn => Sentence::OneClassColumn,
             Sentence::ContextConstantPredicted => Sentence::OneClassPredicted,
@@ -58,6 +114,46 @@ pub fn variation(
         return Err(error.with_field("classes_in_context", count(1)));
     }
     Ok(Some(constant))
+}
+
+pub fn native_constant(
+    role: RelationalTargetRole,
+    naming: &RelationalTargetNaming,
+    display: Option<&UnicodeText>,
+    model: &str,
+) -> Result<Option<Notice>, CoreError> {
+    let points = |name, value: &UnicodeText| {
+        (name, Detail::List(value.points().map(|point| Scalar::UInt32(point)).collect()))
+    };
+    let mut fields = vec![("target", Detail::text(WIRE_TARGET))];
+    let (variant, sentence) = match naming {
+        RelationalTargetNaming::Column => {
+            let value = display.ok_or_else(|| CoreError::protocol(Sentence::InvalidMessage, "a native column name has no display observation"))?;
+            fields.push(points("target_points", value));
+            ("column", Sentence::ContextConstantColumn)
+        }
+        RelationalTargetNaming::Predicted { value } => {
+            fields.push(("predicted", Detail::text(value)));
+            ("predicted", Sentence::ContextConstantPredicted)
+        }
+        RelationalTargetNaming::Question => {
+            let value = display.ok_or_else(|| CoreError::protocol(Sentence::InvalidMessage, "a native question has no repr observation"))?;
+            fields.push(("question", Detail::text("")));
+            fields.push(points("question_repr_points", value));
+            ("question", Sentence::ContextConstantQuestion)
+        }
+        RelationalTargetNaming::Answer => ("answer", Sentence::ContextConstantAnswer),
+    };
+    if !matches!(naming, RelationalTargetNaming::Column | RelationalTargetNaming::Question) && display.is_some() {
+        return Err(CoreError::protocol(Sentence::InvalidMessage, "native display supplied for a name that does not consume one"));
+    }
+    fields.push(("variant", Detail::text(variant)));
+    fields.push(("native_relational_constant", Detail::Scalar(Scalar::Bool(true))));
+    constant(role == RelationalTargetRole::Classification, Notice {
+        sentence,
+        message: "every context row has the same answer",
+        fields,
+    }, model)
 }
 
 pub fn explanation_size(scored: usize, model: &str) -> Result<(), CoreError> {

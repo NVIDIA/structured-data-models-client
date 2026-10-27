@@ -5,6 +5,14 @@
 //! Closed direct-request preparation stages and useful call-local values.
 //! Native equality facts describe ordered headers; the core owns validation.
 
+pub mod relational;
+
+pub use relational::{
+    NativeTargetEquality, RelationalContextFacts, RelationalPreparation, RelationalPrepared,
+    RelationalConstantTarget, RelationalTargetNaming, RelationalTargetPopulation, RelationalTargetRole,
+    RelationalTargetUse, RelationalTaskMeaning,
+};
+
 use crate::data::AttachmentId;
 use crate::ops::{Dtype, Given, HeldSchema, SourceDescription, Stype};
 use crate::{ColumnType, Scalar};
@@ -255,6 +263,9 @@ pub struct TabularEnvelope {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "stage", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Preparation {
+    Relational {
+        input: RelationalPreparation,
+    },
     EncodeBody {
         input: DirectBody,
     },
@@ -423,6 +434,7 @@ pub struct EncodedDirectBody {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(untagged)]
 pub enum PreparedValue {
+    Relational(RelationalPrepared),
     Arguments(ConstructorArguments),
     Headers(ConstructorHeaders),
     Schema(ConstructorSchema),
