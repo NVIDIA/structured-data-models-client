@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The typed numeric/time frame consumer: detached rows, sanitized key maps
+//! The typed numeric/time/text frame consumer: detached rows, sanitized key maps
 //! and DF-1 adjacency, with RS-3 draws owned by its caller's checkpoint.
 //! No provider, SQL renderer or host callback participates in this walk.
 
@@ -42,6 +42,11 @@ fn named<'a>(batch: &'a RecordBatch, name: &str) -> Result<&'a ArrayRef, CoreErr
 /// Reuse the shared numeric identifier reader, applying native missingness.
 /// Boolean features do not enter this identifying-key path.
 fn read_keys(array: &ArrayRef) -> Result<Vec<Option<Key>>, CoreError> {
+    // Text features are supported independently of identifying columns.
+    // Keep both offset widths outside the numeric-key frame consumer.
+    if matches!(array.data_type(), DataType::Utf8 | DataType::LargeUtf8) {
+        return Err(crate::not_yet("frame_text_key"));
+    }
     let mut values = keys::read(array)?;
     if let Some(array) = array.as_any().downcast_ref::<Float32Array>() {
         for (row, value) in values.iter_mut().enumerate() {
@@ -217,10 +222,12 @@ impl Snapshot {
                         | DataType::Float32
                         | DataType::Float64
                         | DataType::Timestamp(_, _)
+                        | DataType::Utf8
+                        | DataType::LargeUtf8
                 )
             }) {
                 return Err(invalid(
-                    "the numeric frame consumer received another native family",
+                    "the frame consumer received an unsupported native family",
                 ));
             }
             let rows = timestamps(rows)?;

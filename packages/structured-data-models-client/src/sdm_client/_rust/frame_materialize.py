@@ -20,6 +20,8 @@ from sdm_client._rust.frames import _convert
 
 def inputs(schema: Any, state: dict[str, Any]) -> dict[int, Any]:
     """Convert live inputs once; resume from opaque checkpoint owners."""
+    import pyarrow as pa
+
     tables = []
     attached: dict[int, Any] = {}
     checkpoint = state.get('held', {}).get('frame_checkpoint')
@@ -30,7 +32,19 @@ def inputs(schema: Any, state: dict[str, Any]) -> dict[int, Any]:
                 raise RouteError(
                     'the partial frame materializer requires built-in DataFrames'
                 )
-            rows, _ = _convert(name, frame)
+            rows, native_types = _convert(name, frame)
+            # Exact Arrow LargeUTF8 has a frozen native-engine failure;
+            # StringDtype exports can use the same physical offset width.
+            # Keep this native family unfinished after generic conversion
+            # validation, and never inspect caller frames on checkpoint reuse.
+            if any(
+                type(dtype) is pd.ArrowDtype
+                and pa.types.is_large_string(dtype.pyarrow_dtype)
+                for dtype in native_types.values()
+            ):
+                raise RouteError(
+                    'exact Arrow large_string columns remain unfinished in the partial frame materializer'
+                )
             attached[number] = rows
             tables.append({'source': codec.relation(name), 'rows': number})
     attached[7] = codec.attachment(
