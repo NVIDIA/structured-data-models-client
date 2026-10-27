@@ -492,3 +492,71 @@ pub(super) fn labelled_rows(
     )
     .map_err(|_| internal("the labels do not make one batch"))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use arrow_array::cast::AsArray;
+    use arrow_array::types::Int64Type;
+    use sdm_contract::ErrorCode;
+
+    fn integers(values: Vec<i64>) -> ArrayRef {
+        Arc::new(Int64Array::from(values))
+    }
+
+    #[test]
+    fn immutable_task_rows_keep_context_and_exact_prediction_ranges() {
+        let predicted = integers(vec![7, 8, 7]);
+        let rows = TaskRows::new(
+            integers(vec![1, 3]),
+            vec![10, 20],
+            Arc::clone(&predicted),
+            99,
+        )
+        .unwrap();
+        let batch = rows.batch(1..3).unwrap();
+        assert_eq!(batch.range, 1..3);
+        assert_eq!(
+            batch.keys.as_primitive::<Int64Type>().values().as_ref(),
+            &[1, 3, 8, 7]
+        );
+        assert_eq!(batch.anchors, [10, 20, 99, 99]);
+        assert_eq!(
+            batch
+                .predicted
+                .as_primitive::<Int64Type>()
+                .values()
+                .as_ptr(),
+            predicted.as_primitive::<Int64Type>().values()[1..].as_ptr()
+        );
+        let earlier = rows.batch(0..1).unwrap();
+        assert_eq!(earlier.range, 0..1);
+        assert_eq!(
+            earlier.keys.as_primitive::<Int64Type>().values().as_ref(),
+            &[1, 3, 7]
+        );
+        assert_eq!(earlier.anchors, [10, 20, 99]);
+        assert_eq!(rows.context_anchors, [10, 20]);
+        assert_eq!(predicted.len(), 3);
+    }
+
+    #[test]
+    fn task_row_shapes_and_ranges_are_checked_before_arrow_slicing() {
+        let error = TaskRows::new(integers(vec![1]), vec![], integers(vec![7]), 0)
+            .err()
+            .expect("misaligned task anchors were accepted");
+        assert_eq!(error.code, ErrorCode::InvalidMessage);
+        let rows = TaskRows::new(integers(vec![1]), vec![0], integers(vec![7]), 0).unwrap();
+        for range in [2..2, 0..2, 1..0] {
+            let error = rows
+                .batch(range)
+                .err()
+                .expect("invalid task range was accepted");
+            assert_eq!(error.code, ErrorCode::InvalidMessage);
+        }
+        let empty = rows.batch(1..1).unwrap();
+        assert_eq!(empty.keys.len(), 1);
+        assert!(empty.predicted.is_empty());
+        assert_eq!(empty.anchors, [0]);
+    }
+}
