@@ -18,25 +18,35 @@ use sdm_contract::{CONTRACT_VERSION, ControlMessage, HostFacts, Scalar, Step, Ti
 use sdm_host::{ArrowData, Attachment, Attachments, HostRun};
 use serde_json::json;
 
+type OwnedDecimalRows = (ArrowData, Vec<NativeDecimalColumn>);
+
 fn start(column: ArrayRef) -> SourceDescription {
     start_native(column, None)
 }
 
 fn start_native(column: ArrayRef, native: Option<NativeDecimal>) -> SourceDescription {
     let batch = RecordBatch::try_from_iter([("value_id", column)]).unwrap();
-    let decimals = native.into_iter().map(|decimal| NativeDecimalColumn {
-        column: 0,
-        name: "value_id".into(),
-        decimal,
-    }).collect();
-    start_rows(ArrowData::new(batch.schema(), vec![batch]), decimals, "schema").0
+    let decimals = native
+        .into_iter()
+        .map(|decimal| NativeDecimalColumn {
+            column: 0,
+            name: "value_id".into(),
+            decimal,
+        })
+        .collect();
+    start_rows(
+        ArrowData::new(batch.schema(), vec![batch]),
+        decimals,
+        "schema",
+    )
+    .0
 }
 
 fn start_rows(
     rows: ArrowData,
     decimals: Vec<NativeDecimalColumn>,
     stage: &str,
-) -> (SourceDescription, Option<(ArrowData, Vec<NativeDecimalColumn>)>) {
+) -> (SourceDescription, Option<OwnedDecimalRows>) {
     let operation: Operation = serde_json::from_value(json!({
         "op":"describe_source", "provider":{"provider":"frames","manifest":2},
         "source":1,"check_keys":true
@@ -86,10 +96,7 @@ fn start_rows(
                 .unwrap(),
             ),
         ),
-        (
-            AttachmentId(3),
-            Attachment::Arrow(rows),
-        ),
+        (AttachmentId(3), Attachment::Arrow(rows)),
     ]);
     let run = HostRun::start(&sdm_host::default_root(), &message, attached)
         .unwrap_or_else(|out| panic!("{:?}", sdm_host::read(&out)));
@@ -100,17 +107,24 @@ fn start_rows(
                 result: OperationResult::DescribeSource(result),
                 ..
             }) => {
+                if result.frame_rows.is_none() {
+                    assert!(result.frame_decimals.is_none());
+                }
                 let Attachment::Bytes(bytes) =
                     run.take_attachment(result.description).unwrap().unwrap()
                 else {
                     panic!("description must be bytes")
                 };
-                let decimals = result.frame_decimals.map(|id| {
-                    let Attachment::Bytes(bytes) = run.take_attachment(id).unwrap().unwrap() else {
-                        panic!("logical Decimal descriptors must be bytes")
-                    };
-                    serde_json::from_slice::<Vec<NativeDecimalColumn>>(&bytes).unwrap()
-                }).unwrap_or_default();
+                let decimals = result
+                    .frame_decimals
+                    .map(|id| {
+                        let Attachment::Bytes(bytes) = run.take_attachment(id).unwrap().unwrap()
+                        else {
+                            panic!("logical Decimal descriptors must be bytes")
+                        };
+                        serde_json::from_slice::<Vec<NativeDecimalColumn>>(&bytes).unwrap()
+                    })
+                    .unwrap_or_default();
                 let owned = result.frame_rows.map(|id| {
                     let Attachment::Arrow(rows) = run.take_attachment(id).unwrap().unwrap() else {
                         panic!("owned rows must be Arrow")
@@ -130,31 +144,53 @@ fn detached_table_rows_rebind_with_original_full_scale_descriptors() {
         for wide in [false, true] {
             let (array, decimal): (ArrayRef, NativeDecimal) = if wide {
                 (
-                    Arc::new(Decimal256Array::from(vec![i256::from_i128(0), i256::from_i128(1)])
-                        .with_precision_and_scale(1, 0).unwrap()),
-                    NativeDecimal::Decimal256 { precision: 1, scale },
+                    Arc::new(
+                        Decimal256Array::from(vec![i256::from_i128(0), i256::from_i128(1)])
+                            .with_precision_and_scale(1, 0)
+                            .unwrap(),
+                    ),
+                    NativeDecimal::Decimal256 {
+                        precision: 1,
+                        scale,
+                    },
                 )
             } else {
                 (
-                    Arc::new(Decimal128Array::from(vec![0, 1])
-                        .with_precision_and_scale(1, 0).unwrap()),
-                    NativeDecimal::Decimal128 { precision: 1, scale },
+                    Arc::new(
+                        Decimal128Array::from(vec![0, 1])
+                            .with_precision_and_scale(1, 0)
+                            .unwrap(),
+                    ),
+                    NativeDecimal::Decimal128 {
+                        precision: 1,
+                        scale,
+                    },
                 )
             };
             let batch = RecordBatch::try_from_iter([("value_id", array)]).unwrap();
             let declarations = vec![NativeDecimalColumn {
-                column: 0, name: "value_id".into(), decimal,
+                column: 0,
+                name: "value_id".into(),
+                decimal,
             }];
             let (table, owned) = start_rows(
-                ArrowData::new(batch.schema(), vec![batch]), declarations.clone(), "table",
+                ArrowData::new(batch.schema(), vec![batch]),
+                declarations.clone(),
+                "table",
             );
             let (rows, rebound) = owned.expect("Table returns detached rows and logical types");
             assert_eq!(rebound, declarations);
             let (schema, owned) = start_rows(rows, rebound, "schema");
             assert!(owned.is_none());
             assert_eq!(schema, table);
-            assert_eq!(schema.tables[0].columns[0].dtype,
-                if scale > 0 { Dtype::Float64 } else { Dtype::Int64 });
+            assert_eq!(
+                schema.tables[0].columns[0].dtype,
+                if scale > 0 {
+                    Dtype::Float64
+                } else {
+                    Dtype::Int64
+                }
+            );
         }
     }
 }

@@ -1609,7 +1609,7 @@ impl Run {
                     let mut tables = Vec::new();
                     for (source, data) in checkpoint.tables {
                         let rows = attach(&mut shared, Attachment::Arrow(data))?;
-                        tables.push(sdm_contract::frames::FrameInput { source, rows });
+                        tables.push(sdm_contract::frames::FrameInput { source, rows, decimals: vec![] });
                     }
                     let manifest = sdm_contract::frames::FrameCheckpointManifest {
                         metadata,

@@ -834,6 +834,7 @@ pub(crate) async fn describe_source(
     let id = asker.attach(Attachment::Bytes(bytes))?;
     Ok(OperationResult::DescribeSource(DescribedSource {
         frame_rows: None,
+        frame_decimals: None,
         description: id,
         notes,
     }))
