@@ -265,6 +265,9 @@ It does not settle temporal aggregation, timed entities, text-time rules, rankin
 
 ### T4.6 – Tabular preparation and one-shot prediction
 
+The first approved bounded development package is [direct numeric preparation and prediction](t46-direct-numeric.md), using working contract 34.
+It completes the explicitly selected direct numeric journey while PQL preparation, sorting, sessions and broader native families remain separate obligations.
+
 - Move `materializers/tabular.py` and `adapters/tabular.py` into `sdm-core::tabular` and `sdm-request::tabular`, with the direct constructor's model-neutral data-dependent validation in `sdm-core::prepare`, reusing wire/result primitives.
 - Support direct context/predict frames and single-table PQL via both indices and supplied predict rows, preserving constructor-time generic refusals and explicit task, PQL-only task derivation/overrides, later model/profile preflight, schema widening across both halves, identity mapping and empty scoring.
 - Preserve holdout/leakage behavior, remove rows with unknown targets before sampling, implement the 10,000-context-row limit and warning at the appropriate materialization/model-preflight boundary, and implement RS-5's core-selected fixed-seed sample followed by core sorting of that subset using T4.1's proven input facts and algorithm.

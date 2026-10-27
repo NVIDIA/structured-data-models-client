@@ -328,6 +328,7 @@ class Request:
     # the core did not materialize, which predict on the core predicts from
     # what it holds, as the old client does (T3.26).
     _core: CoreRequest | None = None
+    _direct: Any = None
 
     def __init__(
         self,
@@ -369,6 +370,24 @@ class Request:
                 from ``context``, or ``predict`` carries the target column.
             UnsupportedRequestError: If ``related_tables`` is given.
         """
+        from sdm_client import _routing
+
+        if _routing.direct_constructor_on_core():
+            from sdm_client._rust.prepare import construct
+
+            construct(
+                self,
+                context,
+                predict,
+                target=target,
+                task=task,
+                related_tables=related_tables,
+                schema=schema,
+                entity_table=entity_table,
+                inference=inference,
+                task_options=task_options,
+            )
+            return
         context = _require_frame(context, 'context')
         predict = _require_frame(predict, 'predict')
         related = {

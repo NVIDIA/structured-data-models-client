@@ -78,6 +78,8 @@ fn source(relation: &str, dtype: Dtype, received: ColumnType, unique: bool) -> O
 
 fn held_column(name: &str, dtype: Dtype, stype: Stype, facts: Option<SourceFacts>) -> HeldColumn {
     HeldColumn {
+        untyped: false,
+        stype_declared: false,
         name: name.into(),
         dtype: dtype.wire_name().into(),
         stype,

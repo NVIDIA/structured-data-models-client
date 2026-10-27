@@ -301,9 +301,21 @@ fn count(n: usize) -> Detail {
 
 /// The result of a request's answer, attached.
 fn finish(asker: &Asker, merged: Part, outputs: Vec<String>) -> Result<OperationResult, CoreError> {
+    finish_direct(asker, merged, outputs, None)
+}
+
+pub(crate) fn finish_direct(
+    asker: &Asker,
+    merged: Part,
+    outputs: Vec<String>,
+    names_rows: Option<bool>,
+) -> Result<OperationResult, CoreError> {
     let laid = table(&merged)?;
     let mut named = laid.schema().metadata().clone();
     named.insert("absent".to_owned(), absent_text(&merged)?);
+    if let Some(names_rows) = names_rows {
+        named.insert("names_its_rows".into(), names_rows.to_string());
+    }
     let schema = std::sync::Arc::new(laid.schema().as_ref().clone().with_metadata(named));
     let laid = laid
         .with_schema(std::sync::Arc::clone(&schema))
@@ -371,7 +383,8 @@ pub(crate) async fn one(
         let starts = call_starts(&payloads)?;
         let mut parts = Vec::with_capacity(payloads.len());
         for ((payload, bytes), start) in payloads.iter().zip(bodies).zip(starts) {
-            let answered = match call(asker, payload, bytes, inputs.endpoint.as_ref()).await {
+            let answered = match call(asker, payload, bytes, inputs.endpoint.as_ref(), false).await
+            {
                 Ok(part) => numbered_from(part, start),
                 Err(error) => Err(error),
             };
@@ -393,11 +406,12 @@ pub(crate) async fn one(
 
 /// One payload's call, its body as written, sent and its answer laid out;
 /// to a serving endpoint, in its envelope, its answer read out of its row.
-async fn call(
+pub(crate) async fn call(
     asker: &Asker,
     payload: &Value,
     bytes: Vec<u8>,
     endpoint: Option<&ModelEndpoint>,
+    tabular: bool,
 ) -> Result<Part, CoreError> {
     let serving = endpoint.map(
         |ModelEndpoint::ServingEndpoint {
@@ -481,6 +495,19 @@ async fn call(
         (Reply::Fetch(_), _) => return Err(internal("a model call was answered as a fetch")),
         (Reply::Failed(error), _) => return Err(error),
     };
-    let response = PredictionResponse::read(&answer).map_err(refused)?;
-    layout(payload, &response, crate::pql::float_text)
+    let response = PredictionResponse::read(&answer).map_err(|error| {
+        if tabular && error.field == "prediction.row_index" && error.reason == "missing" {
+            CoreError::new(
+                Sentence::TabularRowMissing,
+                "a tabular response lacks row attribution",
+            )
+        } else {
+            refused(error)
+        }
+    })?;
+    if tabular {
+        sdm_request::tabular::layout(payload, &response, crate::pql::float_text)
+    } else {
+        layout(payload, &response, crate::pql::float_text)
+    }
 }

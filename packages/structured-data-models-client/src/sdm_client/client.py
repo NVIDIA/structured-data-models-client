@@ -860,9 +860,14 @@ def _predicts_on_the_core(request: Request) -> Any | None:
     """
     schema = getattr(request, 'schema', None)
     source = getattr(schema, 'source', None)
-    if not request.payloads:
-        return None
     from sdm_client import _routing
+
+    if not request.payloads:
+        if _routing.route(_routing.DIRECT_PREDICT) == 'core':
+            from sdm_client._rust import prepare
+
+            return prepare
+        return None
 
     if not _routing.on_the_core(source, _routing.PREDICT):
         return None

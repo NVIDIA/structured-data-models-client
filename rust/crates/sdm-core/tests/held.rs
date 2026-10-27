@@ -178,6 +178,7 @@ fn try_run(
             contract: CONTRACT_VERSION,
             facts: facts(),
             operation: Operation::Predict(Predict {
+                direct: None,
                 state,
                 held,
                 model: "kumo-relational".into(),

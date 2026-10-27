@@ -117,6 +117,8 @@ fn held(description: &SourceDescription) -> HeldSchema {
                     .columns
                     .iter()
                     .map(|c| HeldColumn {
+                        untyped: false,
+                        stype_declared: false,
                         name: c.name.clone(),
                         dtype: c.dtype.wire_name().into(),
                         stype: c.stype,

@@ -276,6 +276,8 @@ impl HostRun {
             // complete dynamic attachment set before admission/copying, then
             // detach foreign buffers before a later next() can read them.
             let frames = match &start.operation {
+                sdm_contract::ops::Operation::PrepareRequest(_) => true,
+                sdm_contract::ops::Operation::Predict(request) => request.direct.is_some(),
                 sdm_contract::ops::Operation::DescribeSource(request) => matches!(
                     request.provider,
                     sdm_contract::data::ProviderChoice::Frames { .. }

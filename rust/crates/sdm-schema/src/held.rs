@@ -377,6 +377,8 @@ fn held_column(
     let at = (table.name.clone(), column.name.clone());
     let lacking = unfacted.contains(&at);
     HeldColumn {
+        untyped: false,
+        stype_declared: false,
         name: column.name.clone(),
         dtype: column.dtype.wire_name().to_owned(),
         stype: column.stype,
