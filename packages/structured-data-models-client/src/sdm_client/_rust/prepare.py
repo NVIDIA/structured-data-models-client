@@ -65,6 +65,7 @@ def _call(
             'direct_lookup': TypeError,
             'direct_ambiguous': ValueError,
             'direct_predict_dtype': AttributeError,
+            'direct_nullable_cast': pd.errors.IntCastingNaNError,
             'direct_schema_missing': KeyError,
             'direct_unfinished': RouteError,
         }.get(error._sentence)
@@ -131,6 +132,13 @@ def _header(frame: pd.DataFrame) -> dict[str, Any]:
                     )
                 )
                 is not None
+                else None,
+                'float_storage': (
+                    'nan_missing'
+                    if isinstance(frame.iloc[:, at].dtype, np.dtype)
+                    else 'validity_masked'
+                )
+                if physical in ('float32', 'float64')
                 else None,
             }
             for at, name in enumerate(frame.columns)
@@ -297,7 +305,6 @@ def construct(
     request.inference = dict(inference or {})
     request.requested_inference = dict(inference or {})
     request.entity_table = entity_table
-    request._direct = results.DirectRequest.from_contract(answer)
 
 
 def _json(value: Any) -> Any:
@@ -326,6 +333,17 @@ def _json(value: Any) -> Any:
             )
         entries.append((key, encoded))
     return {'entries': entries}
+
+
+def _cast_message(scored: pd.DataFrame, fields: Any) -> str:
+    """Present the native wording of the cast fault already selected by Rust."""
+    try:
+        scored.iloc[:, fields['ordinal']].dropna().astype('int64')
+    except pd.errors.IntCastingNaNError as error:
+        return str(error)
+    raise RouteError(
+        'the selected native cast fault no longer matches its captured column'
+    )
 
 
 def predict(
@@ -388,26 +406,79 @@ def predict(
         # The reference's empty result reads no context values or inference.
         scored = request.predict.instance_table
         value = {
+            'stage': 'empty',
             'bound': call,
-            'empty': True,
             'schema': spec.held_schema(request.schema),
             'entity_table': request.entity_table,
             'predict_header': _header(scored),
         }
     else:
+        # One-shot overlap advice runs before the adapter captures its refs.
+        schema = request.schema
+        entity_table = request.entity_table
+        target = request.task.target.column_name
+        context = request.context.instance_table
+        scored = request.predict.instance_table
+        context_header, predict_header = _header(context), _header(scored)
+        overlap = _call(
+            {
+                'stage': 'overlap',
+                'input': {
+                    'bound': call,
+                    'context': 2,
+                    'predict': 3,
+                    'context_header': context_header,
+                    'predict_header': predict_header,
+                    'schema': spec.held_schema(schema),
+                    'entity_table': entity_table,
+                    'target': target,
+                    'task': request.task.kind,
+                },
+            },
+            {
+                2: _buffers(context, context_header),
+                3: _buffers(scored, predict_header),
+            },
+        )
+        # A leakage warning may have replaced Request's references. Capture
+        # the adapter's references now and retain them across its text advice.
         schema = request.schema
         context = request.context.instance_table
         scored = request.predict.instance_table
         context_header, predict_header = _header(context), _header(scored)
+        with errors.holding(
+            direct_nullable_cast=lambda fields: _cast_message(scored, fields)
+        ):
+            envelope = _call(
+                {
+                    'stage': 'envelope',
+                    'input': {
+                        'overlap': overlap,
+                        'context': 2,
+                        'predict': 3,
+                        'context_header': context_header,
+                        'predict_header': predict_header,
+                        'schema': spec.held_schema(schema),
+                        'entity_table': request.entity_table,
+                        'target': request.task.target.column_name,
+                        'task': request.task.kind,
+                    },
+                },
+                {
+                    2: _buffers(context, context_header),
+                    3: _buffers(scored, predict_header),
+                },
+            )
+        # The same captured frames are read after text advice. In-place edits
+        # are visible, while replacement Request references are not recaptured.
+        context_header, predict_header = _header(context), _header(scored)
         value = {
-            'bound': call,
+            'stage': 'body',
+            'envelope': envelope,
             'context': 2,
             'predict': 3,
             'context_header': context_header,
             'predict_header': predict_header,
-            'schema': spec.held_schema(schema),
-            'entity_table': request.entity_table,
-            'target': request.task.target.column_name,
             'task': request.task.kind,
             'inference': _json(request.inference),
         }

@@ -35,10 +35,19 @@ pub fn resolved_attachments(
             if let Some(Attachment::Bytes(bytes)) = attachments.get(&request.input) {
                 let input: sdm_contract::prepare::Preparation = serde_json::from_slice(bytes)
                     .map_err(|_| invalid("unreadable direct preparation input", request.input))?;
-                if let sdm_contract::prepare::Preparation::Schema {
-                    context, predict, ..
-                } = input
-                {
+                let rows = match input {
+                    sdm_contract::prepare::Preparation::Schema {
+                        context, predict, ..
+                    } => Some((context, predict)),
+                    sdm_contract::prepare::Preparation::Overlap { input } => {
+                        Some((input.context, input.predict))
+                    }
+                    sdm_contract::prepare::Preparation::Envelope { input } => {
+                        Some((input.context, input.predict))
+                    }
+                    _ => None,
+                };
+                if let Some((context, predict)) = rows {
                     named.extend([
                         (context, AttachmentKind::Arrow),
                         (predict, AttachmentKind::Arrow),
@@ -52,8 +61,15 @@ pub fn resolved_attachments(
             if let Some(Attachment::Bytes(bytes)) = attachments.get(&id) {
                 let input: sdm_contract::prepare::DirectPredict = serde_json::from_slice(bytes)
                     .map_err(|_| invalid("unreadable direct predict input", id))?;
-                named.extend(input.context.map(|id| (id, AttachmentKind::Arrow)));
-                named.extend(input.predict.map(|id| (id, AttachmentKind::Arrow)));
+                if let sdm_contract::prepare::DirectPredict::Body {
+                    context, predict, ..
+                } = input
+                {
+                    named.extend([
+                        (context, AttachmentKind::Arrow),
+                        (predict, AttachmentKind::Arrow),
+                    ]);
+                }
             }
             return Ok(named);
         }

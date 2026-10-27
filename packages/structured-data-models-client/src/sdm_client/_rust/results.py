@@ -42,7 +42,6 @@ __all__ = [
     'Part',
     'Predicted',
     'Prepared',
-    'DirectRequest',
     'QueryFacts',
     'Ranking',
     'SourceFacts',
@@ -515,32 +514,6 @@ class Prepared:
     """The input-sized value of one fixed direct preparation stage."""
 
     value: int
-
-
-@dataclasses.dataclass(frozen=True)
-class DirectRequest:
-    """Model-neutral constructor meaning, never a gathered wire payload."""
-
-    version: int
-    task: str
-    target: str
-    description: Any
-    schema: Any
-
-    @classmethod
-    def from_contract(cls, value: Any) -> DirectRequest:
-        read = _fields(
-            value,
-            'a prepared direct request',
-            ('version', 'task', 'target', 'description', 'schema'),
-        )
-        return cls(
-            _int(read['version'], 'version'),
-            _text(read['task'], 'task'),
-            _text(read['target'], 'target'),
-            read['description'],
-            read['schema'],
-        )
 
 
 _RESULTS: dict[str, tuple[tuple[str, ...], tuple[str, ...], Any]] = {
