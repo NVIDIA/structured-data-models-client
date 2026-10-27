@@ -10,6 +10,7 @@ import copy
 import json
 import warnings
 from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
@@ -55,7 +56,7 @@ def core(request, monkeypatch):
     return selected
 
 
-def question(unit='ns', zone=None):
+def question(unit='ns', zone=None, *, precise=False, mixed=False):
     counts = np.array(
         [1, -2, 0, -1, -1, 2, 0, 3]
         if unit == 's'
@@ -64,6 +65,31 @@ def question(unit='ns', zone=None):
     )
     if unit != 's':
         counts *= {'ms': 1, 'us': 1000, 'ns': 1_000_000}[unit]
+    if precise:
+        counts = np.array(
+            [
+                1200001,
+                -1800003,
+                500005,
+                -1200007,
+                -1500009,
+                -700011,
+                13,
+                -500015,
+            ]
+            if unit == 'us'
+            else [
+                1200000001,
+                -1800000003,
+                500000005,
+                -1200000007,
+                -1500000009,
+                -700000011,
+                13,
+                -500000015,
+            ],
+            dtype='int64',
+        )
     dates = pd.Series(np.tile(counts, 8).view(f'datetime64[{unit}]'))
     if zone is not None:
         dates = dates.dt.tz_localize('UTC').dt.tz_convert(zone)
@@ -84,9 +110,19 @@ def question(unit='ns', zone=None):
             }
         ),
     }
+    primary = {'users': 'user_id', 'events': 'event_id'}
+    if mixed:
+        frames['notes'] = pd.DataFrame(
+            {
+                'note_id': np.arange(96),
+                'user_id': np.repeat(np.arange(1, 9), 12),
+                'note_marker': np.arange(1000, 1096),
+            }
+        )
+        primary['notes'] = 'note_id'
     schema = Schema.from_data(
         frames,
-        primary_keys={'users': 'user_id', 'events': 'event_id'},
+        primary_keys=primary,
         time_columns={'events': 'at'},
     )
     return (
@@ -95,14 +131,16 @@ def question(unit='ns', zone=None):
     )
 
 
-def materialize(asked, anchor='default', *, neighbors=(2,), hops=1, **options):
+def materialize(
+    asked, anchor='default', *, neighbors=(2,), hops=1, seed=7, **options
+):
     at = {} if anchor == 'default' else {'anchor_time': pd.Timestamp(anchor)}
     return asked.materialize(
         indices=[7, 8],
         num_context_samples=3,
         num_neighbors=list(neighbors),
         num_hops=hops,
-        random_seed=7,
+        random_seed=seed,
         **at,
         **options,
     )
@@ -133,12 +171,16 @@ class Scripted:
         pass
 
 
-def predict(request):
+def predict(request, expected):
     scripted = Scripted()
-    with SDMClient('http://localhost:1', max_retries=0) as client:
-        client._transport.close()
-        client._transport = scripted
-        result = client.predict(request, model=KumoRelational())
+    ids = [call['metadata']['request_id'] for call in expected]
+    # UUID generation is a host fact. Replay its captured values so the
+    # whole payload remains strict, including the metadata field itself.
+    with patch('sdm_client.adapters.relational._request_id', side_effect=ids):
+        with SDMClient('http://localhost:1', max_retries=0) as client:
+            client._transport.close()
+            client._transport = scripted
+            result = client.predict(request, model=KumoRelational())
     return result.to_pandas(), scripted.calls
 
 
@@ -149,7 +191,7 @@ def test_typed_timestamp_journey_keeps_the_frozen_payload(core, unit, anchor):
     asked, frames = question(unit)
     request = materialize(asked, observed['anchor'])
     before = copy.deepcopy(request.payloads)
-    result, sent = predict(request)
+    result, sent = predict(request, observed['sent'])
     assert sent == observed['sent']
     assert request.payloads == before
     assert result['id'].tolist() == [7, 8]
@@ -162,7 +204,7 @@ def test_typed_timestamp_journey_keeps_the_frozen_payload(core, unit, anchor):
 def test_typed_zones_keep_utc_instants_and_second_ties(core, zone):
     observed = REFERENCE['cases']['ns-positive']
     asked, _ = question('ns', zone)
-    _, sent = predict(materialize(asked, observed['anchor']))
+    _, sent = predict(materialize(asked, observed['anchor']), observed['sent'])
     assert sent == observed['sent']
 
 
@@ -189,7 +231,7 @@ def test_sanitization_keeps_key_then_time_precedence_and_snapshot(
             for w in caught
             if 'graph was built' in str(w.message)
         ] == wanted
-        _, sent = predict(request)
+        _, sent = predict(request, observed['sent'])
         assert sent == observed['sent']
         events['at'] = pd.date_range('2026-01-01', periods=64, freq='D')
 
@@ -207,7 +249,9 @@ def test_all_missing_times_refuse_before_notice_and_do_not_cache_failure(core):
     assert str(failed.value) == expected['message']
     assert not any('graph was built' in str(w.message) for w in caught)
     frames['events']['at'] = original
-    _, sent = predict(materialize(asked))
+    _, sent = predict(
+        materialize(asked), REFERENCE['cases']['ns-default']['sent']
+    )
     assert sent == REFERENCE['cases']['ns-default']['sent']
 
 
@@ -226,7 +270,7 @@ def test_time_drop_warning_as_error_keeps_snapshot_before_selection(core):
     frames['events']['at'] = pd.date_range('2026-01-01', periods=64, freq='D')
     with pytest.warns(SDMWarning, match='2 with no time'):
         request = materialize(asked, observed['anchor'])
-    _, sent = predict(request)
+    _, sent = predict(request, observed['sent'])
     assert sent == observed['sent']
 
 
@@ -248,7 +292,7 @@ def test_temporal_walk_and_call_boundaries_keep_recorded_payloads(core, case):
         hops=observed['hops'],
         **options,
     )
-    result, sent = predict(request)
+    result, sent = predict(request, observed['sent'])
     assert sent == observed['sent']
     assert result['id'].tolist() == [7, 8]
 
@@ -301,3 +345,81 @@ def test_wide_counts_stay_lossless_and_remain_an_unfinished_materializer_family(
         assert failed.value.code == expected['code']
         assert str(failed.value) == expected['message']
     assert frames['events']['at'].astype('int64').tolist() == raw
+
+
+@pytest.mark.parametrize('unit', ['us', 'ns'])
+@pytest.mark.parametrize('anchor', ['positive', 'negative'])
+def test_submillisecond_and_submicrosecond_feature_counts_reach_the_frozen_wire(
+    core, unit, anchor
+):
+    observed = REFERENCE['submicro_cases'][f'{unit}-{anchor}']
+    asked, frames = question(unit, precise=True)
+    assert (
+        frames['events']['at'].astype('int64').tolist()
+        == observed['input_counts']
+    )
+    request = materialize(asked, observed['anchor'])
+    _, sent = predict(request, observed['sent'])
+    assert sent == observed['sent']
+    assert (
+        frames['events']['at'].astype('int64').tolist()
+        == observed['input_counts']
+    )
+
+
+def test_mixed_temporal_cuts_leave_seeded_and_continuing_static_draws_intact(
+    core,
+):
+    asked, frames = question(mixed=True)
+    assert frames['notes'].groupby('user_id').size().tolist() == [12] * 8
+    predictions = []
+    for observed in REFERENCE['mixed_calls']:
+        request = materialize(asked, observed['anchor'], seed=observed['seed'])
+        _, sent = predict(request, observed['sent'])
+        # Unseeded context identity uses native entropy; every scored row,
+        # feature and temporal/static neighbor remains an exact witness.
+        assert sent[0]['predict'] == observed['sent'][0]['predict']
+        if observed['seed'] is not None:
+            assert sent == observed['sent']
+        predictions.append(sent[0]['predict'])
+    assert predictions[0] != predictions[1]
+    assert predictions[2] == predictions[3]
+    fresh, _ = question(mixed=True)
+    observed = REFERENCE['mixed_fresh']
+    _, sent = predict(
+        materialize(fresh, observed['anchor'], seed=None), observed['sent']
+    )
+    assert sent[0]['predict'] == predictions[0]
+
+
+def test_all_invalid_static_keys_keep_the_original_exact_requirements_message(
+    core,
+):
+    frames = {
+        'users': pd.DataFrame({'user_id': [1, 2, 3], 'age': [20, 30, 40]}),
+        'notes': pd.DataFrame(
+            {
+                'note_id': [1, 2, 3, 4, 5, 6],
+                'user_id': [1, 1, 2, 2, 3, 3],
+                'amount': [1, 2, 3, 4, 5, 6],
+            }
+        ),
+    }
+    schema = Schema.from_data(
+        frames,
+        primary_keys={'users': 'user_id', 'notes': 'note_id'},
+        time_columns={},
+    )
+    asked = PredictiveQuery('PREDICT users.age FOR EACH users.user_id', schema)
+    frames['users']['user_id'] = pd.Series([pd.NA] * 3, dtype='Int64')
+    with pytest.raises(StructuredDataError) as failed:
+        asked.materialize(
+            indices=[3],
+            num_context_samples=1,
+            num_neighbors=[2],
+            num_hops=1,
+            random_seed=7,
+        )
+    expected = REFERENCE['all_invalid_static']
+    assert failed.value.code == expected['code']
+    assert str(failed.value) == expected['message']

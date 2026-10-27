@@ -372,3 +372,77 @@ fn all_missing_times_refuse_before_snapshot_or_sanitization_notice() {
         assert!(decoded(&state)["state"]["frame_checkpoint"].is_null());
     }
 }
+
+#[test]
+fn precise_features_follow_frozen_wire_rounding_and_retain_original_checkpoint_counts() {
+    let oracle: Value = serde_json::from_str(include_str!(
+        "../../../../packages/structured-data-models-client/tests/t44_temporal_reference.json"
+    ))
+    .unwrap();
+    for (name, unit) in [("us", TimeUnit::Microsecond), ("ns", TimeUnit::Nanosecond)] {
+        for (side, anchor) in [("positive", 100_000_000), ("negative", -800_000_000)] {
+            let observed = &oracle["submicro_cases"][format!("{name}-{side}")];
+            let counts: Vec<i64> = observed["input_counts"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|value| value.as_i64().unwrap())
+                .collect();
+            let times: ArrayRef = match unit {
+                TimeUnit::Microsecond => Arc::new(TimestampMicrosecondArray::from(counts.clone())),
+                TimeUnit::Nanosecond => Arc::new(TimestampNanosecondArray::from(counts.clone())),
+                _ => unreachable!(),
+            };
+            let mut attached = inputs(unit, false, None);
+            let replacement = {
+                let Attachment::Arrow(data) = &attached[&AttachmentId(9)] else {
+                    panic!("original event rows")
+                };
+                let batch = &data.batches[0];
+                let mut columns = batch.columns().to_vec();
+                let at = batch.schema().index_of("at").unwrap();
+                columns[at] = times;
+                let batch = RecordBatch::try_new(batch.schema(), columns).unwrap();
+                Attachment::Arrow(ArrowData::new(batch.schema(), vec![batch]))
+            };
+            attached.insert(AttachmentId(9), replacement);
+            let run = HostRun::start(&sdm_host::default_root(), &message(Some(anchor)), attached)
+                .unwrap();
+            let result = terminal(&run).unwrap_or_else(|error| panic!("{:?}", decoded(&error)));
+            let written = payload(&run, result);
+            assert_eq!(
+                values(&written, "events", "at"),
+                values(&observed["sent"][0], "events", "at"),
+            );
+            let (state, owned) = checkpoint(&run);
+            let bindings = manifest(&state, &owned);
+            let event = bindings["tables"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|binding| binding["source"]["source"] == json!(["events"]))
+                .unwrap();
+            let id = AttachmentId(event["rows"].as_u64().unwrap() as u32);
+            let Attachment::Arrow(data) = &owned[&id] else {
+                panic!("original checkpoint event rows")
+            };
+            let original = data.batches[0].column_by_name("at").unwrap();
+            let retained = match unit {
+                TimeUnit::Microsecond => original
+                    .as_any()
+                    .downcast_ref::<TimestampMicrosecondArray>()
+                    .unwrap()
+                    .values()
+                    .to_vec(),
+                TimeUnit::Nanosecond => original
+                    .as_any()
+                    .downcast_ref::<TimestampNanosecondArray>()
+                    .unwrap()
+                    .values()
+                    .to_vec(),
+                _ => unreachable!(),
+            };
+            assert_eq!(retained, counts);
+        }
+    }
+}
