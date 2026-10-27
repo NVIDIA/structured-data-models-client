@@ -103,6 +103,15 @@ fn finish_response(
     value: AttachmentId,
     native_member: Option<(&str, bool)>,
 ) -> Result<HostRun, sdm_contract::CoreError> {
+    finish_response_limit(run, value, native_member, 4300)
+}
+
+fn finish_response_limit(
+    run: &HostRun,
+    value: AttachmentId,
+    native_member: Option<(&str, bool)>,
+    decimal_limit: u32,
+) -> Result<HostRun, sdm_contract::CoreError> {
     let mut data: Value = serde_json::from_slice(&response_bytes(run, value)).unwrap();
     let mut buffers = Attachments::new();
     for (n, name) in ["payload", "response", "rows"].iter().enumerate() {
@@ -160,7 +169,7 @@ fn finish_response(
     buffers.insert(AttachmentId(5), bytes(json!(accepted)));
     buffers.insert(
         AttachmentId(1),
-        bytes(json!({"stage":"layout_response","data":data,"attributed":5})),
+        bytes(json!({"stage":"layout_response","data":data,"attributed":5,"decimal_limit":decimal_limit})),
     );
     let layout = start(json!({"op":"prepare_request","input":1}), buffers);
     Ok(layout)
@@ -1304,6 +1313,75 @@ fn encoded_int64_cells_reach_final_predict_only_in_the_shared_canonical_form() {
     }
 }
 
+fn classified_result(
+    integer: bool,
+    label: Value,
+    probabilities: serde_json::Map<String, Value>,
+    decimal_limit: u32,
+) -> ArrowData {
+    let feature = Arc::new(arrow_array::Int64Array::from(vec![1, 2, 3])) as ArrayRef;
+    let target = if integer {
+        Arc::new(arrow_array::Int64Array::from(vec![2, 4, 6])) as ArrayRef
+    } else {
+        Arc::new(Float64Array::from(vec![2., 4., 6.])) as ArrayRef
+    };
+    let context = [RecordBatch::try_from_iter([("0", feature), ("1", target)]).unwrap()];
+    let scoring = [RecordBatch::try_from_iter([(
+        "0",
+        Arc::new(arrow_array::Int64Array::from(vec![4, 5])) as ArrayRef,
+    )])
+    .unwrap()];
+    let mut input = prelude(
+        &["feature", "target"],
+        &["feature"],
+        &context,
+        &scoring,
+        &[],
+    );
+    input["task"] = json!("classification");
+    input["bound"] = bound_as(3, "classification");
+    let envelope = plan(input.clone(), &context, &scoring);
+    let run = encoded_prediction(json!({"envelope":envelope,"context":2,"predict":3,"context_header":input["context_header"],"predict_header":input["predict_header"],"task":"classification","primary_key":[],"inference":{}}), attached_batches(&context,&scoring), json!({"op":"predict","direct":1,"model":"kumo-tabular","request_id":"sdm-fixed","outputs":["prediction","probabilities"],"default_outputs":true})).unwrap();
+    let ControlMessage::Step(Step::CallModel(call)) = next(&run) else {
+        panic!("model call")
+    };
+    let answer = json!({"id":"direct-fixture","model":"kumo-tabular","metadata":{},"predictions":(0..2).map(|i|json!({"row_index":i,"id":i.to_string(),"prediction":label,"probabilities":probabilities})).collect::<Vec<_>>()});
+    let reply = sdm_host::encode(&ControlMessage::ModelReply(ModelReply {
+        id: call.id,
+        outcome: ModelOutcome::Response {
+            status: 200,
+            body: AttachmentId(100),
+            content_type: "application/json".into(),
+        },
+    }))
+    .unwrap();
+    run.reply(
+        &reply,
+        Attachments::from([(AttachmentId(100), bytes(answer))]),
+    )
+    .unwrap();
+    let ControlMessage::Step(Step::Done {
+        result: OperationResult::DecodedDirectResponse(decoded),
+        ..
+    }) = next(&run)
+    else {
+        panic!("decoded")
+    };
+    let laid = finish_response_limit(&run, decoded.value, None, decimal_limit).unwrap();
+    let message = next(&laid);
+    let ControlMessage::Step(Step::Done {
+        result: OperationResult::Predict(result),
+        ..
+    }) = message
+    else {
+        panic!("layout: {message:?}")
+    };
+    let Attachment::Arrow(result) = laid.take_attachment(result.result).unwrap().unwrap() else {
+        panic!("result")
+    };
+    result
+}
+
 #[test]
 fn numeric_class_layout_uses_the_existing_numeric_text_grammar_and_collision_rule() {
     use arrow_array::Array;
@@ -1321,70 +1399,10 @@ fn numeric_class_layout_uses_the_existing_numeric_text_grammar_and_collision_rul
         (false, "1_.5", "4", "1_.5", None),
         (false, "1_0.5", "10.5", "1_0.5", Some(10.5)),
     ] {
-        let feature = Arc::new(arrow_array::Int64Array::from(vec![1, 2, 3])) as ArrayRef;
-        let target = if integer {
-            Arc::new(arrow_array::Int64Array::from(vec![2, 4, 6])) as ArrayRef
-        } else {
-            Arc::new(Float64Array::from(vec![2., 4., 6.])) as ArrayRef
-        };
-        let context = [RecordBatch::try_from_iter([("0", feature), ("1", target)]).unwrap()];
-        let scoring = [RecordBatch::try_from_iter([(
-            "0",
-            Arc::new(arrow_array::Int64Array::from(vec![4, 5])) as ArrayRef,
-        )])
-        .unwrap()];
-        let mut input = prelude(
-            &["feature", "target"],
-            &["feature"],
-            &context,
-            &scoring,
-            &[],
-        );
-        input["task"] = json!("classification");
-        input["bound"] = bound_as(3, "classification");
-        let envelope = plan(input.clone(), &context, &scoring);
-        let run = encoded_prediction(json!({"envelope":envelope,"context":2,"predict":3,"context_header":input["context_header"],"predict_header":input["predict_header"],"task":"classification","primary_key":[],"inference":{}}), attached_batches(&context,&scoring), json!({"op":"predict","direct":1,"model":"kumo-tabular","request_id":"sdm-fixed","outputs":["prediction","probabilities"],"default_outputs":true})).unwrap();
-        let ControlMessage::Step(Step::CallModel(call)) = next(&run) else {
-            panic!("model call")
-        };
         let mut probabilities = serde_json::Map::new();
         probabilities.insert(label.to_owned(), json!(0.75));
         probabilities.insert(second_key.to_owned(), json!(0.25));
-        let answer = json!({"id":"direct-fixture","model":"kumo-tabular","metadata":{},"predictions":(0..2).map(|i|json!({"row_index":i,"id":i.to_string(),"prediction":label,"probabilities":probabilities})).collect::<Vec<_>>()});
-        let reply = sdm_host::encode(&ControlMessage::ModelReply(ModelReply {
-            id: call.id,
-            outcome: ModelOutcome::Response {
-                status: 200,
-                body: AttachmentId(100),
-                content_type: "application/json".into(),
-            },
-        }))
-        .unwrap();
-        run.reply(
-            &reply,
-            Attachments::from([(AttachmentId(100), bytes(answer))]),
-        )
-        .unwrap();
-        let ControlMessage::Step(Step::Done {
-            result: OperationResult::DecodedDirectResponse(decoded),
-            ..
-        }) = next(&run)
-        else {
-            panic!("decoded")
-        };
-        let laid = finish_response(&run, decoded.value, None).unwrap();
-        let message = next(&laid);
-        let ControlMessage::Step(Step::Done {
-            result: OperationResult::Predict(result),
-            ..
-        }) = message
-        else {
-            panic!("layout: {message:?}")
-        };
-        let Attachment::Arrow(result) = laid.take_attachment(result.result).unwrap().unwrap()
-        else {
-            panic!("result")
-        };
+        let result = classified_result(integer, json!(label), probabilities, 4300);
         let batch = &result.batches[0];
         let prediction = batch.column_by_name("prediction").unwrap();
         match expected_number {
@@ -1406,6 +1424,245 @@ fn numeric_class_layout_uses_the_existing_numeric_text_grammar_and_collision_rul
         assert!((0..keys.len()).any(|at| keys.value(at) == expected_key));
         assert_eq!(keys.len(), 2);
     }
+}
+
+#[test]
+fn final_integer_class_conversion_counts_original_digits_with_the_fresh_limit() {
+    use arrow_array::cast::AsArray;
+    use arrow_array::types::Int64Type;
+    for (zeros, limit, restored) in [
+        (639, 640, true),
+        (640, 640, false),
+        (650, 0, true),
+        (650, 640, false),
+    ] {
+        let label = format!("{}2", "0".repeat(zeros));
+        let probabilities =
+            serde_json::Map::from_iter([(label.clone(), json!(0.75)), ("4".into(), json!(0.25))]);
+        // Row-ID checks run under 4300 in the helper. Final conversion receives
+        // the explicitly later process observation, not any row's earlier limit.
+        let result = classified_result(true, json!(label), probabilities, limit);
+        let batch = &result.batches[0];
+        let prediction = batch.column_by_name("prediction").unwrap();
+        if restored {
+            assert_eq!(prediction.as_primitive::<Int64Type>().value(0), 2);
+        } else {
+            assert_eq!(prediction.as_string::<i32>().value(0), label);
+        }
+        let classes = batch
+            .column_by_name("probabilities")
+            .unwrap()
+            .as_map()
+            .value(0);
+        let keys = classes.column(0).as_string::<i32>();
+        assert!((0..keys.len()).any(|at| keys.value(at) == if restored { "2" } else { &label }));
+    }
+}
+
+#[test]
+fn whole_float_classes_use_exact_integer_conversion_and_existing_written_carrier() {
+    use arrow_array::cast::AsArray;
+    use arrow_array::types::{Float64Type, Int64Type};
+    for (value, digits, narrow) in [
+        (-9223372036854775808., "-9223372036854775808", true),
+        (9.21e18, "9210000000000000000", true),
+        (9223372036854774784., "9223372036854774784", true),
+        (9223372036854775808., "9223372036854775808", false),
+        (-9223372036854777856., "-9223372036854777856", false),
+    ] {
+        let result = classified_result(true, json!(value), serde_json::Map::new(), 4300);
+        let batch = &result.batches[0];
+        if narrow {
+            assert_eq!(
+                batch
+                    .column_by_name("prediction")
+                    .unwrap()
+                    .as_primitive::<Int64Type>()
+                    .value(0),
+                digits.parse::<i64>().unwrap()
+            );
+        } else {
+            assert_eq!(
+                batch
+                    .column_by_name("prediction_as_answered")
+                    .unwrap()
+                    .as_string::<i32>()
+                    .value(0),
+                digits
+            );
+        }
+    }
+    let result = classified_result(true, json!(1.5), serde_json::Map::new(), 4300);
+    assert_eq!(
+        result.batches[0]
+            .column_by_name("prediction")
+            .unwrap()
+            .as_primitive::<Float64Type>()
+            .value(0),
+        1.5
+    );
+}
+
+#[test]
+fn inferred_constructor_schema_precedes_fresh_remaining_guard_observations() {
+    fn batch(columns: Vec<ArrayRef>) -> RecordBatch {
+        RecordBatch::try_from_iter(
+            columns
+                .into_iter()
+                .enumerate()
+                .map(|(at, array)| (at.to_string(), array)),
+        )
+        .unwrap()
+    }
+    let initial_context = batch(vec![
+        Arc::new(arrow_array::Int64Array::from(
+            (0..100)
+                .map(|at| if at == 0 { None } else { Some(at) })
+                .collect::<Vec<_>>(),
+        )),
+        Arc::new(arrow_array::Int64Array::from_iter_values(0..100)),
+        Arc::new(arrow_array::Int64Array::from_iter_values(100..200)),
+    ]);
+    let initial_predict = batch(vec![
+        Arc::new(arrow_array::Int64Array::from(vec![100, 101])),
+        Arc::new(arrow_array::Int64Array::from(vec![100, 101])),
+    ]);
+    let context_header = native_header(
+        &["user_id", "feature", "target"],
+        std::slice::from_ref(&initial_context),
+    );
+    let predict_header = native_header(
+        &["user_id", "feature"],
+        std::slice::from_ref(&initial_predict),
+    );
+    let headers = prepare(json!({"stage":"headers","arguments":arguments(),"context":context_header,"predict":predict_header,"target_context":{"positions":[2]},"target_predict":{"positions":[]},"predict_context":[[0],[1]]}),Attachments::new()).unwrap();
+    let (inferred, notices) = prepare_trace(
+        json!({"stage":"schema","headers":headers,"context":2,"predict":3,"entity_table":"instance"}),
+        attached_batches(
+            std::slice::from_ref(&initial_context),
+            std::slice::from_ref(&initial_predict),
+        ),
+    );
+    assert_eq!(notices, vec![sdm_contract::Sentence::KeyNoValueColumn]);
+    let inferred = inferred.unwrap();
+    assert_eq!(inferred["entity_table"], "instance");
+    assert_eq!(
+        inferred["description"]["tables"][0]["primary_key"],
+        json!(["user_id"])
+    );
+    for change in [
+        "baseline",
+        "drop-predict",
+        "drop-context",
+        "add-context",
+        "add-predict",
+        "scored-values",
+        "constant-target",
+        "null-target",
+        "drop-target",
+        "empty-context",
+    ] {
+        let mut context_names = vec!["user_id", "feature", "target"];
+        let mut predict_names = vec!["user_id", "feature"];
+        let mut context_arrays = initial_context.columns().to_vec();
+        let mut predict_arrays = initial_predict.columns().to_vec();
+        match change {
+            "drop-predict" => {
+                predict_names.remove(1);
+                predict_arrays.remove(1);
+            }
+            "drop-context" => {
+                context_names.remove(1);
+                context_arrays.remove(1);
+            }
+            "add-context" => {
+                context_names.push("new_feature");
+                context_arrays.push(Arc::new(arrow_array::Int64Array::from_iter_values(0..100)));
+            }
+            "add-predict" => {
+                predict_names.push("new_feature");
+                predict_arrays.push(Arc::new(arrow_array::Int64Array::from(vec![2, 3])));
+            }
+            "scored-values" => {
+                predict_arrays[1] = Arc::new(arrow_array::UInt64Array::from(vec![
+                    1_u64 << 63,
+                    (1_u64 << 63) + 1,
+                ]))
+            }
+            "constant-target" => {
+                context_arrays[2] = Arc::new(arrow_array::Int64Array::from(vec![2; 100]))
+            }
+            "null-target" => {
+                context_arrays[2] = Arc::new(arrow_array::Int64Array::from(vec![None; 100]))
+            }
+            "drop-target" => {
+                context_names.pop();
+                context_arrays.pop();
+            }
+            _ => {}
+        }
+        let context = if change == "empty-context" {
+            batch(context_arrays).slice(0, 0)
+        } else {
+            batch(context_arrays)
+        };
+        let scoring = batch(predict_arrays);
+        let context_header = native_header(&context_names, std::slice::from_ref(&context));
+        let predict_header = native_header(&predict_names, std::slice::from_ref(&scoring));
+        let target = context_names
+            .iter()
+            .enumerate()
+            .filter_map(|(at, name)| (*name == "target").then_some(at))
+            .collect::<Vec<_>>();
+        let context_predict = context_names.iter().map(|name|json!({"positions":predict_names.iter().enumerate().filter_map(|(at,p)|(*p==*name).then_some(at)).collect::<Vec<_>>()})).collect::<Vec<_>>();
+        let (finished, warnings) = prepare_trace(
+            json!({"stage":"finish_constructor","schema":inferred,"context":2,"predict":3,"context_header":context_header,"predict_header":predict_header,"target_context":{"positions":target},"context_predict":context_predict}),
+            attached_batches(
+                std::slice::from_ref(&context),
+                std::slice::from_ref(&scoring),
+            ),
+        );
+        match change {
+            "drop-predict" | "add-context" => assert_eq!(
+                finished.unwrap_err().sentence,
+                sdm_contract::Sentence::DirectMissing
+            ),
+            "scored-values" => assert_eq!(
+                finished.unwrap_err().sentence,
+                sdm_contract::Sentence::DirectScored
+            ),
+            "drop-target" => assert_eq!(
+                finished.unwrap_err().sentence,
+                sdm_contract::Sentence::DirectSchemaMissing
+            ),
+            _ => {
+                let finished = finished.unwrap();
+                assert_eq!(finished["schema"], inferred["schema"]);
+                assert_eq!(finished["target"], "target");
+            }
+        }
+        assert_eq!(
+            warnings,
+            if change == "constant-target" {
+                vec![sdm_contract::Sentence::DirectConstantRegression]
+            } else {
+                vec![]
+            },
+            "{change}"
+        );
+    }
+    // A host that promotes the first schema advice stops here. No later
+    // constructor guard is consumed before it can make that native choice.
+    let mut attached = attached_batches(
+        std::slice::from_ref(&initial_context),
+        std::slice::from_ref(&initial_predict),
+    );
+    attached.insert(AttachmentId(1),bytes(json!({"stage":"schema","headers":headers,"context":2,"predict":3,"entity_table":"instance"})));
+    let run = start(json!({"op":"prepare_request","input":1}), attached);
+    assert!(matches!(
+        next(&run),
+        ControlMessage::Warnings { .. } | ControlMessage::Step(Step::Warnings)
+    ));
 }
 
 #[test]
