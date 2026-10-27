@@ -195,10 +195,8 @@ fn values(payload: &Value, table: &str, name: &str) -> Value {
 fn checkpoint(run: &HostRun) -> (Value, Attachments) {
     let state = decoded(&run.take_sampler_state().unwrap().unwrap())["state"].clone();
     let mut owned = Attachments::new();
-    for field in ["memo"] {
-        let id = AttachmentId(state[field].as_u64().unwrap() as u32);
-        owned.insert(id, run.take_attachment(id).unwrap().unwrap());
-    }
+    let memo_id = AttachmentId(state["memo"].as_u64().unwrap() as u32);
+    owned.insert(memo_id, run.take_attachment(memo_id).unwrap().unwrap());
     let manifest_id = AttachmentId(state["frame_checkpoint"]["manifest"].as_u64().unwrap() as u32);
     let manifest = run.take_attachment(manifest_id).unwrap().unwrap();
     let Attachment::Bytes(raw) = &manifest else {
