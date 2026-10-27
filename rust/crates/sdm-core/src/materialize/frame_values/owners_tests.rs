@@ -271,7 +271,7 @@ fn encoded_part_bodies_remain_independent_until_one_final_assembly() {
                 start,
                 stop: start + 1,
             },
-            payload: AttachmentId(start + 1),
+            payload: AttachmentId(u32::try_from(start + 1).unwrap()),
             answering: 0,
             tables: vec!["users".into()],
         };
@@ -297,7 +297,7 @@ fn encoded_part_bodies_remain_independent_until_one_final_assembly() {
         let clone = owner.clone();
         assert_eq!(clone.wire().as_ptr(), owner.wire().as_ptr());
         let mut rebound = part.clone();
-        rebound.payload = AttachmentId(10_000 + part.range.start);
+        rebound.payload = AttachmentId(u32::try_from(10_000 + part.range.start).unwrap());
         assert!(clone.validate(&plan, &rebound).is_ok());
         rebound.range.stop += 1;
         assert!(clone.validate(&plan, &rebound).is_err());
@@ -311,9 +311,7 @@ fn encoded_part_bodies_remain_independent_until_one_final_assembly() {
 fn hashed_node_rows_cannot_bypass_the_complete_reference_constructor() {
     let graph = crate::frame_materialize::retained_tests::owner();
     let plan = plan(task(graph.clone(), 2));
-    let before = crate::frame_materialize::lock(&graph.frames())
-        .neighbors
-        .checkpoint();
+    let before = crate::frame_materialize::retained_tests::neighbor_checkpoint(&graph);
     // Matching row count and a genuine coherence hash still do not establish
     // that complete native conversion and source reference resolution ran.
     let nodes: ArrayRef = Arc::new(UInt64Array::from(vec![0, 1, 2]));
@@ -322,9 +320,7 @@ fn hashed_node_rows_cannot_bypass_the_complete_reference_constructor() {
     let mut attachments = BTreeMap::from([(AttachmentId(66), Attachment::Arrow(forged))]);
     assert!(complete_reference_rows(&plan, &identity, AttachmentId(66), &mut attachments).is_err());
     assert_eq!(
-        crate::frame_materialize::lock(&graph.frames())
-            .neighbors
-            .checkpoint(),
+        crate::frame_materialize::retained_tests::neighbor_checkpoint(&graph),
         before
     );
 }

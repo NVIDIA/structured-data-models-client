@@ -10,6 +10,12 @@ use arrow_array::Int64Array;
 use sdm_contract::frames::materialize::{FrameNativeColumn, FrameNativeOrigin, FrameNativeTable};
 use sdm_contract::ops::{ColumnRef, DescribedColumn, DescribedTable};
 
+pub(crate) fn neighbor_checkpoint(
+    owner: &RetainedFrameGraph,
+) -> sdm_contract::frames::Mt19937State {
+    lock(&owner.frames()).neighbors.checkpoint()
+}
+
 pub(crate) fn owner() -> RetainedFrameGraph {
     let description = SourceDescription {
         tables: vec![DescribedTable {

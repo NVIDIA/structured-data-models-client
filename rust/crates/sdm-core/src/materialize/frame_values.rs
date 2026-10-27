@@ -21,13 +21,13 @@ mod native_guard_tests;
 
 use arrow_array::UInt64Array;
 use sdm_contract::frames::materialize::*;
+use sdm_wire::json::Value;
 
 use super::*;
 use crate::attached::{take_json, take_json_if};
 use crate::frame_materialize::identity::{Identity, ordered_coverage};
 use crate::frame_materialize::values::{
-    BoundGraph, attach_array, attach_batch, attach_json, positions, take_array, take_arrow,
-    take_strings,
+    BoundGraph, attach_array, attach_json, positions, take_array, take_arrow, take_strings,
 };
 use crate::run::Attachments;
 
@@ -445,9 +445,7 @@ fn labelled_rows(
     anchors: &[i64],
     labels: &labels::Labels,
 ) -> Result<RecordBatch, CoreError> {
-    use arrow_array::{
-        BooleanArray, Decimal128Array, Float32Array, Int64Array, ListArray, StringArray,
-    };
+    use arrow_array::{BooleanArray, Decimal128Array, Float32Array, Int64Array, ListArray};
     use sdm_engine::labels::LinkValue;
     let labels::Labels::Lists(lists) = labels else {
         return task::labelled_rows(keys, anchors, labels);

@@ -915,7 +915,7 @@ mod parent_hop_tests {
             assert_eq!(frame.neighbors.checkpoint(), before);
             assert_eq!(frame.metadata.as_ref().unwrap().neighbors, before);
             let value = asker.attach(Attachment::Bytes(Vec::new()))?;
-            Ok(sdm_contract::ops::OperationResult::Prepared(
+            Ok(sdm_contract::ops::OperationResult::PrepareRequest(
                 PreparedRequest { value },
             ))
         });
@@ -981,7 +981,9 @@ mod parent_hop_tests {
                         Mt19937::seeded(7).checkpoint()
                     );
                 } else {
-                    let first = selected.unwrap_or_else(|error| panic!("{error:?}"));
+                    let first = selected
+                        .unwrap_or_else(|error| panic!("{error:?}"))
+                        .into_walked(&frame.source())?;
                     assert_eq!(
                         order_ids(&first),
                         if whole {
@@ -997,19 +999,21 @@ mod parent_hop_tests {
                         );
                     }
                 }
-                let continued = frame.walk(
-                    &asker,
-                    &graph,
-                    &graph.tables[0],
-                    &keys,
-                    &[0],
-                    FrameWalkOptions {
-                        hops: &[Hop::Keep(3)],
-                        neighbor_values: None,
-                        excluded: &[],
-                        seed: None,
-                    },
-                )?;
+                let continued = frame
+                    .walk(
+                        &asker,
+                        &graph,
+                        &graph.tables[0],
+                        &keys,
+                        &[0],
+                        FrameWalkOptions {
+                            hops: &[Hop::Keep(3)],
+                            neighbor_values: None,
+                            excluded: &[],
+                            seed: None,
+                        },
+                    )?
+                    .into_walked(&frame.source())?;
                 let selected = order_ids(&continued);
                 // Recorded native sampler vectors: a reset/error or a whole
                 // neighborhood consumes no draw; an earlier partial walk does.
