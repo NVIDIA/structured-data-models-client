@@ -208,20 +208,27 @@ def test_scoped_rust_runner_uses_its_actual_cli(
     # than compiled. DuckDB is the Rust CLI default; its explicit database
     # parser accepts SQLite and memory, while Postgres requires a recording.
     source = (ROOT / 'scripts/rust_core/gate.sh').read_text()
-    observe = 'observe() {' + source.split('observe() {', 1)[1].split(
-        '\nrefuse() {', 1
-    )[0]
+    observe = (
+        'observe() {'
+        + source.split('observe() {', 1)[1].split('\nrefuse() {', 1)[0]
+    )
     (tmp_path / 'rust').mkdir()
     arguments = tmp_path / 'cargo-arguments.jsonl'
     done = subprocess.run(
-        ['bash', '-uc',
-         'candidate=$PWD; differs=0; runs=rust-host; made=$PWD; '
-         'database_args=(--database "$database"); '
-         'cargo() { printf "%s\\n" "$@" > "$recorded"; }; '
-         + observe + '\nobserve'],
+        [
+            'bash',
+            '-uc',
+            'candidate=$PWD; differs=0; runs=rust-host; made=$PWD; '
+            'database_args=(--database "$database"); '
+            'cargo() { printf "%s\\n" "$@" > "$recorded"; }; '
+            + observe
+            + '\nobserve',
+        ],
         cwd=tmp_path,
         env={**os.environ, 'database': database, 'recorded': str(arguments)},
-        capture_output=True, text=True, check=False,
+        capture_output=True,
+        text=True,
+        check=False,
     )
     if database == 'postgres':
         assert done.returncode != 0
@@ -230,7 +237,15 @@ def test_scoped_rust_runner_uses_its_actual_cli(
     else:
         assert done.returncode == 0, done.stdout + done.stderr
         argv = arguments.read_text().splitlines()
-        assert argv[:7] == ['run', '-q', '-p', 'sdm-testkit', '--bin', 'sdm-contract-run', '--locked']
+        assert argv[:7] == [
+            'run',
+            '-q',
+            '-p',
+            'sdm-testkit',
+            '--bin',
+            'sdm-contract-run',
+            '--locked',
+        ]
         if database == 'duckdb':
             assert '--database' not in argv
         else:

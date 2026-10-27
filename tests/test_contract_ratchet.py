@@ -349,7 +349,11 @@ def check(
     protected: str | None = None,
 ) -> list[str]:
     return ratchet.check(
-        repo, checkpoint, list(observations), protected
+        repo,
+        checkpoint,
+        list(observations),
+        protected,
+        database='duckdb' if observations else None,
     ).problems
 
 

@@ -648,9 +648,16 @@ observe() {
           "${database_args[@]+"${database_args[@]}"}" \
           --out "$made/$runner.jsonl" "$tree/contract/cases" || return 1 ;;
       rust-host)
+        local rust_database_args=()
+        case "$database" in
+          sqlite) rust_database_args=(--database sqlite) ;;
+          postgres)
+            echo 'rust-host: Postgres needs an explicit fetch recording; this gate invocation supplies none' >&2
+            return 1 ;;
+        esac
         (cd "$tree/rust" && CARGO_TARGET_DIR="$target" cargo run -q \
           -p sdm-testkit --bin sdm-contract-run --locked -- \
-          "${database_args[@]+"${database_args[@]}"}" \
+          "${rust_database_args[@]+"${rust_database_args[@]}"}" \
           --out "$made/rust-host.jsonl" ../contract/cases) || return 1 ;;
       java)
         # The Java host's runner (Phase 3 design choice 10, T3.11's), on

@@ -166,6 +166,42 @@ EXPECTED: dict[str, tuple[str, ...]] = {
         'test_a_result_of_another_shape_is_refused_by_name[validate_query]',
         'test_an_operation_the_host_does_not_know_is_refused_by_name',
     ),
+    'test_t42_frames.py': (
+        'test_frame_start_detaches_numpy_producer_before_later_steps[numbers]',
+        'test_frame_start_detaches_numpy_producer_before_later_steps[validity]',
+        'test_frame_start_detaches_numpy_producer_before_later_steps[sliced]',
+        'test_table_output_is_owned_after_run_drop_and_rebinds_under_fresh_ids',
+    ),
+    'test_t42_string_ownership.py': (
+        'test_string_table_owns_buffers_across_drop_and_schema_rebinding[False-False]',
+        'test_string_table_owns_buffers_across_drop_and_schema_rebinding[False-True]',
+        'test_string_table_owns_buffers_across_drop_and_schema_rebinding[True-False]',
+        'test_string_table_owns_buffers_across_drop_and_schema_rebinding[True-True]',
+    ),
+    'test_t42_temporal_ownership.py': (
+        'test_temporal_table_owns_exact_unit_zone_counts_and_validity_after_run_drop[False-None-s]',
+        'test_temporal_table_owns_exact_unit_zone_counts_and_validity_after_run_drop[False-None-ms]',
+        'test_temporal_table_owns_exact_unit_zone_counts_and_validity_after_run_drop[False-None-us]',
+        'test_temporal_table_owns_exact_unit_zone_counts_and_validity_after_run_drop[False-None-ns]',
+        'test_temporal_table_owns_exact_unit_zone_counts_and_validity_after_run_drop[False-America/Los_Angeles-s]',
+        'test_temporal_table_owns_exact_unit_zone_counts_and_validity_after_run_drop[False-America/Los_Angeles-ms]',
+        'test_temporal_table_owns_exact_unit_zone_counts_and_validity_after_run_drop[False-America/Los_Angeles-us]',
+        'test_temporal_table_owns_exact_unit_zone_counts_and_validity_after_run_drop[False-America/Los_Angeles-ns]',
+        'test_temporal_table_owns_exact_unit_zone_counts_and_validity_after_run_drop[True-None-s]',
+        'test_temporal_table_owns_exact_unit_zone_counts_and_validity_after_run_drop[True-None-ms]',
+        'test_temporal_table_owns_exact_unit_zone_counts_and_validity_after_run_drop[True-None-us]',
+        'test_temporal_table_owns_exact_unit_zone_counts_and_validity_after_run_drop[True-None-ns]',
+        'test_temporal_table_owns_exact_unit_zone_counts_and_validity_after_run_drop[True-America/Los_Angeles-s]',
+        'test_temporal_table_owns_exact_unit_zone_counts_and_validity_after_run_drop[True-America/Los_Angeles-ms]',
+        'test_temporal_table_owns_exact_unit_zone_counts_and_validity_after_run_drop[True-America/Los_Angeles-us]',
+        'test_temporal_table_owns_exact_unit_zone_counts_and_validity_after_run_drop[True-America/Los_Angeles-ns]',
+    ),
+    'test_t44_numeric_checkpoint_ownership.py': (
+        'test_materialize_frame_start_detaches_and_releases_foreign_producers',
+    ),
+    'test_t46_direct_ownership.py': (
+        'test_direct_schema_start_owns_numeric_buffers_before_next',
+    ),
     'test_test_ops.py': (
         'test_another_thread_runs_and_logs_while_the_core_holds_a_call',
         'test_a_second_call_while_one_is_in_the_run_is_refused_as_busy',
@@ -187,7 +223,14 @@ EXPECTED: dict[str, tuple[str, ...]] = {
 #: The binding's test files each build runs: the file any build passes on
 #: the shipped wheel, and every file on the test-ops one.
 FILES = {
-    'production': ('test_binding.py',),
+    'production': (
+        'test_binding.py',
+        'test_t42_frames.py',
+        'test_t42_string_ownership.py',
+        'test_t42_temporal_ownership.py',
+        'test_t44_numeric_checkpoint_ownership.py',
+        'test_t46_direct_ownership.py',
+    ),
     'test-ops': tuple(sorted(EXPECTED)),
 }
 #: The modules whose origin the guard records inside the test process.
