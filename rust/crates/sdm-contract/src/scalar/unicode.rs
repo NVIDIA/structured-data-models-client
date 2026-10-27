@@ -152,7 +152,7 @@ impl std::iter::FusedIterator for UnicodePoints<'_> {}
 
 #[cfg(test)]
 mod tests {
-    use super::{UnicodeError, UnicodeText};
+    use super::{UnicodeError, UnicodeSlice, UnicodeText};
 
     #[test]
     fn explicit_surrogate_pairs_and_supplementary_scalars_are_distinct_values() {
@@ -232,4 +232,26 @@ mod tests {
             UnicodeText::from_points(ordinary.chars().map(u32::from)).unwrap()
         );
     }
+
+    #[test]
+    fn borrowed_native_text_keeps_arrow_owned_bytes_without_a_value_copy() {
+        let source = [b'A', 0xed, 0xa0, 0xbd, 0xed, 0xb8, 0xba, b'B'];
+        let borrowed = UnicodeSlice::from_utf8_surrogatepass(&source).unwrap();
+        assert_eq!(borrowed.as_bytes().as_ptr(), source.as_ptr());
+        assert_eq!(borrowed.points().collect::<Vec<_>>(), [65, 0xd83d, 0xde3a, 66]);
+        assert!(borrowed.utf8().is_none());
+        let ordinary = "é 😺";
+        let borrowed = UnicodeSlice::from(ordinary);
+        assert_eq!(borrowed.as_bytes().as_ptr(), ordinary.as_ptr());
+        assert_eq!(borrowed.utf8(), Some(ordinary));
+        let owned = UnicodeText::from_points([0xd800, 65]).unwrap();
+        let borrowed = owned.as_slice();
+        assert_eq!(borrowed.as_bytes().as_ptr(), owned.as_bytes().as_ptr());
+        assert_eq!(borrowed.points().collect::<Vec<_>>(), [0xd800, 65]);
+        assert_eq!(
+            UnicodeSlice::from_utf8_surrogatepass(&[65, 0xed, 0xa0]).unwrap_err(),
+            UnicodeError::Byte(1)
+        );
+    }
+
 }
