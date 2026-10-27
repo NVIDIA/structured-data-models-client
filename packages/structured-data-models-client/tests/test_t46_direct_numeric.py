@@ -363,8 +363,8 @@ def test_direct_successful_unencodable_labels_remain_unfinished_after_guards(
 
 
 def test_direct_core_path_never_invokes_python_semantic_builders(monkeypatch):
-    from sdm_client.adapters.tabular import TabularAdapter
     import sdm_client.schema as schema_module
+    from sdm_client.adapters.tabular import TabularAdapter
 
     def forbidden(*args, **kwargs):
         raise AssertionError(
@@ -568,7 +568,9 @@ def test_direct_declared_meaning_survives_fresh_wide_scoring(monkeypatch):
     }
 
 
-@pytest.mark.parametrize('dtype,wire', [('int32', 'int64'), ('float32', 'float32')])
+@pytest.mark.parametrize(
+    'dtype,wire', [('int32', 'int64'), ('float32', 'float32')]
+)
 def test_direct_supplied_native_schema_retains_its_wire_width(
     monkeypatch, dtype, wire
 ):
@@ -585,4 +587,7 @@ def test_direct_supplied_native_schema_retains_its_wire_width(
     )
     assert new == old
     assert new[1][0] == 'ok'
-    assert new[3][0]['schema']['instance_table']['columns']['feature']['dtype'] == wire
+    assert (
+        new[3][0]['schema']['instance_table']['columns']['feature']['dtype']
+        == wire
+    )
