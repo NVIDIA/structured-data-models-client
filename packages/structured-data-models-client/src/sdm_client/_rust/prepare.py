@@ -672,6 +672,22 @@ def predict(
         body['payload'] = 2
         # Both encoders have finished before native ID/inference observations.
         request_id = _request_id()
+        if type(request.inference) not in (
+            dict,
+            type(None),
+            bool,
+            int,
+            float,
+            str,
+            bytes,
+            list,
+            tuple,
+            set,
+            frozenset,
+        ):
+            raise RouteError(
+                'the partial direct request requires built-in inference values before truthiness'
+            )
         value = {
             'stage': 'encoded',
             'body': body,
