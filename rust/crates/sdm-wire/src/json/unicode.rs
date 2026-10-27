@@ -7,6 +7,61 @@
 //! escaped separately; adjacent native surrogate points are never merged in
 //! the logical value before writing model JSON.
 
+use sdm_contract::scalar::unicode::UnicodeText;
+
+/// Append one JSON string using the existing writer for ordinary text and
+/// each ordinary run. Only native surrogate points require a new escape.
+/// The owned logical string remains unchanged for native inspection.
+pub(super) fn write(text: &UnicodeText, output: &mut Vec<u8>) {
+    if let Some(ordinary) = text.utf8() {
+        super::write_text(ordinary, output);
+        return;
+    }
+    let bytes = text.as_bytes();
+    output.push(b'"');
+    let mut at = 0;
+    while at < bytes.len() {
+        match std::str::from_utf8(&bytes[at..]) {
+            Ok(ordinary) => {
+                fragment(ordinary, output);
+                break;
+            }
+            Err(error) => {
+                let end = at + error.valid_up_to();
+                let ordinary = std::str::from_utf8(&bytes[at..end])
+                    .expect("validated native ordinary run");
+                fragment(ordinary, output);
+                // UnicodeText has already validated canonical UTF8 with
+                // surrogatepass. This is exactly one three-byte unit.
+                let encoded = &bytes[end..end + 3];
+                let point = (u32::from(encoded[0] & 0x0f) << 12)
+                    | (u32::from(encoded[1] & 0x3f) << 6)
+                    | u32::from(encoded[2] & 0x3f);
+                debug_assert!((0xd800..=0xdfff).contains(&point));
+                output.extend_from_slice(b"\\u");
+                for shift in [12, 8, 4, 0] {
+                    output.push(b"0123456789abcdef"[((point >> shift) & 0xf) as usize]);
+                }
+                at = end + 3;
+            }
+        }
+    }
+    output.push(b'"');
+}
+
+fn fragment(text: &str, output: &mut Vec<u8>) {
+    if text.is_empty() {
+        return;
+    }
+    let start = output.len();
+    super::write_text(text, output);
+    let end = output.len();
+    // Remove only the two quotes of this run in the destination buffer.
+    // There is no second whole input or whole payload allocation.
+    output.copy_within(start + 1..end - 1, start);
+    output.truncate(end - 2);
+}
+
 #[cfg(test)]
 mod tests {
     use sdm_contract::scalar::unicode::UnicodeText;
@@ -54,15 +109,12 @@ mod tests {
     }
 
     #[test]
-    fn every_ordinary_scalar_keeps_the_existing_provider_and_request_encoding() {
-        for point in 0..=0x10ffff {
-            let Some(character) = char::from_u32(point) else {
-                continue;
-            };
-            let ordinary = character.to_string();
+    fn ordinary_controls_keep_the_existing_provider_and_request_encoding() {
+        for ordinary in ["", "\0", "\u{8}\t\n\u{c}\r", "\"\\/", "é 東京 😺", "\u{10ffff}"] {
+            let ordinary = ordinary.to_owned();
             let mut output = Vec::new();
             write(&UnicodeText::from(ordinary.as_str()), &mut output);
-            assert_eq!(output, Value::Text(ordinary).to_bytes(), "U+{point:04X}");
+            assert_eq!(output, Value::Text(ordinary).to_bytes());
         }
     }
 }
