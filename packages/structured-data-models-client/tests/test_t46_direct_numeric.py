@@ -837,3 +837,208 @@ def test_direct_nullable_large_finite_cast_widens_without_a_native_warning(
         new[3][0]['schema']['instance_table']['columns']['feature']['dtype']
         == 'float64'
     )
+
+
+@pytest.mark.parametrize('as_error', [False, True])
+@pytest.mark.parametrize('failing', [False, True])
+def test_direct_overlap_only_widens_key_columns(monkeypatch, as_error, failing):
+    from sdm_client.core.warnings import SDMWarning
+
+    def inputs():
+        return (
+            pd.DataFrame(
+                {
+                    'user_id': [1, 2, 3],
+                    'feature': [1, 2, 3],
+                    'target': [2, 4, 6],
+                }
+            ),
+            pd.DataFrame(
+                {
+                    'user_id': [1, 4],
+                    'feature': [np.inf, np.nan] if failing else [4, 5],
+                }
+            ),
+        )
+
+    old = outcome(monkeypatch, inputs(), core=False, warning_error=as_error)
+    new = outcome(monkeypatch, inputs(), core=True, warning_error=as_error)
+    assert new == old
+    if as_error:
+        assert new[1][1] is SDMWarning
+        assert not new[3]
+    else:
+        assert len(new[2]) == 1
+        assert '1 of the 2 rows' in new[2][0][0]
+        if failing:
+            assert new[1][1] is pd.errors.IntCastingNaNError
+            assert not new[3]
+
+
+@pytest.mark.parametrize('key', [None, 'alternate', ['alternate', 'user_id']])
+def test_direct_primary_key_is_read_from_captured_table_after_text_advice(
+    monkeypatch, key
+):
+    class Opaque(Scripted):
+        def predict(self, payload):
+            answer = super().predict(payload)
+            for item in answer['predictions']:
+                item['id'] = ['opaque-a', 'opaque-b'][item['row_index']]
+            return answer
+
+    def inputs():
+        context, predict = wide_text_fixture()
+        context.insert(0, 'user_id', np.arange(65))
+        context.insert(1, 'alternate', np.arange(100, 165))
+        predict.insert(0, 'user_id', [66, 67])
+        predict.insert(1, 'alternate', [166, 167])
+        return context, predict
+
+    def mutate(request, context, predict):
+        table = request.schema['instance']
+        # Replacing the Request schema must not replace the captured table.
+        request.schema = None
+        table.primary_key = key
+
+    old = outcome(
+        monkeypatch, inputs(), core=False, on_warning=mutate, transport=Opaque()
+    )
+    new = outcome(
+        monkeypatch, inputs(), core=True, on_warning=mutate, transport=Opaque()
+    )
+    assert new == old
+    assert new[1][0] == 'ok'
+    instance = new[3][0]['schema']['instance_table']
+    assert instance.get('primary_key') == (
+        None if key is None else [key] if isinstance(key, str) else key
+    )
+    # The earlier column plan remains frozen even when the setter retypes it.
+    assert instance['columns']['alternate']['stype'] == 'numerical'
+    assert new[1][1][0]['id'] == (
+        [166, 167] if key == 'alternate' else ['opaque-a', 'opaque-b']
+    )
+
+
+@pytest.mark.parametrize(
+    'names',
+    [
+        ['__kumo_entity_ref_feature'],
+        ['instance_id'],
+        ['__kumo_entity_ref_feature', 'instance_id'],
+    ],
+)
+def test_direct_ordinary_feature_names_do_not_acquire_gathered_attribution(
+    monkeypatch, names
+):
+    class Opaque(Scripted):
+        def predict(self, payload):
+            answer = super().predict(payload)
+            for item in answer['predictions']:
+                item['id'] = ['opaque-a', 'opaque-b'][item['row_index']]
+            return answer
+
+    def inputs():
+        return pd.DataFrame(
+            {**{name: [1.0, 2.0, 3.0] for name in names}, 'target': [2, 4, 6]}
+        ), pd.DataFrame({name: [4.0, 5.0] for name in names})
+
+    old = outcome(monkeypatch, inputs(), core=False, transport=Opaque())
+    new = outcome(monkeypatch, inputs(), core=True, transport=Opaque())
+    assert new == old
+    assert new[1][0] == 'ok'
+    assert new[1][1][0]['id'] == (
+        [4.0, 5.0] if 'instance_id' in names else ['opaque-a', 'opaque-b']
+    )
+
+
+@pytest.mark.parametrize('form', ['[{}]', '[{},]', ' [ {}, ] ', "['{}',]"])
+@pytest.mark.parametrize('wrong', [False, True])
+def test_direct_primitive_list_trailing_comma_ids_keep_attribution(
+    monkeypatch, form, wrong
+):
+    class Identified(Scripted):
+        def predict(self, payload):
+            answer = super().predict(payload)
+            for item in answer['predictions']:
+                at = item['row_index']
+                item['id'] = form.format(5 if wrong or at else 4)
+            return answer
+
+    frames = (
+        pd.DataFrame({'user_id': [1, 2, 3], 'target': [2, 4, 6]}),
+        pd.DataFrame({'user_id': [4, 5]}),
+    )
+    old = outcome(monkeypatch, frames, core=False, transport=Identified())
+    new = outcome(monkeypatch, frames, core=True, transport=Identified())
+    assert new == old
+    if wrong:
+        assert new[1][2] == 'INVALID_RESPONSE'
+    else:
+        assert new[1][0] == 'ok'
+        assert new[1][1][0]['id'] == [4, 5]
+
+
+@pytest.mark.parametrize('reverse', [False, True])
+@pytest.mark.parametrize('composite', [False, True])
+@pytest.mark.parametrize('as_error', [False, True])
+def test_direct_signed_zero_keys_share_native_overlap_identity(
+    monkeypatch, reverse, composite, as_error
+):
+    from sdm_client.core.warnings import SDMWarning
+
+    def inputs():
+        context = pd.DataFrame(
+            {
+                'user_id': [0.0 if reverse else -0.0, 1.0, 2.0],
+                'target': [2, 4, 6],
+            }
+        )
+        predict = pd.DataFrame({'user_id': [-0.0 if reverse else 0.0, 3.0]})
+        if composite:
+            context['part'] = [1, 2, 3]
+            predict['part'] = [1, 4]
+        return context, predict
+
+    def edit(request):
+        if composite:
+            request.schema['instance'].primary_key = ['user_id', 'part']
+
+    old = outcome(
+        monkeypatch, inputs(), core=False, edit=edit, warning_error=as_error
+    )
+    new = outcome(
+        monkeypatch, inputs(), core=True, edit=edit, warning_error=as_error
+    )
+    assert new == old
+    if as_error:
+        assert new[1][1] is SDMWarning
+        assert not new[3]
+    else:
+        assert len(new[2]) == 1
+        assert '1 of the 2 rows' in new[2][0][0]
+
+
+@pytest.mark.parametrize('first', ['nonfinite', 'precision'])
+def test_direct_body_serializes_whole_columns_before_rows(monkeypatch, first):
+    def inputs():
+        context = pd.DataFrame(
+            {'a': [1.0, np.inf], 'b': [2**53 + 1, 1], 'target': [1, 2]}
+        )
+        predict = pd.DataFrame({'a': [3.0, 4.0], 'b': [1.0, 2.0]})
+        if first == 'precision':
+            context, predict = (
+                context[['b', 'a', 'target']],
+                predict[['b', 'a']],
+            )
+        return context, predict
+
+    old = outcome(monkeypatch, inputs(), core=False)
+    new = outcome(monkeypatch, inputs(), core=True)
+    assert new == old
+    assert new[1][2] == 'INVALID_REQUEST'
+    assert (
+        'not JSON-representable'
+        if first == 'nonfinite'
+        else 'without losing precision'
+    ) in new[1][-1]
+    assert not new[3]
