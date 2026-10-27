@@ -8,7 +8,7 @@
 // Source SHA-256: 5e619c4cb1a968c65c446b7e79acc49fb091d3e486ad105de13fc0361469f4c1
 // Native receipt SHA-256: b3fa744af2117b91ff7a76b7e6ec13c7ea16d3fb5b6c0977fea93f1809889947
 // Native producer SHA-256: bc4937120808dd9a981a9e77739ae3f532f6d040ddecf9613b198a8e5111a0c5
-// Writer SHA-256: 4e13d06ecb6fdfcfd53d45838e20b7f6d1d9152e868c806e56b1df7cdf4ca20b
+// Writer SHA-256: 1cecddd448d3ef95a0c6be885ba31638906c1bb214c5af58b6c5e27dcbd5b508
 
 #[cfg(test)]
 pub(super) mod controls {

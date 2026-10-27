@@ -2,8 +2,9 @@
 
 This checkpoint provides the complete four/eight-lane source algorithm and an explicit GNU 14 depth fallback in `sdm-engine::index_sort`.
 It has no production consumer, runtime detector, serialized profile, native callback, new dependency or tabular routing activation.
-The candidate source and tests have not been executed.
-Two independent whole-source reviews must approve the same immutable candidate before root grants candidate checks.
+Root's exact candidate `a40812903640b0a4d4bc9d9a81d6ce8f8b6814ac` passed Clippy and the public/fallback native-permutation preflight, then its normal unscoped handoff failed on handwritten writer formatting without a stamp or landing.
+Those passes remain evidence for that exact source and are not relabelled as a subsequent corrective candidate.
+Two fresh independent whole-source reviews must approve each corrected immutable candidate before root grants its checks.
 The [preceding checkpoint](t46-index-kernels.md) records the exact NumPy source/archive/native identity and the full register, network and partition specification.
 
 ## Source boundary
@@ -75,7 +76,7 @@ It imports no candidate or SDK, compiles no C++, and writes complete input/outpu
 The acquisition completed all 123 calls successfully, preserving guard regions and key bytes and checking complete ordered permutations.
 Its receipt hashes to `b3fa744af2117b91ff7a76b7e6ec13c7ea16d3fb5b6c0977fea93f1809889947` and the exact expected permutations are retained separately in `tests/data/t46_simd_fallback_controls.json`.
 The authored depth-zero tests apply those native expected answers to both source profiles, whose fallback policy is identical.
-Those tests have not run, and the shared fallback checks do not establish native AVX512 network or partition behavior.
+Those tests passed in root's exact `a40812903` preflight, and the shared fallback checks do not establish native AVX512 network or partition behavior.
 The forced branch witness remains distinct from naturally reachable public NumPy fallback and cross-producer coverage.
 
 ### Fixture placement rule after the two guard failures
@@ -89,10 +90,14 @@ Neither guard changes.
 Use the existing recorded-data constant pattern from `tests/numpy_sort.rs`, with the immutable 123-control JSON as the single canonical expectation source.
 A small pinned writer may render those exact JSON bytes as a private test-only Rust constant, with no include macro, runtime file access or public test API.
 The generated file must carry its source, native producer and writer hashes, and its output hash must be recorded in the authoring receipt.
+Format the handwritten writer with the same Ruff resolved by the normal handoff before pinning its hash or creating generated output.
+Any later writer-format change requires a new writer hash and canonical regeneration; neither a manual output edit nor formatting the marked generated file is permitted.
 Only that writer may modify the marked generated file; the JSON expectations and native receipt remain immutable.
 The constant stays inside an explicit inline test module so the vocabulary guard can recognize its test-only provenance as well.
-Root inspected and executed `scripts/rust_core/render_t46_fallback_controls.py`, writer SHA-256 `4e13d06ecb6fdfcfd53d45838e20b7f6d1d9152e868c806e56b1df7cdf4ca20b`, against canonical JSON SHA-256 `5e619c4cb1a968c65c446b7e79acc49fb091d3e486ad105de13fc0361469f4c1`.
-The resulting `src/index_sort/recorded.rs` hashes to `d8aa2b40a93c2332e720d86a24c293215a990ae0636fd428428ac07b615abe6a` and retains all 123 native records and their provenance without calculating any expected permutation.
+The initial root authoring used writer SHA-256 `4e13d06ecb6fdfcfd53d45838e20b7f6d1d9152e868c806e56b1df7cdf4ca20b` against canonical JSON SHA-256 `5e619c4cb1a968c65c446b7e79acc49fb091d3e486ad105de13fc0361469f4c1` and produced `src/index_sort/recorded.rs` SHA-256 `d8aa2b40a93c2332e720d86a24c293215a990ae0636fd428428ac07b615abe6a` for exact candidate `a40812903`.
+After that candidate's formatting failure, the handoff-resolved `uvx --quiet --from 'ruff==0.16.*' ruff format` command formatted only the handwritten writer, giving writer SHA-256 `1cecddd448d3ef95a0c6be885ba31638906c1bb214c5af58b6c5e27dcbd5b508`.
+Root's canonical regeneration produced output SHA-256 `e6c8183c7557494f2bd1c1b42509008dff26aad393618ea5c4be94947396d621` and established that only the generated writer-hash comment changed.
+The immutable 123-record JSON, native receipt, producer identities, guards and production sorting algorithms remain unchanged.
 Rendering the recorded data is source authoring and supplies no candidate validation or new reference acquisition credit.
 The complete corrected source still requires two fresh independent whole-change reviews before any candidate checks.
 
