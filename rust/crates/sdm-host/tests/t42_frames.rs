@@ -725,63 +725,61 @@ fn frame_arrow_validity_retains_present_nan_and_merges_signed_zero() {
             let run = HostRun::start(&sdm_host::default_root(), &message(), attached)
                 .unwrap_or_else(|e| panic!("{:?}", error(e)));
             let mut notices = 0;
-            loop {
-                let next = run.next().unwrap();
-                if let Some(out) = run.take_warnings().unwrap() {
-                    let ControlMessage::Warnings { warnings } = sdm_host::read(&out).unwrap()
+            // Each fixed compatibility phase returns its useful artifact
+            // once; its notices are read from the warning buffer below.
+            let next = run.next().unwrap();
+            if let Some(out) = run.take_warnings().unwrap() {
+                let ControlMessage::Warnings { warnings } = sdm_host::read(&out).unwrap() else {
+                    panic!("the warning channel must return warnings")
+                };
+                notices += warnings.len();
+            }
+            assert!(
+                run.take_warnings().unwrap().is_none(),
+                "warnings drain once"
+            );
+            match sdm_host::read(&next).unwrap() {
+                ControlMessage::Step(Step::Done {
+                    result: OperationResult::DescribeSource(result),
+                    ..
+                }) => {
+                    let Attachment::Bytes(bytes) =
+                        run.take_attachment(result.description).unwrap().unwrap()
                     else {
-                        panic!("the warning channel must return warnings")
+                        panic!("description bytes")
                     };
-                    notices += warnings.len();
-                }
-                assert!(
-                    run.take_warnings().unwrap().is_none(),
-                    "warnings drain once"
-                );
-                match sdm_host::read(&next).unwrap() {
-                    ControlMessage::Step(Step::Done {
-                        result: OperationResult::DescribeSource(result),
-                        ..
-                    }) => {
-                        let Attachment::Bytes(bytes) =
-                            run.take_attachment(result.description).unwrap().unwrap()
+                    let value: sdm_contract::ops::SourceDescription =
+                        serde_json::from_slice(&bytes).unwrap();
+                    assert_eq!(
+                        value.tables[0].primary_key,
+                        ["user_id"],
+                        "{stage}/{variant}"
+                    );
+                    assert_eq!(
+                        value.tables[0].duplicate_keys,
+                        Some(Scalar::UInt64(u64::from(matches!(
+                            variant,
+                            "nan_duplicate" | "zero_duplicate"
+                        )))),
+                        "{stage}/{variant}"
+                    );
+                    if stage == "table" {
+                        assert_eq!(notices, usize::from(variant != "nan"), "{variant}");
+                        let owned_id = result.frame_rows.expect("Table returns its owned rows");
+                        let Attachment::Arrow(owned) =
+                            run.take_attachment(owned_id).unwrap().unwrap()
                         else {
-                            panic!("description bytes")
+                            panic!("owned frame rows must be Arrow")
                         };
-                        let value: sdm_contract::ops::SourceDescription =
-                            serde_json::from_slice(&bytes).unwrap();
-                        assert_eq!(
-                            value.tables[0].primary_key,
-                            ["user_id"],
-                            "{stage}/{variant}"
-                        );
-                        assert_eq!(
-                            value.tables[0].duplicate_keys,
-                            Some(Scalar::UInt64(u64::from(matches!(
-                                variant,
-                                "nan_duplicate" | "zero_duplicate"
-                            )))),
-                            "{stage}/{variant}"
-                        );
-                        if stage == "table" {
-                            assert_eq!(notices, usize::from(variant != "nan"), "{variant}");
-                            let owned_id = result.frame_rows.expect("Table returns its owned rows");
-                            let Attachment::Arrow(owned) =
-                                run.take_attachment(owned_id).unwrap().unwrap()
-                            else {
-                                panic!("owned frame rows must be Arrow")
-                            };
-                            rows = Some(owned);
-                            table_description = Some(value);
-                        } else {
-                            assert_eq!(notices, 0, "Table notices must not repeat: {variant}");
-                            assert!(result.frame_rows.is_none());
-                            assert_eq!(Some(value), table_description, "{variant}");
-                        }
-                        break;
+                        rows = Some(owned);
+                        table_description = Some(value);
+                    } else {
+                        assert_eq!(notices, 0, "Table notices must not repeat: {variant}");
+                        assert!(result.frame_rows.is_none());
+                        assert_eq!(Some(value), table_description, "{variant}");
                     }
-                    other => panic!("a frame must not call a provider: {other:?}"),
                 }
+                other => panic!("a frame must not call a provider: {other:?}"),
             }
             // The taken stream, not a Run or an expired attachment id,
             // survives and is rebound under a fresh input id for Schema.
@@ -844,7 +842,7 @@ fn table_stage_rejects_constructor_overrides_and_the_manifest_is_locked() {
     );
     let failure = match HostRun::start(&sdm_host::default_root(), &message(), attached) {
         Err(out) => error(out),
-        Ok(run) => error(run.next().err().expect("table stage must reject overrides")),
+        Ok(run) => error(run.next().expect_err("table stage must reject overrides")),
     };
     assert_eq!(failure.code, ErrorCode::InvalidMessage);
     let schema: Value = serde_json::from_str(&sdm_contract::schema_json()).unwrap();
@@ -874,10 +872,10 @@ fn frame_detachment_owns_nested_sliced_and_dictionary_buffers() {
                 found.insert(buffer.as_ptr() as usize);
             }
         }
-        if let Some(nulls) = data.nulls() {
-            if !nulls.inner().values().is_empty() {
-                found.insert(nulls.inner().values().as_ptr() as usize);
-            }
+        if let Some(nulls) = data.nulls()
+            && !nulls.inner().values().is_empty()
+        {
+            found.insert(nulls.inner().values().as_ptr() as usize);
         }
         for child in data.child_data() {
             buffers(child, found);
@@ -945,8 +943,7 @@ fn date32_frame_is_an_explicit_unfinished_input_family() {
         Err(out) => error(out),
         Ok(run) => error(
             run.next()
-                .err()
-                .expect("date32 frame remains an unfinished development family"),
+                .expect_err("date32 frame remains an unfinished development family"),
         ),
     };
     assert_eq!(failure.code, ErrorCode::UnsupportedRequest);
