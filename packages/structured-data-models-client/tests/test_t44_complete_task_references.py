@@ -65,6 +65,7 @@ def test_complete_task_validation_precedes_all_neighbor_draws_and_seed_resets(
     frames = shop()
     asked = question(frames)
     initial_neighbors = None
+    continued = None
     request_ids = [
         body['metadata']['request_id']
         for record in expected
@@ -127,6 +128,7 @@ def test_complete_task_validation_precedes_all_neighbor_draws_and_seed_resets(
                         if record['label'] == 'continuing-valid':
                             continued = current
                         else:
+                            assert continued is not None
                             assert current == continued
             assert [
                 {
