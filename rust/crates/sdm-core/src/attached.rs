@@ -13,6 +13,7 @@ use sdm_contract::data::{AttachmentId, ProviderChoice};
 use sdm_contract::frames::{FrameCheckpointManifest, FrameManifest, MaterializeFrames};
 use sdm_contract::ops::{AttachmentKind, Operation};
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
+use sdm_wire::json::{self, ReadError, Value};
 use serde::de::DeserializeOwned;
 
 use crate::run::{Attachment, Attachments};
@@ -84,17 +85,46 @@ pub fn resolved_attachments(
                     );
                 }
                 match &input {
-                    sdm_contract::prepare::Preparation::CheckRelationalCoverage { data, rows, .. } => {
-                        named.extend([data.response, data.rows, *rows].into_iter().map(|id| (id, AttachmentKind::Bytes)));
+                    sdm_contract::prepare::Preparation::CheckRelationalCoverage {
+                        data,
+                        rows,
+                        ..
+                    } => {
+                        named.extend(
+                            [data.response, data.rows, *rows]
+                                .into_iter()
+                                .map(|id| (id, AttachmentKind::Bytes)),
+                        );
                     }
                     sdm_contract::prepare::Preparation::CompleteRelationalResponse { part } => {
-                        named.extend([part.data.response, part.data.rows, part.rows, part.target_rows].into_iter().map(|id| (id, AttachmentKind::Bytes)));
+                        named.extend(
+                            [
+                                part.data.response,
+                                part.data.rows,
+                                part.rows,
+                                part.target_rows,
+                            ]
+                            .into_iter()
+                            .map(|id| (id, AttachmentKind::Bytes)),
+                        );
                     }
                     sdm_contract::prepare::Preparation::FinishRelationalResponse { input } => {
-                        named.extend(input.attachments().into_iter().map(|id| (id, AttachmentKind::Bytes)));
+                        named.extend(
+                            input
+                                .attachments()
+                                .into_iter()
+                                .map(|id| (id, AttachmentKind::Bytes)),
+                        );
                     }
-                    sdm_contract::prepare::Preparation::PrepareRelationalRankPopulation { source } => {
-                        named.extend(source.attachments().into_iter().map(|id| (id, AttachmentKind::Bytes)));
+                    sdm_contract::prepare::Preparation::PrepareRelationalRankPopulation {
+                        source,
+                    } => {
+                        named.extend(
+                            source
+                                .attachments()
+                                .into_iter()
+                                .map(|id| (id, AttachmentKind::Bytes)),
+                        );
                     }
                     _ => {}
                 }
@@ -304,6 +334,24 @@ pub fn check_attachments(
     Ok(())
 }
 
+fn take_bytes(attachments: &mut Attachments, id: AttachmentId) -> Result<Vec<u8>, CoreError> {
+    let Some(Attachment::Bytes(bytes)) = attachments.remove(&id) else {
+        return Err(invalid(
+            "the message names a bytes attachment it does not attach",
+            id,
+        ));
+    };
+    Ok(bytes)
+}
+
+fn unreadable_json(id: AttachmentId, error: ReadError) -> CoreError {
+    let count = |n: usize| Detail::Scalar(Scalar::UInt64(u64::try_from(n).unwrap_or(u64::MAX)));
+    invalid("an attachment is not the JSON its message names", id)
+        .with_field("category", Detail::text(error.category))
+        .with_field("line", count(error.line))
+        .with_field("column", count(error.column))
+}
+
 /// Takes the bytes attachment `id` and reads it as the UTF-8 JSON of a `T`.
 /// A refusal names the attachment, and where in it and what kind of
 /// problem it found, never the text it read.
@@ -311,12 +359,7 @@ pub fn take_json<T: DeserializeOwned>(
     attachments: &mut Attachments,
     id: AttachmentId,
 ) -> Result<T, CoreError> {
-    let Some(Attachment::Bytes(bytes)) = attachments.remove(&id) else {
-        return Err(invalid(
-            "the message names a bytes attachment it does not attach",
-            id,
-        ));
-    };
+    let bytes = take_bytes(attachments, id)?;
     serde_json::from_slice(&bytes).map_err(|e| {
         let category = match e.classify() {
             serde_json::error::Category::Io => "io",
@@ -324,11 +367,14 @@ pub fn take_json<T: DeserializeOwned>(
             serde_json::error::Category::Data => "data",
             serde_json::error::Category::Eof => "eof",
         };
-        let count = |n: usize| Detail::Scalar(Scalar::UInt64(u64::try_from(n).unwrap_or(u64::MAX)));
-        invalid("an attachment is not the JSON its message names", id)
-            .with_field("category", Detail::text(category))
-            .with_field("line", count(e.line()))
-            .with_field("column", count(e.column()))
+        unreadable_json(
+            id,
+            ReadError {
+                category,
+                line: e.line(),
+                column: e.column(),
+            },
+        )
     })
 }
 
@@ -339,4 +385,118 @@ pub fn take_json_if<T: DeserializeOwned>(
     id: Option<AttachmentId>,
 ) -> Result<Option<T>, CoreError> {
     id.map(|id| take_json(attachments, id)).transpose()
+}
+
+/// Takes one bytes attachment as wire JSON, retaining exact numeric tokens,
+/// object order and native text through the existing wire reader.
+pub fn take_wire_json(attachments: &mut Attachments, id: AttachmentId) -> Result<Value, CoreError> {
+    let bytes = take_bytes(attachments, id)?;
+    json::read(&bytes).map_err(|error| unreadable_json(id, error))
+}
+
+/// The optional form of [`take_wire_json`], leaving attachments untouched
+/// when no value is named.
+pub fn take_wire_json_if(
+    attachments: &mut Attachments,
+    id: Option<AttachmentId>,
+) -> Result<Option<Value>, CoreError> {
+    id.map(|id| take_wire_json(attachments, id)).transpose()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::run::ArrowData;
+    use arrow_array::RecordBatch;
+    use arrow_schema::Schema;
+    use sdm_contract::ErrorCode;
+    use std::sync::Arc;
+
+    #[test]
+    fn wire_attachment_keeps_numeric_tokens_member_order_and_unicode() {
+        let id = AttachmentId(1);
+        let bytes = br#"{"z":123456789012345678901234567890,"a":1,"negative_zero":-0,"fraction":1.2500e-42,"text":"\u0000\u03a9\ud83d\ude3a","a":2.00}"#;
+        let mut attachments = Attachments::from([(id, Attachment::Bytes(bytes.to_vec()))]);
+        let decoded = take_wire_json(&mut attachments, id).unwrap();
+        assert!(attachments.is_empty());
+        assert_eq!(
+            decoded,
+            Value::Object(vec![
+                (
+                    "z".to_owned(),
+                    Value::Number("123456789012345678901234567890".to_owned())
+                ),
+                ("a".to_owned(), Value::Number("2.00".to_owned())),
+                ("negative_zero".to_owned(), Value::Number("-0".to_owned())),
+                (
+                    "fraction".to_owned(),
+                    Value::Number("1.2500e-42".to_owned())
+                ),
+                ("text".to_owned(), Value::Text("\0Ω😺".into())),
+            ])
+        );
+    }
+
+    #[test]
+    fn unreadable_wire_attachment_preserves_reader_diagnostics() {
+        for bytes in [
+            b"[".as_slice(),
+            br#"{"x":NaN}"#.as_slice(),
+            br#""\ud800""#.as_slice(),
+        ] {
+            let expected = json::read(bytes).unwrap_err();
+            let id = AttachmentId(3);
+            let mut attachments = Attachments::from([(id, Attachment::Bytes(bytes.to_vec()))]);
+            let error = take_wire_json(&mut attachments, id).unwrap_err();
+            assert_eq!(error.code, ErrorCode::InvalidMessage);
+            assert_eq!(error.sentence, Sentence::InvalidMessage);
+            assert_eq!(
+                error.fields["attachment"],
+                Detail::Scalar(Scalar::UInt32(3))
+            );
+            assert_eq!(error.fields["category"], Detail::text(expected.category));
+            assert_eq!(
+                error.fields["line"],
+                Detail::Scalar(Scalar::UInt64(u64::try_from(expected.line).unwrap()))
+            );
+            assert_eq!(
+                error.fields["column"],
+                Detail::Scalar(Scalar::UInt64(u64::try_from(expected.column).unwrap()))
+            );
+            assert_eq!(
+                error.message,
+                "an attachment is not the JSON its message names"
+            );
+            assert!(attachments.is_empty());
+        }
+    }
+
+    #[test]
+    fn optional_wire_attachment_checks_kind_and_consumes_only_the_named_owner() {
+        let id = AttachmentId(4);
+        let spare = AttachmentId(5);
+        let schema = Arc::new(Schema::empty());
+        let arrow = ArrowData::new(schema.clone(), vec![RecordBatch::new_empty(schema)]);
+        let mut attachments = Attachments::from([
+            (id, Attachment::Arrow(arrow)),
+            (spare, Attachment::Bytes(b"null".to_vec())),
+        ]);
+        assert_eq!(take_wire_json_if(&mut attachments, None).unwrap(), None);
+        assert_eq!(attachments.len(), 2);
+        let error = take_wire_json_if(&mut attachments, Some(id)).unwrap_err();
+        assert_eq!(error.code, ErrorCode::InvalidMessage);
+        assert_eq!(
+            error.fields["attachment"],
+            Detail::Scalar(Scalar::UInt32(4))
+        );
+        assert!(!error.fields.contains_key("category"));
+        assert!(!attachments.contains_key(&id));
+        assert!(attachments.contains_key(&spare));
+        assert_eq!(take_wire_json(&mut attachments, id).unwrap_err(), error);
+        assert_eq!(
+            take_wire_json_if(&mut attachments, Some(spare)).unwrap(),
+            Some(Value::Null)
+        );
+        assert!(attachments.is_empty());
+    }
 }

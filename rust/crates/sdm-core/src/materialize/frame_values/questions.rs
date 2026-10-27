@@ -7,6 +7,7 @@
 //! the host owns fresh native materializers, never decomposition semantics.
 
 use super::*;
+use crate::attached::take_json_if;
 
 struct QuestionData {
     description: SourceDescription,
@@ -116,7 +117,7 @@ pub(super) fn prepare(
         Some(Attachment::Bytes(bytes)) => Some(bytes.clone()),
         _ => None,
     });
-    let values: Option<Value> = take_json_if(attachments, input.values)?;
+    let values: Option<Value> = take_wire_json_if(attachments, input.values)?;
     let candidates: Option<Vec<sdm_contract::ops::GivenCandidate>> =
         take_json_if(attachments, input.candidates)?;
     let decomposition = if let Some(plan) = validation.ranking.clone() {
