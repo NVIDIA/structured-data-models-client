@@ -20,11 +20,16 @@ def native_decimal_type(dtype: object) -> dict[str, str | int] | None:
     if type(dtype) is not pd.ArrowDtype:
         return None
     physical = dtype.pyarrow_dtype
-    if pa.types.is_decimal128(physical):
-        tag = 'decimal128'
-    elif pa.types.is_decimal256(physical):
-        tag = 'decimal256'
-    else:
+    tag = next(
+        (
+            f'decimal{bits}'
+            for bits in (32, 64, 128, 256)
+            if (check := getattr(pa.types, f'is_decimal{bits}', None)) is not None
+            and check(physical)
+        ),
+        None,
+    )
+    if tag is None:
         return None
     return {
         'type': tag,
@@ -56,11 +61,10 @@ def native_decimal_column(
     if descriptor is None:
         return None
     physical = dtype.pyarrow_dtype
-    storage_type = (
-        pa.decimal128(physical.precision, 0)
-        if descriptor['type'] == 'decimal128'
-        else pa.decimal256(physical.precision, 0)
-    )
+    # Decimal32/64 remain their original typed zero-copy views here.
+    # Existing shared physical admission widens them exactly to128.
+    make = getattr(pa, f'decimal{physical.bit_width}')
+    storage_type = make(physical.precision, 0)
     original = native.__arrow_array__()
     chunks = [
         pa.Array.from_buffers(

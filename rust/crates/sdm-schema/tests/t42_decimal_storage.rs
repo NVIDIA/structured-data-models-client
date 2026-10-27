@@ -144,8 +144,20 @@ fn bindings_cannot_name_a_different_field_or_repeat_an_ordinal() {
 #[test]
 fn canonical_storage_cannot_forge_a_smaller_native_mantissa_width() {
     for (decimal, value) in [
-        (NativeDecimal::Decimal32 { precision: 9, scale: 129 }, 1_i128 << 40),
-        (NativeDecimal::Decimal64 { precision: 18, scale: -129 }, 1_i128 << 80),
+        (
+            NativeDecimal::Decimal32 {
+                precision: 9,
+                scale: 129,
+            },
+            1_i128 << 40,
+        ),
+        (
+            NativeDecimal::Decimal64 {
+                precision: 18,
+                scale: -129,
+            },
+            1_i128 << 80,
+        ),
     ] {
         let precision = match decimal {
             NativeDecimal::Decimal32 { precision, .. }
@@ -153,8 +165,10 @@ fn canonical_storage_cannot_forge_a_smaller_native_mantissa_width() {
             _ => unreachable!(),
         };
         let array = Decimal128Array::from(vec![value])
-            .with_precision_and_scale(precision, 0).unwrap();
-        let batch = RecordBatch::try_from_iter([("value_id", Arc::new(array) as ArrayRef)]).unwrap();
+            .with_precision_and_scale(precision, 0)
+            .unwrap();
+        let batch =
+            RecordBatch::try_from_iter([("value_id", Arc::new(array) as ArrayRef)]).unwrap();
         assert!(decimal_storage::read(&[batch], 0, &decimal).is_err());
     }
 }
