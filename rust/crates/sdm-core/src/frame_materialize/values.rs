@@ -118,7 +118,7 @@ pub(crate) struct BoundGraph {
     pub native: Arc<Vec<FrameNativeTable>>,
     pub source: String,
     owner: RetainedFrameGraph,
-    _lease: GraphLease,
+    lease: Option<GraphLease>,
 }
 
 fn native_identity(source: &str, native: &[FrameNativeTable]) -> Result<String, CoreError> {
@@ -204,15 +204,23 @@ impl BoundGraph {
     }
 
     fn from_owner(owner: RetainedFrameGraph) -> Result<Self, CoreError> {
-        let lease = owner.try_lease()?;
+        let lease = owner.lease()?;
         Ok(Self {
             prepared: owner.prepared(),
             frames: owner.frames(),
             native: owner.native(),
             source: owner.source().to_owned(),
             owner,
-            _lease: lease,
+            lease: Some(lease),
         })
+    }
+
+    /// Label evaluation borrows immutable graph/index ownership but may
+    /// await shared data kernels. Never retain a graph gate across a host
+    /// suspension. Each local FrameRun method still holds its own mutex;
+    /// continuing neighbor draws occur only in the pure context call.
+    pub fn release_access(&mut self) {
+        self.lease = None;
     }
 
     pub fn take_retained(
