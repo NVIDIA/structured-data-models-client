@@ -56,6 +56,8 @@ use sdm_wire::response::{
     PredictionResponse, Refused, integer_text, integer_text_limited, numeric_text,
 };
 
+pub mod validation;
+
 /// The model this build sends a relational request to.
 pub const RELATIONAL: &str = "kumo-relational";
 
@@ -709,10 +711,7 @@ pub fn preflight(
         if let Some((_, rows)) = instance_table(payload, "context")
             && rows.is_empty()
         {
-            return Err(
-                unsupported(Sentence::NoContextRows, model, "no context rows are left")
-                    .with_field("context_rows", count(0)),
-            );
+            validation::context_empty(true, model)?;
         }
     }
     for payload in payloads {
@@ -727,15 +726,7 @@ pub fn preflight(
             .and_then(Value::as_text);
         if let Some(values) = target_values(payload, column) {
             let labels: BTreeSet<String> = values.iter().map(|v| member(v)).collect();
-            if labels.len() > CLASSES_MAX {
-                return Err(unsupported(
-                    Sentence::TooManyClasses,
-                    model,
-                    "the target has more classes than the model takes",
-                )
-                .with_field("classes", count(labels.len()))
-                .with_field("limit", count(CLASSES_MAX)));
-            }
+            validation::class_count(labels.len(), model)?;
         }
     }
     for payload in payloads {
@@ -756,56 +747,23 @@ pub fn preflight(
             .filter(|v| !matches!(v, Value::Null))
             .map(|v| member(v))
             .collect();
-        if answered.len() != 1 {
-            continue;
+        if let Some(constant) = validation::variation(
+            kind,
+            column.unwrap_or_default(),
+            answered.len(),
+            query,
+            model,
+        )? {
+            notices.push(constant);
+            break;
         }
-        let column = column.unwrap_or_default();
-        let constant = constant_context(column, query);
-        if classifies(kind) {
-            // Named as the notice names the target, for the host's words
-            // (the adapter's `_how_to_name_the_target`).
-            let sentence = match constant.sentence {
-                Sentence::ContextConstantColumn => Sentence::OneClassColumn,
-                Sentence::ContextConstantPredicted => Sentence::OneClassPredicted,
-                Sentence::ContextConstantQuestion => Sentence::OneClassQuestion,
-                _ => Sentence::OneClassAnswer,
-            };
-            let mut error = unsupported(sentence, model, "every context row has the same answer")
-                .with_field("field", Detail::text("context"))
-                .with_field("reason", Detail::text("one_class"));
-            for (name, value) in constant.fields {
-                error = error.with_field(name, value);
-            }
-            return Err(error.with_field("classes_in_context", count(1)));
-        }
-        notices.push(constant);
-        break;
     }
     if !outputs.iter().any(|o| o == "explanation") {
         return Ok(notices);
     }
     let scored: usize = payloads.iter().map(|p| rows_of(p, "predict")).sum();
-    if scored != EXPLANATION_PREDICT_ROWS {
-        // The output and what to change, for the host's words (T2.13).
-        return Err(unsupported(
-            Sentence::ExplanationOneEntity,
-            model,
-            "an explanation covers one entity",
-        )
-        .with_field("field", Detail::text("outputs"))
-        .with_field("remedy", Detail::text("one_entity"))
-        .with_field("scored", count(scored)));
-    }
-    if asks_for_the_larger_context(payloads) {
-        return Err(unsupported(
-            Sentence::ExplanationFastMode,
-            model,
-            "an explanation is given only in the fast run mode",
-        )
-        .with_field("field", Detail::text("outputs"))
-        .with_field("remedy", Detail::text("smaller_context"))
-        .with_field("context_rows_fast", count(CONTEXT_ROWS_FAST)));
-    }
+    validation::explanation_size(scored, model)?;
+    validation::explanation_mode(asks_for_the_larger_context(payloads), model)?;
     Ok(notices)
 }
 
