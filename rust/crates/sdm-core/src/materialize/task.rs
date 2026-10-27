@@ -205,6 +205,64 @@ impl LabelledContext {
     }
 }
 
+/// Immutable context and prediction rows of a complete task. Native owners
+/// are retained as Arrow arrays; each batch exposes its actual ordered range.
+pub(super) struct TaskRows {
+    context_keys: ArrayRef,
+    context_anchors: Vec<i64>,
+    predicted: ArrayRef,
+    prediction_anchor: i64,
+}
+
+pub(super) struct TaskBatch {
+    pub(super) range: std::ops::Range<usize>,
+    pub(super) keys: ArrayRef,
+    pub(super) anchors: Vec<i64>,
+    pub(super) predicted: ArrayRef,
+}
+
+impl TaskRows {
+    pub(super) fn new(
+        context_keys: ArrayRef,
+        context_anchors: Vec<i64>,
+        predicted: ArrayRef,
+        prediction_anchor: i64,
+    ) -> Result<Self, CoreError> {
+        if context_keys.len() != context_anchors.len() {
+            return Err(CoreError::protocol(
+                Sentence::InvalidMessage,
+                "task context anchors do not align with its entity rows",
+            ));
+        }
+        Ok(Self {
+            context_keys,
+            context_anchors,
+            predicted,
+            prediction_anchor,
+        })
+    }
+
+    pub(super) fn batch(&self, range: std::ops::Range<usize>) -> Result<TaskBatch, CoreError> {
+        if range.start > range.end || range.end > self.predicted.len() {
+            return Err(CoreError::protocol(
+                Sentence::InvalidMessage,
+                "a task batch names an invalid prediction range",
+            ));
+        }
+        let predicted = self.predicted.slice(range.start, range.len());
+        let keys = arrow_select::concat::concat(&[self.context_keys.as_ref(), predicted.as_ref()])
+            .map_err(|_| internal("the examples' keys do not concatenate"))?;
+        let mut anchors = self.context_anchors.clone();
+        anchors.extend(std::iter::repeat_n(self.prediction_anchor, predicted.len()));
+        Ok(TaskBatch {
+            range,
+            keys,
+            anchors,
+            predicted,
+        })
+    }
+}
+
 /// Actual ordered prediction ranges of a complete task. Hosts can retain
 /// these useful task facts without choosing rows or applying request policy.
 pub(super) struct BatchLayout {
