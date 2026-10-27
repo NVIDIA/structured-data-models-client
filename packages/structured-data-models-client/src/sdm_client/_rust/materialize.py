@@ -339,11 +339,19 @@ def gather(
     from sdm_client import decompose
 
     schema = materializer.schema
-    anchor = options.get('anchor_time')
     if schema.source is None:
-        choice, provider = {'provider': 'frames', 'manifest': 7}, None
-    else:
-        choice, provider = providers.for_source(schema.source)
+        from sdm_client._rust import frame_facade
+
+        return frame_facade.gather(
+            materializer,
+            query,
+            indices,
+            num_context_samples,
+            options,
+            candidates,
+        )
+    anchor = options.get('anchor_time')
+    choice, provider = providers.for_source(schema.source)
     operation = {
         'op': 'materialize',
         'provider': choice,
@@ -384,12 +392,6 @@ def gather(
             },
         ),
     }
-    if schema.source is None:
-        from sdm_client._rust import frame_materialize
-
-        attachments.update(
-            frame_materialize.inputs(schema, materializer._core_sampler_state)
-        )
     # The ceilings on what one materialize holds, which the caller may set
     # as it sets the most steps of a forecast (T2.8c).
     from sdm_client.materializers import relational

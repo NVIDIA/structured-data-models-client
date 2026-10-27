@@ -226,7 +226,7 @@ def run(
         warning_presentation = 'frame_schema'
     elif operation.get('direct') is not None:
         warning_presentation = 'frame_schema'
-    elif owned_frame and operation['op'] == 'materialize':
+    elif owned_frame and operation['op'] in ('materialize', 'prepare_frames'):
         warning_presentation = 'frame_graph'
     held = None if state is None else state.get('held')
     if held is not None and operation['op'] != 'prepare_frames':
