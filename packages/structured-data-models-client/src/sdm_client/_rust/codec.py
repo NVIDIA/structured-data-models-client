@@ -67,6 +67,21 @@ class CodecError(ValueError):
     """
 
 
+def restored_integer(text: str) -> int:
+    """Restore canonical digits of an already decoded value, without admission.
+
+    Native ID effects may change the decimal string limit after the transport
+    decoded this integer. Decimal-to-int preserves that existing value; fresh
+    declared-text conversions retain their separate current-limit policy.
+    """
+    return int(Decimal(text))
+
+
+def restored_json(text: str | bytes) -> Any:
+    """Restore core-carried decoded values without repeating integer admission."""
+    return json.loads(text, parse_int=restored_integer)
+
+
 @dataclass(frozen=True)
 class Temporal:
     r"""A temporal scalar as the contract counts it: ``value`` in ``unit``.

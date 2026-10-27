@@ -107,10 +107,11 @@ def _explanation(text: str | None, by_step: bool) -> Any:
         return None
     if not by_step:
         return _mapping(text)
-    steps = json.loads(text)['by_forecast_step']
+    steps = codec.restored_json(text)['by_forecast_step']
     return {
         'by_forecast_step': {
-            int(step): dict(explained) for step, explained in steps.items()
+            codec.restored_integer(step): dict(explained)
+            for step, explained in steps.items()
         }
     }
 
@@ -177,16 +178,14 @@ def _as_answered(row: dict[str, Any]) -> Any:
     prediction ``None`` either way."""
     if 'prediction_as_answered' in row:
         text = row['prediction_as_answered']
-        return None if text is None else json.loads(text)
+        return None if text is None else codec.restored_json(text)
     return row.get('prediction')
 
 
 def _forecast_step(row: dict[str, Any]) -> int | None:
     """Restore an already decoded exact whole value, without decimal display."""
-    from decimal import Decimal
-
     if row.get('forecast_step_as_answered') is not None:
-        return int(Decimal(row['forecast_step_as_answered']))
+        return codec.restored_integer(row['forecast_step_as_answered'])
     return row.get('forecast_step')
 
 
@@ -194,7 +193,7 @@ def _mapping(text: str) -> dict[Any, Any]:
     r"""An item's rankings member as the reference's item holds it, from
     the JSON text the core gives: an object, or, where a key is not text,
     the list of its pairs."""
-    read = json.loads(text)
+    read = codec.restored_json(text)
     return dict(read)
 
 
@@ -207,7 +206,7 @@ def _id(row: dict[str, Any]) -> Any:
     way."""
     if 'id_as_written' in row:
         text = row['id_as_written']
-        return None if text is None else json.loads(text)
+        return None if text is None else codec.restored_json(text)
     return row.get('id')
 
 
@@ -535,7 +534,7 @@ def predict(
         _carry_the_answers(error, request.parts is not None)
         raise
     answered = results.expect(finished.result, results.Predicted)
-    metadata = json.loads(finished.take(answered.metadata))
+    metadata = codec.restored_json(finished.take(answered.metadata))
     if ranking:
         # The core's rows are ordered by row_index; a ranking's items keep
         # the order the answers named them in.
@@ -705,7 +704,7 @@ def _carry_the_answers(error: Exception, by_step: bool) -> None:
         table.to_pylist(),
         model=named.get('model', ''),
         request_id=named.get('request_id', ''),
-        metadata=json.loads(named.get('metadata', '{}')),
+        metadata=codec.restored_json(named.get('metadata', '{}')),
         outputs=tuple(json.loads(named.get('outputs', '[]'))),
         by_step=by_step,
         explanation=named.get('explanation'),

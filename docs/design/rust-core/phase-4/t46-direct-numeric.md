@@ -75,6 +75,8 @@ Direct response attribution recognizes the closed primitive list/key forms emitt
 Direct and gathered answers share one layout implementation, with gathered admission unchanged.
 Numeric class restoration uses the existing wire integer and floating text grammar, including supported Unicode decimal digits and single underscores, while preserving malformed-value pass-through and probability-key collision protection.
 Final integer class restoration observes the current native decimal digit limit after all ID conversion effects and counts original digits, including leading zeroes, before canonicalization.
+Restoring a core-carried integer that the transport already decoded does not repeat that admission after native ID effects change the process digit limit.
+One native codec restores nested metadata, numeric predictions, item mappings, identifiers and canonical forecast carriers through maintained exact conversion, while fresh declared-text class conversion retains the actual later limit and caught-failure policy.
 Whole finite numeric classes use the existing exact conversion kernel and integer JSON carrier, preserving typed int64 values and wider native item integers without a new result shape or integer runtime.
 
 Tests were authored and pushed before production implementation.
@@ -131,6 +133,9 @@ Finite whole floats use standard native-compatible conversion, including negativ
 Global decoding still precedes all native row-literal effects, and later bounds remain deferred until their own row.
 An error-only native presenter renders the core-selected bounds integer using maintained exact conversion at that reached presentation boundary, preserving an active decimal digit-limit failure after earlier warning effects.
 The existing common value formatter supplies quoted values for selected generated-contract diagnostics; it does not validate or reinterpret model rows.
+
+The model's Text-to-Categorical correction returns before the regression-target meaning correction, including numeric frames carrying supplied string metadata with an explicitly assigned Text target.
+Earlier schema consistency and scored-feature meaning refusals retain their existing positions.
 
 The R7 source evidence covers immediate missing/repeat advice, fresh time reads, live dictionary ownership, complete malformed response fields, paired decoder failures, successive explicit key overrides and final categorical/date advice effects.
 Cross-table mutation interactions among final key-declined/keyless notices and earlier link/date advice are not established by this bounded evidence and remain a required Phase 4 follow-up.

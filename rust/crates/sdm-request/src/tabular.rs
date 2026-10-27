@@ -347,8 +347,7 @@ pub fn envelope(
         if stype == Stype::Text {
             text_columns.push(name.clone());
             stype = Stype::Categorical;
-        }
-        if name == target {
+        } else if name == target {
             if kind.contains("classification") {
                 stype = Stype::Categorical;
             } else if stype == Stype::Categorical {
