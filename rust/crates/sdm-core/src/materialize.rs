@@ -3023,6 +3023,9 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         description = located;
         sdm_schema::assemble::mark_keys(&mut description);
     }
+    if let Some(frames) = &frames {
+        crate::frame_materialize::lock(frames).validate_text_types(&description)?;
+    }
     kept_checks(&description)?;
     if description.tables.iter().any(|t| t.primary_key.len() > 1) {
         // The reference resolves its query against a schema with no key of
