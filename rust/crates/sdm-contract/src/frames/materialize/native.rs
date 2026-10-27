@@ -59,8 +59,19 @@ pub enum FrameReferenceValues {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "outcome", rename_all = "snake_case", deny_unknown_fields)]
 pub enum NativeFrameStrings {
-    Value { values: StringData },
-    Failed { failure: FrameNativeFailure },
+    Value {
+        values: StringData,
+    },
+    Failed {
+        failure: FrameNativeFailure,
+    },
+    /// Both actual native index casts failed. These display observations
+    /// occur only after the second failure, before core error presentation.
+    CastFailed {
+        failure: FrameNativeFailure,
+        expected_dtype: String,
+        input_repr: String,
+    },
 }
 
 /// The first native element that failed the reached diagnostic constructor.

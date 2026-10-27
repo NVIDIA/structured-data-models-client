@@ -49,7 +49,7 @@ fn converted(value: &FrameReferenceValues, out: &mut Named) {
             converted: NativeFrameStrings::Value { values },
         } => out.push((values.values, AttachmentKind::Arrow)),
         FrameReferenceValues::NativeString {
-            converted: NativeFrameStrings::Failed { .. },
+            converted: NativeFrameStrings::Failed { .. } | NativeFrameStrings::CastFailed { .. },
         } => {}
     }
 }

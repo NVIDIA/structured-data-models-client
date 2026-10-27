@@ -298,6 +298,66 @@ class NativeFrameColumns:
         return diagnostic, failure
 
 
+@dataclass(frozen=True)
+class NativeReferenceCastFailure:
+    """Actual last native cast exception and reached display facts."""
+
+    failure: NativeFrameFailure
+    expected_dtype: str
+    input_repr: str
+
+
+def _native_references(
+    selected: pd.Series, dtype: Any, *, whole: bool
+) -> NativeColumn | NativeFrameFailure | NativeReferenceCastFailure:
+    """Execute the original complete-validation or index-cast builtin.
+
+    Whole validation's element fallback and per-batch index dtype retry are
+    different actual native operations. Core owns unresolved-row admission
+    and formatting a final retry failure from its last actual cause.
+    """
+    if whole:
+        try:
+            return NativeColumn(selected.astype(str))
+        except (TypeError, ValueError, OverflowError):
+            converted = []
+            for value in selected:
+                try:
+                    converted.append(str(value))
+                except (TypeError, ValueError, OverflowError):
+                    converted.append(None)
+            return NativeColumn(pd.Series(converted))
+        except Exception as error:
+            return NativeFrameFailure.capture(error)
+    try:
+        return NativeColumn(selected.astype(str))
+    except (TypeError, ValueError):
+        try:
+            return NativeColumn(selected.astype(dtype))
+        except (TypeError, ValueError) as error:
+            failure = NativeFrameFailure.capture(error)
+            # The old ValueError f-string observes list repr before dtype.
+            return NativeReferenceCastFailure(
+                failure,
+                input_repr=repr(selected.tolist()),
+                expected_dtype=str(dtype),
+            )
+        except Exception as error:
+            return NativeFrameFailure.capture(error)
+    except Exception as error:
+        return NativeFrameFailure.capture(error)
+
+
+def convert_references(
+    selected: pd.Series, dtype: Any, *, whole: bool
+) -> NativeColumn | NativeFrameFailure | NativeReferenceCastFailure:
+    """Capture failures of the complete reached native conversion itself."""
+    try:
+        return _native_references(selected, dtype, whole=whole)
+    except Exception as error:
+        return NativeFrameFailure.capture(error)
+
+
 def convert_text(selected: pd.Series) -> NativeColumn | NativeFrameFailure:
     """Convert one actual selected native column before Rust normalization.
 
