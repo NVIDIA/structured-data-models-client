@@ -7,8 +7,11 @@
 
 use std::sync::Arc;
 
-use arrow_array::{ArrayRef, Decimal128Array, Decimal256Array, RecordBatch};
+use arrow_array::{
+    ArrayRef, Decimal32Array, Decimal64Array, Decimal128Array, Decimal256Array, RecordBatch,
+};
 use arrow_buffer::i256;
+use arrow_schema::DataType;
 use sdm_contract::data::AttachmentId;
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::frames::{NativeDecimal, NativeDecimalColumn};
@@ -191,6 +194,39 @@ fn detached_table_rows_rebind_with_original_full_scale_descriptors() {
                     Dtype::Int64
                 }
             );
+        }
+    }
+}
+
+#[test]
+fn native_small_widths_keep_logical_identity_after_admission_and_owned_rebind() {
+    for scale in [-129, 129] {
+        let arrays: [(ArrayRef, NativeDecimal); 2] = [
+            (
+                Arc::new(Decimal32Array::from(vec![0, 1])
+                    .with_precision_and_scale(1, 0).unwrap()),
+                NativeDecimal::Decimal32 { precision: 1, scale },
+            ),
+            (
+                Arc::new(Decimal64Array::from(vec![0, 1])
+                    .with_precision_and_scale(1, 0).unwrap()),
+                NativeDecimal::Decimal64 { precision: 1, scale },
+            ),
+        ];
+        for (array, decimal) in arrays {
+            let batch = RecordBatch::try_from_iter([("value_id", array)]).unwrap();
+            let declarations = vec![NativeDecimalColumn {
+                column: 0, name: "value_id".into(), decimal,
+            }];
+            let (table, owned) = start_rows(
+                ArrowData::new(batch.schema(), vec![batch]), declarations.clone(), "table",
+            );
+            let (rows, rebound) = owned.unwrap();
+            assert_eq!(rows.schema.field(0).data_type(), &DataType::Decimal128(1, 0));
+            assert_eq!(rebound, declarations);
+            let (schema, owned) = start_rows(rows, rebound, "schema");
+            assert!(owned.is_none());
+            assert_eq!(schema, table);
         }
     }
 }
