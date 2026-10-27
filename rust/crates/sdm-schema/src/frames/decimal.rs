@@ -29,7 +29,7 @@ pub(crate) enum Unscaled {
 }
 
 impl Unscaled {
-    fn fits_int64(&self, scale: i8) -> bool {
+    fn fits_int64(&self, scale: i32) -> bool {
         match self {
             Self::Decimal128(value) => fits_int64(&value.to_string(), scale),
             Self::Decimal256(value) => fits_int64(&value.to_string(), scale),
@@ -73,7 +73,15 @@ pub(crate) fn read(batches: &[RecordBatch], index: usize, data_type: &DataType) 
             _ => unreachable!("only a Decimal field reaches native Decimal reading"),
         }
     }
-    let dtype = if scale > 0 {
+    let dtype = dtype(precision, i32::from(scale), &values);
+    Some(Column { dtype, values })
+}
+
+/// Infer from complete native Decimal metadata and exact unscaled values.
+/// Native scale is an i32 fact even when the closed storage type is narrower.
+/// Shared composition must supply that original fact without an i8 cast.
+pub(crate) fn dtype(precision: u8, scale: i32, values: &[Option<Unscaled>]) -> Dtype {
+    if scale > 0 {
         // Frozen Arrow-backed inference answers from the declared scale,
         // including whole values such as 1.00 and an empty/all-null column.
         Dtype::Float64
@@ -84,21 +92,24 @@ pub(crate) fn read(batches: &[RecordBatch], index: usize, data_type: &DataType) 
         Dtype::Int64
     } else {
         Dtype::String
-    };
-    Some(Column { dtype, values })
+    }
 }
 
 /// Whether a canonical unscaled integer times 10**(-scale) fits int64.
 /// This is used only for nonpositive scale after the precision fast path.
-/// Comparing digits avoids overflow for Decimal256 and scale -128.
-fn fits_int64(unscaled: &str, scale: i8) -> bool {
+/// Comparing digits avoids overflow throughout the native i32 scale domain.
+fn fits_int64(unscaled: &str, scale: i32) -> bool {
     debug_assert!(scale <= 0);
     let negative = unscaled.starts_with('-');
     let digits = unscaled.trim_start_matches('-');
     if digits == "0" {
         return true;
     }
-    let zeros = usize::from(scale.unsigned_abs());
+    let zeros = scale.unsigned_abs();
+    if zeros > 18 {
+        return false;
+    }
+    let zeros = zeros as usize;
     let length = digits.len() + zeros;
     if length != 19 {
         return length < 19;
