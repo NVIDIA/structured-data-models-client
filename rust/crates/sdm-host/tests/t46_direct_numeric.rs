@@ -498,6 +498,25 @@ fn direct_generated_optional_owners_and_native_mapping_faults_remain_selected_da
         ("explanation", json!(4), "", Some("dict")),
         ("metadata", json!([["x"]]), "", Some("dict")),
         ("rankings", json!(4), "", Some("iter")),
+        (
+            "probabilities",
+            json!({"x":"bad"}),
+            "response carries ",
+            Some("float"),
+        ),
+        ("scores", json!([null]), "response carries ", Some("float")),
+        (
+            "embeddings",
+            json!(["bad"]),
+            "response carries ",
+            Some("float"),
+        ),
+        (
+            "quantiles",
+            json!({"x":"bad"}),
+            "response carries ",
+            Some("float"),
+        ),
     ] {
         let input = prelude(
             &["feature", "target"],
@@ -536,10 +555,32 @@ fn direct_generated_optional_owners_and_native_mapping_faults_remain_selected_da
             sdm_contract::Sentence::DirectResponseContract
         );
         assert_eq!(error.fields["before"], sdm_contract::Detail::text(before));
+        let offending = if native == Some("float") {
+            if value.is_array() {
+                &value[0]
+            } else {
+                &value["x"]
+            }
+        } else {
+            &value
+        };
         assert_eq!(
             error.fields["offending"],
-            sdm_contract::Detail::text(serde_json::to_string(&value).unwrap())
+            sdm_contract::Detail::text(serde_json::to_string(offending).unwrap())
         );
+        if native == Some("float") {
+            assert_eq!(
+                error.fields["after"],
+                sdm_contract::Detail::text(" where the contract requires a number")
+            );
+            let shown = if offending.is_null() { "None" } else { "'bad'" };
+            assert_eq!(
+                error.fields["diagnostic"],
+                sdm_contract::Detail::text(format!(
+                    "response carries {shown} where the contract requires a number"
+                ))
+            );
+        }
         assert_eq!(
             error.fields.get("native"),
             native.map(sdm_contract::Detail::text).as_ref()
