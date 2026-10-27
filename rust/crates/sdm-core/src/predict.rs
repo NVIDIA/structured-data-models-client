@@ -518,77 +518,172 @@ pub(crate) async fn call_response(
     Ok((answer, response))
 }
 
-/// Display an already selected decoder fault without a second validator.
-/// The shared decoder supplies its actual item ordinal; the existing common
-/// value formatter supplies Python-compatible quoted JSON values.
-fn direct_contract_error(answer: &Value, error: sdm_wire::response::Refused) -> CoreError {
+/// Present the shared decoder's selected field/value fault, without parsing
+/// or validating the response a second time. Native display/cause stays host-side.
+fn direct_contract_error(_answer: &Value, error: sdm_wire::response::Refused) -> CoreError {
     use sdm_pql::float_repr::Shown;
     fn shown(value: &Value) -> Shown {
         match value {
             Value::Null => Shown::None,
-            Value::Bool(value) => Shown::Bool(*value),
-            Value::Text(value) => Shown::Text(value.clone()),
-            Value::Number(token) if json::is_integer_token(token) => {
-                Shown::Int(sdm_wire::response::integer_text(token).unwrap_or_else(|| token.clone()))
+            Value::Bool(v) => Shown::Bool(*v),
+            Value::Text(v) => Shown::Text(v.clone()),
+            Value::Number(v) if json::is_integer_token(v) => {
+                Shown::Int(sdm_wire::response::integer_text(v).unwrap_or_else(|| v.clone()))
             }
-            Value::Number(token) => Shown::Float(token.parse().unwrap_or(f64::NAN)),
-            Value::Array(values) => Shown::List(values.iter().map(shown).collect()),
-            Value::Object(values) => Shown::Dict(
-                values
-                    .iter()
-                    .map(|(key, value)| (Shown::Text(key.clone()), shown(value)))
+            Value::Number(v) => Shown::Float(v.parse().unwrap_or(f64::NAN)),
+            Value::Array(v) => Shown::List(v.iter().map(shown).collect()),
+            Value::Object(v) => Shown::Dict(
+                v.iter()
+                    .map(|(k, v)| (Shown::Text(k.clone()), shown(v)))
                     .collect(),
             ),
         }
     }
-    let item = error
-        .item
-        .and_then(|ordinal| match answer.get("predictions") {
-            Some(Value::Array(items)) => items.get(ordinal),
-            _ => None,
-        });
-    let value = item.and_then(|item| {
-        error
-            .field
-            .strip_prefix("prediction.")
-            .and_then(|field| item.get(field))
-    });
-    let diagnostic = match (error.field, error.reason) {
-        ("prediction.row_index", "missing") => {
-            "PredictionItem response is missing required field 'row_index'".to_owned()
-        }
-        ("prediction.row_index", "null") => {
-            "PredictionItem response has a null 'row_index', which the contract requires".to_owned()
-        }
-        ("prediction.row_index", "not_whole") => {
-            let Some(value) = value else {
-                return refused(error);
-            };
-            let reason = if matches!(value, Value::Number(_)) {
-                "which is not a whole number"
-            } else {
-                "where the contract requires a whole number"
-            };
-            format!(
-                "PredictionItem response has 'row_index' = {}, {reason}",
-                shown(value).repr()
-            )
-        }
-        ("prediction.probabilities", "not_an_object") => {
-            let Some(value) = value else {
-                return refused(error);
-            };
-            format!(
-                "response carries {} where the contract requires an object",
-                shown(value).repr()
-            )
-        }
-        _ => return refused(error),
+    let owner = if error.field.starts_with("prediction.") || error.field == "prediction" {
+        "PredictionItem"
+    } else {
+        "PredictionResponse"
     };
-    CoreError::new(
+    let field = error
+        .field
+        .strip_prefix("prediction.")
+        .unwrap_or(error.field);
+    let (before, after, fixed) = if error.native.is_some() {
+        (
+            String::new(),
+            String::new(),
+            Some("a native response mapping conversion failed".into()),
+        )
+    } else {
+        match (error.field, error.reason) {
+            (_, "missing") => (
+                String::new(),
+                String::new(),
+                Some(format!(
+                    "{owner} response is missing required field '{field}'"
+                )),
+            ),
+            (_, "null") => (
+                String::new(),
+                String::new(),
+                Some(format!(
+                    "{owner} response has a null '{field}', which the contract requires"
+                )),
+            ),
+            (_, "not_text") => (
+                format!("{owner} response has '{field}' = "),
+                ", where the contract requires a string".into(),
+                None,
+            ),
+            (_, "not_whole") => {
+                let tail = if matches!(error.value.as_ref(), Some(Value::Number(_))) {
+                    ", which is not a whole number"
+                } else {
+                    ", where the contract requires a whole number"
+                };
+                (
+                    format!("{owner} response has '{field}' = "),
+                    tail.into(),
+                    None,
+                )
+            }
+            ("response" | "prediction", "not_an_object") => (
+                "response carries ".into(),
+                format!(" where the contract requires a {owner} object"),
+                None,
+            ),
+            ("metadata", "not_an_object") => (
+                String::new(),
+                String::new(),
+                Some("PredictionResponse response field 'metadata' is not an object".into()),
+            ),
+            ("predictions", "not_a_sequence") => (
+                String::new(),
+                String::new(),
+                Some("PredictionResponse response field 'predictions' is not a sequence".into()),
+            ),
+            (_, "not_an_object") => (
+                "response carries ".into(),
+                " where the contract requires an object".into(),
+                None,
+            ),
+            (_, "not_a_sequence") => (
+                "response carries ".into(),
+                " where the contract requires an array of numbers".into(),
+                None,
+            ),
+            (_, "not_a_number") => (
+                "response carries ".into(),
+                " where the contract requires a number".into(),
+                None,
+            ),
+            (_, "not_finite") => (
+                "response carries a non-finite number ".into(),
+                ", which the contract does not permit".into(),
+                None,
+            ),
+            _ => return refused(error),
+        }
+    };
+    let diagnostic = fixed.unwrap_or_else(|| {
+        format!(
+            "{before}{}{after}",
+            error
+                .value
+                .as_ref()
+                .map(shown)
+                .map(|v| v.repr())
+                .unwrap_or_default()
+        )
+    });
+    let mut selected = CoreError::new(
         Sentence::DirectResponseContract,
         "the direct model response violates its generated contract",
     )
     .with_field("model", Detail::text(sdm_request::predict::TABULAR))
     .with_field("diagnostic", Detail::text(diagnostic))
+    .with_field("field", Detail::text(error.field))
+    .with_field("fault", Detail::text(error.reason));
+    if let Some(item) = error.item {
+        selected = selected.with_field("item", Detail::Scalar(Scalar::UInt64(item as u64)));
+    }
+    if !error.path.is_empty() {
+        let path = Value::Array(
+            error
+                .path
+                .iter()
+                .map(|part| match part {
+                    sdm_wire::response::RefusalAt::Index(at) => {
+                        Value::Object(vec![("index".into(), Value::Number(at.to_string()))])
+                    }
+                    sdm_wire::response::RefusalAt::Member(name) => {
+                        Value::Object(vec![("member".into(), Value::Text(name.clone()))])
+                    }
+                })
+                .collect(),
+        );
+        selected = selected.with_field(
+            "path",
+            Detail::text(String::from_utf8_lossy(&path.to_bytes())),
+        );
+    }
+    if let Some(value) = error.value {
+        selected = selected
+            .with_field(
+                "offending",
+                Detail::text(String::from_utf8_lossy(&value.to_bytes())),
+            )
+            .with_field("before", Detail::text(before))
+            .with_field("after", Detail::text(after));
+    }
+    if let Some(native) = error.native {
+        selected = selected.with_field(
+            "native",
+            Detail::text(match native {
+                sdm_wire::response::NativeFault::Dict => "dict",
+                sdm_wire::response::NativeFault::Iter => "iter",
+            }),
+        );
+    }
+    selected
 }

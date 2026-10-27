@@ -9,14 +9,19 @@ use serde::{Deserialize, Serialize};
 
 use std::collections::BTreeMap;
 
+use crate::CoreWarning;
+use crate::Scalar;
 use crate::data::{AttachmentId, Relation};
-use crate::ops::ColumnRef;
+use crate::ops::{ColumnRef, DescribedColumn, DescribedTable, SourceDescription};
 
 /// The ordered Arrow tables admitted for one describe call.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct FrameManifest {
     pub stage: FrameStage,
+    /// Prior useful table facts, carried separately from fresh Arrow rows.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inference: Option<AttachmentId>,
     pub tables: Vec<FrameInput>,
     /// Native mapping order, separate from SourceSpec's value maps.
     /// Empty/default only when both maps are empty.
@@ -43,6 +48,13 @@ pub struct FrameOverrideOrder {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum FrameStage {
+    Nominate,
+    Adopt,
+    Time,
+    Edit,
+    StatedKey,
+    Assemble,
+    Sample,
     Table,
     Schema,
 }
@@ -138,4 +150,163 @@ pub enum FrameRelationship {
         native_type: String,
         native_repr: String,
     },
+}
+
+/// Why inference passed a timestamp over for the time column, as the
+/// reference's `RejectedTimeColumn` holds it: its values (no row holds
+/// one, or every row that holds one holds the same; more than half the
+/// rows hold none), or its name (a stamp of a row's load, of its last edit,
+/// or a date of birth).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum PassedOver {
+    /// No row holds a value (`value` `None`), or the table has more than
+    /// one row and every row that holds one holds `value`; `missing` of
+    /// its `rows` rows hold none.
+    Constant {
+        value: Option<Scalar>,
+        missing: usize,
+        rows: usize,
+    },
+    /// `missing` of its `rows` rows, more than half, hold no value.
+    Sparse {
+        missing: usize,
+        rows: usize,
+    },
+    LoadStamp,
+    EditStamp,
+    BirthDate,
+}
+
+impl PassedOver {
+    /// The reason's name, as the reference's `RejectedTimeColumn.reason`
+    /// gives it.
+    pub fn reason(&self) -> &'static str {
+        match self {
+            PassedOver::Constant { .. } => "constant",
+            PassedOver::Sparse { .. } => "sparse",
+            PassedOver::LoadStamp => "load_stamp",
+            PassedOver::EditStamp => "edit_stamp",
+            PassedOver::BirthDate => "birth_date",
+        }
+    }
+}
+
+/// How the time column was taken (`TimeColumnChoice.how`): the one
+/// timestamp left, the one creation stamp among several, the one whose
+/// values start earliest, or a lone stamp of the last edit in a table no
+/// other links to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum Taken {
+    Only,
+    Created,
+    Earliest,
+    EditStamp,
+}
+
+/// The time column inference took and how, and the timestamps it passed
+/// over, as the reference's `TimeColumnChoice` holds them.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TimeChoice {
+    pub column: Option<String>,
+    pub how: Option<Taken>,
+    /// The columns it was chosen from, itself included.
+    pub among: Vec<String>,
+    /// Every timestamp passed over, in table order, the lone edit stamp
+    /// taken as the last resort included.
+    pub refused: Vec<(String, PassedOver)>,
+    /// The lone edit stamp left, when no other timestamp was.
+    pub fallback: Option<String>,
+    /// Where the whole table was asked about and its answer failed, each
+    /// timestamp the preview's rows would pass over for its values, kept
+    /// (behind every column they do not) and named, its counts the rows
+    /// read (`TimeColumnChoice.unconfirmed`).
+    pub unconfirmed: Vec<(String, PassedOver)>,
+}
+
+impl TimeChoice {
+    /// The timestamps passed over, each with its reason, in table order:
+    /// the refused but the one taken.
+    pub fn rejected(&self) -> impl Iterator<Item = &(String, PassedOver)> {
+        self.refused
+            .iter()
+            .filter(move |(name, _)| Some(name) != self.column.as_ref())
+    }
+}
+
+/// Independently inspectable inference facts, before native adoption reads.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FrameNomination {
+    pub table: DescribedTable,
+    pub nominated_key: Vec<String>,
+}
+
+/// Key metadata/count fixed before a possible repeat warning is presented.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FrameAdoption {
+    pub table: DescribedTable,
+}
+
+/// Completed table inference, including the later time observations.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FrameInferred {
+    pub table: DescribedTable,
+    pub time: TimeChoice,
+}
+
+/// Complete assembled meaning and independently usable sample-column plans.
+/// Metadata-only advice is retained until its native source position.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FrameSchema {
+    pub description: SourceDescription,
+    pub samples: Vec<FrameSampleColumn>,
+    pub key_notices: Vec<CoreWarning>,
+    pub notices: Vec<CoreWarning>,
+}
+
+/// The fixed original meaning of one column whose cardinality decided it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FrameSampleColumn {
+    pub table: String,
+    pub column: DescribedColumn,
+}
+
+/// Current native cardinality facts at one actual column-read position.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FrameSample {
+    pub column: FrameSampleColumn,
+    pub exists: bool,
+    pub present: u64,
+    pub distinct: u64,
+}
+
+/// Fixed data products of shared native-frame constructor boundaries.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(
+    tag = "kind",
+    content = "value",
+    rename_all = "snake_case",
+    deny_unknown_fields
+)]
+pub enum FrameInference {
+    Nomination(Box<FrameNomination>),
+    Adoption(Box<FrameAdoption>),
+    Inferred(Vec<FrameInferred>),
+    Schema(Box<FrameSchema>),
+    SampleColumn(Box<FrameSampleColumn>),
+    Sample(Box<FrameSample>),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct InferredFrames {
+    pub value: AttachmentId,
 }

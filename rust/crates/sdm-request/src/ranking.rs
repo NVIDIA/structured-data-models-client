@@ -884,6 +884,7 @@ mod tests {
                 .map(|(row, p)| crate::predict::Row {
                     row_index: *row,
                     forecast_step: None,
+                    forecast_step_as_answered: None,
                     answer_index: 0,
                     id: Entity::Integer(*row),
                     prediction: crate::predict::Answer::Bool(true),

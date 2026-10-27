@@ -1113,6 +1113,8 @@ pub struct Row {
     /// The answer's forecast step, which only an answer given as written
     /// (a payload with no entity-reference column) may carry.
     pub forecast_step: Option<i64>,
+    /// Exact direct-only step where the native item exceeds the Arrow width.
+    pub forecast_step_as_answered: Option<String>,
     /// The answer's place in the endpoint's order (across a merge's parts,
     /// the parts in order), which the result's items keep.
     pub answer_index: i64,
@@ -1488,7 +1490,10 @@ fn layout_as(
                 text_ids,
             )
         }
-        None => (as_written(response)?, true),
+        None => (
+            as_written(response, matches!(attribution, Attribution::AsWritten))?,
+            true,
+        ),
     };
 
     let mut laid = Vec::with_capacity(placed.len());
@@ -1499,6 +1504,10 @@ fn layout_as(
         laid.push(Row {
             row_index,
             forecast_step,
+            forecast_step_as_answered: matches!(attribution, Attribution::AsWritten)
+                .then(|| item.forecast_step_written.clone())
+                .flatten()
+                .filter(|_| forecast_step.is_none()),
             answer_index: i64::try_from(laid.len()).unwrap_or(i64::MAX),
             id,
             prediction: answer_of(item.prediction.as_ref(), answers, decimal_limit)?,
@@ -1603,7 +1612,10 @@ fn named(
 /// where the payload names no entity (`_named_entities` with no reference
 /// column): no row is checked, and the id is the instance id the answer
 /// names, as text, or none.
-fn as_written(response: &PredictionResponse) -> Result<Vec<(i64, Entity, Option<i64>)>, CoreError> {
+fn as_written(
+    response: &PredictionResponse,
+    direct: bool,
+) -> Result<Vec<(i64, Entity, Option<i64>)>, CoreError> {
     response
         .predictions
         .iter()
@@ -1612,11 +1624,15 @@ fn as_written(response: &PredictionResponse) -> Result<Vec<(i64, Entity, Option<
                 .row_index
                 .as_i64()
                 .ok_or_else(|| bad_response("prediction.row_index", "out_of_range"))?;
-            let forecast_step = item
-                .forecast_step
-                .map(i64::try_from)
-                .transpose()
-                .map_err(|_| bad_response("prediction.forecast_step", "out_of_range"))?;
+            let forecast_step = if direct {
+                item.forecast_step
+                    .and_then(|value| i64::try_from(value).ok())
+            } else {
+                item.forecast_step
+                    .map(i64::try_from)
+                    .transpose()
+                    .map_err(|_| bad_response("prediction.forecast_step", "out_of_range"))?
+            };
             let id = item.id.clone().map_or(Entity::None, Entity::Text);
             Ok((row_index, id, forecast_step))
         })
@@ -1869,6 +1885,16 @@ pub fn table(part: &Part) -> Result<RecordBatch, CoreError> {
         fields.push(Field::new("forecast_step", DataType::Int64, true));
         columns.push(Arc::new(Int64Array::from_iter(
             rows.iter().map(|r| r.forecast_step),
+        )));
+    }
+    if rows.iter().any(|r| r.forecast_step_as_answered.is_some()) {
+        fields.push(Field::new(
+            "forecast_step_as_answered",
+            DataType::Utf8,
+            true,
+        ));
+        columns.push(Arc::new(StringArray::from_iter(
+            rows.iter().map(|r| r.forecast_step_as_answered.as_deref()),
         )));
     }
     if rows.iter().any(|r| r.prediction != Answer::None) {

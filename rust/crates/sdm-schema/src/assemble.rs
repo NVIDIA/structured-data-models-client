@@ -18,6 +18,7 @@
 //! presentation rule). A warning's `message` is a sentence that names
 //! nothing, for a host with no words of its own.
 
+use crate::infer::TimeChoicePolicy;
 use std::collections::{BTreeMap, BTreeSet};
 
 use sdm_contract::frames::{FrameKeyForm, FrameRelationship};

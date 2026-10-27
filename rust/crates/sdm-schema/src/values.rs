@@ -220,6 +220,52 @@ pub(crate) fn first_temporal(batches: &[RecordBatch], index: usize) -> Option<Sc
     None
 }
 
+/// Native constructor time-choice first present value, even if a warning
+/// handler changed an earlier timestamp candidate's physical storage.
+pub(crate) fn frame_first(batches: &[RecordBatch], index: usize) -> Option<Scalar> {
+    for batch in batches {
+        let array = batch.column(index);
+        if let Some(row) = (0..array.len()).find(|&row| !array.is_null(row)) {
+            return scalar(array.as_ref(), row);
+        }
+    }
+    None
+}
+
+/// Current numeric storage of an original timestamp candidate is read as
+/// nanoseconds by the native constructor's to_datetime conversion. This
+/// does not nominate a new time column or parse textual date content.
+pub(crate) fn frame_instants(batches: &[RecordBatch], index: usize) -> Vec<Option<i128>> {
+    let temporal = instants(batches, index);
+    if batches.iter().all(|batch| {
+        matches!(
+            batch.column(index).data_type(),
+            DataType::Date32 | DataType::Timestamp(_, _)
+        )
+    }) {
+        return temporal;
+    }
+    let Ok(values) = column(batches, index, Floats::Frame) else {
+        return temporal;
+    };
+    values
+        .into_iter()
+        .map(|value| match value {
+            Some(Value::Int(value))
+                if value > i128::from(i64::MIN) && value <= i128::from(i64::MAX) =>
+            {
+                Some(value)
+            }
+            Some(Value::Float(bits)) => {
+                let value = f64::from_bits(bits);
+                (value.is_finite() && value > i64::MIN as f64 && value < -(i64::MIN as f64))
+                    .then_some(value as i128)
+            }
+            _ => None,
+        })
+        .collect()
+}
+
 /// The distinct values of a time-of-day column of `batches`, at most
 /// `limit`, in the order they first appear, as the contract's scalars.
 pub(crate) fn times_of_day(batches: &[RecordBatch], index: usize, limit: usize) -> Vec<Scalar> {
