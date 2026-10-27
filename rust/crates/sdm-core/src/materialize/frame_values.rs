@@ -1043,7 +1043,7 @@ pub(crate) async fn population(
     identity.arrow(&data(population.sampled.clone()))?;
     meaning.identity = identity.finish();
     let graph_value = graph.publish(asker)?;
-    let batches = population::ranges(population.examples.index.len());
+    let rows = population.examples.index.len() as u64;
     let owner = population::RetainedFramePopulation::new(population::PopulationData {
         graph: graph.retained(),
         meaning: meaning.clone(),
@@ -1065,7 +1065,8 @@ pub(crate) async fn population(
         meaning,
         prediction_type,
         owner: asker.attach(Attachment::FramePopulation(owner))?,
-        batches,
+        rows,
+        batch_rows: population::LABEL_BATCH_ROWS as u32,
     })
 }
 

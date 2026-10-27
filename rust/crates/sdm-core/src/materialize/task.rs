@@ -346,17 +346,44 @@ pub(super) struct LabelDraw<'a> {
 /// Complete candidate rows and anchors before their target is read.
 /// This is independently useful sampled task data, without a callback or
 /// suspended execution state.
-#[derive(Clone)]
 pub(super) struct ExamplePopulation {
     pub(super) sampled: RecordBatch,
     pub(super) entity_key: ArrayRef,
-    pub(super) kept: Vec<usize>,
+    pub(super) kept: Arc<[usize]>,
+    // Pure facts of the retained immutable Arrow keys, read once without
+    // native conversion; reached label reads still enforce missing-key policy.
+    nan_key: Arc<BTreeSet<usize>>,
     pub(super) examples: sample::Examples,
 }
 
 impl ExamplePopulation {
     pub(super) fn keys(&self) -> Result<ArrayRef, CoreError> {
         take(&self.entity_key, &self.examples.index)
+    }
+
+    /// Share the retained source and clone only this reached candidate range.
+    /// The complete population deliberately has no Clone implementation.
+    pub(super) fn slice(&self, range: std::ops::Range<usize>) -> Result<Self, CoreError> {
+        let index = self
+            .examples
+            .index
+            .get(range.clone())
+            .ok_or_else(|| internal("candidate index range exceeds its population"))?;
+        let anchors = self
+            .examples
+            .anchors
+            .get(range)
+            .ok_or_else(|| internal("candidate anchors do not cover their index range"))?;
+        Ok(Self {
+            sampled: self.sampled.clone(),
+            entity_key: Arc::clone(&self.entity_key),
+            kept: Arc::clone(&self.kept),
+            nan_key: Arc::clone(&self.nan_key),
+            examples: sample::Examples {
+                index: index.to_vec(),
+                anchors: anchors.to_vec(),
+            },
+        })
     }
 }
 
@@ -390,8 +417,9 @@ pub(super) fn example_population(
     };
     Ok(ExamplePopulation {
         sampled: sampled.sampled,
+        nan_key: Arc::new(nan_rows(&sampled.entity_key)),
         entity_key: sampled.entity_key,
-        kept: sampled.kept,
+        kept: sampled.kept.into(),
         examples,
     })
 }
@@ -448,6 +476,7 @@ pub(super) async fn evaluate_population(
         sampled,
         entity_key,
         kept,
+        nan_key,
         examples,
     } = population;
     // A NaN key a source hands over, which the reference reads as missing
@@ -457,7 +486,6 @@ pub(super) async fn evaluate_population(
     // target's rows (`_by_time`): refused as the caller's error before that
     // read. A static target reads no rows by the key, and such an example
     // is left out once labelled, below (T2.12).
-    let nan_key = nan_rows(&entity_key);
     if asker.reads_nan_as_missing()
         && !labelled_fetches.is_empty()
         && examples.index.iter().any(|i| nan_key.contains(i))
@@ -691,6 +719,45 @@ mod tests {
 
     fn integers(values: Vec<i64>) -> ArrayRef {
         Arc::new(Int64Array::from(values))
+    }
+
+    #[test]
+    fn candidate_slices_share_complete_source_allocations_and_copy_only_reached_examples() {
+        let keys = integers((0..25_000).collect());
+        let population = ExamplePopulation {
+            sampled: RecordBatch::try_from_iter([("id", Arc::clone(&keys))]).unwrap(),
+            entity_key: keys,
+            kept: (0..25_000).collect::<Vec<_>>().into(),
+            nan_key: Arc::new(BTreeSet::from([42, 20_001])),
+            examples: sample::Examples {
+                index: (0..25_000).rev().collect(),
+                anchors: (0..25_000).collect(),
+            },
+        };
+        let selected = population.slice(10_000..20_000).unwrap();
+        assert!(Arc::ptr_eq(&selected.kept, &population.kept));
+        assert!(Arc::ptr_eq(&selected.nan_key, &population.nan_key));
+        assert!(Arc::ptr_eq(&selected.entity_key, &population.entity_key));
+        assert!(Arc::ptr_eq(
+            selected.sampled.column(0),
+            population.sampled.column(0)
+        ));
+        assert_eq!(
+            selected.examples.index,
+            population.examples.index[10_000..20_000]
+        );
+        assert_eq!(
+            selected.examples.anchors,
+            population.examples.anchors[10_000..20_000]
+        );
+        assert_eq!(selected.examples.index.len(), 10_000);
+        assert_eq!(selected.examples.anchors.len(), 10_000);
+        assert_eq!(population.examples.index.len(), 25_000);
+        let source = Arc::downgrade(&population.kept);
+        drop(population);
+        assert!(source.upgrade().is_some());
+        drop(selected);
+        assert!(source.upgrade().is_none());
     }
 
     #[test]
