@@ -15,6 +15,13 @@ pub struct UnicodeText {
     bytes: Vec<u8>,
 }
 
+/// Validated borrowed native text over an independently owned data buffer.
+/// This view does not retain or copy the whole column that owns its bytes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct UnicodeSlice<'a> {
+    bytes: &'a [u8],
+}
+
 /// Location in the supplied representation, with no caller value echoed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnicodeError {
@@ -39,9 +46,8 @@ impl std::fmt::Display for UnicodeError {
 
 impl std::error::Error for UnicodeError {}
 
-impl UnicodeText {
-    /// Take an owned native encoding without another full buffer copy.
-    pub fn from_utf8_surrogatepass(bytes: Vec<u8>) -> Result<Self, UnicodeError> {
+impl<'a> UnicodeSlice<'a> {
+    pub fn from_utf8_surrogatepass(bytes: &'a [u8]) -> Result<Self, UnicodeError> {
         let mut at = 0;
         while at < bytes.len() {
             match std::str::from_utf8(&bytes[at..]) {
@@ -60,6 +66,36 @@ impl UnicodeText {
                 }
             }
         }
+        Ok(Self { bytes })
+    }
+
+    pub fn as_bytes(self) -> &'a [u8] {
+        self.bytes
+    }
+
+    pub fn utf8(self) -> Option<&'a str> {
+        std::str::from_utf8(self.bytes).ok()
+    }
+
+    pub fn points(self) -> UnicodePoints<'a> {
+        UnicodePoints {
+            remaining: self.bytes,
+        }
+    }
+}
+
+impl<'a> From<&'a str> for UnicodeSlice<'a> {
+    fn from(text: &'a str) -> Self {
+        Self {
+            bytes: text.as_bytes(),
+        }
+    }
+}
+
+impl UnicodeText {
+    /// Take an owned native encoding without another full buffer copy.
+    pub fn from_utf8_surrogatepass(bytes: Vec<u8>) -> Result<Self, UnicodeError> {
+        UnicodeSlice::from_utf8_surrogatepass(&bytes)?;
         Ok(Self { bytes })
     }
 
@@ -91,10 +127,12 @@ impl UnicodeText {
         std::str::from_utf8(&self.bytes).ok()
     }
 
+    pub fn as_slice(&self) -> UnicodeSlice<'_> {
+        UnicodeSlice { bytes: &self.bytes }
+    }
+
     pub fn points(&self) -> UnicodePoints<'_> {
-        UnicodePoints {
-            remaining: &self.bytes,
-        }
+        self.as_slice().points()
     }
 }
 
