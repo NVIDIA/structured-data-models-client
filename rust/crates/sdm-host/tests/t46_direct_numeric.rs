@@ -1249,3 +1249,56 @@ fn wide_bounds_are_reached_after_earlier_native_conversion_outcome() {
     assert_eq!(error.sentence, sdm_contract::Sentence::TabularRowBounds);
     assert_eq!(error.fields["index"], sdm_contract::Detail::text(index));
 }
+
+#[test]
+fn encoded_body_facts_and_rows_must_agree_before_transport() {
+    let context = [RecordBatch::try_from_iter([
+        (
+            "0",
+            Arc::new(Float64Array::from(vec![1., 2., 3.])) as ArrayRef,
+        ),
+        (
+            "1",
+            Arc::new(Float64Array::from(vec![2., 4., 6.])) as ArrayRef,
+        ),
+    ])
+    .unwrap()];
+    let scoring = [RecordBatch::try_from_iter([(
+        "0",
+        Arc::new(Float64Array::from(vec![4., 5.])) as ArrayRef,
+    )])
+    .unwrap()];
+    let input = prelude(
+        &["feature", "target"],
+        &["feature"],
+        &context,
+        &scoring,
+        &[],
+    );
+    let envelope = plan(input.clone(), &context, &scoring);
+    let (body,payload)=encoded_body(json!({"envelope":envelope,"context":2,"predict":3,"context_header":input["context_header"],"predict_header":input["predict_header"],"task":"regression","primary_key":[]}),attached_batches(&context,&scoring)).unwrap();
+    for rows_incoherent in [false, true] {
+        let mut body = body.clone();
+        body["payload"] = json!(2);
+        let mut payload: Value = serde_json::from_slice(&payload).unwrap();
+        if rows_incoherent {
+            payload["context"]["instance_table"]["rows"][0] = json!([1.]);
+        } else {
+            body["context_shape"]["rows"] = json!(4);
+        }
+        let run = start(
+            json!({"op":"predict","direct":1,"model":"kumo-tabular","request_id":"sdm-fixed","outputs":["prediction"],"default_outputs":true}),
+            Attachments::from([
+                (
+                    AttachmentId(1),
+                    bytes(json!({"stage":"encoded","body":body,"inference":{}})),
+                ),
+                (AttachmentId(2), bytes(payload)),
+            ]),
+        );
+        let ControlMessage::Error { error } = next(&run) else {
+            panic!("incoherent encoded rows must not call a model")
+        };
+        assert_eq!(error.sentence, sdm_contract::Sentence::InvalidMessage);
+    }
+}
