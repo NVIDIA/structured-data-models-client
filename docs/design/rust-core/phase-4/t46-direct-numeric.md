@@ -158,3 +158,13 @@ The existing common raise boundary preserves that nested chain and removes only 
 Gathered class predictions and probability keys retain the approved parser grammar and existing whole-float conversion range.
 Direct class conversion selects the native numeric text grammar and exact whole-float conversion explicitly through its existing answer policy.
 Frozen native behavior alone does not authorize changing established gathered behavior.
+
+
+## Selected failed-JSON native context
+
+After core selects NativeLiteralText, the host obtains the actual stdlib JSON failure and evaluates the Python literal inside that exception handler.
+This preserves the native exception visible to warning handlers, including the JSON decoder's scanner context and any original caller exception.
+The native JSON result is not used to choose fallback or attribution policy, which remain in core.
+An uncaught native exception retains its original object, explicit cause, context and suppression when core selects propagation.
+The later selected-member string conversion remains outside the completed JSON-failure handler, preserving its separate source position.
+Core generated finite-number diagnostics retain before/value/after wording alongside native Float facts; the mapping placeholder belongs only to Dict and Iter faults.

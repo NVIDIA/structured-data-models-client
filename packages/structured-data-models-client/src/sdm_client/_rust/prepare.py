@@ -142,7 +142,27 @@ def _native_value_call(
         selected = native_error
     # The original native exception survives the plain-data decision.
     assert selected is not None  # Core selected the preserved native failure.
-    raise selected from None
+    original_context = selected.__context__
+    try:
+        raise selected
+    finally:
+        # Raising again inside an active caller handler can overwrite this
+        # native context. Keep the actual conversion graph, cause and flags.
+        selected.__context__ = original_context
+
+
+def _native_literal(text: str) -> Any:
+    """Reach the literal within its actual selected JSON-failure context."""
+    try:
+        # Rust has already selected the failed-JSON representation. This
+        # native conversion supplies the actual exception visible to Python
+        # warning handlers; its result is not used to choose an SDK path.
+        json.loads(text)
+    except (ValueError, TypeError, RecursionError):
+        return ast.literal_eval(text)
+    raise AssertionError(
+        'core selected native literal conversion for a JSON value'
+    )
 
 
 def _attribute_native(checked: dict[str, Any]) -> dict[str, Any]:
@@ -155,7 +175,7 @@ def _attribute_native(checked: dict[str, Any]) -> dict[str, Any]:
     native = None
     native_error = None
     try:
-        native = ast.literal_eval(text)
+        native = _native_literal(text)
     except Exception as error:
         native_error = error
         literal['value'] = {'outcome': 'failed', 'failure': _failure(error)}
