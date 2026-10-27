@@ -364,6 +364,78 @@ pub(crate) fn selected_outputs(outputs: Option<&[String]>) -> Result<Vec<String>
     ))
 }
 
+pub(crate) fn native_output_vocabulary(
+    named: bool,
+    nonempty: Option<bool>,
+) -> Result<sdm_contract::prepare::RankingOutputVocabulary, CoreError> {
+    if named != nonempty.is_some() {
+        return Err(CoreError::protocol(
+            Sentence::InvalidMessage,
+            "native ranking output form is inconsistent",
+        ));
+    }
+    if nonempty == Some(false) {
+        let mut error = refused(
+            Sentence::RankingOutputsNone,
+            "outputs must name at least one field",
+            "outputs",
+        );
+        error.public_details = Some(Default::default());
+        return Err(error);
+    }
+    Ok(sdm_contract::prepare::RankingOutputVocabulary {
+        outputs: RANKING_OUTPUTS.map(str::to_owned).to_vec(),
+        prediction: RANKING_OUTPUTS[0].to_owned(),
+        rankings: RANKING_OUTPUTS[1].to_owned(),
+    })
+}
+
+pub(crate) fn native_selected_outputs(
+    outputs: Option<&[String]>,
+    facts: &sdm_contract::prepare::NativeRankingOutputFacts,
+) -> Result<Vec<String>, CoreError> {
+    let names = outputs.unwrap_or(&[]);
+    if facts.unsupported.windows(2).any(|pair| pair[0] >= pair[1])
+        || facts
+            .unsupported
+            .iter()
+            .any(|position| *position >= names.len())
+    {
+        return Err(CoreError::protocol(
+            Sentence::InvalidMessage,
+            "native ranking output positions are invalid",
+        ));
+    }
+    if !facts.unsupported.is_empty() {
+        let mut error = refused(
+            if facts.unsupported.len() > 1 {
+                Sentence::RankingOutputsUnknown
+            } else {
+                Sentence::RankingOutputUnknown
+            },
+            "a native ranking output is unsupported",
+            "outputs",
+        )
+        .with_field(
+            "unsupported",
+            Detail::List(
+                facts
+                    .unsupported
+                    .iter()
+                    .map(|position| Scalar::Utf8(names[*position].clone()))
+                    .collect(),
+            ),
+        )
+        .with_field("native_ranking_outputs", Detail::Scalar(Scalar::Bool(true)));
+        error.public_details = Some(Default::default());
+        return Err(error);
+    }
+    Ok(outputs.map_or_else(
+        || RANKING_OUTPUTS.map(str::to_owned).to_vec(),
+        <[String]>::to_vec,
+    ))
+}
+
 pub(crate) fn selected_candidates(
     asker: &Asker,
     model: &str,

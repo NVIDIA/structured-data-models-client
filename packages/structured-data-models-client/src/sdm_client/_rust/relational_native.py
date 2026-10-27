@@ -45,14 +45,10 @@ class PreparedCall:
     outputs: tuple[Any, ...]
 
 
-def prepare(request: Any, model: Any, outputs: Any) -> PreparedCall:
-    """Read native public properties at the existing model-check boundaries."""
-    from sdm_client.client import _require_output_names
+def model_call(model: Any) -> dict[str, Any]:
+    """Actual native catalogue/handle observations and a core-resolved model."""
     from sdm_client.models import MODELS, spec_for
 
-    # The public call and the old _prepare each reach this native Sequence
-    # observation before model lookup. Do not collapse those traversals.
-    _require_output_names(outputs)
     catalogue = _call({'stage': 'model_catalogue'})
     if isinstance(model, str):
         selected_model = MODELS.get(model)
@@ -75,6 +71,17 @@ def prepare(request: Any, model: Any, outputs: Any) -> PreparedCall:
         # Existing native handle/spec object-identity and form observations.
         # The canonical id is still admitted by the shared closed model policy.
         call = _call({'stage': 'model', 'model': spec_for(model).model_id})
+    return call
+
+
+def prepare(request: Any, model: Any, outputs: Any) -> PreparedCall:
+    """Read native public properties at the existing model-check boundaries."""
+    from sdm_client.client import _require_output_names
+
+    # The public call and the old _prepare each reach this native Sequence
+    # observation before model lookup. Do not collapse those traversals.
+    _require_output_names(outputs)
+    call = model_call(model)
     words = _call({'stage': 'call_vocabulary', 'call': call})
     if outputs is None:
         # Only this reached dictionary lookup observes the actual public key.
@@ -623,3 +630,76 @@ def output_shapes(
         'parts': count,
         'distinct_sources': [origins[id(shape)] for shape in shapes],
     }
+
+
+def ranking_outputs(outputs: Any, total: int) -> dict[str, Any]:
+    """One reached native ranking output guard and membership population."""
+    words = _call(
+        {
+            'stage': 'ranking_output_vocabulary',
+            'named': outputs is not None,
+            'nonempty': bool(outputs) if outputs is not None else None,
+        }
+    )
+    accepted = tuple(sys.intern(name) for name in words['outputs'])
+    observed = []
+    unsupported = []
+    for name in outputs or ():
+        position = len(observed)
+        observed.append(name)
+        if name not in accepted:
+            unsupported.append(position)
+
+    def refused(_fields: Any) -> list[str]:
+        return [repr(observed[position]) for position in unsupported]
+
+    with errors.holding(relational_ranking_outputs=refused):
+        return _call(
+            {
+                'stage': 'validate_relational_ranking',
+                'outputs': None if outputs is None else observed,
+                'native': {'unsupported': unsupported},
+                'total_parts': total,
+                'cold': None,
+            }
+        )
+
+
+def ranking_fields(outputs: tuple[Any, ...]) -> list[str]:
+    words = _call(
+        {'stage': 'ranking_output_vocabulary', 'named': False, 'nonempty': None}
+    )
+    prediction = sys.intern(words['prediction']) in outputs
+    rankings = sys.intern(words['rankings']) in outputs
+    return _prepared(
+        {
+            'data': 'ranking_fields',
+            'prediction': prediction,
+            'rankings': rankings,
+        }
+    )['value']
+
+
+def forecast_explanations(
+    model: Any, requested: Any, children: Any, answered: Any
+) -> None:
+    # Original call arguments resolve the model before entering the warning's
+    # requested truth/containment guard, even when no warning will be emitted.
+    resolved = model_call(model)
+    words = _prepared({'data': 'output_vocabulary'})['value']
+    asked = bool(requested) and sys.intern(words['explanation']) in requested
+    steps = [about for _, about in answered] if asked else []
+    explained = (
+        [child.presented.explanation is not None for child in children]
+        if asked
+        else []
+    )
+    _prepared(
+        {
+            'data': 'forecast_explanations',
+            'model': resolved['model'],
+            'requested': asked,
+            'steps': steps,
+            'explained': explained,
+        }
+    )

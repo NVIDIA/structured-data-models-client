@@ -56,6 +56,8 @@ pub enum RelationalAggregation {
         candidates: Vec<String>,
         top_k: Option<u32>,
         outputs: Vec<String>,
+        #[serde(default)]
+        selected: Option<ValidatedRelationalRanking>,
         unscored_candidates: Vec<u32>,
         groups: AttachmentId,
     },
@@ -130,6 +132,22 @@ pub struct RelationalRankGroups {
 pub struct ValidatedRelationalRanking {
     pub outputs: Vec<String>,
     pub part_outputs: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native: Option<NativeRankingOutputFacts>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct NativeRankingOutputFacts {
+    pub unsupported: Vec<usize>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RankingOutputVocabulary {
+    pub outputs: Vec<String>,
+    pub prediction: String,
+    pub rankings: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

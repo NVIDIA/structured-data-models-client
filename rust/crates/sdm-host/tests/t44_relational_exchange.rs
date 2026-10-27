@@ -563,6 +563,7 @@ fn ranking_children_exchange_then_core_confidence_ordering_retains_group_owners(
             candidates: vec!["0".into(), "1".into()],
             top_k: Some(1),
             outputs: vec!["rankings".into()],
+            selected: None,
             unscored_candidates: vec![],
             groups: AttachmentId(10),
         },
