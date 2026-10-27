@@ -66,7 +66,7 @@ pub struct HostRun {
 /// [`contain`] reports out of band (decision H17).
 #[derive(Debug, Clone)]
 pub struct Failure {
-    pub error: CoreError,
+    pub error: Box<CoreError>,
     /// Whether the call panicked; only [`contain`] sets it.
     pub panicked: bool,
 }
@@ -74,7 +74,7 @@ pub struct Failure {
 impl From<CoreError> for Failure {
     fn from(error: CoreError) -> Self {
         Failure {
-            error,
+            error: Box::new(error),
             panicked: false,
         }
     }
@@ -127,12 +127,14 @@ pub fn contain<T>(call: impl FnOnce() -> Result<T, CoreError>) -> Result<T, Fail
                 .with(|location| location.borrow_mut().take())
                 .unwrap_or_else(|| "an unknown location".to_owned());
             Err(Failure {
-                error: CoreError::new(
-                    Sentence::Internal,
-                    "the core panicked; the run can no longer be used",
-                )
-                .with_field("panic", Detail::Scalar(Scalar::Bool(true)))
-                .with_field("location", Detail::text(at)),
+                error: Box::new(
+                    CoreError::new(
+                        Sentence::Internal,
+                        "the core panicked; the run can no longer be used",
+                    )
+                    .with_field("panic", Detail::Scalar(Scalar::Bool(true)))
+                    .with_field("location", Detail::text(at)),
+                ),
                 panicked: true,
             })
         }
