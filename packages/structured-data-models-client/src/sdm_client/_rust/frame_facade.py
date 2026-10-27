@@ -26,6 +26,8 @@ from sdm_client._rust.frame_native import (
     NativeColumn,
     NativeFrameColumns,
     NativeFrameFailure,
+    NativeReferenceCastFailure,
+    convert_references,
     convert_text,
     guard_failure,
 )
@@ -271,6 +273,8 @@ def _references(
     bindings: _Bindings,
     start: int,
     stop: int,
+    *,
+    whole: bool = False,
 ) -> tuple[dict[str, Any], NativeFrameFailure | None]:
     kind = task.data['labelled']['prediction_type']
     if kind['kind'] == 'core_key':
@@ -294,12 +298,17 @@ def _references(
         axis=0,
         ignore_index=True,
     )
-    try:
-        converted: NativeColumn | NativeFrameFailure = NativeColumn(
-            selected.astype(str)
-        )
-    except Exception as error:
-        converted = NativeFrameFailure.capture(error)
+    converted = convert_references(selected, columns.dtype(native), whole=whole)
+    if isinstance(converted, NativeReferenceCastFailure):
+        return {
+            'kind': 'native_string',
+            'converted': {
+                'outcome': 'cast_failed',
+                'failure': converted.failure.facts.as_wire(),
+                'expected_dtype': converted.expected_dtype,
+                'input_repr': converted.input_repr,
+            },
+        }, converted.failure
     if isinstance(converted, NativeFrameFailure):
         return {
             'kind': 'native_string',
@@ -560,7 +569,7 @@ def _single(
         )
         bindings = _Bindings()
         converted, native_failure = _references(
-            task, columns, bindings, 0, task.data['prediction_rows']
+            task, columns, bindings, 0, task.data['prediction_rows'], whole=True
         )
         try:
             references = adopt(

@@ -43,9 +43,15 @@ pub(crate) enum FrameStageError {
 }
 
 pub(crate) enum NativeSite {
-    Prediction { table: String },
+    Prediction {
+        table: String,
+    },
     WholeReferences,
     BatchReferences,
+    BatchReferenceCast {
+        expected_dtype: String,
+        input_repr: String,
+    },
     Text(ColumnRef),
 }
 
@@ -114,12 +120,37 @@ impl FrameStageError {
                             "'indices' must hold values matching the primary key of '{table}', which is {dtype_display}{where_}"
                         ))
                     }
+                    (
+                        NativeSite::BatchReferenceCast {
+                            expected_dtype,
+                            input_repr,
+                        },
+                        _,
+                    ) => {
+                        let eligible = failure.builtin.ancestry.iter().any(|kind| {
+                            matches!(
+                                kind,
+                                sdm_contract::prepare::BuiltinFailureClass::TypeError
+                                    | sdm_contract::prepare::BuiltinFailureClass::ValueError
+                            )
+                        });
+                        if !eligible {
+                            return protocol(
+                                "a native reference retry diagnostic followed an ineligible failure",
+                            );
+                        }
+                        Some(format!(
+                            "Could not cast primary keys {input_repr} to the expected data type '{expected_dtype}'"
+                        ))
+                    }
                     _ => None,
                 };
                 let (stage, column) = match site {
                     NativeSite::Prediction { .. } => ("prediction", None),
                     NativeSite::WholeReferences => ("whole_references", None),
-                    NativeSite::BatchReferences => ("batch_references", None),
+                    NativeSite::BatchReferences | NativeSite::BatchReferenceCast { .. } => {
+                        ("batch_references", None)
+                    }
                     NativeSite::Text(column) => ("text", Some(column)),
                 };
                 let mut error = CoreError::new(
@@ -1679,6 +1710,33 @@ fn converted_references(
         ) => {
             return Err(FrameStageError::Native {
                 site,
+                failure,
+                diagnostic: None,
+                dropped_summary: task.labels.graph.dropped_summary(),
+            });
+        }
+        (
+            FramePredictionType::NativeString { .. },
+            FrameReferenceValues::NativeString {
+                converted:
+                    NativeFrameStrings::CastFailed {
+                        failure,
+                        expected_dtype,
+                        input_repr,
+                    },
+            },
+        ) => {
+            if !matches!(&site, NativeSite::BatchReferences) {
+                return Err(protocol(
+                    "native index retry diagnostics cannot replace whole-task validation",
+                )
+                .into());
+            }
+            return Err(FrameStageError::Native {
+                site: NativeSite::BatchReferenceCast {
+                    expected_dtype,
+                    input_repr,
+                },
                 failure,
                 diagnostic: None,
                 dropped_summary: task.labels.graph.dropped_summary(),
