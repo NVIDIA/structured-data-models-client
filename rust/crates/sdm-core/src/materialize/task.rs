@@ -108,38 +108,40 @@ pub(super) async fn entity_sample(
             entity_seed,
         )?
     } else {
-        read_times.read(
-            asker,
-            entity,
-            one_batch(
-                &ask(
-                    asker,
-                    DataRequest::SampleEntities {
-                        table: entity.source.clone(),
-                        key: vec![key.to_owned()],
-                        n: trials as u64,
-                        seed: seed_value,
-                        columns: entity.ordered(&entity_columns),
-                        filters,
-                        // The schema's type of the key, for a provider that
-                        // orders the draw by it (SQLite's, which reads the
-                        // type the key's declaration fixes first).
-                        key_dtype: asker
-                            .samples_by_key_dtype()
-                            .then(|| entity.column(key).map(|c| c.dtype))
-                            .flatten(),
-                        // The table's rows, for a provider sizing its draw by
-                        // them (the reference's sampled percentage).
-                        rows: if asker.capabilities()?.sample_rows {
-                            rows_of(memo, &entity.name)
-                        } else {
-                            None
+        read_times
+            .read(
+                asker,
+                entity,
+                one_batch(
+                    &ask(
+                        asker,
+                        DataRequest::SampleEntities {
+                            table: entity.source.clone(),
+                            key: vec![key.to_owned()],
+                            n: trials as u64,
+                            seed: seed_value,
+                            columns: entity.ordered(&entity_columns),
+                            filters,
+                            // The schema's type of the key, for a provider that
+                            // orders the draw by it (SQLite's, which reads the
+                            // type the key's declaration fixes first).
+                            key_dtype: asker
+                                .samples_by_key_dtype()
+                                .then(|| entity.column(key).map(|c| c.dtype))
+                                .flatten(),
+                            // The table's rows, for a provider sizing its draw by
+                            // them (the reference's sampled percentage).
+                            rows: if asker.capabilities()?.sample_rows {
+                                rows_of(memo, &entity.name)
+                            } else {
+                                None
+                            },
                         },
-                    },
-                )
-                .await?,
-            )?,
-        )?
+                    )
+                    .await?,
+                )?,
+            )
+            .await?
     };
     if sampled.num_rows() == 0 {
         return Err(invalid(

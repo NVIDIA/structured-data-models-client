@@ -1738,6 +1738,10 @@ entries:
     rules, which no map needs yet (text_time_rules), or holds a value
     whose reading takes a rule outside date-rules.md's shapes (text_time);
     offsets mixed are DT-11's;
+    T4.4 lifts text_time_rules for the declared ClientRules mode using
+    whole-column fixed-format reading facts before bounds and selected
+    timestamp features; SQL ValueByValue remains its existing reading,
+    with DT-15/DT-16's fixed-format boundaries unchanged;
     in the core from T1.24, the call's options, which the bridge passes
     through (contract version 13, E61), before anything is fetched: each
     sampling option by its name (the first in name order), unseeded (a

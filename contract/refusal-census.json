@@ -295,22 +295,6 @@
       "until": "predict"
     },
     {
-      "site": "rule:text_time_rules",
-      "why": "a provider declaring the client's text-time rules (frames, Phase 4); DuckDB's declares none, so not reachable on DuckDB",
-      "input": {
-        "base": "shop",
-        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
-        "materialize": {
-          "indices": [
-            0,
-            1
-          ],
-          "anchor_time": "2024-03-01"
-        }
-      },
-      "until": "predict"
-    },
-    {
       "site": "rule:text_time_zones",
       "why": "mixed UTC offsets in a text time column",
       "input": {
