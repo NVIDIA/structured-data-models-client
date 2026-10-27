@@ -1143,3 +1143,50 @@ def test_direct_grouped_or_escaped_primitive_key_ids(monkeypatch, form, wrong):
     else:
         assert new[1][0] == 'ok'
         assert new[1][1][0]['id'] == [4, 5]
+
+
+@pytest.mark.parametrize(
+    ('identifier', 'invalid', 'syntax_warning'),
+    [
+        ('[[]]', True, False),
+        ('[{}]', True, False),
+        ('[{1}]', True, False),
+        ('[(1,)]', True, False),
+        ("[b'4']", True, False),
+        ('[4+0j]', True, False),
+        ('[{[]: 1}]', False, False),
+        ('[{[]}]', False, False),
+        (r"['\N{DIGIT FOUR}']", False, False),
+        (r"['\N{DIGIT FIVE}']", True, False),
+        (r"['\N{NOT A UNICODE NAME}']", False, False),
+        (r"['\q']", True, True),
+        (r"['\N{KEYCAP DIGIT FOUR}']", False, False),
+        ('[NaN]', True, False),
+        ('[Infinity]', True, False),
+        ('[-Infinity]', True, False),
+    ],
+)
+def test_direct_literal_data_is_distinguished_from_invalid_syntax(
+    monkeypatch, identifier, invalid, syntax_warning
+):
+    class Identified(Scripted):
+        def predict(self, payload):
+            answer = super().predict(payload)
+            answer['predictions'][0]['id'] = identifier
+            answer['predictions'][1]['id'] = '[5]'
+            return answer
+
+    frames = (
+        pd.DataFrame({'user_id': [1, 2, 3], 'target': [2, 4, 6]}),
+        pd.DataFrame({'user_id': [4, 5]}),
+    )
+    old = outcome(monkeypatch, frames, core=False, transport=Identified())
+    new = outcome(monkeypatch, frames, core=True, transport=Identified())
+    assert new == old
+    if invalid:
+        assert new[1][2] == 'INVALID_RESPONSE'
+    else:
+        assert new[1][0] == 'ok'
+    assert len(new[2]) == int(syntax_warning)
+    if syntax_warning:
+        assert new[2][0][0] == r"invalid escape sequence '\q'"
