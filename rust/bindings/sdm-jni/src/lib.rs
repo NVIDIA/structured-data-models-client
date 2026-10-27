@@ -312,8 +312,8 @@ fn attachment_object<'local>(
         | Attachment::FrameReferences(_)
         | Attachment::FramePayload(_) => {
             env.throw_new(
-                "java/lang/IllegalArgumentException",
-                "native frame data ownership is not a Java operation",
+                jni_str!("java/lang/IllegalArgumentException"),
+                jni_str!("native frame data ownership is not a Java operation"),
             )?;
             return Err(jni::errors::Error::JavaException);
         }
