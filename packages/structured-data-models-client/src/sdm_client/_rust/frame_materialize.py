@@ -40,7 +40,7 @@ def native_inputs(
         typed_table,
     )
     from sdm_client._rust.frames import _check_header
-    from sdm_client._rust.spec import _links
+    from sdm_client._rust.spec import held_schema
 
     checkpoint = state.get('held', {}).get('frame_checkpoint')
     if checkpoint is not None and 'owner' in checkpoint:
@@ -67,12 +67,9 @@ def native_inputs(
         held = table_meaning(name, table, frame, state)
         held_tables.append(held)
         prepared_tables.append((name, frame, held))
-    graph_schema = source_meaning(
-        {'tables': held_tables, 'links': _links(schema)}, state
-    )
     for name, frame, held in prepared_tables:
         # This is the original native sanitization ownership boundary.
-        # All tables' declared casts and metadata precede these native casts.
+        # All tables' declared casts and dtype facts precede these casts.
         frame = frame.copy(deep=False).reset_index(drop=True)
         arrays = []
         origins = []
@@ -154,6 +151,10 @@ def native_inputs(
         native_tables.append({'source': source, 'columns': origins})
         native_types[source_name] = types
         categorical[source_name] = category_arrays
+    # The old graph applies live logical metadata after all tables' native
+    # construction. Dtypes remain the facts of already typed data; neither
+    # later declared casts nor sanitization can retroactively recast it.
+    graph_schema = source_meaning(held_schema(schema), held_tables, state)
     return (
         exported,
         graph_schema,

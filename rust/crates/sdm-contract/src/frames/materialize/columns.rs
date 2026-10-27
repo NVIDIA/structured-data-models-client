@@ -84,14 +84,16 @@ pub struct FrameTableInputs {
     pub native: Vec<FrameTableColumnFacts>,
 }
 
-/// Actual immutable table declaration before any graph sanitization effects.
+/// Cast-time table dtype facts and their ordered physical column identities.
+/// Later source composition takes logical metadata from live declarations.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct FrameTableMeaning {
     pub table: HeldTable,
 }
 
-/// Complete frozen declarations and relationships before native sanitization.
+/// Graph declarations composed from cast-time dtypes and final live logical
+/// metadata after native construction. These same facts identify its owner.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct FrameSourceMeaning {
