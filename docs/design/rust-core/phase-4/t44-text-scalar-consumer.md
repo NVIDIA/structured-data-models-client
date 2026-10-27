@@ -63,3 +63,27 @@ Both text key offset widths remain explicit unfinished frame-consumer paths.
 Object, Decimal, categorical-extension and custom-hook inputs, text-time interpretation, supplied prediction rows, ranking, forecasting, link integration and fitted sessions remain outside this bounded substep and retain their Phase 4 obligations.
 Typed timestamps retain the previously documented temporal and no-time boundaries.
 No contract, generated artifact, version, lock, Java feature API or default routing change is part of this package.
+
+## Registered no-time anchors and diagnostics
+
+The public default untimed frame journey now implements the existing approved DT-3 settlement explicitly.
+Frozen public traces on pandas 2 and 3 show the old default and explicit Timestamp.min anchor entering the local sampler as `-9223372036854775807` nanoseconds, flooring to `-9223372037` seconds and overflowing on the native nanosecond return to `9223372036709551616`.
+The core retains the no-time marker and uses the existing payload omission rule, so it sends no anchor column for that precise case.
+It does not substitute a maximum timestamp or reproduce the native wrap.
+Ordinary frame anchors, including explicit maximum, positive/negative subseconds and zoned inputs, make the measured floor-second round trip whether the graph has a time column or not.
+Provider anchors remain unchanged.
+
+The public and HostRun tests apply only the named DT-3 no-time column omission to untouched frozen bodies and independently assert that the task, schema and both instance tables omit the column.
+Every other field remains part of the strict whole-body comparison.
+P3E-2's approved core warning-code prefixes are likewise expected only on the exact observed core-owned notices, with their native words and ordering retained.
+The existing frame graph-drop warning presentation exception is unchanged.
+The public payload tuple is asserted before its outer sequence alone is copied into a list for comparison with captured JSON arrays.
+
+Unresolved-entity errors and graph-drop notices use one shared sanitization summary, including key/time cause precedence, through the existing open diagnostic map and existing FrameTaskReferences wording arm.
+No Sentence variant, serialized shape or contract version is added.
+
+The public SDK clears engine end-time roles in `materializers/sources.py::_copy_for_one_gather` before graph construction.
+The current frame HeldTable and engine Graph representations do not carry an end-time role.
+The tests therefore pin public no-anchor omission and unchanged ordinary feature values; they do not claim migration of the engine-only end-time API.
+The engine-only clearing consequence remains the existing DT-3 register probe in `contract/tests/test_register_probes.py`.
+Untimed timestamp-feature admission remains required later Phase 4 work.

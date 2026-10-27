@@ -3258,15 +3258,6 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // context anchored the same way; no time bounds are read or checked
     // for it (`_get_task_table`). Otherwise the anchor and the context's
     // anchor, checked against the data's times.
-    let anchor_time = if frames.is_some() && bounded.is_empty() && anchor_time.is_none() {
-        Some(Scalar::Timestamp {
-            value: TIME_MAX,
-            unit: TimestampUnit::Ns,
-            zone: None,
-        })
-    } else {
-        anchor_time
-    };
     let (anchor, context_anchor, earliest) = if anchor_entity {
         if span.is_some() {
             return Err(invalid(
@@ -4003,14 +3994,20 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         // as the request is built.
         let (use_prediction_time, return_embeddings) = options::request_flags(&deferred)?;
 
-        // The local graph sampler returns its temporal instance anchors
-        // after a floor-second round trip, independently of the original
-        // nanosecond feature values and the bounds used for validation.
-        // No-time handling retains its existing separate DT-3 boundary.
-        let payload_anchors = if frames.is_some() && !bounded.is_empty() {
+        // Every local graph anchor makes the sampler's seconds round trip.
+        // DT-3 keeps the no-time marker explicit instead of wrapping it into
+        // a real timestamp; the existing payload layer omits that column.
+        // Original feature instants and nanosecond validation stay separate.
+        let payload_anchors = if frames.is_some() {
             anchors
                 .iter()
-                .map(|anchor| anchor.div_euclid(1_000_000_000).wrapping_mul(1_000_000_000))
+                .map(|anchor| {
+                    if bounded.is_empty() && *anchor == TIME_MIN {
+                        TIME_MIN
+                    } else {
+                        anchor.div_euclid(1_000_000_000).wrapping_mul(1_000_000_000)
+                    }
+                })
                 .collect()
         } else {
             anchors.clone()
