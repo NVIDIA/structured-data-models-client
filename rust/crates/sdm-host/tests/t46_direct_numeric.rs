@@ -214,7 +214,7 @@ fn direct_numeric_preparation_is_model_neutral_and_binds_one_tabular_call() {
                 rows(&[("0", vec![1., 2., 3., 7.]), ("1", vec![2., 4., 6., 8.])]),
             );
         }
-        attached.insert(AttachmentId(1),bytes(json!({"stage":"body","envelope":envelope,"context":2,"predict":3,"context_header":header(&["feature","target"],count),"predict_header":header(&["feature"],2),"task":task,"primary_key":[],"inference":{}})));
+        attached.insert(AttachmentId(1),bytes(json!({"stage":"body","envelope":envelope,"context":2,"predict":3,"context_header":header(&["feature","target"],count),"predict_header":header(&["feature"],2),"task":task,"primary_key":[],"unicode_version":"15.0.0","inference":{}})));
         let run = start(
             json!({"op":"predict","direct":1,"model":"kumo-tabular","request_id":"sdm-fixed","outputs":call["outputs"],"default_outputs":true}),
             attached,
@@ -454,7 +454,7 @@ fn nullable_cast_fault_is_core_selected_from_native_storage_and_values() {
                 }
                 let envelope = planned.unwrap();
                 let mut attached = data();
-                attached.insert(AttachmentId(1),bytes(json!({"stage":"body","envelope":envelope,"context":2,"predict":3,"context_header":context_header,"predict_header":predict_header,"task":"regression","primary_key":[],"inference":{}})));
+                attached.insert(AttachmentId(1),bytes(json!({"stage":"body","envelope":envelope,"context":2,"predict":3,"context_header":context_header,"predict_header":predict_header,"task":"regression","primary_key":[],"unicode_version":"15.0.0","inference":{}})));
                 let run = start(
                     json!({"op":"predict","direct":1,"model":"kumo-tabular","request_id":"sdm-fixed","outputs":call["outputs"],"default_outputs":true}),
                     attached,
@@ -544,7 +544,11 @@ fn direct_run(
     scoring: &[RecordBatch],
 ) -> HostRun {
     let mut attached = attached_batches(context, scoring);
-    attached.insert(AttachmentId(1), bytes(json!({"stage":"body","envelope":envelope,"context":2,"predict":3,"context_header":input["context_header"],"predict_header":input["predict_header"],"primary_key":key,"task":"regression","inference":{}})));
+    let unicode_version = input
+        .get("unicode_version")
+        .cloned()
+        .unwrap_or_else(|| json!("15.0.0"));
+    attached.insert(AttachmentId(1), bytes(json!({"stage":"body","envelope":envelope,"context":2,"predict":3,"context_header":input["context_header"],"predict_header":input["predict_header"],"primary_key":key,"unicode_version":unicode_version,"task":"regression","inference":{}})));
     start(
         json!({"op":"predict","direct":1,"model":"kumo-tabular","request_id":"sdm-fixed","outputs":["prediction"],"default_outputs":true}),
         attached,
@@ -867,5 +871,78 @@ fn direct_primitive_list_ids_cannot_hide_a_wrong_key() {
                 "{message:?}"
             );
         }
+    }
+}
+
+#[test]
+fn literal_warnings_are_reached_per_answer_before_its_attribution() {
+    for first_warning in [false, true] {
+        let context = [RecordBatch::try_from_iter([
+            (
+                "0",
+                Arc::new(arrow_array::Int64Array::from(vec![1, 2, 3])) as ArrayRef,
+            ),
+            (
+                "1",
+                Arc::new(Float64Array::from(vec![2., 4., 6.])) as ArrayRef,
+            ),
+        ])
+        .unwrap()];
+        let scoring = [RecordBatch::try_from_iter([(
+            "0",
+            Arc::new(arrow_array::Int64Array::from(vec![4, 5])) as ArrayRef,
+        )])
+        .unwrap()];
+        let input = prelude(
+            &["user_id", "target"],
+            &["user_id"],
+            &context,
+            &scoring,
+            &["user_id"],
+        );
+        let envelope = plan(input.clone(), &context, &scoring);
+        let run = direct_run(&input, envelope, &["user_id"], &context, &scoring);
+        let ControlMessage::Step(Step::CallModel(call)) = next(&run) else {
+            panic!("call")
+        };
+        let answer = json!({"id":"direct-fixture","model":"kumo-tabular","metadata":{},"predictions":[{"row_index":0,"id":if first_warning {r"['\q']"} else {"[5]"},"prediction":10},{"row_index":1,"id":r"['\q']","prediction":11}]});
+        let reply = sdm_host::encode(&ControlMessage::ModelReply(ModelReply {
+            id: call.id,
+            outcome: ModelOutcome::Response {
+                status: 200,
+                body: AttachmentId(100),
+                content_type: "application/json".into(),
+            },
+        }))
+        .unwrap();
+        run.reply(
+            &reply,
+            Attachments::from([(AttachmentId(100), bytes(answer))]),
+        )
+        .unwrap();
+        if first_warning {
+            assert!(matches!(next(&run), ControlMessage::Step(Step::Warnings)));
+            let out = run.take_warnings().unwrap().unwrap();
+            let ControlMessage::Warnings { warnings } = sdm_host::read(&out).unwrap() else {
+                panic!("warnings")
+            };
+            assert_eq!(warnings.len(), 1);
+            assert_eq!(
+                warnings[0].sentence,
+                sdm_contract::Sentence::DirectLiteralEscape
+            );
+            assert_eq!(
+                warnings[0].fields["escape"],
+                sdm_contract::Detail::text(r"\q")
+            );
+        }
+        let ControlMessage::Error { error } = next(&run) else {
+            panic!("first attribution must fail")
+        };
+        assert_eq!(error.sentence, sdm_contract::Sentence::TabularIdMismatch);
+        assert_eq!(
+            error.fields["index"],
+            sdm_contract::Detail::Scalar(Scalar::UInt64(0))
+        );
     }
 }
