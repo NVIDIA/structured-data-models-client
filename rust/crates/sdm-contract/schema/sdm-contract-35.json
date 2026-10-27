@@ -1814,6 +1814,28 @@
                 "type": "string"
               }
             },
+            "native": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/NativeRankingOutputFacts"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "selected": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ValidatedRelationalRanking"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
             "total_parts": {
               "type": "integer",
               "format": "uint",
@@ -1846,6 +1868,29 @@
           "required": [
             "stage",
             "total_parts"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "named": {
+              "type": "boolean"
+            },
+            "nonempty": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "stage": {
+              "type": "string",
+              "const": "ranking_output_vocabulary"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "named"
           ]
         },
         {
@@ -2923,6 +2968,64 @@
     },
     "RelationalPreparation": {
       "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "prediction": {
+              "type": "boolean"
+            },
+            "rankings": {
+              "type": "boolean"
+            },
+            "data": {
+              "type": "string",
+              "const": "ranking_fields"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "data",
+            "prediction",
+            "rankings"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "model": {
+              "type": "string"
+            },
+            "requested": {
+              "type": "boolean"
+            },
+            "steps": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              }
+            },
+            "explained": {
+              "type": "array",
+              "items": {
+                "type": "boolean"
+              }
+            },
+            "data": {
+              "type": "string",
+              "const": "forecast_explanations"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "data",
+            "model",
+            "requested",
+            "steps",
+            "explained"
+          ]
+        },
         {
           "type": "object",
           "properties": {
@@ -5206,6 +5309,17 @@
                 "type": "string"
               }
             },
+            "selected": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ValidatedRelationalRanking"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
             "unscored_candidates": {
               "type": "array",
               "items": {
@@ -5268,6 +5382,55 @@
         "bound",
         "parts",
         "counted"
+      ]
+    },
+    "ValidatedRelationalRanking": {
+      "type": "object",
+      "properties": {
+        "outputs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "part_outputs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "native": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NativeRankingOutputFacts"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "outputs",
+        "part_outputs"
+      ]
+    },
+    "NativeRankingOutputFacts": {
+      "type": "object",
+      "properties": {
+        "unsupported": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "unsupported"
       ]
     },
     "RelationalRankingSource": {
@@ -6605,6 +6768,60 @@
           "properties": {
             "data": {
               "type": "string",
+              "const": "ranking_fields"
+            },
+            "value": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "data",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "string",
+              "const": "forecast_coverage"
+            },
+            "value": {
+              "type": "object",
+              "properties": {
+                "steps": {
+                  "type": "integer",
+                  "format": "uint",
+                  "minimum": 0
+                },
+                "explained": {
+                  "type": "integer",
+                  "format": "uint",
+                  "minimum": 0
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "steps",
+                "explained"
+              ]
+            }
+          },
+          "required": [
+            "data",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "string",
               "const": "vocabulary"
             },
             "value": {
@@ -7251,28 +7468,6 @@
       "additionalProperties": false,
       "required": [
         "score"
-      ]
-    },
-    "ValidatedRelationalRanking": {
-      "type": "object",
-      "properties": {
-        "outputs": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "part_outputs": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "outputs",
-        "part_outputs"
       ]
     },
     "RelationalPartDescription": {
@@ -9187,7 +9382,15 @@
           "type": "object",
           "properties": {
             "schema": {
+              "description": "Live logical declarations after physical table admission and before\nGraphStore-style native sanitization.",
               "$ref": "#/$defs/AttachmentId"
+            },
+            "typed_tables": {
+              "description": "Cast-time dtype facts from those same ordered physical tables.",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/FrameTableMeaning"
+              }
             },
             "stage": {
               "type": "string",
@@ -9197,7 +9400,8 @@
           "additionalProperties": false,
           "required": [
             "stage",
-            "schema"
+            "schema",
+            "typed_tables"
           ]
         },
         {
@@ -9756,6 +9960,19 @@
         }
       ]
     },
+    "FrameTableMeaning": {
+      "description": "Cast-time table dtype facts and their ordered physical column identities.\nLater source composition takes logical metadata from live declarations.",
+      "type": "object",
+      "properties": {
+        "table": {
+          "$ref": "#/$defs/HeldTable"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "table"
+      ]
+    },
     "FrameTableInputs": {
       "type": "object",
       "properties": {
@@ -9776,7 +9993,7 @@
       ]
     },
     "FrameTableColumnFacts": {
-      "description": "Physical native source types read after this table's native declared casts.",
+      "description": "Physical native source types read during table construction, after all\ntables have completed their native declared casts.",
       "type": "object",
       "properties": {
         "name": {
@@ -12496,7 +12713,7 @@
       ]
     },
     "FrameSourceMeaning": {
-      "description": "Complete frozen declarations and relationships before native sanitization.",
+      "description": "Graph declarations composed from cast-time dtypes and live logical metadata\nafter physical table admission, before GraphStore-style native sanitization.\nThese same fixed graph facts identify its retained owner.",
       "type": "object",
       "properties": {
         "schema": {
@@ -12506,19 +12723,6 @@
       "additionalProperties": false,
       "required": [
         "schema"
-      ]
-    },
-    "FrameTableMeaning": {
-      "description": "Actual immutable table declaration before any graph sanitization effects.",
-      "type": "object",
-      "properties": {
-        "table": {
-          "$ref": "#/$defs/HeldTable"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "table"
       ]
     },
     "TypedFrameSourceColumn": {
