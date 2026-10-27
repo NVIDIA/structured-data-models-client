@@ -3129,9 +3129,14 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // this core's own order, not the reference's: an input with several
     // errors may be refused for another of them than the reference's first
     // (decision E41(k)(i)).
-    if frames.is_none() {
-        missing_indexes(&mut memo, &graph, asker.capabilities()?.index_advice).await?;
-    }
+    // Frames have no provider indexes to inspect. Complete the same
+    // no-advice check so a memo holding temporal bounds is valid on resume.
+    let advice = if frames.is_some() {
+        None
+    } else {
+        asker.capabilities()?.index_advice
+    };
+    missing_indexes(&mut memo, &graph, advice).await?;
     // Each table's rows, where the provider sizes its sampling by them,
     // as the reference's warehouse sampler counts them as it is built.
     if frames.is_none() {
