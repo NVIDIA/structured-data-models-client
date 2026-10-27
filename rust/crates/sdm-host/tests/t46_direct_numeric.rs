@@ -101,7 +101,7 @@ fn response_bytes(run: &HostRun, id: AttachmentId) -> Vec<u8> {
 fn finish_response(
     run: &HostRun,
     value: AttachmentId,
-    native_member: Option<&str>,
+    native_member: Option<(&str, bool)>,
 ) -> Result<HostRun, sdm_contract::CoreError> {
     let mut data: Value = serde_json::from_slice(&response_bytes(run, value)).unwrap();
     let mut buffers = Attachments::new();
@@ -134,8 +134,13 @@ fn finish_response(
         }
         let row = &checked["row"];
         let literal_value = match native_member {
-            Some(member) => {
-                json!({"outcome":"value","value":{"kind":"list"},"members":[{"kind":"integer","digits":format!("0x{member}"),"radix":"hexadecimal"}]})
+            Some((member, text)) => {
+                let member = if text {
+                    json!({"kind":"unicode","points":member.chars().map(u32::from).collect::<Vec<_>>()})
+                } else {
+                    json!({"kind":"integer","digits":format!("0x{member}"),"radix":"hexadecimal"})
+                };
+                json!({"outcome":"value","value":{"kind":"list"},"members":[member]})
             }
             None => json!({"outcome":"failed","failure":{"ancestry":["syntax_error"]}}),
         };
