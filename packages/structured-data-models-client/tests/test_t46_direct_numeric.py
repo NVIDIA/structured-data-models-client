@@ -644,10 +644,18 @@ def test_direct_numeric_key_spellings_are_checked_before_restoration(
             request.predict.instance_table['user_id'] = [True, False]
 
     old = outcome(
-        monkeypatch, frames, core=False, edit=edit, transport=Identified()
+        monkeypatch,
+        tuple(frame.copy(deep=True) for frame in frames),
+        core=False,
+        edit=edit,
+        transport=Identified(),
     )
     new = outcome(
-        monkeypatch, frames, core=True, edit=edit, transport=Identified()
+        monkeypatch,
+        tuple(frame.copy(deep=True) for frame in frames),
+        core=True,
+        edit=edit,
+        transport=Identified(),
     )
     assert new == old
     if wrong:
