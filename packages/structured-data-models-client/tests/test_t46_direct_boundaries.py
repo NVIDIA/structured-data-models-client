@@ -375,9 +375,6 @@ def ownership_boundary(mode):
         if request is not None:
             record['after'] = schema_state(request.schema)
             current = request.schema.tables.get('instance')
-            col = (
-                current.columns.get('user_id') if current is not None else None
-            )
             record['identity'] = {
                 'same_table_as_original': current is refs.get('original_table'),
                 'same_columns_dict': current is not None
