@@ -873,6 +873,47 @@ fn words(array: &ArrayRef) -> Result<Vec<Vec<String>>, CoreError> {
 }
 
 #[cfg(test)]
+mod frame_words_tests {
+    use std::sync::Arc;
+
+    use arrow_array::{Array, ArrayRef, LargeStringArray, StringArray};
+    use sdm_engine::words::{CasingProfile, UnicodeDataVersion};
+
+    #[test]
+    fn native_profiles_read_both_string_offset_widths_and_selected_slices() {
+        let values = [
+            Some("unselected"),
+            Some("ΟΣ İ a\0b"),
+            None,
+            Some("東京"),
+            Some("unselected"),
+        ];
+        for array in [
+            Arc::new(StringArray::from(values.to_vec())) as ArrayRef,
+            Arc::new(LargeStringArray::from(values.to_vec())) as ArrayRef,
+        ] {
+            let selected = array.slice(1, 3);
+            let before = selected.to_data();
+            assert_eq!(
+                super::frame_words(
+                    &selected,
+                    CasingProfile::FullRoot(UnicodeDataVersion::V15_0)
+                )
+                .unwrap(),
+                [vec!["ος", "i\u{307}", "a\0b"], vec![], vec!["東京"]]
+            );
+            assert_eq!(
+                super::frame_words(&selected, CasingProfile::Simple(UnicodeDataVersion::V17_0))
+                    .unwrap(),
+                [vec!["οσ", "i", "a\0b"], vec![], vec!["東京"]]
+            );
+            assert_eq!(selected.to_data(), before);
+            assert_eq!(array.len(), 5);
+        }
+    }
+}
+
+#[cfg(test)]
 mod null_key_tests {
     use std::sync::Arc;
 
