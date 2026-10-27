@@ -21,8 +21,12 @@ use super::NativeTextFacts;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum FramePredictionValues {
-    CoreKeys { values: AttachmentId },
-    NativeString { constructed: NativeFrameConstruction },
+    CoreKeys {
+        values: AttachmentId,
+    },
+    NativeString {
+        constructed: NativeFrameConstruction,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

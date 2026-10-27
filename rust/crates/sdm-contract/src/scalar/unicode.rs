@@ -276,7 +276,10 @@ mod tests {
         let source = [b'A', 0xed, 0xa0, 0xbd, 0xed, 0xb8, 0xba, b'B'];
         let borrowed = UnicodeSlice::from_utf8_surrogatepass(&source).unwrap();
         assert_eq!(borrowed.as_bytes().as_ptr(), source.as_ptr());
-        assert_eq!(borrowed.points().collect::<Vec<_>>(), [65, 0xd83d, 0xde3a, 66]);
+        assert_eq!(
+            borrowed.points().collect::<Vec<_>>(),
+            [65, 0xd83d, 0xde3a, 66]
+        );
         assert!(borrowed.utf8().is_none());
         let ordinary = "é 😺";
         let borrowed = UnicodeSlice::from(ordinary);
@@ -291,5 +294,4 @@ mod tests {
             UnicodeError::Byte(1)
         );
     }
-
 }

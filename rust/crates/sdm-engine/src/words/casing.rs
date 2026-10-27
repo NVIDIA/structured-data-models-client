@@ -117,9 +117,11 @@ pub(super) fn lower_points<T: Copy + From<char>>(
     if !full {
         return text
             .iter()
-            .map(|&character| scalar(character)
-                .map(|character| T::from(tables.simple(character)))
-                .unwrap_or(character))
+            .map(|&character| {
+                scalar(character)
+                    .map(|character| T::from(tables.simple(character)))
+                    .unwrap_or(character)
+            })
             .collect();
     }
 
