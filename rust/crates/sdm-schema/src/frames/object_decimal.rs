@@ -31,7 +31,7 @@ pub(crate) enum Key {
     Native {
         row: usize,
     },
-    Text(sdm_contract::scalar::UnicodeText),
+    Text(sdm_contract::scalar::unicode::UnicodeText),
     Float(u64),
 }
 

@@ -117,7 +117,7 @@ pub(crate) fn scalar(
             }
             6 => {
                 required(&[8])?;
-                let value = sdm_contract::scalar::UnicodeText::from_utf8_surrogatepass(
+                let value = sdm_contract::scalar::unicode::UnicodeText::from_utf8_surrogatepass(
                     fields.column(8).as_binary::<i32>().value(row).to_vec(),
                 )
                 .map_err(|_| invalid("native text is not valid Unicode scalar storage"))?;
