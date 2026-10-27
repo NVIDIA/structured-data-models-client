@@ -90,7 +90,7 @@ pub fn envelope(endpoint: &str, max_request_bytes: u64, call: &[u8]) -> Result<V
         "dataframe_records".into(),
         Value::Array(vec![Value::Object(vec![(
             REQUEST_COLUMN.into(),
-            Value::Text(payload),
+            Value::Text(payload.into()),
         )])]),
     )])
     .to_bytes();

@@ -675,7 +675,7 @@ impl FrameRun {
                         }
                         Hop::Stop => Value::Number("0".into()),
                         Hop::Negative(value) => Value::Number(value.as_str().into()),
-                        Hop::Expression(text) => Value::Text(text.clone()),
+                        Hop::Expression(text) => Value::Text(text.clone().into()),
                     })
                     .collect::<Vec<_>>();
                 projected.as_slice()

@@ -17,9 +17,12 @@
 use std::collections::BTreeMap;
 
 use serde::de::{Deserializer, MapAccess, Visitor};
+use serde::Serialize;
 use serde_json::value::RawValue;
+use sdm_contract::scalar::unicode::UnicodeText;
 
 mod logical;
+mod unicode;
 pub use logical::Error as LogicalError;
 
 /// Capture existing typed data before encoding, preserving its field order
@@ -35,7 +38,7 @@ pub enum Value {
     Bool(bool),
     /// A number, as the token written: `1`, `-0`, `97.0`, `1e-05`.
     Number(String),
-    Text(String),
+    Text(UnicodeText),
     Array(Vec<Value>),
     /// Members in the order written.
     Object(Vec<(String, Value)>),
@@ -503,7 +506,7 @@ fn value_with(raw: &RawValue, marker: Option<&str>) -> Result<Value, serde_json:
                     .collect::<Result<_, _>>()?,
             )
         }
-        Some(b'"') => Value::Text(serde_json::from_str(text)?),
+        Some(b'"') => Value::Text(serde_json::from_str::<String>(text)?.into()),
         Some(b't') => Value::Bool(true),
         Some(b'f') => Value::Bool(false),
         Some(b'n') => Value::Null,
@@ -564,15 +567,20 @@ impl Value {
     }
 
     pub fn text(value: &str) -> Value {
-        Value::Text(value.to_owned())
+        Value::Text(value.into())
     }
 
     /// The value's text, if it is text.
     pub fn as_text(&self) -> Option<&str> {
         match self {
-            Value::Text(text) => Some(text),
+            Value::Text(text) => text.utf8(),
             _ => None,
         }
+    }
+
+    /// The same logical text even where no ordinary UTF-8 view exists.
+    pub fn as_unicode(&self) -> Option<&UnicodeText> {
+        match self { Value::Text(text) => Some(text), _ => None }
     }
 
     /// Whether a decoded value has only ordinary JSON numeric tokens.
@@ -616,7 +624,7 @@ impl Value {
             Value::Bool(true) => out.extend_from_slice(b"true"),
             Value::Bool(false) => out.extend_from_slice(b"false"),
             Value::Number(token) => out.extend_from_slice(token.as_bytes()),
-            Value::Text(text) => write_text(text, out),
+            Value::Text(text) => unicode::write(text, out),
             Value::Array(items) => {
                 out.push(b'[');
                 for (i, item) in items.iter().enumerate() {
@@ -643,6 +651,37 @@ impl Value {
     }
 }
 
+/// Serialize the one native text meaning, retaining an ordinary UTF-8 fast
+/// view. The logical serializer receives original canonical bytes rather
+/// than a JSON escape that could combine distinct surrogate codepoints.
+pub fn serialize_text<S: serde::Serializer>(text: &UnicodeText, serializer: S) -> Result<S::Ok, S::Error> {
+    if let Some(text) = text.utf8() { return serializer.serialize_str(text); }
+    struct Bytes<'a>(&'a [u8]);
+    impl serde::Serialize for Bytes<'_> {
+        fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> { serializer.serialize_bytes(self.0) }
+    }
+    if !serializer.is_human_readable() {
+        return serializer.serialize_newtype_struct(logical::UNICODE, &Bytes(text.as_bytes()));
+    }
+    use serde::ser::Error;
+    let mut encoded = Vec::new();
+    unicode::write(text, &mut encoded);
+    let encoded = String::from_utf8(encoded).expect("native JSON text is escaped UTF-8");
+    RawValue::from_string(encoded).map_err(S::Error::custom)?.serialize(serializer)
+}
+
+/// The typed model's class strings use the same logical serializer as cells.
+pub fn serialize_texts<S: serde::Serializer>(texts: &[UnicodeText], serializer: S) -> Result<S::Ok, S::Error> {
+    use serde::ser::SerializeSeq;
+    struct Text<'a>(&'a UnicodeText);
+    impl serde::Serialize for Text<'_> {
+        fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> { serialize_text(self.0, serializer) }
+    }
+    let mut sequence = serializer.serialize_seq(Some(texts.len()))?;
+    for text in texts { sequence.serialize_element(&Text(text))?; }
+    sequence.end()
+}
+
 /// A value written as [`Value::to_bytes`] writes it: each number its token,
 /// members in order. This is how a payload's cells are written
 /// ([`crate::payload`]).
@@ -658,7 +697,7 @@ impl serde::Serialize for Value {
             Value::Number(token) => RawValue::from_string(token.clone())
                 .map_err(|_| S::Error::custom("a number token that is not JSON"))?
                 .serialize(serializer),
-            Value::Text(text) => serializer.serialize_str(text),
+            Value::Text(text) => serialize_text(text, serializer),
             Value::Array(items) => {
                 let mut seq = serializer.serialize_seq(Some(items.len()))?;
                 for item in items {

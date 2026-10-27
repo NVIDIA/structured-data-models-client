@@ -643,7 +643,7 @@ fn direct_contract_error(_answer: &Value, error: sdm_wire::response::Refused) ->
                         Value::Object(vec![("index".into(), Value::Number(at.to_string()))])
                     }
                     sdm_wire::response::RefusalAt::Member(name) => {
-                        Value::Object(vec![("member".into(), Value::Text(name.clone()))])
+                        Value::Object(vec![("member".into(), Value::Text(name.clone().into()))])
                     }
                 })
                 .collect(),

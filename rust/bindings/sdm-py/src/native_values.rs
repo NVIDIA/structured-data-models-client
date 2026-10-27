@@ -7,7 +7,7 @@
 //! here. Exact builtin types construct only primitive native values.
 
 use pyo3::prelude::*;
-use pyo3::types::{PyBool, PyDict, PyFloat, PyInt, PyList, PyString};
+use pyo3::types::{PyBool, PyBytes, PyDict, PyFloat, PyInt, PyList, PyString};
 use sdm_host::LogicalValue;
 
 pub(super) fn present(py: Python<'_>, value: &LogicalValue) -> PyResult<Py<PyAny>> {
@@ -26,7 +26,13 @@ pub(super) fn present(py: Python<'_>, value: &LogicalValue) -> PyResult<Py<PyAny
             };
             kind.call1((token,))?.unbind()
         }
-        LogicalValue::Text(text) => PyString::new(py, text).into_any().unbind(),
+        LogicalValue::Text(text) => {
+            let value = match text.utf8() {
+                Some(text) => PyString::new(py, text),
+                None => PyString::from_encoded_object(PyBytes::new(py, text.as_bytes()).as_any(), Some(c"utf-8"), Some(c"surrogatepass"))?,
+            };
+            value.into_any().unbind()
+        }
         LogicalValue::Array(items) => {
             let result = PyList::empty(py);
             for item in items {

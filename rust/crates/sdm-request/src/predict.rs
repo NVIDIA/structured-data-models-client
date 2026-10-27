@@ -1424,7 +1424,7 @@ fn spelled_as(
     let respelled: Vec<(String, f64)> = probabilities
         .iter()
         .map(|(class, p)| {
-            let as_written = Value::Text(class.clone());
+            let as_written = Value::Text(class.clone().into());
             let key = match answers {
                 AnswerType::Bool => {
                     let read = match policy {
@@ -2554,7 +2554,7 @@ mod tests {
     #[test]
     fn an_entity_is_read_back_as_as_declared_reads_it() {
         let number = |t: &str| Value::Number(t.to_owned());
-        let text = |t: &str| Value::Text(t.to_owned());
+        let text = |t: &str| Value::Text(t.into());
         let int = Some("int64");
         assert_eq!(entity(&number("7"), int), Entity::Integer(7));
         assert_eq!(entity(&text(" +0_07 "), int), Entity::Integer(7));
@@ -2584,7 +2584,7 @@ mod tests {
     #[test]
     fn a_float_target_s_class_reads_back_as_a_double() {
         let number = |t: &str| Value::Number(t.to_owned());
-        let text = |t: &str| Value::Text(t.to_owned());
+        let text = |t: &str| Value::Text(t.into());
         assert_eq!(as_float(&text(" 3.0 ")), Some(3.0));
         assert_eq!(
             as_float(&text("0.10000000149011612")),
@@ -2632,7 +2632,7 @@ mod tests {
                 ("0", false),
             ] {
                 let padded = format!("{separator}{label}{separator}");
-                let value = Value::Text(padded.clone());
+                let value = Value::Text(padded.clone().into());
                 assert_eq!(
                     answer_of(
                         Some(&value),

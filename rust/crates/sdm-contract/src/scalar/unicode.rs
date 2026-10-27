@@ -10,7 +10,7 @@
 /// Exact native string codepoints, stored as UTF8 with surrogatepass.
 /// Validation permits surrogate codepoints but rejects overlong encodings,
 /// malformed UTF8 and values past U+10FFFF. It never combines adjacent units.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct UnicodeText {
     bytes: Vec<u8>,
 }
@@ -120,6 +120,14 @@ impl UnicodeText {
 
     pub fn as_bytes(&self) -> &[u8] {
         &self.bytes
+    }
+
+    pub fn is_empty(&self) -> bool { self.bytes.is_empty() }
+
+    /// Move an ordinary UTF-8 value into String without another allocation.
+    /// An exceptional value remains the same exact native text on failure.
+    pub fn into_utf8(self) -> Result<String, Self> {
+        String::from_utf8(self.bytes).map_err(|error| Self { bytes: error.into_bytes() })
     }
 
     /// An ordinary string view only where no surrogate codepoint occurs.

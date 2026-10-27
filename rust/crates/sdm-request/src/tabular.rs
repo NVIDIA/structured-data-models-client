@@ -21,6 +21,7 @@ use std::collections::{BTreeMap, BTreeSet};
 pub mod response;
 
 fn text(value: impl Into<String>) -> Value {
+    let value: String = value.into();
     Value::Text(value.into())
 }
 fn object<const N: usize>(pairs: [(&str, Value); N]) -> Value {
@@ -282,7 +283,7 @@ fn primitive_inference(inference: DirectInference) -> Result<Value, CoreError> {
             PrimitiveOption::Value(Scalar::UInt64(v)) => integer(v.to_string())?,
             PrimitiveOption::Value(Scalar::Null) => Value::Null,
             PrimitiveOption::Value(Scalar::Bool(v)) => Value::Bool(v),
-            PrimitiveOption::Value(Scalar::Utf8(v)) => Value::Text(v),
+            PrimitiveOption::Value(Scalar::Utf8(v)) => Value::Text(v.into()),
             PrimitiveOption::Value(Scalar::Float64(v)) => Value::float(v).ok_or_else(|| {
                 CoreError::protocol(
                     Sentence::InvalidMessage,
