@@ -93,7 +93,10 @@ fn signed_zero_and_finite_extremes_preserve_value_comparisons_and_input_bits() {
         let original: Vec<u64> = values.iter().map(|value| value.to_bits()).collect();
         assert_eq!(scalar_argsort(&values), vector.order);
         assert_eq!(
-            values.iter().map(|value| value.to_bits()).collect::<Vec<_>>(),
+            values
+                .iter()
+                .map(|value| value.to_bits())
+                .collect::<Vec<_>>(),
             original
         );
     }
