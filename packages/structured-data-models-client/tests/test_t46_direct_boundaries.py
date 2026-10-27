@@ -1164,8 +1164,9 @@ def test_direct_generated_response_field_family_and_error_order(
         ('row_index', 2, None),
     ],
 )
+@pytest.mark.parametrize('active', [False, True])
 def test_public_predict_run_loop_keeps_selected_causes(
-    monkeypatch, field, value, cause_name
+    monkeypatch, field, value, cause_name, active
 ):
     from sdm_client.errors import StructuredDataError
 
@@ -1176,12 +1177,24 @@ def test_public_predict_run_loop_keeps_selected_causes(
         scoring = pd.DataFrame({'user_id': [4, 5]})
         request = Request(context, scoring, target='target', task='regression')
         transport = Scripted(item({field: value}))
-        with SDMClient('http://localhost:1', max_retries=0) as client:
-            client._transport.close()
-            client._transport = transport
-            with pytest.raises(StructuredDataError) as caught:
-                client.predict(request, model=KumoTabular())
-        failure = caught.value
+
+        def call():
+            with SDMClient('http://localhost:1', max_retries=0) as client:
+                client._transport.close()
+                client._transport = transport
+                with pytest.raises(StructuredDataError) as caught:
+                    client.predict(request, model=KumoTabular())
+            return caught.value
+
+        caller = None
+        if active:
+            try:
+                raise LookupError('outer-active-caller')
+            except LookupError as outer:
+                caller = outer
+                failure = call()
+        else:
+            failure = call()
         observed.append(error(failure))
         assert failure.code == 'INVALID_RESPONSE'
         assert len(transport.calls) == 1
@@ -1191,10 +1204,11 @@ def test_public_predict_run_loop_keeps_selected_causes(
         else:
             assert type(cause).__name__ == cause_name
             assert failure.message.endswith(str(cause))
-            if cause_name in ('TypeError', 'ValueError'):
-                # A real reached native failure, not a synthetic replacement.
-                assert cause.__traceback__ is not None
-                assert cause.__context__ is None or cause.__suppress_context__
+            assert failure.__context__ is cause
+            assert cause.__cause__ is None
+            assert cause.__context__ is caller
+            assert not cause.__suppress_context__
+            assert cause.__traceback__ is not None
         if core:
             assert failure.__suppress_context__
     assert observed[1] == observed[0]
