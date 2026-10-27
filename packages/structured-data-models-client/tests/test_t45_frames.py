@@ -17,6 +17,7 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
+from t45_frame_routes import FRAME_ROUTES
 
 from sdm_client import (
     KumoRelational,
@@ -25,7 +26,6 @@ from sdm_client import (
     Schema,
     SDMClient,
 )
-from sdm_client._routing import CORE_ROUTED
 from sdm_client.materializers.relational import RelationalMaterializer
 
 PANDAS = int(pd.__version__.split('.')[0])
@@ -34,7 +34,6 @@ REFERENCE = json.loads(
     .with_name(f't45_frames_pandas{PANDAS}_reference.json')
     .read_text()
 )
-ROUTES = ','.join(sorted(CORE_ROUTED))
 
 
 def keys(kind, values):
@@ -312,7 +311,7 @@ def observe(kind, shape, expected):
 def test_public_link_frame_journey_matches_frozen_client(
     monkeypatch, core, case
 ):
-    monkeypatch.setenv('SDM_CORE_ROUTES', ROUTES if core else '')
+    monkeypatch.setenv('SDM_CORE_ROUTES', FRAME_ROUTES if core else '')
     if core:
 
         def old_engine_was_called(*args, **kwargs):
