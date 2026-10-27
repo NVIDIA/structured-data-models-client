@@ -287,13 +287,10 @@ fn default_anchor_uses_valid_snapshot_bounds_and_retains_no_draws_on_timed_hops(
     )
     .unwrap();
     let result = terminal(&run).unwrap_or_else(|error| panic!("{:?}", decoded(&error)));
-    let payload = payload(&run, result);
+    let built = payload(&run, result);
+    assert_eq!(values(&built, "events", "marker"), json!([54, 48, 62, 56]));
     assert_eq!(
-        values(&payload, "events", "marker"),
-        json!([54, 48, 62, 56])
-    );
-    assert_eq!(
-        values(&payload, "instance_table", "__kumo_anchor_time"),
+        values(&built, "instance_table", "__kumo_anchor_time"),
         json!(["1970-01-01T00:00:01.000000Z", "1970-01-01T00:00:01.000000Z"])
     );
     let (state, owned) = checkpoint(&run);
