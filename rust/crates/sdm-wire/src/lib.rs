@@ -16,6 +16,7 @@
 #![forbid(unsafe_code)]
 
 pub mod json;
+pub mod id_json;
 pub mod key;
 pub mod payload;
 pub mod response;

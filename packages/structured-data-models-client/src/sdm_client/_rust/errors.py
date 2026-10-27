@@ -748,13 +748,6 @@ def warn_from_core(
                 + words['between'].join(said(w) for w in together)
                 + words['closing']
             )
-        if first['sentence'] == 'direct_literal_escape':
-            fields = _fields(first.get('fields', {}))
-            text, category = _held()['direct_literal_notice'](fields)
-            warnings.warn(
-                text, category=category, stacklevel=caller_stacklevel()
-            )
-            continue
         frame_notice = presentation == 'frame_schema' or (
             presentation == 'frame_graph'
             and first['code'] == 'FRAME_ROWS_DROPPED'

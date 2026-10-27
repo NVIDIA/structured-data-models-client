@@ -64,11 +64,6 @@ library. Written by scripts/rust_core/rust_notices.py from rust/Cargo.lock;
 regenerate it with --write rather than editing it.
 """
 
-UNICODE_DATA = REPO / 'rust/crates/sdm-request/data/LICENSE-UNICODE.txt'
-UNICODE_PROVENANCE = (
-    REPO / 'rust/crates/sdm-request/data/UNICODE-PROVENANCE.json'
-)
-
 STD = """\
 The Rust standard library
 =========================
@@ -189,27 +184,6 @@ def render() -> str:
         + '\n\n\n'.join(sections)
         + '\n\n\n'
         + STD.format(toolchain=_toolchain())
-        + unicode_data_notice()
-    )
-
-
-def unicode_data_notice() -> str:
-    """Terms for the alias membership data generated into the core."""
-    provenance = json.loads(UNICODE_PROVENANCE.read_text(encoding='utf-8'))
-    data = UNICODE_DATA.read_bytes()
-    if hashlib.sha256(data).hexdigest() != provenance['license']['sha256']:
-        raise ValueError(
-            'Unicode data license differs from generator provenance'
-        )
-    return (
-        '\n\nUnicode name-alias data\n=======================\n\n'
-        'The core includes name-alias membership derived from the official '
-        'Unicode Character Database versions 13.0, 14.0, 15.0, 15.1 and 16.0.\n'
-        'Copyright (c) 1991-2026 Unicode, Inc. Licensed under Unicode-3.0.\n'
-        'scripts/rust_core/generate_direct_unicode.py records the input URLs, '
-        'pinned hashes and derived bytes in UNICODE-PROVENANCE.json.\n\n'
-        + data.decode('utf-8').strip()
-        + '\n'
     )
 
 

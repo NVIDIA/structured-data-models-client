@@ -919,8 +919,8 @@ sentences! {
     DirectOptionInteger = "direct_option_integer", E::InvalidRequest;
     DirectPredictDtype = "direct_predict_dtype", E::InvalidRequest;
     DirectNullableCast = "direct_nullable_cast", E::InvalidRequest;
+    DirectNativeFailure = "direct_native_failure", E::InvalidRequest;
     DirectAnswersShown = "direct_answers_shown", W::FrameSchema;
-    DirectLiteralEscape = "direct_literal_escape", W::FrameSchema;
     DirectLookup = "direct_lookup", E::InvalidRequest;
     DirectAmbiguous = "direct_ambiguous", E::InvalidRequest;
     DirectEmpty = "direct_empty", E::InvalidRequest;
