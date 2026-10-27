@@ -1051,3 +1051,142 @@ fn native_value_association_and_uncaught_string_failure_are_explicit() {
     assert_eq!(error.sentence, sdm_contract::Sentence::DirectNativeFailure);
     assert_eq!(error.fields["stage"], sdm_contract::Detail::text("string"));
 }
+
+fn encoded_body(
+    input: Value,
+    mut attached: Attachments,
+) -> Result<(Value, Vec<u8>), sdm_contract::CoreError> {
+    attached.insert(
+        AttachmentId(1),
+        bytes(json!({"stage":"encode_body","input":input})),
+    );
+    let run = start(json!({"op":"prepare_request","input":1}), attached);
+    loop {
+        match next(&run) {
+            ControlMessage::Warnings { .. } => {}
+            ControlMessage::Step(Step::Warnings) => {
+                run.take_warnings().unwrap().expect("warnings");
+            }
+            ControlMessage::Error { error } => return Err(error),
+            ControlMessage::Step(Step::Done {
+                result: OperationResult::PrepareRequest(value),
+                ..
+            }) => {
+                let body: Value =
+                    serde_json::from_slice(&response_bytes(&run, value.value)).unwrap();
+                let payload =
+                    response_bytes(&run, AttachmentId(body["payload"].as_u64().unwrap() as u32));
+                return Ok((body, payload));
+            }
+            other => panic!("row encoding performs no model I/O: {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn encoded_numeric_body_is_useful_before_native_inference_is_observed() {
+    for nonfinite in [false, true] {
+        let context = [RecordBatch::try_from_iter([
+            (
+                "0",
+                Arc::new(Float64Array::from(vec![
+                    1.,
+                    if nonfinite { f64::INFINITY } else { 2. },
+                    3.,
+                ])) as ArrayRef,
+            ),
+            (
+                "1",
+                Arc::new(arrow_array::Int64Array::from(vec![2, 4, 6])) as ArrayRef,
+            ),
+        ])
+        .unwrap()];
+        let scoring = [RecordBatch::try_from_iter([(
+            "0",
+            Arc::new(Float64Array::from(vec![4., 5.])) as ArrayRef,
+        )])
+        .unwrap()];
+        let input = prelude(
+            &["feature", "target"],
+            &["feature"],
+            &context,
+            &scoring,
+            &[],
+        );
+        let envelope = plan(input.clone(), &context, &scoring);
+        let encoded = encoded_body(
+            json!({"envelope":envelope,"context":2,"predict":3,"context_header":input["context_header"],"predict_header":input["predict_header"],"task":"regression","primary_key":[]}),
+            attached_batches(&context, &scoring),
+        );
+        if nonfinite {
+            assert_eq!(
+                encoded.unwrap_err().sentence,
+                sdm_contract::Sentence::DirectWireNonFinite
+            );
+            continue;
+        }
+        let (body, payload) = encoded.unwrap();
+        assert_eq!(body["version"], 1);
+        assert_eq!(body["context_shape"]["rows"], 3);
+        assert_eq!(body["predict_shape"]["rows"], 2);
+        let payload: Value = serde_json::from_slice(&payload).unwrap();
+        assert_eq!(
+            payload["context"]["instance_table"]["rows"],
+            json!([[1., 2], [2., 4], [3., 6]])
+        );
+        assert_eq!(
+            payload["predict"]["instance_table"]["rows"],
+            json!([[4.], [5.]])
+        );
+        assert!(payload.get("metadata").is_none());
+        assert!(payload.get("inference").is_none());
+        assert_eq!(payload["model"], "kumo-tabular");
+        assert_eq!(payload["output"]["fields"], json!(["prediction"]));
+    }
+}
+
+#[test]
+fn boolean_and_numeric_halves_share_numeric_wire_categories() {
+    let context = [RecordBatch::try_from_iter([
+        (
+            "0",
+            Arc::new(arrow_array::BooleanArray::from(vec![
+                Some(true),
+                Some(false),
+                None,
+            ])) as ArrayRef,
+        ),
+        (
+            "1",
+            Arc::new(arrow_array::Int64Array::from(vec![2, 4, 6])) as ArrayRef,
+        ),
+    ])
+    .unwrap()];
+    let scoring = [RecordBatch::try_from_iter([(
+        "0",
+        Arc::new(arrow_array::UInt64Array::from(vec![0, 1])) as ArrayRef,
+    )])
+    .unwrap()];
+    let input = prelude(
+        &["feature", "target"],
+        &["feature"],
+        &context,
+        &scoring,
+        &[],
+    );
+    let envelope = plan(input.clone(), &context, &scoring);
+    let (_,payload)=encoded_body(json!({"envelope":envelope,"context":2,"predict":3,"context_header":input["context_header"],"predict_header":input["predict_header"],"task":"regression","primary_key":[]}),attached_batches(&context,&scoring)).unwrap();
+    let payload: Value = serde_json::from_slice(&payload).unwrap();
+    assert_eq!(
+        payload["schema"]["instance_table"]["columns"]["feature"],
+        json!({"dtype":"int64","stype":"categorical"})
+    );
+    assert_eq!(
+        payload["context"]["instance_table"]["rows"],
+        json!([[1, 2], [0, 4], [null, 6]])
+    );
+    assert_eq!(
+        payload["predict"]["instance_table"]["rows"],
+        json!([[0], [1]])
+    );
+}
