@@ -261,7 +261,6 @@ pub enum Preparation {
     CheckResponseRows {
         scope: ResponseScope,
         rows: Vec<DecodedDirectRow>,
-        decimal_limit: u32,
     },
     InterpretResponseJson {
         checked: CheckedDirectRow,
@@ -500,7 +499,6 @@ pub struct DecodedDirectRow {
 pub struct CheckedDirectRow {
     pub scope: ResponseScope,
     pub row: DecodedDirectRow,
-    pub decimal_limit: u32,
     pub id: DirectRowId,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -617,7 +615,6 @@ pub struct StringObservation {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct AttributedDirectRow {
-    pub decimal_limit: u32,
     pub row: DecodedDirectRow,
     pub json: Option<JsonObservation>,
     pub literal: Option<LiteralObservation>,

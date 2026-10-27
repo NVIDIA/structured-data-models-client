@@ -154,10 +154,7 @@ fn row_index(scope: &ResponseScope, row: &DecodedDirectRow) -> Result<usize, Cor
     }
     Ok(at)
 }
-fn representation(row: &DecodedDirectRow, limit: u32) -> Result<DirectRowId, CoreError> {
-    if limit != 0 && limit < 640 {
-        return Err(protocol("native decimal limit is incoherent"));
-    }
+fn representation(row: &DecodedDirectRow) -> Result<DirectRowId, CoreError> {
     if row.key.is_none() {
         return Ok(DirectRowId::Unkeyed);
     }
@@ -213,7 +210,6 @@ fn attribution(
         }
     }
     Ok(AttributedDirectRow {
-        decimal_limit: checked.decimal_limit,
         row: row.clone(),
         json,
         literal,
@@ -224,7 +220,6 @@ fn attribution(
 pub fn check_rows(
     scope: ResponseScope,
     rows: Vec<DecodedDirectRow>,
-    limit: u32,
     float_text: fn(f64) -> String,
 ) -> Result<CheckedDirectRows, CoreError> {
     self::scope(&scope)?;
@@ -236,11 +231,10 @@ pub fn check_rows(
         }
         prior = Some(row.ordinal);
         row_index(&scope, &row)?;
-        let id = representation(&row, limit)?;
+        let id = representation(&row)?;
         let checked = CheckedDirectRow {
             scope: scope.clone(),
             row,
-            decimal_limit: limit,
             id,
         };
         if matches!(&checked.id, DirectRowId::NativeJsonText { .. }) {
@@ -261,7 +255,7 @@ pub fn check_rows(
 fn checked(row: &CheckedDirectRow) -> Result<(), CoreError> {
     row_index(&row.scope, &row.row)
         .map_err(|_| protocol("a checked row contains a refused source row"))?;
-    if representation(&row.row, row.decimal_limit)? != row.id {
+    if representation(&row.row)? != row.id {
         return Err(protocol(
             "checked ID representation differs from its source",
         ));
@@ -376,7 +370,7 @@ pub fn interpret_json(
 }
 fn interpreted(row: &InterpretedDirectRow) -> Result<(), CoreError> {
     let mut original = row.checked.clone();
-    original.id = representation(&original.row, original.decimal_limit)?;
+    original.id = representation(&original.row)?;
     if interpret_json(original, row.json.clone())? != *row {
         return Err(protocol(
             "interpreted JSON differs from its source observations",
@@ -499,8 +493,7 @@ pub fn layout(
             let checked = CheckedDirectRow {
                 scope: scope.clone(),
                 row: row.clone(),
-                decimal_limit: accepted.decimal_limit,
-                id: representation(row, accepted.decimal_limit)?,
+                id: representation(row)?,
             };
             attribute(
                 select_member(
@@ -514,12 +507,7 @@ pub fn layout(
             if accepted.literal.is_some() || accepted.string.is_some() {
                 return Err(protocol("native member data has no JSON observation"));
             }
-            let mut checked = check_rows(
-                scope.clone(),
-                vec![row.clone()],
-                accepted.decimal_limit,
-                float_text,
-            )?;
+            let mut checked = check_rows(scope.clone(), vec![row.clone()], float_text)?;
             if checked.row.is_some() {
                 return Err(protocol("a reached ID has no JSON observation"));
             }

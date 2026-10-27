@@ -181,7 +181,7 @@ fn finish_response_limit(
     let mut at = 0;
     while at < rows.len() {
         let checked = prepare(
-            json!({"stage":"check_response_rows","scope":data["scope"],"rows":rows[at..],"decimal_limit":4300}),
+            json!({"stage":"check_response_rows","scope":data["scope"],"rows":rows[at..]}),
             Attachments::new(),
         )?;
         let ready = checked["rows"].as_array().unwrap();
@@ -1390,7 +1390,7 @@ fn checked_native_row(text: &str) -> Value {
     let scope = json!({"version":2,"model":"kumo-tabular","request_id":"server-nonce","call_request_id":"sdm-fixed","response_rows":2,"scoring_rows":2});
     let rows = json!([{"ordinal":0,"row_index":"0","id":text,"key":{"t":"i64","v":"4"},"raw_in_batch":false,"prior_ordinal":null},{"ordinal":1,"row_index":"0","id":"[4]","key":{"t":"i64","v":"4"},"raw_in_batch":false,"prior_ordinal":0}]);
     let checked = prepare(
-        json!({"stage":"check_response_rows","scope":scope,"rows":rows,"decimal_limit":640}),
+        json!({"stage":"check_response_rows","scope":scope,"rows":rows}),
         Attachments::new(),
     )
     .unwrap();
@@ -2207,7 +2207,7 @@ fn direct_row_bounds_use_exact_decoded_digits_before_machine_width() {
         let scope = json!({"version":2,"model":"kumo-tabular","request_id":"response-nonce","call_request_id":"sdm-fixed","response_rows":1,"scoring_rows":2});
         let row = json!({"ordinal":0,"row_index":index,"id":null,"key":null,"raw_in_batch":false,"prior_ordinal":null});
         let error = prepare(
-            json!({"stage":"check_response_rows","scope":scope,"rows":[row],"decimal_limit":4300}),
+            json!({"stage":"check_response_rows","scope":scope,"rows":[row]}),
             Attachments::new(),
         )
         .unwrap_err();
@@ -2237,7 +2237,11 @@ fn wide_bounds_are_reached_after_earlier_native_conversion_outcome() {
     assert_eq!(accepted["id"], json!({"t":"i64","v":"4"}));
     let index = "9".repeat(663);
     let row = json!({"ordinal":1,"row_index":index,"id":"opaque-b","key":null,"raw_in_batch":false,"prior_ordinal":null});
-    let error=prepare(json!({"stage":"check_response_rows","scope":checked["scope"],"rows":[row],"decimal_limit":640}),Attachments::new()).unwrap_err();
+    let error = prepare(
+        json!({"stage":"check_response_rows","scope":checked["scope"],"rows":[row]}),
+        Attachments::new(),
+    )
+    .unwrap_err();
     assert_eq!(error.sentence, sdm_contract::Sentence::TabularRowBounds);
     assert_eq!(error.fields["index"], sdm_contract::Detail::text(index));
 }
