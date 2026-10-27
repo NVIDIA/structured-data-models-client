@@ -763,6 +763,95 @@ fn logical_string_key_metadata_retains_actual_numeric_identifying_arrays() {
     }
 }
 
+fn complete_reference_arguments(attached: &mut Attachments, indices: [i64; 2], unseeded: bool) {
+    attached.insert(
+        AttachmentId(2),
+        bytes(json!(
+            "PREDICT users.age FOR EACH users.user_id WHERE users.user_id = 1"
+        )),
+    );
+    attached.insert(
+        AttachmentId(3),
+        arrow(vec![("index", ints(indices))], false),
+    );
+    attached.insert(AttachmentId(5), bytes(json!({"num_context_samples":1,"num_neighbors":[3],"num_hops":1,"rows_per_call":1,"random_seed":if unseeded {Value::Null} else {json!(7)}})));
+    let Attachment::Bytes(manifest) = &attached[&AttachmentId(7)] else {
+        panic!("frame manifest")
+    };
+    let mut manifest: Value = serde_json::from_slice(manifest).unwrap();
+    manifest["entropy"] = json!(7);
+    attached.insert(AttachmentId(7), bytes(manifest));
+}
+
+fn checkpoint_neighbors(state: &Value, attached: &Attachments) -> Value {
+    let manifest = AttachmentId(state["frame_checkpoint"]["manifest"].as_u64().unwrap() as u32);
+    let Attachment::Bytes(raw) = &attached[&manifest] else {
+        panic!("checkpoint manifest")
+    };
+    let manifest: Value = serde_json::from_slice(raw).unwrap();
+    let metadata = AttachmentId(manifest["metadata"].as_u64().unwrap() as u32);
+    let Attachment::Bytes(raw) = &attached[&metadata] else {
+        panic!("checkpoint metadata")
+    };
+    serde_json::from_slice::<Value>(raw).unwrap()["neighbors"].clone()
+}
+
+#[test]
+fn complete_task_reference_validation_precedes_draws_and_seed_resets() {
+    let observed: Value = serde_json::from_str(include_str!(
+        "../../../../packages/structured-data-models-client/tests/t44_complete_task_references_reference.json"
+    )).unwrap();
+    let mut attached = inputs("age", "batched", false, 7);
+    complete_reference_arguments(&mut attached, [9999, 8], false);
+    let mut message = materialize_message();
+    let mut first_neighbors = None;
+    for (number, indices) in [[9999, 8], [7, 9999]].into_iter().enumerate() {
+        complete_reference_arguments(&mut attached, indices, false);
+        let run = HostRun::start(&sdm_host::default_root(), &message, attached).unwrap();
+        let failed = terminal(&run).expect_err("the complete task has one unresolved entity");
+        let error = decoded(&failed);
+        assert_eq!(
+            observed["records"][number]["error"]["code"],
+            "INVALID_REQUEST"
+        );
+        assert_eq!(error["error"]["code"], "INVALID_REQUEST");
+        assert_eq!(error["error"]["sentence"], "frame_task_references");
+        assert_eq!(
+            error["error"]["fields"],
+            json!({"table":{"t":"utf8","v":"users"},"rows":{"t":"u64","v":1},"detail":{"t":"utf8","v":""}})
+        );
+        let (state, owned) = checkpoint(&run);
+        let neighbors = checkpoint_neighbors(&state, &owned);
+        assert_eq!(neighbors["position"], 624);
+        if let Some(first) = &first_neighbors {
+            assert_eq!(&neighbors, first);
+        } else {
+            first_neighbors = Some(neighbors);
+        }
+        (message, attached) = rebound(&state, &owned, false, false);
+    }
+    complete_reference_arguments(&mut attached, [7, 8], true);
+    let continued = HostRun::start(&sdm_host::default_root(), &message, attached).unwrap();
+    let materialized = terminal(&continued).unwrap_or_else(|error| panic!("{:?}", decoded(&error)));
+    let expected = dt3_no_time_record(
+        json!({"payloads":observed["records"][2]["inspection"]["payloads"],"sent":observed["records"][2]["sent"],"result":observed["records"][2]["result"]}),
+    );
+    predict(&continued, materialized, "age", &expected);
+    let (state, owned) = checkpoint(&continued);
+    let continued_neighbors = checkpoint_neighbors(&state, &owned);
+    assert_eq!(continued_neighbors["position"], 12);
+    let mut fresh = inputs("age", "batched", false, 7);
+    complete_reference_arguments(&mut fresh, [7, 8], true);
+    let fresh = HostRun::start(&sdm_host::default_root(), &materialize_message(), fresh).unwrap();
+    let materialized = terminal(&fresh).unwrap_or_else(|error| panic!("{:?}", decoded(&error)));
+    let expected = dt3_no_time_record(
+        json!({"payloads":observed["records"][3]["inspection"]["payloads"],"sent":observed["records"][3]["sent"],"result":observed["records"][3]["result"]}),
+    );
+    predict(&fresh, materialized, "age", &expected);
+    let (state, owned) = checkpoint(&fresh);
+    assert_eq!(checkpoint_neighbors(&state, &owned), continued_neighbors);
+}
+
 fn anchor_inputs(timed: bool) -> Attachments {
     let mut attached = inputs("age", "ordinary", false, 7);
     let schema = json!({"tables":[
