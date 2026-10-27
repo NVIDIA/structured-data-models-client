@@ -95,6 +95,8 @@ pub struct CheckedRelationalRow {
 pub struct RelationalInstanceText {
     pub ordinal: usize,
     pub points: Vec<u32>,
+    /// Actual reached native str(id) != str(instance) truth.
+    pub different: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

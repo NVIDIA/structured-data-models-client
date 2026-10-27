@@ -96,6 +96,9 @@ pub const INFERENCE_OPTIONS: [&str; 6] = [
     "class_shuffle",
 ];
 
+/// The inference key whose unsupported use receives the statistic remedy.
+pub const INFERENCE_STATISTIC_KEY: &str = "output_type";
+
 /// The most classes `kumo-relational` classifies (`classes_max`).
 pub const CLASSES_MAX: usize = 10;
 
@@ -943,29 +946,11 @@ pub fn body(
                     .collect();
                 refused.sort();
                 if !refused.is_empty() {
-                    // The option field and what to change, for the host's
-                    // words (T2.13): drop the options, and choose a
-                    // regression's statistic where `output_type` is one.
-                    let mut forwarded = INFERENCE_OPTIONS;
-                    forwarded.sort_unstable();
-                    let remedy = if refused.iter().any(|n| *n == "output_type") {
-                        "drop_or_statistic"
-                    } else {
-                        "drop"
-                    };
-                    return Err(CoreError::new(
-                        if remedy == "drop" {
-                            Sentence::OptionsUnread
-                        } else {
-                            Sentence::OptionsUnreadStatistic
-                        },
-                        "the model does not read an inference option the call set",
-                    )
-                    .with_field("field", Detail::text("inference_config"))
-                    .with_field("remedy", Detail::text(remedy))
-                    .with_field("model", Detail::text(model))
-                    .with_field("unsupported", texts(refused.iter().map(|n| n.as_str())))
-                    .with_field("forwarded", texts(forwarded)));
+                    return Err(validation::inference_refusal(
+                        model,
+                        texts(refused.iter().map(|name| name.as_str())),
+                        refused.iter().any(|name| *name == INFERENCE_STATISTIC_KEY),
+                    ));
                 }
                 let sent: Vec<(String, Value)> = config
                     .iter()

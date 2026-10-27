@@ -11,7 +11,6 @@ encodes each reached call, performs I/O and presents the selected owners.
 
 from __future__ import annotations
 
-import copy
 import json
 from dataclasses import dataclass
 from typing import Any
@@ -213,13 +212,38 @@ def _tag(
     error: StructuredDataError, scope: dict[str, Any], candidate: Any
 ) -> StructuredDataError:
     description = _call({'stage': 'describe_relational_part', 'scope': scope})
+    # Reached native presentation, with its sentence grammar selected by Rust.
+    # Complete the prefix before formatting the candidate or reading the
+    # forecast remedy, and retain extra native exception arguments.
+    text = str(error.args[0]).rstrip()
+    ending = description['ending']
+    first = (
+        text
+        if not text or text[-1] in ending['terminal_characters']
+        else f'{text}{ending["period"]}'
+    )
+    if scope['kind'] == 'steps':
+        outran = bool(
+            (getattr(error, 'details', None) or {}).get(
+                'window_outran_the_data'
+            )
+        )
+        if outran:
+            description = _call(
+                {
+                    'stage': 'describe_relational_part',
+                    'scope': {**scope, 'window_outran': outran},
+                }
+            )
     fields = errors.decoded(description['fields'])
     suffix = errors.render(
         description['sentence'], fields, {'part_candidate': candidate}
     )
-    described = copy.copy(error)
-    described.message = f'{error.message} {suffix}'
-    described.args = (described.message,)
+    said = f'{first} {suffix}'
+    described = error.__class__.__new__(error.__class__)
+    described.__dict__.update(error.__dict__)
+    described.message = said
+    described.args = (said, *error.args[1:])
     described.details = {**error.details, **fields}
     # The public client's outer wrapper recognizes an already attributed core
     # error. Preserve that attribution even when its original cause was native.

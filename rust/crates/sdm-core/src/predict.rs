@@ -526,6 +526,8 @@ async fn call_response_with_contract(
     };
     let decoded = if direct {
         PredictionResponse::read_direct(&answer)
+    } else if native_model.is_some() {
+        PredictionResponse::read_native_gathered(&answer)
     } else {
         PredictionResponse::read(&answer)
     };
@@ -533,7 +535,10 @@ async fn call_response_with_contract(
         if let Some(model) = native_model {
             let mut selected = direct_contract_error(&answer, error)
                 .with_field("model", Detail::text(model))
-                .with_field("native_relational_contract", Detail::Scalar(Scalar::Bool(true)));
+                .with_field(
+                    "native_relational_contract",
+                    Detail::Scalar(Scalar::Bool(true)),
+                );
             selected.public_details = Some(std::collections::BTreeMap::new());
             selected
         } else if direct {

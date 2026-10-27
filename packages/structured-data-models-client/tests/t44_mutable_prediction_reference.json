@@ -40,6 +40,14 @@
     "r7-312": {
       "receipt_sha256": "da1bc9c7a30ae421be7ff5ab54e4557a34649b40e604fd7015a0ee7ae0942986",
       "producer_sha256": "cfdb29a6a74c09612c8a67da7a94393a2932f55e8aa5f6b56d6315607520dca7"
+    },
+    "r8-310": {
+      "receipt_sha256": "a0c9723a8ce03e6dbef142fc39724a9dbe677c85bf78d62fb9b40e6315b83eee",
+      "producer_sha256": "00be9a5260d51902a8d6773bedb7f94ea7e6ac39f703eb8d81d117efdc7c8f61"
+    },
+    "r8-312": {
+      "receipt_sha256": "d1673d46caf4ae80b33b4c1123817057d90ff28c1f30def1cfb3334e9710478d",
+      "producer_sha256": "00be9a5260d51902a8d6773bedb7f94ea7e6ac39f703eb8d81d117efdc7c8f61"
     }
   },
   "cases": {
@@ -15379,6 +15387,286 @@
         "kind.eq",
         "kind.str",
         "kind.contains.3"
+      ]
+    }
+  },
+  "fault_cases": {
+    "forecast-unknown-model": {
+      "case": "forecast-unknown-model",
+      "outcome": "error",
+      "error": {
+        "type": "UnknownModelError",
+        "message": "[UNKNOWN_MODEL] Unknown model 'does-not-exist'; this client can send: ['kumo-relational', 'kumo-tabular']. The Universal TFM contract declares these as a closed set, so a new model id has to be added to the contract and the bindings regenerated before it can be sent. This is forecast step 1 of 2.",
+        "args": [
+          "Unknown model 'does-not-exist'; this client can send: ['kumo-relational', 'kumo-tabular']. The Universal TFM contract declares these as a closed set, so a new model id has to be added to the contract and the bindings regenerated before it can be sent. This is forecast step 1 of 2."
+        ],
+        "code": "UNKNOWN_MODEL",
+        "details": {
+          "model": "does-not-exist",
+          "known_models": [
+            "kumo-relational",
+            "kumo-tabular"
+          ]
+        },
+        "cause": {
+          "type": "UnknownModelError",
+          "message": "[UNKNOWN_MODEL] Unknown model 'does-not-exist'; this client can send: ['kumo-relational', 'kumo-tabular']. The Universal TFM contract declares these as a closed set, so a new model id has to be added to the contract and the bindings regenerated before it can be sent.",
+          "args": [
+            "Unknown model 'does-not-exist'; this client can send: ['kumo-relational', 'kumo-tabular']. The Universal TFM contract declares these as a closed set, so a new model id has to be added to the contract and the bindings regenerated before it can be sent."
+          ],
+          "code": "UNKNOWN_MODEL",
+          "details": {
+            "model": "does-not-exist",
+            "known_models": [
+              "kumo-relational",
+              "kumo-tabular"
+            ]
+          }
+        }
+      },
+      "warnings": [
+        {
+          "type": "UserWarning",
+          "message": "Received custom 'num_neighbors' option; ignoring custom 'num_hops=1' option"
+        },
+        {
+          "type": "SDMWarning",
+          "message": "'items' is linked into the schema and not in this request: the sampler reached no row of it from the entities being scored, so the model answers without it. Raise num_hops if it lies further out than the hops sampled, and check the foreign key holds values the parent key actually has if it does not."
+        },
+        {
+          "type": "SDMWarning",
+          "message": "orders.note is typed text, which this model does not read, so the request is answered without it and it contributes nothing to the prediction. Type a column categorical if its values are labels rather than prose, or leave it out to say so."
+        },
+        {
+          "type": "UserWarning",
+          "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2025-12-31 00:00:00', however, your data only contains data back to '2026-01-01 00:00:00'."
+        },
+        {
+          "type": "UserWarning",
+          "message": "Received custom 'num_neighbors' option; ignoring custom 'num_hops=1' option"
+        },
+        {
+          "type": "SDMWarning",
+          "message": "'items' is linked into the schema and not in this request: the sampler reached no row of it from the entities being scored, so the model answers without it. Raise num_hops if it lies further out than the hops sampled, and check the foreign key holds values the parent key actually has if it does not."
+        },
+        {
+          "type": "SDMWarning",
+          "message": "orders.note is typed text, which this model does not read, so the request is answered without it and it contributes nothing to the prediction. Type a column categorical if its values are labels rather than prose, or leave it out to say so."
+        }
+      ],
+      "events": []
+    },
+    "ranking-unknown-model": {
+      "case": "ranking-unknown-model",
+      "outcome": "error",
+      "error": {
+        "type": "UnknownModelError",
+        "message": "[UNKNOWN_MODEL] Unknown model 'does-not-exist'; this client can send: ['kumo-relational', 'kumo-tabular']. The Universal TFM contract declares these as a closed set, so a new model id has to be added to the contract and the bindings regenerated before it can be sent. This is the question asked for candidate 0, one of 2 this ranking is asked as.",
+        "args": [
+          "Unknown model 'does-not-exist'; this client can send: ['kumo-relational', 'kumo-tabular']. The Universal TFM contract declares these as a closed set, so a new model id has to be added to the contract and the bindings regenerated before it can be sent. This is the question asked for candidate 0, one of 2 this ranking is asked as."
+        ],
+        "code": "UNKNOWN_MODEL",
+        "details": {
+          "model": "does-not-exist",
+          "known_models": [
+            "kumo-relational",
+            "kumo-tabular"
+          ]
+        },
+        "cause": {
+          "type": "UnknownModelError",
+          "message": "[UNKNOWN_MODEL] Unknown model 'does-not-exist'; this client can send: ['kumo-relational', 'kumo-tabular']. The Universal TFM contract declares these as a closed set, so a new model id has to be added to the contract and the bindings regenerated before it can be sent.",
+          "args": [
+            "Unknown model 'does-not-exist'; this client can send: ['kumo-relational', 'kumo-tabular']. The Universal TFM contract declares these as a closed set, so a new model id has to be added to the contract and the bindings regenerated before it can be sent."
+          ],
+          "code": "UNKNOWN_MODEL",
+          "details": {
+            "model": "does-not-exist",
+            "known_models": [
+              "kumo-relational",
+              "kumo-tabular"
+            ]
+          }
+        }
+      },
+      "warnings": [
+        {
+          "type": "UserWarning",
+          "message": "Received custom 'num_neighbors' option; ignoring custom 'num_hops=1' option"
+        },
+        {
+          "type": "SDMWarning",
+          "message": "'items' is linked into the schema and not in this request: the sampler reached no row of it from the entities being scored, so the model answers without it. Raise num_hops if it lies further out than the hops sampled, and check the foreign key holds values the parent key actually has if it does not."
+        },
+        {
+          "type": "SDMWarning",
+          "message": "orders.note is typed text, which this model does not read, so the request is answered without it and it contributes nothing to the prediction. Type a column categorical if its values are labels rather than prose, or leave it out to say so."
+        },
+        {
+          "type": "UserWarning",
+          "message": "Received custom 'num_neighbors' option; ignoring custom 'num_hops=1' option"
+        },
+        {
+          "type": "SDMWarning",
+          "message": "'items' is linked into the schema and not in this request: the sampler reached no row of it from the entities being scored, so the model answers without it. Raise num_hops if it lies further out than the hops sampled, and check the foreign key holds values the parent key actually has if it does not."
+        },
+        {
+          "type": "SDMWarning",
+          "message": "orders.note is typed text, which this model does not read, so the request is answered without it and it contributes nothing to the prediction. Type a column categorical if its values are labels rather than prose, or leave it out to say so."
+        }
+      ],
+      "events": []
+    },
+    "forecast-window-refusal": {
+      "case": "forecast-window-refusal",
+      "outcome": "error",
+      "error": {
+        "type": "NimRequestError",
+        "message": "[422 INVALID_REQUEST] context window ended. This is forecast step 1 of 2. The window named above is that step's rather than the one written; ask for fewer than 1 steps if the data does not reach that far.",
+        "args": [
+          "context window ended. This is forecast step 1 of 2. The window named above is that step's rather than the one written; ask for fewer than 1 steps if the data does not reach that far."
+        ],
+        "code": "INVALID_REQUEST",
+        "details": {
+          "window_outran_the_data": true
+        },
+        "cause": {
+          "type": "NimRequestError",
+          "message": "[422 INVALID_REQUEST] context window ended",
+          "args": [
+            "context window ended"
+          ],
+          "code": "INVALID_REQUEST",
+          "details": {
+            "window_outran_the_data": true
+          }
+        }
+      },
+      "warnings": [
+        {
+          "type": "UserWarning",
+          "message": "Received custom 'num_neighbors' option; ignoring custom 'num_hops=1' option"
+        },
+        {
+          "type": "SDMWarning",
+          "message": "'items' is linked into the schema and not in this request: the sampler reached no row of it from the entities being scored, so the model answers without it. Raise num_hops if it lies further out than the hops sampled, and check the foreign key holds values the parent key actually has if it does not."
+        },
+        {
+          "type": "SDMWarning",
+          "message": "orders.note is typed text, which this model does not read, so the request is answered without it and it contributes nothing to the prediction. Type a column categorical if its values are labels rather than prose, or leave it out to say so."
+        },
+        {
+          "type": "UserWarning",
+          "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2025-12-31 00:00:00', however, your data only contains data back to '2026-01-01 00:00:00'."
+        },
+        {
+          "type": "UserWarning",
+          "message": "Received custom 'num_neighbors' option; ignoring custom 'num_hops=1' option"
+        },
+        {
+          "type": "SDMWarning",
+          "message": "'items' is linked into the schema and not in this request: the sampler reached no row of it from the entities being scored, so the model answers without it. Raise num_hops if it lies further out than the hops sampled, and check the foreign key holds values the parent key actually has if it does not."
+        },
+        {
+          "type": "SDMWarning",
+          "message": "orders.note is typed text, which this model does not read, so the request is answered without it and it contributes nothing to the prediction. Type a column categorical if its values are labels rather than prose, or leave it out to say so."
+        }
+      ],
+      "events": [
+        "http-post"
+      ]
+    },
+    "huge-integer-probability": {
+      "case": "huge-integer-probability",
+      "outcome": "error",
+      "error": {
+        "type": "StructuredDataError",
+        "message": "[INVALID_RESPONSE] kumo-relational returned a response that does not match the contract: response carries 10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000 where the contract requires a number",
+        "args": [
+          "kumo-relational returned a response that does not match the contract: response carries 10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000 where the contract requires a number"
+        ],
+        "code": "INVALID_RESPONSE",
+        "details": {},
+        "cause": {
+          "type": "ResponseContractError",
+          "message": "response carries 10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000 where the contract requires a number",
+          "args": [
+            "response carries 10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000 where the contract requires a number"
+          ],
+          "code": null,
+          "details": null
+        }
+      },
+      "warnings": [
+        {
+          "type": "SDMWarning",
+          "message": "2 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it."
+        }
+      ],
+      "events": [
+        "http-post"
+      ]
+    },
+    "instance-string-iteration": {
+      "case": "instance-string-iteration",
+      "result": {
+        "columns": [
+          "row_index",
+          "id",
+          "prediction"
+        ],
+        "index": [
+          0,
+          1
+        ],
+        "data": [
+          [
+            0,
+            0,
+            "a"
+          ],
+          [
+            1,
+            1,
+            "a"
+          ]
+        ]
+      },
+      "outcome": "success",
+      "warnings": [
+        {
+          "type": "SDMWarning",
+          "message": "2 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it."
+        }
+      ],
+      "events": [
+        "http-post",
+        "instance.str",
+        "instance.ne"
+      ]
+    },
+    "instance-native-inequality": {
+      "case": "instance-native-inequality",
+      "outcome": "error",
+      "error": {
+        "type": "RuntimeError",
+        "message": "actual instance inequality failed",
+        "args": [
+          "actual instance inequality failed"
+        ],
+        "code": null,
+        "details": null
+      },
+      "warnings": [
+        {
+          "type": "SDMWarning",
+          "message": "2 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it."
+        }
+      ],
+      "events": [
+        "http-post",
+        "instance.str",
+        "instance.ne"
       ]
     }
   }

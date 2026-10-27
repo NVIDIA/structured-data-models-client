@@ -211,13 +211,22 @@ pub struct PredictionResponse {
 impl PredictionResponse {
     /// Reads `value` as the bindings read a response.
     pub fn read(value: &Value) -> Result<PredictionResponse, Refused> {
-        Self::read_inner(value, false)
+        Self::read_inner(value, false, false)
     }
     /// The direct adapter applies row bounds before result width constraints.
     pub fn read_direct(value: &Value) -> Result<PredictionResponse, Refused> {
-        Self::read_inner(value, true)
+        Self::read_inner(value, true, true)
     }
-    fn read_inner(value: &Value, keep_wide_index: bool) -> Result<PredictionResponse, Refused> {
+    /// Generated native field diagnostics/order with the established gathered
+    /// row-index and forecast-step admission retained independently.
+    pub fn read_native_gathered(value: &Value) -> Result<PredictionResponse, Refused> {
+        Self::read_inner(value, false, true)
+    }
+    fn read_inner(
+        value: &Value,
+        keep_wide_index: bool,
+        native_fields: bool,
+    ) -> Result<PredictionResponse, Refused> {
         let Value::Object(_) = value else {
             return Err(refused("response", "not_an_object").with_value(value));
         };
@@ -229,15 +238,17 @@ impl PredictionResponse {
                 .iter()
                 .enumerate()
                 .map(|(ordinal, item)| {
-                    PredictionItem::read(item, keep_wide_index).map_err(|mut error| {
-                        error.item = Some(ordinal);
-                        let selected = error
-                            .field
-                            .strip_prefix("prediction.")
-                            .and_then(|field| item.get(field))
-                            .unwrap_or(item);
-                        error.with_value(selected)
-                    })
+                    PredictionItem::read(item, keep_wide_index, native_fields).map_err(
+                        |mut error| {
+                            error.item = Some(ordinal);
+                            let selected = error
+                                .field
+                                .strip_prefix("prediction.")
+                                .and_then(|field| item.get(field))
+                                .unwrap_or(item);
+                            error.with_value(selected)
+                        },
+                    )
                 })
                 .collect::<Result<_, _>>()?,
             // An object iterates over its names, each of which is text and
@@ -264,7 +275,11 @@ impl PredictionResponse {
 }
 
 impl PredictionItem {
-    fn read(value: &Value, keep_wide_index: bool) -> Result<PredictionItem, Refused> {
+    fn read(
+        value: &Value,
+        keep_wide_index: bool,
+        native_fields: bool,
+    ) -> Result<PredictionItem, Refused> {
         let Value::Object(_) = value else {
             return Err(refused("prediction", "not_an_object"));
         };
@@ -308,7 +323,7 @@ impl PredictionItem {
                     .map(|(class, p)| {
                         Ok((
                             class.clone(),
-                            read_number(p, "prediction.probabilities", keep_wide_index)
+                            read_number(p, "prediction.probabilities", native_fields)
                                 .map_err(|fault| fault.at(RefusalAt::Member(class.clone())))?,
                         ))
                     })
@@ -323,7 +338,7 @@ impl PredictionItem {
                     .iter()
                     .enumerate()
                     .map(|(at, v)| {
-                        read_number(v, "prediction.scores", keep_wide_index)
+                        read_number(v, "prediction.scores", native_fields)
                             .map_err(|fault| fault.at(RefusalAt::Index(at)))
                     })
                     .collect::<Result<_, Refused>>()?,
@@ -342,7 +357,7 @@ impl PredictionItem {
                         .iter()
                         .enumerate()
                         .map(|(at, v)| {
-                            read_number(v, "prediction.embeddings", keep_wide_index)
+                            read_number(v, "prediction.embeddings", native_fields)
                                 .map_err(|fault| fault.at(RefusalAt::Index(at)))
                         })
                         .collect::<Result<_, Refused>>()?,
@@ -357,7 +372,7 @@ impl PredictionItem {
                 Some(given @ Value::Object(_)) => Some(numbers(
                     mapping(given, "prediction.quantiles")?,
                     "prediction.quantiles",
-                    keep_wide_index,
+                    native_fields,
                 )?),
                 Some(_) => return Err(refused("prediction.quantiles", "not_an_object")),
             };
@@ -377,7 +392,7 @@ impl PredictionItem {
             };
             Ok(result)
         };
-        let (embeddings, quantiles, explanation, metadata) = if keep_wide_index {
+        let (embeddings, quantiles, explanation, metadata) = if native_fields {
             (
                 read_embeddings()?,
                 read_quantiles()?,
@@ -451,14 +466,14 @@ fn whole_of(value: &Value, field: &'static str) -> Result<i128, Refused> {
 /// holds one: each value read as [`number`] reads it (refused naming
 /// `field`), and written as the double it reads as, so text a float reads
 /// and an integer alike are that double.
-fn numbers(mapping: Value, field: &'static str, direct: bool) -> Result<Value, Refused> {
+fn numbers(mapping: Value, field: &'static str, native_fields: bool) -> Result<Value, Refused> {
     let Value::Object(members) = mapping else {
         return Err(refused(field, "not_an_object"));
     };
     members
         .into_iter()
         .map(|(name, v)| {
-            let read = read_number(&v, field, direct)
+            let read = read_number(&v, field, native_fields)
                 .map_err(|fault| fault.at(RefusalAt::Member(name.clone())))?;
             Ok((
                 name,
@@ -621,17 +636,17 @@ fn number(value: &Value, field: &'static str) -> Result<f64, Refused> {
     }
 }
 
-fn read_number(value: &Value, field: &'static str, direct: bool) -> Result<f64, Refused> {
+fn read_number(value: &Value, field: &'static str, native_fields: bool) -> Result<f64, Refused> {
     number(value, field).map_err(|mut fault| {
         // float(huge Python int) raises OverflowError; float(huge text)
-        // returns infinity. The generated direct decoder distinguishes them.
-        if direct
+        // returns infinity. The generated native decoder distinguishes them.
+        if native_fields
             && fault.reason == "not_finite"
             && matches!(value, Value::Number(token) if is_integer_token(token))
         {
             fault.reason = "not_a_number";
         }
-        if direct && fault.reason == "not_a_number" && !matches!(value, Value::Bool(_)) {
+        if native_fields && fault.reason == "not_a_number" && !matches!(value, Value::Bool(_)) {
             fault = fault.native(NativeFault::Float, value);
         }
         fault
@@ -780,6 +795,46 @@ mod tests {
     /// taken (`json::read_answer`).
     fn answer(text: &str) -> Value {
         crate::json::read_answer(text.as_bytes()).unwrap()
+    }
+
+    #[test]
+    fn native_gathered_faults_do_not_widen_gathered_row_indices() {
+        let value =
+            answer(r#"{"id":"r","model":"m","metadata":{},"predictions":[{"row_index":1e50}]}"#);
+        let legacy = PredictionResponse::read(&value).unwrap_err();
+        let native = PredictionResponse::read_native_gathered(&value).unwrap_err();
+        assert_eq!((native.field, native.reason), (legacy.field, legacy.reason));
+        assert!(PredictionResponse::read_direct(&value).is_ok());
+    }
+
+    #[test]
+    fn native_gathered_integer_overflow_keeps_generated_number_diagnostic() {
+        let value = answer(&format!(
+            r#"{{"id":"r","model":"m","metadata":{{}},"predictions":[{{"row_index":0,"probabilities":{{"true":1{}}}}}]}}"#,
+            "0".repeat(400),
+        ));
+        let legacy = PredictionResponse::read(&value).unwrap_err();
+        assert_eq!(legacy.reason, "not_finite");
+        let native = PredictionResponse::read_native_gathered(&value).unwrap_err();
+        assert_eq!(native.reason, "not_a_number");
+        assert_eq!(native.native, Some(NativeFault::Float));
+    }
+
+    #[test]
+    fn native_gathered_field_order_matches_generated_bindings() {
+        let value = answer(
+            r#"{"id":"r","model":"m","metadata":{},"predictions":[{"row_index":0,"embeddings":"bad","explanation":true}]}"#,
+        );
+        assert_eq!(
+            PredictionResponse::read(&value).unwrap_err().field,
+            "prediction.explanation"
+        );
+        assert_eq!(
+            PredictionResponse::read_native_gathered(&value)
+                .unwrap_err()
+                .field,
+            "prediction.embeddings"
+        );
     }
 
     #[test]

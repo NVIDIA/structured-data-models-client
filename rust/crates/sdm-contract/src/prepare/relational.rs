@@ -17,6 +17,7 @@ pub struct RelationalCallFields {
     pub outputs: Vec<String>,
     pub statistic: RelationalStatistic,
     pub inference_options: Vec<String>,
+    pub inference_statistic_key: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

@@ -649,9 +649,11 @@ pub(crate) async fn run(
                         .map(|spec| spec.model.to_owned())
                         .collect();
                     names.sort();
-                    error(Sentence::DirectUnknownModel)
+                    let mut refused = error(Sentence::DirectUnknownModel)
                         .with_field("model", Detail::text(&model))
-                        .with_field("known_models", text_list(names))
+                        .with_field("known_models", text_list(names));
+                    refused.public_details = Some(refused.fields.clone());
+                    refused
                 })?
                 .to_owned();
             serde_json::to_value(CallPreparation::ModelResolved {

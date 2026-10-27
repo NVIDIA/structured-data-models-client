@@ -342,15 +342,8 @@ pub fn attribute_instance(
             "native instance display names another gathered row",
         ));
     }
-    let displayed = text(&instance.points)?;
-    if checked
-        .bound
-        .row
-        .id
-        .as_deref()
-        .map(|id| id.chars().map(u32::from).collect::<Vec<_>>())
-        != Some(displayed.points().collect())
-    {
+    text(&instance.points)?;
+    if instance.different {
         return Err(refusal(Sentence::RelationalIdMismatch)
             .with_field("native_field", Detail::text("expected"))
             .with_field("index", count(checked.bound.source_row.unwrap_or(0)))
@@ -619,6 +612,7 @@ mod tests {
         if attribution.instances {
             let instance = RelationalInstanceText {
                 ordinal: checked.bound.row.ordinal,
+                different: false,
                 points: checked
                     .bound
                     .row
@@ -662,6 +656,7 @@ mod tests {
             RelationalInstanceText {
                 ordinal: 0,
                 points: "mutated-instance".chars().map(u32::from).collect(),
+                different: true,
             },
         )
         .unwrap_err();

@@ -20,6 +20,7 @@ from decimal import Decimal
 from typing import Any
 
 from sdm_client._rust import codec, errors, results
+from sdm_client._rust.relational_native import _points, vocabulary
 from sdm_client._rust.run import Finished, run
 from sdm_client.wire.dtypes import as_declared
 
@@ -261,11 +262,15 @@ def present(finished: Finished, envelope: dict[str, Any]) -> CompletedResponse:
         accepted = []
         at = 0
         while at < len(rows):
+            # Keyed attribution reaches one native forecast/instance read at
+            # a time. Sending an overlapping 256-row suffix would repeatedly
+            # encode rows the core cannot yet consume.
+            width = 256 if entities is None else 1
             checked = _call(
                 {
                     'stage': 'check_relational_rows',
                     'attribution': attribution,
-                    'rows': rows[at : at + 256],
+                    'rows': rows[at : at + width],
                 }
             )
             accepted.extend(checked['rows'])
@@ -287,14 +292,17 @@ def present(finished: Finished, envelope: dict[str, Any]) -> CompletedResponse:
                         }
                     )
                 else:
+                    response_id = str(bound['row']['id'])
                     displayed = str(instances[bound['source_row']])
+                    different = bool(response_id != displayed)
                     item = _call(
                         {
                             'stage': 'attribute_relational_instance',
                             'checked': checked_row,
                             'instance': {
                                 'ordinal': bound['row']['ordinal'],
-                                'points': [ord(point) for point in displayed],
+                                'points': _points(displayed),
+                                'different': different,
                             },
                         }
                     )
@@ -315,8 +323,6 @@ def present(finished: Finished, envelope: dict[str, Any]) -> CompletedResponse:
         # Target metadata is read only after every entity is attributed and
         # all requested rows are covered. No pre-send task snapshot is used.
         task = (envelope or {}).get('task', {})
-        from sdm_client._rust.relational_native import _points, vocabulary
-
         words = vocabulary()
         native_kind = str(task.get('kind', ''))
         classification = words['classification'] in native_kind

@@ -34,6 +34,11 @@ TASK_REFERENCE = json.loads(
     .with_name('t44_mutable_prediction_reference.json')
     .read_text()
 )['task_cases']
+FAULT_REFERENCE = json.loads(
+    Path(__file__)
+    .with_name('t44_mutable_prediction_reference.json')
+    .read_text()
+)['fault_cases']
 
 
 def _request(*, batched=False):
@@ -336,4 +341,123 @@ def test_native_task_string_overrides_remain_at_reached_boundaries(
         # Existing P3E-2: shared core warnings include their selected code.
         warning = expected['warnings'][1]
         warning['message'] = '[CONTEXT_CONSTANT] ' + warning['message']
+    assert observed == expected
+
+
+def _error_record(error, seen=None):
+    seen = set() if seen is None else seen
+    if id(error) in seen:
+        return {'cause_cycle': True}
+    seen.add(id(error))
+    result = {
+        'type': type(error).__name__,
+        'message': str(error),
+        'args': [str(value) for value in error.args],
+        'code': getattr(error, 'code', None),
+        'details': getattr(error, 'details', None),
+    }
+    if error.__cause__ is not None:
+        result['cause'] = _error_record(error.__cause__, seen)
+    return result
+
+
+@pytest.mark.parametrize('core', [False, True], ids=['original', 'core'])
+@pytest.mark.parametrize('case', list(FAULT_REFERENCE))
+def test_native_part_fault_and_instance_comparison_parity(
+    monkeypatch, core, case
+):
+    from test_t44_decomposition_owners import question
+
+    monkeypatch.setenv(
+        'SDM_CORE_ROUTES', 'client.predict/regression/frames' if core else ''
+    )
+    expected = FAULT_REFERENCE[case]
+    events = []
+    observed = {'case': case}
+
+    class Instance(str):
+        def __str__(self):
+            events.append('instance.str')
+            return self
+
+        def __iter__(self):
+            events.append('instance.iter')
+            raise RuntimeError('native instance string must not be iterated')
+
+        def __ne__(self, other):
+            events.append('instance.ne')
+            if case == 'instance-native-inequality':
+                raise RuntimeError('actual instance inequality failed')
+            return str.__ne__(self, other)
+
+    def post(url, *, data, **kwargs):
+        events.append('http-post')
+        sent = json.loads(data)
+        table = sent['predict']['instance_table']
+        at = table['columns'].index('instance_id')
+        reply = {
+            'id': 'fault-reference',
+            'model': 'kumo-relational',
+            'metadata': {},
+            'predictions': [
+                {'row_index': i, 'id': str(row[at]), 'prediction': 'a'}
+                for i, row in enumerate(table['rows'])
+            ],
+        }
+        response = requests.Response()
+        response.status_code = 200
+        if case == 'forecast-window-refusal':
+            response.status_code = 422
+            reply = {
+                'title': 'context window ended',
+                'code': 'INVALID_REQUEST',
+                'window_outran_the_data': True,
+            }
+        if case == 'huge-integer-probability':
+            reply['predictions'][0]['probabilities'] = {'true': 10**400}
+        response._content = json.dumps(reply).encode()
+        response._content_consumed = True
+        return response
+
+    with warnings.catch_warnings(record=True) as notices:
+        warnings.simplefilter('always')
+        try:
+            if case.startswith(('forecast-', 'ranking-')):
+                ranking = case.startswith('ranking-')
+                asked = question('ranking' if ranking else 'forecast')
+                how = {
+                    'indices': [1, 2],
+                    'num_context_samples': 3,
+                    'num_neighbors': [3],
+                    'num_hops': 1,
+                    'random_seed': 7,
+                }
+                if ranking:
+                    how['candidates'] = pd.Series([0, 1])
+                request = asked.materialize(**how)
+            else:
+                request = _request()
+                if case.startswith('instance-'):
+                    table = request.payloads[0]['predict']['instance_table']
+                    at = table['columns'].index('instance_id')
+                    table['rows'][0][at] = Instance(str(table['rows'][0][at]))
+            with SDMClient('http://localhost:1', max_retries=0) as client:
+                client._transport._session.post = post
+                model = (
+                    'does-not-exist'
+                    if case.endswith('unknown-model')
+                    else KumoRelational()
+                )
+                result = client.predict(request, model=model)
+                observed['result'] = json.loads(
+                    result.to_pandas().to_json(orient='split')
+                )
+            observed['outcome'] = 'success'
+        except Exception as error:
+            observed.update(outcome='error', error=_error_record(error))
+        observed['warnings'] = [
+            {'type': type(item.message).__name__, 'message': str(item.message)}
+            for item in notices
+        ]
+    observed['events'] = events
     assert observed == expected

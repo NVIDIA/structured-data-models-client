@@ -98,8 +98,16 @@ pub(crate) fn describe(scope: RelationalPartScope) -> Result<RelationalPartDescr
         _ => None,
     };
     let (sentence, fields) = match scope {
-        RelationalPartScope::Steps { step, total } => (
-            Sentence::PartForecastStep,
+        RelationalPartScope::Steps {
+            step,
+            total,
+            window_outran,
+        } => (
+            if window_outran {
+                Sentence::PartForecastStepOutran
+            } else {
+                Sentence::PartForecastStep
+            },
             BTreeMap::from([
                 ("forecast_step".into(), Detail::Scalar(Scalar::UInt32(step))),
                 (
@@ -131,7 +139,14 @@ pub(crate) fn describe(scope: RelationalPartScope) -> Result<RelationalPartDescr
             Detail::Scalar(Scalar::UInt64(paid as u64)),
         );
     }
-    Ok(RelationalPartDescription { sentence, fields })
+    Ok(RelationalPartDescription {
+        sentence,
+        fields,
+        ending: RelationalSentenceEnding {
+            terminal_characters: ".!?".to_owned(),
+            period: ".".to_owned(),
+        },
+    })
 }
 
 fn probabilities(

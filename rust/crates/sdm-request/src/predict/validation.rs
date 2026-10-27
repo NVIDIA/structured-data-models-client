@@ -71,6 +71,7 @@ pub fn call_fields(
         model: model.to_owned(),
         outputs: outputs.to_vec(),
         statistic,
+        inference_statistic_key: INFERENCE_STATISTIC_KEY.to_owned(),
         inference_options: INFERENCE_OPTIONS
             .iter()
             .map(|value| (*value).to_owned())
@@ -99,14 +100,27 @@ pub fn native_inference(
             "native inference refusal lacks its reached statistic-option observation",
         )
     })?;
-    let mut forwarded = INFERENCE_OPTIONS;
-    forwarded.sort_unstable();
     let unsupported = Detail::List(
         (0..refused)
             .map(|index| Scalar::UInt64(index as u64))
             .collect(),
     );
-    let mut error = CoreError::new(
+    let mut error = inference_refusal(model, unsupported.clone(), statistic).with_field(
+        "native_relational_inference",
+        Detail::Scalar(Scalar::Bool(true)),
+    );
+    error.public_details = Some(std::collections::BTreeMap::from([
+        ("model".to_owned(), Detail::text(model)),
+        ("unsupported".to_owned(), unsupported),
+    ]));
+    Err(error)
+}
+
+/// One option-refusal policy for native and serialized gathered envelopes.
+pub fn inference_refusal(model: &str, unsupported: Detail, statistic: bool) -> CoreError {
+    let mut forwarded = INFERENCE_OPTIONS;
+    forwarded.sort_unstable();
+    CoreError::new(
         if statistic {
             Sentence::OptionsUnreadStatistic
         } else {
@@ -124,17 +138,8 @@ pub fn native_inference(
         }),
     )
     .with_field("model", Detail::text(model))
-    .with_field("unsupported", unsupported.clone())
+    .with_field("unsupported", unsupported)
     .with_field("forwarded", texts(forwarded))
-    .with_field(
-        "native_relational_inference",
-        Detail::Scalar(Scalar::Bool(true)),
-    );
-    error.public_details = Some(std::collections::BTreeMap::from([
-        ("model".to_owned(), Detail::text(model)),
-        ("unsupported".to_owned(), unsupported),
-    ]));
-    Err(error)
 }
 
 pub fn task_vocabulary() -> RelationalTaskVocabulary {

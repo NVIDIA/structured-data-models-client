@@ -507,7 +507,12 @@ class SDMClient:
             try:
                 merged = on_the_core.predict(self, request, model, outputs)
             except StructuredDataError as error:
-                raise _said_of_the_part(error, request) from error
+                described = _said_of_the_part(error, request)
+                if described is error:
+                    # A core-attributed error already carries its original
+                    # cause. Raising it from itself would introduce a cycle.
+                    raise
+                raise described from error
             if ranking:
                 return merged
             return _report_absent(merged, outputs, spec_for(model).model_id)

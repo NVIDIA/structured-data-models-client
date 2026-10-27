@@ -138,6 +138,8 @@ pub enum RelationalPartScope {
     Steps {
         step: u32,
         total: u32,
+        #[serde(default)]
+        window_outran: bool,
     },
     Ranking {
         position: u32,
@@ -152,6 +154,14 @@ pub enum RelationalPartScope {
 pub struct RelationalPartDescription {
     pub sentence: Sentence,
     pub fields: BTreeMap<String, Detail>,
+    pub ending: RelationalSentenceEnding,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RelationalSentenceEnding {
+    pub terminal_characters: String,
+    pub period: String,
 }
 
 fn response_attachments(parts: &[RelationalResponsePart]) -> Vec<AttachmentId> {

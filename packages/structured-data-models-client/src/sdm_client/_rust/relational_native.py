@@ -134,7 +134,7 @@ def _inference(
                 'data': 'inference',
                 'call': call,
                 'refused': list(range(len(refused))),
-                'statistic_option': 'output_type' in refused
+                'statistic_option': fields['inference_statistic_key'] in refused
                 if refused
                 else None,
             }
@@ -350,10 +350,10 @@ def constant(
         name = _prepared(
             {'data': 'question_meaning', 'target': name, 'truth': bool(query)}
         )['value']
-    kind = name['naming']['kind']
-    if kind == 'column':
+    naming_kind = name['naming']['kind']
+    if naming_kind == 'column':
         display = _points(format(str(column), ''))
-    elif kind == 'question':
+    elif naming_kind == 'question':
         # This is the native !r conversion at the reached wording boundary,
         # before the core assembles the model's constant-context sentence.
         display = _points(format(repr(query), ''))
