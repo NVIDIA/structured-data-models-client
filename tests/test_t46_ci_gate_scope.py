@@ -76,10 +76,17 @@ def _baseline_report(
     if missing_baseline:
         proposed.pop(key)
     ratchet.check_baselines(
-        report, {'python-core': held}, {'python-core': proposed},
-        list(held[key]['projection']), list(held[key]['projection']),
+        report,
+        {'python-core': held},
+        {'python-core': proposed},
+        list(held[key]['projection']),
+        list(held[key]['projection']),
         {'python-core': {} if missing else {key: line}},
-        {bare: ({'status': 'acceptance'}, '')}, [], set(), {}, None,
+        {bare: ({'status': 'acceptance'}, '')},
+        [],
+        set(),
+        {},
+        None,
         database=database,
     )
     assert held == before
@@ -87,17 +94,25 @@ def _baseline_report(
 
 
 @pytest.mark.parametrize('database', ['duckdb', 'sqlite', 'postgres'])
-def test_declared_database_checks_its_unchanged_baseline(ratchet: Any, database: str) -> None:
+def test_declared_database_checks_its_unchanged_baseline(
+    ratchet: Any, database: str
+) -> None:
     assert _baseline_report(ratchet, database).problems == []
     problems = _baseline_report(ratchet, database, missing=True).problems
     assert any('baselined, and not observed' in problem for problem in problems)
-    assert any('proposed baseline is not the observation' in problem for problem in problems)
+    assert any(
+        'proposed baseline is not the observation' in problem
+        for problem in problems
+    )
 
 
 def test_omitted_scope_keeps_all_database_requirements(ratchet: Any) -> None:
     problems = _baseline_report(ratchet, None).problems
     for database in ('sqlite', 'postgres'):
-        assert any(f'@{database}:' in problem and 'not observed' in problem for problem in problems)
+        assert any(
+            f'@{database}:' in problem and 'not observed' in problem
+            for problem in problems
+        )
 
 
 @pytest.mark.parametrize('database', ['duckdb', 'sqlite', 'postgres'])
@@ -117,8 +132,13 @@ def _observation() -> dict[str, Any]:
     return line
 
 
-@pytest.mark.parametrize('fault', ['foreign', 'cell', 'runner', 'empty', 'mixed-cells', 'malformed-key'])
-def test_scope_refuses_foreign_or_invalid_evidence(ratchet: Any, fault: str) -> None:
+@pytest.mark.parametrize(
+    'fault',
+    ['foreign', 'cell', 'runner', 'empty', 'mixed-cells', 'malformed-key'],
+)
+def test_scope_refuses_foreign_or_invalid_evidence(
+    ratchet: Any, fault: str
+) -> None:
     line = _observation()
     observed = {'python-core': {line['case']: line}}
     control = ratchet.Report()
@@ -146,31 +166,55 @@ def test_scope_refuses_foreign_or_invalid_evidence(ratchet: Any, fault: str) -> 
     assert report.problems
 
 
-def test_scope_without_observation_files_is_refused(ratchet: Any, tmp_path: Path) -> None:
+def test_scope_without_observation_files_is_refused(
+    ratchet: Any, tmp_path: Path
+) -> None:
     report = ratchet.check(tmp_path, 'unused', [], database='duckdb')
     assert report.problems == ['scope: duckdb: no observations']
 
 
 @pytest.mark.parametrize('mode', ['full', 'locked'])
-def test_partial_scope_cannot_claim_aggregate_mode(ratchet: Any, tmp_path: Path, mode: str) -> None:
-    report = ratchet.check(tmp_path, 'unused', [], database='duckdb', **{mode: True})
+def test_partial_scope_cannot_claim_aggregate_mode(
+    ratchet: Any, tmp_path: Path, mode: str
+) -> None:
+    report = ratchet.check(
+        tmp_path, 'unused', [], database='duckdb', **{mode: True}
+    )
     assert any('scope' in problem for problem in report.problems)
     done = subprocess.run(
-        ['bash', str(ROOT / 'scripts/rust_core/gate.sh'), '--base', 'HEAD',
-         '--database', 'duckdb', *(['--full'] if mode == 'full' else ['--locked', '4a'])],
-        capture_output=True, text=True, check=False,
+        [
+            'bash',
+            str(ROOT / 'scripts/rust_core/gate.sh'),
+            '--base',
+            'HEAD',
+            '--database',
+            'duckdb',
+            *(['--full'] if mode == 'full' else ['--locked', '4a']),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
     )
     assert done.returncode == 2
     assert 'scope' in done.stderr
 
 
 def _captured() -> tuple[dict[str, Any], dict[str, Any]]:
-    case = json.loads((ROOT / 'contract/cases/s2/java.databricks-sql.types.json').read_text())
-    capture = json.loads((ROOT / 'contract/captures/databricks-sql/java.databricks-sql.types/capture.json').read_text())
+    case = json.loads(
+        (ROOT / 'contract/cases/s2/java.databricks-sql.types.json').read_text()
+    )
+    capture = json.loads(
+        (
+            ROOT
+            / 'contract/captures/databricks-sql/java.databricks-sql.types/capture.json'
+        ).read_text()
+    )
     return case, capture['reference']
 
 
-def test_actual_databricks_capture_credits_omitted_inputs(coverage: Any) -> None:
+def test_actual_databricks_capture_credits_omitted_inputs(
+    coverage: Any,
+) -> None:
     case, line = _captured()
     cells = coverage.observed(case, line)
     assert {'binary/feature', 'list/feature', 'int64/primary-key'} <= cells
@@ -179,16 +223,40 @@ def test_actual_databricks_capture_credits_omitted_inputs(coverage: Any) -> None
     assert coverage._undeclared(line) == {'users', 'orders'}
 
 
-@pytest.mark.parametrize('fault', [
-    'absent', 'failed', 'nonempty', 'boolean-count', 'schema', 'types',
-    'results', 'method', 'parameter-type', 'parameter-expression',
-    'parameter-count', 'parameter-empty', 'duplicate', 'unrelated-sql',
-    'missing-error', 'digest', 'unencodable', 'multiple-results',
-])
-def test_constraint_credit_requires_successful_unambiguous_empty_lookup(coverage: Any, fault: str) -> None:
+@pytest.mark.parametrize(
+    'fault',
+    [
+        'absent',
+        'failed',
+        'nonempty',
+        'boolean-count',
+        'schema',
+        'types',
+        'results',
+        'method',
+        'parameter-type',
+        'parameter-expression',
+        'parameter-count',
+        'parameter-empty',
+        'duplicate',
+        'unrelated-sql',
+        'missing-error',
+        'digest',
+        'unencodable',
+        'multiple-results',
+    ],
+)
+def test_constraint_credit_requires_successful_unambiguous_empty_lookup(
+    coverage: Any, fault: str
+) -> None:
     case, line = _captured()
     statements = line['driver']['capture']['statements']
-    statement = next(s for s in statements if 'table_constraints tc' in s['sql'] and s['parameters'][1]['value'] == "'users'")
+    statement = next(
+        s
+        for s in statements
+        if 'table_constraints tc' in s['sql']
+        and s['parameters'][1]['value'] == "'users'"
+    )
     if fault == 'absent':
         statements.remove(statement)
     elif fault == 'failed':
@@ -210,7 +278,9 @@ def test_constraint_credit_requires_successful_unambiguous_empty_lookup(coverage
     elif fault == 'parameter-expression':
         statement['parameters'][1]['value'] = "'us' + 'ers'"
     elif fault == 'parameter-count':
-        statement['parameters'].append(copy.deepcopy(statement['parameters'][1]))
+        statement['parameters'].append(
+            copy.deepcopy(statement['parameters'][1])
+        )
     elif fault == 'parameter-empty':
         statement['parameters'][1]['value'] = "''"
     elif fault == 'duplicate':
@@ -225,4 +295,6 @@ def test_constraint_credit_requires_successful_unambiguous_empty_lookup(coverage
         statement['results'].append(copy.deepcopy(statement['results'][0]))
     else:
         statement['sql'] += ' OR 1 = 1'
-    assert not {'binary/feature', 'list/feature'} & coverage.observed(case, line)
+    assert not {'binary/feature', 'list/feature'} & coverage.observed(
+        case, line
+    )

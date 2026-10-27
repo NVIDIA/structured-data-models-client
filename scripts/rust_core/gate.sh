@@ -10,6 +10,7 @@
 #   scripts/rust_core/gate.sh (--base REV | --phase-push BEFORE) [--epic]
 #       [--protected-paths TEXT] [--run RUNNERS] [--observations FILE]...
 #       [--out DIR] [--no-l0]
+#       [--database duckdb|sqlite|postgres | --full]
 #       [--only CHECK | --locked HALF [--evidence DIR]
 #        [--wheel FILE --test-ops-wheel FILE [--wheel-run ID]]]
 #
@@ -72,6 +73,10 @@
 #                 the checkpoint without the owner (T1.15).
 #
 # --out keeps the observations made, for ratchet.py accept.
+# --database declares one CI database leg, retaining every check but requiring
+# only that leg's baselines and refusing observations from another database.
+# Omission retains all baseline requirements. --full and --locked require all
+# databases and refuse a partial scope.
 #
 # The local modes (T1.15, with T1.19 merged in; decisions E53(b), H26, E77):
 #
@@ -167,6 +172,9 @@ wheel_run=''
 harness=0
 candidate=''
 for_harness=()
+database=''
+database_args=()
+full=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --base | --phase-push)
@@ -178,6 +186,11 @@ while [ $# -gt 0 ]; do
     --run)
       [ $# -ge 2 ] || { echo "gate.sh: $1 needs a value" >&2; exit 2; }
       runs=$2; for_harness+=("$1" "$2"); shift 2 ;;
+    --database)
+      [ $# -ge 2 ] || { echo "gate.sh: $1 needs a value" >&2; exit 2; }
+      database=$2; database_args=(--database "$2")
+      for_harness+=("$1" "$2"); shift 2 ;;
+    --full) full=(--full); for_harness+=("$1"); shift ;;
     --observations)
       [ $# -ge 2 ] || { echo "gate.sh: $1 needs a value" >&2; exit 2; }
       observations+=("$(cd "$(dirname "$2")" && pwd)/$(basename "$2")")
@@ -213,6 +226,14 @@ while [ $# -gt 0 ]; do
   esac
 done
 [ ${#where[@]} -eq 2 ] || { echo 'gate.sh: give --base or --phase-push' >&2; exit 2; }
+case "$database" in
+  '' | duckdb | sqlite | postgres) ;;
+  *) echo "gate.sh: unknown database scope $database" >&2; exit 2 ;;
+esac
+if [ -n "$database" ] && { [ ${#full[@]} -ne 0 ] || [ -n "$locked" ]; }; then
+  echo 'gate.sh: a full or locked gate requires all databases; partial scope is refused' >&2
+  exit 2
+fi
 case "$only" in
   '' | observations | ratchet | compare | coverage) ;;
   l0) [ "$l0" = 1 ] || { echo 'gate.sh: --only l0 with --no-l0 runs nothing' >&2; exit 2; } ;;
@@ -624,15 +645,18 @@ observe() {
     case "$runner" in
       python-core | python-old)
         "$PYTHON" -I "$tree/contract/runners/run_python.py" --mode "$runner" \
+          "${database_args[@]+"${database_args[@]}"}" \
           --out "$made/$runner.jsonl" "$tree/contract/cases" || return 1 ;;
       rust-host)
         (cd "$tree/rust" && CARGO_TARGET_DIR="$target" cargo run -q \
           -p sdm-testkit --bin sdm-contract-run --locked -- \
+          "${database_args[@]+"${database_args[@]}"}" \
           --out "$made/rust-host.jsonl" ../contract/cases) || return 1 ;;
       java)
         # The Java host's runner (Phase 3 design choice 10, T3.11's), on
         # every leg it reports a provider for.
         "$PYTHON" -I "$tree/contract/runners/run_java.py" \
+          "${database_args[@]+"${database_args[@]}"}" \
           --out "$made/java.jsonl" "$tree/contract/cases" || return 1 ;;
       *) echo "no runner $runner"; return 1 ;;
     esac
@@ -702,6 +726,7 @@ judge_ratchet() {
     --checkpoint "$checkpoint" "${bootstrap[@]+"${bootstrap[@]}"}" \
     --effective-out "$scratch/effective.json" "${epic[@]+"${epic[@]}"}" \
     "${temporary[@]+"${temporary[@]}"}" \
+    "${database_args[@]+"${database_args[@]}"}" "${full[@]+"${full[@]}"}" \
     "${protected[@]+"${protected[@]}"}" "${with[@]+"${with[@]}"}"
 }
 want ratchet && step ratchet judge_ratchet
@@ -1052,6 +1077,8 @@ if [ -n "$only" ]; then
   echo "gate: passed (--only $only: one check, not the gate)"
 elif [ -n "$locked" ]; then
   echo "gate: passed (--locked $locked)"
+elif [ -n "$database" ]; then
+  echo "gate: passed (database $database)"
 else
   echo 'gate: passed'
 fi

@@ -10,6 +10,7 @@ H19 and A6). ``gate.sh`` runs the checkpoint's copy of this file.
     ratchet.py checkpoint [--repo DIR] (--base REV | --phase-push BEFORE)
         [--epic] [--epic-ref REF]
     ratchet.py check [--repo DIR] --checkpoint SHA [--epic] [--locked]
+        [--database duckdb|sqlite|postgres | --full]
         [--protected-paths TEXT]
         [--observations FILE]... [--effective-out FILE]
     ratchet.py accept [--repo DIR] [--checkpoint SHA] --observations FILE...
@@ -960,6 +961,55 @@ def case_of(key: str) -> str:
     ID, a SQLite or Postgres line's ``<case>@sqlite`` or ``<case>@postgres``
     (design choice 2; the observation schema's ``key`` holds the form)."""
     return key.partition('@')[0]
+
+
+def database_of(key: str) -> str:
+    r"""The observation key's database, with a bare key naming DuckDB."""
+    return key.partition('@')[2] or 'duckdb'
+
+
+def check_database_scope(
+    report: Report,
+    observed: dict[str, dict[str, Any]],
+    database: str,
+) -> None:
+    r"""Bind explicitly scoped evidence to its database and runtime identity.
+
+    The scope is declared by the caller, never inferred from the rows that
+    happened to arrive. The comparator still checks case completeness and
+    the rest of each observation's identity.
+    """
+    if not observed or not any(observed.values()):
+        report.fail('scope', f'{database}: no observations')
+        return
+    form = key_form()
+    cells = json.loads(
+        (REPO / 'contract/observation.schema.json').read_text(encoding='utf-8')
+    )['$defs']['identity']['properties']['cell']['enum']
+    for runner, by_case in observed.items():
+        runtime_cells: set[str | None] = set()
+        for case, line in by_case.items():
+            identity = line.get('identity')
+            if (
+                not isinstance(case, str)
+                or not form.fullmatch(case)
+                or line.get('case') != case
+                or database_of(case) != database
+            ):
+                report.fail('scope', f'{case}: not a {database} observation')
+            if (
+                runner not in RUNNERS
+                or (database != 'duckdb' and runner not in DATABASE_RUNNERS)
+                or not isinstance(identity, dict)
+                or identity.get('runner') != runner
+                or 'cell' not in identity
+                or identity['cell'] not in cells
+            ):
+                report.fail('scope', f'{case}: wrong runner or cell identity')
+                continue
+            runtime_cells.add(identity['cell'])
+        if len(runtime_cells) > 1:
+            report.fail('scope', f'{runner}: observations mix runtime cells')
 
 
 def projection(
@@ -2350,6 +2400,7 @@ def check_baselines(
     gone: set[str],
     reference: dict[str, dict[str, Any]],
     ordered: dict[str, Any] | None,
+    database: str | None = None,
 ) -> None:
     for runner, by_case in sorted(observed.items()):
         crashes = {
@@ -2360,6 +2411,8 @@ def check_baselines(
             )
         }
         for case, line in sorted(held.get(runner, {}).items()):
+            if database is not None and database_of(case) != database:
+                continue
             if case_of(case) in gone:
                 continue
             observation = by_case.get(case)
@@ -2397,6 +2450,8 @@ def check_baselines(
                 )
         mine = proposed.get(runner, {})
         for case, line in sorted(mine.items()):
+            if database is not None and database_of(case) != database:
+                continue
             if case_of(case) not in corpus:
                 continue  # a line of no case: check_keys names it
             observation = by_case.get(case)
@@ -2446,11 +2501,28 @@ def check(
     effective_out: Path | None = None,
     epic: bool = False,
     locked: bool = False,
+    database: str | None = None,
+    full: bool = False,
 ) -> Report:
     r"""Every rule's problems; ``effective_out`` receives the effective
     expectations (:func:`effective`) for the comparator. ``locked``, the
-    locked run's ratchet step, adds :func:`check_temporary`."""
+    locked run's ratchet step, adds :func:`check_temporary`. An explicit
+    ``database`` limits only baseline evidence to that database's keys;
+    omission, ``full`` and ``locked`` retain all database requirements.
+    """
     report = Report()
+    if database is not None:
+        if database not in ('duckdb', 'sqlite', 'postgres'):
+            report.fail('scope', f'unknown database {database!r}')
+            return report
+        if locked or full:
+            report.fail(
+                'scope', 'a full or locked check requires all databases'
+            )
+            return report
+        if not observation_files:
+            report.fail('scope', f'{database}: no observations')
+            return report
     checkpoint = Tree(repo, checkpoint_sha)
     head = git(repo, 'rev-parse', 'HEAD^{commit}').strip()
     candidate = Tree(repo, head)
@@ -2565,6 +2637,8 @@ def check(
         check_known_differing(report, checkpoint, candidate)
         if observation_files:
             observed = observations(observation_files)
+            if database is not None:
+                check_database_scope(report, observed, database)
             corpus = cases(candidate)
             check_availability(
                 report,
@@ -2601,6 +2675,7 @@ def check(
                 (new_policy or {}).get('ordered')
                 if isinstance(new_policy, dict)
                 else None,
+                database=database,
             )
     except Unreadable as error:
         report.fail('read', str(error))
@@ -2911,6 +2986,8 @@ def main(argv: list[str] | None = None) -> int:
     judge.add_argument('--effective-out', type=Path)
     judge.add_argument('--epic', action='store_true')
     judge.add_argument('--locked', action='store_true')
+    judge.add_argument('--database', choices=('duckdb', 'sqlite', 'postgres'))
+    judge.add_argument('--full', action='store_true')
     spot = commands.add_parser('where')
     spot.add_argument('--repo', type=Path, default=Path('.'))
     pushed = commands.add_parser('push-base')
@@ -3005,6 +3082,8 @@ def main(argv: list[str] | None = None) -> int:
             arguments.effective_out,
             arguments.epic,
             arguments.locked,
+            arguments.database,
+            arguments.full,
         )
     except Unreadable as error:
         print(f'ratchet: {error}\nratchet: FAIL')
