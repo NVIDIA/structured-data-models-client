@@ -384,10 +384,12 @@ fn predict(run: &HostRun, mut materialized: Materialized, target: &str, expected
     assert_eq!(json!(payloads), expected["payloads"]);
     if let Some(batches) = &mut materialized.state.batches {
         for (i, batch) in batches.iter_mut().enumerate() {
-            batch.request_id = expected["sent"][i + 1]["metadata"]["request_id"]
-                .as_str()
-                .unwrap()
-                .into();
+            batch.request_id = Some(
+                expected["sent"][i + 1]["metadata"]["request_id"]
+                    .as_str()
+                    .unwrap()
+                    .into(),
+            );
         }
     }
     let start = message(
