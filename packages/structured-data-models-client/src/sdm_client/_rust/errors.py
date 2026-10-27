@@ -675,34 +675,35 @@ def error_from_core(
 
         if 'offending' in fields:
             value = codec.restored_json(fields['offending'])
-            try:
-                if fields.get('native') == 'dict':
-                    # The core selected the failed conversion. Preserve its
-                    # actual native wording and cause inside the SDK wrapper.
-                    dict(value)
-                elif fields.get('native') == 'iter':
-                    iter(value)
-            except (TypeError, ValueError) as failed:
-                fields['diagnostic'] = str(failed)
-                response_cause = failed
-            if fields.get('before') or fields.get('after'):
-                fields['diagnostic'] = (
-                    fields['before'] + repr(value) + fields['after']
-                )
             if fields.get('native') == 'float':
-                # The core selected _finite's conversion failure, separately
-                # from bool rejection or nonfinite values after a good cast.
-                # Preserve the actual native exception beneath the generated
-                # wrapper, including its native traceback and caller context.
+                # The generated decoder formats its refusal inside the
+                # failed float handler. Native repr can itself raise there;
+                # keep that actual failure and its original float context.
                 try:
-                    float(value)
-                except (TypeError, ValueError, OverflowError):
                     try:
-                        raise ResponseContractError(
-                            fields['diagnostic']
-                        ) from None
-                    except ResponseContractError as generated:
-                        response_cause = generated
+                        float(value)
+                    except (TypeError, ValueError, OverflowError):
+                        diagnostic = (
+                            fields['before'] + repr(value) + fields['after']
+                        )
+                        raise ResponseContractError(diagnostic) from None
+                except (TypeError, ValueError) as failed:
+                    fields['diagnostic'] = str(failed)
+                    response_cause = failed
+            else:
+                try:
+                    if fields.get('native') == 'dict':
+                        # Core selected the failed native conversion.
+                        dict(value)
+                    elif fields.get('native') == 'iter':
+                        iter(value)
+                except (TypeError, ValueError) as failed:
+                    fields['diagnostic'] = str(failed)
+                    response_cause = failed
+                if fields.get('before') or fields.get('after'):
+                    fields['diagnostic'] = (
+                        fields['before'] + repr(value) + fields['after']
+                    )
         details['diagnostic'] = fields['diagnostic']
     said = _said(sentence, fields)
     part = error.get('part')

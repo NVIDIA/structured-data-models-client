@@ -168,3 +168,7 @@ The native JSON result is not used to choose fallback or attribution policy, whi
 An uncaught native exception retains its original object, explicit cause, context and suppression when core selects propagation.
 The later selected-member string conversion remains outside the completed JSON-failure handler, preserving its separate source position.
 Core generated finite-number diagnostics retain before/value/after wording alongside native Float facts; the mapping placeholder belongs only to Dict and Iter faults.
+
+The selected Float presenter formats the offending value inside the actual failed-float handler, so a native integer-display refusal retains that conversion as its context.
+Its SDK wrapper retains the actual native display exception where the generated decoder's own formatting fails.
+This does not broaden the separate shared transport conversion of decoded DICT replies to JSON bytes or claim equivalence to raw HTTP decoder admission.
