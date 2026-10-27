@@ -13,6 +13,7 @@ import pyarrow as pa
 import pytest
 
 from sdm_client._rust.frame_decimals import native_decimal_column
+from sdm_client import StructuredDataError
 
 
 def arrays(bits, precision, scale):
@@ -47,7 +48,10 @@ def test_lossless_native_decimal_mantissa_view(bits, scale):
         assert len(view) == len(source)
         assert view.offset == source.offset
         assert view.null_count == source.null_count
-        assert [buffer.address if buffer else None for buffer in view.buffers()] == [
+        addresses = [
+            buffer.address if buffer else None for buffer in view.buffers()
+        ]
+        assert addresses == [
             buffer.address if buffer else None for buffer in source.buffers()
         ]
     # The C stream carries representable typed mantissas, with the original
@@ -57,13 +61,48 @@ def test_lossless_native_decimal_mantissa_view(bits, scale):
     restored = reader.read_all()['value']
     del original, series, chunks, storage, table, reader
     gc.collect()
-    assert [str(value) if value is not None else None for value in restored.to_pylist()] == [
-        '1', None, '2', '0'
+    values = [
+        str(value) if value is not None else None
+        for value in restored.to_pylist()
     ]
+    assert values == ['1', None, '2', '0']
 
 
 @pytest.mark.parametrize('dtype', [pa.int64(), pa.binary(), pa.string()])
 def test_ordinary_storage_is_not_interpreted_as_decimal(dtype):
-    values = [1] if pa.types.is_integer(dtype) else [b'1'] if pa.types.is_binary(dtype) else ['1']
-    series = pd.Series(pd.arrays.ArrowExtensionArray(pa.array(values, type=dtype)))
+    values = (
+        [1]
+        if pa.types.is_integer(dtype)
+        else [b'1']
+        if pa.types.is_binary(dtype)
+        else ['1']
+    )
+    series = pd.Series(
+        pd.arrays.ArrowExtensionArray(pa.array(values, type=dtype))
+    )
     assert native_decimal_column(series) is None
+
+
+def test_table_result_preserves_logical_type_attachment_with_owned_rows():
+    from sdm_client._rust import results
+
+    table = results.expect(
+        {'op': 'describe_source', 'description': 1, 'frame_rows': 2, 'frame_decimals': 3},
+        results.Described,
+    )
+    assert table.frame_rows == 2
+    assert table.frame_decimals == 3
+    sql = results.expect({'op': 'describe_source', 'description': 1}, results.Described)
+    assert sql.frame_rows is None
+    assert sql.frame_decimals is None
+
+
+@pytest.mark.parametrize('value', [True, -1, '3', 1.5, [], {}])
+def test_table_result_rejects_malformed_logical_type_attachment(value):
+    from sdm_client._rust import results
+
+    with pytest.raises(StructuredDataError, match='frame_decimals is not a count'):
+        results.expect(
+            {'op': 'describe_source', 'description': 1, 'frame_rows': 2, 'frame_decimals': value},
+            results.Described,
+        )
