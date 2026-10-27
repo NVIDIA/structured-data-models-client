@@ -550,7 +550,10 @@ fn direct_contract_error(_answer: &Value, error: sdm_wire::response::Refused) ->
         .field
         .strip_prefix("prediction.")
         .unwrap_or(error.field);
-    let (before, after, fixed) = if error.native.is_some() {
+    let (before, after, fixed) = if matches!(
+        error.native,
+        Some(sdm_wire::response::NativeFault::Dict | sdm_wire::response::NativeFault::Iter)
+    ) {
         (
             String::new(),
             String::new(),
