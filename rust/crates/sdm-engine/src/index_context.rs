@@ -16,17 +16,19 @@
 //! only after the selected index's monotonic shortcut has been considered.
 
 use crate::index_codes::{CodeWidth, IndexCodes, InvalidCodes};
-use crate::index_sort::{SimdArgsortProfile, SimdKey, simd_argsort};
+use crate::index_sort::{SimdArgsortProfile, SimdKey, intel5_argsort, simd_argsort};
 use crate::sample::scalar_argsort;
 use arrow_array::types::*;
 use arrow_array::{Array, ArrayRef, BooleanArray, PrimitiveArray};
 use arrow_schema::{DataType, TimeUnit};
 
 /// Established native algorithm bindings, not user-selectable ordering policy.
-/// Intel5's old entry and actual GCC10 binding are deliberately not inferred.
+/// The Intel5 entry is source-proven; actual old GCC10 binary fallback binding
+/// is still a separate obligation and this consumer remains publicly unrouted.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NumpyProducer {
     Scalar,
+    Intel5Avx2SharedGnu,
     Intel7Avx2Gnu14,
     Intel7Avx512Gnu14,
 }
@@ -364,6 +366,7 @@ impl OriginalIndexFacts {
 fn wide_order<T: SimdKey>(keys: &[T], producer: NumpyProducer) -> Vec<usize> {
     match producer {
         NumpyProducer::Scalar => scalar_argsort(keys),
+        NumpyProducer::Intel5Avx2SharedGnu => intel5_argsort(keys, SimdArgsortProfile::Avx2Gnu14),
         NumpyProducer::Intel7Avx2Gnu14 => simd_argsort(keys, SimdArgsortProfile::Avx2Gnu14),
         NumpyProducer::Intel7Avx512Gnu14 => simd_argsort(keys, SimdArgsortProfile::Avx512Gnu14),
     }

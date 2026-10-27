@@ -2,13 +2,16 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! Portable index operations for the source-locked NumPy 2.5.3 SIMD algorithm.
+//! Portable source-locked NumPy SIMD index operations and closed source entries.
 //!
 //! These profiles describe algorithms, not detected CPUs or supported runtime
 //! bindings. No production caller selects either profile yet. Missing values,
 //! including NaNs, must be removed by the caller before entering this kernel.
 //! The caller must separately establish its producer's algorithm and fallback
 //! profile. See `docs/design/rust-core/phase-4/t46-simd-kernels.md`.
+//! NumPy 2.2.6's Intel5 entry shares the compared ascending nonmissing network,
+//! partition and GNU operations, but does not have Intel7's sorted shortcut.
+//! Reusing those operations does not prove the old Red Hat binary's fallback.
 
 mod gnu;
 #[cfg(test)]
@@ -80,8 +83,37 @@ impl SimdKey for f64 {
 /// Callers must exclude NaNs and prove their native producer uses this profile.
 /// It does not choose missing placement, selected-subset shortcuts or row ids.
 pub fn simd_argsort<T: SimdKey>(values: &[T], profile: SimdArgsortProfile) -> Vec<usize> {
+    source_argsort(values, profile, Entry::Intel7)
+}
+
+/// NumPy 2.2.6's Intel5 ascending nonmissing entry, without a sorted shortcut.
+///
+/// The exact source is xss-common-argsort.h's avx2_argsort/avx512_argsort entry
+/// in the pinned 2.2.6 sdist. Its selected network/partition operations match
+/// the shared implementation; the 16 inspected official GNU10/GNU14 sort/heap
+/// bodies normalize identically. Actual old-producer fallback binding remains
+/// a separate proof obligation before any public routing activation.
+pub fn intel5_argsort<T: SimdKey>(values: &[T], profile: SimdArgsortProfile) -> Vec<usize> {
+    source_argsort(values, profile, Entry::Intel5)
+}
+
+#[derive(Clone, Copy)]
+enum Entry {
+    Intel5,
+    Intel7,
+}
+
+fn source_argsort<T: SimdKey>(
+    values: &[T],
+    profile: SimdArgsortProfile,
+    entry: Entry,
+) -> Vec<usize> {
     let mut indices: Vec<usize> = (0..values.len()).collect();
-    if values.len() > 1 && values.windows(2).any(|pair| pair[1] < pair[0]) {
+    let enter = match entry {
+        Entry::Intel5 => true,
+        Entry::Intel7 => values.windows(2).any(|pair| pair[1] < pair[0]),
+    };
+    if values.len() > 1 && enter {
         // The source casts log2(n) to size_t before doubling. This conversion
         // concerns only the range length, never a key or an index label.
         let depth = 2 * (values.len() as f64).log2() as u32;

@@ -131,6 +131,21 @@ The CP310 and CP312 Arrow 25.0.1 `libarrow_compute.so.2500` files are byte-ident
 Their Python/native wrapper identities are still recorded separately, and matching compute bytes do not prove every input-conversion rule agrees.
 Only a bounded additional frozen-reference matrix over the distinct or unobserved producer seams is warranted; the original 64 cases and full captures need not be rerun wholesale.
 
+The subsequent actual 18-case CP310 and three-case CP312 observations had no observer gaps, preserved the real mixed-label refusal and agreed on their observed context orders.
+Their sorted-nonmissing fixtures had only24 nonmissing keys, so that agreement did not exercise the missing Intel5 entry shortcut above the256-key network threshold.
+The root then executed exactly two400-row sorted-nonmissing fixtures per cell, using float64 labels and categorical int32 codes.
+All four actual controls had399 candidates,300 selected rows, six missing labels and294 nonmissing nondecreasing keys, while their full selected indexes were nonmonotonic.
+The CP310 receipt is `81d4ab496e483771561cfd1194d10dc06ec2e672f9c1b840be46f64ee6e8fe02`, and the CP312 receipt is `bdad19b7bfd823f8be640e61ad49a108095b7a450db6ef0c4086f94a75576efc`.
+For both label families, the actual public context/wire orders differed at86 of300 positions with the same changed-position pattern.
+This is an actual public witness for the source-entry distinction, not a claim of a different network implementation or a proven old binary fallback.
+
+The current source range therefore adds only a closed Intel5 entry that omits the Intel7 sorted shortcut and reuses the existing network, partition, recursion and GNU implementation.
+The existing `simd_argsort` entry and profiles retain their Intel7 behavior.
+The connected consumer names the older choice `Intel5Avx2SharedGnu`, keeping the missing actual Red Hat fallback-binding proof explicit.
+Tests-first source extends the single canonical fixture writer with a separate, pinned profile mode that copies original400-row Arrow facts and actual selected/expected300-row identities from those two receipts.
+It never opens the original44 generated files or rewrites their historical3e772 writer/d5b001 producer provenance.
+No candidate check, comparison-order approximation, new ordinary refusal or routing activation is claimed.
+
 ## Minimum boundary and composition
 
 Native conversion supplies typed facts aligned with the original admitted frame snapshot before the core chooses rows.
