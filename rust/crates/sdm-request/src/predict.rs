@@ -52,7 +52,9 @@ use arrow_array::{
 use arrow_schema::{DataType, Field, Schema};
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 use sdm_wire::json::{Value, is_integer_token};
-use sdm_wire::response::{PredictionResponse, Refused, integer_text, numeric_text};
+use sdm_wire::response::{
+    PredictionResponse, Refused, integer_text, integer_text_limited, numeric_text,
+};
 
 /// The model this build sends a relational request to.
 pub const RELATIONAL: &str = "kumo-relational";
@@ -1246,10 +1248,22 @@ fn as_int(value: &Value) -> Option<i64> {
         Value::Text(text) => integer_text(text)?.parse::<i64>().ok(),
         Value::Number(token) if is_integer_token(token) => token.parse::<i64>().ok(),
         Value::Number(token) => {
-            let float: f64 = token.parse().ok()?;
-            (float.is_finite() && float.fract() == 0.0 && float.abs() < 9.2e18)
-                .then_some(float as i64)
+            sdm_wire::json::whole(token).and_then(|whole| i64::try_from(whole).ok())
         }
+        _ => None,
+    }
+}
+
+/// Direct integer classes retain the existing exact JSON carrier past i64.
+/// The shared entity conversion already implements finite whole-float casts;
+/// text first observes its reached native process limit before zero stripping.
+fn direct_integer_class(value: &Value, decimal_limit: u32) -> Option<String> {
+    if let Value::Text(text) = value {
+        return integer_text_limited(text, decimal_limit);
+    }
+    match entity(value, Some("int64")) {
+        Entity::Integer(value) => Some(value.to_string()),
+        Entity::Written(Value::Number(token)) if is_integer_token(&token) => Some(token),
         _ => None,
     }
 }
@@ -1269,7 +1283,11 @@ fn as_float(value: &Value) -> Option<f64> {
 }
 
 /// One answer's prediction as the result gives it.
-fn answer_of(prediction: Option<&Value>, answers: AnswerType) -> Result<Answer, CoreError> {
+fn answer_of(
+    prediction: Option<&Value>,
+    answers: AnswerType,
+    decimal_limit: Option<u32>,
+) -> Result<Answer, CoreError> {
     let Some(value) = prediction else {
         return Ok(Answer::None);
     };
@@ -1301,7 +1319,16 @@ fn answer_of(prediction: Option<&Value>, answers: AnswerType) -> Result<Answer, 
             Ok(Answer::NonFinite(non_finite(value).unwrap_or(f64::NAN)))
         }
         AnswerType::Bool => Ok(as_bool(value).map_or_else(|| written(value), Answer::Bool)),
-        AnswerType::Int => Ok(as_int(value).map_or_else(|| written(value), Answer::Int)),
+        AnswerType::Int => Ok(match decimal_limit {
+            Some(limit) => direct_integer_class(value, limit).map_or_else(
+                || written(value),
+                |digits| match digits.parse::<i64>() {
+                    Ok(value) => Answer::Int(value),
+                    Err(_) => Answer::Written(Value::Number(digits)),
+                },
+            ),
+            None => as_int(value).map_or_else(|| written(value), Answer::Int),
+        }),
         AnswerType::Text => Ok(match value {
             Value::Text(text) => Answer::Text(text.clone()),
             other => written(other),
@@ -1339,6 +1366,15 @@ fn spelled(
     answers: AnswerType,
     float_text: fn(f64) -> String,
 ) -> Vec<(String, f64)> {
+    spelled_with_limit(probabilities, answers, float_text, None)
+}
+
+fn spelled_with_limit(
+    probabilities: &[(String, f64)],
+    answers: AnswerType,
+    float_text: fn(f64) -> String,
+    decimal_limit: Option<u32>,
+) -> Vec<(String, f64)> {
     let respelled: Vec<(String, f64)> = probabilities
         .iter()
         .map(|(class, p)| {
@@ -1351,7 +1387,10 @@ fn spelled(
                         "False".to_owned()
                     }
                 }),
-                AnswerType::Int => as_int(&as_written).map(|n| n.to_string()),
+                AnswerType::Int => match decimal_limit {
+                    Some(limit) => direct_integer_class(&as_written, limit),
+                    None => as_int(&as_written).map(|n| n.to_string()),
+                },
                 AnswerType::FloatClass => as_float(&as_written).map(float_text),
                 _ => None,
             };
@@ -1390,6 +1429,7 @@ pub fn layout(
         float_text,
         answer_type(payload)?,
         Attribution::GatheredReference,
+        None,
     )
 }
 
@@ -1398,6 +1438,7 @@ pub fn layout(
 pub(crate) fn layout_tabular(
     payload: &Value,
     response: &PredictionResponse,
+    decimal_limit: u32,
     float_text: fn(f64) -> String,
 ) -> Result<Part, CoreError> {
     layout_as(
@@ -1406,6 +1447,7 @@ pub(crate) fn layout_tabular(
         float_text,
         declared_answers(payload, kind_of(payload)?),
         Attribution::AsWritten,
+        Some(decimal_limit),
     )
 }
 
@@ -1423,6 +1465,7 @@ fn layout_as(
     float_text: fn(f64) -> String,
     answers: AnswerType,
     attribution: Attribution,
+    decimal_limit: Option<u32>,
 ) -> Result<Part, CoreError> {
     let (names, rows) = instance_table(payload, "predict").ok_or_else(|| bad_payload("predict"))?;
     let reference = match attribution {
@@ -1458,11 +1501,14 @@ fn layout_as(
             forecast_step,
             answer_index: i64::try_from(laid.len()).unwrap_or(i64::MAX),
             id,
-            prediction: answer_of(item.prediction.as_ref(), answers)?,
+            prediction: answer_of(item.prediction.as_ref(), answers, decimal_limit)?,
             probabilities: item
                 .probabilities
                 .as_ref()
-                .map(|given| spelled(given, answers, float_text)),
+                .map(|given| match decimal_limit {
+                    Some(limit) => spelled_with_limit(given, answers, float_text, Some(limit)),
+                    None => spelled(given, answers, float_text),
+                }),
             scores: item.scores.clone(),
             rankings: item.rankings.clone(),
             explanation: item.explanation.clone(),
@@ -2458,12 +2504,12 @@ mod tests {
         assert_eq!(as_float(&Value::Bool(true)), None);
         assert_eq!(as_float(&number(&"9".repeat(400))), None);
         assert_eq!(
-            answer_of(Some(&text("3.0")), AnswerType::FloatClass),
+            answer_of(Some(&text("3.0")), AnswerType::FloatClass, None),
             Ok(Answer::Float(3.0))
         );
         // One that does not read is given back as written (T2.8).
         assert_eq!(
-            answer_of(Some(&text("three")), AnswerType::FloatClass),
+            answer_of(Some(&text("three")), AnswerType::FloatClass, None),
             Ok(Answer::Written(text("three")))
         );
     }

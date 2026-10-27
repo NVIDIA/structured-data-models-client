@@ -68,7 +68,7 @@ fn frame(form: FrameForm, name: &str) -> Result<(), CoreError> {
         .with_field("native_type", Detail::text(kind))
         .with_field("hint", Detail::text(hint)))
 }
-fn lookup(read: &NativeLookup, count: usize) -> Result<(), CoreError> {
+fn lookup_bounds(read: &NativeLookup, count: usize) -> Result<(), CoreError> {
     if read.positions.iter().any(|&n| n >= count)
         || read.positions.iter().collect::<BTreeSet<_>>().len() != read.positions.len()
     {
@@ -76,6 +76,10 @@ fn lookup(read: &NativeLookup, count: usize) -> Result<(), CoreError> {
             "a native target lookup names an invalid column ordinal",
         ));
     }
+    Ok(())
+}
+fn lookup(read: &NativeLookup, count: usize) -> Result<(), CoreError> {
+    lookup_bounds(read, count)?;
     if let Some(kind) = &read.unhashable {
         return Err(error(Sentence::DirectLookup).with_field("native_type", Detail::text(kind)));
     }
@@ -251,8 +255,8 @@ pub(crate) async fn run(
         Preparation::AttributeResponseRow { selected, string } => serde_json::to_value(
             sdm_request::tabular::response::attribute(selected, string, crate::pql::float_text)?,
         ),
-        Preparation::LayoutResponse { data, attributed } => {
-            return crate::prepare_response::layout(&asker, data, attributed, attached);
+        Preparation::LayoutResponse { data, attributed, decimal_limit } => {
+            return crate::prepare_response::layout(&asker, data, attributed, decimal_limit, attached);
         }
         Preparation::Overlap { input } => {
             serde_json::to_value(overlap(&asker, input, &mut attached).await?)
@@ -364,7 +368,6 @@ pub(crate) async fn run(
                 check_names(&headers.context, &entity_table, "context")?;
             }
             let context = renamed(&headers.context, &context)?;
-            let predict = renamed(&headers.predict, &predict)?;
             let target = names(&headers.context)?[headers.target].clone();
             let original_schema = schema.clone();
             let description = if let Some(schema) = schema {
@@ -402,78 +405,6 @@ pub(crate) async fn run(
                 }
                 description
             };
-            let table = description.tables.iter().find(|t| t.name == entity_table);
-            if let Some(table) = table {
-                let arriving =
-                    sdm_schema::frames::storage_dtypes(&predict.schema, &predict.batches)?;
-                for (at, dtype) in arriving.into_iter().enumerate() {
-                    let name = predict.schema.field(at).name().clone();
-                    if let Some(stated) = table.columns.iter().find(|c| c.name == name) {
-                        if original_schema
-                            .as_ref()
-                            .and_then(|s| s.tables.iter().find(|t| t.name == entity_table))
-                            .and_then(|t| t.columns.iter().find(|c| c.name == name))
-                            .is_some_and(|c| c.untyped && !c.stype_declared)
-                        {
-                            continue;
-                        }
-                        if predict
-                            .schema
-                            .fields()
-                            .iter()
-                            .filter(|f| f.name() == &name)
-                            .count()
-                            > 1
-                        {
-                            return Err(error(Sentence::DirectPredictDtype));
-                        }
-                        if !crate::edit::supports(stated.stype, dtype) {
-                            return Err(error(Sentence::DirectScored)
-                                .with_field("column", Detail::text(&name))
-                                .with_field("arriving", Detail::text(dtype.wire_name()))
-                                .with_field("dtype", Detail::text(stated.dtype.wire_name()))
-                                .with_field("stype", Detail::text(stype(stated.stype)))
-                                .with_field("table", Detail::text(&entity_table)));
-                        }
-                    }
-                }
-            }
-            let table = table.ok_or_else(|| {
-                error(Sentence::DirectSchemaMissing).with_field("name", Detail::text(&entity_table))
-            })?;
-            let missing: Vec<String> = names(&headers.context)?
-                .into_iter()
-                .filter(|name| {
-                    name != &target
-                        && !table.primary_key.contains(name)
-                        && !predict.schema.fields().iter().any(|f| f.name() == name)
-                })
-                .collect();
-            if !missing.is_empty() {
-                return Err(
-                    error(Sentence::DirectMissing).with_field("columns", text_list(missing))
-                );
-            }
-            if sdm_schema::frames::present_distinct(&context.batches, headers.target)? == 1
-                && (headers.task.contains("classification") || headers.task == "regression")
-            {
-                asker.warn(
-                    CoreWarning::new(
-                        if headers.task == "regression" {
-                            Sentence::DirectConstantRegression
-                        } else {
-                            Sentence::DirectConstantClass
-                        },
-                        "every context row has the same target",
-                    )
-                    .with_field("target", Detail::text(&target)),
-                );
-            }
-            if !table.columns.iter().any(|c| c.name == target) {
-                return Err(
-                    error(Sentence::DirectSchemaMissing).with_field("name", Detail::text(&target))
-                );
-            }
             let schema = original_schema.unwrap_or_else(|| {
                 sdm_schema::held::held(
                     &description,
@@ -485,13 +416,155 @@ pub(crate) async fn run(
                     &BTreeMap::new(),
                 )
             });
-            serde_json::to_value(PreparedDirectRequest {
+            serde_json::to_value(ConstructorSchema {
                 version: DIRECT_PREPARED_VERSION,
                 task: headers.task,
+                target,
+                entity_table,
+                description,
+                schema,
+            })
+        }
+        Preparation::FinishConstructor {
+            schema,
+            context,
+            predict,
+            context_header,
+            predict_header,
+            target_context,
+            context_predict,
+        } => {
+            version(schema.version, DIRECT_PREPARED_VERSION)?;
+            let context = take_rows(&mut attached, context)?;
+            let predict = take_rows(&mut attached, predict)?;
+            coherent(&context_header, &context)?;
+            coherent(&predict_header, &predict)?;
+            if context_predict.len() != context_header.columns.len() {
+                return Err(invalid("fresh constructor membership facts have another width"));
+            }
+            let ConstructorSchema { version: _, task, target, entity_table, description, schema } = schema;
+            lookup_bounds(&target_context, context_header.columns.len())?;
+            let target_positions: Vec<_> = context_header.columns.iter().enumerate().filter_map(|(at,column)|matches!(&column.name,HeaderName::Text { value } if value==&target).then_some(at)).collect();
+            if target_positions != target_context.positions {
+                return Err(invalid("fresh target lookup disagrees with its named header"));
+            }
+            for (column, found) in context_header.columns.iter().zip(&context_predict) {
+                lookup_bounds(found, predict_header.columns.len())?;
+                if let HeaderName::Text { value } = &column.name {
+                    let actual: Vec<_> = predict_header.columns.iter().enumerate().filter_map(|(at,column)|matches!(&column.name,HeaderName::Text { value: candidate } if candidate==value).then_some(at)).collect();
+                    if found.positions != actual {
+                        return Err(invalid("fresh membership lookup disagrees with named headers"));
+                    }
+                }
+            }
+            let table = description.tables.iter().find(|t| t.name == entity_table);
+            if let Some(table) = table {
+                let arriving =
+                    sdm_schema::frames::storage_dtypes(&predict.schema, &predict.batches)?;
+                for (at, dtype) in arriving.into_iter().enumerate() {
+                    let HeaderName::Text { value: name } = &predict_header.columns[at].name else {
+                        continue;
+                    };
+                    if let Some(stated) = table.columns.iter().find(|c| c.name == *name) {
+                        if schema.tables.iter().find(|t| t.name == entity_table)
+                            .and_then(|t| t.columns.iter().find(|c| c.name == *name))
+                            .is_some_and(|c| c.untyped && !c.stype_declared)
+                        {
+                            continue;
+                        }
+                        if predict_header
+                            .columns
+                            .iter()
+                            .filter(|column| matches!(&column.name, HeaderName::Text { value } if value == name))
+                            .count()
+                            > 1
+                        {
+                            return Err(error(Sentence::DirectPredictDtype));
+                        }
+                        if !crate::edit::supports(stated.stype, dtype) {
+                            return Err(error(Sentence::DirectScored)
+                                .with_field("column", Detail::text(name))
+                                .with_field("arriving", Detail::text(dtype.wire_name()))
+                                .with_field("dtype", Detail::text(stated.dtype.wire_name()))
+                                .with_field("stype", Detail::text(stype(stated.stype)))
+                                .with_field("table", Detail::text(&entity_table)));
+                        }
+                    }
+                }
+            }
+            let table = table.ok_or_else(|| {
+                let mut tables: Vec<_> = description.tables.iter().map(|table|table.name.clone()).collect();
+                tables.sort();
+                error(Sentence::NoTable).with_field("table", Detail::text(&entity_table)).with_field("tables",text_list(tables))
+            })?;
+            let mut missing = Vec::new();
+            for (at, (column, found)) in context_header.columns.iter().zip(&context_predict).enumerate() {
+                lookup(found, predict_header.columns.len())?;
+                let identity = matches!(&column.name, HeaderName::Text { value } if table.primary_key.contains(value));
+                if !target_context.positions.contains(&at) && !identity && found.positions.is_empty() {
+                    missing.push(at);
+                }
+            }
+            if !missing.is_empty() {
+                return Err(error(Sentence::DirectMissing)
+                    .with_field("half", Detail::text("context"))
+                    .with_field("positions", positions(missing)));
+            }
+            lookup(&target_context, context_header.columns.len())?;
+            if target_context.positions.is_empty() {
+                return Err(error(Sentence::DirectSchemaMissing).with_field("name", Detail::text(&target)));
+            }
+            let constant = if target_context.positions.len() > 1 {
+                // The fresh target is a DataFrame: dropna removes rows with
+                // any missing target. A remaining row reaches Series truth;
+                // an empty result returns before that comparison.
+                if context.batches.iter().any(|batch|(0..batch.num_rows()).any(|row|target_context.positions.iter().all(|&at|batch.column(at).is_valid(row)))) {
+                    return Err(error(Sentence::DirectAmbiguous));
+                }
+                false
+            } else {
+                sdm_schema::frames::present_distinct(&context.batches, target_context.positions[0])? == 1
+            };
+            if constant
+                && (task.contains("classification") || task == "regression")
+            {
+                asker.warn(
+                    CoreWarning::new(
+                        if task == "regression" { Sentence::DirectConstantRegression } else { Sentence::DirectConstantClass },
+                        "every context row has the same target",
+                    ).with_field("target", Detail::text(&target)),
+                );
+            }
+            serde_json::to_value(PreparedDirectRequest {
+                version: DIRECT_PREPARED_VERSION,
+                task,
                 target,
                 description,
                 schema,
             })
+        }
+        Preparation::ConstructorTask { prepared, entity_table, tables, table } => {
+            version(prepared.version, DIRECT_PREPARED_VERSION)?;
+            let present = tables.iter().any(|name| matches!(name,HeaderName::Text { value } if value==&entity_table));
+            if present != table.is_some() {
+                return Err(invalid("native task table lookup disagrees with its names"));
+            }
+            let sorted_names = |names: Vec<HeaderName>| {
+                let mut names: Vec<_> = names.into_iter().filter_map(|name|match name {HeaderName::Text {value}=>Some(value),_=>None}).collect();
+                names.sort();
+                text_list(names)
+            };
+            let Some(table) = table else {
+                return Err(error(Sentence::NoTable).with_field("table",Detail::text(entity_table)).with_field("tables",sorted_names(tables)));
+            };
+            let present = table.columns.iter().any(|name|matches!(name,HeaderName::Text { value } if value==&prepared.target));
+            if present != table.target_dtype.is_some() {
+                return Err(invalid("native task target lookup disagrees with its names"));
+            }
+            let Some(dtype) = table.target_dtype else {
+                return Err(error(Sentence::NoColumn).with_field("table",Detail::text(entity_table)).with_field("column",Detail::text(prepared.target)).with_field("columns",sorted_names(table.columns)));
+            };
+            serde_json::to_value(PreparedDirectTask {kind:prepared.task,target:prepared.target,table:entity_table,dtype})
         }
         Preparation::Model { model } => {
             let model = policy::resolve_model(&model)

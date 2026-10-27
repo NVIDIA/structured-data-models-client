@@ -102,6 +102,36 @@ pub struct PreparedDirectRequest {
     pub schema: HeldSchema,
 }
 
+/// Settled inferred or supplied meaning, before later native frame observations.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ConstructorSchema {
+    pub version: u32,
+    pub task: String,
+    pub target: String,
+    pub entity_table: String,
+    pub description: SourceDescription,
+    pub schema: HeldSchema,
+}
+
+/// Only the selected native table's names and selected target's dtype.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ConstructorTaskTable {
+    pub columns: Vec<HeaderName>,
+    pub target_dtype: Option<String>,
+}
+
+/// Model-neutral task metadata, resolved after constructor advice effects.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct PreparedDirectTask {
+    pub kind: String,
+    pub target: String,
+    pub table: String,
+    pub dtype: String,
+}
+
 /// Native capability observations retained independently of the later task read.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -234,6 +264,7 @@ pub enum Preparation {
     LayoutResponse {
         data: DirectResponseData,
         attributed: AttachmentId,
+        decimal_limit: u32,
     },
     Overlap {
         input: DirectPrelude,
@@ -263,6 +294,21 @@ pub enum Preparation {
         entity_table: String,
         #[serde(default)]
         schema: Option<HeldSchema>,
+    },
+    FinishConstructor {
+        schema: ConstructorSchema,
+        context: AttachmentId,
+        predict: AttachmentId,
+        context_header: FrameHeader,
+        predict_header: FrameHeader,
+        target_context: NativeLookup,
+        context_predict: Vec<NativeLookup>,
+    },
+    ConstructorTask {
+        prepared: PreparedDirectRequest,
+        entity_table: String,
+        tables: Vec<HeaderName>,
+        table: Option<ConstructorTaskTable>,
     },
     Model {
         model: String,
@@ -350,7 +396,9 @@ pub struct EncodedDirectBody {
 pub enum PreparedValue {
     Arguments(ConstructorArguments),
     Headers(ConstructorHeaders),
+    Schema(ConstructorSchema),
     Request(PreparedDirectRequest),
+    Task(PreparedDirectTask),
     Call(CallPreparation),
     Overlap(DirectOverlap),
     Envelope(TabularEnvelope),

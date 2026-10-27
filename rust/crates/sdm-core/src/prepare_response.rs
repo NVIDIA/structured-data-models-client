@@ -57,6 +57,7 @@ pub(crate) fn layout(
     asker: &Asker,
     data: DirectResponseData,
     attributed: AttachmentId,
+    decimal_limit: u32,
     mut attached: Attachments,
 ) -> Result<OperationResult, CoreError> {
     let payload = json::read(&bytes(&mut attached, data.payload)?)
@@ -85,6 +86,7 @@ pub(crate) fn layout(
         &response,
         &scope,
         accepted,
+        decimal_limit,
         crate::pql::float_text,
     )?;
     if data.named {

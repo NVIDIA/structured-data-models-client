@@ -567,10 +567,19 @@ fn ascii_digits(text: &str) -> Option<String> {
 /// decimal digits; the integer's digits, with no leading zero and a minus
 /// sign only for a negative one, or `None` for any other text.
 pub fn integer_text(text: &str) -> Option<String> {
+    integer_text_limited(text, 0)
+}
+
+/// The same native decimal grammar under an observed process digit limit.
+/// Count original digits, including leading zeroes, before canonicalization.
+pub fn integer_text_limited(text: &str, decimal_limit: u32) -> Option<String> {
     let plain = ascii_digits(text)?;
     let negative = plain.starts_with('-');
     let digits = plain.strip_prefix(['+', '-']).unwrap_or(&plain);
     if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    if decimal_limit != 0 && digits.len() > decimal_limit as usize {
         return None;
     }
     let digits = digits.trim_start_matches('0');
