@@ -2,23 +2,32 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The numeric static frame consumer: detached rows, sanitized key maps
+//! The typed numeric/time frame consumer: detached rows, sanitized key maps
 //! and DF-1 adjacency, with RS-3 draws owned by its caller's checkpoint.
 //! No provider, SQL renderer or host callback participates in this walk.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
-use arrow_array::{
-    Array, ArrayRef, Float32Array, Float64Array, Int64Array, RecordBatch, UInt64Array,
+use arrow_array::cast::AsArray;
+use arrow_array::types::{
+    TimestampMicrosecondType, TimestampMillisecondType, TimestampNanosecondType,
+    TimestampSecondType,
 };
-use arrow_schema::{DataType, Field, Schema};
+use arrow_array::{
+    Array, ArrayRef, Float32Array, Float64Array, Int64Array, RecordBatch, TimestampNanosecondArray,
+    UInt64Array,
+};
+use arrow_schema::{DataType, Field, Schema, TimeUnit};
 use sdm_contract::data::{BATCH_COLUMN, MATCHES_COLUMN};
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 
 use crate::graph::{Edge, Graph};
 use crate::keys::{self, Key};
 use crate::random::Mt19937;
+use crate::time::Instant;
+
+const NANOS_PER_SECOND: i64 = 1_000_000_000;
 
 fn invalid(message: &str) -> CoreError {
     CoreError::protocol(Sentence::InvalidMessage, message)
@@ -72,6 +81,8 @@ struct Table {
     rows: RecordBatch,
     valid: Vec<usize>,
     index: BTreeMap<Key, usize>,
+    /// Original instants in nanoseconds; cuts use their floor seconds.
+    time: Option<Vec<Option<i64>>>,
 }
 
 struct Adjacency {
@@ -92,6 +103,67 @@ pub struct DroppedRows {
     pub input: usize,
     pub null_keys: usize,
     pub duplicate_keys: usize,
+    pub null_times: usize,
+}
+
+/// Normalize the already typed input, not a native-language date parser.
+/// Graph sanitization reads every timestamp before applying row masks.
+fn timestamps(rows: RecordBatch) -> Result<RecordBatch, CoreError> {
+    let mut fields = Vec::with_capacity(rows.num_columns());
+    let mut columns = Vec::with_capacity(rows.num_columns());
+    for (field, array) in rows.schema().fields().iter().zip(rows.columns()) {
+        let DataType::Timestamp(unit, _) = field.data_type() else {
+            fields.push(field.as_ref().clone());
+            columns.push(Arc::clone(array));
+            continue;
+        };
+        if field.data_type() == &DataType::Timestamp(TimeUnit::Nanosecond, None) {
+            fields.push(field.as_ref().clone());
+            columns.push(Arc::clone(array));
+            continue;
+        }
+        let raw: Vec<Option<i64>> = match unit {
+            TimeUnit::Second => array.as_primitive::<TimestampSecondType>().iter().collect(),
+            TimeUnit::Millisecond => array
+                .as_primitive::<TimestampMillisecondType>()
+                .iter()
+                .collect(),
+            TimeUnit::Microsecond => array
+                .as_primitive::<TimestampMicrosecondType>()
+                .iter()
+                .collect(),
+            TimeUnit::Nanosecond => array
+                .as_primitive::<TimestampNanosecondType>()
+                .iter()
+                .collect(),
+        };
+        let nanos = raw
+            .into_iter()
+            .map(|value| {
+                value
+                    .map(|value| {
+                        Instant::from_count(value, *unit)
+                            .to_count(TimeUnit::Nanosecond, field.name())
+                            // The frozen frame route refuses these as
+                            // INVALID_REQUEST with native date wording,
+                            // rather than the shared provider range code.
+                            // Its lossless wide constructor stays admitted;
+                            // that materializer family remains unfinished.
+                            .map_err(|_| crate::not_yet("frame_wide_timestamps"))
+                    })
+                    .transpose()
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        fields.push(
+            field
+                .as_ref()
+                .clone()
+                .with_data_type(DataType::Timestamp(TimeUnit::Nanosecond, None)),
+        );
+        columns.push(Arc::new(TimestampNanosecondArray::from(nanos)) as ArrayRef);
+    }
+    RecordBatch::try_new(Arc::new(Schema::new(fields)), columns)
+        .map_err(|_| invalid("normalized frame timestamp columns do not align"))
 }
 
 pub struct WalkedTable {
@@ -114,13 +186,22 @@ impl Snapshot {
     pub fn new(graph: &Graph, mut input: BTreeMap<String, RecordBatch>) -> Result<Self, CoreError> {
         let mut tables = BTreeMap::new();
         let mut dropped = Vec::new();
+        let timed = graph.tables.iter().any(|table| table.time_column.is_some());
         for table in &graph.tables {
-            if table.time_column.is_some() {
-                return Err(crate::not_yet("frame_temporal"));
-            }
             let rows = input
                 .remove(&table.name)
                 .ok_or_else(|| invalid("a frame source lacks one table"))?;
+            // Timestamp features on an otherwise untimed graph retain the
+            // separate no-time/DT-3 acceptance obligation of the full phase.
+            if !timed
+                && rows
+                    .schema()
+                    .fields()
+                    .iter()
+                    .any(|field| matches!(field.data_type(), DataType::Timestamp(_, _)))
+            {
+                return Err(crate::not_yet("frame_untimed_timestamp_features"));
+            }
             if rows.schema().fields().iter().any(|f| {
                 !matches!(
                     f.data_type(),
@@ -135,17 +216,46 @@ impl Snapshot {
                         | DataType::UInt64
                         | DataType::Float32
                         | DataType::Float64
+                        | DataType::Timestamp(_, _)
                 )
             }) {
                 return Err(invalid(
                     "the numeric frame consumer received another native family",
                 ));
             }
+            let rows = timestamps(rows)?;
+            let time = table
+                .time_column
+                .as_ref()
+                .map(|column| {
+                    let array = named(&rows, column)?;
+                    if !matches!(
+                        array.data_type(),
+                        DataType::Timestamp(TimeUnit::Nanosecond, None)
+                    ) {
+                        return Err(crate::not_yet("frame_time_type"));
+                    }
+                    Ok(array
+                        .as_primitive::<TimestampNanosecondType>()
+                        .iter()
+                        .collect::<Vec<_>>())
+                })
+                .transpose()?;
             let mut index = BTreeMap::new();
+            let mut seen = BTreeSet::new();
             let mut null_keys = 0;
             let mut duplicate_keys = 0;
+            let mut null_times = 0;
+            let mut has_time = |row: usize| {
+                if time.as_ref().is_some_and(|values| values[row].is_none()) {
+                    null_times += 1;
+                    false
+                } else {
+                    true
+                }
+            };
             let valid: Vec<usize> = match &table.primary_key {
-                None => (0..rows.num_rows()).collect(),
+                None => (0..rows.num_rows()).filter(|&row| has_time(row)).collect(),
                 Some(key) => read_keys(named(&rows, key)?)?
                     .into_iter()
                     .enumerate()
@@ -154,8 +264,12 @@ impl Snapshot {
                             null_keys += 1;
                             return None;
                         };
-                        if index.contains_key(&key) {
+                        // Duplicate detection precedes time removal, so a
+                        // later duplicate cannot replace a missing-time row.
+                        if !seen.insert(key.clone()) {
                             duplicate_keys += 1;
+                            None
+                        } else if !has_time(row) {
                             None
                         } else {
                             index.insert(key, row);
@@ -169,17 +283,34 @@ impl Snapshot {
                     Sentence::FrameNoValidRows,
                     "a frame has no valid primary-key rows",
                 )
-                .with_field("table", Detail::text(&table.name)));
+                .with_field("table", Detail::text(&table.name))
+                .with_field(
+                    "requirements",
+                    Detail::text(if time.is_some() {
+                        "primary key and time column pairs"
+                    } else {
+                        "primary keys"
+                    }),
+                ));
             }
-            if null_keys + duplicate_keys > 0 {
+            if null_keys + duplicate_keys + null_times > 0 {
                 dropped.push(DroppedRows {
                     table: table.name.clone(),
                     input: rows.num_rows(),
                     null_keys,
                     duplicate_keys,
+                    null_times,
                 });
             }
-            tables.insert(table.name.clone(), Table { rows, valid, index });
+            tables.insert(
+                table.name.clone(),
+                Table {
+                    rows,
+                    valid,
+                    index,
+                    time,
+                },
+            );
         }
         if !input.is_empty() {
             return Err(invalid("a snapshot binds an undescribed frame"));
@@ -201,6 +332,15 @@ impl Snapshot {
                     reverse[row].push(at);
                 }
             }
+            if let Some(times) = &src.time {
+                for group in &mut forward {
+                    // DF-1: equal seconds keep source-row order, including
+                    // timestamps on opposite sides of a subsecond anchor.
+                    group.sort_by_key(|&row| {
+                        times[row].map(|time| time.div_euclid(NANOS_PER_SECOND))
+                    });
+                }
+            }
             adjacency.push(Adjacency {
                 edge: edge.clone(),
                 reversed: false,
@@ -217,6 +357,20 @@ impl Snapshot {
             adjacency,
             dropped,
         })
+    }
+
+    /// The graph's valid nanosecond values, before second sampler cuts.
+    pub fn time_bounds(&self, table: &str) -> Result<(Option<i64>, Option<i64>), CoreError> {
+        let table = self
+            .tables
+            .get(table)
+            .ok_or_else(|| invalid("unknown timed frame"))?;
+        let time = table
+            .time
+            .as_ref()
+            .ok_or_else(|| invalid("an untimed frame was bounded in time"))?;
+        let values = table.valid.iter().filter_map(|&row| time[row]);
+        Ok((values.clone().min(), values.max()))
     }
 
     /// Entity sampling uses the sanitized primary-key map, before RS-1.
@@ -311,10 +465,14 @@ impl Snapshot {
         graph: &Graph,
         entity: &str,
         keys: &ArrayRef,
+        anchors: &[i64],
         hops: &[i64],
         rng: &mut Mt19937,
     ) -> Result<Walked, CoreError> {
         let entity_rows = self.entity_rows(entity, keys)?;
+        if anchors.len() != entity_rows.len() {
+            return Err(invalid("frame anchors do not align with entity rows"));
+        }
         let mut nodes: BTreeMap<String, Vec<(usize, usize)>> = graph
             .tables
             .iter()
@@ -347,7 +505,19 @@ impl Snapshot {
                 for at in begin..end {
                     let (batch, row) = nodes[from][at];
                     let group = &adj.groups[row];
-                    let selected = if count < 0 {
+                    let selected = if let Some(times) = &self.tables[to].time {
+                        let anchor = anchors[batch].div_euclid(NANOS_PER_SECOND);
+                        let end = group.partition_point(|&row| {
+                            times[row]
+                                .is_some_and(|time| time.div_euclid(NANOS_PER_SECOND) <= anchor)
+                        });
+                        let begin = if count < 0 {
+                            0
+                        } else {
+                            end.saturating_sub(count as usize)
+                        };
+                        (begin..end).collect()
+                    } else if count < 0 {
                         (0..group.len()).collect()
                     } else {
                         rng.floyd(group.len(), count as usize)
