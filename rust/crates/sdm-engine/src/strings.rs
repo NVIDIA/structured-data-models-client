@@ -23,6 +23,7 @@ pub struct StringColumn<'a> {
     values: Values<'a>,
 }
 
+#[derive(Clone, Copy)]
 enum Values<'a> {
     Utf8(&'a StringArray),
     LargeUtf8(&'a LargeStringArray),
@@ -49,7 +50,7 @@ impl<'a> StringColumn<'a> {
     }
 
     pub fn len(&self) -> usize {
-        match &self.values {
+        match self.values {
             Values::Utf8(values) => values.len(),
             Values::LargeUtf8(values) => values.len(),
             Values::Surrogatepass(values) => values.len(),
@@ -81,7 +82,7 @@ impl<'a> StringColumn<'a> {
                 }
             };
         }
-        match &self.values {
+        match self.values {
             Values::Utf8(values) => ordinary!(values),
             Values::LargeUtf8(values) => ordinary!(values),
             Values::Surrogatepass(values) => native!(values),
