@@ -684,6 +684,7 @@ fn direct_contract_error(_answer: &Value, error: sdm_wire::response::Refused) ->
             Detail::text(match native {
                 sdm_wire::response::NativeFault::Dict => "dict",
                 sdm_wire::response::NativeFault::Iter => "iter",
+                sdm_wire::response::NativeFault::Float => "float",
             }),
         );
     }

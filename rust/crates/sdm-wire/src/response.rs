@@ -72,6 +72,8 @@ pub enum RefusalAt {
 pub enum NativeFault {
     Dict,
     Iter,
+    /// Generated _finite caught a native float conversion exception.
+    Float,
 }
 
 impl Refused {
@@ -608,6 +610,9 @@ fn read_number(value: &Value, field: &'static str, direct: bool) -> Result<f64, 
             && matches!(value, Value::Number(token) if is_integer_token(token))
         {
             fault.reason = "not_a_number";
+        }
+        if direct && fault.reason == "not_a_number" && !matches!(value, Value::Bool(_)) {
+            fault = fault.native(NativeFault::Float, value);
         }
         fault
     })
