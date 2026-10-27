@@ -1412,14 +1412,14 @@ fn spelled(
     answers: AnswerType,
     float_text: fn(f64) -> String,
 ) -> Vec<(String, f64)> {
-    spelled_with_limit(probabilities, answers, float_text, None)
+    spelled_as(probabilities, answers, float_text, AnswerPolicy::Gathered)
 }
 
-fn spelled_with_limit(
+fn spelled_as(
     probabilities: &[(String, f64)],
     answers: AnswerType,
     float_text: fn(f64) -> String,
-    decimal_limit: Option<u32>,
+    policy: AnswerPolicy,
 ) -> Vec<(String, f64)> {
     let respelled: Vec<(String, f64)> = probabilities
         .iter()
@@ -1427,10 +1427,9 @@ fn spelled_with_limit(
             let as_written = Value::Text(class.clone());
             let key = match answers {
                 AnswerType::Bool => {
-                    let read = if decimal_limit.is_some() {
-                        direct_bool_class(&as_written)
-                    } else {
-                        as_bool(&as_written)
+                    let read = match policy {
+                        AnswerPolicy::Gathered => as_bool(&as_written),
+                        AnswerPolicy::Direct { .. } => direct_bool_class(&as_written),
                     };
                     read.map(|b| {
                         if b {
@@ -1440,15 +1439,14 @@ fn spelled_with_limit(
                         }
                     })
                 }
-                AnswerType::Int => match decimal_limit {
+                AnswerType::Int => match policy.decimal_limit() {
                     Some(limit) => direct_integer_class(&as_written, limit),
                     None => as_int(&as_written).map(|n| n.to_string()),
                 },
                 AnswerType::FloatClass => {
-                    let read = if decimal_limit.is_some() {
-                        direct_float_class(&as_written)
-                    } else {
-                        as_float(&as_written)
+                    let read = match policy {
+                        AnswerPolicy::Gathered => as_float(&as_written),
+                        AnswerPolicy::Direct { .. } => direct_float_class(&as_written),
                     };
                     read.map(float_text)
                 }
@@ -1586,13 +1584,10 @@ fn layout_as(
             answer_index: i64::try_from(laid.len()).unwrap_or(i64::MAX),
             id,
             prediction: answer_of(item.prediction.as_ref(), answers, policy)?,
-            probabilities: item
-                .probabilities
-                .as_ref()
-                .map(|given| match policy.decimal_limit() {
-                    Some(limit) => spelled_with_limit(given, answers, float_text, Some(limit)),
-                    None => spelled(given, answers, float_text),
-                }),
+            probabilities: item.probabilities.as_ref().map(|given| match policy {
+                AnswerPolicy::Direct { .. } => spelled_as(given, answers, float_text, policy),
+                AnswerPolicy::Gathered => spelled(given, answers, float_text),
+            }),
             scores: item.scores.clone(),
             rankings: item.rankings.clone(),
             explanation: item.explanation.clone(),
@@ -2660,7 +2655,14 @@ mod tests {
                 let canonical = if expected { "True" } else { "False" };
                 let given = vec![(padded.clone(), 0.75)];
                 assert_eq!(
-                    spelled_with_limit(&given, AnswerType::Bool, spell, Some(4300)),
+                    spelled_as(
+                        &given,
+                        AnswerType::Bool,
+                        spell,
+                        AnswerPolicy::Direct {
+                            decimal_limit: 4300
+                        }
+                    ),
                     vec![(canonical.into(), 0.75)]
                 );
                 let gathered = if ('\u{1c}'..='\u{1f}').contains(&separator) {
@@ -2671,7 +2673,14 @@ mod tests {
                 assert_eq!(spelled(&given, AnswerType::Bool, spell), gathered);
                 let colliding = vec![(padded, 0.75), (canonical.into(), 0.25)];
                 assert_eq!(
-                    spelled_with_limit(&colliding, AnswerType::Bool, spell, Some(4300)),
+                    spelled_as(
+                        &colliding,
+                        AnswerType::Bool,
+                        spell,
+                        AnswerPolicy::Direct {
+                            decimal_limit: 4300
+                        }
+                    ),
                     colliding
                 );
             }
