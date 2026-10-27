@@ -1,0 +1,2270 @@
+{
+  "reference": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+  "source_sha256": {
+    "decimal-meanings-r1-310.json": "42438fe84e4b0e98f2015ff064bdbe8e53b7d3f30a7fdb66b6487d28d157c6da",
+    "decimal-meanings-r1-312.json": "ab925eda539252a52583646d833061bb3a4b0b008b3648b5477866139ac0f11d",
+    "decimal-meanings-r2-310.json": "92e8790c283a77cbd76a595c20ce2bdfadbfd134fcab04e37ea1c43709db4dfb",
+    "decimal-meanings-r2-312.json": "253db9c79a3bff78e6b847c61b6acb65d46a329b82f21483eb99cc8750d7b240"
+  },
+  "pandas": "2.3.3",
+  "pyarrow": "25.0.1",
+  "cases": [
+    {
+      "storage": "object",
+      "shape": "fraction",
+      "declared": "float64",
+      "mutation": false,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "e5b65f8b5a3d58930d3b32f20045f7a5d267bad85ff0cacd177f4e7934f67a60",
+            "context_rows": 6,
+            "predict_rows": 2
+          },
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "e5b65f8b5a3d58930d3b32f20045f7a5d267bad85ff0cacd177f4e7934f67a60",
+            "context_rows": 6,
+            "predict_rows": 2
+          }
+        ],
+        "warnings": [
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          },
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          }
+        ],
+        "effect_reached": false
+      }
+    },
+    {
+      "storage": "object",
+      "shape": "fraction",
+      "declared": "int64",
+      "mutation": false,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "error",
+            "native_calls": [],
+            "error": {
+              "type": "StructuredDataError",
+              "code": "INVALID_REQUEST",
+              "message": "[INVALID_REQUEST] column items.item_id is declared 'int64' and holds Decimal('0.70'), which is not a whole number. Sending it would round the value without saying so; declare the column float64, or round it yourself if that is what you meant"
+            }
+          },
+          {
+            "outcome": "error",
+            "native_calls": [],
+            "error": {
+              "type": "StructuredDataError",
+              "code": "INVALID_REQUEST",
+              "message": "[INVALID_REQUEST] column items.item_id is declared 'int64' and holds Decimal('0.70'), which is not a whole number. Sending it would round the value without saying so; declare the column float64, or round it yourself if that is what you meant"
+            }
+          }
+        ],
+        "warnings": [],
+        "effect_reached": false
+      }
+    },
+    {
+      "storage": "object",
+      "shape": "fraction",
+      "declared": "string",
+      "mutation": false,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "6bc2cb32cb2c645f07e7cae743423b995e147baa6d6e85f171f5453cdc7caf06",
+            "context_rows": 6,
+            "predict_rows": 2
+          },
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "6bc2cb32cb2c645f07e7cae743423b995e147baa6d6e85f171f5453cdc7caf06",
+            "context_rows": 6,
+            "predict_rows": 2
+          }
+        ],
+        "warnings": [
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          },
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          }
+        ],
+        "effect_reached": false
+      }
+    },
+    {
+      "storage": "object",
+      "shape": "whole",
+      "declared": "float64",
+      "mutation": false,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "2f8c81e818133d8472f475cdd4f620127e5b73ba4bf79df4c4b64b7c0dcc7295",
+            "context_rows": 6,
+            "predict_rows": 2
+          },
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "2f8c81e818133d8472f475cdd4f620127e5b73ba4bf79df4c4b64b7c0dcc7295",
+            "context_rows": 6,
+            "predict_rows": 2
+          }
+        ],
+        "warnings": [
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          },
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          }
+        ],
+        "effect_reached": false
+      }
+    },
+    {
+      "storage": "object",
+      "shape": "whole",
+      "declared": "int64",
+      "mutation": false,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "67e24aab3f6022c677005054367e15fff5a9ecfe9b372e7bb6eabae978f3f28e",
+            "context_rows": 6,
+            "predict_rows": 2
+          },
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "67e24aab3f6022c677005054367e15fff5a9ecfe9b372e7bb6eabae978f3f28e",
+            "context_rows": 6,
+            "predict_rows": 2
+          }
+        ],
+        "warnings": [
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          },
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          }
+        ],
+        "effect_reached": false
+      }
+    },
+    {
+      "storage": "object",
+      "shape": "whole",
+      "declared": "string",
+      "mutation": false,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "25dd0836b642259e551d034eef409593d7f7143433b1f4ae0a61efee4360bf92",
+            "context_rows": 6,
+            "predict_rows": 2
+          },
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "25dd0836b642259e551d034eef409593d7f7143433b1f4ae0a61efee4360bf92",
+            "context_rows": 6,
+            "predict_rows": 2
+          }
+        ],
+        "warnings": [
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          },
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          }
+        ],
+        "effect_reached": false
+      }
+    },
+    {
+      "storage": "object",
+      "shape": "missing",
+      "declared": "float64",
+      "mutation": false,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "adc95426c2ee35c4eee7ccdab8e36e44efb815967e3a7cc5e824158ad13dc0cd",
+            "context_rows": 5,
+            "predict_rows": 2
+          },
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "adc95426c2ee35c4eee7ccdab8e36e44efb815967e3a7cc5e824158ad13dc0cd",
+            "context_rows": 5,
+            "predict_rows": 2
+          }
+        ],
+        "warnings": [
+          {
+            "type": "SDMWarning",
+            "message": "the graph was built without some of the rows given to it [items: 1 of 4 rows dropped (1 with no primary key)]. Those rows are not in the context the model sees; fill the missing values or drop the rows yourself if that is not what you meant."
+          },
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          },
+          {
+            "type": "SDMWarning",
+            "message": "the graph was built without some of the rows given to it [items: 1 of 4 rows dropped (1 with no primary key)]. Those rows are not in the context the model sees; fill the missing values or drop the rows yourself if that is not what you meant."
+          },
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          }
+        ],
+        "effect_reached": false
+      }
+    },
+    {
+      "storage": "object",
+      "shape": "missing",
+      "declared": "int64",
+      "mutation": false,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "error",
+            "native_calls": [],
+            "error": {
+              "type": "StructuredDataError",
+              "code": "INVALID_REQUEST",
+              "message": "[INVALID_REQUEST] column items.item_id is declared 'int64' and holds Decimal('0.70'), which is not a whole number. Sending it would round the value without saying so; declare the column float64, or round it yourself if that is what you meant"
+            }
+          },
+          {
+            "outcome": "error",
+            "native_calls": [],
+            "error": {
+              "type": "StructuredDataError",
+              "code": "INVALID_REQUEST",
+              "message": "[INVALID_REQUEST] column items.item_id is declared 'int64' and holds Decimal('0.70'), which is not a whole number. Sending it would round the value without saying so; declare the column float64, or round it yourself if that is what you meant"
+            }
+          }
+        ],
+        "warnings": [],
+        "effect_reached": false
+      }
+    },
+    {
+      "storage": "object",
+      "shape": "missing",
+      "declared": "string",
+      "mutation": false,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "0c31b2a9abed316ba2d7cb63ec0048ba9abaa40e42932480427c7e44663afa55",
+            "context_rows": 5,
+            "predict_rows": 2
+          },
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "0c31b2a9abed316ba2d7cb63ec0048ba9abaa40e42932480427c7e44663afa55",
+            "context_rows": 5,
+            "predict_rows": 2
+          }
+        ],
+        "warnings": [
+          {
+            "type": "SDMWarning",
+            "message": "the graph was built without some of the rows given to it [items: 1 of 4 rows dropped (1 with no primary key)]. Those rows are not in the context the model sees; fill the missing values or drop the rows yourself if that is not what you meant."
+          },
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          },
+          {
+            "type": "SDMWarning",
+            "message": "the graph was built without some of the rows given to it [items: 1 of 4 rows dropped (1 with no primary key)]. Those rows are not in the context the model sees; fill the missing values or drop the rows yourself if that is not what you meant."
+          },
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          }
+        ],
+        "effect_reached": false
+      }
+    },
+    {
+      "storage": "object",
+      "shape": "overflow",
+      "declared": "float64",
+      "mutation": false,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "51b726ac8e0910e4500ef7b8995ba7fbbbddc97537a43b8c617fd22536cd3034",
+            "context_rows": 6,
+            "predict_rows": 2
+          },
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "51b726ac8e0910e4500ef7b8995ba7fbbbddc97537a43b8c617fd22536cd3034",
+            "context_rows": 6,
+            "predict_rows": 2
+          }
+        ],
+        "warnings": [
+          {
+            "type": "SDMWarning",
+            "message": "the graph was built without some of the rows given to it [items: 3 of 4 rows dropped (3 with a repeated primary key)]. Those rows are not in the context the model sees; fill the missing values or drop the rows yourself if that is not what you meant."
+          },
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          },
+          {
+            "type": "SDMWarning",
+            "message": "the graph was built without some of the rows given to it [items: 3 of 4 rows dropped (3 with a repeated primary key)]. Those rows are not in the context the model sees; fill the missing values or drop the rows yourself if that is not what you meant."
+          },
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          }
+        ],
+        "effect_reached": false
+      }
+    },
+    {
+      "storage": "object",
+      "shape": "overflow",
+      "declared": "int64",
+      "mutation": false,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "2fed1e8ff0689a4283e3b47421c370f2e4c747039c61bc16d69e6333aa4ba7b5",
+            "context_rows": 6,
+            "predict_rows": 2
+          },
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "2fed1e8ff0689a4283e3b47421c370f2e4c747039c61bc16d69e6333aa4ba7b5",
+            "context_rows": 6,
+            "predict_rows": 2
+          }
+        ],
+        "warnings": [
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          },
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          }
+        ],
+        "effect_reached": false
+      }
+    },
+    {
+      "storage": "object",
+      "shape": "overflow",
+      "declared": "string",
+      "mutation": false,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "b6cdcc06b645593b25622dea26ba52917f542debbc9684e48ff4fd6be7c9fb8c",
+            "context_rows": 6,
+            "predict_rows": 2
+          },
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "b6cdcc06b645593b25622dea26ba52917f542debbc9684e48ff4fd6be7c9fb8c",
+            "context_rows": 6,
+            "predict_rows": 2
+          }
+        ],
+        "warnings": [
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          },
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          }
+        ],
+        "effect_reached": false
+      }
+    },
+    {
+      "storage": "object",
+      "shape": "scale-minus129",
+      "declared": "float64",
+      "mutation": false,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "error",
+            "native_calls": [],
+            "error": {
+              "type": "StructuredDataError",
+              "code": "INVALID_REQUEST",
+              "message": "[INVALID_REQUEST] encountered a non-finite value (inf); NIM requests must contain finite numbers or nulls"
+            }
+          },
+          {
+            "outcome": "error",
+            "native_calls": [],
+            "error": {
+              "type": "StructuredDataError",
+              "code": "INVALID_REQUEST",
+              "message": "[INVALID_REQUEST] encountered a non-finite value (inf); NIM requests must contain finite numbers or nulls"
+            }
+          }
+        ],
+        "warnings": [
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          },
+          {
+            "type": "RuntimeWarning",
+            "message": "overflow encountered in cast"
+          },
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          },
+          {
+            "type": "RuntimeWarning",
+            "message": "overflow encountered in cast"
+          }
+        ],
+        "effect_reached": false
+      }
+    },
+    {
+      "storage": "object",
+      "shape": "scale-minus129",
+      "declared": "int64",
+      "mutation": false,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "error",
+            "native_calls": [],
+            "error": {
+              "type": "StructuredDataError",
+              "code": "INTERNAL_ERROR",
+              "message": "[INTERNAL_ERROR] the relational engine failed while building this request: OverflowError: Python int too large to convert to C long"
+            }
+          },
+          {
+            "outcome": "error",
+            "native_calls": [],
+            "error": {
+              "type": "StructuredDataError",
+              "code": "INTERNAL_ERROR",
+              "message": "[INTERNAL_ERROR] the relational engine failed while building this request: OverflowError: Python int too large to convert to C long"
+            }
+          }
+        ],
+        "warnings": [],
+        "effect_reached": false
+      }
+    },
+    {
+      "storage": "object",
+      "shape": "scale-minus129",
+      "declared": "string",
+      "mutation": false,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "ef23633243790a1dc3b70bbbe358069261aac87afb73a7cfbe59350213d0b69f",
+            "context_rows": 6,
+            "predict_rows": 2
+          },
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "ef23633243790a1dc3b70bbbe358069261aac87afb73a7cfbe59350213d0b69f",
+            "context_rows": 6,
+            "predict_rows": 2
+          }
+        ],
+        "warnings": [
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          },
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          }
+        ],
+        "effect_reached": false
+      }
+    },
+    {
+      "storage": "object",
+      "shape": "scale-plus129",
+      "declared": "float64",
+      "mutation": false,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "561f302603f54dc3b2355ecacbd7c47af28996bec9c2bedc38ecc3c4dbf16ec6",
+            "context_rows": 6,
+            "predict_rows": 2
+          },
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "561f302603f54dc3b2355ecacbd7c47af28996bec9c2bedc38ecc3c4dbf16ec6",
+            "context_rows": 6,
+            "predict_rows": 2
+          }
+        ],
+        "warnings": [
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          },
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          }
+        ],
+        "effect_reached": false
+      }
+    },
+    {
+      "storage": "object",
+      "shape": "scale-plus129",
+      "declared": "int64",
+      "mutation": false,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "error",
+            "native_calls": [],
+            "error": {
+              "type": "StructuredDataError",
+              "code": "INVALID_REQUEST",
+              "message": "[INVALID_REQUEST] column items.item_id is declared 'int64' and holds Decimal('1E-129'), which is not a whole number. Sending it would round the value without saying so; declare the column float64, or round it yourself if that is what you meant"
+            }
+          },
+          {
+            "outcome": "error",
+            "native_calls": [],
+            "error": {
+              "type": "StructuredDataError",
+              "code": "INVALID_REQUEST",
+              "message": "[INVALID_REQUEST] column items.item_id is declared 'int64' and holds Decimal('1E-129'), which is not a whole number. Sending it would round the value without saying so; declare the column float64, or round it yourself if that is what you meant"
+            }
+          }
+        ],
+        "warnings": [],
+        "effect_reached": false
+      }
+    },
+    {
+      "storage": "object",
+      "shape": "scale-plus129",
+      "declared": "string",
+      "mutation": false,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "20f25287634195cadb9cdb5b2bf26c581a72702d4fc2cda86e7cdc68a3d7cd23",
+            "context_rows": 6,
+            "predict_rows": 2
+          },
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "20f25287634195cadb9cdb5b2bf26c581a72702d4fc2cda86e7cdc68a3d7cd23",
+            "context_rows": 6,
+            "predict_rows": 2
+          }
+        ],
+        "warnings": [
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          },
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          }
+        ],
+        "effect_reached": false
+      }
+    },
+    {
+      "storage": "arrow128",
+      "shape": "fraction",
+      "declared": "float64",
+      "mutation": false,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "e5b65f8b5a3d58930d3b32f20045f7a5d267bad85ff0cacd177f4e7934f67a60",
+            "context_rows": 6,
+            "predict_rows": 2
+          },
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "e5b65f8b5a3d58930d3b32f20045f7a5d267bad85ff0cacd177f4e7934f67a60",
+            "context_rows": 6,
+            "predict_rows": 2
+          }
+        ],
+        "warnings": [
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          },
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          }
+        ],
+        "effect_reached": false
+      }
+    },
+    {
+      "storage": "arrow128",
+      "shape": "fraction",
+      "declared": "int64",
+      "mutation": false,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "error",
+            "native_calls": [],
+            "error": {
+              "type": "StructuredDataError",
+              "code": "INVALID_REQUEST",
+              "message": "[INVALID_REQUEST] column items.item_id is declared 'int64' and holds Decimal('0.70'), which is not a whole number. Sending it would round the value without saying so; declare the column float64, or round it yourself if that is what you meant"
+            }
+          },
+          {
+            "outcome": "error",
+            "native_calls": [],
+            "error": {
+              "type": "StructuredDataError",
+              "code": "INVALID_REQUEST",
+              "message": "[INVALID_REQUEST] column items.item_id is declared 'int64' and holds Decimal('0.70'), which is not a whole number. Sending it would round the value without saying so; declare the column float64, or round it yourself if that is what you meant"
+            }
+          }
+        ],
+        "warnings": [],
+        "effect_reached": false
+      }
+    },
+    {
+      "storage": "arrow128",
+      "shape": "fraction",
+      "declared": "string",
+      "mutation": false,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "6bc2cb32cb2c645f07e7cae743423b995e147baa6d6e85f171f5453cdc7caf06",
+            "context_rows": 6,
+            "predict_rows": 2
+          },
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "6bc2cb32cb2c645f07e7cae743423b995e147baa6d6e85f171f5453cdc7caf06",
+            "context_rows": 6,
+            "predict_rows": 2
+          }
+        ],
+        "warnings": [
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          },
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          }
+        ],
+        "effect_reached": false
+      }
+    },
+    {
+      "storage": "arrow128",
+      "shape": "whole",
+      "declared": "float64",
+      "mutation": false,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "2f8c81e818133d8472f475cdd4f620127e5b73ba4bf79df4c4b64b7c0dcc7295",
+            "context_rows": 6,
+            "predict_rows": 2
+          },
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "2f8c81e818133d8472f475cdd4f620127e5b73ba4bf79df4c4b64b7c0dcc7295",
+            "context_rows": 6,
+            "predict_rows": 2
+          }
+        ],
+        "warnings": [
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          },
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          }
+        ],
+        "effect_reached": false
+      }
+    },
+    {
+      "storage": "arrow128",
+      "shape": "whole",
+      "declared": "int64",
+      "mutation": false,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "67e24aab3f6022c677005054367e15fff5a9ecfe9b372e7bb6eabae978f3f28e",
+            "context_rows": 6,
+            "predict_rows": 2
+          },
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "67e24aab3f6022c677005054367e15fff5a9ecfe9b372e7bb6eabae978f3f28e",
+            "context_rows": 6,
+            "predict_rows": 2
+          }
+        ],
+        "warnings": [
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          },
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          }
+        ],
+        "effect_reached": false
+      }
+    },
+    {
+      "storage": "arrow128",
+      "shape": "whole",
+      "declared": "string",
+      "mutation": false,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "5c78312780524cfc9532c1e9f3266fab183951b402852e87488dfbba6bab3f8a",
+            "context_rows": 6,
+            "predict_rows": 2
+          },
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "5c78312780524cfc9532c1e9f3266fab183951b402852e87488dfbba6bab3f8a",
+            "context_rows": 6,
+            "predict_rows": 2
+          }
+        ],
+        "warnings": [
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          },
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          }
+        ],
+        "effect_reached": false
+      }
+    },
+    {
+      "storage": "arrow128",
+      "shape": "missing",
+      "declared": "float64",
+      "mutation": false,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "adc95426c2ee35c4eee7ccdab8e36e44efb815967e3a7cc5e824158ad13dc0cd",
+            "context_rows": 5,
+            "predict_rows": 2
+          },
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "adc95426c2ee35c4eee7ccdab8e36e44efb815967e3a7cc5e824158ad13dc0cd",
+            "context_rows": 5,
+            "predict_rows": 2
+          }
+        ],
+        "warnings": [
+          {
+            "type": "SDMWarning",
+            "message": "the graph was built without some of the rows given to it [items: 1 of 4 rows dropped (1 with no primary key)]. Those rows are not in the context the model sees; fill the missing values or drop the rows yourself if that is not what you meant."
+          },
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          },
+          {
+            "type": "SDMWarning",
+            "message": "the graph was built without some of the rows given to it [items: 1 of 4 rows dropped (1 with no primary key)]. Those rows are not in the context the model sees; fill the missing values or drop the rows yourself if that is not what you meant."
+          },
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          }
+        ],
+        "effect_reached": false
+      }
+    },
+    {
+      "storage": "arrow128",
+      "shape": "missing",
+      "declared": "int64",
+      "mutation": false,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "error",
+            "native_calls": [],
+            "error": {
+              "type": "StructuredDataError",
+              "code": "INVALID_REQUEST",
+              "message": "[INVALID_REQUEST] column items.item_id is declared 'int64' and holds Decimal('0.70'), which is not a whole number. Sending it would round the value without saying so; declare the column float64, or round it yourself if that is what you meant"
+            }
+          },
+          {
+            "outcome": "error",
+            "native_calls": [],
+            "error": {
+              "type": "StructuredDataError",
+              "code": "INVALID_REQUEST",
+              "message": "[INVALID_REQUEST] column items.item_id is declared 'int64' and holds Decimal('0.70'), which is not a whole number. Sending it would round the value without saying so; declare the column float64, or round it yourself if that is what you meant"
+            }
+          }
+        ],
+        "warnings": [],
+        "effect_reached": false
+      }
+    },
+    {
+      "storage": "arrow128",
+      "shape": "missing",
+      "declared": "string",
+      "mutation": false,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "0c31b2a9abed316ba2d7cb63ec0048ba9abaa40e42932480427c7e44663afa55",
+            "context_rows": 5,
+            "predict_rows": 2
+          },
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "0c31b2a9abed316ba2d7cb63ec0048ba9abaa40e42932480427c7e44663afa55",
+            "context_rows": 5,
+            "predict_rows": 2
+          }
+        ],
+        "warnings": [
+          {
+            "type": "SDMWarning",
+            "message": "the graph was built without some of the rows given to it [items: 1 of 4 rows dropped (1 with no primary key)]. Those rows are not in the context the model sees; fill the missing values or drop the rows yourself if that is not what you meant."
+          },
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          },
+          {
+            "type": "SDMWarning",
+            "message": "the graph was built without some of the rows given to it [items: 1 of 4 rows dropped (1 with no primary key)]. Those rows are not in the context the model sees; fill the missing values or drop the rows yourself if that is not what you meant."
+          },
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          }
+        ],
+        "effect_reached": false
+      }
+    },
+    {
+      "storage": "arrow128",
+      "shape": "overflow",
+      "declared": "float64",
+      "mutation": false,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "51b726ac8e0910e4500ef7b8995ba7fbbbddc97537a43b8c617fd22536cd3034",
+            "context_rows": 6,
+            "predict_rows": 2
+          },
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "51b726ac8e0910e4500ef7b8995ba7fbbbddc97537a43b8c617fd22536cd3034",
+            "context_rows": 6,
+            "predict_rows": 2
+          }
+        ],
+        "warnings": [
+          {
+            "type": "SDMWarning",
+            "message": "the graph was built without some of the rows given to it [items: 3 of 4 rows dropped (3 with a repeated primary key)]. Those rows are not in the context the model sees; fill the missing values or drop the rows yourself if that is not what you meant."
+          },
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          },
+          {
+            "type": "SDMWarning",
+            "message": "the graph was built without some of the rows given to it [items: 3 of 4 rows dropped (3 with a repeated primary key)]. Those rows are not in the context the model sees; fill the missing values or drop the rows yourself if that is not what you meant."
+          },
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          }
+        ],
+        "effect_reached": false
+      }
+    },
+    {
+      "storage": "arrow128",
+      "shape": "overflow",
+      "declared": "int64",
+      "mutation": false,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "2fed1e8ff0689a4283e3b47421c370f2e4c747039c61bc16d69e6333aa4ba7b5",
+            "context_rows": 6,
+            "predict_rows": 2
+          },
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "2fed1e8ff0689a4283e3b47421c370f2e4c747039c61bc16d69e6333aa4ba7b5",
+            "context_rows": 6,
+            "predict_rows": 2
+          }
+        ],
+        "warnings": [
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          },
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          }
+        ],
+        "effect_reached": false
+      }
+    },
+    {
+      "storage": "arrow128",
+      "shape": "overflow",
+      "declared": "string",
+      "mutation": false,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "3b9dda5260aee4ae39dd6e17c0f9b5f52c9df6620088952fe8db80715901c41c",
+            "context_rows": 6,
+            "predict_rows": 2
+          },
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "3b9dda5260aee4ae39dd6e17c0f9b5f52c9df6620088952fe8db80715901c41c",
+            "context_rows": 6,
+            "predict_rows": 2
+          }
+        ],
+        "warnings": [
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          },
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          }
+        ],
+        "effect_reached": false
+      }
+    },
+    {
+      "storage": "arrow128",
+      "shape": "scale-minus129",
+      "declared": "float64",
+      "mutation": false,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "error",
+            "native_calls": [],
+            "error": {
+              "type": "StructuredDataError",
+              "code": "INTERNAL_ERROR",
+              "message": "[INTERNAL_ERROR] the relational engine failed while building this request: InvalidOperation: [<class 'decimal.ConversionSyntax'>]"
+            }
+          },
+          {
+            "outcome": "error",
+            "native_calls": [],
+            "error": {
+              "type": "StructuredDataError",
+              "code": "INTERNAL_ERROR",
+              "message": "[INTERNAL_ERROR] the relational engine failed while building this request: InvalidOperation: [<class 'decimal.ConversionSyntax'>]"
+            }
+          }
+        ],
+        "warnings": [],
+        "effect_reached": false
+      }
+    },
+    {
+      "storage": "arrow128",
+      "shape": "scale-minus129",
+      "declared": "int64",
+      "mutation": false,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "error",
+            "native_calls": [],
+            "error": {
+              "type": "StructuredDataError",
+              "code": "INTERNAL_ERROR",
+              "message": "[INTERNAL_ERROR] the relational engine failed while building this request: InvalidOperation: [<class 'decimal.ConversionSyntax'>]"
+            }
+          },
+          {
+            "outcome": "error",
+            "native_calls": [],
+            "error": {
+              "type": "StructuredDataError",
+              "code": "INTERNAL_ERROR",
+              "message": "[INTERNAL_ERROR] the relational engine failed while building this request: InvalidOperation: [<class 'decimal.ConversionSyntax'>]"
+            }
+          }
+        ],
+        "warnings": [],
+        "effect_reached": false
+      }
+    },
+    {
+      "storage": "arrow128",
+      "shape": "scale-minus129",
+      "declared": "string",
+      "mutation": false,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "error",
+            "native_calls": [],
+            "error": {
+              "type": "StructuredDataError",
+              "code": "INTERNAL_ERROR",
+              "message": "[INTERNAL_ERROR] the relational engine failed while building this request: InvalidOperation: [<class 'decimal.ConversionSyntax'>]"
+            }
+          },
+          {
+            "outcome": "error",
+            "native_calls": [],
+            "error": {
+              "type": "StructuredDataError",
+              "code": "INTERNAL_ERROR",
+              "message": "[INTERNAL_ERROR] the relational engine failed while building this request: InvalidOperation: [<class 'decimal.ConversionSyntax'>]"
+            }
+          }
+        ],
+        "warnings": [],
+        "effect_reached": false
+      }
+    },
+    {
+      "storage": "arrow128",
+      "shape": "scale-plus129",
+      "declared": "float64",
+      "mutation": false,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "error",
+            "native_calls": [],
+            "error": {
+              "type": "StructuredDataError",
+              "code": "INTERNAL_ERROR",
+              "message": "[INTERNAL_ERROR] the relational engine failed while building this request: InvalidOperation: [<class 'decimal.ConversionSyntax'>]"
+            }
+          },
+          {
+            "outcome": "error",
+            "native_calls": [],
+            "error": {
+              "type": "StructuredDataError",
+              "code": "INTERNAL_ERROR",
+              "message": "[INTERNAL_ERROR] the relational engine failed while building this request: InvalidOperation: [<class 'decimal.ConversionSyntax'>]"
+            }
+          }
+        ],
+        "warnings": [],
+        "effect_reached": false
+      }
+    },
+    {
+      "storage": "arrow128",
+      "shape": "scale-plus129",
+      "declared": "int64",
+      "mutation": false,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "error",
+            "native_calls": [],
+            "error": {
+              "type": "StructuredDataError",
+              "code": "INTERNAL_ERROR",
+              "message": "[INTERNAL_ERROR] the relational engine failed while building this request: InvalidOperation: [<class 'decimal.ConversionSyntax'>]"
+            }
+          },
+          {
+            "outcome": "error",
+            "native_calls": [],
+            "error": {
+              "type": "StructuredDataError",
+              "code": "INTERNAL_ERROR",
+              "message": "[INTERNAL_ERROR] the relational engine failed while building this request: InvalidOperation: [<class 'decimal.ConversionSyntax'>]"
+            }
+          }
+        ],
+        "warnings": [],
+        "effect_reached": false
+      }
+    },
+    {
+      "storage": "arrow128",
+      "shape": "scale-plus129",
+      "declared": "string",
+      "mutation": false,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "error",
+            "native_calls": [],
+            "error": {
+              "type": "StructuredDataError",
+              "code": "INTERNAL_ERROR",
+              "message": "[INTERNAL_ERROR] the relational engine failed while building this request: InvalidOperation: [<class 'decimal.ConversionSyntax'>]"
+            }
+          },
+          {
+            "outcome": "error",
+            "native_calls": [],
+            "error": {
+              "type": "StructuredDataError",
+              "code": "INTERNAL_ERROR",
+              "message": "[INTERNAL_ERROR] the relational engine failed while building this request: InvalidOperation: [<class 'decimal.ConversionSyntax'>]"
+            }
+          }
+        ],
+        "warnings": [],
+        "effect_reached": false
+      }
+    },
+    {
+      "storage": "object-callback",
+      "shape": "fraction",
+      "declared": "float64",
+      "mutation": false,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "success",
+            "native_calls": [
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float",
+              "float"
+            ],
+            "payload_sha256": "e5b65f8b5a3d58930d3b32f20045f7a5d267bad85ff0cacd177f4e7934f67a60",
+            "context_rows": 6,
+            "predict_rows": 2
+          },
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "e5b65f8b5a3d58930d3b32f20045f7a5d267bad85ff0cacd177f4e7934f67a60",
+            "context_rows": 6,
+            "predict_rows": 2
+          }
+        ],
+        "warnings": [
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          },
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          }
+        ],
+        "effect_reached": false
+      }
+    },
+    {
+      "storage": "object-callback",
+      "shape": "fraction",
+      "declared": "float64",
+      "mutation": true,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "error",
+            "native_calls": [
+              "float",
+              "effect",
+              "float",
+              "float",
+              "float",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str"
+            ],
+            "error": {
+              "type": "StructuredDataError",
+              "code": "INVALID_REQUEST",
+              "message": "[INVALID_REQUEST] Edge(src_table='buys', fkey='item_id', dst_table='items') is invalid as foreign key 'item_id' and primary key 'item_id' have incompatible data types (got foreign key data type 'string' and primary key data type 'float')"
+            }
+          },
+          {
+            "outcome": "error",
+            "native_calls": [],
+            "error": {
+              "type": "StructuredDataError",
+              "code": "INVALID_REQUEST",
+              "message": "[INVALID_REQUEST] buys.item_id -> items.item_id joins 'string' to 'float64', which cannot match. Give both columns the same kind of value"
+            }
+          }
+        ],
+        "warnings": [],
+        "effect_reached": true
+      }
+    },
+    {
+      "storage": "object-callback",
+      "shape": "fraction",
+      "declared": "int64",
+      "mutation": false,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "error",
+            "native_calls": [
+              "int",
+              "int",
+              "int",
+              "int",
+              "repr"
+            ],
+            "error": {
+              "type": "StructuredDataError",
+              "code": "INVALID_REQUEST",
+              "message": "[INVALID_REQUEST] column items.item_id is declared 'int64' and holds Decimal('0.70'), which is not a whole number. Sending it would round the value without saying so; declare the column float64, or round it yourself if that is what you meant"
+            }
+          },
+          {
+            "outcome": "error",
+            "native_calls": [
+              "int",
+              "int",
+              "int",
+              "int",
+              "repr"
+            ],
+            "error": {
+              "type": "StructuredDataError",
+              "code": "INVALID_REQUEST",
+              "message": "[INVALID_REQUEST] column items.item_id is declared 'int64' and holds Decimal('0.70'), which is not a whole number. Sending it would round the value without saying so; declare the column float64, or round it yourself if that is what you meant"
+            }
+          }
+        ],
+        "warnings": [],
+        "effect_reached": false
+      }
+    },
+    {
+      "storage": "object-callback",
+      "shape": "fraction",
+      "declared": "int64",
+      "mutation": true,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "error",
+            "native_calls": [
+              "int",
+              "int",
+              "int",
+              "int",
+              "repr"
+            ],
+            "error": {
+              "type": "StructuredDataError",
+              "code": "INVALID_REQUEST",
+              "message": "[INVALID_REQUEST] column items.item_id is declared 'int64' and holds Decimal('0.70'), which is not a whole number. Sending it would round the value without saying so; declare the column float64, or round it yourself if that is what you meant"
+            }
+          },
+          {
+            "outcome": "error",
+            "native_calls": [
+              "int",
+              "int",
+              "int",
+              "int",
+              "repr"
+            ],
+            "error": {
+              "type": "StructuredDataError",
+              "code": "INVALID_REQUEST",
+              "message": "[INVALID_REQUEST] column items.item_id is declared 'int64' and holds Decimal('0.70'), which is not a whole number. Sending it would round the value without saying so; declare the column float64, or round it yourself if that is what you meant"
+            }
+          }
+        ],
+        "warnings": [],
+        "effect_reached": false
+      }
+    },
+    {
+      "storage": "object-callback",
+      "shape": "fraction",
+      "declared": "string",
+      "mutation": false,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "success",
+            "native_calls": [
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str"
+            ],
+            "payload_sha256": "6bc2cb32cb2c645f07e7cae743423b995e147baa6d6e85f171f5453cdc7caf06",
+            "context_rows": 6,
+            "predict_rows": 2
+          },
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "6bc2cb32cb2c645f07e7cae743423b995e147baa6d6e85f171f5453cdc7caf06",
+            "context_rows": 6,
+            "predict_rows": 2
+          }
+        ],
+        "warnings": [
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          },
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          }
+        ],
+        "effect_reached": false
+      }
+    },
+    {
+      "storage": "object-callback",
+      "shape": "fraction",
+      "declared": "string",
+      "mutation": true,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "success",
+            "native_calls": [
+              "str",
+              "effect",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str",
+              "str"
+            ],
+            "payload_sha256": "4ec64e85938d1b614a553650de68e917be526c0b8929052a3b5c86b7aa7f6739",
+            "context_rows": 6,
+            "predict_rows": 2
+          },
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "4ec64e85938d1b614a553650de68e917be526c0b8929052a3b5c86b7aa7f6739",
+            "context_rows": 6,
+            "predict_rows": 2
+          }
+        ],
+        "warnings": [
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          },
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          }
+        ],
+        "effect_reached": true
+      }
+    },
+    {
+      "storage": "object",
+      "shape": "whole-missing",
+      "declared": "int64",
+      "mutation": false,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "5a76af9290fe6bfdc2c66c03b7badd9266a6fa51bf852fecfc461d607e9f3feb",
+            "context_rows": 5,
+            "predict_rows": 2
+          },
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "5a76af9290fe6bfdc2c66c03b7badd9266a6fa51bf852fecfc461d607e9f3feb",
+            "context_rows": 5,
+            "predict_rows": 2
+          }
+        ],
+        "warnings": [
+          {
+            "type": "SDMWarning",
+            "message": "the graph was built without some of the rows given to it [items: 1 of 4 rows dropped (1 with no primary key)]. Those rows are not in the context the model sees; fill the missing values or drop the rows yourself if that is not what you meant."
+          },
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          },
+          {
+            "type": "SDMWarning",
+            "message": "the graph was built without some of the rows given to it [items: 1 of 4 rows dropped (1 with no primary key)]. Those rows are not in the context the model sees; fill the missing values or drop the rows yourself if that is not what you meant."
+          },
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          }
+        ],
+        "effect_reached": false
+      }
+    },
+    {
+      "storage": "object",
+      "shape": "uint64-max",
+      "declared": "int64",
+      "mutation": false,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "8d4fed0ffd47c72760efea8eee0f1f357e00a3e31b2b78aae580b65a9abc79ca",
+            "context_rows": 6,
+            "predict_rows": 2
+          },
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "8d4fed0ffd47c72760efea8eee0f1f357e00a3e31b2b78aae580b65a9abc79ca",
+            "context_rows": 6,
+            "predict_rows": 2
+          }
+        ],
+        "warnings": [
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          },
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          }
+        ],
+        "effect_reached": false
+      }
+    },
+    {
+      "storage": "object",
+      "shape": "past-uint64",
+      "declared": "int64",
+      "mutation": false,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "error",
+            "native_calls": [],
+            "error": {
+              "type": "StructuredDataError",
+              "code": "INTERNAL_ERROR",
+              "message": "[INTERNAL_ERROR] the relational engine failed while building this request: OverflowError: Python int too large to convert to C long"
+            }
+          },
+          {
+            "outcome": "error",
+            "native_calls": [],
+            "error": {
+              "type": "StructuredDataError",
+              "code": "INTERNAL_ERROR",
+              "message": "[INTERNAL_ERROR] the relational engine failed while building this request: OverflowError: Python int too large to convert to C long"
+            }
+          }
+        ],
+        "warnings": [],
+        "effect_reached": false
+      }
+    },
+    {
+      "storage": "object",
+      "shape": "past-int64-min",
+      "declared": "int64",
+      "mutation": false,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "error",
+            "native_calls": [],
+            "error": {
+              "type": "StructuredDataError",
+              "code": "INTERNAL_ERROR",
+              "message": "[INTERNAL_ERROR] the relational engine failed while building this request: OverflowError: Python int too large to convert to C long"
+            }
+          },
+          {
+            "outcome": "error",
+            "native_calls": [],
+            "error": {
+              "type": "StructuredDataError",
+              "code": "INTERNAL_ERROR",
+              "message": "[INTERNAL_ERROR] the relational engine failed while building this request: OverflowError: Python int too large to convert to C long"
+            }
+          }
+        ],
+        "warnings": [],
+        "effect_reached": false
+      }
+    },
+    {
+      "storage": "arrow128",
+      "shape": "whole-missing",
+      "declared": "int64",
+      "mutation": false,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "5a76af9290fe6bfdc2c66c03b7badd9266a6fa51bf852fecfc461d607e9f3feb",
+            "context_rows": 5,
+            "predict_rows": 2
+          },
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "5a76af9290fe6bfdc2c66c03b7badd9266a6fa51bf852fecfc461d607e9f3feb",
+            "context_rows": 5,
+            "predict_rows": 2
+          }
+        ],
+        "warnings": [
+          {
+            "type": "SDMWarning",
+            "message": "the graph was built without some of the rows given to it [items: 1 of 4 rows dropped (1 with no primary key)]. Those rows are not in the context the model sees; fill the missing values or drop the rows yourself if that is not what you meant."
+          },
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          },
+          {
+            "type": "SDMWarning",
+            "message": "the graph was built without some of the rows given to it [items: 1 of 4 rows dropped (1 with no primary key)]. Those rows are not in the context the model sees; fill the missing values or drop the rows yourself if that is not what you meant."
+          },
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          }
+        ],
+        "effect_reached": false
+      }
+    },
+    {
+      "storage": "arrow128",
+      "shape": "uint64-max",
+      "declared": "int64",
+      "mutation": false,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "8d4fed0ffd47c72760efea8eee0f1f357e00a3e31b2b78aae580b65a9abc79ca",
+            "context_rows": 6,
+            "predict_rows": 2
+          },
+          {
+            "outcome": "success",
+            "native_calls": [],
+            "payload_sha256": "8d4fed0ffd47c72760efea8eee0f1f357e00a3e31b2b78aae580b65a9abc79ca",
+            "context_rows": 6,
+            "predict_rows": 2
+          }
+        ],
+        "warnings": [
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          },
+          {
+            "type": "UserWarning",
+            "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'."
+          }
+        ],
+        "effect_reached": false
+      }
+    },
+    {
+      "storage": "arrow128",
+      "shape": "past-uint64",
+      "declared": "int64",
+      "mutation": false,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "error",
+            "native_calls": [],
+            "error": {
+              "type": "StructuredDataError",
+              "code": "INTERNAL_ERROR",
+              "message": "[INTERNAL_ERROR] the relational engine failed while building this request: OverflowError: Python int too large to convert to C long"
+            }
+          },
+          {
+            "outcome": "error",
+            "native_calls": [],
+            "error": {
+              "type": "StructuredDataError",
+              "code": "INTERNAL_ERROR",
+              "message": "[INTERNAL_ERROR] the relational engine failed while building this request: OverflowError: Python int too large to convert to C long"
+            }
+          }
+        ],
+        "warnings": [],
+        "effect_reached": false
+      }
+    },
+    {
+      "storage": "arrow128",
+      "shape": "past-int64-min",
+      "declared": "int64",
+      "mutation": false,
+      "expected": {
+        "calls": [
+          {
+            "outcome": "error",
+            "native_calls": [],
+            "error": {
+              "type": "StructuredDataError",
+              "code": "INTERNAL_ERROR",
+              "message": "[INTERNAL_ERROR] the relational engine failed while building this request: OverflowError: Python int too large to convert to C long"
+            }
+          },
+          {
+            "outcome": "error",
+            "native_calls": [],
+            "error": {
+              "type": "StructuredDataError",
+              "code": "INTERNAL_ERROR",
+              "message": "[INTERNAL_ERROR] the relational engine failed while building this request: OverflowError: Python int too large to convert to C long"
+            }
+          }
+        ],
+        "warnings": [],
+        "effect_reached": false
+      }
+    }
+  ]
+}
