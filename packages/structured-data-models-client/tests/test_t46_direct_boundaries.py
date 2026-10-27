@@ -1606,3 +1606,98 @@ def test_native_id_conversion_preserves_observed_exception_objects_and_graph(
         assert observed[1] == observed[0]
     finally:
         sys.set_int_max_str_digits(saved)
+
+
+@pytest.mark.parametrize('active', [False, True])
+def test_selected_finite_value_display_retains_the_actual_float_failure_context(
+    monkeypatch, active
+):
+    # The frozen witness uses a decoded DICT transport. Core receives a
+    # preencoded reply to reach this selected presentation boundary without
+    # changing the separate shared DICT-to-JSON transport conversion.
+    # This is no assertion about native raw-HTTP decoder admission.
+    from sdm_client.errors import StructuredDataError
+
+    observed = []
+    saved = sys.get_int_max_str_digits()
+    try:
+        for core in (False, True):
+            sys.set_int_max_str_digits(4300)
+            monkeypatch.setenv('SDM_CORE_ROUTES', CORE if core else '')
+            context = pd.DataFrame({'user_id': [1, 2, 3], 'target': [2, 4, 6]})
+            scoring = pd.DataFrame({'user_id': [4, 5]})
+            request = Request(
+                context, scoring, target='target', task='regression'
+            )
+            answer = {
+                'id': 'server',
+                'model': 'kumo-tabular',
+                'metadata': {},
+                'predictions': [
+                    {
+                        'row_index': 0,
+                        'id': '[4]',
+                        'prediction': 10,
+                        'probabilities': {'x': 10**700},
+                    },
+                    {'row_index': 1, 'id': '[5]', 'prediction': 11},
+                ],
+            }
+            encoded = json.dumps(answer).encode()
+
+            class ScriptedFinite:
+                calls = 0
+
+                def close(self):
+                    pass
+
+                def predict(self, payload):
+                    self.calls += 1
+                    return copy.deepcopy(answer)
+
+                def predict_body(self, body):
+                    self.calls += 1
+                    return encoded
+
+            transport = ScriptedFinite()
+            caller = None
+
+            def call():
+                with SDMClient('http://localhost:1', max_retries=0) as client:
+                    client._transport.close()
+                    client._transport = transport
+                    with pytest.raises(StructuredDataError) as caught:
+                        client.predict(request, model=KumoTabular())
+                return caught.value
+
+            try:
+                sys.set_int_max_str_digits(640)
+                if active:
+                    try:
+                        raise LookupError('outer-active-caller')
+                    except LookupError as outer:
+                        caller = outer
+                        failure = call()
+                else:
+                    failure = call()
+            finally:
+                sys.set_int_max_str_digits(4300)
+            assert transport.calls == 1
+            assert failure.code == 'INVALID_RESPONSE'
+            assert failure.__suppress_context__
+            display = failure.__cause__
+            assert failure.__context__ is display
+            assert type(display) is ValueError
+            assert display.__cause__ is None
+            assert not display.__suppress_context__
+            conversion = display.__context__
+            assert type(conversion) is OverflowError
+            assert conversion.__cause__ is None
+            assert not conversion.__suppress_context__
+            assert conversion.__context__ is caller
+            assert display.__traceback__ is not None
+            assert conversion.__traceback__ is not None
+            observed.append(native_exception_graph(failure))
+        assert observed[1] == observed[0]
+    finally:
+        sys.set_int_max_str_digits(saved)
