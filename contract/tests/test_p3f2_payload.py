@@ -328,3 +328,43 @@ def test_scalar_only_approval_never_excuses_wrong_targets_or_other_fields(
         'reference': {case: old},
     }
     assert checked.rust_problems(document)[case] is not None
+
+
+@pytest.mark.parametrize(
+    ('before', 'after'),
+    [('1.0', '1'), ('0.0', '-0.0'), ('9007199254740992', '9007199254740993')],
+)
+def test_unlisted_captured_numbers_keep_kind_sign_and_exact_value(
+    before, after
+):
+    old, new = pair()
+    old['public']['payloads'][0]['parsed']['context']['related_tables'][
+        'orders'
+    ]['rows'][0][6] = {'number': before}
+    body = new['public']['payloads'][0]['parsed']
+    body['context']['related_tables']['orders']['rows'][0][6] = {
+        'number': after
+    }
+    assert checked.payload_problem(old, new, CASE) is not None
+    document = {
+        'observed': {CASE: {'core': {'predicted': {'body': body}}}},
+        'reference': {CASE: old},
+    }
+    assert checked.rust_problems(document)[CASE] is not None
+
+
+def test_equal_float_spellings_follow_the_stock_lossless_number_rule():
+    old, new = pair()
+    old['public']['payloads'][0]['parsed']['context']['related_tables'][
+        'orders'
+    ]['rows'][0][6] = {'number': '1e-5'}
+    body = new['public']['payloads'][0]['parsed']
+    body['context']['related_tables']['orders']['rows'][0][6] = {
+        'number': '0.00001'
+    }
+    assert checked.payload_problem(old, new, CASE) is None
+    document = {
+        'observed': {CASE: {'core': {'predicted': {'body': body}}}},
+        'reference': {CASE: old},
+    }
+    assert checked.rust_problems(document) == {CASE: None}
