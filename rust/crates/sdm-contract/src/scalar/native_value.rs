@@ -19,12 +19,45 @@ pub const NATIVE_VALUE_VERSION: u32 = 1;
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum NativeValue {
     Null,
-    Boolean { value: bool },
-    Integer { digits: String },
-    Float { bits: [u8; 8] },
-    Unicode { points: Vec<u32> },
-    Array { items: Vec<NativeValue> },
-    Object { members: Vec<NativeMember> },
+    Boolean {
+        value: bool,
+    },
+    Integer {
+        digits: String,
+    },
+    Float {
+        bits: [u8; 8],
+    },
+    Unicode {
+        points: Vec<u32>,
+    },
+    Array {
+        items: Vec<NativeValue>,
+    },
+    Object {
+        members: Vec<NativeMember>,
+    },
+    /// Complete postorder container data. Child ordinals are local to this
+    /// value's nodes, never attachment handles or instructions. Scalars use
+    /// the same exact integer/float/Unicode facts as the ordinary form.
+    Tree {
+        nodes: Vec<NativeTreeNode>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum NativeTreeNode {
+    Scalar { value: NativeValue },
+    Array { children: Vec<u32> },
+    Object { members: Vec<NativeTreeMember> },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct NativeTreeMember {
+    pub key: NativeObjectKey,
+    pub value: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
