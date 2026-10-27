@@ -49,20 +49,34 @@ fn next(run: &HostRun) -> ControlMessage {
 }
 
 fn prepare(value: Value, more: Attachments) -> Result<Value, sdm_contract::CoreError> {
+    prepare_trace(value, more).0
+}
+
+fn prepare_trace(
+    value: Value,
+    more: Attachments,
+) -> (
+    Result<Value, sdm_contract::CoreError>,
+    Vec<sdm_contract::Sentence>,
+) {
+    let mut warnings = Vec::new();
     let mut attached = more;
     attached.insert(AttachmentId(1), bytes(value));
     let run = start(json!({"op":"prepare_request","input":1}), attached);
     loop {
         match next(&run) {
-            ControlMessage::Warnings { .. } => {}
+            ControlMessage::Warnings { warnings: given } => {
+                warnings.extend(given.into_iter().map(|w| w.sentence));
+            }
             ControlMessage::Step(Step::Warnings) => {
                 let out = run.take_warnings().unwrap().expect("pending warnings");
-                assert!(matches!(
-                    sdm_host::read(&out).unwrap(),
-                    ControlMessage::Warnings { .. }
-                ));
+                let ControlMessage::Warnings { warnings: given } = sdm_host::read(&out).unwrap()
+                else {
+                    panic!("warning packet")
+                };
+                warnings.extend(given.into_iter().map(|w| w.sentence));
             }
-            ControlMessage::Error { error } => return Err(error),
+            ControlMessage::Error { error } => return (Err(error), warnings),
             ControlMessage::Step(Step::Done {
                 result: OperationResult::PrepareRequest(result),
                 ..
@@ -71,7 +85,7 @@ fn prepare(value: Value, more: Attachments) -> Result<Value, sdm_contract::CoreE
                 else {
                     panic!("preparation bytes")
                 };
-                return Ok(serde_json::from_slice(&value).unwrap());
+                return (Ok(serde_json::from_slice(&value).unwrap()), warnings);
             }
             other => panic!("preparation must not fetch or call model: {other:?}"),
         }
@@ -200,7 +214,7 @@ fn direct_numeric_preparation_is_model_neutral_and_binds_one_tabular_call() {
                 rows(&[("0", vec![1., 2., 3., 7.]), ("1", vec![2., 4., 6., 8.])]),
             );
         }
-        attached.insert(AttachmentId(1),bytes(json!({"stage":"body","envelope":envelope,"context":2,"predict":3,"context_header":header(&["feature","target"],count),"predict_header":header(&["feature"],2),"task":task,"inference":{}})));
+        attached.insert(AttachmentId(1),bytes(json!({"stage":"body","envelope":envelope,"context":2,"predict":3,"context_header":header(&["feature","target"],count),"predict_header":header(&["feature"],2),"task":task,"primary_key":[],"inference":{}})));
         let run = start(
             json!({"op":"predict","direct":1,"model":"kumo-tabular","request_id":"sdm-fixed","outputs":call["outputs"],"default_outputs":true}),
             attached,
@@ -440,7 +454,7 @@ fn nullable_cast_fault_is_core_selected_from_native_storage_and_values() {
                 }
                 let envelope = planned.unwrap();
                 let mut attached = data();
-                attached.insert(AttachmentId(1),bytes(json!({"stage":"body","envelope":envelope,"context":2,"predict":3,"context_header":context_header,"predict_header":predict_header,"task":"regression","inference":{}})));
+                attached.insert(AttachmentId(1),bytes(json!({"stage":"body","envelope":envelope,"context":2,"predict":3,"context_header":context_header,"predict_header":predict_header,"task":"regression","primary_key":[],"inference":{}})));
                 let run = start(
                     json!({"op":"predict","direct":1,"model":"kumo-tabular","request_id":"sdm-fixed","outputs":call["outputs"],"default_outputs":true}),
                     attached,
@@ -452,6 +466,387 @@ fn nullable_cast_fault_is_core_selected_from_native_storage_and_values() {
                     other => panic!("non-finite rows must fail before transport: {other:?}"),
                 }
             }
+        }
+    }
+}
+
+fn attached_batches(context: &[RecordBatch], scoring: &[RecordBatch]) -> Attachments {
+    Attachments::from([
+        (
+            AttachmentId(2),
+            Attachment::Arrow(ArrowData::new(context[0].schema(), context.to_vec())),
+        ),
+        (
+            AttachmentId(3),
+            Attachment::Arrow(ArrowData::new(scoring[0].schema(), scoring.to_vec())),
+        ),
+    ])
+}
+
+fn native_header(names: &[&str], batches: &[RecordBatch]) -> Value {
+    let mut value = header(names, batches.iter().map(RecordBatch::num_rows).sum());
+    for (at, field) in batches[0].schema().fields().iter().enumerate() {
+        if field.data_type() == &arrow_schema::DataType::Int64 {
+            value["columns"][at]["physical"] = json!({"type":"int64"});
+            value["columns"][at]
+                .as_object_mut()
+                .unwrap()
+                .remove("float_storage");
+        }
+    }
+    value
+}
+
+fn prelude(
+    context_names: &[&str],
+    scoring_names: &[&str],
+    context: &[RecordBatch],
+    scoring: &[RecordBatch],
+    key: &[&str],
+) -> Value {
+    let ch = native_header(context_names, context);
+    let ph = native_header(scoring_names, scoring);
+    let target = context_names.iter().position(|n| *n == "target").unwrap();
+    let headers = prepare(json!({"stage":"headers","arguments":arguments(),"context":ch,"predict":ph,"target_context":{"positions":[target]},"target_predict":{"positions":[]},"predict_context":scoring_names.iter().map(|name|vec![context_names.iter().position(|n| n == name).unwrap()]).collect::<Vec<_>>()}), Attachments::new()).unwrap();
+    let prepared = prepare(json!({"stage":"schema","headers":headers,"context":2,"predict":3,"entity_table":"instance"}), attached_batches(context, scoring)).unwrap();
+    let mut schema = prepared["schema"].clone();
+    schema["tables"][0]["primary_key"] = json!(key);
+    for column in schema["tables"][0]["columns"].as_array_mut().unwrap() {
+        if key.iter().any(|name| column["name"] == *name) {
+            column["stype"] = json!("ID");
+        }
+    }
+    schema["tables"][0]["frame_key_form"] =
+        json!(if key.len() > 1 { "sequence" } else { "scalar" });
+    json!({"bound":bound(ch["rows"].as_u64().unwrap() as usize),"context":2,"predict":3,"context_header":ch,"predict_header":ph,"schema":schema,"entity_table":"instance","target":"target","task":"regression"})
+}
+
+fn plan(mut input: Value, context: &[RecordBatch], scoring: &[RecordBatch]) -> Value {
+    let overlap = prepare(
+        json!({"stage":"overlap","input":input}),
+        attached_batches(context, scoring),
+    )
+    .unwrap();
+    input.as_object_mut().unwrap().remove("bound");
+    input["overlap"] = overlap;
+    prepare(
+        json!({"stage":"envelope","input":input}),
+        attached_batches(context, scoring),
+    )
+    .unwrap()
+}
+
+fn direct_run(
+    input: &Value,
+    envelope: Value,
+    key: &[&str],
+    context: &[RecordBatch],
+    scoring: &[RecordBatch],
+) -> HostRun {
+    let mut attached = attached_batches(context, scoring);
+    attached.insert(AttachmentId(1), bytes(json!({"stage":"body","envelope":envelope,"context":2,"predict":3,"context_header":input["context_header"],"predict_header":input["predict_header"],"primary_key":key,"task":"regression","inference":{}})));
+    start(
+        json!({"op":"predict","direct":1,"model":"kumo-tabular","request_id":"sdm-fixed","outputs":["prediction"],"default_outputs":true}),
+        attached,
+    )
+}
+
+#[test]
+fn overlap_warns_before_unrelated_feature_cast_and_uses_numeric_key_identity() {
+    for unrelated_cast in [false, true] {
+        for composite in [false, true] {
+            let context = RecordBatch::try_from_iter([
+                (
+                    "0",
+                    Arc::new(Float64Array::from(vec![-0., 1., 2.])) as ArrayRef,
+                ),
+                (
+                    "1",
+                    Arc::new(arrow_array::Int64Array::from(vec![1, 2, 3])) as ArrayRef,
+                ),
+                (
+                    "2",
+                    Arc::new(Float64Array::from(vec![2., 4., 6.])) as ArrayRef,
+                ),
+            ])
+            .unwrap();
+            let scoring = RecordBatch::try_from_iter([
+                ("0", Arc::new(Float64Array::from(vec![0., 3.])) as ArrayRef),
+                (
+                    "1",
+                    Arc::new(Float64Array::from(if unrelated_cast {
+                        vec![Some(f64::INFINITY), None]
+                    } else {
+                        vec![Some(1.), Some(4.)]
+                    })) as ArrayRef,
+                ),
+            ])
+            .unwrap();
+            let context = [context];
+            let scoring = [scoring];
+            let key = if composite {
+                vec!["user_id", "feature"]
+            } else {
+                vec!["user_id"]
+            };
+            let input = prelude(
+                &["user_id", "feature", "target"],
+                &["user_id", "feature"],
+                &context,
+                &scoring,
+                &key,
+            );
+            let (answer, warnings) = prepare_trace(
+                json!({"stage":"overlap","input":input}),
+                attached_batches(&context, &scoring),
+            );
+            // A failure in a key is advice-only; an unrelated column is not consumed here.
+            if composite && unrelated_cast {
+                assert!(warnings.is_empty());
+                assert_eq!(answer.unwrap()["shown"], 0);
+                continue;
+            }
+            assert_eq!(warnings, vec![sdm_contract::Sentence::DirectAnswersShown]);
+            assert_eq!(answer.unwrap()["shown"], 1);
+            if unrelated_cast {
+                let mut input = input;
+                input.as_object_mut().unwrap().remove("bound");
+                input["overlap"] = json!({"version":1,"bound":bound(3),"shown":1,"predict_rows":2});
+                let error = prepare(
+                    json!({"stage":"envelope","input":input}),
+                    attached_batches(&context, &scoring),
+                )
+                .unwrap_err();
+                assert_eq!(error.sentence, sdm_contract::Sentence::DirectNullableCast);
+                assert_eq!(
+                    error.fields["ordinal"],
+                    sdm_contract::Detail::Scalar(Scalar::UInt64(1))
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn direct_column_order_is_preserved_across_arrow_batches() {
+    for first_precision in [false, true] {
+        let make = |a: f64, b: i64, target: i64| {
+            let mut cols = vec![
+                ("0", Arc::new(Float64Array::from(vec![a])) as ArrayRef),
+                (
+                    "1",
+                    Arc::new(arrow_array::Int64Array::from(vec![b])) as ArrayRef,
+                ),
+            ];
+            if first_precision {
+                cols.swap(0, 1);
+                cols[0].0 = "0";
+                cols[1].0 = "1";
+            }
+            cols.push((
+                "2",
+                Arc::new(arrow_array::Int64Array::from(vec![target])) as ArrayRef,
+            ));
+            RecordBatch::try_from_iter(cols).unwrap()
+        };
+        let context = [
+            make(1., 9_007_199_254_740_993, 1),
+            make(f64::INFINITY, 1, 2),
+        ];
+        let scoring = [RecordBatch::try_from_iter([
+            ("0", Arc::new(Float64Array::from(vec![3., 4.])) as ArrayRef),
+            ("1", Arc::new(Float64Array::from(vec![1., 2.])) as ArrayRef),
+        ])
+        .unwrap()];
+        let cn = if first_precision {
+            vec!["b", "a", "target"]
+        } else {
+            vec!["a", "b", "target"]
+        };
+        let pn = if first_precision {
+            vec!["b", "a"]
+        } else {
+            vec!["a", "b"]
+        };
+        let input = prelude(&cn, &pn, &context, &scoring, &[]);
+        let envelope = plan(input.clone(), &context, &scoring);
+        let run = direct_run(&input, envelope, &[], &context, &scoring);
+        let ControlMessage::Error { error } = next(&run) else {
+            panic!("body must fail before transport")
+        };
+        assert_eq!(
+            error.sentence,
+            if first_precision {
+                sdm_contract::Sentence::DirectFloatPrecision
+            } else {
+                sdm_contract::Sentence::DirectWireNonFinite
+            }
+        );
+    }
+}
+
+#[test]
+fn direct_attribution_starts_as_written_and_reads_later_declared_keys() {
+    use arrow_array::cast::AsArray;
+    for later_key in [None, Some("instance_id"), Some("__kumo_entity_ref_feature")] {
+        let context = [RecordBatch::try_from_iter([
+            (
+                "0",
+                Arc::new(Float64Array::from(vec![1., 2., 3.])) as ArrayRef,
+            ),
+            (
+                "1",
+                Arc::new(Float64Array::from(vec![11., 12., 13.])) as ArrayRef,
+            ),
+            (
+                "2",
+                Arc::new(Float64Array::from(vec![2., 4., 6.])) as ArrayRef,
+            ),
+        ])
+        .unwrap()];
+        let scoring = [RecordBatch::try_from_iter([
+            ("0", Arc::new(Float64Array::from(vec![4., 5.])) as ArrayRef),
+            (
+                "1",
+                Arc::new(Float64Array::from(vec![14., 15.])) as ArrayRef,
+            ),
+        ])
+        .unwrap()];
+        let mut input = prelude(
+            &["__kumo_entity_ref_feature", "instance_id", "target"],
+            &["__kumo_entity_ref_feature", "instance_id"],
+            &context,
+            &scoring,
+            &["instance_id"],
+        );
+        // Text advice freezes the column plan, but not the captured table's key.
+        input["schema"]["tables"][0]["columns"][0]["dtype"] = json!("string");
+        input["schema"]["tables"][0]["columns"][0]["stype"] = json!("text");
+        let envelope = plan(input.clone(), &context, &scoring);
+        let key = later_key.into_iter().collect::<Vec<_>>();
+        let run = direct_run(&input, envelope, &key, &context, &scoring);
+        let ControlMessage::Step(Step::CallModel(call)) = next(&run) else {
+            panic!("model call")
+        };
+        let Attachment::Bytes(body) = run.take_attachment(call.body).unwrap().unwrap() else {
+            panic!("body")
+        };
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            body["schema"]["instance_table"].get("primary_key").cloned(),
+            if key.is_empty() {
+                None
+            } else {
+                Some(json!(key))
+            }
+        );
+        assert_eq!(
+            body["schema"]["instance_table"]["columns"]["__kumo_entity_ref_feature"]["stype"],
+            "categorical"
+        );
+        let answer = json!({"id":"direct-fixture","model":"kumo-tabular","metadata":{},"predictions":[{"row_index":0,"id":"opaque-a","prediction":10},{"row_index":1,"id":"opaque-b","prediction":11}]});
+        let reply = sdm_host::encode(&ControlMessage::ModelReply(ModelReply {
+            id: call.id,
+            outcome: ModelOutcome::Response {
+                status: 200,
+                body: AttachmentId(100),
+                content_type: "application/json".into(),
+            },
+        }))
+        .unwrap();
+        run.reply(
+            &reply,
+            Attachments::from([(AttachmentId(100), bytes(answer))]),
+        )
+        .unwrap();
+        let ControlMessage::Step(Step::Done {
+            result: OperationResult::Predict(result),
+            ..
+        }) = next(&run)
+        else {
+            panic!("result")
+        };
+        let Attachment::Arrow(result) = run.take_attachment(result.result).unwrap().unwrap() else {
+            panic!("result Arrow")
+        };
+        let batch = &result.batches[0];
+        let id = batch.column_by_name("id").unwrap().as_string::<i32>();
+        assert_eq!(
+            id.value(0),
+            match later_key {
+                None => "opaque-a",
+                Some("instance_id") => "14.0",
+                _ => "4.0",
+            }
+        );
+    }
+}
+
+#[test]
+fn direct_primitive_list_ids_cannot_hide_a_wrong_key() {
+    for first in [
+        "[4]", "[5]", "[4,]", "[5,]", " [ 4, ] ", " [ 5, ] ", "['4',]", "['5',]",
+    ] {
+        let context = [RecordBatch::try_from_iter([
+            (
+                "0",
+                Arc::new(arrow_array::Int64Array::from(vec![1, 2, 3])) as ArrayRef,
+            ),
+            (
+                "1",
+                Arc::new(Float64Array::from(vec![2., 4., 6.])) as ArrayRef,
+            ),
+        ])
+        .unwrap()];
+        let scoring = [RecordBatch::try_from_iter([(
+            "0",
+            Arc::new(arrow_array::Int64Array::from(vec![4, 5])) as ArrayRef,
+        )])
+        .unwrap()];
+        let input = prelude(
+            &["user_id", "target"],
+            &["user_id"],
+            &context,
+            &scoring,
+            &["user_id"],
+        );
+        let envelope = plan(input.clone(), &context, &scoring);
+        let run = direct_run(&input, envelope, &["user_id"], &context, &scoring);
+        let ControlMessage::Step(Step::CallModel(call)) = next(&run) else {
+            panic!("model call")
+        };
+        let answer = json!({"id":"direct-fixture","model":"kumo-tabular","metadata":{},"predictions":[{"row_index":0,"id":first,"prediction":10},{"row_index":1,"id":"[5]","prediction":11}]});
+        let reply = sdm_host::encode(&ControlMessage::ModelReply(ModelReply {
+            id: call.id,
+            outcome: ModelOutcome::Response {
+                status: 200,
+                body: AttachmentId(100),
+                content_type: "application/json".into(),
+            },
+        }))
+        .unwrap();
+        run.reply(
+            &reply,
+            Attachments::from([(AttachmentId(100), bytes(answer))]),
+        )
+        .unwrap();
+        let message = next(&run);
+        if first.contains('5') {
+            let ControlMessage::Error { error } = message else {
+                panic!("wrong key must fail: {message:?}")
+            };
+            assert_eq!(error.sentence, sdm_contract::Sentence::TabularIdMismatch);
+        } else {
+            assert!(
+                matches!(
+                    message,
+                    ControlMessage::Step(Step::Done {
+                        result: OperationResult::Predict(_),
+                        ..
+                    })
+                ),
+                "{message:?}"
+            );
         }
     }
 }
