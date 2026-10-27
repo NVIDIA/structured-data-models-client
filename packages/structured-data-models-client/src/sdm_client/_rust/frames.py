@@ -207,39 +207,41 @@ def _numeric_physical(dtype: Any) -> str | None:
     return None
 
 
+def _check_header(name: str, frame: pd.DataFrame) -> None:
+    """Observe the existing native header checks without reading values."""
+    if type(frame.columns) not in (pd.Index, pd.RangeIndex) or any(
+        type(column) not in (str, int, float, bool, type(None))
+        for column in frame.columns
+    ):
+        raise RouteError(
+            'the partial frame constructor requires ordinary built-in column names'
+        )
+    if frame.columns.has_duplicates:
+        duplicates = sorted(
+            {str(c) for c in frame.columns[frame.columns.duplicated()]}
+        )
+        raise StructuredDataError(
+            f'table {name!r} has duplicate column name(s) {duplicates}',
+            code='INVALID_REQUEST',
+        )
+    if any(isinstance(c, str) and type(c) is not str for c in frame.columns):
+        raise RouteError(
+            'the partial frame constructor requires ordinary built-in column names'
+        )
+    non_strings = [c for c in frame.columns if not isinstance(c, str)]
+    if non_strings:
+        raise StructuredDataError(
+            f'table {name!r} column names must be strings; got {non_strings}',
+            code='INVALID_REQUEST',
+        )
+
+
 def _convert(
     name: str, frame: pd.DataFrame, *, check_header: bool = True
 ) -> tuple[Any, dict[str, Any]]:
-    # Validate one table before proceeding to the next. No preliminary
-    # all-table scan or native-object conversion is permitted here.
+    # Validate one table before proceeding to the next.
     if check_header:
-        if type(frame.columns) not in (pd.Index, pd.RangeIndex) or any(
-            type(column) not in (str, int, float, bool, type(None))
-            for column in frame.columns
-        ):
-            raise RouteError(
-                'the partial frame constructor requires ordinary built-in column names'
-            )
-        if frame.columns.has_duplicates:
-            duplicates = sorted(
-                {str(c) for c in frame.columns[frame.columns.duplicated()]}
-            )
-            raise StructuredDataError(
-                f'table {name!r} has duplicate column name(s) {duplicates}',
-                code='INVALID_REQUEST',
-            )
-        if any(
-            isinstance(c, str) and type(c) is not str for c in frame.columns
-        ):
-            raise RouteError(
-                'the partial frame constructor requires ordinary built-in column names'
-            )
-        non_strings = [c for c in frame.columns if not isinstance(c, str)]
-        if non_strings:
-            raise StructuredDataError(
-                f'table {name!r} column names must be strings; got {non_strings}',
-                code='INVALID_REQUEST',
-            )
+        _check_header(name, frame)
     import pyarrow as pa
 
     arrays = []
