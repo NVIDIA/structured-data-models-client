@@ -532,13 +532,16 @@ impl Snapshot {
                 "selected relationship repeats a source position within one example",
             ));
         }
-        let keys = read_keys(named(&source.rows, &edge.fkey)?)?;
+        let selected = take(&source.rows, source_rows, &[edge.fkey.clone()])?;
+        let keys = read_keys(named(&selected, &edge.fkey)?)?;
         Ok(source_rows
             .iter()
             .zip(source_batch)
             .enumerate()
-            .filter_map(|(position, (&row, &batch))| {
-                let target_row = keys[row].as_ref().and_then(|key| target.index.get(key))?;
+            .filter_map(|(position, (_, &batch))| {
+                let target_row = keys[position]
+                    .as_ref()
+                    .and_then(|key| target.index.get(key))?;
                 targets
                     .get(&(batch, *target_row))
                     .map(|&target_position| (position, target_position))

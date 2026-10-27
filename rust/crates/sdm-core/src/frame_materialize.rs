@@ -108,6 +108,9 @@ pub(crate) struct FrameRun {
     snapshot: Option<Snapshot>,
     neighbors: Mt19937,
     pub entropy: Option<u64>,
+    /// Core-created live owners retain the actual graph/state directly.
+    /// Their standard state handoff must not re-export every raw table.
+    retained_owner: bool,
 }
 
 /// Per-walk sampling options, borrowed from this materialization call.
@@ -193,6 +196,7 @@ pub(crate) fn take(
         snapshot: None,
         neighbors,
         entropy: input.entropy,
+        retained_owner: false,
     })))
 }
 
@@ -312,6 +316,9 @@ fn native_hops(graph: &Graph, values: &[Value]) -> Result<Vec<i64>, CoreError> {
 }
 
 impl FrameRun {
+    pub(crate) fn retain_owner(&mut self) {
+        self.retained_owner = true;
+    }
     /// Native table construction infers the physical primitive family before
     /// applying Text meaning. A logical dtype edit cannot turn numeric rows
     /// into a text column. Reuse the shared semantic rule and diagnostic.
@@ -424,6 +431,9 @@ impl FrameRun {
     pub fn keep(&mut self, asker: &Asker) {
         if let Some(metadata) = &mut self.metadata {
             metadata.neighbors = self.neighbors.checkpoint();
+            if self.retained_owner {
+                return;
+            }
             asker.keep_frame(OwnedCheckpoint {
                 metadata: metadata.clone(),
                 tables: self.tables.clone(),
