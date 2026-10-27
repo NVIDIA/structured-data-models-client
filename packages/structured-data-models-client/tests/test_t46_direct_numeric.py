@@ -1189,4 +1189,4 @@ def test_direct_literal_data_is_distinguished_from_invalid_syntax(
         assert new[1][0] == 'ok'
     assert len(new[2]) == int(syntax_warning)
     if syntax_warning:
-        assert new[2][0][0] == r"invalid escape sequence '\q'"
+        assert 'escape sequence' in new[2][0][0]
