@@ -1645,3 +1645,130 @@ def test_direct_custom_inference_development_guard_precedes_custom_truthiness(
     else:
         assert result[1][1] is RouteError
         assert 'built-in inference' in result[1][-1]
+
+
+@pytest.mark.parametrize(
+    'boundary', ['related', 'context', 'predict', 'related-frame', 'mixed-sort']
+)
+@pytest.mark.parametrize('key', ['\ud800', 5])
+def test_direct_related_names_are_presented_only_after_argument_guards(
+    monkeypatch, boundary, key
+):
+    observed = []
+    for core in (False, True):
+        monkeypatch.setenv('SDM_CORE_ROUTES', CORE if core else '')
+        context, predict = fixture('int64')
+        related = {key: {} if boundary == 'related-frame' else context}
+        if boundary == 'mixed-sort':
+            # Native mixed-key sorting is reached only by the related refusal.
+            related = {5: context, 'x': context}
+        with pytest.raises(Exception) as caught:
+            Request(
+                {} if boundary == 'context' else context,
+                {} if boundary == 'predict' else predict,
+                target='target',
+                task='regression',
+                related_tables=related,
+            )
+        error = caught.value
+        observed.append(
+            (
+                type(error),
+                getattr(error, 'code', None),
+                str(error),
+                getattr(error, 'details', {}).get('related_tables'),
+            )
+        )
+    assert observed[1] == observed[0]
+    if boundary == 'mixed-sort':
+        assert observed[0][0] is TypeError
+    elif boundary == 'related':
+        assert observed[0][1] == 'UNSUPPORTED_REQUEST'
+        assert observed[0][3] == [key]
+    else:
+        assert observed[0][1] == 'INVALID_REQUEST'
+        assert 'must be a pandas DataFrame' in observed[0][2]
+
+
+@pytest.mark.parametrize(
+    'dtype,label,classes,expected,keys',
+    [
+        ('int64', '0_2', {'0_2': 0.75, '4': 0.25}, 2, ['2', '4']),
+        ('int64', '٢', {'٢': 0.75, '٤': 0.25}, 2, ['2', '4']),
+        (
+            'int64',
+            '\u2003+0_2\u2003',
+            {'\u2003+0_2\u2003': 0.75, '4': 0.25},
+            2,
+            ['2', '4'],
+        ),
+        ('int64', '0__2', {'0__2': 0.75, '4': 0.25}, '0__2', ['0__2', '4']),
+        ('int64', '0_2', {'0_2': 0.75, '2': 0.25}, 2, ['0_2', '2']),
+        ('float64', '1_0.5', {'1_0.5': 0.75, '4': 0.25}, 10.5, ['10.5', '4.0']),
+        ('float64', '١٠.٥', {'١٠.٥': 0.75, '٤': 0.25}, 10.5, ['10.5', '4.0']),
+        ('float64', '1_0e-1', {'1_0e-1': 0.75, '4': 0.25}, 1.0, ['1.0', '4.0']),
+        ('float64', '1_.5', {'1_.5': 0.75, '4': 0.25}, '1_.5', ['1_.5', '4.0']),
+        (
+            'float64',
+            '1_0.5',
+            {'1_0.5': 0.75, '10.5': 0.25},
+            10.5,
+            ['1_0.5', '10.5'],
+        ),
+    ],
+)
+def test_direct_numeric_classes_and_probability_keys_use_native_numeric_text(
+    monkeypatch, dtype, label, classes, expected, keys
+):
+    class Classified(Scripted):
+        def predict(self, payload):
+            answer = super().predict(payload)
+            for item in answer['predictions']:
+                item['prediction'] = label
+                item['probabilities'] = classes
+            return answer
+
+    old = outcome(
+        monkeypatch,
+        fixture(dtype),
+        core=False,
+        options={'task': 'classification'},
+        transport=Classified(),
+    )
+    new = outcome(
+        monkeypatch,
+        fixture(dtype),
+        core=True,
+        options={'task': 'classification'},
+        transport=Classified(),
+    )
+    assert new == old
+    assert new[1][0] == 'ok'
+    frame = new[1][1][0]
+    assert frame['prediction'] == [expected, expected]
+    assert [name for name in frame if name.startswith('probability_')] == [
+        f'probability_{key}' for key in keys
+    ]
+
+
+@pytest.mark.parametrize('sign', [-1, 1])
+def test_direct_lossless_int64_cells_reach_transport_in_both_halves(
+    monkeypatch, sign
+):
+    context, predict = fixture('int64')
+    context['feature'] = pd.Series(
+        [sign * (2**53 + 1), 2, 3], index=context.index, dtype='int64'
+    )
+    predict['feature'] = pd.Series(
+        [sign * (2**53 + 3), 5], index=predict.index, dtype='int64'
+    )
+    old = outcome(monkeypatch, (context, predict), core=False)
+    new = outcome(monkeypatch, (context, predict), core=True)
+    assert new == old
+    assert new[1][0] == 'ok'
+    assert new[3][0]['context']['instance_table']['rows'][0][0] == str(
+        sign * (2**53 + 1)
+    )
+    assert new[3][0]['predict']['instance_table']['rows'][0][0] == str(
+        sign * (2**53 + 3)
+    )

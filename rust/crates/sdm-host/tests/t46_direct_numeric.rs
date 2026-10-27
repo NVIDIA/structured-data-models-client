@@ -408,15 +408,19 @@ fn direct_preparation_rejects_wrong_versions_and_impossible_call_phases() {
 }
 
 fn bound(context_rows: usize) -> Value {
+    bound_as(context_rows, "regression")
+}
+
+fn bound_as(context_rows: usize, kind: &str) -> Value {
     let mut call = prepare(
         json!({"stage":"model","model":"kumo-tabular"}),
         Attachments::new(),
     )
     .unwrap();
     for stage in [
-        json!({"stage":"outputs","kind":"regression"}),
-        json!({"stage":"capabilities","kind":"regression","anchored":false,"relationships":false,"tables":1}),
-        json!({"stage":"task","kind":"regression"}),
+        json!({"stage":"outputs","kind":kind}),
+        json!({"stage":"capabilities","kind":kind,"anchored":false,"relationships":false,"tables":1}),
+        json!({"stage":"task","kind":kind}),
         json!({"stage":"capacity","rows":context_rows}),
     ] {
         let mut input = stage;
@@ -1159,6 +1163,242 @@ fn encoded_numeric_body_is_useful_before_native_inference_is_observed() {
         assert!(payload.get("inference").is_none());
         assert_eq!(payload["model"], "kumo-tabular");
         assert_eq!(payload["output"]["fields"], json!(["prediction"]));
+    }
+}
+
+#[test]
+fn argument_forms_select_errors_without_serializing_unused_native_names() {
+    for (context, predict, related, sentence, ordinal) in [
+        (
+            "dict",
+            "frame",
+            vec![json!({"kind":"frame"})],
+            sdm_contract::Sentence::DirectFrame,
+            None,
+        ),
+        (
+            "frame",
+            "dict",
+            vec![json!({"kind":"frame"})],
+            sdm_contract::Sentence::DirectFrame,
+            None,
+        ),
+        (
+            "frame",
+            "frame",
+            vec![json!({"kind":"frame"}), json!({"kind":"dict"})],
+            sdm_contract::Sentence::DirectFrame,
+            Some(1),
+        ),
+        (
+            "frame",
+            "frame",
+            vec![json!({"kind":"frame"})],
+            sdm_contract::Sentence::DirectRelated,
+            None,
+        ),
+    ] {
+        let error = prepare(json!({"stage":"arguments","context":{"kind":context},"predict":{"kind":predict},"related":related,"task":{"value":"unknown"}}), Attachments::new()).unwrap_err();
+        assert_eq!(error.sentence, sentence);
+        assert_eq!(
+            error.fields.get("related_ordinal"),
+            ordinal
+                .map(|n| sdm_contract::Detail::Scalar(Scalar::UInt64(n)))
+                .as_ref()
+        );
+        // Names remain native values and are needed only by the selected presenter.
+        assert!(!error.fields.contains_key("related_tables"));
+    }
+}
+
+#[test]
+fn encoded_int64_cells_reach_final_predict_only_in_the_shared_canonical_form() {
+    for large in [
+        -(1_i64 << 53) - 1,
+        -(1_i64 << 53) + 1,
+        (1_i64 << 53) - 1,
+        (1_i64 << 53) + 1,
+        i64::MIN,
+        i64::MAX,
+    ] {
+        for key in [false, true] {
+            let context = [RecordBatch::try_from_iter([
+                (
+                    "0",
+                    Arc::new(arrow_array::Int64Array::from(vec![large, 2, 3])) as ArrayRef,
+                ),
+                (
+                    "1",
+                    Arc::new(arrow_array::Int64Array::from(vec![large, 4, 6])) as ArrayRef,
+                ),
+            ])
+            .unwrap()];
+            let scoring = [RecordBatch::try_from_iter([(
+                "0",
+                Arc::new(arrow_array::Int64Array::from(vec![large, 5])) as ArrayRef,
+            )])
+            .unwrap()];
+            let keys = if key { vec!["feature"] } else { vec![] };
+            let input = prelude(
+                &["feature", "target"],
+                &["feature"],
+                &context,
+                &scoring,
+                &keys,
+            );
+            let envelope = plan(input.clone(), &context, &scoring);
+            let (body, encoded) = encoded_body(json!({"envelope":envelope,"context":2,"predict":3,"context_header":input["context_header"],"predict_header":input["predict_header"],"task":"regression","primary_key":keys}), attached_batches(&context, &scoring)).unwrap();
+            let original: Value = serde_json::from_slice(&encoded).unwrap();
+            let expected = if large.unsigned_abs() > 9_007_199_254_740_991 {
+                json!(large.to_string())
+            } else {
+                json!(large)
+            };
+            assert_eq!(
+                original["context"]["instance_table"]["rows"][0],
+                json!([expected, expected])
+            );
+            assert_eq!(
+                original["predict"]["instance_table"]["rows"][0],
+                json!([expected])
+            );
+            for replacement in [
+                None,
+                Some(json!("+9007199254740993")),
+                Some(json!("09007199254740993")),
+                Some(json!("9223372036854775808")),
+                Some(json!("2")),
+                Some(json!("1.5")),
+            ] {
+                let mut body = body.clone();
+                body["payload"] = json!(2);
+                let mut payload = original.clone();
+                if let Some(value) = &replacement {
+                    payload["predict"]["instance_table"]["rows"][0][0] = value.clone();
+                }
+                let run = start(
+                    json!({"op":"predict","direct":1,"model":"kumo-tabular","request_id":"sdm-fixed","outputs":["prediction"],"default_outputs":true}),
+                    Attachments::from([
+                        (
+                            AttachmentId(1),
+                            bytes(json!({"stage":"encoded","body":body,"inference":{}})),
+                        ),
+                        (AttachmentId(2), bytes(payload)),
+                    ]),
+                );
+                match next(&run) {
+                    ControlMessage::Step(Step::CallModel(_)) if replacement.is_none() => {}
+                    ControlMessage::Error { error } if replacement.is_some() => {
+                        assert_eq!(error.sentence, sdm_contract::Sentence::InvalidMessage)
+                    }
+                    other => panic!("integer coherence ({large}, {replacement:?}): {other:?}"),
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn numeric_class_layout_uses_the_existing_numeric_text_grammar_and_collision_rule() {
+    use arrow_array::Array;
+    use arrow_array::cast::AsArray;
+    use arrow_array::types::{Float64Type, Int64Type};
+    for (integer, label, second_key, expected_key, expected_number) in [
+        (true, "0_2", "4", "2", Some(2.)),
+        (true, "٢", "٤", "2", Some(2.)),
+        (true, "\u{2003}+0_2\u{2003}", "4", "2", Some(2.)),
+        (true, "0__2", "4", "0__2", None),
+        (true, "0_2", "2", "0_2", Some(2.)),
+        (false, "1_0.5", "4", "10.5", Some(10.5)),
+        (false, "١٠.٥", "٤", "10.5", Some(10.5)),
+        (false, "1_0e-1", "4", "1.0", Some(1.)),
+        (false, "1_.5", "4", "1_.5", None),
+        (false, "1_0.5", "10.5", "1_0.5", Some(10.5)),
+    ] {
+        let feature = Arc::new(arrow_array::Int64Array::from(vec![1, 2, 3])) as ArrayRef;
+        let target = if integer {
+            Arc::new(arrow_array::Int64Array::from(vec![2, 4, 6])) as ArrayRef
+        } else {
+            Arc::new(Float64Array::from(vec![2., 4., 6.])) as ArrayRef
+        };
+        let context = [RecordBatch::try_from_iter([("0", feature), ("1", target)]).unwrap()];
+        let scoring = [RecordBatch::try_from_iter([(
+            "0",
+            Arc::new(arrow_array::Int64Array::from(vec![4, 5])) as ArrayRef,
+        )])
+        .unwrap()];
+        let mut input = prelude(
+            &["feature", "target"],
+            &["feature"],
+            &context,
+            &scoring,
+            &[],
+        );
+        input["task"] = json!("classification");
+        input["bound"] = bound_as(3, "classification");
+        let envelope = plan(input.clone(), &context, &scoring);
+        let run = encoded_prediction(json!({"envelope":envelope,"context":2,"predict":3,"context_header":input["context_header"],"predict_header":input["predict_header"],"task":"classification","primary_key":[],"inference":{}}), attached_batches(&context,&scoring), json!({"op":"predict","direct":1,"model":"kumo-tabular","request_id":"sdm-fixed","outputs":["prediction","probabilities"],"default_outputs":true})).unwrap();
+        let ControlMessage::Step(Step::CallModel(call)) = next(&run) else {
+            panic!("model call")
+        };
+        let mut probabilities = serde_json::Map::new();
+        probabilities.insert(label.to_owned(), json!(0.75));
+        probabilities.insert(second_key.to_owned(), json!(0.25));
+        let answer = json!({"id":"direct-fixture","model":"kumo-tabular","metadata":{},"predictions":(0..2).map(|i|json!({"row_index":i,"id":i.to_string(),"prediction":label,"probabilities":probabilities})).collect::<Vec<_>>()});
+        let reply = sdm_host::encode(&ControlMessage::ModelReply(ModelReply {
+            id: call.id,
+            outcome: ModelOutcome::Response {
+                status: 200,
+                body: AttachmentId(100),
+                content_type: "application/json".into(),
+            },
+        }))
+        .unwrap();
+        run.reply(
+            &reply,
+            Attachments::from([(AttachmentId(100), bytes(answer))]),
+        )
+        .unwrap();
+        let ControlMessage::Step(Step::Done {
+            result: OperationResult::DecodedDirectResponse(decoded),
+            ..
+        }) = next(&run)
+        else {
+            panic!("decoded")
+        };
+        let laid = finish_response(&run, decoded.value, None).unwrap();
+        let message = next(&laid);
+        let ControlMessage::Step(Step::Done {
+            result: OperationResult::Predict(result),
+            ..
+        }) = message
+        else {
+            panic!("layout: {message:?}")
+        };
+        let Attachment::Arrow(result) = laid.take_attachment(result.result).unwrap().unwrap()
+        else {
+            panic!("result")
+        };
+        let batch = &result.batches[0];
+        let prediction = batch.column_by_name("prediction").unwrap();
+        match expected_number {
+            Some(expected) if integer => assert_eq!(
+                prediction.as_primitive::<Int64Type>().value(0),
+                expected as i64
+            ),
+            Some(expected) => {
+                assert_eq!(prediction.as_primitive::<Float64Type>().value(0), expected)
+            }
+            None => assert_eq!(prediction.as_string::<i32>().value(0), label),
+        }
+        let classes = batch
+            .column_by_name("probabilities")
+            .unwrap()
+            .as_map()
+            .value(0);
+        let keys = classes.column(0).as_string::<i32>();
+        assert!((0..keys.len()).any(|at| keys.value(at) == expected_key));
+        assert_eq!(keys.len(), 2);
     }
 }
 
