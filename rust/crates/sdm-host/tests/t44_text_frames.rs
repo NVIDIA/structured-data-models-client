@@ -7,7 +7,9 @@
 use std::sync::Arc;
 
 use arrow_array::cast::AsArray;
-use arrow_array::{ArrayRef, Int32Array, Int64Array, LargeStringArray, RecordBatch, StringArray};
+use arrow_array::{
+    ArrayRef, Int32Array, Int64Array, LargeStringArray, RecordBatch, StringArray, UInt64Array,
+};
 use sdm_contract::data::AttachmentId;
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::ops::{Materialized, Operation, OperationResult};
@@ -441,7 +443,7 @@ fn predict(run: &HostRun, mut materialized: Materialized, target: &str, expected
 fn text_physical_families_reuse_scalar_labels_sampling_payloads_and_results() {
     for large in [false, true] {
         for target in ["age", "category"] {
-            for variant in ["ordinary", "chunks", "allnull", "batched", "prose"] {
+            for variant in ["ordinary", "chunks", "allnull", "batched"] {
                 let run = HostRun::start(
                     &sdm_host::default_root(),
                     &materialize_message(),
@@ -562,5 +564,75 @@ fn text_identifying_columns_stay_explicitly_unfinished_for_both_offsets() {
             decoded(&error)["error"]["fields"]["rule"],
             json!({"t":"utf8","v":"frame_text_key"})
         );
+    }
+}
+
+#[test]
+fn whole_text_semantic_family_is_unfinished_without_a_native_execution_profile() {
+    for large in [false, true] {
+        let run = HostRun::start(
+            &sdm_host::default_root(),
+            &materialize_message(),
+            inputs("age", "prose", large, 7),
+        )
+        .unwrap();
+        let failed = terminal(&run).expect_err("unrepresented native lowercase profile");
+        assert_eq!(
+            decoded(&failed)["error"]["fields"]["rule"],
+            json!({"t":"utf8","v":"frame_text_features"})
+        );
+    }
+}
+
+#[test]
+fn logical_string_key_metadata_retains_actual_numeric_identifying_arrays() {
+    for wide in [false, true] {
+        let mut attached = inputs("age", "ordinary", false, 7);
+        let Attachment::Bytes(raw) = &attached[&AttachmentId(1)] else {
+            panic!("schema")
+        };
+        let mut schema: Value = serde_json::from_slice(raw).unwrap();
+        schema["tables"][0]["columns"][0]["dtype"] = json!("string");
+        schema["tables"][1]["columns"][1]["dtype"] = json!("string");
+        attached.insert(AttachmentId(1), bytes(schema));
+        if wide {
+            let mut keys: Vec<u64> = (1..=8).collect();
+            keys[3] = 1_u64 << 63;
+            for (id, column) in [(AttachmentId(8), 0), (AttachmentId(9), 1)] {
+                let Attachment::Arrow(data) = &attached[&id] else {
+                    panic!("rows")
+                };
+                let batch = &data.batches[0];
+                let mut columns = batch.columns().to_vec();
+                columns[column] = Arc::new(UInt64Array::from(
+                    (0..batch.num_rows())
+                        .map(|row| keys[if id.0 == 8 { row } else { row / 8 }])
+                        .collect::<Vec<_>>(),
+                ));
+                let batch = RecordBatch::try_from_iter(
+                    batch
+                        .schema()
+                        .fields()
+                        .iter()
+                        .zip(columns)
+                        .map(|(field, array)| (field.name().clone(), array)),
+                )
+                .unwrap();
+                attached.insert(
+                    id,
+                    Attachment::Arrow(ArrowData::new(batch.schema(), vec![batch])),
+                );
+            }
+        }
+        let run =
+            HostRun::start(&sdm_host::default_root(), &materialize_message(), attached).unwrap();
+        let materialized = terminal(&run).unwrap_or_else(|error| panic!("{:?}", decoded(&error)));
+        let expected = if wide {
+            let observed: Value = serde_json::from_str(include_str!("../../../../packages/structured-data-models-client/tests/t44_text_wide_pandas3_reference.json")).unwrap();
+            observed["records"]["wide-metadata-safe-selection"].clone()
+        } else {
+            oracle("age", "ordinary")
+        };
+        predict(&run, materialized, "age", &expected);
     }
 }
