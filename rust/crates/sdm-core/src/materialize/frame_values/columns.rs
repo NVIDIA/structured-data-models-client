@@ -10,6 +10,35 @@ use super::*;
 use sdm_contract::data::strings::StringData;
 use sdm_contract::ops::{HeldSchema, HeldTable};
 
+pub(super) fn source(
+    schema: sdm_contract::ops::HeldSchema,
+) -> Result<FrameSourceMeaning, CoreError> {
+    let read = sdm_schema::held::read(schema.clone(), &BTreeMap::new(), true)?;
+    let mut description = read.description;
+    consistent(&mut description, &read.types)?;
+    reserved(&description)?;
+    kept_checks(&description)?;
+    Ok(FrameSourceMeaning { schema })
+}
+
+pub(super) fn table(input: FrameTableInputs) -> Result<FrameTableMeaning, CoreError> {
+    let mut names = BTreeSet::new();
+    for column in &input.native {
+        if !names.insert(&column.name) {
+            return Err(protocol(
+                "native table type facts repeat a physical source column",
+            ));
+        }
+        if column.arrow_large_string {
+            return Err(crate::frame_materialize::values::unsupported_large_string(
+                &input.table.name,
+                &column.name,
+            ));
+        }
+    }
+    Ok(FrameTableMeaning { table: input.table })
+}
+
 pub(super) fn meaning(input: FrameColumnInputs) -> FrameColumnMeaning {
     let facts = &input.facts;
     let text = (facts.object || facts.string) && facts.inferred.as_deref() == Some("string");
@@ -34,6 +63,11 @@ pub(super) fn meaning(input: FrameColumnInputs) -> FrameColumnMeaning {
         )
     {
         FrameColumnKind::NativeTime
+    } else if facts.timestamp
+        && (input.column.stype == Stype::Timestamp
+            || sdm_schema::held::wire_dtype(declared) == sdm_contract::ops::Dtype::Time)
+    {
+        FrameColumnKind::TypedTime
     } else if text
         && (input.column.stype == Stype::Timestamp
             || matches!(
@@ -142,10 +176,7 @@ pub(super) fn time(
                     "rows".to_owned(),
                     Detail::Scalar(Scalar::UInt64(u64::try_from(rows).unwrap_or(u64::MAX))),
                 ),
-                (
-                    "examples".to_owned(),
-                    Detail::List(converted.examples.into_iter().map(Detail::Scalar).collect()),
-                ),
+                ("examples".to_owned(), Detail::List(converted.examples)),
             ]
             .into(),
             ..CoreWarning::new(
@@ -183,6 +214,7 @@ mod tests {
                 object: true,
                 string: false,
                 arrow_decimal: false,
+                timestamp: false,
                 inferred: Some("decimal".to_owned()),
             },
         }
@@ -199,6 +231,20 @@ mod tests {
             meaning(declared("int64")).kind,
             FrameColumnKind::DecimalInteger
         );
+    }
+
+    #[test]
+    fn actual_typed_timestamps_retain_their_native_sanitization_boundary() {
+        let mut input = declared("timestamp[us]");
+        input.column.stype = Stype::Timestamp;
+        input.facts = FrameColumnFacts {
+            object: false,
+            string: false,
+            arrow_decimal: false,
+            timestamp: true,
+            inferred: None,
+        };
+        assert_eq!(meaning(input).kind, FrameColumnKind::TypedTime);
     }
 
     #[test]

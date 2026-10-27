@@ -86,7 +86,9 @@ impl FramePreparation {
             Self::Context { references, .. } => Some(references.plan.task.labelled.graph.owner),
             Self::Payload { context, .. } => Some(context.plan.task.labelled.graph.owner),
             Self::Request { plan, .. } => Some(plan.task.labelled.graph.owner),
-            Self::ColumnMeaning { .. }
+            Self::SourceMeaning { .. }
+            | Self::TableMeaning { .. }
+            | Self::ColumnMeaning { .. }
             | Self::IntegerColumn { .. }
             | Self::TimeColumn { .. }
             | Self::Question { .. }
@@ -101,7 +103,9 @@ impl FramePreparation {
         use AttachmentKind::{Arrow, Bytes, FrameGraph};
         let mut out = Vec::new();
         match self {
-            Self::ColumnMeaning { .. } | Self::IntegerColumn { .. } => {}
+            Self::SourceMeaning { schema } => out.push((*schema, Bytes)),
+            Self::TableMeaning { .. } | Self::ColumnMeaning { .. } | Self::IntegerColumn { .. } => {
+            }
             Self::TimeColumn { values, .. } => out.push((values.values, Arrow)),
             Self::Question { schema, query, .. } => out.extend([(*schema, Bytes), (*query, Bytes)]),
             Self::Questions { input } => {

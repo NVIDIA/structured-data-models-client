@@ -225,6 +225,12 @@ pub(crate) async fn run(
     part_scope: Option<FrameQuestionScope>,
 ) -> Result<OperationResult, CoreError> {
     let value = match input {
+        FramePreparation::SourceMeaning { schema } => PreparedFrameValue::SourceMeaning(
+            columns::source(take_json(&mut attachments, schema)?)?,
+        ),
+        FramePreparation::TableMeaning { input } => {
+            PreparedFrameValue::TableMeaning(columns::table(input)?)
+        }
         FramePreparation::ColumnMeaning { input } => {
             PreparedFrameValue::ColumnMeaning(columns::meaning(input))
         }
