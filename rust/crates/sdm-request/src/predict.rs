@@ -1088,9 +1088,8 @@ pub enum Answer {
     /// reference's `as_declared` leaves as it is: no value of the target's
     /// type, the item's own the number.
     NonFinite(f64),
-    /// A class's prediction that does not read as the target's type, which
-    /// `as_declared` leaves as it is (T2.8): the item's own value, as
-    /// written.
+    /// A direct regression value or a class that does not read as the target's
+    /// type: the decoded item's own value, as written.
     Written(Value),
 }
 
@@ -1288,13 +1287,19 @@ fn as_float(value: &Value) -> Option<f64> {
 fn answer_of(
     prediction: Option<&Value>,
     answers: AnswerType,
-    decimal_limit: Option<u32>,
+    policy: AnswerPolicy,
 ) -> Result<Answer, CoreError> {
     let Some(value) = prediction else {
         return Ok(Answer::None);
     };
+    // The direct generated decoder accepts prediction as data, and the
+    // native adapter returns a nonclassification answer unchanged. Gathered
+    // regression retains its separately established numeric admission below.
+    if matches!(policy, AnswerPolicy::Direct { .. }) && answers == AnswerType::Float {
+        return Ok(written(value));
+    }
     match answers {
-        // A regression's prediction is a number (owner decision of
+        // A gathered regression's prediction is a number (owner decision of
         // 2026-10-12, relayed): a token past a double's range, a `NaN` and
         // an infinity read as the reference reads them; an integer past
         // int64, text, a boolean, an array or an object refused.
@@ -1321,7 +1326,7 @@ fn answer_of(
             Ok(Answer::NonFinite(non_finite(value).unwrap_or(f64::NAN)))
         }
         AnswerType::Bool => Ok(as_bool(value).map_or_else(|| written(value), Answer::Bool)),
-        AnswerType::Int => Ok(match decimal_limit {
+        AnswerType::Int => Ok(match policy.decimal_limit() {
             Some(limit) => direct_integer_class(value, limit).map_or_else(
                 || written(value),
                 |digits| match digits.parse::<i64>() {
@@ -1338,9 +1343,8 @@ fn answer_of(
     }
 }
 
-/// A class's prediction as written, where it does not read as the target's
-/// type (`as_declared` leaving it as it is, T2.8): a null, which an item's
-/// reader takes as none, none.
+/// An unchanged direct regression or an unconverted class prediction:
+/// a null, which an item's reader takes as none, none.
 fn written(value: &Value) -> Answer {
     match value {
         Value::Null => Answer::None,
@@ -1431,7 +1435,7 @@ pub fn layout(
         float_text,
         answer_type(payload)?,
         Attribution::GatheredReference,
-        None,
+        AnswerPolicy::Gathered,
     )
 }
 
@@ -1449,7 +1453,7 @@ pub(crate) fn layout_tabular(
         float_text,
         declared_answers(payload, kind_of(payload)?),
         Attribution::AsWritten,
-        Some(decimal_limit),
+        AnswerPolicy::Direct { decimal_limit },
     )
 }
 
@@ -1461,13 +1465,30 @@ enum Attribution {
     AsWritten,
 }
 
+/// The owning adapter's prediction admission, separate from row attribution.
+/// Only direct final text coercion observes the fresh native decimal limit.
+#[derive(Clone, Copy)]
+enum AnswerPolicy {
+    Gathered,
+    Direct { decimal_limit: u32 },
+}
+
+impl AnswerPolicy {
+    fn decimal_limit(self) -> Option<u32> {
+        match self {
+            Self::Gathered => None,
+            Self::Direct { decimal_limit } => Some(decimal_limit),
+        }
+    }
+}
+
 fn layout_as(
     payload: &Value,
     response: &PredictionResponse,
     float_text: fn(f64) -> String,
     answers: AnswerType,
     attribution: Attribution,
-    decimal_limit: Option<u32>,
+    policy: AnswerPolicy,
 ) -> Result<Part, CoreError> {
     let (names, rows) = instance_table(payload, "predict").ok_or_else(|| bad_payload("predict"))?;
     let reference = match attribution {
@@ -1510,11 +1531,11 @@ fn layout_as(
                 .filter(|_| forecast_step.is_none()),
             answer_index: i64::try_from(laid.len()).unwrap_or(i64::MAX),
             id,
-            prediction: answer_of(item.prediction.as_ref(), answers, decimal_limit)?,
+            prediction: answer_of(item.prediction.as_ref(), answers, policy)?,
             probabilities: item
                 .probabilities
                 .as_ref()
-                .map(|given| match decimal_limit {
+                .map(|given| match policy.decimal_limit() {
                     Some(limit) => spelled_with_limit(given, answers, float_text, Some(limit)),
                     None => spelled(given, answers, float_text),
                 }),
@@ -2530,12 +2551,20 @@ mod tests {
         assert_eq!(as_float(&Value::Bool(true)), None);
         assert_eq!(as_float(&number(&"9".repeat(400))), None);
         assert_eq!(
-            answer_of(Some(&text("3.0")), AnswerType::FloatClass, None),
+            answer_of(
+                Some(&text("3.0")),
+                AnswerType::FloatClass,
+                AnswerPolicy::Gathered
+            ),
             Ok(Answer::Float(3.0))
         );
         // One that does not read is given back as written (T2.8).
         assert_eq!(
-            answer_of(Some(&text("three")), AnswerType::FloatClass, None),
+            answer_of(
+                Some(&text("three")),
+                AnswerType::FloatClass,
+                AnswerPolicy::Gathered
+            ),
             Ok(Answer::Written(text("three")))
         );
     }

@@ -73,6 +73,9 @@ An error-only presenter obtains the selected pandas cast exception wording at th
 The transport and presentation functions are shared with existing core prediction.
 Direct response attribution recognizes the closed primitive list/key forms emitted by numeric/Boolean/string widening, before restoring caller keys.
 Direct and gathered answers share one layout implementation, with gathered admission unchanged.
+The direct generated decoder accepts prediction as decoded data, and a nonclassification task returns that data unchanged, including containers and integers wider than a double.
+An explicit internal adapter policy chooses that direct rule inside the shared layout while preserving gathered regression's existing numeric admission.
+Classification retains declared int/float/bool conversion, catches the native TypeError/ValueError/OverflowError family as unchanged-value pass-through, and keeps Boolean values distinct from numeric casts.
 Numeric class restoration uses the existing wire integer and floating text grammar, including supported Unicode decimal digits and single underscores, while preserving malformed-value pass-through and probability-key collision protection.
 Final integer class restoration observes the current native decimal digit limit after all ID conversion effects and counts original digits, including leading zeroes, before canonicalization.
 Restoring a core-carried integer that the transport already decoded does not repeat that admission after native ID effects change the process digit limit.
@@ -125,6 +128,7 @@ Direct model-contract errors retain the generated decoder's selected item ordina
 The direct parser follows generated field order, with embeddings before quantiles, explanation and metadata, while gathered ordering stays unchanged.
 Core selects the diagnostic and native conversion failure; Python supplies only reached native representation and exception presentation.
 The generated decoder's TypeError and ValueError failures retain the SDK INVALID_RESPONSE wrapper and their actual native cause, while generated contract failures retain ResponseContractError causes.
+The common public raise path retains the selected explicit cause as well as suppressing unrelated implicit core context.
 Optional item id and forecast_step diagnostics retain the generated helper owner `prediction`; required item fields and object diagnostics retain `PredictionItem`.
 Accepted direct whole forecast steps retain exact digits through a native-item carrier when they exceed the Arrow int64 width.
 That native reconstruction uses maintained exact conversion without imposing a new late integer-display limit.
