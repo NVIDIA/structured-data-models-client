@@ -25,6 +25,7 @@ from sdm_client._rust.frame_decimals import (
     native_decimal_column,
     native_decimal_type,
 )
+from sdm_client._rust.frame_time import first_values
 from sdm_client._rust.run import Finished, run
 from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.errors import StructuredDataError
@@ -99,11 +100,31 @@ def _frame_key_candidate(fields: dict[str, Any]) -> str:
 
 
 def _frame_timestamp(
-    fields: dict[str, Any], native_types: Mapping[str, Mapping[str, Any]]
+    fields: dict[str, Any],
+    native_types: Mapping[str, Mapping[str, Any]],
+    native_firsts: Mapping[str, Mapping[str, Any]],
 ) -> str:
     # Only presentation of the core-selected scalar, in its original native
     # timezone implementation and unit. No original frame values are read.
+    if fields['column'] in native_firsts.get(fields['table'], {}):
+        return str(native_firsts[fields['table']][fields['column']])
     value = fields['value']
+    if 'frame_decimal_kind' in fields:
+        kind = fields['frame_decimal_kind']
+        exponent = (
+            fields['frame_decimal_exponent']
+            if kind == 'finite'
+            else {'infinity': 'F', 'nan': 'n', 'signaling_nan': 'N'}[kind]
+        )
+        return str(
+            Decimal(
+                (
+                    int(fields['frame_decimal_negative']),
+                    tuple(int(digit) for digit in value),
+                    exponent,
+                )
+            )
+        )
     dtype = native_types[fields['table']][fields['column']]
     if not hasattr(value, 'unit'):
         return str(pd.Series([value], dtype=dtype).iloc[0])
@@ -120,12 +141,15 @@ def _frame_timestamp(
 
 def _presentation(
     native_types: Mapping[str, Mapping[str, Any]],
+    native_firsts: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> AbstractContextManager[None]:
     return errors.holding(
         frame_example=lambda fields: _frame_example(fields, native_types),
         frame_key=_frame_key,
         frame_key_candidate=_frame_key_candidate,
-        frame_timestamp=lambda fields: _frame_timestamp(fields, native_types),
+        frame_timestamp=lambda fields: _frame_timestamp(
+            fields, native_types, native_firsts or {}
+        ),
     )
 
 
@@ -395,7 +419,7 @@ def _observe(
 
 def _infer_table(
     name: str, frame: pd.DataFrame
-) -> tuple[dict[str, Any], dict[str, Any]]:
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     spec = {
         'tables': [{'name': name, 'source': codec.relation(name)}],
         'primary_keys': {},
@@ -414,19 +438,31 @@ def _infer_table(
     )
     result = results.expect(finished.result, results.InferredFrames)
     adopted = json.loads(finished.take(result.value))
-    converted, types = _observe(name, frame, names)
+    finished = _describe('time_facts', {}, spec, {}, inference=adopted)
+    result = results.expect(finished.result, results.InferredFrames)
+    plan = json.loads(finished.take(result.value))['value']
+    facts, native_firsts = first_values(frame, plan)
+    converted, types = _observe(name, frame, plan['columns'])
     # A missing candidate is selected by the core. Native lookup is used
     # only by its reached diagnostic presenter, preserving KeyError cause.
     with errors.holding(
         direct_schema_missing=lambda fields: frame[fields['name']]
     ):
         finished = _describe(
-            'time', {name: converted}, spec, {name: types}, inference=adopted
+            'time',
+            {name: converted},
+            spec,
+            {name: types},
+            inference={'kind': 'time_facts', 'value': facts},
         )
     result = results.expect(finished.result, results.InferredFrames)
-    return cast(
-        'dict[str, Any]', json.loads(finished.take(result.value))['value'][0]
-    ), types
+    return (
+        cast(
+            'dict[str, Any]', json.loads(finished.take(result.value))['value'][0]
+        ),
+        types,
+        native_firsts,
+    )
 
 
 def _ordinary_builtin(value: Any, seen: set[int]) -> bool:
@@ -485,6 +521,7 @@ def from_data(
     snapshots: dict[str, Any] = {}
     inferred: dict[str, dict[str, Any]] = {}
     time_types: dict[str, dict[str, Any]] = {}
+    time_firsts: dict[str, dict[str, Any]] = {}
     originals: dict[str, pd.DataFrame] = {}
     native_types: dict[str, dict[str, Any]] = {}
     finished: Finished | None = None
@@ -510,7 +547,9 @@ def from_data(
                 raise RouteError(
                     'the partial frame constructor requires ordinary built-in DataFrames'
                 )
-            inferred[name], time_types[name] = _infer_table(name, frame)
+            inferred[name], time_types[name], time_firsts[name] = _infer_table(
+                name, frame
+            )
             originals[name] = frame
         # Native argument conversion is deliberately after all Table stages,
         # matching the constructor's override boundary.
@@ -707,7 +746,7 @@ def from_data(
                 sampled.result, results.InferredFrames
             )
             sampled.take(sampled_result.value)
-        with _presentation(time_types):
+        with _presentation(time_types, time_firsts):
             _show_held(assembled['notices'])
         return schema
     finally:
@@ -718,5 +757,6 @@ def from_data(
         snapshots.clear()
         inferred.clear()
         time_types.clear()
+        time_firsts.clear()
         native_types.clear()
         held_notices.clear()

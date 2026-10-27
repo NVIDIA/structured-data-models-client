@@ -322,7 +322,10 @@ class _Words(string.Formatter):
             return type(given).__name__
         if conversion == 't':
             native = _held().get('frame_timestamp')
-            if native is not None and isinstance(value, codec.Temporal):
+            if native is not None and (
+                isinstance(value, codec.Temporal)
+                or self._fields.get('frame_native_first') is True
+            ):
                 return native({**self._fields, 'value': value})
             if isinstance(value, str):
                 return str(_as_timestamp(value))

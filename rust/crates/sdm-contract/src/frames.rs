@@ -50,6 +50,7 @@ pub struct FrameOverrideOrder {
 pub enum FrameStage {
     Nominate,
     Adopt,
+    TimeFacts,
     Time,
     Edit,
     StatedKey,
@@ -192,6 +193,13 @@ pub enum PassedOver {
         missing: usize,
         rows: usize,
     },
+    /// A native frame's completed first-value read, kept independently of
+    /// physical Arrow storage and its narrower Decimal scalar descriptor.
+    FrameConstant {
+        first: Option<FrameScalar>,
+        missing: usize,
+        rows: usize,
+    },
     /// `missing` of its `rows` rows, more than half, hold no value.
     Sparse {
         missing: usize,
@@ -207,7 +215,7 @@ impl PassedOver {
     /// gives it.
     pub fn reason(&self) -> &'static str {
         match self {
-            PassedOver::Constant { .. } => "constant",
+            PassedOver::Constant { .. } | PassedOver::FrameConstant { .. } => "constant",
             PassedOver::Sparse { .. } => "sparse",
             PassedOver::LoadStamp => "load_stamp",
             PassedOver::EditStamp => "edit_stamp",
@@ -275,6 +283,57 @@ pub struct FrameAdoption {
     pub table: DescribedTable,
 }
 
+/// A completed native scalar conversion, not an instruction to the host.
+/// Decimal tuples retain actual native boxing, including a full exponent,
+/// separately from both constructor mantissas and later model wire values.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum FrameScalar {
+    Value {
+        value: Scalar,
+    },
+    Decimal {
+        negative: bool,
+        digits: String,
+        exponent: FrameDecimalExponent,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum FrameDecimalExponent {
+    Finite { value: i64 },
+    Infinity,
+    Nan,
+    SignalingNan,
+}
+
+/// Core-selected native first-value reads in original candidate order.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FrameTimePlan {
+    pub adoption: FrameAdoption,
+    pub columns: Vec<String>,
+}
+
+/// Values/counts read by actual native dropna/iloc/equality operations.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FrameTimeFirst {
+    pub name: String,
+    pub rows: usize,
+    pub held: usize,
+    pub same: bool,
+    pub first: Option<FrameScalar>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FrameTimeFacts {
+    pub plan: FrameTimePlan,
+    pub firsts: Vec<FrameTimeFirst>,
+}
+
 /// Completed table inference, including the later time observations.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -323,6 +382,8 @@ pub struct FrameSample {
 pub enum FrameInference {
     Nomination(Box<FrameNomination>),
     Adoption(Box<FrameAdoption>),
+    TimePlan(Box<FrameTimePlan>),
+    TimeFacts(Box<FrameTimeFacts>),
     Inferred(Vec<FrameInferred>),
     Schema(Box<FrameSchema>),
     SampleColumn(Box<FrameSampleColumn>),

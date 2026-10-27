@@ -14,7 +14,8 @@ use arrow_array::RecordBatch;
 use arrow_schema::{DataType, Schema};
 use sdm_contract::data::Relation;
 use sdm_contract::frames::{
-    FrameAdoption, FrameInferred, FrameNomination, FrameSample, FrameSampleColumn, NativeDecimal,
+    FrameAdoption, FrameDecimalExponent, FrameInferred, FrameNomination, FrameSample,
+    FrameSampleColumn, FrameScalar, FrameTimeFacts, FrameTimePlan, NativeDecimal,
     NativeDecimalColumn, TimeChoice,
 };
 use sdm_contract::ops::DescribedTable;
@@ -866,6 +867,91 @@ pub fn choose_time_from(
     let mut table = adopted.table;
     table.time_column = time.column.clone();
     Ok(FrameInferred { table, time })
+}
+
+/// Select only the actual first-value reads, preserving the shared time
+/// policy's candidate and name checks before any native scalar conversion.
+pub fn time_plan(adoption: FrameAdoption) -> FrameTimePlan {
+    let table = inferred(&adoption.table, TimeChoice::default());
+    let columns = crate::infer::candidates(&table.columns, &table.primary_key)
+        .into_iter()
+        .map(|at| &table.columns[at].name)
+        .filter(|name| !crate::names::is_load_stamp(name) && !crate::names::is_birth_date(name))
+        .cloned()
+        .collect();
+    FrameTimePlan { adoption, columns }
+}
+
+/// Validate a completed typed native read independently of current Arrow
+/// physical types. Original timestamp meaning still controls the choice.
+pub fn choose_time_from_facts(
+    facts: FrameTimeFacts,
+    input: &Columns<'_>,
+) -> Result<FrameInferred, CoreError> {
+    let expected = time_plan(facts.plan.adoption.clone());
+    if facts.plan != expected || facts.firsts.len() != expected.columns.len() {
+        return Err(time_facts_invalid());
+    }
+    for (name, first) in expected.columns.iter().zip(&facts.firsts) {
+        if &first.name != name
+            || first.held > first.rows
+            || (first.held == 0) != first.first.is_none()
+            || (first.held == 0 && first.same)
+            || matches!(
+                &first.first,
+                Some(FrameScalar::Value {
+                    value: Scalar::Null
+                })
+            )
+        {
+            return Err(time_facts_invalid());
+        }
+        if let Some(FrameScalar::Decimal {
+            digits, exponent, ..
+        }) = &first.first
+        {
+            let finite = matches!(exponent, FrameDecimalExponent::Finite { .. });
+            if digits.len() > 76
+                || !digits.bytes().all(|c| c.is_ascii_digit())
+                || (finite && (digits.is_empty() || (digits.len() > 1 && digits.starts_with('0'))))
+                || (matches!(exponent, FrameDecimalExponent::Infinity) && digits != "0")
+            {
+                return Err(time_facts_invalid());
+            }
+        }
+    }
+    let adopted = facts.plan.adoption;
+    let read = observe_from(&adopted.table, TimeChoice::default(), input)?;
+    let by_name: BTreeMap<_, _> = facts
+        .firsts
+        .iter()
+        .map(|first| (first.name.as_str(), first))
+        .collect();
+    let native: Vec<_> = read
+        .table
+        .columns
+        .iter()
+        .map(|column| by_name.get(column.name.as_str()).copied())
+        .collect();
+    let time = crate::infer::frame_time_observed(
+        &read.table.columns,
+        &read.values,
+        input.batches,
+        &read.bindings,
+        &native,
+        read.rows,
+        &read.table.primary_key,
+    )?;
+    let mut table = adopted.table;
+    table.time_column = time.column.clone();
+    Ok(FrameInferred { table, time })
+}
+
+fn time_facts_invalid() -> CoreError {
+    CoreError::protocol(
+        Sentence::InvalidMessage,
+        "native frame time facts do not match their ordered plan",
+    )
 }
 
 fn check_name(name: &str) -> Result<(), CoreError> {

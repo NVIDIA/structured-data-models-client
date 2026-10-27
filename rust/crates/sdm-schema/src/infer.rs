@@ -20,6 +20,7 @@ use std::collections::BTreeSet;
 use arrow_array::RecordBatch;
 use arrow_schema::{DataType, Field, Schema};
 use sdm_contract::data::{EXACT_NUMBER_MARKED, EXACT_NUMBER_MARKER, Relation};
+use sdm_contract::frames::FrameTimeFirst;
 use sdm_contract::ops::{Dtype, ExactNumber, SourceFacts, Stype};
 use sdm_contract::{ColumnType, CoreError, Detail, Scalar, Sentence, TimestampUnit};
 
@@ -363,6 +364,8 @@ pub fn choose_among(
             instants: &previewed.instants,
             presence: &previewed.presence,
             firsts: &previewed.firsts,
+            native: None,
+            missing: None,
         },
         previewed.rows,
         &table.primary_key,
@@ -427,6 +430,8 @@ fn choose(
             instants: &instants,
             presence: &presence,
             firsts: &firsts,
+            native: None,
+            missing: None,
         },
         rows,
         &table.primary_key,
@@ -1269,6 +1274,8 @@ struct Read<'a> {
     instants: &'a [Result<Vec<Option<i128>>, TextUnread>],
     presence: &'a [Vec<Option<Value>>],
     firsts: &'a [Option<Scalar>],
+    native: Option<&'a [Option<&'a FrameTimeFirst>]>,
+    missing: Option<&'a [bool]>,
 }
 
 /// The first real day: a value before it, such as 0001-01-01 or
@@ -1346,7 +1353,7 @@ pub fn first_values_past_the_years(
 
 /// The timestamps a table's time column is chosen among, in table order:
 /// every column of a timestamp's meaning but the key.
-fn candidates(columns: &[InferredColumn], key: &[String]) -> Vec<usize> {
+pub(crate) fn candidates(columns: &[InferredColumn], key: &[String]) -> Vec<usize> {
     (0..columns.len())
         .filter(|&i| columns[i].stype == Stype::Timestamp && !key.contains(&columns[i].name))
         .collect()
@@ -1530,7 +1537,11 @@ fn choose_time_column(
             continue;
         }
         let over = whole.and_then(|w| w.range(name).map(|r| (w.rows, r)));
-        let why = refused_for_values(&read.presence[i], read.firsts[i].as_ref(), rows, over);
+        let why = if let Some(native) = read.native.and_then(|facts| facts[i]) {
+            refused_for_native_values(native)
+        } else {
+            refused_for_values(&read.presence[i], read.firsts[i].as_ref(), rows, over)
+        };
         if let Some(why) = &why {
             if !failed {
                 refused.push((name.clone(), why.clone()));
@@ -1642,11 +1653,61 @@ pub(crate) fn frame_time(
             instants: &instants,
             presence,
             firsts: &firsts,
+            native: None,
+            missing: None,
         },
         rows,
         key,
         None,
         false,
+    )
+}
+
+/// The existing time policy over original metadata, completed native first
+/// reads, and later physical columns. Missing arrays matter only if the
+/// shared policy reaches their earliest-value read.
+pub(crate) fn frame_time_observed(
+    columns: &[InferredColumn],
+    presence: &[Vec<Option<Value>>],
+    batches: &[RecordBatch],
+    bindings: &[Option<usize>],
+    firsts: &[Option<&FrameTimeFirst>],
+    rows: usize,
+    key: &[String],
+) -> Result<TimeChoice, CoreError> {
+    let instants: Vec<_> = bindings
+        .iter()
+        .map(|binding| Ok(binding.map_or_else(Vec::new, |at| values::frame_instants(batches, at))))
+        .collect();
+    let missing: Vec<_> = bindings.iter().map(Option::is_none).collect();
+    let scalar_firsts = vec![None; columns.len()];
+    choose_time_column(
+        columns,
+        &Read {
+            instants: &instants,
+            presence,
+            firsts: &scalar_firsts,
+            native: Some(firsts),
+            missing: Some(&missing),
+        },
+        rows,
+        key,
+        None,
+        false,
+    )
+}
+
+fn refused_for_native_values(first: &FrameTimeFirst) -> Option<PassedOver> {
+    let missing = first.rows - first.held;
+    refused_for_counts(
+        first.rows,
+        first.held,
+        first.same,
+        PassedOver::FrameConstant {
+            first: first.first.clone(),
+            missing,
+            rows: first.rows,
+        },
     )
 }
 
@@ -1679,24 +1740,34 @@ fn refused_for_values(
         ),
     };
     let missing = rows.saturating_sub(held);
-    if held == 0 {
-        return Some(PassedOver::Constant {
-            value: None,
+    refused_for_counts(
+        rows,
+        held,
+        same,
+        PassedOver::Constant {
+            value: if held == 0 { None } else { first },
             missing,
             rows,
-        });
+        },
+    )
+}
+
+/// Shared sparse/constant policy; the constructor and SQL paths differ
+/// only in the already converted scalar retained for native presentation.
+fn refused_for_counts(
+    rows: usize,
+    held: usize,
+    same: bool,
+    constant: PassedOver,
+) -> Option<PassedOver> {
+    if held == 0 {
+        return Some(constant);
     }
-    if 2 * missing > rows {
+    let missing = rows.saturating_sub(held);
+    if missing > rows / 2 {
         return Some(PassedOver::Sparse { missing, rows });
     }
-    if rows > 1 && same {
-        return Some(PassedOver::Constant {
-            value: first,
-            missing,
-            rows,
-        });
-    }
-    None
+    (rows > 1 && same).then_some(constant)
 }
 
 /// Whether an instant is a real start: not before 1901 and not the epoch's
@@ -1721,6 +1792,13 @@ fn earliest(
 ) -> Result<usize, CoreError> {
     let mut best: Option<(i128, usize)> = None;
     for &i in among {
+        if read.missing.is_some_and(|missing| missing[i]) {
+            return Err(CoreError::new(
+                Sentence::DirectSchemaMissing,
+                "a timestamp candidate is absent from the current frame",
+            )
+            .with_field("name", Detail::text(&columns[i].name)));
+        }
         let over = whole
             .and_then(|w| w.range(&columns[i].name))
             .and_then(|r| r.start)

@@ -34,7 +34,8 @@ pub(crate) async fn run(
         return Err(invalid("a frame constructor names one table twice"));
     }
     if named.is_empty()
-        || (manifest.stage != FrameStage::Edit && named.len() != manifest.tables.len())
+        || (!matches!(manifest.stage, FrameStage::Edit | FrameStage::TimeFacts)
+            && named.len() != manifest.tables.len())
     {
         return Err(invalid(
             "a frame describe must name each admitted table once",
@@ -80,6 +81,33 @@ pub(crate) async fn run(
         .inference
         .map(|id| take_json::<FrameInference>(&mut attachments, id))
         .transpose()?;
+    if manifest.stage == FrameStage::TimeFacts {
+        if named.len() != 1
+            || named[0].columns.is_some()
+            || !manifest.tables.is_empty()
+            || !spec.primary_keys.is_empty()
+            || !spec.time_columns.is_empty()
+            || manifest.relationships.is_some()
+        {
+            return Err(invalid(
+                "a frame time plan requires one metadata-only table and no overrides",
+            ));
+        }
+        let Some(FrameInference::Adoption(value)) = inference else {
+            return Err(invalid(
+                "a frame time plan requires completed key adoption facts",
+            ));
+        };
+        if value.table.name != named[0].name || value.table.source != named[0].source {
+            return Err(invalid(
+                "frame time metadata does not match the named table",
+            ));
+        }
+        return finish_inference(
+            &asker,
+            FrameInference::TimePlan(Box::new(sdm_schema::frames::time_plan(*value))),
+        );
+    }
     if manifest.stage == FrameStage::Edit {
         if !manifest.tables.is_empty()
             || named.iter().any(|table| table.columns.is_some())
@@ -165,6 +193,13 @@ pub(crate) async fn run(
                 if value.table.name == table.name && value.table.source == table.source =>
             {
                 let value = sdm_schema::frames::choose_time_from(*value, &columns)?;
+                (FrameInference::Inferred(vec![value]), vec![])
+            }
+            (FrameStage::Time, Some(FrameInference::TimeFacts(value)))
+                if value.plan.adoption.table.name == table.name
+                    && value.plan.adoption.table.source == table.source =>
+            {
+                let value = sdm_schema::frames::choose_time_from_facts(*value, &columns)?;
                 (FrameInference::Inferred(vec![value]), vec![])
             }
             (FrameStage::StatedKey, Some(FrameInference::Inferred(mut values)))
