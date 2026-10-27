@@ -511,3 +511,58 @@ def test_direct_boolean_storage_and_supplied_schema_refusal(monkeypatch):
         == old
     )
     assert "which 'bool' cannot mean" in old[1][-1]
+
+
+def test_direct_supplied_untyped_schema_uses_scored_type(monkeypatch):
+    from sdm_client import Schema
+
+    context, predict = fixture('int64')
+    schema = Schema.from_data(
+        {
+            'instance': pd.DataFrame(
+                {
+                    'feature': pd.Series([None] * 3, dtype=object),
+                    'target': [2, 4, 6],
+                }
+            )
+        },
+        relationships=[],
+    )
+    assert schema['instance']['feature'].untyped
+    old = outcome(
+        monkeypatch, (context, predict), core=False, options={'schema': schema}
+    )
+    new = outcome(
+        monkeypatch, (context, predict), core=True, options={'schema': schema}
+    )
+    assert new == old
+    assert new[3][0]['schema']['instance_table']['columns']['feature'] == {
+        'dtype': 'int64',
+        'stype': 'categorical',
+    }
+
+
+def test_direct_declared_meaning_survives_fresh_wide_scoring(monkeypatch):
+    records = []
+    for core in (False, True):
+        monkeypatch.setenv('SDM_CORE_ROUTES', CORE if core else '')
+        context, predict = fixture('int64')
+        request = Request(context, predict, target='target', task='regression')
+        request.schema['instance']['feature'].stype = 'numerical'
+        assert request.schema['instance']['feature'].stype_declared
+        predict['feature'] = pd.Series(
+            [2**63, 2**63 + 1], index=predict.index, dtype='uint64'
+        )
+        scripted = Scripted()
+        with SDMClient('http://localhost:1', max_retries=0) as client:
+            client._transport.close()
+            client._transport = scripted
+            client.predict(request, model=KumoTabular())
+        body = scripted.calls[0]
+        body['metadata']['request_id'] = '<drawn>'
+        records.append(body)
+    assert records[1] == records[0]
+    assert records[1]['schema']['instance_table']['columns']['feature'] == {
+        'dtype': 'string',
+        'stype': 'numerical',
+    }
