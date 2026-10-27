@@ -638,6 +638,79 @@ fn whole_text_semantic_family_is_unfinished_without_a_native_execution_profile()
 }
 
 #[test]
+fn physical_numeric_text_retains_the_frozen_native_graph_failure() {
+    use arrow_array::{BooleanArray, Float32Array, Float64Array};
+
+    let observed: Value = serde_json::from_str(include_str!(
+        "../../../../packages/structured-data-models-client/tests/t44_native_text_numeric_pandas3_reference.json"
+    )).unwrap();
+    for (kind, dtype) in [
+        ("numpy-int64", "int"),
+        ("numpy-float32", "float"),
+        ("numpy-float64", "float"),
+        ("numpy-bool", "bool"),
+    ] {
+        let record = &observed["records"][format!("{kind}-python-True-False")];
+        assert_eq!(record["error"]["code"], "INVALID_REQUEST");
+        assert_eq!(
+            record["error"]["message"],
+            format!(
+                "[INVALID_REQUEST] Column 'note' received an incompatible semantic type (got dtype='{dtype}' and stype='text')"
+            )
+        );
+        assert!(record["trace"].as_array().unwrap().is_empty());
+        let mut attached = inputs("age", "prose", false, 7);
+        for id in [AttachmentId(8), AttachmentId(9)] {
+            let Attachment::Arrow(data) = &attached[&id] else {
+                panic!("frame rows")
+            };
+            let batch = &data.batches[0];
+            let mut columns = batch.columns().to_vec();
+            let note = batch.schema().index_of("note").unwrap();
+            columns[note] = match kind {
+                "numpy-int64" => ints(0..batch.num_rows() as i64),
+                "numpy-float32" => Arc::new(Float32Array::from(vec![1.0; batch.num_rows()])),
+                "numpy-float64" => Arc::new(Float64Array::from(vec![1.0; batch.num_rows()])),
+                "numpy-bool" => Arc::new(BooleanArray::from(vec![true; batch.num_rows()])),
+                _ => unreachable!(),
+            };
+            let rows = RecordBatch::try_from_iter(
+                batch
+                    .schema()
+                    .fields()
+                    .iter()
+                    .zip(columns)
+                    .map(|(field, array)| (field.name().clone(), array)),
+            )
+            .unwrap();
+            attached.insert(
+                id,
+                Attachment::Arrow(ArrowData::new(rows.schema(), vec![rows])),
+            );
+        }
+        let run =
+            HostRun::start(&sdm_host::default_root(), &materialize_message(), attached).unwrap();
+        let failed =
+            terminal(&run).expect_err("native graph rejects a physical numeric Text column");
+        let error = decoded(&failed);
+        assert_eq!(error["error"]["kind"], "invalid_request");
+        assert_eq!(error["error"]["code"], "INVALID_REQUEST");
+        assert_eq!(error["error"]["sentence"], "incompatible_semantic_type");
+        assert_eq!(
+            error["error"]["fields"],
+            json!({
+                "field":{"t":"utf8","v":"schema"},
+                "table":{"t":"utf8","v":"users"},
+                "column":{"t":"utf8","v":"note"},
+                "dtype":{"t":"utf8","v":dtype},
+                "stype":{"t":"utf8","v":"text"},
+                "reason":{"t":"utf8","v":"incompatible_semantic_type"},
+            })
+        );
+    }
+}
+
+#[test]
 fn logical_string_key_metadata_retains_actual_numeric_identifying_arrays() {
     for wide in [false, true] {
         let mut attached = inputs("age", "ordinary", false, 7);
