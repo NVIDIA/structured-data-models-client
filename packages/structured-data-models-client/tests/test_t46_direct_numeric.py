@@ -788,3 +788,33 @@ def test_direct_text_advice_preserves_captured_references_and_later_reads(
     )
     if mutation == 'inference':
         assert body['inference'] == {'seed': 2**53}
+
+
+@pytest.mark.parametrize('mutation', ['reference', 'task'])
+def test_direct_leakage_advice_precedes_envelope_reference_capture(
+    monkeypatch, mutation
+):
+    from sdm_client.request import Split
+
+    def inputs():
+        return pd.DataFrame(
+            {'user_id': [1, 2, 3], 'target': [2, 4, 6]}
+        ), pd.DataFrame({'user_id': [1, 4]})
+
+    def mutate(request, context, predict):
+        if mutation == 'reference':
+            request._predict = Split(pd.DataFrame({'user_id': [8, 9]}))
+        else:
+            request.task = replace(request.task, kind='forecasting')
+
+    old = outcome(monkeypatch, inputs(), core=False, on_warning=mutate)
+    new = outcome(monkeypatch, inputs(), core=True, on_warning=mutate)
+    assert new == old
+    assert len(new[2]) == 1
+    body = new[3][0]
+    if mutation == 'reference':
+        assert new[1][0] == 'ok'
+        assert body['predict']['instance_table']['rows'] == [[8], [9]]
+    else:
+        assert body['task']['kind'] == 'forecasting'
+        assert new[1][2] == 'INVALID_RESPONSE'
