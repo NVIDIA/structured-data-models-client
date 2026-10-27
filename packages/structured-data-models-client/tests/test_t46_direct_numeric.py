@@ -1993,3 +1993,57 @@ def test_direct_whole_float_classes_retain_scalar_type_and_frame_dtype(
     assert observed[1] == observed[0]
     assert observed[1][0][0][1] is kind
     assert observed[1][2] == dtype
+
+
+@pytest.mark.parametrize('restore', [False, True])
+def test_direct_constructor_task_reads_native_schema_after_constant_advice(
+    monkeypatch, restore
+):
+    from sdm_client import Schema
+
+    observed = []
+    for core in (False, True):
+        monkeypatch.setenv('SDM_CORE_ROUTES', CORE if core else '')
+        context = pd.DataFrame({'feature': [1, 2, 3], 'target': [2, 2, 2]})
+        predict = pd.DataFrame({'feature': [4, 5]})
+        schema = Schema.from_data({'instance': context}, relationships=())
+        target = schema['instance'].columns['target']
+        if restore:
+            schema['instance'].columns.pop('target')
+        events = []
+        with warnings.catch_warnings():
+            warnings.simplefilter('always')
+
+            def show(message, category, filename, lineno, file=None, line=None):
+                events.append((str(message), category))
+                if restore:
+                    schema['instance'].columns['target'] = target
+                else:
+                    schema['instance'].columns.pop('target', None)
+
+            warnings.showwarning = show
+            try:
+                request = Request(
+                    context,
+                    predict,
+                    target='target',
+                    task='regression',
+                    schema=schema,
+                )
+                assert request.schema is schema
+                answer = ('ok', request.task.target.dtype)
+            except Exception as error:
+                answer = (
+                    'error',
+                    type(error),
+                    getattr(error, 'code', None),
+                    str(error),
+                )
+        observed.append((answer, events))
+    assert observed[1] == observed[0]
+    assert len(observed[1][1]) == 1
+    if restore:
+        assert observed[1][0] == ('ok', 'int64')
+    else:
+        assert observed[1][0][2] == 'INVALID_REQUEST'
+        assert "table 'instance' has no column 'target'" in observed[1][0][-1]
