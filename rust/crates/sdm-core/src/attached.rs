@@ -387,20 +387,24 @@ pub fn take_json_if<T: DeserializeOwned>(
     id.map(|id| take_json(attachments, id)).transpose()
 }
 
-/// Takes one bytes attachment as wire JSON, retaining exact numeric tokens,
-/// object order and native text through the existing wire reader.
-pub fn take_wire_json(attachments: &mut Attachments, id: AttachmentId) -> Result<Value, CoreError> {
+/// Takes one option-values attachment through the existing option reader.
+/// Numeric tokens, including NaN and infinities, remain exact facts for
+/// downstream option policy; object order and native text are retained.
+pub fn take_option_values(
+    attachments: &mut Attachments,
+    id: AttachmentId,
+) -> Result<Value, CoreError> {
     let bytes = take_bytes(attachments, id)?;
-    json::read(&bytes).map_err(|error| unreadable_json(id, error))
+    json::read_options(&bytes).map_err(|error| unreadable_json(id, error))
 }
 
-/// The optional form of [`take_wire_json`], leaving attachments untouched
+/// The optional form of [`take_option_values`], leaving attachments untouched
 /// when no value is named.
-pub fn take_wire_json_if(
+pub fn take_option_values_if(
     attachments: &mut Attachments,
     id: Option<AttachmentId>,
 ) -> Result<Option<Value>, CoreError> {
-    id.map(|id| take_wire_json(attachments, id)).transpose()
+    id.map(|id| take_option_values(attachments, id)).transpose()
 }
 
 #[cfg(test)]
@@ -413,11 +417,11 @@ mod tests {
     use std::sync::Arc;
 
     #[test]
-    fn wire_attachment_keeps_numeric_tokens_member_order_and_unicode() {
+    fn option_attachment_keeps_numeric_tokens_member_order_and_unicode() {
         let id = AttachmentId(1);
-        let bytes = br#"{"z":123456789012345678901234567890,"a":1,"negative_zero":-0,"fraction":1.2500e-42,"text":"\u0000\u03a9\ud83d\ude3a","a":2.00}"#;
+        let bytes = br#"{"z":123456789012345678901234567890,"a":1,"negative_zero":-0,"fraction":1.2500e-42,"nan":NaN,"positive":Infinity,"negative":-Infinity,"text":"\u0000\u03a9\ud83d\ude3a","a":2.00}"#;
         let mut attachments = Attachments::from([(id, Attachment::Bytes(bytes.to_vec()))]);
-        let decoded = take_wire_json(&mut attachments, id).unwrap();
+        let decoded = take_option_values(&mut attachments, id).unwrap();
         assert!(attachments.is_empty());
         assert_eq!(
             decoded,
@@ -432,22 +436,21 @@ mod tests {
                     "fraction".to_owned(),
                     Value::Number("1.2500e-42".to_owned())
                 ),
+                ("nan".to_owned(), Value::Number("NaN".to_owned())),
+                ("positive".to_owned(), Value::Number("Infinity".to_owned())),
+                ("negative".to_owned(), Value::Number("-Infinity".to_owned())),
                 ("text".to_owned(), Value::Text("\0Ω😺".into())),
             ])
         );
     }
 
     #[test]
-    fn unreadable_wire_attachment_preserves_reader_diagnostics() {
-        for bytes in [
-            b"[".as_slice(),
-            br#"{"x":NaN}"#.as_slice(),
-            br#""\ud800""#.as_slice(),
-        ] {
-            let expected = json::read(bytes).unwrap_err();
+    fn unreadable_option_attachment_preserves_reader_diagnostics() {
+        for bytes in [b"[".as_slice(), br#""\ud800""#.as_slice()] {
+            let expected = json::read_options(bytes).unwrap_err();
             let id = AttachmentId(3);
             let mut attachments = Attachments::from([(id, Attachment::Bytes(bytes.to_vec()))]);
-            let error = take_wire_json(&mut attachments, id).unwrap_err();
+            let error = take_option_values(&mut attachments, id).unwrap_err();
             assert_eq!(error.code, ErrorCode::InvalidMessage);
             assert_eq!(error.sentence, Sentence::InvalidMessage);
             assert_eq!(
@@ -472,7 +475,7 @@ mod tests {
     }
 
     #[test]
-    fn optional_wire_attachment_checks_kind_and_consumes_only_the_named_owner() {
+    fn optional_option_values_check_kind_and_consume_only_the_named_owner() {
         let id = AttachmentId(4);
         let spare = AttachmentId(5);
         let schema = Arc::new(Schema::empty());
@@ -481,9 +484,9 @@ mod tests {
             (id, Attachment::Arrow(arrow)),
             (spare, Attachment::Bytes(b"null".to_vec())),
         ]);
-        assert_eq!(take_wire_json_if(&mut attachments, None).unwrap(), None);
+        assert_eq!(take_option_values_if(&mut attachments, None).unwrap(), None);
         assert_eq!(attachments.len(), 2);
-        let error = take_wire_json_if(&mut attachments, Some(id)).unwrap_err();
+        let error = take_option_values_if(&mut attachments, Some(id)).unwrap_err();
         assert_eq!(error.code, ErrorCode::InvalidMessage);
         assert_eq!(
             error.fields["attachment"],
@@ -492,9 +495,9 @@ mod tests {
         assert!(!error.fields.contains_key("category"));
         assert!(!attachments.contains_key(&id));
         assert!(attachments.contains_key(&spare));
-        assert_eq!(take_wire_json(&mut attachments, id).unwrap_err(), error);
+        assert_eq!(take_option_values(&mut attachments, id).unwrap_err(), error);
         assert_eq!(
-            take_wire_json_if(&mut attachments, Some(spare)).unwrap(),
+            take_option_values_if(&mut attachments, Some(spare)).unwrap(),
             Some(Value::Null)
         );
         assert!(attachments.is_empty());

@@ -24,7 +24,7 @@ use sdm_contract::frames::materialize::*;
 use sdm_wire::json::Value;
 
 use super::*;
-use crate::attached::{take_json, take_wire_json, take_wire_json_if};
+use crate::attached::{take_json, take_option_values, take_option_values_if};
 use crate::frame_materialize::identity::{Identity, ordered_coverage};
 use crate::frame_materialize::values::{
     BoundGraph, attach_array, attach_json, positions, take_array, take_arrow, take_strings,
@@ -689,7 +689,7 @@ pub(crate) fn graph(
     else {
         return Err(protocol("graph preparation requires graph source values"));
     };
-    let values: Option<Value> = take_wire_json_if(attachments, values)?;
+    let values: Option<Value> = take_option_values_if(attachments, values)?;
     check_call(values.as_ref(), &option_names, prediction_rows, &limits)?;
     let held: sdm_contract::ops::HeldSchema = take_json(attachments, schema)?;
     if let Some(owner) = retained {
@@ -797,7 +797,7 @@ pub(crate) async fn population(
     // can suspend. Actual FrameRun accesses remain individually locked.
     graph.release_access();
     let query: String = take_json(attachments, query)?;
-    let values: Option<Value> = take_wire_json_if(attachments, values)?;
+    let values: Option<Value> = take_option_values_if(attachments, values)?;
     let mut deferred = options::values(values.as_ref())?;
     if deferred.num_context_samples.is_none() {
         deferred.num_context_samples = num_context_samples.map(|count| options::Integer {
@@ -1284,7 +1284,7 @@ pub(crate) fn task(
         .with_field("reason", Detail::text("empty"))
         .into());
     }
-    let values: Option<Value> = take_wire_json_if(attachments, values)?;
+    let values: Option<Value> = take_option_values_if(attachments, values)?;
     let deferred = options::values(values.as_ref())?;
     let lag_steps = deferred
         .lag_timesteps
@@ -1675,7 +1675,7 @@ pub(crate) fn plan(
 ) -> Result<FrameRequestPlan, CoreError> {
     let task = bind_task(asker, task, attachments)?;
     let sampling: Value =
-        take_wire_json_if(attachments, values)?.unwrap_or(Value::Object(Vec::new()));
+        take_option_values_if(attachments, values)?.unwrap_or(Value::Object(Vec::new()));
     let deferred = options::values(Some(&sampling))?;
     let top_k = deferred.top_k.as_ref().map(options::top_k).transpose()?;
     let inference = options::options(task.labels.asked.task, deferred.inference_config.as_ref())?;
@@ -1718,7 +1718,7 @@ fn bind_plan(
     attachments: &mut Attachments,
 ) -> Result<BoundPlan, CoreError> {
     let task = bind_task(asker, value.task.clone(), attachments)?;
-    let sampling: Value = take_wire_json(attachments, value.sampling_values)?;
+    let sampling: Value = take_option_values(attachments, value.sampling_values)?;
     if value.version != FRAME_MATERIALIZATION_VERSION
         || plan_identity(&value, &sampling)? != value.identity
     {
@@ -2487,7 +2487,7 @@ pub(crate) fn payload_part(
         })
         .transpose()?
         .unwrap_or_default();
-    let values: Option<Value> = take_wire_json_if(attachments, values)?;
+    let values: Option<Value> = take_option_values_if(attachments, values)?;
     let flags = options::values(values.as_ref())?;
     let (use_prediction_time, return_embeddings) = options::request_flags(&flags)?;
     let meaning = &context.plan.task.value.labelled.meaning;
