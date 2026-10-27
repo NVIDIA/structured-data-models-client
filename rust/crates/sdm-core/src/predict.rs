@@ -539,7 +539,9 @@ fn direct_contract_error(_answer: &Value, error: sdm_wire::response::Refused) ->
             ),
         }
     }
-    let owner = if error.field.starts_with("prediction.") || error.field == "prediction" {
+    let owner = if matches!(error.field, "prediction.id" | "prediction.forecast_step") {
+        "prediction"
+    } else if error.field.starts_with("prediction.") || error.field == "prediction" {
         "PredictionItem"
     } else {
         "PredictionResponse"
