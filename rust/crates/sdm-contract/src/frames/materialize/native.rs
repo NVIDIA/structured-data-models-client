@@ -42,6 +42,28 @@ pub enum NativeFrameConstruction {
     },
 }
 
+/// Actual complete-task or per-batch reference values at their distinct
+/// reached astype(str) positions. Numeric keys retain the core-owned cast;
+/// a native failure has no invented Arrow success value or diagnostic cast.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum FrameReferenceValues {
+    CoreKeys { values: AttachmentId },
+    NativeString { converted: NativeFrameStrings },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "outcome", rename_all = "snake_case", deny_unknown_fields)]
+pub enum NativeFrameStrings {
+    Value {
+        values: StringData,
+    },
+    Failed {
+        failure: NativeFailure,
+        message: String,
+    },
+}
+
 /// The first native element that failed the reached diagnostic constructor.
 /// Its repr is native presentation data, not a core inference from content.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
