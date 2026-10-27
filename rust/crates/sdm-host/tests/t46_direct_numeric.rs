@@ -241,7 +241,13 @@ fn constructor_header_and_arrow_coherence_checks_each_axis() {
 #[test]
 fn direct_numeric_preparation_is_model_neutral_and_binds_one_tabular_call() {
     for after_advice in [false, true] {
-        let prepared=prepare(json!({"stage":"schema","headers":headers(),"context":2,"predict":3,"entity_table":"instance"}),halves()).unwrap();
+        let inferred=prepare(json!({"stage":"schema","headers":headers(),"context":2,"predict":3,"entity_table":"instance"}),halves()).unwrap();
+        let prepared=prepare(json!({"stage":"finish_constructor","schema":inferred,"context":2,"predict":3,"context_header":header(&["feature","target"],3),"predict_header":header(&["feature"],2),"target_context":{"positions":[1]},"context_predict":[{"positions":[0]},{"positions":[]}]}),halves()).unwrap();
+        let task=prepare(json!({"stage":"constructor_task","prepared":prepared,"entity_table":"instance","tables":[{"kind":"text","value":"instance"}],"table":{"columns":[{"kind":"text","value":"feature"},{"kind":"text","value":"target"}],"target_dtype":"float64"}}),Attachments::new()).unwrap();
+        assert_eq!(
+            task,
+            json!({"kind":"regression","target":"target","table":"instance","dtype":"float64"})
+        );
         assert_eq!(prepared["task"], "regression");
         assert_eq!(prepared["target"], "target");
         assert_eq!(
