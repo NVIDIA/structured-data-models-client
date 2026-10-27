@@ -330,7 +330,7 @@ def test_builtin_text_preserves_schema_and_date_advice_on_both_routes(
                 ['2024-01-01', '2024-01-02', '2024-01-03']
                 if dated
                 else ['first', 'second', 'third'],
-                dtype='str',
+                dtype=pd.StringDtype(storage='python'),
             ),
         }
     )
