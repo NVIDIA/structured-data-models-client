@@ -1042,3 +1042,79 @@ def test_direct_body_serializes_whole_columns_before_rows(monkeypatch, first):
         else 'without losing precision'
     ) in new[1][-1]
     assert not new[3]
+
+
+@pytest.mark.parametrize(
+    ('identifier', 'invalid'),
+    [
+        ('[+5,]', True),
+        ('[-5,]', True),
+        ('[0x5,]', True),
+        ('[0o5,]', True),
+        ('[0b101,]', True),
+        ('[5_0,]', True),
+        ('[5.0e0,]', True),
+        ('[+5.5,]', True),
+        ('[True,]', True),
+        ('[None,]', True),
+        ('[4+1,]', False),
+        ('[4,,]', False),
+        ('[04,]', False),
+    ],
+)
+def test_direct_primitive_literal_grammar_preserves_opaque_tokens(
+    monkeypatch, identifier, invalid
+):
+    class Identified(Scripted):
+        def predict(self, payload):
+            answer = super().predict(payload)
+            answer['predictions'][0]['id'] = identifier
+            answer['predictions'][1]['id'] = '[5]'
+            return answer
+
+    frames = (
+        pd.DataFrame({'user_id': [1, 2, 3], 'target': [2, 4, 6]}),
+        pd.DataFrame({'user_id': [4, 5]}),
+    )
+    old = outcome(monkeypatch, frames, core=False, transport=Identified())
+    new = outcome(monkeypatch, frames, core=True, transport=Identified())
+    assert new == old
+    if invalid:
+        assert new[1][2] == 'INVALID_RESPONSE'
+    else:
+        assert new[1][0] == 'ok'
+        assert new[1][1][0]['id'] == [4, 5]
+
+
+@pytest.mark.parametrize(
+    'form', ["['{}.5',]", '[{}.5,]', '[+{}.5,]', '[{}.5e0,]']
+)
+@pytest.mark.parametrize('wrong', [False, True])
+def test_direct_primitive_literal_float_and_string_float_ids(
+    monkeypatch, form, wrong
+):
+    class Identified(Scripted):
+        def predict(self, payload):
+            answer = super().predict(payload)
+            for item in answer['predictions']:
+                at = item['row_index']
+                item['id'] = form.format(5 if wrong or at else 4)
+            return answer
+
+    def inputs():
+        return pd.DataFrame(
+            {'user_id': [1.5, 2.5, 3.5], 'target': [2, 4, 6]}
+        ), pd.DataFrame({'user_id': [4.5, 5.5]})
+
+    def edit(request):
+        if "'" in form:
+            request.schema['instance']['user_id'].dtype = 'string'
+
+    old = outcome(
+        monkeypatch, inputs(), core=False, edit=edit, transport=Identified()
+    )
+    new = outcome(
+        monkeypatch, inputs(), core=True, edit=edit, transport=Identified()
+    )
+    assert new == old
+    assert new[1][2] == 'INVALID_RESPONSE' if wrong else new[1][0] == 'ok'
