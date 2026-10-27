@@ -273,7 +273,9 @@ def test_string_table_notice_survives_later_error_but_date_notice_does_not(
         ['é', '😺', 'a\0b'],
     ],
 )
-def test_string_native_unicode_keeps_exact_constructor_outcome(monkeypatch, values):
+def test_string_native_unicode_keeps_exact_constructor_outcome(
+    monkeypatch, values
+):
     frame = pd.DataFrame(
         {'value': pd.Series(values, dtype=pd.StringDtype(storage='python'))}
     )
