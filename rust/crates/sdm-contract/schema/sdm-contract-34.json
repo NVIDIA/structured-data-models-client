@@ -265,6 +265,21 @@
       "description": "What each bytes attachment holds that a control message names and the\ncore reads or writes as JSON, by `<type>.<field>` of the field naming\nit: part of the locked schema (`$defs/Attachments`, put there by\n[`crate::schema_json`]), so a change to an attachment's shape needs a\nversion bump as a change to a control message's does. A model call's\nbody and the endpoint's answer are the endpoint's bytes, and an Arrow\nattachment carries its own schema; neither is listed.",
       "type": "object",
       "properties": {
+        "DecodedDirectResponse.value": {
+          "$ref": "#/$defs/DirectResponseData"
+        },
+        "DirectResponseData.rows": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DecodedDirectRow"
+          }
+        },
+        "LayoutResponse.attributed": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AttributedDirectRow"
+          }
+        },
         "PrepareRequest.input": {
           "$ref": "#/$defs/Preparation"
         },
@@ -373,6 +388,9 @@
       },
       "additionalProperties": false,
       "required": [
+        "DecodedDirectResponse.value",
+        "DirectResponseData.rows",
+        "LayoutResponse.attributed",
         "PrepareRequest.input",
         "PreparedRequest.value",
         "Predict.direct",
@@ -408,8 +426,1054 @@
         "Predicted.metadata"
       ]
     },
+    "DirectResponseData": {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "$ref": "#/$defs/ResponseScope"
+        },
+        "outputs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "named": {
+          "type": "boolean"
+        },
+        "payload": {
+          "$ref": "#/$defs/AttachmentId"
+        },
+        "response": {
+          "$ref": "#/$defs/AttachmentId"
+        },
+        "rows": {
+          "$ref": "#/$defs/AttachmentId"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "scope",
+        "outputs",
+        "named",
+        "payload",
+        "response",
+        "rows"
+      ]
+    },
+    "ResponseScope": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "model": {
+          "type": "string"
+        },
+        "request_id": {
+          "type": "string"
+        },
+        "call_request_id": {
+          "type": "string"
+        },
+        "response_rows": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "scoring_rows": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "model",
+        "request_id",
+        "call_request_id",
+        "response_rows",
+        "scoring_rows"
+      ]
+    },
+    "AttachmentId": {
+      "description": "Names an attachment that travels beside a control message: Arrow data\n(a fetch's result, a key set, a predict result) or bytes (a model\nrequest or response body).",
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "DecodedDirectRow": {
+      "description": "One actual decoded item with pure key/occurrence facts derived once.",
+      "type": "object",
+      "properties": {
+        "ordinal": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "row_index": {
+          "type": "string"
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "key": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "raw_in_batch": {
+          "type": "boolean"
+        },
+        "prior_ordinal": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "ordinal",
+        "row_index",
+        "raw_in_batch"
+      ]
+    },
+    "Scalar": {
+      "description": "The encoded form: what crosses the boundary, field for field.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "t": {
+              "type": "string",
+              "const": "null"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "type": "boolean"
+            },
+            "t": {
+              "type": "string",
+              "const": "bool"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "v"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "$ref": "#/$defs/Digits"
+            },
+            "t": {
+              "type": "string",
+              "const": "i8"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "v"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "$ref": "#/$defs/Digits"
+            },
+            "t": {
+              "type": "string",
+              "const": "i16"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "v"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "$ref": "#/$defs/Digits"
+            },
+            "t": {
+              "type": "string",
+              "const": "i32"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "v"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "$ref": "#/$defs/Digits"
+            },
+            "t": {
+              "type": "string",
+              "const": "i64"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "v"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "$ref": "#/$defs/Digits"
+            },
+            "t": {
+              "type": "string",
+              "const": "u8"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "v"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "$ref": "#/$defs/Digits"
+            },
+            "t": {
+              "type": "string",
+              "const": "u16"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "v"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "$ref": "#/$defs/Digits"
+            },
+            "t": {
+              "type": "string",
+              "const": "u32"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "v"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "$ref": "#/$defs/Digits"
+            },
+            "t": {
+              "type": "string",
+              "const": "u64"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "v"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "$ref": "#/$defs/FloatText"
+            },
+            "t": {
+              "type": "string",
+              "const": "f32"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "v"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "$ref": "#/$defs/FloatText"
+            },
+            "t": {
+              "type": "string",
+              "const": "f64"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "v"
+          ]
+        },
+        {
+          "description": "The unscaled integer: the value is `v * 10^-s`.",
+          "type": "object",
+          "properties": {
+            "p": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0,
+              "maximum": 255
+            },
+            "s": {
+              "type": "integer",
+              "format": "int8",
+              "minimum": -128,
+              "maximum": 127
+            },
+            "v": {
+              "$ref": "#/$defs/Digits"
+            },
+            "t": {
+              "type": "string",
+              "const": "d128"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "p",
+            "s",
+            "v"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "p": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0,
+              "maximum": 255
+            },
+            "s": {
+              "type": "integer",
+              "format": "int8",
+              "minimum": -128,
+              "maximum": 127
+            },
+            "v": {
+              "$ref": "#/$defs/Digits"
+            },
+            "t": {
+              "type": "string",
+              "const": "d256"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "p",
+            "s",
+            "v"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "type": "string"
+            },
+            "t": {
+              "type": "string",
+              "const": "utf8"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "v"
+          ]
+        },
+        {
+          "description": "Standard base64 with padding.",
+          "type": "object",
+          "properties": {
+            "v": {
+              "type": "string"
+            },
+            "t": {
+              "type": "string",
+              "const": "binary"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "v"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "$ref": "#/$defs/Digits"
+            },
+            "t": {
+              "type": "string",
+              "const": "date32"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "v"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "unit": {
+              "$ref": "#/$defs/TimestampUnit"
+            },
+            "zone": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "v": {
+              "$ref": "#/$defs/Digits"
+            },
+            "t": {
+              "type": "string",
+              "const": "ts"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "unit",
+            "v"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "unit": {
+              "$ref": "#/$defs/Unit"
+            },
+            "v": {
+              "$ref": "#/$defs/Digits"
+            },
+            "t": {
+              "type": "string",
+              "const": "duration"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "unit",
+            "v"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "unit": {
+              "$ref": "#/$defs/Unit"
+            },
+            "v": {
+              "$ref": "#/$defs/Digits"
+            },
+            "t": {
+              "type": "string",
+              "const": "time64"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "unit",
+            "v"
+          ]
+        }
+      ]
+    },
+    "Digits": {
+      "type": "string",
+      "pattern": "^(0|-?[1-9][0-9]*)$"
+    },
+    "FloatText": {
+      "type": "string",
+      "pattern": "^(NaN|inf|-inf|-?[0-9]+(\\.[0-9]+)?([eE][+-]?[0-9]+)?)$"
+    },
+    "TimestampUnit": {
+      "description": "A timestamp's physical count unit. Unlike durations and times of day,\nnative frame timestamps retain seconds and milliseconds without scaling.",
+      "type": "string",
+      "enum": [
+        "s",
+        "ms",
+        "us",
+        "ns"
+      ]
+    },
+    "Unit": {
+      "description": "The admitted unit of a duration or time of day.",
+      "type": "string",
+      "enum": [
+        "ns",
+        "us"
+      ]
+    },
+    "AttributedDirectRow": {
+      "type": "object",
+      "properties": {
+        "decimal_limit": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "row": {
+          "$ref": "#/$defs/DecodedDirectRow"
+        },
+        "literal": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LiteralObservation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "string": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StringObservation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "$ref": "#/$defs/Scalar"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "decimal_limit",
+        "row",
+        "id"
+      ]
+    },
+    "LiteralObservation": {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "$ref": "#/$defs/ResponseScope"
+        },
+        "ordinal": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "text": {
+          "type": "string"
+        },
+        "value": {
+          "$ref": "#/$defs/NativeLiteralValue"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "scope",
+        "ordinal",
+        "text",
+        "value"
+      ]
+    },
+    "NativeLiteralValue": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "$ref": "#/$defs/BuiltinValue"
+            },
+            "members": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "$ref": "#/$defs/BuiltinValue"
+              }
+            },
+            "outcome": {
+              "type": "string",
+              "const": "value"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "outcome",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "failure": {
+              "$ref": "#/$defs/NativeFailure"
+            },
+            "outcome": {
+              "type": "string",
+              "const": "failed"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "outcome",
+            "failure"
+          ]
+        }
+      ]
+    },
+    "BuiltinValue": {
+      "description": "Literal-built builtin facts. Nonprimitive members do not acquire display text.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "null"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "boolean"
+            },
+            "kind": {
+              "type": "string",
+              "const": "boolean"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "digits": {
+              "type": "string"
+            },
+            "radix": {
+              "$ref": "#/$defs/IntegerRadix"
+            },
+            "kind": {
+              "type": "string",
+              "const": "integer"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "digits",
+            "radix"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "bits": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "uint8",
+                "minimum": 0,
+                "maximum": 255
+              },
+              "minItems": 8,
+              "maxItems": 8
+            },
+            "kind": {
+              "type": "string",
+              "const": "float"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "bits"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "points": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              }
+            },
+            "kind": {
+              "type": "string",
+              "const": "unicode"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "points"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "bytes"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "complex"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "list"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "tuple"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "dictionary"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "set"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "ellipsis"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "IntegerRadix": {
+      "type": "string",
+      "enum": [
+        "decimal",
+        "hexadecimal"
+      ]
+    },
+    "NativeFailure": {
+      "type": "object",
+      "properties": {
+        "ancestry": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/BuiltinFailureClass"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "ancestry"
+      ]
+    },
+    "BuiltinFailureClass": {
+      "type": "string",
+      "enum": [
+        "syntax_error",
+        "value_error",
+        "type_error",
+        "memory_error",
+        "recursion_error"
+      ]
+    },
+    "StringObservation": {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "$ref": "#/$defs/ResponseScope"
+        },
+        "ordinal": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "value": {
+          "$ref": "#/$defs/NativeStringValue"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "scope",
+        "ordinal",
+        "value"
+      ]
+    },
+    "NativeStringValue": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "points": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              }
+            },
+            "outcome": {
+              "type": "string",
+              "const": "value"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "outcome",
+            "points"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "failure": {
+              "$ref": "#/$defs/NativeFailure"
+            },
+            "outcome": {
+              "type": "string",
+              "const": "failed"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "outcome",
+            "failure"
+          ]
+        }
+      ]
+    },
     "Preparation": {
       "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "scope": {
+              "$ref": "#/$defs/ResponseScope"
+            },
+            "rows": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/DecodedDirectRow"
+              }
+            },
+            "decimal_limit": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "stage": {
+              "type": "string",
+              "const": "check_response_rows"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "scope",
+            "rows",
+            "decimal_limit"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "checked": {
+              "$ref": "#/$defs/CheckedDirectRow"
+            },
+            "literal": {
+              "$ref": "#/$defs/LiteralObservation"
+            },
+            "stage": {
+              "type": "string",
+              "const": "select_response_member"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "checked",
+            "literal"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "selected": {
+              "$ref": "#/$defs/SelectedDirectMember"
+            },
+            "string": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/StringObservation"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "stage": {
+              "type": "string",
+              "const": "attribute_response_row"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "selected"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "$ref": "#/$defs/DirectResponseData"
+            },
+            "attributed": {
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "stage": {
+              "type": "string",
+              "const": "layout_response"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "data",
+            "attributed"
+          ]
+        },
         {
           "type": "object",
           "properties": {
@@ -703,6 +1767,145 @@
         }
       ]
     },
+    "CheckedDirectRow": {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "$ref": "#/$defs/ResponseScope"
+        },
+        "row": {
+          "$ref": "#/$defs/DecodedDirectRow"
+        },
+        "decimal_limit": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "id": {
+          "$ref": "#/$defs/DirectRowId"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "scope",
+        "row",
+        "decimal_limit",
+        "id"
+      ]
+    },
+    "DirectRowId": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "representation": {
+              "type": "string",
+              "const": "unkeyed"
+            }
+          },
+          "required": [
+            "representation"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "representation": {
+              "type": "string",
+              "const": "absent"
+            }
+          },
+          "required": [
+            "representation"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "representation": {
+              "type": "string",
+              "const": "length_limited_text"
+            }
+          },
+          "required": [
+            "representation"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "$ref": "#/$defs/BuiltinValue"
+            },
+            "members": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "$ref": "#/$defs/BuiltinValue"
+              }
+            },
+            "representation": {
+              "type": "string",
+              "const": "json_value"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "representation",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "string"
+            },
+            "representation": {
+              "type": "string",
+              "const": "native_literal_text"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "representation",
+            "value"
+          ]
+        }
+      ]
+    },
+    "SelectedDirectMember": {
+      "description": "A selected member of a checked row, independently useful builtin data.",
+      "type": "object",
+      "properties": {
+        "checked": {
+          "$ref": "#/$defs/CheckedDirectRow"
+        },
+        "literal": {
+          "$ref": "#/$defs/LiteralObservation"
+        },
+        "member": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BuiltinValue"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "checked",
+        "literal"
+      ]
+    },
     "DirectPrelude": {
       "description": "Fresh observations at the pre-warning one-shot overlap boundary.",
       "type": "object",
@@ -964,12 +2167,6 @@
         "relationships",
         "tables"
       ]
-    },
-    "AttachmentId": {
-      "description": "Names an attachment that travels beside a control message: Arrow data\n(a fetch's result, a key set, a predict result) or bytes (a model\nrequest or response body).",
-      "type": "integer",
-      "format": "uint32",
-      "minimum": 0
     },
     "FrameHeader": {
       "type": "object",
@@ -1483,24 +2680,6 @@
         }
       ]
     },
-    "TimestampUnit": {
-      "description": "A timestamp's physical count unit. Unlike durations and times of day,\nnative frame timestamps retain seconds and milliseconds without scaling.",
-      "type": "string",
-      "enum": [
-        "s",
-        "ms",
-        "us",
-        "ns"
-      ]
-    },
-    "Unit": {
-      "description": "The admitted unit of a duration or time of day.",
-      "type": "string",
-      "enum": [
-        "ns",
-        "us"
-      ]
-    },
     "Field": {
       "description": "A named, typed column or child of a nested type.",
       "type": "object",
@@ -1863,403 +3042,6 @@
         "sequence"
       ]
     },
-    "Scalar": {
-      "description": "The encoded form: what crosses the boundary, field for field.",
-      "oneOf": [
-        {
-          "type": "object",
-          "properties": {
-            "t": {
-              "type": "string",
-              "const": "null"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "t"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "v": {
-              "type": "boolean"
-            },
-            "t": {
-              "type": "string",
-              "const": "bool"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "t",
-            "v"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "v": {
-              "$ref": "#/$defs/Digits"
-            },
-            "t": {
-              "type": "string",
-              "const": "i8"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "t",
-            "v"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "v": {
-              "$ref": "#/$defs/Digits"
-            },
-            "t": {
-              "type": "string",
-              "const": "i16"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "t",
-            "v"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "v": {
-              "$ref": "#/$defs/Digits"
-            },
-            "t": {
-              "type": "string",
-              "const": "i32"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "t",
-            "v"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "v": {
-              "$ref": "#/$defs/Digits"
-            },
-            "t": {
-              "type": "string",
-              "const": "i64"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "t",
-            "v"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "v": {
-              "$ref": "#/$defs/Digits"
-            },
-            "t": {
-              "type": "string",
-              "const": "u8"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "t",
-            "v"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "v": {
-              "$ref": "#/$defs/Digits"
-            },
-            "t": {
-              "type": "string",
-              "const": "u16"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "t",
-            "v"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "v": {
-              "$ref": "#/$defs/Digits"
-            },
-            "t": {
-              "type": "string",
-              "const": "u32"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "t",
-            "v"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "v": {
-              "$ref": "#/$defs/Digits"
-            },
-            "t": {
-              "type": "string",
-              "const": "u64"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "t",
-            "v"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "v": {
-              "$ref": "#/$defs/FloatText"
-            },
-            "t": {
-              "type": "string",
-              "const": "f32"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "t",
-            "v"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "v": {
-              "$ref": "#/$defs/FloatText"
-            },
-            "t": {
-              "type": "string",
-              "const": "f64"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "t",
-            "v"
-          ]
-        },
-        {
-          "description": "The unscaled integer: the value is `v * 10^-s`.",
-          "type": "object",
-          "properties": {
-            "p": {
-              "type": "integer",
-              "format": "uint8",
-              "minimum": 0,
-              "maximum": 255
-            },
-            "s": {
-              "type": "integer",
-              "format": "int8",
-              "minimum": -128,
-              "maximum": 127
-            },
-            "v": {
-              "$ref": "#/$defs/Digits"
-            },
-            "t": {
-              "type": "string",
-              "const": "d128"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "t",
-            "p",
-            "s",
-            "v"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "p": {
-              "type": "integer",
-              "format": "uint8",
-              "minimum": 0,
-              "maximum": 255
-            },
-            "s": {
-              "type": "integer",
-              "format": "int8",
-              "minimum": -128,
-              "maximum": 127
-            },
-            "v": {
-              "$ref": "#/$defs/Digits"
-            },
-            "t": {
-              "type": "string",
-              "const": "d256"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "t",
-            "p",
-            "s",
-            "v"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "v": {
-              "type": "string"
-            },
-            "t": {
-              "type": "string",
-              "const": "utf8"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "t",
-            "v"
-          ]
-        },
-        {
-          "description": "Standard base64 with padding.",
-          "type": "object",
-          "properties": {
-            "v": {
-              "type": "string"
-            },
-            "t": {
-              "type": "string",
-              "const": "binary"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "t",
-            "v"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "v": {
-              "$ref": "#/$defs/Digits"
-            },
-            "t": {
-              "type": "string",
-              "const": "date32"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "t",
-            "v"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "unit": {
-              "$ref": "#/$defs/TimestampUnit"
-            },
-            "zone": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "v": {
-              "$ref": "#/$defs/Digits"
-            },
-            "t": {
-              "type": "string",
-              "const": "ts"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "t",
-            "unit",
-            "v"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "unit": {
-              "$ref": "#/$defs/Unit"
-            },
-            "v": {
-              "$ref": "#/$defs/Digits"
-            },
-            "t": {
-              "type": "string",
-              "const": "duration"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "t",
-            "unit",
-            "v"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "unit": {
-              "$ref": "#/$defs/Unit"
-            },
-            "v": {
-              "$ref": "#/$defs/Digits"
-            },
-            "t": {
-              "type": "string",
-              "const": "time64"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "t",
-            "unit",
-            "v"
-          ]
-        }
-      ]
-    },
-    "Digits": {
-      "type": "string",
-      "pattern": "^(0|-?[1-9][0-9]*)$"
-    },
-    "FloatText": {
-      "type": "string",
-      "pattern": "^(NaN|inf|-inf|-?[0-9]+(\\.[0-9]+)?([eE][+-]?[0-9]+)?)$"
-    },
     "ColumnRef": {
       "type": "object",
       "properties": {
@@ -2552,6 +3334,18 @@
         },
         {
           "$ref": "#/$defs/TabularEnvelope"
+        },
+        {
+          "$ref": "#/$defs/DirectResponseData"
+        },
+        {
+          "$ref": "#/$defs/CheckedDirectRows"
+        },
+        {
+          "$ref": "#/$defs/SelectedDirectMember"
+        },
+        {
+          "$ref": "#/$defs/AttributedDirectRow"
         }
       ]
     },
@@ -2791,12 +3585,6 @@
             "$ref": "#/$defs/TabularColumn"
           }
         },
-        "primary_key": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
         "target": {
           "type": "string"
         }
@@ -2805,7 +3593,6 @@
       "required": [
         "dtypes",
         "columns",
-        "primary_key",
         "target"
       ]
     },
@@ -2827,6 +3614,36 @@
         "name",
         "dtype",
         "stype"
+      ]
+    },
+    "CheckedDirectRows": {
+      "description": "Consecutive pure rows plus at most one reached native representation.",
+      "type": "object",
+      "properties": {
+        "scope": {
+          "$ref": "#/$defs/ResponseScope"
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AttributedDirectRow"
+          }
+        },
+        "row": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CheckedDirectRow"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "scope",
+        "rows"
       ]
     },
     "DirectPredict": {
@@ -2882,6 +3699,13 @@
             "task": {
               "type": "string"
             },
+            "primary_key": {
+              "description": "Read from the same captured native table after text advice.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
             "inference": {
               "$ref": "#/$defs/DirectInference",
               "default": {
@@ -2901,7 +3725,8 @@
             "predict",
             "context_header",
             "predict_header",
-            "task"
+            "task",
+            "primary_key"
           ]
         }
       ]
@@ -7313,6 +8138,24 @@
             "op",
             "value"
           ]
+        },
+        {
+          "description": "Owned model response data. The attachments are data, never resume handles.",
+          "type": "object",
+          "properties": {
+            "value": {
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "op": {
+              "type": "string",
+              "const": "decoded_direct_response"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "value"
+          ]
         }
       ]
     },
@@ -7646,6 +8489,7 @@
         "direct_option_integer",
         "direct_predict_dtype",
         "direct_nullable_cast",
+        "direct_native_failure",
         "direct_answers_shown",
         "direct_lookup",
         "direct_ambiguous",
