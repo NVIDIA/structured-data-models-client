@@ -20,6 +20,7 @@ fn row(row_index: i64, id: i64, prediction: Answer) -> Row {
     Row {
         row_index,
         forecast_step: None,
+        forecast_step_as_answered: None,
         answer_index: 0,
         id: Entity::Integer(id),
         prediction,

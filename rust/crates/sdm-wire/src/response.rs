@@ -45,7 +45,7 @@ use crate::json::{Value, is_integer_token, whole};
 
 /// Why a response is not one the contract describes: the field, and the
 /// fault, never the value.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Refused {
     /// The field, as `prediction.row_index` or `metadata`.
     pub field: &'static str,
@@ -54,6 +54,42 @@ pub struct Refused {
     pub reason: &'static str,
     /// The selected prediction item, when the fault arose inside that item.
     pub item: Option<usize>,
+    /// The actual value consumed by the selected guard, including members.
+    pub value: Option<Value>,
+    /// Native conversion faults are selected here and presented by the host.
+    pub native: Option<NativeFault>,
+    pub path: Vec<RefusalAt>,
+}
+
+/// A selected member relative to its typed response field.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RefusalAt {
+    Index(usize),
+    Member(String),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NativeFault {
+    Dict,
+    Iter,
+}
+
+impl Refused {
+    fn at(mut self, member: RefusalAt) -> Self {
+        self.path.insert(0, member);
+        self
+    }
+
+    fn with_value(mut self, value: &Value) -> Self {
+        if self.value.is_none() {
+            self.value = Some(value.clone());
+        }
+        self
+    }
+    fn native(mut self, fault: NativeFault, value: &Value) -> Self {
+        self.native = Some(fault);
+        self.with_value(value)
+    }
 }
 
 fn refused(field: &'static str, reason: &'static str) -> Refused {
@@ -61,6 +97,9 @@ fn refused(field: &'static str, reason: &'static str) -> Refused {
         field,
         reason,
         item: None,
+        value: None,
+        native: None,
+        path: vec![],
     }
 }
 
@@ -89,7 +128,7 @@ impl std::fmt::Display for RowIndex {
         f.write_str(&self.0)
     }
 }
-fn row_index(value: &Value) -> Result<RowIndex, Refused> {
+fn whole_index(value: &Value) -> Result<RowIndex, Refused> {
     let Value::Number(token) = value else {
         return Err(refused("prediction.row_index", "not_whole"));
     };
@@ -121,6 +160,8 @@ pub struct PredictionItem {
     pub row_index: RowIndex,
     pub id: Option<String>,
     pub forecast_step: Option<i128>,
+    /// Direct-only exact whole values wider than the shared gathered carrier.
+    pub forecast_step_written: Option<String>,
     /// The answer as the response wrote it; absent and `null` alike are
     /// `None`, as the bindings read both.
     pub prediction: Option<Value>,
@@ -171,7 +212,7 @@ impl PredictionResponse {
     }
     fn read_inner(value: &Value, keep_wide_index: bool) -> Result<PredictionResponse, Refused> {
         let Value::Object(_) = value else {
-            return Err(refused("response", "not_an_object"));
+            return Err(refused("response", "not_an_object").with_value(value));
         };
         let id = required_text(value, "id", "id")?;
         let model = required_text(value, "model", "model")?;
@@ -183,20 +224,28 @@ impl PredictionResponse {
                 .map(|(ordinal, item)| {
                     PredictionItem::read(item, keep_wide_index).map_err(|mut error| {
                         error.item = Some(ordinal);
-                        error
+                        let selected = error
+                            .field
+                            .strip_prefix("prediction.")
+                            .and_then(|field| item.get(field))
+                            .unwrap_or(item);
+                        error.with_value(selected)
                     })
                 })
                 .collect::<Result<_, _>>()?,
             // An object iterates over its names, each of which is text and
             // so not an item; with none, there are no items.
             Some(Value::Object(members)) if members.is_empty() => vec![],
-            Some(Value::Object(_)) => return Err(refused("prediction", "not_an_object")),
-            Some(_) => return Err(refused("predictions", "not_a_sequence")),
+            Some(Value::Object(values)) => {
+                return Err(refused("prediction", "not_an_object")
+                    .with_value(&Value::Text(values[0].0.clone())));
+            }
+            Some(value) => return Err(refused("predictions", "not_a_sequence").with_value(value)),
         };
         let metadata = match value.get("metadata") {
             None => return Err(refused("metadata", "missing")),
             Some(object @ Value::Object(_)) => object.clone(),
-            Some(_) => return Err(refused("metadata", "not_an_object")),
+            Some(value) => return Err(refused("metadata", "not_an_object").with_value(value)),
         };
         Ok(PredictionResponse {
             id,
@@ -220,14 +269,21 @@ impl PredictionItem {
         let row_index = match value.get("row_index") {
             None => return Err(refused("prediction.row_index", "missing")),
             Some(Value::Null) => return Err(refused("prediction.row_index", "null")),
-            Some(number) => row_index(number)?,
+            Some(number) => whole_index(number)?,
         };
         if !keep_wide_index && row_index.as_i128().is_none() {
             return Err(refused("prediction.row_index", "out_of_range"));
         }
-        let forecast_step = match value.get("forecast_step") {
-            None | Some(Value::Null) => None,
-            Some(number) => Some(whole_of(number, "prediction.forecast_step")?),
+        let (forecast_step, forecast_step_written) = match value.get("forecast_step") {
+            None | Some(Value::Null) => (None, None),
+            Some(number) if keep_wide_index => {
+                let exact = whole_index(number).map_err(|mut error| {
+                    error.field = "prediction.forecast_step";
+                    error
+                })?;
+                (exact.as_i128(), Some(exact.digits().into()))
+            }
+            Some(number) => (Some(whole_of(number, "prediction.forecast_step")?), None),
         };
         let prediction = match value.get("prediction") {
             None | Some(Value::Null) => None,
@@ -238,7 +294,13 @@ impl PredictionItem {
             Some(Value::Object(members)) => Some(
                 members
                     .iter()
-                    .map(|(class, p)| Ok((class.clone(), probability(p)?)))
+                    .map(|(class, p)| {
+                        Ok((
+                            class.clone(),
+                            read_number(p, "prediction.probabilities", keep_wide_index)
+                                .map_err(|fault| fault.at(RefusalAt::Member(class.clone())))?,
+                        ))
+                    })
                     .collect::<Result<_, Refused>>()?,
             ),
             Some(_) => return Err(refused("prediction.probabilities", "not_an_object")),
@@ -248,7 +310,11 @@ impl PredictionItem {
             Some(Value::Array(members)) => Some(
                 members
                     .iter()
-                    .map(|v| number(v, "prediction.scores"))
+                    .enumerate()
+                    .map(|(at, v)| {
+                        read_number(v, "prediction.scores", keep_wide_index)
+                            .map_err(|fault| fault.at(RefusalAt::Index(at)))
+                    })
                     .collect::<Result<_, Refused>>()?,
             ),
             Some(_) => return Err(refused("prediction.scores", "not_a_sequence")),
@@ -257,31 +323,62 @@ impl PredictionItem {
             None | Some(Value::Null) => None,
             Some(given) => Some(mappings(given)?),
         };
-        let explanation = match value.get("explanation") {
-            None | Some(Value::Null) => None,
-            Some(given) => Some(mapping(given, "prediction.explanation")?),
+        let read_embeddings = || -> Result<_, Refused> {
+            let result = match value.get("embeddings") {
+                None | Some(Value::Null) => None,
+                Some(Value::Array(members)) => Some(
+                    members
+                        .iter()
+                        .enumerate()
+                        .map(|(at, v)| {
+                            read_number(v, "prediction.embeddings", keep_wide_index)
+                                .map_err(|fault| fault.at(RefusalAt::Index(at)))
+                        })
+                        .collect::<Result<_, Refused>>()?,
+                ),
+                Some(_) => return Err(refused("prediction.embeddings", "not_a_sequence")),
+            };
+            Ok(result)
         };
-        let metadata = match value.get("metadata") {
-            None | Some(Value::Null) => None,
-            Some(given) => Some(mapping(given, "prediction.metadata")?),
+        let read_quantiles = || -> Result<_, Refused> {
+            let result = match value.get("quantiles") {
+                None | Some(Value::Null) => None,
+                Some(given @ Value::Object(_)) => Some(numbers(
+                    mapping(given, "prediction.quantiles")?,
+                    "prediction.quantiles",
+                    keep_wide_index,
+                )?),
+                Some(_) => return Err(refused("prediction.quantiles", "not_an_object")),
+            };
+            Ok(result)
         };
-        let quantiles = match value.get("quantiles") {
-            None | Some(Value::Null) => None,
-            Some(given @ Value::Object(_)) => Some(numbers(
-                mapping(given, "prediction.quantiles")?,
-                "prediction.quantiles",
-            )?),
-            Some(_) => return Err(refused("prediction.quantiles", "not_an_object")),
+        let read_explanation = || -> Result<_, Refused> {
+            let result = match value.get("explanation") {
+                None | Some(Value::Null) => None,
+                Some(given) => Some(mapping(given, "prediction.explanation")?),
+            };
+            Ok(result)
         };
-        let embeddings = match value.get("embeddings") {
-            None | Some(Value::Null) => None,
-            Some(Value::Array(members)) => Some(
-                members
-                    .iter()
-                    .map(|v| number(v, "prediction.embeddings"))
-                    .collect::<Result<_, Refused>>()?,
-            ),
-            Some(_) => return Err(refused("prediction.embeddings", "not_a_sequence")),
+        let read_metadata = || -> Result<_, Refused> {
+            let result = match value.get("metadata") {
+                None | Some(Value::Null) => None,
+                Some(given) => Some(mapping(given, "prediction.metadata")?),
+            };
+            Ok(result)
+        };
+        let (embeddings, quantiles, explanation, metadata) = if keep_wide_index {
+            (
+                read_embeddings()?,
+                read_quantiles()?,
+                read_explanation()?,
+                read_metadata()?,
+            )
+        } else {
+            let explanation = read_explanation()?;
+            let metadata = read_metadata()?;
+            let quantiles = read_quantiles()?;
+            let embeddings = read_embeddings()?;
+            (embeddings, quantiles, explanation, metadata)
         };
         let carried = UNREAD_ITEM_FIELDS
             .into_iter()
@@ -291,6 +388,7 @@ impl PredictionItem {
             row_index,
             id,
             forecast_step,
+            forecast_step_written,
             prediction,
             probabilities,
             scores,
@@ -308,7 +406,7 @@ fn required_text(value: &Value, name: &str, field: &'static str) -> Result<Strin
     match value.get(name) {
         None => Err(refused(field, "missing")),
         Some(Value::Text(text)) => Ok(text.clone()),
-        Some(_) => Err(refused(field, "not_text")),
+        Some(value) => Err(refused(field, "not_text").with_value(value)),
     }
 }
 
@@ -335,24 +433,19 @@ fn whole_of(value: &Value, field: &'static str) -> Result<i128, Refused> {
     ))
 }
 
-/// A probability as the bindings' `_finite` reads one: a number, or text
-/// Python's `float` reads ([`numeric_text`]), never a boolean, and finite.
-fn probability(value: &Value) -> Result<f64, Refused> {
-    number(value, "prediction.probabilities")
-}
-
 /// A mapping whose every value is a number, as the bindings' `_float_dict`
 /// holds one: each value read as [`number`] reads it (refused naming
 /// `field`), and written as the double it reads as, so text a float reads
 /// and an integer alike are that double.
-fn numbers(mapping: Value, field: &'static str) -> Result<Value, Refused> {
+fn numbers(mapping: Value, field: &'static str, direct: bool) -> Result<Value, Refused> {
     let Value::Object(members) = mapping else {
         return Err(refused(field, "not_an_object"));
     };
     members
         .into_iter()
         .map(|(name, v)| {
-            let read = number(&v, field)?;
+            let read = read_number(&v, field, direct)
+                .map_err(|fault| fault.at(RefusalAt::Member(name.clone())))?;
             Ok((
                 name,
                 Value::float(read).ok_or(refused(field, "not_finite"))?,
@@ -380,7 +473,7 @@ fn numbers(mapping: Value, field: &'static str) -> Result<Value, Refused> {
 /// JSON list of its pairs, `[[key, value], ...]`, as a JSON object holds no
 /// other key. Both forms are read here, keys equal as Python's are in both.
 pub fn mapping(member: &Value, field: &'static str) -> Result<Value, Refused> {
-    let not = || refused(field, "not_a_mapping");
+    let not = || refused(field, "not_a_mapping").native(NativeFault::Dict, member);
     // Two characters, as `dict` reads a pair from text.
     let pair_of = |text: &str| -> Option<(Value, Value)> {
         let mut chars = text.chars();
@@ -450,7 +543,11 @@ pub fn mappings(value: &Value) -> Result<Vec<Value>, Refused> {
     const FIELD: &str = "prediction.rankings";
     let one = |member: &Value| mapping(member, FIELD);
     match value {
-        Value::Array(members) => members.iter().map(one).collect(),
+        Value::Array(members) => members
+            .iter()
+            .enumerate()
+            .map(|(at, member)| one(member).map_err(|fault| fault.at(RefusalAt::Index(at))))
+            .collect(),
         Value::Text(text) => text
             .chars()
             .map(|c| one(&Value::Text(c.to_string())))
@@ -459,7 +556,7 @@ pub fn mappings(value: &Value) -> Result<Vec<Value>, Refused> {
             .iter()
             .map(|(name, _)| one(&Value::Text(name.clone())))
             .collect(),
-        _ => Err(refused(FIELD, "not_a_mapping")),
+        _ => Err(refused(FIELD, "not_a_mapping").native(NativeFault::Iter, value)),
     }
 }
 
@@ -496,10 +593,24 @@ fn number(value: &Value, field: &'static str) -> Result<f64, Refused> {
         _ => None,
     };
     match read {
-        None => Err(refused(field, "not_a_number")),
-        Some(p) if !p.is_finite() => Err(refused(field, "not_finite")),
+        None => Err(refused(field, "not_a_number").with_value(value)),
+        Some(p) if !p.is_finite() => Err(refused(field, "not_finite").with_value(value)),
         Some(p) => Ok(p),
     }
+}
+
+fn read_number(value: &Value, field: &'static str, direct: bool) -> Result<f64, Refused> {
+    number(value, field).map_err(|mut fault| {
+        // float(huge Python int) raises OverflowError; float(huge text)
+        // returns infinity. The generated direct decoder distinguishes them.
+        if direct
+            && fault.reason == "not_finite"
+            && matches!(value, Value::Number(token) if is_integer_token(token))
+        {
+            fault.reason = "not_a_number";
+        }
+        fault
+    })
 }
 
 /// The first code point of each run of ten Unicode decimal digits (0 to 9)

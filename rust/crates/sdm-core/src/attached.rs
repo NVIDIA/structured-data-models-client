@@ -49,7 +49,10 @@ pub fn resolved_attachments(
                     sdm_contract::prepare::Preparation::EncodeBody { input } => {
                         Some((input.context, input.predict))
                     }
-                    sdm_contract::prepare::Preparation::Schema {
+                    sdm_contract::prepare::Preparation::Context {
+                        context, predict, ..
+                    }
+                    | sdm_contract::prepare::Preparation::Schema {
                         context, predict, ..
                     }
                     | sdm_contract::prepare::Preparation::FinishConstructor {
@@ -138,9 +141,10 @@ pub fn resolved_attachments(
     }
     let mut tables = match operation {
         Operation::DescribeSource(_) => {
-            serde_json::from_slice::<FrameManifest>(read(manifest)?)
-                .map_err(|_| invalid("unreadable constructor frame manifest", manifest))?
-                .tables
+            let frame = serde_json::from_slice::<FrameManifest>(read(manifest)?)
+                .map_err(|_| invalid("unreadable constructor frame manifest", manifest))?;
+            named.extend(frame.inference.map(|id| (id, AttachmentKind::Bytes)));
+            frame.tables
         }
         Operation::Materialize(request) => {
             let mut tables = serde_json::from_slice::<MaterializeFrames>(read(manifest)?)

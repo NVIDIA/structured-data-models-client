@@ -440,26 +440,46 @@ def construct(
             }
         }
         holding.enter_context(frames._presentation(native_types))
-        answer = _call(
-            {
-                'stage': 'schema',
-                'headers': headers,
-                'context': 2,
-                'predict': 3,
-                'entity_table': entity_table,
-                'schema': None if schema is None else spec.held_schema(schema),
-            },
-            {
-                2: _buffers(context, context_header),
-                3: _buffers(predict, predict_header),
-            },
-        )
         if schema is None:
-            schema = schemas.build(
-                Schema,
-                None,
-                answer['description'],
-                frames={entity_table: context},
+            early = _call(
+                {
+                    'stage': 'context',
+                    'headers': headers,
+                    'context': 2,
+                    'predict': 3,
+                    'entity_table': entity_table,
+                },
+                {
+                    2: _buffers(context, context_header),
+                    3: _buffers(predict, predict_header),
+                },
+            )
+            schema = frames.from_data(
+                Schema, {entity_table: context}, relationships=[]
+            )
+            answer = _call(
+                {
+                    'stage': 'inferred_schema',
+                    'context': early,
+                    'schema': spec.held_schema(schema),
+                }
+            )
+        else:
+            answer = _call(
+                {
+                    'stage': 'schema',
+                    'headers': headers,
+                    'context': 2,
+                    'predict': 3,
+                    'entity_table': entity_table,
+                    'schema': None
+                    if schema is None
+                    else spec.held_schema(schema),
+                },
+                {
+                    2: _buffers(context, context_header),
+                    3: _buffers(predict, predict_header),
+                },
             )
         # Schema inference advice has now been presented. These are the same
         # original native frames, observed again only for the remaining guards.
@@ -666,6 +686,16 @@ def predict(
         # A leakage warning may have replaced Request's references. Capture
         # the adapter's references now and retain them across its text advice.
         schema = request.schema
+        # Native ownership/back-reference copying precedes core key marking.
+        # Publish the core's canonical metadata before a consistency refusal.
+        schema._own_tables()
+        canonical = _call(
+            {'stage': 'adopt_schema', 'schema': spec.held_schema(schema)}
+        )
+        from sdm_client._rust.edits import _store
+
+        _store(schema, canonical, None)
+        _call({'stage': 'consistent_schema', 'schema': canonical})
         # Capture the table object as the adapter does. A missing table remains
         # a core-selected schema error in Envelope, before this reference is used.
         table = (

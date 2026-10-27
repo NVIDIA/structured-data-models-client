@@ -10,6 +10,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use arrow_array::RecordBatch;
 use arrow_schema::{DataType, Schema};
 use sdm_contract::data::Relation;
+use sdm_contract::frames::{
+    FrameAdoption, FrameInferred, FrameNomination, FrameSample, FrameSampleColumn, TimeChoice,
+};
+use sdm_contract::ops::DescribedTable;
 use sdm_contract::ops::{Dtype, SourceDescription, Stype};
 use sdm_contract::{ColumnType, CoreError, CoreWarning, Detail, Scalar, Sentence};
 
@@ -22,12 +26,27 @@ pub struct Read {
     pub table: InferredTable,
     values: Vec<Vec<Option<Value>>>,
     batches: Vec<RecordBatch>,
+    bindings: Vec<Option<usize>>,
     pub rows: usize,
 }
 
 impl Read {
     /// Count a key against the current admitted snapshot, not old metadata.
     pub fn count(&self, key: &[String]) -> Counted {
+        if key.iter().any(|name| {
+            self.table
+                .columns
+                .iter()
+                .position(|c| &c.name == name)
+                .is_none_or(|at| self.bindings[at].is_none())
+        }) {
+            return Counted {
+                rows: 0,
+                distinct: 0,
+                missing: 0,
+                example: None,
+            };
+        }
         let columns: Vec<usize> = key
             .iter()
             .filter_map(|name| self.table.columns.iter().position(|c| &c.name == name))
@@ -53,7 +72,7 @@ impl Read {
                 if row < batch.num_rows() {
                     return columns
                         .iter()
-                        .map(|&at| values::scalar(batch.column(at).as_ref(), row))
+                        .map(|&at| values::scalar(batch.column(self.bindings[at]?).as_ref(), row))
                         .collect();
                 }
                 row -= batch.num_rows();
@@ -66,32 +85,6 @@ impl Read {
             missing,
             example,
         }
-    }
-
-    /// The immediate inferred-key warnings, before a later table is read.
-    pub fn hold_inferred(&mut self) -> Result<Vec<CoreWarning>, CoreError> {
-        if self.table.primary_key.is_empty() {
-            return Ok(vec![]);
-        }
-        let count = self.count(&self.table.primary_key);
-        let mut notices = Vec::new();
-        if count.missing > 0 {
-            notices.push(
-                CoreWarning::new(
-                    Sentence::KeyNoValueColumn,
-                    "an inferred key has missing values",
-                )
-                .with_fields(vec![
-                    ("table", Detail::text(&self.table.name)),
-                    ("column", Detail::text(&self.table.primary_key[0])),
-                    ("missing", number(count.missing)),
-                ]),
-            );
-        }
-        if count.repeats() > 0 {
-            notices.push(self.repeated(&self.table.primary_key, &count));
-        }
-        Ok(notices)
     }
 
     fn fields(&self, key: &[String], count: &Counted) -> Vec<(&'static str, Detail)> {
@@ -129,7 +122,9 @@ impl Read {
                     .find(|(_, c)| &c.name == *name)
                     .is_some_and(|(at, c)| {
                         crate::assemble::can_identify(c.dtype)
-                            && self.values[at].iter().all(Option::is_some)
+                            && c.stype != Stype::Timestamp
+                            && (self.bindings[at].is_none()
+                                || self.values[at].iter().all(Option::is_some))
                     })
             })
             .cloned()
@@ -209,6 +204,24 @@ pub fn final_notices(
     reads: &[Read],
     description: &SourceDescription,
     infer_links: bool,
+) -> Result<Vec<CoreWarning>, CoreError> {
+    final_notices_with_samples(reads, description, infer_links, true)
+}
+
+/// Final key advice only; native hosts count sample columns later, individually.
+pub fn key_notices(
+    reads: &[Read],
+    description: &SourceDescription,
+    infer_links: bool,
+) -> Result<Vec<CoreWarning>, CoreError> {
+    final_notices_with_samples(reads, description, infer_links, false)
+}
+
+fn final_notices_with_samples(
+    reads: &[Read],
+    description: &SourceDescription,
+    infer_links: bool,
+    samples: bool,
 ) -> Result<Vec<CoreWarning>, CoreError> {
     let mut notices = Vec::new();
     let mut named = BTreeMap::<&str, BTreeSet<&str>>::new();
@@ -355,6 +368,9 @@ pub fn final_notices(
             );
         }
     }
+    if !samples {
+        return Ok(notices);
+    }
     for (read, table) in reads.iter().zip(&description.tables) {
         for (at, c) in table.columns.iter().enumerate() {
             if c.dtype != Dtype::String || c.stype != Stype::Categorical {
@@ -362,30 +378,104 @@ pub fn final_notices(
             }
             let distinct = values::distinct(&read.values[at]);
             let present = read.values[at].iter().flatten().count();
-            if distinct >= 32 && distinct as f64 >= present as f64 * 0.5 {
-                notices.push(
-                    CoreWarning::new(
-                        Sentence::FrameCategoricalSample,
-                        "frame size determined a column's meaning",
-                    )
-                    .with_fields(vec![
-                        ("table", Detail::text(&table.name)),
-                        ("column", Detail::text(&c.name)),
-                        ("distinct", number(distinct as u64)),
-                        ("present", number(present as u64)),
-                    ]),
-                );
+            if let Some(notice) =
+                sample_notice(&table.name, &c.name, distinct as u64, present as u64)
+            {
+                notices.push(notice);
             }
         }
     }
     Ok(notices)
 }
 
+fn sample_notice(table: &str, column: &str, distinct: u64, present: u64) -> Option<CoreWarning> {
+    (distinct >= 32 && distinct as f64 >= present as f64 * 0.5).then(|| {
+        CoreWarning::new(
+            Sentence::FrameCategoricalSample,
+            "frame size determined a column's meaning",
+        )
+        .with_fields(vec![
+            ("table", Detail::text(table)),
+            ("column", Detail::text(column)),
+            ("distinct", number(distinct)),
+            ("present", number(present)),
+        ])
+    })
+}
+
+/// A fixed core-selected sample column, observed only at its native loop position.
+pub fn sample(
+    column: FrameSampleColumn,
+    schema: &Schema,
+    batches: &[RecordBatch],
+) -> Result<(FrameSample, Vec<CoreWarning>), CoreError> {
+    if column.column.dtype != Dtype::String || column.column.stype != Stype::Categorical {
+        return Err(CoreError::protocol(
+            Sentence::InvalidMessage,
+            "a sample column must have the original automatically categorical string meaning",
+        ));
+    }
+    if schema.fields().len() > 1
+        || schema
+            .fields()
+            .first()
+            .is_some_and(|field| field.name() != &column.column.name)
+    {
+        return Err(CoreError::protocol(
+            Sentence::InvalidMessage,
+            "sample Arrow does not identify only its original column",
+        ));
+    }
+    let at = schema
+        .fields()
+        .iter()
+        .position(|field| field.name() == &column.column.name);
+    let values = at
+        .map(|at| values::column(batches, at, Floats::Frame))
+        .transpose()?
+        .unwrap_or_default();
+    let distinct = values::distinct(&values) as u64;
+    let present = values.iter().flatten().count() as u64;
+    let notices = sample_notice(&column.table, &column.column.name, distinct, present)
+        .into_iter()
+        .collect();
+    Ok((
+        FrameSample {
+            column,
+            exists: at.is_some(),
+            distinct,
+            present,
+        },
+        notices,
+    ))
+}
+
+/// A fresh stated-key check/adoption after the metadata edit, without
+/// renominating columns or reselecting the earlier inferred time choice.
+pub fn adopt_stated(
+    mut value: FrameInferred,
+    schema: &Schema,
+    batches: &[RecordBatch],
+) -> Result<(FrameInferred, Vec<CoreWarning>), CoreError> {
+    let read = observe(&value.table, value.time.clone(), schema, batches)?;
+    let notices = read.hold_stated(&value.table.primary_key)?;
+    value.table.duplicate_keys = Some(Scalar::UInt64(
+        read.count(&value.table.primary_key).repeats(),
+    ));
+    let mut description = SourceDescription {
+        tables: vec![value.table],
+        links: vec![],
+    };
+    crate::assemble::mark_keys(&mut description);
+    value.table = description.tables.remove(0);
+    Ok((value, notices))
+}
+
 /// Whole-table frame inference, not preview-sized SQL inference. This first
 /// consumer accepts NumPy/pandas masked numeric/Boolean arrays, native
 /// timestamp arrays and built-in pandas text, without object or Decimal conversion. Native
 /// conversion has already encoded missingness in Arrow validity.
-pub fn read(
+fn read_columns(
     name: &str,
     source: &Relation,
     schema: &Schema,
@@ -435,11 +525,12 @@ pub fn read(
         })
     };
     let primary_key: Vec<_> = primary_key.into_iter().collect();
-    let time = crate::infer::frame_time(&columns, &all_values, batches, rows, &primary_key)?;
+    let time = TimeChoice::default();
     Ok(Read {
         rows,
         values: all_values,
         batches: batches.to_vec(),
+        bindings: (0..schema.fields().len()).map(Some).collect(),
         table: InferredTable {
             name: name.into(),
             source: source.clone(),
@@ -455,6 +546,195 @@ pub fn read(
             declared: BTreeSet::new(),
         },
     })
+}
+
+/// The complete initial column meanings and fixed nominee, before adoption.
+pub fn nominate(
+    name: &str,
+    source: &Relation,
+    schema: &Schema,
+    batches: &[RecordBatch],
+) -> Result<(FrameNomination, Vec<CoreWarning>), CoreError> {
+    let mut read = read_columns(name, source, schema, batches)?;
+    let nominated_key = std::mem::take(&mut read.table.primary_key);
+    let count = read.count(&nominated_key);
+    let notices = if count.missing > 0 {
+        vec![
+            CoreWarning::new(
+                Sentence::KeyNoValueColumn,
+                "an inferred key has missing values",
+            )
+            .with_fields(vec![
+                ("table", Detail::text(name)),
+                ("column", Detail::text(&nominated_key[0])),
+                ("missing", number(count.missing)),
+            ]),
+        ]
+    } else {
+        vec![]
+    };
+    Ok((
+        FrameNomination {
+            table: crate::assemble::described_table(read.table, Some(Scalar::UInt64(0))),
+            nominated_key,
+        },
+        notices,
+    ))
+}
+
+/// Convert settled metadata back to the shared inference assembly value.
+/// This performs no nomination, value inference, key check, or time choice.
+pub fn inferred(table: &DescribedTable, time: TimeChoice) -> InferredTable {
+    InferredTable {
+        name: table.name.clone(),
+        source: table.source.clone(),
+        columns: table
+            .columns
+            .iter()
+            .map(|c| InferredColumn {
+                name: c.name.clone(),
+                dtype: c.dtype,
+                stype: c.stype,
+                stype_before_key: c.stype_before_key,
+                received: c.received.clone(),
+                nullable: c.nullable,
+                unique: c.unique,
+                exact_number: c.exact_number,
+            })
+            .collect(),
+        primary_key: table.primary_key.clone(),
+        time_column: table.time_column.clone(),
+        time,
+        left_out: vec![],
+        unread_times: vec![],
+        day_first: vec![],
+        tied_keys: vec![],
+        unique: vec![],
+        declared: BTreeSet::new(),
+    }
+}
+
+/// Fresh values bound by original column name; absent differs from all-null.
+pub fn observe(
+    table: &DescribedTable,
+    time: TimeChoice,
+    schema: &Schema,
+    batches: &[RecordBatch],
+) -> Result<Read, CoreError> {
+    let bindings: Vec<_> = table
+        .columns
+        .iter()
+        .map(|c| schema.fields().iter().position(|f| f.name() == &c.name))
+        .collect();
+    let values = bindings
+        .iter()
+        .map(|at| match at {
+            Some(at) => values::column(batches, *at, Floats::Frame),
+            None => Ok(vec![]),
+        })
+        .collect::<Result<_, _>>()?;
+    Ok(Read {
+        table: inferred(table, time),
+        rows: batches.iter().map(RecordBatch::num_rows).sum(),
+        values,
+        bindings,
+        batches: batches.to_vec(),
+    })
+}
+
+/// Adopt the fixed nominee using current rows, then fix repeat count/advice.
+pub fn adopt(
+    mut nomination: FrameNomination,
+    schema: &Schema,
+    batches: &[RecordBatch],
+) -> Result<(FrameAdoption, Vec<CoreWarning>), CoreError> {
+    nomination.table.primary_key = nomination.nominated_key;
+    nomination.table.frame_key_form = (!nomination.table.primary_key.is_empty())
+        .then_some(sdm_contract::frames::FrameKeyForm::Scalar);
+    let read = observe(&nomination.table, TimeChoice::default(), schema, batches)?;
+    let count = read.count(&nomination.table.primary_key);
+    nomination.table.duplicate_keys =
+        Some(Scalar::UInt64(if nomination.table.primary_key.is_empty() {
+            0
+        } else {
+            count.repeats()
+        }));
+    let notices = if !nomination.table.primary_key.is_empty() && count.repeats() > 0 {
+        vec![read.repeated(&nomination.table.primary_key, &count)]
+    } else {
+        vec![]
+    };
+    let mut description = SourceDescription {
+        tables: vec![nomination.table],
+        links: vec![],
+    };
+    crate::assemble::mark_keys(&mut description);
+    Ok((
+        FrameAdoption {
+            table: description.tables.remove(0),
+        },
+        notices,
+    ))
+}
+
+/// Read only original timestamp candidates after any repeat advice effects.
+pub fn choose_time(
+    adopted: FrameAdoption,
+    schema: &Schema,
+    batches: &[RecordBatch],
+) -> Result<FrameInferred, CoreError> {
+    let read = observe(&adopted.table, TimeChoice::default(), schema, batches)?;
+    for (at, c) in read.table.columns.iter().enumerate() {
+        if c.stype == Stype::Timestamp
+            && !read.table.primary_key.contains(&c.name)
+            && !crate::names::is_load_stamp(&c.name)
+            && !crate::names::is_birth_date(&c.name)
+            && read.bindings[at].is_none()
+        {
+            return Err(CoreError::new(
+                Sentence::DirectSchemaMissing,
+                "a timestamp candidate is absent from the current frame",
+            )
+            .with_field("name", Detail::text(&c.name)));
+        }
+    }
+    // Preserve original ordinals/meanings while reading current physical arrays.
+    let present: Vec<_> = read
+        .bindings
+        .iter()
+        .enumerate()
+        .filter_map(|(at, binding)| binding.map(|binding| (at, binding)))
+        .collect();
+    let columns: Vec<_> = present
+        .iter()
+        .map(|(at, _)| read.table.columns[*at].clone())
+        .collect();
+    let presence: Vec<_> = present
+        .iter()
+        .map(|(at, _)| read.values[*at].clone())
+        .collect();
+    let projection: Vec<_> = present.iter().map(|(_, binding)| *binding).collect();
+    let projected: Vec<_> = batches
+        .iter()
+        .map(|b| {
+            b.project(&projection).map_err(|_| {
+                CoreError::protocol(
+                    Sentence::InvalidMessage,
+                    "frame time observation projection failed",
+                )
+            })
+        })
+        .collect::<Result<_, _>>()?;
+    let time = crate::infer::frame_time(
+        &columns,
+        &presence,
+        &projected,
+        read.rows,
+        &read.table.primary_key,
+    )?;
+    let mut table = adopted.table;
+    table.time_column = time.column.clone();
+    Ok(FrameInferred { table, time })
 }
 
 fn check_name(name: &str) -> Result<(), CoreError> {

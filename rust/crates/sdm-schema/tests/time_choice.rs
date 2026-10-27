@@ -13,6 +13,7 @@
 //! (`column_type`). From T1.32e, a preview that may not hold every row
 //! reads the timestamps over the whole table (`time_whole_table`).
 
+use sdm_schema::infer::TimeChoicePolicy;
 use std::sync::Arc;
 
 use arrow_array::builder::{BinaryBuilder, BooleanBuilder, Int32Builder, ListBuilder};

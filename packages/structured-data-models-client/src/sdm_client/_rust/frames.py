@@ -91,6 +91,8 @@ def _frame_timestamp(
     # timezone implementation and unit. No original frame values are read.
     value = fields['value']
     dtype = native_types[fields['table']][fields['column']]
+    if not hasattr(value, 'unit'):
+        return str(pd.Series([value], dtype=dtype).iloc[0])
     if type(dtype) is pd.DatetimeTZDtype:
         stamp = pd.Timestamp(value.value, unit=value.unit, tz='UTC').tz_convert(
             dtype.tz
@@ -205,34 +207,39 @@ def _numeric_physical(dtype: Any) -> str | None:
     return None
 
 
-def _convert(name: str, frame: pd.DataFrame) -> tuple[Any, dict[str, Any]]:
+def _convert(
+    name: str, frame: pd.DataFrame, *, check_header: bool = True
+) -> tuple[Any, dict[str, Any]]:
     # Validate one table before proceeding to the next. No preliminary
     # all-table scan or native-object conversion is permitted here.
-    if type(frame.columns) not in (pd.Index, pd.RangeIndex) or any(
-        type(column) not in (str, int, float, bool, type(None))
-        for column in frame.columns
-    ):
-        raise RouteError(
-            'the partial frame constructor requires ordinary built-in column names'
-        )
-    if frame.columns.has_duplicates:
-        duplicates = sorted(
-            {str(c) for c in frame.columns[frame.columns.duplicated()]}
-        )
-        raise StructuredDataError(
-            f'table {name!r} has duplicate column name(s) {duplicates}',
-            code='INVALID_REQUEST',
-        )
-    if any(isinstance(c, str) and type(c) is not str for c in frame.columns):
-        raise RouteError(
-            'the partial frame constructor requires ordinary built-in column names'
-        )
-    non_strings = [c for c in frame.columns if not isinstance(c, str)]
-    if non_strings:
-        raise StructuredDataError(
-            f'table {name!r} column names must be strings; got {non_strings}',
-            code='INVALID_REQUEST',
-        )
+    if check_header:
+        if type(frame.columns) not in (pd.Index, pd.RangeIndex) or any(
+            type(column) not in (str, int, float, bool, type(None))
+            for column in frame.columns
+        ):
+            raise RouteError(
+                'the partial frame constructor requires ordinary built-in column names'
+            )
+        if frame.columns.has_duplicates:
+            duplicates = sorted(
+                {str(c) for c in frame.columns[frame.columns.duplicated()]}
+            )
+            raise StructuredDataError(
+                f'table {name!r} has duplicate column name(s) {duplicates}',
+                code='INVALID_REQUEST',
+            )
+        if any(
+            isinstance(c, str) and type(c) is not str for c in frame.columns
+        ):
+            raise RouteError(
+                'the partial frame constructor requires ordinary built-in column names'
+            )
+        non_strings = [c for c in frame.columns if not isinstance(c, str)]
+        if non_strings:
+            raise StructuredDataError(
+                f'table {name!r} column names must be strings; got {non_strings}',
+                code='INVALID_REQUEST',
+            )
     import pyarrow as pa
 
     arrays = []
@@ -305,6 +312,7 @@ def _describe(
     key_forms: dict[str, str] | None = None,
     relationships: list[dict[str, Any]] | None = None,
     held_notices: list[dict[str, Any]] | None = None,
+    inference: dict[str, Any] | None = None,
 ) -> Finished:
     manifest: dict[str, Any] = {
         'stage': stage,
@@ -325,6 +333,10 @@ def _describe(
                 {'source': codec.relation(name), 'rows': ordinal}
             )
             attached[ordinal] = rows
+        if inference is not None:
+            inference_id = max(2, max(attached)) + 1
+            manifest['inference'] = inference_id
+            attached[inference_id] = codec.attachment(inference)
         attached[2] = codec.attachment(manifest)
         with _presentation(native_types):
             return run(
@@ -343,6 +355,52 @@ def _describe(
     finally:
         rows = None
         attached.clear()
+
+
+def _observe(
+    name: str, frame: pd.DataFrame, names: list[str]
+) -> tuple[Any, dict[str, Any]]:
+    # Original metadata decides which columns this source position consumes.
+    # New unrelated columns are not traversed and earlier header guards are
+    # not replayed after a native warning handler changes the frame.
+    current = [column for column in names if column in frame.columns]
+    return _convert(name, frame[current], check_header=False)
+
+
+def _infer_table(
+    name: str, frame: pd.DataFrame
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    spec = {
+        'tables': [{'name': name, 'source': codec.relation(name)}],
+        'primary_keys': {},
+        'time_columns': {},
+    }
+    converted, types = _convert(name, frame)
+    finished = _describe('nominate', {name: converted}, spec, {name: types})
+    result = results.expect(finished.result, results.InferredFrames)
+    nominated = json.loads(finished.take(result.value))
+    names = [
+        column['name'] for column in nominated['value']['table']['columns']
+    ]
+    converted, types = _observe(name, frame, names)
+    finished = _describe(
+        'adopt', {name: converted}, spec, {name: types}, inference=nominated
+    )
+    result = results.expect(finished.result, results.InferredFrames)
+    adopted = json.loads(finished.take(result.value))
+    converted, types = _observe(name, frame, names)
+    # A missing candidate is selected by the core. Native lookup is used
+    # only by its reached diagnostic presenter, preserving KeyError cause.
+    with errors.holding(
+        direct_schema_missing=lambda fields: frame[fields['name']]
+    ):
+        finished = _describe(
+            'time', {name: converted}, spec, {name: types}, inference=adopted
+        )
+    result = results.expect(finished.result, results.InferredFrames)
+    return cast(
+        'dict[str, Any]', json.loads(finished.take(result.value))['value'][0]
+    ), types
 
 
 def _ordinary_builtin(value: Any, seen: set[int]) -> bool:
@@ -399,6 +457,8 @@ def from_data(
             'a schema needs at least one table', code='INVALID_REQUEST'
         )
     snapshots: dict[str, Any] = {}
+    inferred: dict[str, dict[str, Any]] = {}
+    time_types: dict[str, dict[str, Any]] = {}
     originals: dict[str, pd.DataFrame] = {}
     native_types: dict[str, dict[str, Any]] = {}
     finished: Finished | None = None
@@ -424,22 +484,8 @@ def from_data(
                 raise RouteError(
                     'the partial frame constructor requires ordinary built-in DataFrames'
                 )
-            converted, native_types[name] = _convert(name, frame)
-            spec: dict[str, Any] = {
-                'tables': [{'name': name, 'source': codec.relation(name)}],
-                'primary_keys': {},
-                'time_columns': {},
-            }
-            finished = _describe('table', {name: converted}, spec, native_types)
-            result = results.expect(finished.result, results.Described)
-            if result.frame_rows is None:
-                raise StructuredDataError(
-                    'Table stage returned no owned frame', code='INTERNAL_ERROR'
-                )
-            snapshots[name] = finished.take(result.frame_rows)
+            inferred[name], time_types[name] = _infer_table(name, frame)
             originals[name] = frame
-            finished = None
-            converted = None
         # Native argument conversion is deliberately after all Table stages,
         # matching the constructor's override boundary.
         for option in (primary_keys, time_columns):
@@ -479,15 +525,58 @@ def from_data(
             raise RouteError(
                 'the partial frame constructor requires ordinary built-in relationship sequences'
             )
+        # Native mapping iteration is itself observable. Each completed
+        # metadata edit precedes only the fresh values its setter consumes.
+        for name, value in (primary_keys or {}).items():
+            edit_spec = {
+                'tables': [
+                    {'name': table, 'source': codec.relation(table)}
+                    for table in originals
+                ],
+                'primary_keys': {name: codec.given_key(value)[0]},
+                'time_columns': {},
+            }
+            edited = _describe(
+                'edit',
+                {},
+                edit_spec,
+                {},
+                key_forms={
+                    name: 'scalar' if type(value) is str else 'sequence'
+                },
+                inference={
+                    'kind': 'inferred',
+                    'value': list(inferred.values()),
+                },
+            )
+            result = results.expect(edited.result, results.InferredFrames)
+            inferred = {
+                item['table']['name']: item
+                for item in json.loads(edited.take(result.value))['value']
+            }
+            columns = [
+                column['name'] for column in inferred[name]['table']['columns']
+            ]
+            converted, types = _observe(name, originals[name], columns)
+            stated = _describe(
+                'stated_key',
+                {name: converted},
+                {
+                    'tables': [{'name': name, 'source': codec.relation(name)}],
+                    'primary_keys': {},
+                    'time_columns': {},
+                },
+                {name: types},
+                inference={'kind': 'inferred', 'value': [inferred[name]]},
+            )
+            result = results.expect(stated.result, results.InferredFrames)
+            inferred[name] = json.loads(stated.take(result.value))['value'][0]
         spec = {
             'tables': [
                 {'name': name, 'source': codec.relation(name)}
-                for name in snapshots
+                for name in originals
             ],
-            'primary_keys': {
-                name: codec.given_key(value)[0]
-                for name, value in (primary_keys or {}).items()
-            },
+            'primary_keys': {},
             'time_columns': {
                 name: codec.given_name_or_none(value)
                 for name, value in (time_columns or {}).items()
@@ -535,18 +624,25 @@ def from_data(
                     raise RouteError(
                         'the partial frame constructor requires ordinary built-in relationship arguments'
                     )
+        # All immediate table/override argument effects precede this fresh
+        # final assembly observation. Earlier column meanings stay fixed.
+        for name, frame in originals.items():
+            names = [
+                column['name'] for column in inferred[name]['table']['columns']
+            ]
+            snapshots[name], native_types[name] = _observe(name, frame, names)
         try:
             finished = _describe(
-                'schema',
+                'assemble',
                 snapshots,
                 spec,
                 native_types,
-                key_forms={
-                    name: 'scalar' if type(value) is str else 'sequence'
-                    for name, value in (primary_keys or {}).items()
-                },
                 relationships=slots,
                 held_notices=held_notices,
+                inference={
+                    'kind': 'inferred',
+                    'value': list(inferred.values()),
+                },
             )
         except StructuredDataError:
             # Preserve preceding notices on a real core refusal. A warning
@@ -555,15 +651,38 @@ def from_data(
             with _presentation(native_types):
                 _show_held(held_notices)
             raise
-        result = results.expect(finished.result, results.Described)
-        if result.frame_rows is not None:
-            raise StructuredDataError(
-                'Schema stage returned a table snapshot', code='INTERNAL_ERROR'
-            )
-        described = json.loads(finished.take(result.description))
+        result = results.expect(finished.result, results.InferredFrames)
+        assembled = json.loads(finished.take(result.value))['value']
         finished = None
-        schema = schemas.build(cls, None, described, frames=originals)
-        _final_notices(schema, held_notices, native_types)
+        schema = schemas.build(
+            cls, None, assembled['description'], frames=originals
+        )
+        _final_notices(schema, assembled['key_notices'], native_types)
+        # These are the core-selected original automatic meanings. Presence
+        # and cardinality are captured separately for each native iteration,
+        # after the previous advice and after the date-as-text presentation.
+        for column in assembled['samples']:
+            name = column['table']
+            converted, types = _observe(
+                name, originals[name], [column['column']['name']]
+            )
+            sampled = _describe(
+                'sample',
+                {name: converted},
+                {
+                    'tables': [{'name': name, 'source': codec.relation(name)}],
+                    'primary_keys': {},
+                    'time_columns': {},
+                },
+                {name: types},
+                inference={'kind': 'sample_column', 'value': column},
+            )
+            sampled_result = results.expect(
+                sampled.result, results.InferredFrames
+            )
+            sampled.take(sampled_result.value)
+        with _presentation(time_types):
+            _show_held(assembled['notices'])
         return schema
     finally:
         # Tracebacks can retain these frames. Clear only call-owned snapshots;
@@ -571,5 +690,7 @@ def from_data(
         finished = None
         converted = None
         snapshots.clear()
+        inferred.clear()
+        time_types.clear()
         native_types.clear()
         held_notices.clear()

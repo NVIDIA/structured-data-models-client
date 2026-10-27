@@ -40,6 +40,9 @@ public final class Results {
   public record ViewNote(
       String sentence, Map<String, Object> fields, String table, String timeColumn) {}
 
+  /** Shared internal frame inference data, without a Java public constructor. */
+  public record InferredFrames(int value) {}
+
   /** {@code edit_schema}'s result: the attachment of the schema edited. */
   public record Edited(int schema, Map<String, Object> declared) {}
 
@@ -77,6 +80,7 @@ public final class Results {
       return switch (op) {
         case "validate_query" -> validated(result);
         case "describe_source" -> described(result);
+        case "inferred_frames" -> new InferredFrames(count(result, "value"));
         case "edit_schema" -> new Edited(count(result, "schema"), map(result.get("declared")));
         case "materialize" -> new Gathered(state(map(result.get("state"))), facts(result.get("query")));
         case "predict" -> predicted(result);

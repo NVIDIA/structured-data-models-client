@@ -10,6 +10,7 @@
 //! check that holds the schema `materialize` is handed, each refusal
 //! seeded.
 
+use sdm_schema::infer::TimeChoicePolicy;
 use std::collections::BTreeSet;
 
 use sdm_contract::ops::{

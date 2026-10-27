@@ -181,6 +181,15 @@ def _as_answered(row: dict[str, Any]) -> Any:
     return row.get('prediction')
 
 
+def _forecast_step(row: dict[str, Any]) -> int | None:
+    """Restore an already decoded exact whole value, without decimal display."""
+    from decimal import Decimal
+
+    if row.get('forecast_step_as_answered') is not None:
+        return int(Decimal(row['forecast_step_as_answered']))
+    return row.get('forecast_step')
+
+
 def _mapping(text: str) -> dict[Any, Any]:
     r"""An item's rankings member as the reference's item holds it, from
     the JSON text the core gives: an object, or, where a key is not text,
@@ -576,7 +585,7 @@ def _result(
             PredictionItem(
                 row_index=row['row_index'],
                 id=_id(row),
-                forecast_step=row.get('forecast_step'),
+                forecast_step=_forecast_step(row),
                 prediction=_as_answered(row),
                 probabilities=None
                 if row.get('probabilities') is None

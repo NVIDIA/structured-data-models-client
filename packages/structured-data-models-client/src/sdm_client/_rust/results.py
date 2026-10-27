@@ -35,6 +35,7 @@ __all__ = [
     'CoreRanking',
     'CoreRequest',
     'Described',
+    'InferredFrames',
     'Diagnostic',
     'Edited',
     'Gathered',
@@ -266,6 +267,11 @@ class Described:
     description: int
     notes: tuple[ViewNote, ...] = ()
     frame_rows: int | None = None
+
+
+@dataclasses.dataclass(frozen=True)
+class InferredFrames:
+    value: int
 
 
 @dataclasses.dataclass(frozen=True)
@@ -530,6 +536,11 @@ _RESULTS: dict[str, tuple[tuple[str, ...], tuple[str, ...], Any]] = {
         lambda read: DecodedDirectResponse(_int(read['value'], 'value')),
     ),
     'validate_query': (('accepted', 'diagnostics'), ('query',), _validated),
+    'inferred_frames': (
+        ('value',),
+        (),
+        lambda read: InferredFrames(_int(read['value'], 'value')),
+    ),
     'describe_source': (('description',), ('notes', 'frame_rows'), _described),
     'edit_schema': (('schema',), ('declared',), _edited),
     'materialize': (
@@ -562,6 +573,7 @@ def decode(
 ) -> (
     Validated
     | Described
+    | InferredFrames
     | Edited
     | Gathered
     | Predicted
@@ -589,6 +601,7 @@ def decode(
     built: (
         Validated
         | Described
+        | InferredFrames
         | Edited
         | Gathered
         | Predicted
@@ -602,6 +615,7 @@ _T = TypeVar(
     '_T',
     Validated,
     Described,
+    InferredFrames,
     Edited,
     Gathered,
     Predicted,
