@@ -7,36 +7,51 @@
 use std::sync::Arc;
 
 use arrow_array::{ArrayRef, RecordBatch, TimestampMicrosecondArray};
+use sdm_contract::Scalar;
 use sdm_contract::data::Relation;
 use sdm_contract::frames::{
     FrameDecimalExponent, FrameScalar, FrameTimeFacts, FrameTimeFirst, PassedOver,
 };
-use sdm_contract::Scalar;
 use sdm_schema::frames::{self, Columns};
 
 fn rows() -> RecordBatch {
     RecordBatch::try_from_iter([(
         "observed_at",
         Arc::new(TimestampMicrosecondArray::from_iter_values([1, 2, 3, 4])) as ArrayRef,
-    )]).unwrap()
+    )])
+    .unwrap()
 }
 
 fn facts() -> FrameTimeFacts {
     let batch = rows();
     let (nomination, _) = frames::nominate(
-        "rows", &Relation { source: vec!["rows".into()] },
-        batch.schema().as_ref(), std::slice::from_ref(&batch),
-    ).unwrap();
+        "rows",
+        &Relation {
+            source: vec!["rows".into()],
+        },
+        batch.schema().as_ref(),
+        std::slice::from_ref(&batch),
+    )
+    .unwrap();
     let (adoption, _) = frames::adopt(
-        nomination, batch.schema().as_ref(), std::slice::from_ref(&batch),
-    ).unwrap();
+        nomination,
+        batch.schema().as_ref(),
+        std::slice::from_ref(&batch),
+    )
+    .unwrap();
     FrameTimeFacts {
         plan: frames::time_plan(adoption),
         firsts: vec![FrameTimeFirst {
-            name: "observed_at".into(), rows: 4, held: 4, same: false,
+            name: "observed_at".into(),
+            rows: 4,
+            held: 4,
+            same: false,
             first: Some(FrameScalar::Decimal {
-                negative: false, digits: "1".into(),
-                exponent: FrameDecimalExponent::Finite { value: 2_147_483_648 },
+                negative: false,
+                digits: "1".into(),
+                exponent: FrameDecimalExponent::Finite {
+                    value: 2_147_483_648,
+                },
             }),
         }],
     }
@@ -70,15 +85,19 @@ fn native_counts_share_empty_sparse_and_constant_precedence() {
         first.rows = rows;
         first.held = held;
         first.same = same;
-        if held == 0 { first.first = None; }
+        if held == 0 {
+            first.first = None;
+        }
         let result = frames::choose_time_from_facts(facts, &input).unwrap();
         if expected == "only" {
             assert_eq!(result.table.time_column.as_deref(), Some("observed_at"));
         } else {
             assert_eq!(result.time.refused[0].1.reason(), expected);
             if held == 0 {
-                assert!(matches!(&result.time.refused[0].1,
-                    PassedOver::FrameConstant { first: None, .. }));
+                assert!(matches!(
+                    &result.time.refused[0].1,
+                    PassedOver::FrameConstant { first: None, .. }
+                ));
             }
         }
     }
@@ -98,12 +117,20 @@ fn native_facts_cannot_forge_order_counts_or_a_decimal_tuple() {
             2 => facts.firsts[0].name = "other".into(),
             3 => facts.firsts[0].held = 5,
             4 => facts.firsts[0].first = None,
-            5 => facts.firsts[0].first = Some(FrameScalar::Value { value: Scalar::Null }),
+            5 => {
+                facts.firsts[0].first = Some(FrameScalar::Value {
+                    value: Scalar::Null,
+                })
+            }
             6 | 7 => {
                 let Some(FrameScalar::Decimal { digits, .. }) = &mut facts.firsts[0].first else {
                     panic!("fixture Decimal tuple")
                 };
-                *digits = if variant == 6 { "01".into() } else { "x".into() };
+                *digits = if variant == 6 {
+                    "01".into()
+                } else {
+                    "x".into()
+                };
             }
             _ => unreachable!(),
         }
