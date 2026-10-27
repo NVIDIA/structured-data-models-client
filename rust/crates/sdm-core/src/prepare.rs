@@ -268,7 +268,7 @@ pub(crate) async fn run(
         } => {
             frame(context, "context")?;
             frame(predict, "predict")?;
-            for (ordinal, (_, form)) in related.iter().enumerate() {
+            for (ordinal, form) in related.iter().enumerate() {
                 frame(form.clone(), "related_tables").map_err(|error| {
                     error.with_field(
                         "related_ordinal",
@@ -277,11 +277,7 @@ pub(crate) async fn run(
                 })?;
             }
             if !related.is_empty() {
-                let mut named: Vec<String> = related.iter().map(|(name, _)| name.clone()).collect();
-                named.sort();
-                return Err(
-                    error(Sentence::DirectRelated).with_field("related_tables", text_list(named))
-                );
+                return Err(error(Sentence::DirectRelated));
             }
             let Some(task) = task.value().filter(|task| TASKS.contains(&task.as_str())) else {
                 return Err(error(Sentence::DirectTask));
