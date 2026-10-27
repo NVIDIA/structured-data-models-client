@@ -6,6 +6,90 @@
 //! Binary buffers mean text only under an explicit closed data descriptor.
 //! Ordinary provider binary admission and key casting remain unchanged.
 
+use arrow_array::{Array, BinaryArray, LargeBinaryArray, LargeStringArray, StringArray};
+use sdm_contract::data::strings::StringEncoding;
+use sdm_contract::scalar::unicode::{UnicodeError, UnicodeSlice};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StringDataError {
+    Physical,
+    Index { row: usize, rows: usize },
+    Encoding { row: usize, error: UnicodeError },
+}
+
+/// Borrowed physical data with its already matched explicit meaning.
+/// No per-value or whole-column ownership copies are necessary.
+pub struct StringColumn<'a> {
+    values: Values<'a>,
+}
+
+enum Values<'a> {
+    Utf8(&'a StringArray),
+    LargeUtf8(&'a LargeStringArray),
+    Surrogatepass(&'a BinaryArray),
+    LargeSurrogatepass(&'a LargeBinaryArray),
+}
+
+impl<'a> StringColumn<'a> {
+    pub fn new(array: &'a dyn Array, encoding: StringEncoding) -> Result<Self, StringDataError> {
+        let values = match encoding {
+            StringEncoding::Utf8 => array
+                .as_any()
+                .downcast_ref::<StringArray>()
+                .map(Values::Utf8)
+                .or_else(|| array.as_any().downcast_ref::<LargeStringArray>().map(Values::LargeUtf8)),
+            StringEncoding::Utf8Surrogatepass => array
+                .as_any()
+                .downcast_ref::<BinaryArray>()
+                .map(Values::Surrogatepass)
+                .or_else(|| array.as_any().downcast_ref::<LargeBinaryArray>().map(Values::LargeSurrogatepass)),
+        }
+        .ok_or(StringDataError::Physical)?;
+        Ok(Self { values })
+    }
+
+    pub fn len(&self) -> usize {
+        match &self.values {
+            Values::Utf8(values) => values.len(),
+            Values::LargeUtf8(values) => values.len(),
+            Values::Surrogatepass(values) => values.len(),
+            Values::LargeSurrogatepass(values) => values.len(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    pub fn get(&self, row: usize) -> Result<Option<UnicodeSlice<'a>>, StringDataError> {
+        if row >= self.len() {
+            return Err(StringDataError::Index { row, rows: self.len() });
+        }
+        macro_rules! ordinary {
+            ($values:expr) => {
+                Ok((!$values.is_null(row)).then(|| UnicodeSlice::from($values.value(row))))
+            };
+        }
+        macro_rules! native {
+            ($values:expr) => {
+                if $values.is_null(row) {
+                    Ok(None)
+                } else {
+                    UnicodeSlice::from_utf8_surrogatepass($values.value(row))
+                        .map(Some)
+                        .map_err(|error| StringDataError::Encoding { row, error })
+                }
+            };
+        }
+        match &self.values {
+            Values::Utf8(values) => ordinary!(values),
+            Values::LargeUtf8(values) => ordinary!(values),
+            Values::Surrogatepass(values) => native!(values),
+            Values::LargeSurrogatepass(values) => native!(values),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
