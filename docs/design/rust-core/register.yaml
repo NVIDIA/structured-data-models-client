@@ -7996,11 +7996,12 @@ entries:
     KO2-75 remains the original owner decision, with no new approval
     assigned to it. P4E-1 records only the measured SQL bookkeeping.
 
-# --- lane E entries, Phase 3 (P3E-1..19) ---
-
+  case_outcomes:
   - {case: target.aggregation.list-distinct@lakebase, cell: ref-pandas3, runner: python-core, old: 'refusal - at predict (NimRequestError)', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', statements_differ: [materialize], summary: 'T2.10: LIST_DISTINCT link prediction refused by name until Phase 4 (KO2-75)'}
   - {case: target.aggregation.list-distinct@databricks-sql, cell: ref-pandas3, runner: python-core, old: 'refusal - at predict (NimRequestError)', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: "T3.10: exact measured warehouse applicability of P2E-19 under its existing owner decision", statements_differ: [materialize]}
   - {case: target.aggregation.list-distinct@snowflake, cell: ref-pandas3, runner: python-core, old: 'refusal - at predict (NimRequestError)', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: "T3.10: exact measured warehouse applicability of P2E-19 under its existing owner decision", statements_differ: [materialize]}
+
+# --- lane E entries, Phase 3 (P3E-1..19) ---
 
 - id: P3E-1
   title: A Postgres table a source without a schema lacks is named without the current schema
