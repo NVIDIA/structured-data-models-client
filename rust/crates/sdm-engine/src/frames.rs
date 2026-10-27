@@ -200,7 +200,7 @@ impl Snapshot {
             if table
                 .columns
                 .iter()
-                .any(|column| column.stype == Some(sdm_contract::ops::Stype::Text))
+                .any(|column| column.stype == sdm_contract::ops::Stype::Text)
             {
                 return Err(crate::not_yet("frame_text_features"));
             }
