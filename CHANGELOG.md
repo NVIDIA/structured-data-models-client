@@ -42,13 +42,6 @@ these packages. All five distributions share one version and one entry.
   value that cannot be read as its type, such as a `run_mode` that is not
   text, is refused with `INVALID_REQUEST` before sending, where a NIM
   answered `422 VALIDATION_FAILED`.
-- The `duckdb` extra holds `duckdb` below 2. The 2.0 release warns on the
-  Arrow fetch the relational engine reads DuckDB tables through, and this
-  release is tested against 1.5.
-- `structured-data-models-client` and the relational engine hold `pandas`
-  below 3.1. The 3.1 release raises taking a date offset from the earliest
-  timestamp, which the engine does for every graph without a time column,
-  and this release is tested against 3.0.
 
 ### Fixed
 
@@ -56,6 +49,15 @@ these packages. All five distributions share one version and one entry.
   request carries the query in `metadata.source_query` for logging, which the
   contract caps at 1,024 characters, so a NIM refused a longer one with
   `VALIDATION_FAILED`. The logged copy is now cut to fit.
+- DuckDB 2.0 no longer warns on every read. The relational engine and
+  `read_table` read a DuckDB result through a relation rather than the DB-API
+  cursor, which 2.0 warns makes an extra copy of the rows.
+- A relational prediction over a graph without a time column works on pandas
+  3.1. Its anchor is the earliest timestamp pandas holds, and 3.1 refused to
+  take even an empty date offset from it.
+- A request's description leaves out a wire table carrying an integer past
+  the float range on every pandas release. pandas 3.1 had started to build
+  a frame around one, where earlier releases refused it.
 
 ## 1.0.0 - 2026-10-15
 

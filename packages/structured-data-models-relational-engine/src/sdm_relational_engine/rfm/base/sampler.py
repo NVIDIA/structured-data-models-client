@@ -25,6 +25,7 @@ from sdm_relational_engine.rfm.base import DataBackend
 from sdm_relational_engine.rfm.base.utils import (
     TimeBound,
     date_offset_to_seconds,
+    shift_time,
     to_naive_utc,
 )
 from sdm_relational_engine.rfm.diagnostics import GraphSanitizationReport
@@ -1205,7 +1206,7 @@ def _window_fits_after(
         ends.append(window.end_date_offset)
     if not ends:
         return False
-    return anchor_time + max_date_offset(*ends) <= max_time
+    return shift_time(anchor_time, max_date_offset(*ends)) <= max_time
 
 
 def _entity_filter_condition(query: ValidatedPredictiveQuery) -> str | None:

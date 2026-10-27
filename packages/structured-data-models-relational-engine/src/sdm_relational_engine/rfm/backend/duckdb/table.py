@@ -166,8 +166,7 @@ class DuckDBTable(Table):
                 f'FROM {self._quoted_source_name} '
                 f'LIMIT {self._NUM_SAMPLE_ROWS}'
             )
-            cursor.execute(sql)
-            table = cursor.to_arrow_table()
+            table = cursor.sql(sql).to_arrow_table()
 
         if len(table) == 0:
             raise RuntimeError(f"Table '{self.source_name}' is empty")
@@ -219,8 +218,7 @@ class DuckDBTable(Table):
                 f'FROM {self._quoted_source_name} '
                 f'LIMIT {self._NUM_SAMPLE_ROWS}'
             )
-            cursor.execute(sql)
-            table = cursor.to_arrow_table()
+            table = cursor.sql(sql).to_arrow_table()
 
         if len(table) == 0:
             raise RuntimeError(f"Table '{self.source_name}' is empty")

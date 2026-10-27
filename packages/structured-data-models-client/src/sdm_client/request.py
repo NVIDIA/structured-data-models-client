@@ -32,6 +32,7 @@ from __future__ import annotations
 import json
 import math
 import re
+import sys
 import warnings
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -877,21 +878,37 @@ def _entity_table_in(payloads: Sequence[Mapping[str, Any]]) -> str:
 
 
 def _wire_frame(table: Any) -> pd.DataFrame | None:
-    r"""One wire table as a frame, or nothing if it cannot be read as one."""
+    r"""One wire table as a frame, or nothing if it cannot be read as one.
+
+    An integer past the float range is refused here rather than left to
+    pandas, whose releases disagree on whether a frame can hold one.
+    """
     if not isinstance(table, Mapping):
         return None
     columns = table.get('columns')
     rows = table.get('rows')
     if not isinstance(columns, list) or not isinstance(rows, list):
         return None
+    if any(
+        _past_the_float_range(value)
+        for row in rows
+        if isinstance(row, (list, tuple))
+        for value in row
+    ):
+        return None
     try:
         return pd.DataFrame(rows, columns=columns)
     except (TypeError, ValueError, OverflowError):
-        # A row wider than its header raises rather than padding, and a
-        # number too large for pandas to hold raises as well. Reading a
+        # A row wider than its header raises rather than padding. Reading a
         # request is a description of it, and a description that cannot be
         # made is not worth failing the call for.
         return None
+
+
+def _past_the_float_range(value: Any) -> bool:
+    return isinstance(value, int) and not (
+        -sys.float_info.max <= value <= sys.float_info.max
+    )
 
 
 #: What ties a related row to the instance it hangs off.
