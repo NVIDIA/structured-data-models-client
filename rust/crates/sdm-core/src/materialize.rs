@@ -486,6 +486,38 @@ struct Asked {
     choosing: Vec<Shape>,
 }
 
+/// Immutable target meaning shared by useful task and request-plan stages.
+/// This is the existing validated domain tree, never a host-selected model
+/// policy or an encoded request schema.
+pub(crate) struct ResolvedTarget {
+    pub validated: ValidatedQuery,
+    pub source_query: String,
+    pub entity_filter: Option<String>,
+}
+
+pub(crate) fn resolve_target(
+    description: &SourceDescription,
+    query: &str,
+    facts: &HostFacts,
+    zones: &dyn sdm_engine::time::Zones,
+) -> Result<ResolvedTarget, CoreError> {
+    let profile = Profile::resolve(&ProfileSpec {
+        name: ProfileName::Relational,
+        model: None,
+        capabilities: Default::default(),
+    });
+    let validation =
+        crate::pql::resolve(query, &query_schema(description), &profile, facts, zones)?;
+    let (Some(validated), Some(source_query)) = (validation.query, validation.text) else {
+        return Err(unresolved(query, &validation.diagnostics));
+    };
+    Ok(ResolvedTarget {
+        validated,
+        source_query,
+        entity_filter: validation.entity_filter,
+    })
+}
+
 impl Asked {
     /// The windowed aggregations the labels read, in the order the
     /// reference's sampler meets them (`_get_query_time_offset_dict`): the
@@ -3061,29 +3093,19 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     if dropped_notice {
         asker.flush_warnings().await;
     }
-    let profile = Profile::resolve(&ProfileSpec {
-        name: ProfileName::Relational,
-        model: None,
-        capabilities: Default::default(),
-    });
-    let validation = crate::pql::resolve(
-        &query,
-        &query_schema(&description),
-        &profile,
-        &facts,
-        &*zones,
-    )?;
+    let ResolvedTarget {
+        validated,
+        source_query,
+        entity_filter,
+    } = resolve_target(&description, &query, &facts, &*zones)?;
     // D4's warning is validate_query's: a public call validates its query
     // before it materializes it (`PredictiveQuery._resolve`), so this run,
     // which reads the same literals, does not give it again.
-    let (Some(validated), Some(source_query)) = (validation.query, validation.text) else {
-        return Err(unresolved(&query, &validation.diagnostics));
-    };
     // An entity filter chooses the labelled examples, never the entities
     // scored, which the client says before it gathers
     // (`_warn_the_filter_chose_only_the_examples`), as a code and the
     // filter's condition and the entities' count the host words.
-    if let Some(condition) = &validation.entity_filter {
+    if let Some(condition) = &entity_filter {
         asker.warn(CoreWarning {
             fields: [
                 ("condition".to_owned(), Detail::text(condition.as_str())),
@@ -3547,7 +3569,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
             &aggregated,
             &ends,
             (!anchor_entity).then_some(context_anchor),
-            validation.entity_filter.as_deref(),
+            entity_filter.as_deref(),
         )
         .await);
     }
