@@ -102,6 +102,16 @@ pub struct PreparedDirectRequest {
     pub schema: HeldSchema,
 }
 
+/// Settled early constructor guards, before schema inference reads/advice.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ConstructorContext {
+    pub version: u32,
+    pub task: String,
+    pub target: String,
+    pub entity_table: String,
+}
+
 /// Settled inferred or supplied meaning, before later native frame observations.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -287,6 +297,22 @@ pub enum Preparation {
         target_predict: NativeLookup,
         predict_context: Vec<Vec<usize>>,
     },
+    Context {
+        headers: ConstructorHeaders,
+        context: AttachmentId,
+        predict: AttachmentId,
+        entity_table: String,
+    },
+    InferredSchema {
+        context: ConstructorContext,
+        schema: HeldSchema,
+    },
+    AdoptSchema {
+        schema: HeldSchema,
+    },
+    ConsistentSchema {
+        schema: HeldSchema,
+    },
     Schema {
         headers: ConstructorHeaders,
         context: AttachmentId,
@@ -397,6 +423,8 @@ pub enum PreparedValue {
     Arguments(ConstructorArguments),
     Headers(ConstructorHeaders),
     Schema(ConstructorSchema),
+    Context(ConstructorContext),
+    HeldSchema(HeldSchema),
     Request(PreparedDirectRequest),
     Task(PreparedDirectTask),
     Call(CallPreparation),

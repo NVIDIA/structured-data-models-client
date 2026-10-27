@@ -17,7 +17,16 @@ Native name sorting and display occur at that selected presentation boundary, pr
 
 Working contract 34 adds one closed `PrepareRequest` family with explicit arguments, headers, schema, model, outputs, capabilities, task and capacity stages.
 Each returned state contains useful typed facts and an explicit version, without native handles, callbacks or a workflow interpreter.
-Constructor schema inference first returns a useful ConstructorSchema value with settled meaning and delivers its advice.
+An early ConstructorContext completes the empty/known-target/extra-column boundaries before shared frame inference.
+Shared DescribeSource nomination preserves original column meanings and the nominated key, then presents missing-key advice.
+Adoption observes the same original frame afresh to count duplicates and choose the composite-key remedy, fixing its count before repeat advice.
+Time inference observes that frame again after repeat advice, retaining the original timestamp candidates even when their current physical values change.
+Plain TimeChoice data lives in the contract, while link-settlement policy remains in the schema crate.
+The compatibility Table/Schema modes compose these kernels only over caller-owned static buffers; those modes do not establish freshness for native warning handlers.
+Explicit key overrides reuse the existing metadata apply-key policy, followed by fresh stated-key adoption at each native mapping iteration.
+Complete assembled schema metadata carries core-selected automatic categorical sample columns; their independently useful present/distinct counts are observed separately at each native column iteration, after native date advice and earlier sample advice.
+Missing current columns retain the native sample-warning skip rule.
+Constructor schema inference then returns a useful ConstructorSchema value with settled meaning and delivers its advice.
 Only then does FinishConstructor consume fresh observations of the same original frames for scored compatibility, missing features and target advice.
 It does not repeat the earlier empty-context, known-target, scored-target or extra-column guards after warning-side edits.
 Fresh duplicate target columns follow the native DataFrame dropna and truth boundary, including success when no complete target row remains.
@@ -28,7 +37,9 @@ It is distinct from a per-call model-bound value.
 Accepted capability facts remain in the bound call, including the independently consumed capability kind, anchor, relationship truth and table count.
 A fixed Overlap stage verifies the pre-warning task, actual row count and schema shape against that bound call, with header/Arrow coherence and the shared model policy.
 It computes one-shot overlap advice before the adapter captures its frame/schema references.
-An Envelope stage then captures those current references, checks schema consistency, resolves wire columns and delivers text-as-categorical advice before row/inference encoding.
+At the adapter consistency boundary, Python takes native ownership of live Table/Column replacements and preserves the reference's copy and back-reference behavior.
+Core canonicalizes key marking and release through the shared held-schema policy, and the bridge publishes that useful metadata value before a later consistency refusal.
+Only after consistency succeeds does an Envelope stage capture the adapter references, resolve wire columns and deliver text-as-categorical advice before row/inference encoding.
 The returned versioned TabularEnvelope contains the actual core-resolved columns, wire widths and target, with no native handle.
 The primary key is a later observation from the same captured native table, after text advice; an in-place edit changes that call without replacing its earlier column plan.
 A fixed EncodeBody preparation consumes that plan and the explicitly later observations over those same captured native frames.
@@ -72,7 +83,7 @@ HostRun tests cover the same preparation/prediction journey, explicit versions/p
 A binding ownership test mutates and releases producer arrays after Run start but before the first poll.
 Frozen reference probes used source `43e55f4f58924384c3cb52f67c8ed2e73ba45fa1`, a readonly runtime, blocked sockets, disabled bytecode and numerical threads set to one.
 Canonical schema generation is authoring, not validation credit.
-The first two source reviews requested changes, and their candidate/evidence remain preserved.
+Previous source reviews requested changes, and their exact candidates and evidence remain preserved.
 Supplemental frozen public cases establish cast storage distinctions, exact ID refusals, warning/error order and the two different warning-side reference boundaries.
 Candidate execution requires two renewed independent reviews of the exact final source; this document makes no passing-check claim.
 
@@ -108,9 +119,18 @@ Owned shared buffers and compact observations retain expected O(N) work and memo
 The same builtin/failure facts are useful inputs to a pure Rust HostRun host.
 No language step, warning acknowledgment protocol, generic workflow interpreter, literal evaluator in Rust, Unicode-name data dependency or new workspace crate is added.
 
-Direct model-contract errors retain the generated decoder's selected item ordinal and reached row-index diagnostic.
+Direct model-contract errors retain the generated decoder's selected item ordinal, member path and actual offending value across its complete reached field family.
+The direct parser follows generated field order, with embeddings before quantiles, explanation and metadata, while gathered ordering stays unchanged.
+Core selects the diagnostic and caught-versus-native-conversion failure; Python supplies only reached native representation and exception presentation, preserving generated ResponseContractError causes and uncaught native dict/iteration errors.
+Accepted direct whole forecast steps retain exact digits through a native-item carrier when they exceed the Arrow int64 width.
+That native reconstruction uses maintained exact conversion without imposing a new late integer-display limit.
 The same shared decoder keeps gathered width admission unchanged, while its explicit direct mode preserves exact canonical row-integer digits through bounds checking before result-table narrowing.
 Finite whole floats use standard native-compatible conversion, including negative-zero normalization; arbitrary integer tokens acquire no fixed i64 or i128 bound before direct attribution.
 Global decoding still precedes all native row-literal effects, and later bounds remain deferred until their own row.
 An error-only native presenter renders the core-selected bounds integer using maintained exact conversion at that reached presentation boundary, preserving an active decimal digit-limit failure after earlier warning effects.
 The existing common value formatter supplies quoted values for selected generated-contract diagnostics; it does not validate or reinterpret model rows.
+
+The R7 source evidence covers immediate missing/repeat advice, fresh time reads, live dictionary ownership, complete malformed response fields, paired decoder failures, successive explicit key overrides and final categorical/date advice effects.
+Cross-table mutation interactions among final key-declined/keyless notices and earlier link/date advice are not established by this bounded evidence and remain a required Phase 4 follow-up.
+The static compatibility path and its captured final-key notices are not claimed to prove those native timing interactions.
+Broader storage/custom protocols and default activation remain unfinished.

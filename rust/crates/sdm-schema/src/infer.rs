@@ -112,83 +112,18 @@ pub fn exact_number(field: &Field, constraints: &[CatalogKey]) -> Option<ExactNu
     })
 }
 
-/// Why inference passed a timestamp over for the time column, as the
-/// reference's `RejectedTimeColumn` holds it: its values (no row holds
-/// one, or every row that holds one holds the same; more than half the
-/// rows hold none), or its name (a stamp of a row's load, of its last edit,
-/// or a date of birth).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum PassedOver {
-    /// No row holds a value (`value` `None`), or the table has more than
-    /// one row and every row that holds one holds `value`; `missing` of
-    /// its `rows` rows hold none.
-    Constant {
-        value: Option<Scalar>,
-        missing: usize,
-        rows: usize,
-    },
-    /// `missing` of its `rows` rows, more than half, hold no value.
-    Sparse {
-        missing: usize,
-        rows: usize,
-    },
-    LoadStamp,
-    EditStamp,
-    BirthDate,
-}
+pub use sdm_contract::frames::{PassedOver, Taken, TimeChoice};
 
-impl PassedOver {
-    /// The reason's name, as the reference's `RejectedTimeColumn.reason`
-    /// gives it.
-    pub fn reason(&self) -> &'static str {
-        match self {
-            PassedOver::Constant { .. } => "constant",
-            PassedOver::Sparse { .. } => "sparse",
-            PassedOver::LoadStamp => "load_stamp",
-            PassedOver::EditStamp => "edit_stamp",
-            PassedOver::BirthDate => "birth_date",
-        }
-    }
+/// Domain policy for a plain, serializable time-choice value.
+pub trait TimeChoicePolicy {
+    fn for_links(&self, linked: bool) -> TimeChoice;
 }
-
-/// How the time column was taken (`TimeColumnChoice.how`): the one
-/// timestamp left, the one creation stamp among several, the one whose
-/// values start earliest, or a lone stamp of the last edit in a table no
-/// other links to.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Taken {
-    Only,
-    Created,
-    Earliest,
-    EditStamp,
-}
-
-/// The time column inference took and how, and the timestamps it passed
-/// over, as the reference's `TimeColumnChoice` holds them.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct TimeChoice {
-    pub column: Option<String>,
-    pub how: Option<Taken>,
-    /// The columns it was chosen from, itself included.
-    pub among: Vec<String>,
-    /// Every timestamp passed over, in table order, the lone edit stamp
-    /// taken as the last resort included.
-    pub refused: Vec<(String, PassedOver)>,
-    /// The lone edit stamp left, when no other timestamp was.
-    pub fallback: Option<String>,
-    /// Where the whole table was asked about and its answer failed, each
-    /// timestamp the preview's rows would pass over for its values, kept
-    /// (behind every column they do not) and named, its counts the rows
-    /// read (`TimeColumnChoice.unconfirmed`).
-    pub unconfirmed: Vec<(String, PassedOver)>,
-}
-
-impl TimeChoice {
+impl TimeChoicePolicy for TimeChoice {
     /// This choice for a table another table links to, or none does
     /// (`TimeColumnChoice.for_links`): a lone edit stamp is refused in a
     /// table something links to, an entity edited in place, and taken in
     /// one nothing links to, a log of changes.
-    pub fn for_links(&self, linked: bool) -> TimeChoice {
+    fn for_links(&self, linked: bool) -> TimeChoice {
         let Some(fallback) = &self.fallback else {
             return self.clone();
         };
@@ -204,14 +139,6 @@ impl TimeChoice {
             fallback: self.fallback.clone(),
             unconfirmed: self.unconfirmed.clone(),
         }
-    }
-
-    /// The timestamps passed over, each with its reason, in table order:
-    /// the refused but the one taken.
-    pub fn rejected(&self) -> impl Iterator<Item = &(String, PassedOver)> {
-        self.refused
-            .iter()
-            .filter(move |(name, _)| Some(name) != self.column.as_ref())
     }
 }
 
@@ -1694,7 +1621,7 @@ pub(crate) fn frame_time(
         .enumerate()
         .map(|(at, column)| {
             Ok(if column.stype == Stype::Timestamp {
-                values::instants(batches, at)
+                values::frame_instants(batches, at)
             } else {
                 vec![]
             })
@@ -1705,7 +1632,7 @@ pub(crate) fn frame_time(
         .enumerate()
         .map(|(at, column)| {
             (column.stype == Stype::Timestamp)
-                .then(|| values::first_temporal(batches, at))
+                .then(|| values::frame_first(batches, at))
                 .flatten()
         })
         .collect();

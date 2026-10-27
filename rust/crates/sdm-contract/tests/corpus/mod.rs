@@ -453,6 +453,11 @@ pub fn messages() -> Vec<ControlMessage> {
             result: OperationResult::Materialize(Materialized { state, query: None }),
         }),
         ControlMessage::Step(Step::Done {
+            result: OperationResult::InferredFrames(sdm_contract::frames::InferredFrames {
+                value: AttachmentId(1),
+            }),
+        }),
+        ControlMessage::Step(Step::Done {
             result: OperationResult::PrepareRequest(sdm_contract::prepare::PreparedRequest {
                 value: AttachmentId(1),
             }),

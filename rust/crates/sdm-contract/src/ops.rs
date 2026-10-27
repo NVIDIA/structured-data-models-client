@@ -153,6 +153,7 @@ impl Operation {
 pub enum OperationResult {
     ValidateQuery(QueryValidation),
     DescribeSource(DescribedSource),
+    InferredFrames(crate::frames::InferredFrames),
     EditSchema(SchemaEdited),
     Materialize(Materialized),
     Predict(Predicted),
@@ -1536,6 +1537,10 @@ pub struct Attachments {
     pub prepared_request_value: crate::prepare::PreparedValue,
     #[schemars(rename = "Predict.direct")]
     pub predict_direct: crate::prepare::DirectPredict,
+    #[schemars(rename = "FrameManifest.inference")]
+    pub frame_inference_input: crate::frames::FrameInference,
+    #[schemars(rename = "InferredFrames.value")]
+    pub frame_inference_value: crate::frames::FrameInference,
     #[schemars(rename = "Frames.manifest")]
     pub frames_manifest: crate::frames::FrameManifest,
     #[schemars(rename = "Materialize.frames")]

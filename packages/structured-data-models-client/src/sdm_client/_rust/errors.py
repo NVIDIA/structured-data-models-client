@@ -664,6 +664,31 @@ def error_from_core(
         # itself raise under active runtime limits, as at the reference f-string.
         # Keep it outside _said's formatting-defect catch.
         fields['index'] = present(fields)
+    if (
+        sentence == 'direct_schema_missing'
+        and (present := _held().get('direct_schema_missing')) is not None
+    ):
+        present(fields)
+    if sentence == 'direct_response_contract':
+        from decimal import Decimal
+
+        from sdm_api.generated.tfm_api import ResponseContractError
+
+        if 'offending' in fields:
+            value = json.loads(
+                fields['offending'], parse_int=lambda token: int(Decimal(token))
+            )
+            if fields.get('native') == 'dict':
+                # The core has already selected the failed dict conversion.
+                # Invoke only its actual native diagnostic/cause at this point.
+                dict(value)
+            elif fields.get('native') == 'iter':
+                iter(value)
+            elif fields.get('before') or fields.get('after'):
+                fields['diagnostic'] = (
+                    fields['before'] + repr(value) + fields['after']
+                )
+        details['diagnostic'] = fields['diagnostic']
     said = _said(sentence, fields)
     part = error.get('part')
     if part is not None:
@@ -675,6 +700,8 @@ def error_from_core(
         said = f'{said} {_said(part, fields)}'
     made = _instance(cls, said, code, details)
     made._sentence = sentence
+    if sentence == 'direct_response_contract':
+        made.__cause__ = ResponseContractError(fields['diagnostic'])
     return made
 
 
@@ -691,9 +718,10 @@ def raise_from_core(
     driver_class: str | None = None,
 ) -> NoReturn:
     r"""Raises the exception an ``error`` control message is, ``from None``."""
-    raise error_from_core(
-        control, attachments, driver_class=driver_class
-    ) from None
+    error = error_from_core(control, attachments, driver_class=driver_class)
+    if error.__cause__ is not None:
+        raise error from error.__cause__
+    raise error from None
 
 
 def numpy_warns_on_cast_overflow() -> bool:

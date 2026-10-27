@@ -504,7 +504,12 @@ fn unaccounted(schema: &Value) -> Result<(), String> {
 
 /// The fields whose attachment is JSON of the contract's, with the entry of
 /// `$defs/Attachments` that locks it.
-const JSON: [(&str, &str); 36] = [
+const JSON: [(&str, &str); 38] = [
+    ("FrameManifest.inference", "FrameManifest.inference"),
+    (
+        "OperationResult/inferred_frames.value",
+        "InferredFrames.value",
+    ),
     ("Operation/prepare_request.input", "PrepareRequest.input"),
     (
         "OperationResult/prepare_request.value",
@@ -560,7 +565,15 @@ const JSON: [(&str, &str); 36] = [
 ];
 
 /// The other fields naming an attachment, and why the lock needs no entry.
-const OTHER: [(&str, &str); 25] = [
+const OTHER: [(&str, &str); 27] = [
+    (
+        "Preparation/context.context",
+        "Arrow, with positional header facts",
+    ),
+    (
+        "Preparation/context.predict",
+        "Arrow, with positional header facts",
+    ),
     (
         "EncodedDirectBody.payload",
         "Complete already encoded tabular wire envelope",

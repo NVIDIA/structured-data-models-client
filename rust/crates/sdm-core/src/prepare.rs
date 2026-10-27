@@ -4,7 +4,6 @@
 
 //! The fixed model-neutral constructor and per-call native observation boundary.
 
-use crate::attached::take_json;
 use crate::run::{ArrowData, Asker, Attachment, Attachments};
 use arrow_array::{RecordBatch, RecordBatchOptions};
 use arrow_schema::{Field, Schema};
@@ -232,6 +231,45 @@ fn known(rows: &ArrowData, at: usize) -> usize {
         .sum()
 }
 
+fn constructor_context(
+    headers: &ConstructorHeaders,
+    context: &ArrowData,
+    predict: &ArrowData,
+    entity_table: &str,
+    infer_schema: bool,
+) -> Result<ConstructorContext, CoreError> {
+    version(headers.version, DIRECT_PREPARED_VERSION)?;
+    coherent(&headers.context, context)?;
+    coherent(&headers.predict, predict)?;
+    if headers.target >= headers.context.columns.len() {
+        return Err(invalid("direct target ordinal is outside the header"));
+    }
+    if known(context, headers.target) == 0 {
+        return Err(error(Sentence::DirectKnownTarget));
+    }
+    let extra: Vec<usize> = headers
+        .predict_context
+        .iter()
+        .enumerate()
+        .filter_map(|(n, v)| v.is_empty().then_some(n))
+        .collect();
+    if !extra.is_empty() {
+        return Err(error(Sentence::DirectExtra)
+            .with_field("half", Detail::text("predict"))
+            .with_field("positions", positions(extra)));
+    }
+    if infer_schema {
+        check_names(&headers.context, entity_table, "context")?;
+    }
+    let target = names(&headers.context)?[headers.target].clone();
+    Ok(ConstructorContext {
+        version: DIRECT_PREPARED_VERSION,
+        task: headers.task.clone(),
+        target,
+        entity_table: entity_table.into(),
+    })
+}
+
 pub(crate) async fn run(
     asker: Asker,
     input: Preparation,
@@ -335,6 +373,34 @@ pub(crate) async fn run(
                 predict_context,
             })
         }
+        Preparation::Context { headers, context, predict, entity_table } => {
+            let context = take_rows(&mut attached, context)?;
+            let predict = take_rows(&mut attached, predict)?;
+            serde_json::to_value(constructor_context(&headers, &context, &predict, &entity_table, true)?)
+        }
+        Preparation::InferredSchema { context, schema } => {
+            version(context.version, DIRECT_PREPARED_VERSION)?;
+            let description = read_schema(schema.clone())?.description;
+            serde_json::to_value(ConstructorSchema { version: DIRECT_PREPARED_VERSION, task: context.task, target: context.target, entity_table: context.entity_table, description, schema })
+        }
+        Preparation::AdoptSchema { schema } => {
+            let mut read = read_schema(schema.clone())?;
+            sdm_schema::assemble::mark_keys(&mut read.description);
+            let mut held = schema;
+            for (table, current) in held.tables.iter_mut().zip(&read.description.tables) {
+                table.time_column = current.time_column.clone();
+                for (column, canonical) in table.columns.iter_mut().zip(&current.columns) {
+                    column.stype = canonical.stype;
+                    column.stype_before_key = canonical.stype_before_key;
+                }
+            }
+            serde_json::to_value(held)
+        }
+        Preparation::ConsistentSchema { schema } => {
+            let read = read_schema(schema.clone())?;
+            check_consistent(&read)?;
+            serde_json::to_value(schema)
+        }
         Preparation::Schema {
             headers,
             context,
@@ -342,67 +408,26 @@ pub(crate) async fn run(
             entity_table,
             schema,
         } => {
-            version(headers.version, DIRECT_PREPARED_VERSION)?;
             let context = take_rows(&mut attached, context)?;
             let predict = take_rows(&mut attached, predict)?;
-            coherent(&headers.context, &context)?;
-            coherent(&headers.predict, &predict)?;
-            if headers.target >= headers.context.columns.len() {
-                return Err(invalid("direct target ordinal is outside the header"));
-            }
-            if known(&context, headers.target) == 0 {
-                return Err(error(Sentence::DirectKnownTarget));
-            }
-            let extra: Vec<usize> = headers
-                .predict_context
-                .iter()
-                .enumerate()
-                .filter_map(|(n, v)| v.is_empty().then_some(n))
-                .collect();
-            if !extra.is_empty() {
-                return Err(error(Sentence::DirectExtra)
-                    .with_field("half", Detail::text("predict"))
-                    .with_field("positions", positions(extra)));
-            }
-            if schema.is_none() {
-                check_names(&headers.context, &entity_table, "context")?;
-            }
+            let early = constructor_context(&headers, &context, &predict, &entity_table, schema.is_none())?;
+            let target = early.target;
             let context = renamed(&headers.context, &context)?;
-            let target = names(&headers.context)?[headers.target].clone();
             let original_schema = schema.clone();
             let description = if let Some(schema) = schema {
                 read_schema(schema)?.description
             } else {
                 let relation = Relation::named(&entity_table);
-                let mut read = sdm_schema::frames::read(
-                    &entity_table,
-                    &relation,
-                    &context.schema,
-                    &context.batches,
-                )?;
-                for notice in read.hold_inferred()? {
-                    asker.warn(notice);
-                }
-                let duplicates = if read.table.primary_key.is_empty() {
-                    0
-                } else {
-                    read.count(&read.table.primary_key).repeats()
-                };
-                let mut table = sdm_schema::assemble::described_table(
-                    read.table.clone(),
-                    Some(Scalar::UInt64(duplicates)),
-                );
-                if !table.primary_key.is_empty() {
-                    table.frame_key_form = Some(sdm_contract::frames::FrameKeyForm::Scalar);
-                }
-                let mut description = SourceDescription {
-                    tables: vec![table],
-                    links: vec![],
-                };
-                sdm_schema::assemble::mark_keys(&mut description);
-                for notice in sdm_schema::frames::final_notices(&[read], &description, false)? {
-                    asker.warn(notice);
-                }
+                // Compatibility callers own this fixed Arrow snapshot. The
+                // Python host uses the separate shared frame boundaries.
+                let (nomination, first) = sdm_schema::frames::nominate(&entity_table, &relation, &context.schema, &context.batches)?;
+                for notice in first { asker.warn(notice); }
+                let (adopted, repeated) = sdm_schema::frames::adopt(nomination, &context.schema, &context.batches)?;
+                for notice in repeated { asker.warn(notice); }
+                let completed = sdm_schema::frames::choose_time(adopted, &context.schema, &context.batches)?;
+                let read = sdm_schema::frames::observe(&completed.table, completed.time, &context.schema, &context.batches)?;
+                let description = SourceDescription { tables: vec![completed.table], links: vec![] };
+                for notice in sdm_schema::frames::final_notices(&[read], &description, false)? { asker.warn(notice); }
                 description
             };
             let schema = original_schema.unwrap_or_else(|| {
@@ -804,6 +829,25 @@ async fn overlap(
         predict_rows: input.predict_header.rows,
     })
 }
+fn check_consistent(read: &sdm_schema::held::Read) -> Result<(), CoreError> {
+    for table in &read.description.tables {
+        for column in &table.columns {
+            if !crate::edit::supports(column.stype, column.dtype) {
+                return Err(CoreError::new(
+                    Sentence::MeaningNotCarried,
+                    "a schema meaning contradicts its storage",
+                )
+                .with_field("table", Detail::text(&table.name))
+                .with_field("column", Detail::text(&column.name))
+                .with_field("dtype", Detail::text(column.dtype.wire_name()))
+                .with_field("stype", Detail::text(stype(column.stype))));
+            }
+        }
+    }
+    sdm_schema::assemble::check_links(&read.description, &read.types)?;
+    Ok(())
+}
+
 async fn envelope(
     asker: &Asker,
     input: DirectEnvelope,
@@ -827,21 +871,7 @@ async fn envelope(
     coherent(&input.predict_header, &scoring)?;
     let scoring = renamed(&input.predict_header, &scoring)?;
     let read = read_schema(input.schema.clone())?;
-    for table in &read.description.tables {
-        for column in &table.columns {
-            if !crate::edit::supports(column.stype, column.dtype) {
-                return Err(CoreError::new(
-                    Sentence::MeaningNotCarried,
-                    "a schema meaning contradicts its storage",
-                )
-                .with_field("table", Detail::text(&table.name))
-                .with_field("column", Detail::text(&column.name))
-                .with_field("dtype", Detail::text(column.dtype.wire_name()))
-                .with_field("stype", Detail::text(stype(column.stype))));
-            }
-        }
-    }
-    sdm_schema::assemble::check_links(&read.description, &read.types)?;
+    check_consistent(&read)?;
     let (columns, notices) = sdm_request::tabular::envelope(
         &read.description,
         &input.schema,
