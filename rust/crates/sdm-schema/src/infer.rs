@@ -1486,7 +1486,7 @@ fn infinity_as_read(value: Scalar) -> Scalar {
 /// in no row, or in fewer than half the rows, or holding one value in every
 /// row of a table of more than one, is passed over for its values; a stamp
 /// of the last edit is passed over too, and taken only when it is the one
-/// timestamp left (settled by the links, [`TimeChoice::for_links`]); of the
+/// timestamp left (settled by the links, [`TimeChoicePolicy::for_links`]); of the
 /// rest, the one left is taken, else the one creation stamp, else the one
 /// whose values start earliest, placeholders left out, the first in table
 /// order on a tie. A time of day holds no value the engine's preview
