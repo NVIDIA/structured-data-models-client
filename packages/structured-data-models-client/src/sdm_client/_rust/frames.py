@@ -61,15 +61,6 @@ def _frame_example(
                 np.zeros(1, dtype=bool),
             )
             pieces.append(pd.Series(native))
-        elif type(dtype) is pd.ArrowDtype:
-            import pyarrow as pa
-
-            # Preserve the selected scalar's native validity. The pandas
-            # list constructor would convert a present Arrow NaN to null.
-            native = pd.arrays.ArrowExtensionArray(
-                pa.array([value], type=dtype.pyarrow_dtype, from_pandas=False)
-            )
-            pieces.append(pd.Series(native))
         else:
             pieces.append(pd.Series([value], dtype=dtype))
     selected = pd.concat(pieces, axis=1)
@@ -268,10 +259,6 @@ def _convert(name: str, frame: pd.DataFrame) -> tuple[Any, dict[str, Any]]:
                     pa.types.is_integer(physical)
                     and physical.bit_width in (8, 16, 32, 64)
                 )
-                or (
-                    pa.types.is_floating(physical)
-                    and physical.bit_width in (32, 64)
-                )
                 or pa.types.is_boolean(physical)
                 or pa.types.is_string(physical)
                 or pa.types.is_large_string(physical)
@@ -280,16 +267,20 @@ def _convert(name: str, frame: pd.DataFrame) -> tuple[Any, dict[str, Any]]:
                     and physical.unit in ('s', 'ms', 'us', 'ns')
                 )
             )
+            # Arrow float nunique distinguishes zero/NaN bit patterns while
+            # pandas duplicate-key equality can merge them. The current
+            # frame contract does not represent both native facts, so that
+            # whole family remains outside this development route.
         if not (primitive or masked or temporal or text or arrow):
             raise RouteError(
-                f'the partial frame constructor supports only NumPy or pandas masked numeric and Boolean columns, native datetimes, built-in pandas strings, or built-in Arrow columns of those physical families: {name}.{column}'
+                f'the partial frame constructor supports only NumPy or pandas masked numeric and Boolean columns, native datetimes, built-in pandas strings, or built-in Arrow integer, Boolean, string or timestamp columns: {name}.{column}'
             )
         # Convert values only. DataFrame export may add a non-Range index
         # column, which the public schema constructor never describes.
         # Native conversion supplies validity: NumPy NaNs become null;
         # a masked float's unmasked NaN remains a present Arrow value.
         # An exact built-in Arrow array already carries native validity,
-        # chunks, units and zones, including valid NaNs. Do not reconstruct
+        # chunks, units and zones. Do not reconstruct
         # it from Python values or apply pandas missing-value inference.
         arrays.append(
             series.array.__arrow_array__()
