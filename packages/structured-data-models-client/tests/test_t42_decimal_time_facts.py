@@ -17,6 +17,8 @@ import pytest
 from test_t42_arrow_decimal_frames import raw_series
 from test_t42_frames import PATHS, projection
 
+from sdm_client import Schema
+
 
 WIDTHS = [bits for bits in (32, 64, 128, 256) if hasattr(pa, f'decimal{bits}')]
 
@@ -90,9 +92,6 @@ def replaced(monkeypatch, bits, scale, variant, *, core):
             native_trace = []
     assert changed
     return outcome, [str(item.message) for item in notices], native_trace
-
-
-from sdm_client import Schema
 
 
 @pytest.mark.parametrize('bits', WIDTHS)
