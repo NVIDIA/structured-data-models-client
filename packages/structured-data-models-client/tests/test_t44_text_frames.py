@@ -181,7 +181,7 @@ def predict(request, target, frames, expected):
 @pytest.mark.parametrize('storage', ['python', 'pyarrow', 'utf8'])
 @pytest.mark.parametrize('target', ['age', 'category'])
 @pytest.mark.parametrize(
-    'variant', ['ordinary', 'chunks', 'allnull', 'batched', 'prose']
+    'variant', ['ordinary', 'chunks', 'allnull', 'batched']
 )
 def test_text_journey_keeps_complete_frozen_payloads_and_results(
     core, storage, target, variant
@@ -297,13 +297,17 @@ def test_text_graph_keys_remain_an_explicit_unfinished_core_family(
         [f'u{i}' for i in range(1, 9) for _ in range(8)], storage
     )
     asked = question(frames)
-    with pytest.raises((NotImplementedError, RouteError)):
+    with pytest.raises((StructuredDataError, RouteError)) as failed:
         asked.materialize(
             indices=['u7', 'u8'],
             num_context_samples=3,
             num_neighbors=[3],
             random_seed=7,
         )
+    if storage != 'largeutf8':
+        assert isinstance(failed.value, StructuredDataError)
+        assert failed.value.code == 'UNSUPPORTED_REQUEST'
+        assert failed.value.details['rule'] == 'frame_text_key'
 
 
 def test_exact_largeutf8_native_materialization_keeps_its_frozen_failure_boundary(
@@ -354,3 +358,94 @@ def test_cached_text_snapshot_does_not_read_new_unsupported_native_values(core):
     frames['users']['note'] = text(['changed'] * 8, 'largeutf8')
     frames['orders']['note'] = text(['changed'] * 64, 'largeutf8')
     assert inspection(materialize(asked)) == initial
+
+
+def runtime_reference(name):
+    # These bodies are native-runtime observations, not comparator masks.
+    cell = 'pandas2' if int(pd.__version__.split('.')[0]) == 2 else 'pandas3'
+    return json.loads(
+        Path(__file__)
+        .with_name(f't44_text_{name}_{cell}_reference.json')
+        .read_text()
+    )['records']
+
+
+@pytest.mark.parametrize('storage', ['python', 'pyarrow', 'utf8'])
+@pytest.mark.parametrize('target', ['age', 'category'])
+def test_whole_text_stype_family_remains_unfinished_until_native_profiles_exist(
+    core, storage, target
+):
+    frames = shop(storage)
+    asked = question(frames, target, prose=True)
+    if core:
+        with pytest.raises(StructuredDataError) as failed:
+            materialize(asked, target)
+        assert failed.value.code == 'UNSUPPORTED_REQUEST'
+        assert failed.value.details['rule'] == 'frame_text_features'
+    else:
+        expected = REFERENCE['records'][f'{storage}-{target}-prose']
+        request = materialize(asked, target)
+        assert inspection(request) == {
+            key: expected[key] for key in inspection(request)
+        }
+        predict(request, target, frames, expected)
+
+
+@pytest.mark.parametrize('storage', ['python', 'pyarrow', 'utf8'])
+def test_unicode_text_reference_bodies_require_distinct_native_profiles(
+    core, storage
+):
+    frames = shop(storage)
+    frames['users'].loc[6, 'note'] = 'ΟΣ'
+    frames['users'].loc[7, 'note'] = 'İ'
+    asked = question(frames, prose=True)
+    if core:
+        with pytest.raises(StructuredDataError) as failed:
+            materialize(asked)
+        assert failed.value.code == 'UNSUPPORTED_REQUEST'
+        assert failed.value.details['rule'] == 'frame_text_features'
+    else:
+        expected = runtime_reference('boundary')[f'unicode-{storage}']
+        request = materialize(asked)
+        assert inspection(request) == {
+            key: expected[key] for key in inspection(request)
+        }
+        predict(request, 'age', frames, expected)
+
+
+@pytest.mark.parametrize('with_text', [False, True])
+def test_logical_string_metadata_does_not_refuse_physical_numeric_keys(
+    core, with_text
+):
+    frames = {'users': shop()['users']}
+    if not with_text:
+        frames['users'] = frames['users'][['user_id', 'age']]
+    schema = Schema.from_data(
+        frames, primary_keys={'users': 'user_id'}, time_columns={}
+    )
+    schema['users']['user_id'].dtype = 'string'
+    asked = PredictiveQuery('PREDICT users.age FOR EACH users.user_id', schema)
+    expected = runtime_reference('key')[
+        f'metadata-single-users-text-{with_text}'
+    ]
+    request = materialize(asked, model=KumoRelational())
+    assert inspection(request) == {
+        key: expected[key] for key in inspection(request)
+    }
+    predict(request, 'age', frames, expected)
+
+
+def test_wide_numeric_key_metadata_keeps_safe_selected_uint64_rows(core):
+    frames = shop()
+    keys = np.arange(1, 9, dtype=np.uint64)
+    keys[3] = np.uint64(2**63)
+    frames['users']['user_id'] = pd.Series(keys)
+    frames['orders']['user_id'] = pd.Series(np.repeat(keys, 8))
+    asked = question(frames)
+    assert asked.schema['users']['user_id'].dtype == 'string'
+    expected = runtime_reference('wide')['wide-metadata-safe-selection']
+    request = materialize(asked)
+    assert inspection(request) == {
+        key: expected[key] for key in inspection(request)
+    }
+    predict(request, 'age', frames, expected)
