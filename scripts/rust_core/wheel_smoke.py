@@ -203,6 +203,9 @@ EXPECTED: dict[str, tuple[str, ...]] = {
     ),
     'test_t46_direct_ownership.py': (
         'test_direct_schema_start_owns_numeric_buffers_before_next',
+        'test_zero_column_scoring_rows_survive_native_admission_and_owner_release[0]',
+        'test_zero_column_scoring_rows_survive_native_admission_and_owner_release[2]',
+        'test_zero_column_scoring_rows_survive_native_admission_and_owner_release[5]',
     ),
     'test_test_ops.py': (
         'test_another_thread_runs_and_logs_while_the_core_holds_a_call',
