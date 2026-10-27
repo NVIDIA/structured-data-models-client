@@ -4926,34 +4926,8 @@ fn labels_result(
     anchors: &[i64],
     labels: &labels::Labels,
 ) -> Result<OperationResult, CoreError> {
-    use arrow_array::{BooleanArray, Float32Array, Int64Array, StringArray};
-    let target: ArrayRef = match labels {
-        labels::Labels::Float(v) => Arc::new(Float32Array::from(v.clone())),
-        labels::Labels::Int(v) => Arc::new(Int64Array::from(v.clone())),
-        labels::Labels::Bool(v) => Arc::new(BooleanArray::from(v.clone())),
-        labels::Labels::Text(v) => Arc::new(StringArray::from(v.clone())),
-        labels::Labels::Lists(_) => {
-            return Err(internal("the scalar label echo does not carry list labels"));
-        }
-    };
-    let schema = Arc::new(arrow_schema::Schema::new(vec![
-        arrow_schema::Field::new("entity", keys.data_type().clone(), true),
-        arrow_schema::Field::new(
-            "anchor",
-            DataType::Timestamp(ArrowUnit::Nanosecond, None),
-            false,
-        ),
-        arrow_schema::Field::new("target", target.data_type().clone(), false),
-    ]));
-    let batch = RecordBatch::try_new(
-        Arc::clone(&schema),
-        vec![
-            Arc::clone(keys),
-            Arc::new(TimestampNanosecondArray::from(anchors.to_vec())),
-            target,
-        ],
-    )
-    .map_err(|_| internal("the labels do not make one batch"))?;
+    let batch = crate::frame_materialize::labelled_rows(keys, anchors, labels)?;
+    let schema = batch.schema();
     let rows = batch.num_rows() as u64;
     let data = asker.attach(Attachment::Arrow(ArrowData::new(schema, vec![batch])))?;
     Ok(OperationResult::Test(sdm_contract::test_ops::TestResult {
