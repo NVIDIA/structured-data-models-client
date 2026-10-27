@@ -64,6 +64,62 @@ fn frame_mode(value: options::RunMode) -> FrameRunMode {
     }
 }
 
+/// Local reads feed the existing Labelling builder and aggregation kernels.
+/// Broad native seconds select the same ordered candidate rows as the
+/// original query hop; exact calendar/nanosecond predicates stay in the
+/// existing aggregate_target implementation. No neighbor reset/draw occurs.
+pub(super) fn label_rows(
+    labelling: &Labelling<'_>,
+    frames: &crate::frame_materialize::Context,
+    fetches: &[Fetch<'_>],
+) -> Result<BTreeMap<String, Fetched>, CoreError> {
+    let keys = take(labelling.entity_key, &labelling.examples.index)?;
+    let mut fetched = BTreeMap::new();
+    for fetch in fetches {
+        let windows = label_windows(&labelling.examples.anchors, fetch.start, fetch.end);
+        let columns = fetch.table.ordered(&fetch.columns);
+        let selected = crate::frame_materialize::lock(frames).temporal_rows(
+            &fetch.edge,
+            &keys,
+            &windows,
+            &columns,
+        )?;
+        let time = fetch
+            .table
+            .time_column
+            .as_deref()
+            .ok_or_else(|| internal("the frame label table has no time column"))?;
+        fetched.insert(
+            fetch.table.name.clone(),
+            Fetched {
+                times: times_ns(named(&selected.rows, time)?, time)?,
+                rows: selected.rows,
+                batch: selected.batch,
+            },
+        );
+    }
+    Ok(fetched)
+}
+
+fn label_windows(
+    anchors: &[i64],
+    start: Offset,
+    end: Offset,
+) -> Vec<sdm_engine::frames::TemporalWindow> {
+    let lower = offset_seconds(start, false);
+    let upper = offset_seconds(end, true);
+    anchors
+        .iter()
+        .map(|anchor| {
+            let second = i128::from(anchor.div_euclid(1_000_000_000));
+            sdm_engine::frames::TemporalWindow {
+                lower: Some(second + lower),
+                upper: second + upper,
+            }
+        })
+        .collect()
+}
+
 fn one_column(data: &ArrowData) -> Result<ArrayRef, CoreError> {
     let rows = one_batch(data)?;
     if rows.num_columns() != 1 {

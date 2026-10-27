@@ -504,6 +504,21 @@ impl FrameRun {
             .entity_rows_many(&table.name, columns)
     }
 
+    /// Existing immutable frame adjacency supplies temporal label rows.
+    /// This operation does not borrow or advance the neighbor generator.
+    pub fn temporal_rows(
+        &self,
+        edge: &sdm_engine::graph::Edge,
+        keys: &ArrayRef,
+        windows: &[sdm_engine::frames::TemporalWindow],
+        columns: &[String],
+    ) -> Result<sdm_engine::frames::WalkedTable, CoreError> {
+        self.snapshot
+            .as_ref()
+            .ok_or_else(|| internal("frame graph not initialized"))?
+            .temporal_rows(edge, keys, windows, columns)
+    }
+
     pub fn walk(
         &mut self,
         asker: &Asker,
