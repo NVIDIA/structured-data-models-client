@@ -566,3 +566,23 @@ def test_direct_declared_meaning_survives_fresh_wide_scoring(monkeypatch):
         'dtype': 'string',
         'stype': 'numerical',
     }
+
+
+@pytest.mark.parametrize('dtype,wire', [('int32', 'int64'), ('float32', 'float32')])
+def test_direct_supplied_native_schema_retains_its_wire_width(
+    monkeypatch, dtype, wire
+):
+    from sdm_client import Schema
+
+    context, predict = fixture(dtype)
+    schema = Schema.from_data({'instance': context}, relationships=[])
+    assert schema['instance']['feature'].dtype == wire
+    old = outcome(
+        monkeypatch, (context, predict), core=False, options={'schema': schema}
+    )
+    new = outcome(
+        monkeypatch, (context, predict), core=True, options={'schema': schema}
+    )
+    assert new == old
+    assert new[1][0] == 'ok'
+    assert new[3][0]['schema']['instance_table']['columns']['feature']['dtype'] == wire
