@@ -1,0 +1,66 @@
+{
+  "format": "sdm-case/1",
+  "id": "view.semantic.link",
+  "status": "acceptance",
+  "slice": "S2",
+  "warehouses": [
+    "snowflake"
+  ],
+  "paths": [
+    "schema.from-source/semantic-model/snowflake-semantic-view",
+    "query.materialize/indices-link-prediction/snowflake-semantic-view",
+    "client.predict/link-prediction/snowflake-semantic-view"
+  ],
+  "routes": [
+    "schema.from-source/semantic-model/snowflake-semantic-view",
+    "query.materialize/indices-binary/snowflake-semantic-view",
+    "query.materialize/indices-multiclass/snowflake-semantic-view",
+    "query.materialize/indices-regression/snowflake-semantic-view",
+    "query.materialize/indices-link-prediction/snowflake-semantic-view",
+    "query.materialize/indices-ranking/snowflake-semantic-view",
+    "query.materialize/indices-forecast/snowflake-semantic-view",
+    "client.predict/binary/snowflake-semantic-view",
+    "client.predict/multiclass/snowflake-semantic-view",
+    "client.predict/regression/snowflake-semantic-view",
+    "client.predict/link-prediction/snowflake-semantic-view",
+    "client.predict/ranking/snowflake-semantic-view",
+    "client.predict/forecast/snowflake-semantic-view"
+  ],
+  "cells": [
+    "int8/primary-key",
+    "int8/foreign-key",
+    "timestamp-us/time-column"
+  ],
+  "input": {
+    "base": "shop",
+    "setup": [
+      "CREATE TABLE items AS SELECT i::BIGINT AS item_id, ['a', 'b', 'c', 'd'][1 + i] AS kind FROM range(4) t(i)",
+      "CREATE TABLE buys AS SELECT i::BIGINT AS buy_id, (i % 8)::BIGINT AS user_id, ((i * 3) % 4)::BIGINT AS item_id, TIMESTAMP '2023-01-01' + to_days((i * 5)::INTEGER) AS ts FROM range(120) t(i)"
+    ],
+    "pql": "PREDICT LIST_DISTINCT(BUYS.ITEM_ID, 0, 30, days) FOR EACH USERS.USER_ID",
+    "materialize": {
+      "indices": [
+        0,
+        1,
+        2
+      ],
+      "anchor_time": "2023-06-01"
+    },
+    "view": {
+      "kind": "semantic_view",
+      "name": "view_semantic_link",
+      "yaml": "name: shop_buys\ntables:\n  - name: users\n    base_table:\n      database: '{catalog}'\n      schema: '{schema}'\n      table: users\n    primary_key:\n      columns: [user_id]\n    dimensions:\n      - name: user_id\n        expr: user_id\n        data_type: NUMBER\n      - name: country\n        expr: country\n        data_type: TEXT\n    facts:\n      - name: age\n        expr: age\n        data_type: NUMBER\n  - name: items\n    base_table:\n      database: '{catalog}'\n      schema: '{schema}'\n      table: items\n    primary_key:\n      columns: [item_id]\n    dimensions:\n      - name: item_id\n        expr: item_id\n        data_type: NUMBER\n      - name: kind\n        expr: kind\n        data_type: TEXT\n  - name: buys\n    base_table:\n      database: '{catalog}'\n      schema: '{schema}'\n      table: buys\n    primary_key:\n      columns: [buy_id]\n    dimensions:\n      - name: buy_id\n        expr: buy_id\n        data_type: NUMBER\n      - name: user_id\n        expr: user_id\n        data_type: NUMBER\n      - name: item_id\n        expr: item_id\n        data_type: NUMBER\n    time_dimensions:\n      - name: ts\n        expr: ts\n        data_type: TIMESTAMP_NTZ\nrelationships:\n  - name: buys_to_users\n    left_table: buys\n    right_table: users\n    relationship_columns:\n      - left_column: user_id\n        right_column: user_id\n  - name: buys_to_items\n    left_table: buys\n    right_table: items\n    relationship_columns:\n      - left_column: item_id\n        right_column: item_id\n"
+    }
+  },
+  "until": "predict",
+  "expect": {
+    "outcome": "refusal",
+    "stage": "predict",
+    "error": "NimRequestError",
+    "code": null,
+    "message": "[400] {\"error\": \"no_classes\"}",
+    "today": "This uses the original scripted endpoint, whose classification-only answer has no LINK classes. The public successful LINK response seam is covered separately by the endpoint parity tests."
+  },
+  "why": "A temporal foreign-key LIST_DISTINCT query through the existing semantic view, without ranking decomposition. Both ordered entity roles and list labels must survive view conversion, materialization and the original scripted endpoint refusal.",
+  "source": "T4.5 LINK coverage, reusing the existing view schema and original scripted endpoint; authored from the frozen Python public API at43e55f4f. Reference execution and recorded capture are required before admission."
+}
