@@ -325,7 +325,10 @@ def test_wide_counts_stay_lossless_and_remain_an_unfinished_materializer_family(
     schema = Schema.from_data(
         frames,
         primary_keys={'users': 'user_id', 'events': 'event_id'},
-        time_columns={'events': 'at'} if role == 'time' else {},
+        time_columns={'events': 'at' if role == 'time' else None},
+    )
+    assert schema.tables['events'].time_column == (
+        'at' if role == 'time' else None
     )
     assert str(frames['events']['at'].dtype) == f'datetime64[{unit}]'
     assert frames['events']['at'].astype('int64').tolist() == raw
