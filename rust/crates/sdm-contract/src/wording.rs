@@ -954,7 +954,7 @@ pub fn template(sentence: Sentence) -> Template {
         ),
         S::NotInTable => said(r#""The primary keys {keys!r} do not exist in the '{table}' table""#),
         S::FrameTaskReferences => said(
-            r#"Task references {rows} unresolved row(s) in table '{table}' after graph sanitization"#,
+            r#"Task references {rows} unresolved row(s) in table '{table}' after graph sanitization{detail}"#,
         ),
         S::FrameNoValidRows => said(
             r#"Found no valid rows in table '{table}'. Please make sure that there exists valid non-N/A {requirements} in this table."#,

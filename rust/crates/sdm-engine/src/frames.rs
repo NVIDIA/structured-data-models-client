@@ -377,6 +377,41 @@ impl Snapshot {
         })
     }
 
+    /// The one native graph-sanitization summary used by notices and errors.
+    pub fn dropped_summary(&self) -> Option<String> {
+        if self.dropped.is_empty() {
+            return None;
+        }
+        let detail = self
+            .dropped
+            .iter()
+            .map(|row| {
+                let mut causes = Vec::new();
+                if row.null_keys > 0 {
+                    causes.push(format!("{} with no primary key", row.null_keys));
+                }
+                if row.duplicate_keys > 0 {
+                    causes.push(format!(
+                        "{} with a repeated primary key",
+                        row.duplicate_keys
+                    ));
+                }
+                if row.null_times > 0 {
+                    causes.push(format!("{} with no time", row.null_times));
+                }
+                format!(
+                    "{}: {} of {} rows dropped ({})",
+                    row.table,
+                    row.null_keys + row.duplicate_keys + row.null_times,
+                    row.input,
+                    causes.join(", ")
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("; ");
+        Some(format!("[{detail}]"))
+    }
+
     /// The graph's valid nanosecond values, before second sampler cuts.
     pub fn time_bounds(&self, table: &str) -> Result<(Option<i64>, Option<i64>), CoreError> {
         let table = self
@@ -446,7 +481,15 @@ impl Snapshot {
                 "task entity references are unresolved after graph sanitization",
             )
             .with_field("table", Detail::text(table))
-            .with_field("rows", Detail::Scalar(Scalar::UInt64(missing as u64))));
+            .with_field("rows", Detail::Scalar(Scalar::UInt64(missing as u64)))
+            .with_field(
+                "detail",
+                Detail::text(
+                    self.dropped_summary()
+                        .map(|summary| format!(" {summary}"))
+                        .unwrap_or_default(),
+                ),
+            ));
         }
         Ok(found.into_iter().flatten().collect())
     }

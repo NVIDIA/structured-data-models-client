@@ -319,42 +319,15 @@ impl FrameRun {
         let Some(snapshot) = &self.snapshot else {
             return false;
         };
-        if snapshot.dropped.is_empty() {
+        let Some(detail) = snapshot.dropped_summary() else {
             return false;
-        }
-        let detail = snapshot
-            .dropped
-            .iter()
-            .map(|row| {
-                let mut causes = Vec::new();
-                if row.null_keys > 0 {
-                    causes.push(format!("{} with no primary key", row.null_keys));
-                }
-                if row.duplicate_keys > 0 {
-                    causes.push(format!(
-                        "{} with a repeated primary key",
-                        row.duplicate_keys
-                    ));
-                }
-                if row.null_times > 0 {
-                    causes.push(format!("{} with no time", row.null_times));
-                }
-                format!(
-                    "{}: {} of {} rows dropped ({})",
-                    row.table,
-                    row.null_keys + row.duplicate_keys + row.null_times,
-                    row.input,
-                    causes.join(", ")
-                )
-            })
-            .collect::<Vec<_>>()
-            .join("; ");
+        };
         asker.warn(
             CoreWarning::new(
                 Sentence::FrameRowsDropped,
                 "graph sanitization removed rows",
             )
-            .with_field("detail", Detail::text(format!("[{detail}]"))),
+            .with_field("detail", Detail::text(detail)),
         );
         true
     }
