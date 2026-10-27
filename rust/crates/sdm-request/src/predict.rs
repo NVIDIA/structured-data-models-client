@@ -134,6 +134,7 @@ struct Spec {
     outputs: &'static [&'static str],
     explanation_formats: &'static [&'static str],
     sessions: bool,
+    context_rows_max: usize,
 }
 
 /// The models the contract carries, in this build's order.
@@ -200,6 +201,7 @@ const KUMO_RELATIONAL: Spec = Spec {
     ],
     explanation_formats: &[],
     sessions: true,
+    context_rows_max: CONTEXT_ROWS_MAX,
 };
 
 /// `KUMO_TABULAR`: one table, static, no link or forecast.
@@ -210,6 +212,7 @@ const KUMO_TABULAR: Spec = Spec {
     outputs: &["prediction", "probabilities", "quantiles"],
     explanation_formats: &[],
     sessions: true,
+    context_rows_max: CONTEXT_ROWS_MAX,
 };
 
 /// The refusal of a `predict` input that takes a rule this build does not
@@ -419,32 +422,9 @@ fn resolve_call<'a>(
     asked: &[String],
     defaulted: bool,
 ) -> Result<ResolvedCall<'a>, CoreError> {
-    let spec = MODELS
-        .into_iter()
-        .find(|spec| spec.id == model)
-        .ok_or_else(|| {
-            CoreError::new(
-                Sentence::UnknownModel,
-                "the model named is not one the contract carries",
-            )
-            .with_field("field", Detail::text("model"))
-        })?;
+    let spec = model_spec(model)?;
     let kind = kind_of(payload)?;
-    let outputs: Vec<String> = if defaulted {
-        default_outputs(kind)
-            .iter()
-            .map(|f| (*f).to_owned())
-            .collect()
-    } else {
-        asked.to_vec()
-    };
-    if outputs.is_empty() {
-        return Err(CoreError::new(
-            Sentence::OutputsNone,
-            "outputs must name at least one field",
-        )
-        .with_field("field", Detail::text("outputs")));
-    }
+    let outputs = resolve_outputs(model, kind, (!defaulted).then_some(asked))?;
 
     Ok(ResolvedCall {
         spec,
@@ -491,6 +471,84 @@ fn validate_call(
             Value::Object(members) => !members.is_empty(),
             Value::Bool(true) => true,
         });
+    validate_shape(spec.id, kind, anchored, linked, tables)?;
+    // Preserve the gathered route's existing diagnostic normalization.
+    // Direct calls supply the native ordered outputs to this same policy.
+    let checked_outputs: Vec<String> = outputs
+        .iter()
+        .cloned()
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    validate_task_outputs(spec.id, kind, &checked_outputs)?;
+    let rows = payloads
+        .iter()
+        .map(|p| rows_of(p, "context"))
+        .max()
+        .unwrap_or(0);
+    if spec.id == RELATIONAL {
+        validate_capacity(spec.id, rows)?;
+    }
+    if spec.id == TABULAR {
+        // The tabular model takes no relational request this build sends.
+        return Err(not_yet("model"));
+    }
+    Ok(())
+}
+
+fn model_spec(model: &str) -> Result<&'static Spec, CoreError> {
+    MODELS
+        .into_iter()
+        .find(|spec| spec.id == model)
+        .ok_or_else(|| {
+            CoreError::new(
+                Sentence::UnknownModel,
+                "the model named is not one the contract carries",
+            )
+            .with_field("field", Detail::text("model"))
+        })
+}
+
+/// Resolve a model once, before any later native call observations.
+pub fn resolve_model(model: &str) -> Result<&'static str, CoreError> {
+    Ok(model_spec(model)?.id)
+}
+
+/// Ordered explicit outputs or model-specific defaults, with empty checked now.
+pub fn resolve_outputs(
+    model: &str,
+    kind: &str,
+    asked: Option<&[String]>,
+) -> Result<Vec<String>, CoreError> {
+    let spec = model_spec(model)?;
+    let defaults = if spec.id == TABULAR && !matches!(kind, "classification" | "regression") {
+        &REGRESSION_FIELDS[..]
+    } else {
+        default_outputs(kind)
+    };
+    let outputs = asked.map_or_else(
+        || defaults.iter().map(|s| (*s).to_owned()).collect(),
+        <[String]>::to_vec,
+    );
+    if outputs.is_empty() {
+        return Err(CoreError::new(
+            Sentence::OutputsNone,
+            "outputs must name at least one field",
+        )
+        .with_field("field", Detail::text("outputs")));
+    }
+    Ok(outputs)
+}
+
+/// Shared shape policy after all native capability observations have completed.
+pub fn validate_shape(
+    model: &str,
+    kind: &str,
+    anchored: bool,
+    linked: bool,
+    tables: usize,
+) -> Result<(), CoreError> {
+    let spec = model_spec(model)?;
     let temporal = anchored || matches!(kind, "forecasting" | "temporal_link_prediction");
     let needed = |shape: &str| match shape {
         "relationships" => linked,
@@ -514,6 +572,12 @@ fn validate_call(
         )
         .with_field("unsupported", texts(lacking)));
     }
+    Ok(())
+}
+
+/// Shared task then supported-output policy, without reading native row counts.
+pub fn validate_task_outputs(model: &str, kind: &str, outputs: &[String]) -> Result<(), CoreError> {
+    let spec = model_spec(model)?;
     if !spec.tasks.contains(&kind) {
         return Err(unsupported(
             Sentence::ModelLacksTask,
@@ -530,7 +594,6 @@ fn validate_call(
         .collect();
     if !unknown.is_empty() {
         unknown.sort_unstable();
-        unknown.dedup();
         return Err(unsupported(
             Sentence::ModelLacksOutputs,
             spec.id,
@@ -539,23 +602,20 @@ fn validate_call(
         .with_field("unsupported_outputs", texts(unknown))
         .with_field("supported_outputs", texts(sorted(spec.outputs))));
     }
-    let rows = payloads
-        .iter()
-        .map(|p| rows_of(p, "context"))
-        .max()
-        .unwrap_or(0);
-    if spec.id == RELATIONAL && rows > CONTEXT_ROWS_MAX {
+    Ok(())
+}
+
+/// The single model table supplies the direct and gathered per-call context cap.
+pub fn validate_capacity(model: &str, rows: usize) -> Result<(), CoreError> {
+    let spec = model_spec(model)?;
+    if rows > spec.context_rows_max {
         return Err(unsupported(
             Sentence::ContextPastModel,
             spec.id,
             "the request's context is larger than the model reads",
         )
         .with_field("context_rows", count(rows))
-        .with_field("context_rows_max", count(CONTEXT_ROWS_MAX)));
-    }
-    if spec.id == TABULAR {
-        // The tabular model takes no relational request this build sends.
-        return Err(not_yet("model"));
+        .with_field("context_rows_max", count(spec.context_rows_max)));
     }
     Ok(())
 }
@@ -1132,7 +1192,10 @@ fn target_dtype(payload: &Value) -> Option<&str> {
 /// boolean, an integer, a double or, for any other dtype, the class's
 /// text.
 fn answer_type(payload: &Value) -> Result<AnswerType, CoreError> {
-    let kind = called(payload)?;
+    let kind = kind_of(payload)?;
+    if kind != "classification" {
+        called(payload)?;
+    }
     if !classifies(kind) {
         return Ok(AnswerType::Float);
     }
@@ -2174,7 +2237,7 @@ fn entity_dtype(payload: &Value) -> Option<String> {
 /// integer, a whole float, or text Python's `int` reads ([`integer_text`]);
 /// a declared float from a number not past a double's range, or text
 /// Python's `float` reads ([`numeric_text`]); any other dtype as written.
-fn entity(value: &Value, dtype: Option<&str>) -> Entity {
+pub(crate) fn entity(value: &Value, dtype: Option<&str>) -> Entity {
     let read = match (dtype, value) {
         (None, _) | (_, Value::Null) => None,
         (Some(d), _) if d.starts_with("bool") => {

@@ -212,9 +212,18 @@ def run(
     # A frame call releases its local attachment bindings after Start.
     # Own that mutable map rather than clearing the caller's Mapping.
     attachments = dict(attachments)
-    owned_frame = operation.get('provider', {}).get('provider') == 'frames'
+    owned_frame = (
+        operation.get('provider', {}).get('provider') == 'frames'
+        or operation['op'] == 'prepare_request'
+        or operation.get('direct') is not None
+    )
     warning_presentation: errors.WarningPresentation = 'coded'
-    if owned_frame and operation['op'] == 'describe_source':
+    if owned_frame and operation['op'] in (
+        'describe_source',
+        'prepare_request',
+    ):
+        warning_presentation = 'frame_schema'
+    elif operation.get('direct') is not None:
         warning_presentation = 'frame_schema'
     elif owned_frame and operation['op'] == 'materialize':
         warning_presentation = 'frame_graph'

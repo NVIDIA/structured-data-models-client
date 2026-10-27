@@ -33,6 +33,8 @@ fn schema() -> HeldSchema {
             source: "app_users".into(),
             columns: vec![
                 HeldColumn {
+                    untyped: false,
+                    stype_declared: false,
                     name: "user_id".into(),
                     dtype: "int64".into(),
                     stype: Stype::Id,
@@ -40,6 +42,8 @@ fn schema() -> HeldSchema {
                     source: Some(facts(Dtype::Int, ColumnType::Int64)),
                 },
                 HeldColumn {
+                    untyped: false,
+                    stype_declared: false,
                     name: "seen".into(),
                     dtype: "timestamp[us]".into(),
                     stype: Stype::Timestamp,

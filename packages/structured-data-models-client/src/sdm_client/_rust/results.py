@@ -41,6 +41,8 @@ __all__ = [
     'GatheredState',
     'Part',
     'Predicted',
+    'Prepared',
+    'DirectRequest',
     'QueryFacts',
     'Ranking',
     'SourceFacts',
@@ -508,6 +510,39 @@ def _predicted(read: dict[str, Any]) -> Predicted:
     )
 
 
+@dataclasses.dataclass(frozen=True)
+class Prepared:
+    """The input-sized value of one fixed direct preparation stage."""
+
+    value: int
+
+
+@dataclasses.dataclass(frozen=True)
+class DirectRequest:
+    """Model-neutral constructor meaning, never a gathered wire payload."""
+
+    version: int
+    task: str
+    target: str
+    description: Any
+    schema: Any
+
+    @classmethod
+    def from_contract(cls, value: Any) -> DirectRequest:
+        read = _fields(
+            value,
+            'a prepared direct request',
+            ('version', 'task', 'target', 'description', 'schema'),
+        )
+        return cls(
+            _int(read['version'], 'version'),
+            _text(read['task'], 'task'),
+            _text(read['target'], 'target'),
+            read['description'],
+            read['schema'],
+        )
+
+
 _RESULTS: dict[str, tuple[tuple[str, ...], tuple[str, ...], Any]] = {
     'validate_query': (('accepted', 'diagnostics'), ('query',), _validated),
     'describe_source': (('description',), ('notes', 'frame_rows'), _described),
@@ -524,6 +559,11 @@ _RESULTS: dict[str, tuple[tuple[str, ...], tuple[str, ...], Any]] = {
             ),
         ),
     ),
+    'prepare_request': (
+        ('value',),
+        (),
+        lambda read: Prepared(_int(read['value'], 'value')),
+    ),
     'predict': (
         ('result', 'model', 'request_id', 'metadata', 'outputs'),
         ('unscored_candidates',),
@@ -534,7 +574,7 @@ _RESULTS: dict[str, tuple[tuple[str, ...], tuple[str, ...], Any]] = {
 
 def decode(
     result: Any,
-) -> Validated | Described | Edited | Gathered | Predicted:
+) -> Validated | Described | Edited | Gathered | Predicted | Prepared:
     r"""The result a ``done`` step carries, decoded once.
 
     Raises:
@@ -553,11 +593,13 @@ def decode(
         required,
         optional,
     )
-    built: Validated | Described | Edited | Gathered | Predicted = build(read)
+    built: Validated | Described | Edited | Gathered | Predicted | Prepared = (
+        build(read)
+    )
     return built
 
 
-_T = TypeVar('_T', Validated, Described, Edited, Gathered, Predicted)
+_T = TypeVar('_T', Validated, Described, Edited, Gathered, Predicted, Prepared)
 
 
 def expect(result: Any, kind: type[_T]) -> _T:

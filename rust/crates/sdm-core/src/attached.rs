@@ -30,6 +30,36 @@ pub fn resolved_attachments(
     attachments: &Attachments,
 ) -> Result<Vec<(AttachmentId, AttachmentKind)>, CoreError> {
     let mut named = operation.attachments();
+    match operation {
+        Operation::PrepareRequest(request) => {
+            if let Some(Attachment::Bytes(bytes)) = attachments.get(&request.input) {
+                let input: sdm_contract::prepare::Preparation = serde_json::from_slice(bytes)
+                    .map_err(|_| invalid("unreadable direct preparation input", request.input))?;
+                if let sdm_contract::prepare::Preparation::Schema {
+                    context, predict, ..
+                } = input
+                {
+                    named.extend([
+                        (context, AttachmentKind::Arrow),
+                        (predict, AttachmentKind::Arrow),
+                    ]);
+                }
+            }
+            return Ok(named);
+        }
+        Operation::Predict(request) if request.direct.is_some() => {
+            let id = request.direct.expect("matched direct input");
+            if let Some(Attachment::Bytes(bytes)) = attachments.get(&id) {
+                let input: sdm_contract::prepare::DirectPredict = serde_json::from_slice(bytes)
+                    .map_err(|_| invalid("unreadable direct predict input", id))?;
+                named.extend(input.context.map(|id| (id, AttachmentKind::Arrow)));
+                named.extend(input.predict.map(|id| (id, AttachmentKind::Arrow)));
+            }
+            return Ok(named);
+        }
+        _ => {}
+    }
+
     let manifest = match operation {
         Operation::DescribeSource(request) => match request.provider {
             ProviderChoice::Frames { manifest } => manifest,

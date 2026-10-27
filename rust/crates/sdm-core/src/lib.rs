@@ -24,6 +24,7 @@ pub mod materialize;
 mod pages;
 pub mod pql;
 mod predict;
+mod prepare;
 pub mod profiles;
 mod ranking;
 pub mod run;

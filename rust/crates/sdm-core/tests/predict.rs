@@ -110,6 +110,7 @@ fn predict_run_setting(
     inference_asked: &[&str],
 ) -> Result<Run, CoreError> {
     let operation = Operation::Predict(Predict {
+        direct: None,
         state: Some(RequestState {
             version,
             payload: AttachmentId(1),
@@ -220,6 +221,7 @@ fn a_ranking_s_state_naming_its_candidates_out_of_order_is_refused_by_name() {
     // given back under other candidates' names.
     let run = |first: u32, later: u32| {
         let operation = Operation::Predict(Predict {
+            direct: None,
             state: Some(RequestState {
                 version: REQUEST_STATE_VERSION,
                 payload: AttachmentId(1),

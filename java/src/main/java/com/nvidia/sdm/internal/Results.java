@@ -53,6 +53,9 @@ public final class Results {
   /** {@code materialize}'s result. */
   public record Gathered(State state, QueryFacts query) {}
 
+  /** One internal direct preparation value, without a Java feature surface. */
+  public record Prepared(int value) {}
+
   /** {@code predict}'s result. */
   public record Predicted(
       int result,
@@ -74,6 +77,7 @@ public final class Results {
         case "edit_schema" -> new Edited(count(result, "schema"), map(result.get("declared")));
         case "materialize" -> new Gathered(state(map(result.get("state"))), facts(result.get("query")));
         case "predict" -> predicted(result);
+        case "prepare_request" -> new Prepared(count(result, "value"));
         default -> throw new IllegalArgumentException("an operation this host does not know");
       };
     } catch (IllegalArgumentException | ClassCastException | NullPointerException e) {

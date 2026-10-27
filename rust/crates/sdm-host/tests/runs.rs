@@ -655,6 +655,7 @@ fn request_state_leaves_one_run_as_bytes_and_returns_under_the_host_s_id() {
     state.query = AttachmentId(1);
     let predict = start_message(
         Operation::Predict(Predict {
+            direct: None,
             state: Some(state),
             held: None,
             model: "kumo-relational".into(),

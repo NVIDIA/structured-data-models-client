@@ -2126,6 +2126,7 @@ fn predict(
         contract: CONTRACT_VERSION,
         facts: facts()?,
         operation: Operation::Predict(Predict {
+            direct: None,
             state: Some(RequestState {
                 version: state.version,
                 payload: AttachmentId(1),

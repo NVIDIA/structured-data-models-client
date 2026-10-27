@@ -306,6 +306,7 @@ fn payload_text() -> String {
 
 fn predict_run() -> Run {
     let operation = Operation::Predict(Predict {
+        direct: None,
         state: Some(RequestState {
             version: REQUEST_STATE_VERSION,
             payload: AttachmentId(1),

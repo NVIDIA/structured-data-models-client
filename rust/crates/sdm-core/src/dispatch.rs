@@ -10,6 +10,7 @@ use sdm_contract::ops::{
     GivenCandidate, HeldSchema, Operation, OperationResult, QuerySchema, REQUEST_STATE_VERSION,
     RequestState, SAMPLER_STATE_VERSION, SamplerMemo, SchemaEdit, SourceSpec,
 };
+use sdm_contract::prepare::{DirectPredict, Preparation};
 use sdm_contract::run::StartRun;
 use sdm_contract::{CONTRACT_VERSION, CoreError, Detail, HeldState, HostFacts, Scalar, Sentence};
 use sdm_engine::time::Zones;
@@ -116,7 +117,23 @@ pub fn start(
             #[cfg(feature = "test-ops")]
             false,
         )?,
+        Operation::PrepareRequest(request) => {
+            let input: Preparation = take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| crate::prepare::run(asker, input, attachments))
+        }
         Operation::Predict(request) => {
+            let direct: Option<DirectPredict> = take_json_if(&mut attachments, request.direct)?;
+            if let Some(input) = direct {
+                if request.state.is_some() || request.held.is_some() {
+                    return Err(crate::prepare::invalid(
+                        "a direct prediction cannot name gathered state",
+                    ));
+                }
+                return Ok(Run::new(move |asker| {
+                    crate::prepare::predict(asker, input, request, attachments)
+                }));
+            }
+
             // What predict asks: the state `materialize` answered, or a
             // request the core did not materialize, rebuilt from what the
             // host holds of it (T3.26).
