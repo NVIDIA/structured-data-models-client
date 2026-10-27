@@ -1333,3 +1333,41 @@ def test_direct_inner_id_json_and_character_limits_are_separate_from_wire_json(
     else:
         assert new[1][0] == 'ok'
         assert new[1][1][0]['id'] == [4, 5]
+
+
+@pytest.mark.parametrize('identifier', ['[4]', '[0x4,]', '[func()]'])
+def test_direct_native_literal_conversion_is_reached_once(
+    monkeypatch, identifier
+):
+    import ast
+
+    original = ast.literal_eval
+    observed = []
+
+    def conversion(value):
+        observed.append(value)
+        return original(value)
+
+    monkeypatch.setattr(ast, 'literal_eval', conversion)
+
+    class Identified(Scripted):
+        def predict(self, payload):
+            answer = super().predict(payload)
+            answer['predictions'][0]['id'] = identifier
+            answer['predictions'][1]['id'] = '[5]'
+            return answer
+
+    frames = (
+        pd.DataFrame({'user_id': [1, 2, 3], 'target': [2, 4, 6]}),
+        pd.DataFrame({'user_id': [4, 5]}),
+    )
+    old = outcome(monkeypatch, frames, core=False, transport=Identified())
+    native_calls = list(observed)
+    observed.clear()
+    new = outcome(monkeypatch, frames, core=True, transport=Identified())
+    assert new == old
+    assert (
+        observed
+        == native_calls
+        == ([] if identifier == '[4]' else [identifier])
+    )
