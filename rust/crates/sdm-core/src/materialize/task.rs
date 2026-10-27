@@ -202,6 +202,12 @@ pub(super) struct LabelledContext {
     pub(super) labels: labels::Labels,
 }
 
+/// Evaluated labels and their original pre-mask native list-result population.
+pub(super) struct EvaluatedContext {
+    pub(super) context: LabelledContext,
+    pub(super) native_labels: Option<LabelledContext>,
+}
+
 impl LabelledContext {
     pub(super) fn narrow(mut self, asked: Option<usize>) -> Self {
         let rows = asked.map_or(self.keys.len(), |count| self.keys.len().min(count));
@@ -408,7 +414,9 @@ pub(super) async fn label_population(
     native_rows: Option<RecordBatch>,
 ) -> Result<LabelledContext, CoreError> {
     let kept = population.kept.len();
-    let labelled = evaluate_population(asker, memo, draw, population, native_rows).await?;
+    let labelled = evaluate_population(asker, memo, draw, population, native_rows)
+        .await?
+        .context;
     finish_context(asker, memo, draw, labelled, kept).await
 }
 
@@ -418,7 +426,7 @@ pub(super) async fn evaluate_population(
     draw: LabelDraw<'_>,
     population: ExamplePopulation,
     native_rows: Option<RecordBatch>,
-) -> Result<LabelledContext, CoreError> {
+) -> Result<EvaluatedContext, CoreError> {
     let LabelDraw {
         entity,
         key,
@@ -510,6 +518,24 @@ pub(super) async fn evaluate_population(
         labels::label(&target)?
     };
     null_compared(&asked.target, &labelled.mask)?;
+    // Keep the actual reached list-result population before later entity,
+    // assumption or NaN-key masks can remove a native conversion failure.
+    let native_labels = if matches!(&labelled.labels, labels::Labels::Lists(_)) {
+        let selected = (0..labelled.mask.len())
+            .filter(|&row| labelled.mask[row])
+            .collect::<Vec<_>>();
+        let source_rows = selected
+            .iter()
+            .map(|&row| examples.index[row])
+            .collect::<Vec<_>>();
+        Some(LabelledContext {
+            keys: take(&entity_key, &source_rows)?,
+            anchors: selected.iter().map(|&row| examples.anchors[row]).collect(),
+            labels: labelled.labels.clone(),
+        })
+    } else {
+        None
+    };
     // The examples the entity filter or the assumption leaves out keep no
     // label (`out[mask[_mask]]`, `mask & _mask`).
     if let Some(chosen) = &chosen {
@@ -547,10 +573,13 @@ pub(super) async fn evaluate_population(
         .iter()
         .map(|&row| examples.anchors[row])
         .collect();
-    Ok(LabelledContext {
-        keys: take(&entity_key, &rows)?,
-        anchors,
-        labels: labelled.labels.truncated(gathered),
+    Ok(EvaluatedContext {
+        context: LabelledContext {
+            keys: take(&entity_key, &rows)?,
+            anchors,
+            labels: labelled.labels.truncated(gathered),
+        },
+        native_labels,
     })
 }
 

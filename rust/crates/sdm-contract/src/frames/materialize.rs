@@ -221,6 +221,12 @@ pub struct PreparedFrameLabelBatch {
     pub range: FrameBatchRange,
     pub complete: bool,
     pub owner: AttachmentId,
+    /// Original source dtype for the actual list-label pointwise result.
+    /// The native category conversion consumes these already computed rows.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_target: Option<FrameNativeColumnRef>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_encoding: Option<StringEncoding>,
 }
 
 /// Actual entity/anchor/target Arrow rows before native entity construction.

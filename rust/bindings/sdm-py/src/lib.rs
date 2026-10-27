@@ -242,6 +242,17 @@ struct FrameLabelBatch {
     owner: sdm_host::RetainedFrameLabelBatch,
 }
 
+#[pymethods]
+impl FrameLabelBatch {
+    fn rows(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let rows = self
+            .owner
+            .rows()
+            .map_err(|error| PyValueError::new_err(error.message))?;
+        to_python(py, Attachment::Arrow(rows), true)
+    }
+}
+
 #[pyclass(frozen, module = "sdm_client._native")]
 struct FramePopulation {
     owner: sdm_host::RetainedFramePopulation,

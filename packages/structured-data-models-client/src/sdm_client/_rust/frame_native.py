@@ -189,6 +189,11 @@ class NativeColumn:
                 type=pa.large_binary(),
             )
             return pa.table({'values': array}), 'utf8_surrogatepass'
+        if pa.types.is_dictionary(array.type):
+            # Category codes are a native storage representation, not graph
+            # keys. Export their exact logical values through Arrow's kernel;
+            # the original dtype/categories owner remains in NativeFrameColumns.
+            array = array.dictionary_decode()
         if pa.types.is_null(array.type):
             array = array.cast(pa.string())
         return pa.table({'values': array}), 'utf8'
@@ -232,11 +237,21 @@ class NativeFrameColumns:
     and retain it with that graph even if a later warning/conversion fails.
     """
 
-    def __init__(self, columns: Mapping[str, Mapping[str, Any]]) -> None:
+    def __init__(
+        self,
+        columns: Mapping[str, Mapping[str, Any]],
+        categorical: Mapping[str, Mapping[str, Any]] | None = None,
+    ) -> None:
         self._columns = MappingProxyType(
             {
                 source: MappingProxyType(dict(types))
                 for source, types in columns.items()
+            }
+        )
+        self._categorical = MappingProxyType(
+            {
+                source: MappingProxyType(dict(arrays))
+                for source, arrays in (categorical or {}).items()
             }
         )
 
@@ -244,6 +259,34 @@ class NativeFrameColumns:
         """Read exactly the source Relation/column resolved by the core graph."""
         source = relation_name(binding['source'])
         return self._columns[source][binding['column']]
+
+    def label_result(
+        self, binding: Mapping[str, Any], values: list[Any]
+    ) -> None:
+        """Perform the reached native category pointwise-result conversion.
+
+        Values are the core's actual list labels, never host aggregations.
+        The original category array retains its native categories/index owner.
+        Native pandas chooses its own conversion/fallback behavior, including
+        the measured unhashable-list failure; no runtime-version policy lives
+        here. Successful list results retain the core's logical values.
+        """
+        import numpy as np
+
+        source = relation_name(binding['source'])
+        native = self._categorical[source][binding['column']]
+        boxed = np.empty(len(values), dtype=object)
+        for ordinal, value in enumerate(values):
+            boxed[ordinal] = value
+        cast = getattr(native, '_cast_pointwise_result', None)
+        if cast is not None:
+            cast(boxed)
+        else:
+            # This is the native operation used by pandas' earlier groupby
+            # implementation, including its own extension-cast fallback.
+            from pandas.core.dtypes.cast import maybe_cast_pointwise_result
+
+            maybe_cast_pointwise_result(boxed, native.dtype, numeric_only=True)
 
     def prediction(
         self, binding: Mapping[str, Any], indices: list[Any]
