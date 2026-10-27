@@ -13,6 +13,8 @@ use serde::{Deserialize, Serialize};
 
 pub mod relational_response;
 pub use relational_response::*;
+pub mod relational_result;
+pub use relational_result::*;
 
 pub const DIRECT_PREPARED_VERSION: u32 = 1;
 pub const CALL_PREPARATION_VERSION: u32 = 2;
@@ -290,6 +292,17 @@ pub enum Preparation {
     CompleteRelationalResponse {
         part: RelationalResponsePart,
     },
+    FinishRelationalResponse { input: RelationalResultInput },
+    PrepareRelationalRankPopulation { source: RelationalRankingSource },
+    RankRelationalScore { item: RelationalRankItem },
+    ValidateRelationalRanking {
+        outputs: Option<Vec<String>>,
+        total_parts: usize,
+        cold: Option<Vec<u32>>,
+        #[serde(default)]
+        model: Option<String>,
+    },
+    DescribeRelationalPart { scope: RelationalPartScope },
     CheckResponseRows {
         scope: ResponseScope,
         rows: Vec<DecodedDirectRow>,
@@ -478,6 +491,11 @@ pub enum PreparedValue {
     RelationalAttribution(RelationalAttribution),
     RelationalTarget(RelationalTargetMeaning),
     RelationalPart(RelationalResponsePart),
+    RelationalResult(RelationalResultData),
+    RelationalRankPopulation(RelationalRankPopulation),
+    RelationalRankConfidence(RelationalRankConfidence),
+    RelationalRanking(ValidatedRelationalRanking),
+    RelationalPartDescription(RelationalPartDescription),
 }
 
 /// Ordered flat primitive inference values; exact integer digits do not

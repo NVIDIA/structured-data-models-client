@@ -349,6 +349,12 @@ pub fn predict_rows(payload: &Value) -> Option<usize> {
 /// after it unnumberable, `INTERNAL_ERROR`, as the client refuses it.
 pub fn call_starts(payloads: &[Value]) -> Result<Vec<usize>, CoreError> {
     let counted: Vec<Option<usize>> = payloads.iter().map(predict_rows).collect();
+    call_offsets(&counted)
+}
+
+/// Offsets from the actual native call-count observations, shared with
+/// serialized provider calls without constructing placeholder rows.
+pub fn call_offsets(counted: &[Option<usize>]) -> Result<Vec<usize>, CoreError> {
     if counted
         .iter()
         .take(counted.len().saturating_sub(1))

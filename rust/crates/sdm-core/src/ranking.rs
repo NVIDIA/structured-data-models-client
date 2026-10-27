@@ -308,32 +308,25 @@ pub(crate) async fn materialize(
 const RANKING_OUTPUTS: [&str; 2] = ["prediction", "rankings"];
 const RANKING_PARTS: [&str; 2] = ["prediction", "probabilities"];
 
+pub(crate) fn part_outputs() -> Vec<String> {
+    RANKING_PARTS.map(str::to_owned).to_vec()
+}
+
 /// A ranking's question as `predict` asks it: the candidate, by its
 /// position among those given and as the result names it, and the
 /// question's payload, query and the id its call carries.
 pub(crate) type Question = (u32, String, Vec<u8>, String, String);
 
-/// A ranking predicted (`_answer_in_parts` for a ranking): `questions` in
-/// the order asked, the first the state's own.
-pub(crate) async fn predict(
-    asker: Asker,
-    inputs: crate::predict::Inputs,
-    questions: Vec<Question>,
-    top_k: Option<u32>,
-) -> Result<OperationResult, CoreError> {
-    use sdm_request::predict::{body, preflight, prepare};
-
-    // `_refuse_outputs_a_ranking_cannot_give`.
-    if !inputs.default_outputs {
-        if inputs.outputs.is_empty() {
+pub(crate) fn selected_outputs(outputs: Option<&[String]>) -> Result<Vec<String>, CoreError> {
+    if let Some(outputs) = outputs {
+        if outputs.is_empty() {
             return Err(refused(
                 Sentence::RankingOutputsNone,
                 "outputs must name at least one field",
                 "outputs",
             ));
         }
-        let unknown: Vec<&String> = inputs
-            .outputs
+        let unknown: Vec<&String> = outputs
             .iter()
             .filter(|name| !RANKING_OUTPUTS.contains(&name.as_str()))
             .collect();
@@ -354,6 +347,61 @@ pub(crate) async fn predict(
             ));
         }
     }
+    Ok(outputs.map_or_else(
+        || RANKING_OUTPUTS.map(str::to_owned).to_vec(),
+        <[String]>::to_vec,
+    ))
+}
+
+pub(crate) fn selected_candidates(
+    asker: &Asker,
+    model: &str,
+    total: usize,
+    cold: &[u32],
+) -> Result<(), CoreError> {
+    let positions = |at: &[u32]| Detail::List(at.iter().map(|p| Scalar::UInt32(*p)).collect());
+    let several = cold.len() > 1;
+    if cold.len() == total {
+        return Err(CoreError::new(
+            if several {
+                Sentence::RankingUnscoredSeveral
+            } else {
+                Sentence::RankingUnscoredOne
+            },
+            "the context gathered for every candidate holds one answer only, so there is \
+             nothing to rank and nothing was sent",
+        )
+        .with_field("model", Detail::text(model))
+        .with_field("candidates", positions(cold))
+        .with_field("classes_in_context", count(1)));
+    }
+    if !cold.is_empty() {
+        asker.warn(
+            sdm_contract::CoreWarning::new(
+                if several {
+                    Sentence::CandidatesUnscoredSeveral
+                } else {
+                    Sentence::CandidatesUnscoredOne
+                },
+                "candidates are left out of the ranking, unscored",
+            )
+            .with_field("candidates", positions(cold)),
+        );
+    }
+    Ok(())
+}
+
+/// A ranking predicted (`_answer_in_parts` for a ranking): `questions` in
+/// the order asked, the first the state's own.
+pub(crate) async fn predict(
+    asker: Asker,
+    inputs: crate::predict::Inputs,
+    questions: Vec<Question>,
+    top_k: Option<u32>,
+) -> Result<OperationResult, CoreError> {
+    use sdm_request::predict::{body, preflight, prepare};
+
+    selected_outputs((!inputs.default_outputs).then_some(inputs.outputs.as_slice()))?;
     let parts = u64::try_from(questions.len()).unwrap_or(u64::MAX);
     let tagged = |position: u32| {
         move |e: CoreError| {
@@ -397,35 +445,7 @@ pub(crate) async fn predict(
             cold.push(*position);
         }
     }
-    let positions = |at: &[u32]| Detail::List(at.iter().map(|p| Scalar::UInt32(*p)).collect());
-    let several = cold.len() > 1;
-    if cold.len() == questions.len() {
-        return Err(CoreError::new(
-            if several {
-                Sentence::RankingUnscoredSeveral
-            } else {
-                Sentence::RankingUnscoredOne
-            },
-            "the context gathered for every candidate holds one answer only, so there is \
-             nothing to rank and nothing was sent",
-        )
-        .with_field("model", Detail::text(&inputs.model))
-        .with_field("candidates", positions(&cold))
-        .with_field("classes_in_context", count(1)));
-    }
-    if !cold.is_empty() {
-        asker.warn(
-            sdm_contract::CoreWarning::new(
-                if several {
-                    Sentence::CandidatesUnscoredSeveral
-                } else {
-                    Sentence::CandidatesUnscoredOne
-                },
-                "candidates are left out of the ranking, unscored",
-            )
-            .with_field("candidates", positions(&cold)),
-        );
-    }
+    selected_candidates(&asker, &inputs.model, questions.len(), &cold)?;
     // Each question left asked as a classification, in order, a refusal
     // said of its candidate, with how many were answered before it.
     let mut answers = Vec::with_capacity(questions.len() - cold.len());

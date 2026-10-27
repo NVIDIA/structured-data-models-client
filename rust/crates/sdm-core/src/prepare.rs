@@ -5,6 +5,7 @@
 //! The fixed model-neutral constructor and per-call native observation boundary.
 
 pub(crate) mod relational_response;
+pub(crate) mod relational_result;
 
 use crate::run::{ArrowData, Asker, Attachment, Attachments};
 use arrow_array::{RecordBatch, RecordBatchOptions};
@@ -306,6 +307,21 @@ pub(crate) async fn run(
         ),
         Preparation::CompleteRelationalResponse { part } => serde_json::to_value(
             relational_response::complete(&asker, part, attached)?,
+        ),
+        Preparation::FinishRelationalResponse { input } => serde_json::to_value(
+            relational_result::finish(&asker, input, attached)?,
+        ),
+        Preparation::PrepareRelationalRankPopulation { source } => serde_json::to_value(
+            relational_result::prepare_ranking(source, attached)?,
+        ),
+        Preparation::RankRelationalScore { item } => serde_json::to_value(
+            relational_result::confidence(item)?,
+        ),
+        Preparation::ValidateRelationalRanking { outputs, total_parts, cold, model } => serde_json::to_value(
+            relational_result::validate_ranking(&asker, outputs, total_parts, cold, model)?,
+        ),
+        Preparation::DescribeRelationalPart { scope } => serde_json::to_value(
+            relational_result::describe(scope),
         ),
         Preparation::CheckResponseRows {
             scope,

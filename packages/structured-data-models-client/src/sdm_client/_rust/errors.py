@@ -710,6 +710,14 @@ def error_from_core(
         # catch, so a real native formatting fault remains that actual fault.
         fields[fields['native_field']] = present(fields)
     if (
+        sentence in {'probabilities_none', 'probabilities_unread'}
+        and (present := _held().get('relational_rank_candidate')) is not None
+    ):
+        # Native candidate repr is part of this selected diagnostic. The
+        # ranking host holds its displayed value for the template, so the
+        # actual repr runs exactly once and outside _said's defect catch.
+        present(fields)
+    if (
         sentence
         in {
             'direct_lookup',
