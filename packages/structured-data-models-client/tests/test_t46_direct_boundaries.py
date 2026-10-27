@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import copy
+import json
 import math
 import sys
 import warnings
@@ -1459,3 +1460,149 @@ def test_direct_classes_retain_native_numeric_grammar_separately_from_gathered(
         assert first.probabilities == {expected_key: 0.75}
         observed.append((typed_value(first.prediction), first.probabilities))
     assert observed[1] == observed[0]
+
+
+def native_exception_graph(exception, seen=None):
+    if exception is None:
+        return None
+    if seen is None:
+        seen = {}
+    if id(exception) in seen:
+        return ('reference', seen[id(exception)])
+    seen[id(exception)] = len(seen)
+    return (
+        type(exception).__module__,
+        type(exception).__name__,
+        str(exception),
+        exception.__suppress_context__,
+        native_exception_graph(exception.__cause__, seen),
+        native_exception_graph(exception.__context__, seen),
+    )
+
+
+@pytest.mark.parametrize(
+    'kind',
+    [
+        'plain-runtime',
+        'explicit-runtime',
+        'caught-value-error',
+        'integer-display',
+    ],
+)
+@pytest.mark.parametrize('active', [False, True])
+def test_native_id_conversion_preserves_observed_exception_objects_and_graph(
+    monkeypatch, kind, active
+):
+    observed = []
+    saved = sys.get_int_max_str_digits()
+    try:
+        for core in (False, True):
+            sys.set_int_max_str_digits(4300)
+            monkeypatch.setenv('SDM_CORE_ROUTES', CORE if core else '')
+            context = pd.DataFrame({'user_id': [1, 2, 3], 'target': [2, 4, 6]})
+            scoring = pd.DataFrame({'user_id': [4, 5]})
+            request = Request(
+                context, scoring, target='target', task='regression'
+            )
+            token = (
+                '[0x' + format(2**2200, 'x') + ']'
+                if kind == 'integer-display'
+                else r"['\q']"
+            )
+            transport = Scripted(item({'id': token}))
+            warning_contexts = []
+            selected = []
+            explicit_causes = []
+            events = []
+
+            def show(message, category, filename, lineno, file=None, line=None):
+                native_context = sys.exc_info()[1]
+                warning_contexts.append(native_context)
+                events.append(
+                    (
+                        str(message),
+                        category,
+                        native_exception_graph(native_context),
+                    )
+                )
+                made = (
+                    ValueError('handler-caught-value')
+                    if kind == 'caught-value-error'
+                    else RuntimeError('handler-failed')
+                )
+                selected.append(made)
+                if kind == 'explicit-runtime':
+                    cause = ValueError('explicit-native-cause')
+                    explicit_causes.append(cause)
+                    raise made from cause
+                raise made
+
+            failure = None
+            result = None
+            caller = None
+
+            def call():
+                nonlocal failure, result
+                try:
+                    with SDMClient(
+                        'http://localhost:1', max_retries=0
+                    ) as client:
+                        client._transport.close()
+                        client._transport = transport
+                        result = client.predict(request, model=KumoTabular())
+                except Exception as error:
+                    failure = error
+
+            try:
+                if kind == 'integer-display':
+                    sys.set_int_max_str_digits(640)
+                with warnings.catch_warnings():
+                    warnings.simplefilter('always')
+                    warnings.showwarning = show
+                    if active:
+                        try:
+                            raise LookupError('outer-active-caller')
+                        except LookupError as outer:
+                            caller = outer
+                            call()
+                    else:
+                        call()
+            finally:
+                sys.set_int_max_str_digits(4300)
+            assert len(transport.calls) == 1
+            if kind == 'integer-display':
+                assert not events
+                assert type(failure) is ValueError
+                assert failure.__cause__ is None
+                assert not failure.__suppress_context__
+                assert failure.__context__ is caller
+            else:
+                assert len(events) == 1
+                json_error = warning_contexts[0]
+                assert type(json_error) is json.JSONDecodeError
+                assert json_error.__suppress_context__
+                assert json_error.__cause__ is None
+                scanner = json_error.__context__
+                assert type(scanner) is StopIteration
+                assert str(scanner) == '1'
+                assert not scanner.__suppress_context__
+                assert scanner.__context__ is caller
+                assert selected[0].__context__ is json_error
+                if kind == 'caught-value-error':
+                    assert failure is None
+                    assert [item.id for item in result.items] == [4, 5]
+                else:
+                    assert failure is selected[0]
+                    assert failure.__context__ is json_error
+                    assert failure.__suppress_context__ == (
+                        kind == 'explicit-runtime'
+                    )
+                    if explicit_causes:
+                        assert failure.__cause__ is explicit_causes[0]
+                    else:
+                        assert failure.__cause__ is None
+                    assert failure.__traceback__ is not None
+            observed.append((events, native_exception_graph(failure)))
+        assert observed[1] == observed[0]
+    finally:
+        sys.set_int_max_str_digits(saved)
