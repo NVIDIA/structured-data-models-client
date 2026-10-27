@@ -785,8 +785,26 @@ fn direct_attribution_starts_as_written_and_reads_later_declared_keys() {
 #[test]
 fn direct_primitive_list_ids_cannot_hide_a_wrong_key() {
     for first in [
-        "[+4,]", "[+5,]", "[0x4,]", "[0x5,]", "[0o4,]", "[0o5,]", "[0b100,]", "[0b101,]", "[4]",
-        "[5]", "[4,]", "[5,]", " [ 4, ] ", " [ 5, ] ", "['4',]", "['5',]",
+        "[(4),]",
+        "[(5),]",
+        r"['\x34',]",
+        r"['\x35',]",
+        "[+4,]",
+        "[+5,]",
+        "[0x4,]",
+        "[0x5,]",
+        "[0o4,]",
+        "[0o5,]",
+        "[0b100,]",
+        "[0b101,]",
+        "[4]",
+        "[5]",
+        "[4,]",
+        "[5,]",
+        " [ 4, ] ",
+        " [ 5, ] ",
+        "['4',]",
+        "['5',]",
     ] {
         let context = [RecordBatch::try_from_iter([
             (
