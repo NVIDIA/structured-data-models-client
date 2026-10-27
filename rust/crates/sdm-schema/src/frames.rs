@@ -7,7 +7,10 @@
 
 pub(crate) mod decimal;
 mod decimal_storage;
-pub mod object_decimal;
+pub mod key_candidates;
+pub(crate) mod object_decimal;
+pub mod object_infer;
+mod objects;
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -17,7 +20,7 @@ use sdm_contract::data::Relation;
 use sdm_contract::frames::{
     FrameAdoption, FrameDecimalExponent, FrameInferred, FrameNomination, FrameSample,
     FrameSampleColumn, FrameScalar, FrameTimeFacts, FrameTimePlan, NativeDecimal,
-    NativeDecimalColumn, TimeChoice,
+    NativeDecimalColumn, NativeObjectColumn, TimeChoice,
 };
 use sdm_contract::ops::DescribedTable;
 use sdm_contract::ops::{Dtype, SourceDescription, Stype};
@@ -33,6 +36,7 @@ pub struct Columns<'a> {
     schema: &'a Schema,
     batches: &'a [RecordBatch],
     decimals: BTreeMap<usize, &'a NativeDecimal>,
+    objects: BTreeMap<usize, &'a NativeObjectColumn>,
 }
 
 impl<'a> Columns<'a> {
@@ -41,14 +45,55 @@ impl<'a> Columns<'a> {
         batches: &'a [RecordBatch],
         decimals: &'a [NativeDecimalColumn],
     ) -> Result<Self, CoreError> {
+        Self::with_objects(schema, batches, decimals, &[])
+    }
+
+    pub fn with_objects(
+        schema: &'a Schema,
+        batches: &'a [RecordBatch],
+        decimals: &'a [NativeDecimalColumn],
+        objects: &'a [NativeObjectColumn],
+    ) -> Result<Self, CoreError> {
+        let mut bound = BTreeMap::new();
+        for column in objects {
+            let Some(field) = schema.fields().get(column.column) else {
+                return Err(CoreError::protocol(
+                    Sentence::InvalidMessage,
+                    "a native object field ordinal is out of bounds",
+                ));
+            };
+            if field.name() != &column.name
+                || field.data_type() != &objects::storage_type()
+                || bound.insert(column.column, column).is_some()
+            {
+                return Err(CoreError::protocol(
+                    Sentence::InvalidMessage,
+                    "a native object field has a different identity or typed storage",
+                ));
+            }
+        }
+        if decimals
+            .iter()
+            .any(|column| bound.contains_key(&column.column))
+        {
+            return Err(CoreError::protocol(
+                Sentence::InvalidMessage,
+                "a native field has conflicting logical descriptors",
+            ));
+        }
         Ok(Self {
             schema,
             batches,
             decimals: decimal_storage::bindings(schema, decimals)?,
+            objects: bound,
         })
     }
 
     fn read(&self, at: usize) -> Result<(Vec<Option<Value>>, Dtype), CoreError> {
+        if let Some(native) = self.objects.get(&at) {
+            let column = objects::read(self.batches, at, native.meaning)?;
+            return Ok((column.values.into_iter().map(|value| value.map(Value::Object)).collect(), column.dtype));
+        }
         let native = if let Some(native) = self.decimals.get(&at) {
             Some(decimal_storage::read(self.batches, at, native)?)
         } else {
@@ -74,17 +119,21 @@ impl<'a> Columns<'a> {
         self.read(at).map(|(values, _)| values)
     }
 
+    fn object_meaning(&self, at: usize) -> Option<sdm_contract::frames::NativeObjectMeaning> {
+        self.objects.get(&at).and_then(|native| native.meaning)
+    }
+
     fn scales(&self) -> BTreeMap<usize, i32> {
         self.decimals
             .iter()
-            .map(|(&at, native)| {
+            .filter_map(|(&at, native)| {
                 let scale = match native {
                     NativeDecimal::Decimal32 { scale, .. }
                     | NativeDecimal::Decimal64 { scale, .. }
                     | NativeDecimal::Decimal128 { scale, .. }
                     | NativeDecimal::Decimal256 { scale, .. } => *scale,
                 };
-                (at, scale)
+                Some((at, scale))
             })
             .collect()
     }
@@ -142,7 +191,12 @@ impl Read {
                 if row < batch.num_rows() {
                     return columns
                         .iter()
-                        .map(|&at| values::scalar(batch.column(self.bindings[at]?).as_ref(), row))
+                        .map(|&at| {
+                            Some(
+                                values::scalar(batch.column(self.bindings[at]?).as_ref(), row)
+                                    .unwrap_or(Scalar::Null),
+                            )
+                        })
                         .collect();
                 }
                 row -= batch.num_rows();
@@ -167,6 +221,30 @@ impl Read {
             ("rows", number(count.rows)),
             ("example", Detail::List(examples)),
         ];
+        let ordinals: Option<Vec<_>> = key
+            .iter()
+            .map(|name| {
+                self.table
+                    .columns
+                    .iter()
+                    .position(|column| &column.name == name)
+            })
+            .collect();
+        if let Some(ordinals) = ordinals {
+            let mut seen = BTreeSet::new();
+            for row in 0..self.rows {
+                let parts: Option<Vec<_>> = ordinals
+                    .iter()
+                    .map(|&at| self.values[at][row].clone())
+                    .collect();
+                if let Some(parts) = parts
+                    && !seen.insert(parts)
+                {
+                    fields.push(("example_row", number(row as u64)));
+                    break;
+                }
+            }
+        }
         let scales: Vec<_> = key
             .iter()
             .map(|name| {
@@ -589,10 +667,20 @@ fn read_columns(name: &str, source: &Relation, input: &Columns<'_>) -> Result<Re
             Dtype::Int64 | Dtype::Float32 | Dtype::Float64 => Stype::Numerical,
             Dtype::Bool => Stype::Categorical,
             Dtype::Date => Stype::Timestamp,
-            _ if values::distinct(&values) <= 64 => Stype::Categorical,
+            _ if input
+                .object_meaning(at)
+                .and_then(|meaning| meaning.distinct)
+                .unwrap_or_else(|| values::distinct(&values) as u64)
+                <= 64 =>
+            {
+                Stype::Categorical
+            }
             _ => Stype::Text,
         };
         columns.push(InferredColumn {
+            untyped: input
+                .object_meaning(at)
+                .is_some_and(|meaning| meaning.untyped),
             name: field.name().clone(),
             dtype,
             stype,
@@ -648,6 +736,20 @@ fn read_columns(name: &str, source: &Relation, input: &Columns<'_>) -> Result<Re
 }
 
 /// The complete initial column meanings and fixed nominee, before adoption.
+pub fn column_meanings(
+    name: &str,
+    source: &Relation,
+    input: &Columns<'_>,
+) -> Result<DescribedTable, CoreError> {
+    let mut read = read_columns(name, source, input)?;
+    read.table.primary_key.clear();
+    Ok(crate::assemble::described_table(
+        read.table,
+        Some(Scalar::UInt64(0)),
+    ))
+}
+
+/// The complete initial column meanings and fixed nominee, before adoption.
 pub fn nominate(
     name: &str,
     source: &Relation,
@@ -699,6 +801,7 @@ pub fn inferred(table: &DescribedTable, time: TimeChoice) -> InferredTable {
             .columns
             .iter()
             .map(|c| InferredColumn {
+                untyped: c.untyped,
                 name: c.name.clone(),
                 dtype: c.dtype,
                 stype: c.stype,

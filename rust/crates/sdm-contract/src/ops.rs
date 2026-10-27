@@ -547,6 +547,9 @@ pub struct DescribedTable {
 #[serde(deny_unknown_fields)]
 pub struct DescribedColumn {
     pub name: String,
+    /// Native inference carried no type, independently of its placeholder.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub untyped: bool,
     /// The type the provider handed over, after admission.
     #[serde(
         serialize_with = "crate::types::checked_column_type",

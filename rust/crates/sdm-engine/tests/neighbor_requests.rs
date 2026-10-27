@@ -19,6 +19,7 @@ const REQUESTS: &str = include_str!("../../sdm-testkit/tests/neighbor-requests.j
 
 fn column(name: &str, received: ColumnType, dtype: Dtype, stype: Stype) -> DescribedColumn {
     DescribedColumn {
+        untyped: false,
         name: name.into(),
         received,
         dtype,

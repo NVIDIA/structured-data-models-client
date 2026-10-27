@@ -50,6 +50,7 @@ pub struct FrameOverrideOrder {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum FrameStage {
+    ColumnMeanings,
     Nominate,
     Adopt,
     TimeFacts,
@@ -71,6 +72,9 @@ pub struct FrameInput {
     /// Original native Decimal types of this attachment's typed mantissas.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub decimals: Vec<NativeDecimalColumn>,
+    /// Native object/category cells and their reached column meanings.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub objects: Vec<NativeObjectColumn>,
 }
 
 /// Original logical type beside admitted scale-zero Decimal mantissa storage.
@@ -83,6 +87,29 @@ pub enum NativeDecimal {
     Decimal64 { precision: u8, scale: i32 },
     Decimal128 { precision: u8, scale: i32 },
     Decimal256 { precision: u8, scale: i32 },
+}
+
+/// One native scalar column, bound by both physical ordinal and source name.
+/// An unconverted scalar is a category/presence observation, never a handle.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct NativeObjectColumn {
+    pub column: usize,
+    pub name: String,
+    pub category: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub meaning: Option<NativeObjectMeaning>,
+}
+
+/// The result of the core-selected native object inference traversal.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct NativeObjectMeaning {
+    pub dtype: crate::ops::Dtype,
+    pub untyped: bool,
+    /// Actual native nunique at the reached string-meaning boundary.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub distinct: Option<u64>,
 }
 
 /// One logical native Decimal type bound to the same FrameInput field.
@@ -298,6 +325,12 @@ pub struct FrameAdoption {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum FrameScalar {
+    /// The native source has not reached a conversion of this scalar.
+    /// It is neither an object handle nor a claim that the value is absent.
+    Native,
+    Text {
+        value: crate::scalar::UnicodeText,
+    },
     Value {
         value: Scalar,
     },
@@ -389,6 +422,7 @@ pub struct FrameSample {
     deny_unknown_fields
 )]
 pub enum FrameInference {
+    ColumnMeanings(Box<DescribedTable>),
     Nomination(Box<FrameNomination>),
     Adoption(Box<FrameAdoption>),
     TimePlan(Box<FrameTimePlan>),

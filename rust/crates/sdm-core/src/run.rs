@@ -1614,6 +1614,7 @@ impl Run {
                             source,
                             rows,
                             decimals: vec![],
+                            objects: vec![],
                         });
                     }
                     let manifest = sdm_contract::frames::FrameCheckpointManifest {

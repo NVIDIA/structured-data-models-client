@@ -371,6 +371,7 @@ pub fn described_table(table: InferredTable, duplicates: Option<Scalar>) -> Desc
             .columns
             .into_iter()
             .map(|c| DescribedColumn {
+                untyped: c.untyped,
                 name: c.name,
                 received: c.received,
                 dtype: c.dtype,
@@ -1419,6 +1420,14 @@ fn cannot_join(tables: &[DescribedTable], link: &[ColumnRef], why: Unjoinable) -
 fn native_first_fields(first: &FrameScalar, fields: &mut Vec<(&'static str, Detail)>) {
     fields.push(("frame_native_first", Detail::Scalar(Scalar::Bool(true))));
     match first {
+        FrameScalar::Native => fields.push(("value", Detail::Scalar(Scalar::Null))),
+        FrameScalar::Text { value } => {
+            fields.push(("value", Detail::Scalar(Scalar::Null)));
+            fields.push((
+                "frame_native_text",
+                Detail::List(value.points().map(Scalar::UInt32).collect()),
+            ));
+        }
         FrameScalar::Value { value } => fields.push(("value", Detail::Scalar(value.clone()))),
         FrameScalar::Decimal {
             negative,

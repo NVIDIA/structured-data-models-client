@@ -16,6 +16,7 @@ pub(crate) fn owner() -> RetainedFrameGraph {
             name: "users".into(),
             source: "input_users".into(),
             columns: vec![DescribedColumn {
+                untyped: false,
                 name: "id".into(),
                 received: sdm_contract::ColumnType::Int64,
                 dtype: Dtype::Int,

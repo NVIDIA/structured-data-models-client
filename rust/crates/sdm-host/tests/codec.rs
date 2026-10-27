@@ -176,6 +176,7 @@ fn description_of(size: usize) -> Vec<u8> {
             name: "t".repeat(pad + 1),
             source: "t".into(),
             columns: vec![DescribedColumn {
+                untyped: false,
                 name: "c".into(),
                 received: ColumnType::Int64,
                 dtype: Dtype::Int,

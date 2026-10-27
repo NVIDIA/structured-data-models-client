@@ -15,6 +15,29 @@ pub struct UnicodeText {
     bytes: Vec<u8>,
 }
 
+impl serde::Serialize for UnicodeText {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serde::Serialize::serialize(&self.points().collect::<Vec<_>>(), serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for UnicodeText {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let points = <Vec<u32> as serde::Deserialize>::deserialize(deserializer)?;
+        Self::from_points(points).map_err(serde::de::Error::custom)
+    }
+}
+
+impl schemars::JsonSchema for UnicodeText {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "UnicodeText".into()
+    }
+
+    fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        <Vec<u32> as schemars::JsonSchema>::json_schema(generator)
+    }
+}
+
 /// Validated borrowed native text over an independently owned data buffer.
 /// This view does not retain or copy the whole column that owns its bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]

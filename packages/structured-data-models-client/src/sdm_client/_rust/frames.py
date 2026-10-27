@@ -12,6 +12,7 @@ import json
 import warnings
 from collections.abc import Mapping, Sequence
 from contextlib import AbstractContextManager
+from dataclasses import dataclass
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, cast
 
@@ -19,7 +20,7 @@ import numpy as np
 import pandas as pd
 
 from sdm_client._routing import RouteError
-from sdm_client._rust import codec, errors, results
+from sdm_client._rust import codec, errors, frame_objects, results
 from sdm_client._rust import schema as schemas
 from sdm_client._rust.frame_decimals import (
     native_decimal_column,
@@ -46,6 +47,17 @@ _FINAL_NOTICE_CODES = frozenset(
 )
 
 
+@dataclass(frozen=True)
+class _NativeObjectType:
+    dtype: Any
+    series: pd.Series
+    descriptor: dict[str, Any]
+
+
+def _native_dtype(dtype: Any) -> Any:
+    return dtype.dtype if isinstance(dtype, _NativeObjectType) else dtype
+
+
 def _frame_example(
     fields: dict[str, Any], native_types: Mapping[str, Mapping[str, Any]]
 ) -> str:
@@ -61,13 +73,16 @@ def _frame_example(
     for name, value, scale in zip(
         columns, fields['example'], scales, strict=True
     ):
+        held_type = types[name]
+        if isinstance(held_type, _NativeObjectType) and 'example_row' in fields:
+            value = held_type.series.iloc[fields['example_row']]
         if scale is not None:
             # The core selected the mantissa and original logical scale.
             # Reconstruct its actual native representation from digits,
             # without Decimal arithmetic or context rounding.
             parts = value.as_tuple()
             value = Decimal((parts.sign, parts.digits, -scale))
-        dtype = types[name]
+        dtype = _native_dtype(held_type)
         if type(dtype) in (pd.Float32Dtype, pd.Float64Dtype):
             # The core selected a present scalar. Construct its native
             # representation without turning a valid NaN into pd.NA.
@@ -125,7 +140,7 @@ def _frame_timestamp(
                 )
             )
         )
-    dtype = native_types[fields['table']][fields['column']]
+    dtype = _native_dtype(native_types[fields['table']][fields['column']])
     if not hasattr(value, 'unit'):
         return str(pd.Series([value], dtype=dtype).iloc[0])
     if type(dtype) is pd.DatetimeTZDtype:
@@ -275,7 +290,11 @@ def _check_header(name: str, frame: pd.DataFrame) -> None:
 
 
 def _convert(
-    name: str, frame: pd.DataFrame, *, check_header: bool = True
+    name: str,
+    frame: pd.DataFrame,
+    *,
+    check_header: bool = True,
+    infer_objects: bool = True,
 ) -> tuple[Any, dict[str, Any]]:
     # Validate one table before proceeding to the next.
     if check_header:
@@ -291,6 +310,21 @@ def _convert(
         series = frame.iloc[:, ordinal]
         dtype = series.dtype
         decimal = native_decimal_column(series)
+        object_values = None
+        if (isinstance(dtype, np.dtype) and dtype.kind == 'O') or type(
+            dtype
+        ) is pd.CategoricalDtype:
+            observed = frame_objects.meaning(series) if infer_objects else None
+            if not infer_objects or observed is not None:
+                descriptor: dict[str, Any] = {
+                    'category': type(dtype) is pd.CategoricalDtype
+                }
+                if observed is not None:
+                    descriptor['meaning'] = observed
+                object_values = frame_objects.storage(series)
+                native_types[column] = _NativeObjectType(
+                    dtype, series, descriptor
+                )
         numeric = _numeric_physical(dtype) is not None
         temporal = (
             isinstance(dtype, np.dtype)
@@ -327,7 +361,14 @@ def _convert(
             # Arrow timestamps also remain unfinished: native scalar
             # boxing can overflow or turn a present ns MIN into NaT, which
             # affects time choice at its consumed row and constructor stage.
-        if not (numeric or temporal or text or arrow or decimal is not None):
+        if not (
+            numeric
+            or temporal
+            or text
+            or arrow
+            or decimal is not None
+            or object_values is not None
+        ):
             raise RouteError(
                 f'the partial frame constructor supports only NumPy or pandas masked numeric and Boolean columns, native datetimes, built-in pandas strings, or built-in Arrow integer, Boolean, string or Decimal columns: {name}.{column}'
             )
@@ -339,13 +380,16 @@ def _convert(
         # chunks and widths. Do not reconstruct it from Python values or
         # apply pandas missing-value inference.
         arrays.append(
-            decimal[0]
+            object_values
+            if object_values is not None
+            else decimal[0]
             if decimal is not None
             else series.array.__arrow_array__()
             if arrow
             else _primitive_array(series)
         )
-        native_types[column] = dtype
+        if object_values is None:
+            native_types[column] = dtype
     return pa.Table.from_arrays(arrays, names=list(frame.columns)), native_types
 
 
@@ -382,10 +426,18 @@ def _describe(
             decimals = [
                 {'column': at, 'name': column, 'decimal': descriptor}
                 for at, (column, dtype) in enumerate(native_types[name].items())
-                if (descriptor := native_decimal_type(dtype)) is not None
+                if not isinstance(dtype, _NativeObjectType)
+                and (descriptor := native_decimal_type(dtype)) is not None
             ]
             if decimals:
                 entry['decimals'] = decimals
+            objects = [
+                {'column': at, 'name': column, **dtype.descriptor}
+                for at, (column, dtype) in enumerate(native_types[name].items())
+                if isinstance(dtype, _NativeObjectType)
+            ]
+            if objects:
+                entry['objects'] = objects
             manifest['tables'].append(entry)
             attached[ordinal] = rows
         if inference is not None:
@@ -419,7 +471,9 @@ def _observe(
     # New unrelated columns are not traversed and earlier header guards are
     # not replayed after a native warning handler changes the frame.
     current = [column for column in names if column in frame.columns]
-    return _convert(name, frame[current], check_header=False)
+    return _convert(
+        name, frame[current], check_header=False, infer_objects=False
+    )
 
 
 def _infer_table(
@@ -431,9 +485,28 @@ def _infer_table(
         'time_columns': {},
     }
     converted, types = _convert(name, frame)
-    finished = _describe('nominate', {name: converted}, spec, {name: types})
+    finished = _describe(
+        'column_meanings', {name: converted}, spec, {name: types}
+    )
     result = results.expect(finished.result, results.InferredFrames)
-    nominated = json.loads(finished.take(result.value))
+    from sdm_client import _native
+
+    candidates = _native.FrameKeyCandidates(
+        finished.take(result.value), len(frame)
+    )
+    while (candidate := candidates.column()) is not None:
+        candidates.observe(int(frame[candidate].nunique(dropna=True)))
+    nominee = candidates.selected()
+    missing = None
+    if nominee is not None:
+        has_missing = bool(frame[nominee].isna().any())
+        missing = (
+            has_missing,
+            int(frame[nominee].isna().sum()) if has_missing else 0,
+        )
+    nomination, notices = candidates.finish(missing)
+    nominated = json.loads(nomination)
+    _show_held(json.loads(notices))
     names = [
         column['name'] for column in nominated['value']['table']['columns']
     ]
@@ -463,7 +536,8 @@ def _infer_table(
     result = results.expect(finished.result, results.InferredFrames)
     return (
         cast(
-            'dict[str, Any]', json.loads(finished.take(result.value))['value'][0]
+            'dict[str, Any]',
+            json.loads(finished.take(result.value))['value'][0],
         ),
         types,
         native_firsts,
