@@ -1550,6 +1550,30 @@ fn inferred_constructor_schema_precedes_fresh_remaining_guard_observations() {
         inferred["description"]["tables"][0]["primary_key"],
         json!(["user_id"])
     );
+    for axis in ["version", "physical", "target-position", "membership"] {
+        let mut input = json!({"stage":"finish_constructor","schema":inferred,"context":2,"predict":3,"context_header":context_header,"predict_header":predict_header,"target_context":{"positions":[2]},"context_predict":[{"positions":[0]},{"positions":[1]},{"positions":[]}]});
+        match axis {
+            "version" => input["schema"]["version"] = json!(u32::MAX),
+            "physical" => {
+                input["context_header"]["columns"][0]["physical"] = json!({"type":"float64"})
+            }
+            "target-position" => input["target_context"]["positions"] = json!([1]),
+            _ => input["context_predict"][0]["positions"] = json!([2]),
+        }
+        let error = prepare(
+            input,
+            attached_batches(
+                std::slice::from_ref(&initial_context),
+                std::slice::from_ref(&initial_predict),
+            ),
+        )
+        .unwrap_err();
+        assert_eq!(
+            error.sentence,
+            sdm_contract::Sentence::InvalidMessage,
+            "{axis}"
+        );
+    }
     for change in [
         "baseline",
         "drop-predict",

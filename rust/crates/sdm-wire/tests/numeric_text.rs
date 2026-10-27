@@ -57,3 +57,17 @@ fn only_the_digits_every_supported_python_reads_are_read() {
     assert_eq!(numeric_text("\u{0660}.\u{0665}"), Some(0.5));
     assert_eq!(numeric_text("\u{ff10}.\u{ff15}"), Some(0.5));
 }
+
+#[test]
+fn decimal_limit_counts_original_digits_before_zero_canonicalization() {
+    use sdm_wire::response::{integer_text, integer_text_limited};
+    let at_limit = format!("{}2", "0".repeat(639));
+    let past_limit = format!("{}2", "0".repeat(640));
+    assert_eq!(integer_text_limited(&at_limit, 640).as_deref(), Some("2"));
+    assert_eq!(integer_text_limited(&past_limit, 640), None);
+    assert_eq!(integer_text_limited(&past_limit, 0).as_deref(), Some("2"));
+    assert_eq!(integer_text(&past_limit).as_deref(), Some("2"));
+    let underscored = format!("+{}٢", "٠_".repeat(640));
+    assert_eq!(integer_text_limited(&underscored, 640), None);
+    assert_eq!(integer_text_limited(&underscored, 0).as_deref(), Some("2"));
+}
