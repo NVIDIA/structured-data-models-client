@@ -77,7 +77,9 @@ impl<'a> Columns<'a> {
             .iter()
             .map(|(&at, native)| {
                 let scale = match native {
-                    NativeDecimal::Decimal128 { scale, .. }
+                    NativeDecimal::Decimal32 { scale, .. }
+                    | NativeDecimal::Decimal64 { scale, .. }
+                    | NativeDecimal::Decimal128 { scale, .. }
                     | NativeDecimal::Decimal256 { scale, .. } => *scale,
                 };
                 (at, scale)

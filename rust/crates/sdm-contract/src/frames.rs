@@ -70,12 +70,14 @@ pub struct FrameInput {
     pub decimals: Vec<NativeDecimalColumn>,
 }
 
-/// Original logical type beside scale-zero Decimal128/256 mantissa storage.
+/// Original logical type beside admitted scale-zero Decimal mantissa storage.
 /// Native scale is the complete signed-i32 fact, including scale greater
 /// than precision; it is not narrowed to Arrow Rust's physical i8 scale.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum NativeDecimal {
+    Decimal32 { precision: u8, scale: i32 },
+    Decimal64 { precision: u8, scale: i32 },
     Decimal128 { precision: u8, scale: i32 },
     Decimal256 { precision: u8, scale: i32 },
 }

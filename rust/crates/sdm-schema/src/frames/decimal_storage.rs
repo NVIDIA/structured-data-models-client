@@ -9,7 +9,7 @@
 use std::collections::BTreeMap;
 
 use arrow_array::RecordBatch;
-use arrow_schema::{DataType, Schema};
+use arrow_schema::{DECIMAL32_MAX_PRECISION, DECIMAL64_MAX_PRECISION, DataType, Schema};
 use sdm_contract::frames::{NativeDecimal, NativeDecimalColumn};
 use sdm_contract::scalar::{DECIMAL128_MAX_PRECISION, DECIMAL256_MAX_PRECISION};
 use sdm_contract::{CoreError, Sentence};
@@ -22,6 +22,16 @@ fn invalid(message: &str) -> CoreError {
 
 fn storage_type(native: &NativeDecimal) -> Result<DataType, CoreError> {
     match *native {
+        NativeDecimal::Decimal32 { precision, .. }
+            if (1..=DECIMAL32_MAX_PRECISION).contains(&precision) =>
+        {
+            Ok(DataType::Decimal128(precision, 0))
+        }
+        NativeDecimal::Decimal64 { precision, .. }
+            if (1..=DECIMAL64_MAX_PRECISION).contains(&precision) =>
+        {
+            Ok(DataType::Decimal128(precision, 0))
+        }
         NativeDecimal::Decimal128 { precision, .. }
             if (1..=DECIMAL128_MAX_PRECISION).contains(&precision) =>
         {
@@ -90,8 +100,22 @@ pub(crate) fn read(
     }
     let mut column = decimal::read(batches, index, &storage)
         .ok_or_else(|| invalid("native Decimal storage is not a typed Decimal column"))?;
+    let limits = match native {
+        NativeDecimal::Decimal32 { .. } => Some((i128::from(i32::MIN), i128::from(i32::MAX))),
+        NativeDecimal::Decimal64 { .. } => Some((i128::from(i64::MIN), i128::from(i64::MAX))),
+        _ => None,
+    };
+    if let Some((low, high)) = limits {
+        if column.values.iter().flatten().any(|value| {
+            !matches!(value, decimal::Unscaled::Decimal128(value) if low <= *value && *value <= high)
+        }) {
+            return Err(invalid("native Decimal mantissa exceeds its declared original width"));
+        }
+    }
     let (precision, scale) = match *native {
-        NativeDecimal::Decimal128 { precision, scale }
+        NativeDecimal::Decimal32 { precision, scale }
+        | NativeDecimal::Decimal64 { precision, scale }
+        | NativeDecimal::Decimal128 { precision, scale }
         | NativeDecimal::Decimal256 { precision, scale } => (precision, scale),
     };
     column.dtype = decimal::dtype(precision, scale, &column.values);
