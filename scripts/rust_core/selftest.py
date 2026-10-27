@@ -71,6 +71,7 @@ import tempfile
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -102,6 +103,23 @@ class Result:
     name: str
     ok: bool
     detail: str
+
+
+@contextmanager
+def lexical_cache() -> Iterator[None]:
+    """Reuse immutable lexical results only during this selftest invocation.
+
+    Complete source text is the key: every fixture discovery and path-dependent
+    guard still runs, and changed text cannot reuse the old lexical result.
+    """
+    original = l0_scan.read_rust
+    cached = lru_cache(maxsize=512)(original)
+    l0_scan.read_rust = cached
+    try:
+        yield
+    finally:
+        l0_scan.read_rust = original
+        cached.cache_clear()
 
 
 # --- fixtures -----------------------------------------------------------------
@@ -3851,12 +3869,13 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     results: list[Result] = []
     metadata = l0_deps.cargo_metadata(REPO_ROOT)
-    deps_cases(results, metadata)
-    freeze_cases(results)
-    scan_cases(results)
-    parser_name_cases(results, metadata)
-    if not args.no_clippy:
-        clippy_case(results)
+    with lexical_cache():
+        deps_cases(results, metadata)
+        freeze_cases(results)
+        scan_cases(results)
+        parser_name_cases(results, metadata)
+        if not args.no_clippy:
+            clippy_case(results)
     # The handoff retains a short tail: keep every failure after successes.
     failed = [r for r in results if not r.ok]
     for result in [r for r in results if r.ok] + failed:
