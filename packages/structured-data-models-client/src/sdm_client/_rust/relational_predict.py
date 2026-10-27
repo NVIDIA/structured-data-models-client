@@ -12,6 +12,7 @@ encodes each reached call, performs I/O and presents the selected owners.
 from __future__ import annotations
 
 import json
+import sys
 from dataclasses import dataclass
 from typing import Any
 
@@ -34,6 +35,7 @@ class CallResult:
     known_empty: bool = False
     native_outputs: tuple[Any, ...] | None = None
     requested_outputs: Any = None
+    presented: Any = None
 
     def attached(self, first: int) -> tuple[dict[str, Any], dict[int, Any]]:
         parts = []
@@ -64,6 +66,7 @@ def _present(
     *,
     by_step: bool = False,
     given: dict[int, Any] | None = None,
+    native_outputs: tuple[Any, ...] | None = None,
 ) -> tuple[Any, dict[str, int]]:
     from sdm_client._rust import predict as prediction
 
@@ -89,6 +92,7 @@ def _present(
             sorted(rows, key=lambda row: row['answer_index']),
             metadata,
             given,
+            native_outputs=native_outputs,
         )
     else:
         explained = (table.schema.metadata or {}).get(b'explanation')
@@ -116,6 +120,7 @@ def _finish(
     report_absent: bool = True,
     by_step: bool = False,
     given: dict[int, Any] | None = None,
+    native_outputs: tuple[Any, ...] | None = None,
 ) -> tuple[Any, dict[str, int]]:
     finished = run(
         {'op': 'prepare_request', 'input': 1},
@@ -133,7 +138,13 @@ def _finish(
             **attached,
         },
     )
-    return _present(finished, owners, by_step=by_step, given=given)
+    return _present(
+        finished,
+        owners,
+        by_step=by_step,
+        given=given,
+        native_outputs=native_outputs,
+    )
 
 
 def _finish_calls(
@@ -350,16 +361,9 @@ def _parts(
     wanted = outputs
     ranking_outputs = None
     if ranking:
-        selected = _call(
-            {
-                'stage': 'validate_relational_ranking',
-                'outputs': outputs,
-                'total_parts': total,
-                'cold': None,
-            }
-        )
+        selected = native.ranking_outputs(outputs, total)
         wanted = selected['part_outputs']
-        ranking_outputs = selected['outputs']
+        ranking_outputs = selected
         for position, part, (_, about) in zip(
             positions_, request.parts, rewritten.parts, strict=True
         ):
@@ -377,7 +381,8 @@ def _parts(
         _call(
             {
                 'stage': 'validate_relational_ranking',
-                'outputs': outputs,
+                'outputs': None,
+                'selected': selected,
                 'total_parts': total,
                 'cold': cold,
                 'model': bound['model'],
@@ -390,10 +395,19 @@ def _parts(
         if position in cold:
             continue
         try:
+            # Original decomposition enters the public predict method for
+            # each scored child, before its separate preparation guard.
+            from sdm_client.client import (
+                _require_a_request,
+                _require_output_names,
+            )
+
+            _require_a_request(part)
+            _require_output_names(wanted)
             child = _one(client, part, model, wanted)
             # Each ordinary child reports its absent outputs before the next
             # part's model checks, matching separate public predict calls.
-            _finish_calls(child)
+            child.presented, _ = _finish_calls(child)
             children.append(child)
             answered.append((position, about))
         except Exception as error:
@@ -412,26 +426,27 @@ def _parts(
                         'parts_answered': paid['parts_answered'],
                     }
                 else:
-                    result, details = _finish_parts(
-                        children, answered, None, report_absent=False
-                    )
+                    result, details = _finish_parts(children, answered, None)
                     _carry(error, result, details)
             if isinstance(error, StructuredDataError):
                 raise _tag(error, scope(position, about), about) from error
             raise
-    return _finish_parts(
+    result, _ = _finish_parts(
         children,
         answered,
-        (given, cold, rewritten.top, ranking_outputs) if ranking else None,
-    )[0]
+        (given, cold, rewritten.top, ranking_outputs, outputs)
+        if ranking
+        else None,
+    )
+    if not ranking:
+        native.forecast_explanations(model, outputs, children, answered)
+    return result
 
 
 def _finish_parts(
     children: list[CallResult],
     answered: list[tuple[int, Any]],
     ranking: Any,
-    *,
-    report_absent: bool = True,
 ) -> tuple[Any, dict[str, int]]:
     values = []
     attached = {}
@@ -441,6 +456,7 @@ def _finish_parts(
         attached.update(buffers)
     owners = _owners(children)
     given = None
+    native_outputs = None
     if ranking is None:
         aggregation = {
             'kind': 'steps',
@@ -450,12 +466,22 @@ def _finish_parts(
     else:
         from sdm_client._rust import relational_rank
 
-        given, cold, top_k, outputs = ranking
+        given, cold, top_k, selected, requested = ranking
         positions_ = [position for position, _ in answered]
         population = relational_rank.population(
             {'children': values, 'positions': positions_}, attached
         )
         grouped = relational_rank.groups(population, owners, given)
+        words = _call(
+            {
+                'stage': 'ranking_output_vocabulary',
+                'named': False,
+                'nonempty': None,
+            }
+        )
+        native_outputs = tuple(
+            requested or tuple(sys.intern(name) for name in words['outputs'])
+        )
         group_id = 2 + len(attached)
         attached[group_id] = codec.attachment(grouped)
         aggregation = {
@@ -464,16 +490,27 @@ def _finish_parts(
             'positions': positions_,
             'candidates': ['null' for _ in positions_],
             'top_k': top_k,
-            'outputs': outputs,
+            'outputs': selected['outputs'],
+            'selected': selected,
             'unscored_candidates': cold,
             'groups': group_id,
         }
-    return _finish(
+    result, details = _finish(
         children[0].bound,
         aggregation,
         attached,
         owners,
-        report_absent=report_absent,
+        # Native post-child containment chooses forecast explanation advice.
+        # The public caller still performs its own final absent-output read.
+        report_absent=False,
         by_step=ranking is None,
         given=given,
+        native_outputs=native_outputs,
     )
+    if ranking is None:
+        result.outputs = (
+            tuple(children[0].presented.outputs) if children else ()
+        )
+    elif native_outputs is not None:
+        result.outputs = native_outputs
+    return result, details

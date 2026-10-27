@@ -59,11 +59,36 @@ fn call_group(
 pub(crate) fn validate_ranking(
     asker: &Asker,
     outputs: Option<Vec<String>>,
+    native: Option<NativeRankingOutputFacts>,
+    selected: Option<ValidatedRelationalRanking>,
     total_parts: usize,
     cold: Option<Vec<u32>>,
     model: Option<String>,
 ) -> Result<ValidatedRelationalRanking, CoreError> {
-    let outputs = crate::ranking::selected_outputs(outputs.as_deref())?;
+    let (outputs, native) = if let Some(selected) = selected {
+        if outputs.is_some()
+            || native.is_some()
+            || selected.part_outputs != crate::ranking::part_outputs()
+        {
+            return Err(invalid(
+                "retained ranking output selection conflicts with fresh names",
+            ));
+        }
+        let checked = match &selected.native {
+            Some(facts) => crate::ranking::native_selected_outputs(Some(&selected.outputs), facts)?,
+            None => crate::ranking::selected_outputs(Some(&selected.outputs))?,
+        };
+        if checked != selected.outputs {
+            return Err(invalid("retained ranking output selection changed"));
+        }
+        (selected.outputs, selected.native)
+    } else {
+        let selected = match &native {
+            Some(facts) => crate::ranking::native_selected_outputs(outputs.as_deref(), facts)?,
+            None => crate::ranking::selected_outputs(outputs.as_deref())?,
+        };
+        (selected, native)
+    };
     if let Some(cold) = cold {
         if cold.len() > total_parts || cold.iter().collect::<BTreeSet<_>>().len() != cold.len() {
             return Err(invalid(
@@ -78,6 +103,7 @@ pub(crate) fn validate_ranking(
     Ok(ValidatedRelationalRanking {
         outputs,
         part_outputs: crate::ranking::part_outputs(),
+        native,
     })
 }
 
@@ -416,10 +442,25 @@ pub(crate) fn finish(
             candidates,
             top_k,
             outputs,
+            selected,
             unscored_candidates,
             groups,
         } => {
-            let outputs = crate::ranking::selected_outputs(Some(&outputs))?;
+            let outputs = if let Some(selected) = selected {
+                if selected.outputs != outputs
+                    || selected.part_outputs != crate::ranking::part_outputs()
+                {
+                    return Err(invalid(
+                        "ranking composition changed its retained output selection",
+                    ));
+                }
+                match &selected.native {
+                    Some(facts) => crate::ranking::native_selected_outputs(Some(&outputs), facts)?,
+                    None => crate::ranking::selected_outputs(Some(&outputs))?,
+                }
+            } else {
+                crate::ranking::selected_outputs(Some(&outputs))?
+            };
             if children.is_empty() || candidates.len() != children.len() {
                 return Err(invalid(
                     "ranking candidate values do not name its child results",

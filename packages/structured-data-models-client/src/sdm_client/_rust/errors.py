@@ -690,6 +690,14 @@ def error_from_core(
         cls = StructuredDataError
     sentence = error['sentence']
     if (
+        sentence in {'ranking_output_unknown', 'ranking_outputs_unknown'}
+        and fields.get('native_ranking_outputs')
+        and (present := _held().get('relational_ranking_outputs')) is not None
+    ):
+        fields['unsupported'] = [
+            _ObservedRepr(shown) for shown in present(fields)
+        ]
+    if (
         sentence == 'relational_output_shapes'
         and (present := _held().get('relational_output_shapes')) is not None
     ):

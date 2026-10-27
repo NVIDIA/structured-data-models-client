@@ -128,6 +128,48 @@ pub(super) fn prepare(
     input: RelationalPreparation,
 ) -> Result<RelationalPrepared, CoreError> {
     Ok(match input {
+        RelationalPreparation::RankingFields {
+            prediction,
+            rankings,
+        } => {
+            let words = crate::ranking::native_output_vocabulary(false, None)?;
+            let fields = [(prediction, words.prediction), (rankings, words.rankings)]
+                .into_iter()
+                .filter_map(|(included, field)| included.then_some(field))
+                .collect();
+            RelationalPrepared::RankingFields(fields)
+        }
+        RelationalPreparation::ForecastExplanations {
+            model,
+            requested,
+            steps,
+            explained,
+        } => {
+            policy::resolve_model(&model)?;
+            if steps.len() != explained.len()
+                || steps.iter().any(|step| *step == 0)
+                || steps.iter().collect::<BTreeSet<_>>().len() != steps.len()
+            {
+                return Err(invalid(
+                    "native forecast explanation population is inconsistent",
+                ));
+            }
+            let presence: Vec<_> = steps
+                .iter()
+                .copied()
+                .zip(explained.iter().copied())
+                .collect();
+            if let Some(warning) = policy::steps_unexplained_observed(&model, requested, &presence)
+            {
+                asker.warn(
+                    CoreWarning::new(warning.sentence, warning.message).with_fields(warning.fields),
+                );
+            }
+            RelationalPrepared::ForecastCoverage {
+                steps: steps.len(),
+                explained: explained.iter().filter(|value| **value).count(),
+            }
+        }
         RelationalPreparation::OutputShapes {
             call,
             parts,

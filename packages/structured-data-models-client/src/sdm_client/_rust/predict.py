@@ -341,6 +341,8 @@ def _ranked(
     rows: list[dict[str, Any]],
     metadata: dict[str, Any],
     given: dict[int, Any],
+    *,
+    native_outputs: tuple[Any, ...] | None = None,
 ) -> PredictionResult:
     r"""A ranking's result as the client gives it (``_ranked``): each row's
     candidates, best first, as the caller gave them (``given``, by the
@@ -352,15 +354,21 @@ def _ranked(
 
     from sdm_client.result import PredictionResult
 
-    wanted = answered.outputs
+    wanted = answered.outputs if native_outputs is None else native_outputs
     items = []
     for row in rows:
         chosen = [given[at] for at in row['candidates']]
+        if native_outputs is not None:
+            from sdm_client._rust.relational_native import ranking_fields
+
+            fields = ranking_fields(native_outputs)
+        else:
+            fields = wanted
         items.append(
             PredictionItem(
                 row_index=row['row_index'],
                 id=_id(row),
-                prediction=chosen if 'prediction' in wanted else None,
+                prediction=chosen if 'prediction' in fields else None,
                 rankings=(
                     tuple(
                         {'candidate': candidate, 'score': score}
@@ -368,7 +376,7 @@ def _ranked(
                             chosen, row['scores'], strict=True
                         )
                     )
-                    if 'rankings' in wanted
+                    if 'rankings' in fields
                     else None
                 ),
             )

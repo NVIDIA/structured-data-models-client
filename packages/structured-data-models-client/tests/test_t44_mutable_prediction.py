@@ -975,3 +975,214 @@ def test_native_two_paid_call_output_shape_hash_boundary(
         ]
     record.update(events=events, sent=sent, paid_calls=len(sent))
     assert record == expected
+
+
+DECOMPOSED_OUTPUT_REFERENCE = json.loads(
+    Path(__file__)
+    .with_name('t44_mutable_prediction_reference.json')
+    .read_text()
+)['decomposed_output_cases'][
+    '310' if int(pd.__version__.split('.')[0]) == 2 else '312'
+]
+
+
+@pytest.mark.parametrize('core', [False, True], ids=['original', 'core'])
+@pytest.mark.parametrize('case', list(DECOMPOSED_OUTPUT_REFERENCE))
+def test_native_decomposed_output_owners_and_paid_boundaries(
+    monkeypatch, core, case
+):
+    from test_t44_decomposition_owners import question as question_for
+
+    from sdm_client.result import PredictionResult
+
+    monkeypatch.setenv(
+        'SDM_CORE_ROUTES', 'client.predict/regression/frames' if core else ''
+    )
+    expected = copy.deepcopy(DECOMPOSED_OUTPUT_REFERENCE[case])
+    if core and case == 'ranking-owner-control':
+        expected['warnings'][-1]['message'] = (
+            '[CANDIDATES_UNSCORED] ' + expected['warnings'][-1]['message']
+        )
+    if expected['sent']:
+        if case.startswith('ranking-'):
+            monkeypatch.setattr(
+                'sdm_client.adapters.relational._request_id',
+                lambda: expected['sent'][0]['metadata']['request_id'],
+            )
+        else:
+            identifiers = iter(
+                body['metadata']['request_id'] for body in expected['sent']
+            )
+            monkeypatch.setattr(
+                'sdm_client.adapters.relational._request_id',
+                lambda: next(identifiers),
+            )
+    events = []
+    sent = []
+    armed = False
+    retained = RuntimeError('retained decomposed output observation failure')
+    paid_failure = RuntimeError('retained second child delivery failure')
+    record = {'case': case}
+
+    class ModelName(str):
+        def __hash__(self):
+            events.append('model.hash')
+            return str.__hash__(self)
+
+        def __eq__(self, other):
+            events.append('model.eq.' + str(other))
+            return str.__eq__(self, other)
+
+    class Output(str):
+        def __hash__(self):
+            events.append('output.hash')
+            if armed:
+                raise retained
+            return str.__hash__(self)
+
+        def __eq__(self, other):
+            events.append('output.eq.' + str(other))
+            if case == 'ranking-output-equality-fails':
+                raise retained
+            return str.__eq__(self, other)
+
+    class Outputs(list):
+        iterations = 0
+
+        def __iter__(self):
+            self.iterations += 1
+            events.append('outputs.iter.' + str(self.iterations))
+            if (
+                case == 'forecast-sequence-fourth-fails'
+                and self.iterations == 4
+            ):
+                raise retained
+            return list.__iter__(self)
+
+        def __contains__(self, value):
+            events.append('outputs.contains.' + str(value))
+            if case == 'forecast-explanation-contains-fails':
+                raise retained
+            return list.__contains__(self, value)
+
+    def post(url, *, data, **kwargs):
+        events.append('http-post.' + str(len(sent) + 1))
+        body = json.loads(data)
+        sent.append(body)
+        if case == 'forecast-paid-prefix-owner' and len(sent) == 2:
+            raise paid_failure
+        table = body['predict']['instance_table']
+        at = table['columns'].index('instance_id')
+        ranking = case.startswith('ranking-')
+        predictions = []
+        for i, row in enumerate(table['rows']):
+            item = {
+                'row_index': i,
+                'id': str(row[at]),
+                'prediction': True if ranking else 17.0 + i,
+            }
+            if ranking:
+                item['probabilities'] = {'false': 0.3, 'true': 0.7}
+            predictions.append(item)
+        response = requests.Response()
+        response.status_code = 200
+        response._content = json.dumps(
+            {
+                'id': 'decomposed-owner-' + str(len(sent)),
+                'model': 'kumo-relational',
+                'metadata': {},
+                'predictions': predictions,
+            }
+        ).encode()
+        response._content_consumed = True
+        return response
+
+    def inspect_result(answer):
+        return {
+            'result': json.loads(answer.to_pandas().to_json(orient='split')),
+            'tuple_identity': answer.outputs is outputs,
+            'member_identities': [
+                value is outputs[i] for i, value in enumerate(answer.outputs)
+            ],
+        }
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        try:
+            ranking = case.startswith('ranking-')
+            question = question_for('ranking' if ranking else 'forecast')
+            how = {
+                'indices': [1, 2],
+                'num_context_samples': 3,
+                'num_neighbors': [3],
+                'num_hops': 1,
+                'random_seed': 7,
+            }
+            if ranking:
+                how['candidates'] = pd.Series([0, 1])
+            request = question.materialize(**how)
+            owner = Output('rankings' if ranking else 'prediction')
+            outputs = (
+                Outputs(['prediction'])
+                if '-sequence-' in case or '-explanation-' in case
+                else (owner,)
+            )
+            with SDMClient('http://localhost:1', max_retries=0) as client:
+                client._transport._session.post = post
+                answer = client.predict(
+                    request, model=ModelName('kumo-relational'), outputs=outputs
+                )
+            record.update(outcome='success', answer=inspect_result(answer))
+            if '-owner-' in case:
+                armed = True
+                try:
+                    PredictionResult.merge([answer, answer])
+                    record['later_merge'] = {'outcome': 'success'}
+                except Exception as error:
+                    record['later_merge'] = {
+                        'outcome': 'error',
+                        'type': type(error).__name__,
+                        'message': str(error),
+                        'retained_identity': error is retained,
+                    }
+                armed = False
+        except Exception as error:
+            details = getattr(error, 'details', None)
+            answered = (
+                details.get('answered') if isinstance(details, dict) else None
+            )
+            record.update(
+                outcome='error',
+                error={
+                    'type': type(error).__name__,
+                    'message': str(error),
+                    'code': getattr(error, 'code', None),
+                    'retained_identity': error is retained,
+                    'paid_failure_identity': error is paid_failure,
+                    'parts_answered': details.get('parts_answered')
+                    if isinstance(details, dict)
+                    else None,
+                    'answered': None
+                    if answered is None
+                    else inspect_result(answered),
+                },
+            )
+            if answered is not None:
+                armed = True
+                try:
+                    PredictionResult.merge([answered, answered])
+                    record['later_merge'] = {'outcome': 'success'}
+                except Exception as later:
+                    record['later_merge'] = {
+                        'outcome': 'error',
+                        'type': type(later).__name__,
+                        'message': str(later),
+                        'retained_identity': later is retained,
+                    }
+                armed = False
+        record['warnings'] = [
+            {'type': type(item.message).__name__, 'message': str(item.message)}
+            for item in caught
+        ]
+    record.update(events=events, sent=sent, paid_calls=len(sent))
+    assert record == expected

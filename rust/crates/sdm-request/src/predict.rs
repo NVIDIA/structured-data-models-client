@@ -2076,12 +2076,30 @@ pub fn absent_notice(model: &str, absent: &[String]) -> Notice {
 /// and the steps with none, in step order; `None` where every step or none
 /// was explained, or none was asked for.
 pub fn steps_unexplained(model: &str, named: &[String], steps: &[(u32, &Part)]) -> Option<Notice> {
-    if !named.iter().any(|n| n == "explanation") {
+    if !named.iter().any(|name| name == "explanation") {
+        return None;
+    }
+    steps_unexplained_observed(
+        model,
+        true,
+        &steps
+            .iter()
+            .map(|(step, part)| (*step, part.explanation.is_some()))
+            .collect::<Vec<_>>(),
+    )
+}
+
+pub fn steps_unexplained_observed(
+    model: &str,
+    requested: bool,
+    steps: &[(u32, bool)],
+) -> Option<Notice> {
+    if !requested {
         return None;
     }
     let missing: Vec<u32> = steps
         .iter()
-        .filter(|(_, part)| part.explanation.is_none())
+        .filter(|(_, explained)| !*explained)
         .map(|(step, _)| *step)
         .collect();
     if missing.is_empty() || missing.len() == steps.len() {

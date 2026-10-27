@@ -367,10 +367,18 @@ pub enum Preparation {
     },
     ValidateRelationalRanking {
         outputs: Option<Vec<String>>,
+        #[serde(default)]
+        native: Option<NativeRankingOutputFacts>,
+        #[serde(default)]
+        selected: Option<ValidatedRelationalRanking>,
         total_parts: usize,
         cold: Option<Vec<u32>>,
         #[serde(default)]
         model: Option<String>,
+    },
+    RankingOutputVocabulary {
+        named: bool,
+        nonempty: Option<bool>,
     },
     DescribeRelationalPart {
         scope: RelationalPartScope,

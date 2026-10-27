@@ -320,9 +320,10 @@ pub(crate) async fn run(
         Preparation::RankRelationalScore { item } => serde_json::to_value(
             relational_result::confidence(item)?,
         ),
-        Preparation::ValidateRelationalRanking { outputs, total_parts, cold, model } => serde_json::to_value(
-            relational_result::validate_ranking(&asker, outputs, total_parts, cold, model)?,
+        Preparation::ValidateRelationalRanking { outputs, native, selected, total_parts, cold, model } => serde_json::to_value(
+            relational_result::validate_ranking(&asker, outputs, native, selected, total_parts, cold, model)?,
         ),
+        Preparation::RankingOutputVocabulary { named, nonempty } => serde_json::to_value(crate::ranking::native_output_vocabulary(named, nonempty)?),
         Preparation::DescribeRelationalPart { scope } => serde_json::to_value(
             relational_result::describe(scope)?,
         ),

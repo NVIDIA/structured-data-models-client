@@ -194,6 +194,16 @@ pub enum NativeOutputEmpty {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "data", rename_all = "snake_case", deny_unknown_fields)]
 pub enum RelationalPreparation {
+    RankingFields {
+        prediction: bool,
+        rankings: bool,
+    },
+    ForecastExplanations {
+        model: String,
+        requested: bool,
+        steps: Vec<u32>,
+        explained: Vec<bool>,
+    },
     TaskVocabulary,
     OutputVocabulary,
     OutputShapes {
@@ -284,6 +294,8 @@ pub enum RelationalPreparation {
     deny_unknown_fields
 )]
 pub enum RelationalPrepared {
+    RankingFields(Vec<String>),
+    ForecastCoverage { steps: usize, explained: usize },
     Vocabulary(RelationalTaskVocabulary),
     OutputVocabulary(NativeOutputVocabulary),
     OutputMeaning(NativeOutputMeaning),
