@@ -345,6 +345,39 @@ fn native_hops(graph: &Graph, values: &[Value]) -> Result<Vec<i64>, CoreError> {
 }
 
 impl FrameRun {
+    /// Native table construction infers the physical primitive family before
+    /// applying Text meaning. A logical dtype edit cannot turn numeric rows
+    /// into a text column. Reuse the shared semantic rule and diagnostic.
+    pub fn validate_text_types(&self, description: &SourceDescription) -> Result<(), CoreError> {
+        let mut physical = description.clone();
+        for table in &mut physical.tables {
+            let (_, rows) = self
+                .tables
+                .iter()
+                .find(|(source, _)| source == &table.source)
+                .ok_or_else(|| invalid("a materialized frame lacks its source"))?;
+            for column in table
+                .columns
+                .iter_mut()
+                .filter(|column| column.stype == Stype::Text)
+            {
+                let field = rows
+                    .schema
+                    .field_with_name(&column.name)
+                    .map_err(|_| invalid("a frame lacks a described column"))?;
+                let dtype = field.data_type();
+                if dtype.is_integer() {
+                    column.dtype = Dtype::Int;
+                } else if dtype.is_floating() {
+                    column.dtype = Dtype::Float;
+                } else if dtype == &DataType::Boolean {
+                    column.dtype = Dtype::Bool;
+                }
+            }
+        }
+        crate::materialize::meanings_carried(&physical, None)
+    }
+
     /// Prepare a useful graph artifact before task-native input conversion.
     /// Construction retains the snapshot before its separate drop notice is
     /// presented, so warning-as-error does not reread mutated caller frames.
