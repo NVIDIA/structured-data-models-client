@@ -218,3 +218,22 @@ fn direct_numeric_preparation_is_model_neutral_and_binds_one_tabular_call() {
         }
     }
 }
+
+#[test]
+fn direct_preparation_rejects_wrong_versions_and_impossible_call_phases() {
+    let mut arguments = arguments();
+    arguments["version"] = json!(u32::MAX);
+    let error=prepare(json!({"stage":"headers","arguments":arguments,"context":header(&["target"],1),"predict":header(&[],0),"target_context":{"positions":[0]},"target_predict":{"positions":[]},"predict_context":[]}),Attachments::new()).unwrap_err();
+    assert_eq!(error.sentence, sdm_contract::Sentence::InvalidMessage);
+    let model = prepare(
+        json!({"stage":"model","model":"kumo-tabular"}),
+        Attachments::new(),
+    )
+    .unwrap();
+    let error = prepare(
+        json!({"stage":"capacity","call":model,"rows":3}),
+        Attachments::new(),
+    )
+    .unwrap_err();
+    assert_eq!(error.sentence, sdm_contract::Sentence::InvalidMessage);
+}
