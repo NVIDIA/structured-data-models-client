@@ -2594,6 +2594,61 @@ mod tests {
     }
 
     #[test]
+    fn direct_boolean_classes_strip_native_spaces_without_changing_gathered_policy() {
+        let spell = |value: f64| value.to_string();
+        let whitespace = "\t\n\u{b}\u{c}\r\u{1c}\u{1d}\u{1e}\u{1f} \u{85}\u{a0}\u{1680}\u{2000}\u{2001}\u{2002}\u{2003}\u{2004}\u{2005}\u{2006}\u{2007}\u{2008}\u{2009}\u{200a}\u{2028}\u{2029}\u{202f}\u{205f}\u{3000}";
+        for separator in whitespace.chars() {
+            for (label, expected) in [
+                ("True", true),
+                ("t", true),
+                ("1", true),
+                ("FALSE", false),
+                ("F", false),
+                ("0", false),
+            ] {
+                let padded = format!("{separator}{label}{separator}");
+                let value = Value::Text(padded.clone());
+                assert_eq!(
+                    answer_of(
+                        Some(&value),
+                        AnswerType::Bool,
+                        AnswerPolicy::Direct {
+                            decimal_limit: 4300
+                        }
+                    ),
+                    Ok(Answer::Bool(expected))
+                );
+                let gathered = if ('\u{1c}'..='\u{1f}').contains(&separator) {
+                    written(&value)
+                } else {
+                    Answer::Bool(expected)
+                };
+                assert_eq!(
+                    answer_of(Some(&value), AnswerType::Bool, AnswerPolicy::Gathered),
+                    Ok(gathered)
+                );
+                let canonical = if expected { "True" } else { "False" };
+                let given = vec![(padded.clone(), 0.75)];
+                assert_eq!(
+                    spelled_with_limit(&given, AnswerType::Bool, spell, Some(4300)),
+                    vec![(canonical.into(), 0.75)]
+                );
+                let gathered = if ('\u{1c}'..='\u{1f}').contains(&separator) {
+                    given.clone()
+                } else {
+                    vec![(canonical.into(), 0.75)]
+                };
+                assert_eq!(spelled(&given, AnswerType::Bool, spell), gathered);
+                let colliding = vec![(padded, 0.75), (canonical.into(), 0.25)];
+                assert_eq!(
+                    spelled_with_limit(&colliding, AnswerType::Bool, spell, Some(4300)),
+                    colliding
+                );
+            }
+        }
+    }
+
+    #[test]
     fn a_float_target_s_probabilities_are_keyed_as_its_classes_are_spelled() {
         let spell = |x: f64| format!("<{x}>");
         let given = vec![("3".to_owned(), 0.5), ("x".to_owned(), 0.5)];

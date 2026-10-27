@@ -1463,6 +1463,69 @@ def test_direct_classes_retain_native_numeric_grammar_separately_from_gathered(
     assert observed[1] == observed[0]
 
 
+@pytest.mark.parametrize(
+    'separator',
+    list('\t\n\v\f\r\x1c\x1d\x1e\x1f \x85\xa0\u1680')
+    + [chr(point) for point in range(0x2000, 0x200B)]
+    + list('\u2028\u2029\u202f\u205f\u3000'),
+    ids=lambda separator: f'U+{ord(separator):04X}',
+)
+@pytest.mark.parametrize(
+    'positive,negative', [('True', 'FALSE'), ('t', 'F'), ('1', '0')]
+)
+@pytest.mark.parametrize('collision', [False, True])
+def test_direct_boolean_classes_strip_native_whitespace_and_keep_collisions(
+    monkeypatch, separator, positive, negative, collision
+):
+    positive = separator + positive + separator
+    negative = separator + negative + separator
+    probabilities = {positive: 0.75, negative: 0.25}
+    if collision:
+        probabilities['True'] = 0.125
+    expected_keys = (
+        probabilities if collision else {'True': 0.75, 'False': 0.25}
+    )
+    observed = []
+    for core in (False, True):
+        monkeypatch.setenv('SDM_CORE_ROUTES', CORE if core else '')
+        context = pd.DataFrame(
+            {'user_id': [1, 2, 3], 'target': [True, False, True]}
+        )
+        scoring = pd.DataFrame({'user_id': [4, 5]})
+        request = Request(
+            context, scoring, target='target', task='classification'
+        )
+
+        def answer(response):
+            for row, prediction in zip(
+                response['predictions'], (positive, negative)
+            ):
+                row.update(prediction=prediction, probabilities=probabilities)
+            return response
+
+        transport = Scripted(answer)
+        with SDMClient('http://localhost:1', max_retries=0) as client:
+            client._transport.close()
+            client._transport = transport
+            result = client.predict(request, model=KumoTabular())
+        assert len(transport.calls) == 1
+        assert [item.prediction for item in result.items] == [True, False]
+        assert all(type(item.prediction) is bool for item in result.items)
+        assert all(item.probabilities == expected_keys for item in result.items)
+        assert all(
+            type(key) is str
+            for item in result.items
+            for key in item.probabilities
+        )
+        observed.append(
+            [
+                (typed_value(item.prediction), item.probabilities)
+                for item in result.items
+            ]
+        )
+    assert observed[1] == observed[0]
+
+
 def native_exception_graph(exception, seen=None):
     if exception is None:
         return None

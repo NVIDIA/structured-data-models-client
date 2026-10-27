@@ -1715,12 +1715,21 @@ fn classified_result(
     probabilities: serde_json::Map<String, Value>,
     decimal_limit: u32,
 ) -> ArrowData {
-    let feature = Arc::new(arrow_array::Int64Array::from(vec![1, 2, 3])) as ArrayRef;
     let target = if integer {
         Arc::new(arrow_array::Int64Array::from(vec![2, 4, 6])) as ArrayRef
     } else {
         Arc::new(Float64Array::from(vec![2., 4., 6.])) as ArrayRef
     };
+    classified_result_with_target(target, label, probabilities, decimal_limit)
+}
+
+fn classified_result_with_target(
+    target: ArrayRef,
+    label: Value,
+    probabilities: serde_json::Map<String, Value>,
+    decimal_limit: u32,
+) -> ArrowData {
+    let feature = Arc::new(arrow_array::Int64Array::from(vec![1, 2, 3])) as ArrayRef;
     let context = [RecordBatch::try_from_iter([("0", feature), ("1", target)]).unwrap()];
     let scoring = [RecordBatch::try_from_iter([(
         "0",
@@ -1776,6 +1785,62 @@ fn classified_result(
         panic!("result")
     };
     result
+}
+
+#[test]
+fn direct_boolean_layout_strips_all_native_whitespace_and_preserves_collisions() {
+    use arrow_array::cast::AsArray;
+    let whitespace = "\t\n\u{b}\u{c}\r\u{1c}\u{1d}\u{1e}\u{1f} \u{85}\u{a0}\u{1680}\u{2000}\u{2001}\u{2002}\u{2003}\u{2004}\u{2005}\u{2006}\u{2007}\u{2008}\u{2009}\u{200a}\u{2028}\u{2029}\u{202f}\u{205f}\u{3000}";
+    for separator in whitespace.chars() {
+        for (positive, negative) in [("True", "FALSE"), ("t", "F"), ("1", "0")] {
+            for collision in [false, true] {
+                for (label, expected) in [(positive, true), (negative, false)] {
+                    let positive = format!("{separator}{positive}{separator}");
+                    let negative = format!("{separator}{negative}{separator}");
+                    let mut probabilities = serde_json::Map::from_iter([
+                        (positive.clone(), json!(0.75)),
+                        (negative.clone(), json!(0.25)),
+                    ]);
+                    if collision {
+                        probabilities.insert("True".into(), json!(0.125));
+                    }
+                    let result = classified_result_with_target(
+                        Arc::new(arrow_array::BooleanArray::from(vec![true, false, true])),
+                        json!(format!("{separator}{label}{separator}")),
+                        probabilities.clone(),
+                        4300,
+                    );
+                    let batch = &result.batches[0];
+                    let prediction = batch.column_by_name("prediction").unwrap().as_boolean();
+                    assert_eq!(prediction.value(0), expected);
+                    let classes = batch
+                        .column_by_name("probabilities")
+                        .unwrap()
+                        .as_map()
+                        .value(0);
+                    let keys = classes.column(0).as_string::<i32>();
+                    let values = classes
+                        .column(1)
+                        .as_primitive::<arrow_array::types::Float64Type>();
+                    let actual: std::collections::BTreeMap<_, _> = (0..keys.len())
+                        .map(|at| (keys.value(at).to_owned(), values.value(at)))
+                        .collect();
+                    let expected = if collision {
+                        probabilities
+                            .iter()
+                            .map(|(key, value)| (key.clone(), value.as_f64().unwrap()))
+                            .collect()
+                    } else {
+                        std::collections::BTreeMap::from([
+                            ("True".into(), 0.75),
+                            ("False".into(), 0.25),
+                        ])
+                    };
+                    assert_eq!(actual, expected);
+                }
+            }
+        }
+    }
 }
 
 #[test]
