@@ -28,8 +28,8 @@ pub(super) fn write(text: &UnicodeText, output: &mut Vec<u8>) {
             }
             Err(error) => {
                 let end = at + error.valid_up_to();
-                let ordinary = std::str::from_utf8(&bytes[at..end])
-                    .expect("validated native ordinary run");
+                let ordinary =
+                    std::str::from_utf8(&bytes[at..end]).expect("validated native ordinary run");
                 fragment(ordinary, output);
                 // UnicodeText has already validated canonical UTF8 with
                 // surrogatepass. This is exactly one three-byte unit.
@@ -110,7 +110,14 @@ mod tests {
 
     #[test]
     fn ordinary_controls_keep_the_existing_provider_and_request_encoding() {
-        for ordinary in ["", "\0", "\u{8}\t\n\u{c}\r", "\"\\/", "é 東京 😺", "\u{10ffff}"] {
+        for ordinary in [
+            "",
+            "\0",
+            "\u{8}\t\n\u{c}\r",
+            "\"\\/",
+            "é 東京 😺",
+            "\u{10ffff}",
+        ] {
             let ordinary = ordinary.to_owned();
             let mut output = Vec::new();
             write(&UnicodeText::from(ordinary.as_str()), &mut output);
