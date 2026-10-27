@@ -1,6 +1,6 @@
 # Phase 3 validation tracker
 
-Updated 2026-10-27, 02:40 UTC.
+Updated 2026-10-27, 03:22 UTC.
 Phase 3 / T3.10 is unfinished.
 The owner assigned existing Phase4work to a separate new agent; this coordinator continues Phase3.
 The coordinator alone edits this tracker; agents report results and next actions.
@@ -21,6 +21,10 @@ The coordinator alone edits this tracker; agents report results and next actions
 - Owner explicitly approved keeping all valid sampled links instead of the old partial-link behavior; exact decision row is `T310-OWNER-2026-10-26-COMPLETE-SAMPLED-LINKS-1` on the current repair candidate.
 - One exact diamond request lists identical relationship objects in order[0,2,1,3] on Snowflake/Spark and selected Java/Python runtimes.
   The owner explicitly accepted this exact difference; both finite-review addenda confirm its bounded scope and retain the actual SF joint accuracy result within5%.
+- Owner explicitly approved finishing Phase3 against frozen43e and deferring new main functionality; both policy reviewers accepted this scope.
+  The genuine gate main/check7/check12 failure remains visible, while all nine other gate steps passed.
+- Owner approved only five physically unsupported sealed case/backend pairings: storedNaN on SQLite, and nanosecond-offset on PostgreSQL, Lakebase, Databricks SQL and Spark.
+  Keep all40 frozen cases and every other pairing; continue the same started attempt without resetting its marker, changing data, or inventing passing observations.
 - Preserve failed attempts, raw strict differences and original source/native/build identities; recording an observation is not comparison acceptance.
 - Use existing coverage only; do not add scenarios or new validation machinery.
 
@@ -63,8 +67,8 @@ Counts describe existing cases only.
 | R9 | **DONE: selected affected comparison acceptance** | All36warehouse and18Java plus paired18Python observations complete; both quality reviews and both finite data/runtime reviews accepted their bounded scopes. Owner accepted the exact five diamond request-order differences | All66successful bodies have valid FK targets; every raw strict failure and existing metadata/warning/error limit remains visible |
 | R10 | **DONE: final-source full CI green** | Exact234 [fullCI40430848336](https://github.com/NVIDIA/structured-data-models-client/actions/runs/40430848336), attempt2:81successful jobs and2intentional skips. Java ARM SQLite retry121975118980 passed in2.5minutes; timing guard121975939188 passed | Original attempt1 job IDs, timeout and actual official artifact producers preserved. GitHub carried successful jobs forward; no new execution is claimed for those jobs |
 | R11 | **DONE: Snowflake identical-input comparison** | Full 10101-row source and original 10000-row draw verified; both complete current requests match the originals; all 10001 actual model26 predictions exactly equal old, RMSE ratio 1.0 on both batches and aggregate; SDK0 cleanup | Coordinator consumed receipt `8f48d1c7`; sampling unchanged; historical independent-draw 26.51% loss and failed recorder-mode attempt preserved |
-| R12 | Finish final-source ordinary acceptance | Same complete stock locked3a session64928: all315observations per host, ratchet/compare/L0/coverage/runners and fullRustL1 PASS; all364seeded tests PASS, gate self-checks active, stock runtime-cell/evidence tail remains | Coordinator owns one Phase3heavy slot. Original wrapper pagination false refusal retained; unchanged stock steps continue directly under the existing audit. All cost decisions approved |
-| R13 | Sealed readiness, final draw and evidence/integration | Single reviewed source-publication job886982126233377/task193762529920270 RUNNING attempt0; local fullclone/manifest passed, cloud copy progressing, final stock-consumer proof pending. Genuine234wheels/JAR and fresh runtime ready; final H4 Java connection configuration draft awaits exact binding review | Cloud owner completes W1proof and freezes H4; obtain both CODE reviews and fresh readiness/dry checks. After fullCI and ordinary acceptance, run sealed40LASTonce, final pack/twoGO, signed no-ff core merge/push and inspect core CI |
+| R12 | **DONE: ordinary acceptance under approved frozen-reference policy** | All nine non-main gate steps PASS, including fullRustL1,364seeded tests,452self-checks and inventory388; seven clean234 runner/cell files each hold315records. Dependency/size checks and generated evidence passed, with zero regressions in the41-case legacy inventory report | Original machine gate stays FAILmain/check7/check12; owner exception and both independent alignment reviews retained separately, with no fabricated wrapper/stamp PASS |
+| R13 | Finish the same sealed attempt, final evidence and integration | W1SUCCESS verified20207files; both H4CODE approvals, Java admission, stock dry and fresh namespace checks passed. Actual sealed run stopped in old-reference SQLite fixture loading before Rust ran;25DuckDB reference rows retained, global marker remains | Owner approved five storage exclusions over2cases, retaining all40IDs and169applicable pairs. Author preparing minimal unchanged-stock-CLI continuation for both CODE reviews; then finish the same attempt, final pack/twoGO, normal signed no-ff merge/push and inspect automatic core CI |
 | R14 | **DONE: existing Spark and Lakebase live provider kits** | Spark saved-answer correction has both CODE approvals, five controls and actual 99-answer readjudication PASS; Lakebase actually completed all 99 normal/fault cases on final15e, normal33 clean and both faults detected | Spark receipt `08a8d2c7`, Lakebase `d3f3825e`; original failures, all driver captures and source IDs preserved; cleanup verified and lease released |
 | R15 | **DONE: approved shared graph correction landed** | Owner-approved valid-link correction landed/frozen as cc51 with genuine official artifacts; local N3 quality is 2.4701% worse, current original DK/SF quality refreshes are 2.4323%/1.9583% worse, all within 5% | No sampling change; finite quality reviews and subsequent test-only source attribution remain separate acceptance steps |
 
@@ -91,10 +95,23 @@ That target was missed after the Java tail exposed a real shared Rust graph defe
 The graph correction and affected-result acceptance are complete; the critical path is final-source ordinary validation, CI, sealed readiness and the final draw.
 The deadline does not lower correctness requirements.
 
+## Lean remaining validation
+
+Use the existing source, CI, warehouse/model/performance results, W1 proof and readiness admissions.
+The continuation corrects only the five owner-approved storage applicability pairings, using byte-identical per-leg views and exact169-key completeness checks.
+The planned second reference pass remains part of the original protocol.
+Do not create another draw, reset the marker, rerun completed campaigns or add another comparator/framework.
+Automatic post-merge CI still runs, while identical-full-tree CI reuse is allowed by the existing final gate.
+Verify the new merge parents/tree, epic ratchet/provenance and remote identity; inspect automatic CI and fix genuine integration failures.
+A second full identical-tree matrix is not a new Phase3 closure barrier.
+
 ## Current execution and integration
 
 - Final published Phase3head is `234c3adff5f4de8c2348bac3ecc17cfc6f43241f`, tree `d3460725323ea5e364e0f9adf9ddc109e97efbb4`; verified landing and actual stock protected-path ratchet passed.
-- FullCI40430848336 and local complete locked3a session64928 are the only current full validation attempts.
+- FullCI40430848336 is green; local full gate64928 is terminal with main-only failure under the explicit owner-approved frozen-reference policy.
+- W1 source publication and H4 readiness are complete; the started sealed attempt remains unfinished after the original SQLite fixture failed to represent NaN.
+  The global marker, frozen input files, source/reference, register snapshot, failed log and passed25-row DuckDB reference result remain unchanged.
+  No candidate sealed leg has executed yet.
   Previouscc51CI40418671928 is terminal failed on stale test expectations; the later AEA attempt failed only the coordinator's missing filename acknowledgment, corrected without tracked-source changes.
 - All27affected five-run timing rows are complete; all current owner cost dispositions are approved.
 - Final234production/test-ops wheels, Java/JNI assets and immutable publications are authenticated; their original producing identities are preserved.
