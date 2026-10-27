@@ -361,4 +361,57 @@ mod tests {
             assert_eq!(indices, [1, 3, 5, 0, 2, 4]);
         }
     }
+
+    #[test]
+    fn all_actual_wheel_forced_fallback_permutations_match_both_depth_zero_profiles() {
+        let data: serde_json::Value = serde_json::from_str(include_str!(
+            "../tests/data/t46_simd_fallback_controls.json"
+        ))
+        .unwrap();
+        assert_eq!(data["numpy"], "2.5.3");
+        assert_eq!(data["naturally_reachable_public_fallback_witness"], false);
+        let records = data["records"].as_array().unwrap();
+        assert_eq!(records.len(), 123);
+        for record in records {
+            let name = record["case"].as_str().unwrap();
+            assert_eq!(record["forced_depth"], 0);
+            let encoded = record["values_hex"].as_str().unwrap();
+            let bytes: Vec<u8> = (0..encoded.len())
+                .step_by(2)
+                .map(|at| u8::from_str_radix(&encoded[at..at + 2], 16).unwrap())
+                .collect();
+            let expected: Vec<usize> = serde_json::from_value(record["order"].clone()).unwrap();
+            macro_rules! check {
+                ($dtype:ty, $width:literal) => {{
+                    assert_eq!(bytes.len() % $width, 0, "{name}");
+                    let values: Vec<$dtype> = bytes
+                        .chunks_exact($width)
+                        .map(|word| <$dtype>::from_le_bytes(word.try_into().unwrap()))
+                        .collect();
+                    for profile in [
+                        SimdArgsortProfile::Avx2Gnu14,
+                        SimdArgsortProfile::Avx512Gnu14,
+                    ] {
+                        let mut indices: Vec<usize> = (0..values.len()).collect();
+                        sort_recursive(&values, &mut indices, 0, profile);
+                        assert_eq!(indices, expected, "{name}, {profile:?}");
+                    }
+                    let after: Vec<u8> = values
+                        .iter()
+                        .flat_map(|value| value.to_le_bytes())
+                        .collect();
+                    assert_eq!(after, bytes, "input changed: {name}");
+                }};
+            }
+            match record["dtype"].as_str().unwrap() {
+                "<i4" => check!(i32, 4),
+                "<u4" => check!(u32, 4),
+                "<i8" => check!(i64, 8),
+                "<u8" => check!(u64, 8),
+                "<f4" => check!(f32, 4),
+                "<f8" => check!(f64, 8),
+                dtype => panic!("unexpected recorded fallback dtype {dtype}"),
+            }
+        }
+    }
 }
