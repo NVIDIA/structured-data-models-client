@@ -684,10 +684,6 @@ def error_from_core(
                     iter(value)
             except (TypeError, ValueError) as failed:
                 fields['diagnostic'] = str(failed)
-                # This presentation may run inside an internal CoreError
-                # handler. Its incidental context is not a model response
-                # cause; retain the actual native exception without showing it.
-                failed.__suppress_context__ = True
                 response_cause = failed
             if fields.get('before') or fields.get('after'):
                 fields['diagnostic'] = (
@@ -725,15 +721,37 @@ def raise_from_core(
     attachments: dict[int, Any],
     *,
     driver_class: str | None = None,
+    internal_context: BaseException | None = None,
 ) -> NoReturn:
     r"""Raise the public exception, retaining only its selected explicit cause."""
     error = error_from_core(control, attachments, driver_class=driver_class)
-    raise_error(error)
+    raise_error(error, internal_context=internal_context)
 
 
-def raise_error(error: StructuredDataError) -> NoReturn:
-    """Raise a presented error with its selected cause and no implicit context."""
-    raise error from error.__cause__
+def raise_error(
+    error: StructuredDataError,
+    *,
+    internal_context: BaseException | None = None,
+) -> NoReturn:
+    """Keep the selected cause and its caller context at the public boundary."""
+    cause = error.__cause__
+    if cause is None:
+        raise error from None
+    try:
+        # A normal decoder raises the wrapper inside its cause's handler.
+        # Reuse that same exception, including its original native traceback.
+        raise cause
+    except BaseException as selected:
+        if selected is not cause:
+            raise
+        if (
+            internal_context is not None
+            and cause.__context__ is internal_context
+        ):
+            # Remove only our caught core exception, retaining any original
+            # caller exception behind it and its native suppression flags.
+            cause.__context__ = internal_context.__context__
+        raise error from cause
 
 
 def numpy_warns_on_cast_overflow() -> bool:
