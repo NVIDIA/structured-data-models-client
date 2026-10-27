@@ -28,7 +28,7 @@ The coordinator maintains current execution status in the separate validation tr
 | Prior full CI | [40430848336](https://github.com/NVIDIA/structured-data-models-client/actions/runs/40430848336), attempt2, source234, SUCCESS with81 successful jobs and two intentional skips |
 | Retained official native wheel | Original artifact `12701738756`, authenticated source234 wheel/sidecar; Spark uses its independently authenticated ARM counterpart |
 | Retained locked gate | Source234 terminal FAIL solely on moving-main ancestry; all nine other steps passed; explicit owner frozen-reference exception and both source-impact reviews retained |
-| W1 source publication | Job `886982126233377` / task `193762529920270` SUCCESS; all20207 tracked files and modes verified over1645925491 bytes; cluster terminated |
+| W1 source publication | Owned source-publication job and task SUCCESS; all 20207 tracked files and modes verified over 1645925491 bytes; cluster terminated; terminal receipt retained privately |
 | Complete same-input follow-up | All40 original IDs and169 exact supported keys retained on Python/Rust, plus original Java20 and old-client25; raw H11 NO-GO33/82 and all original failures preserved |
 | Historical15e gate | Actual3a pass; original JSON SHA-256 `df01741be67ace10556950dfb334bd0b6f66ccca669965d024bed9b1d7ca5f32`, historical only |
 
@@ -45,7 +45,7 @@ GitHub assigned new API job IDs to those carried-forward entries; the original a
 The existing automatic fresh-dependency nightly run temporarily blocked the retry through the same branch concurrency group.
 Only that duplicate run was cancelled after its origin, job and artifact metadata were saved; its different dependency inputs and cancellation remain explicit, and neither the nightly schedule nor Phase 4 changed.
 
-| Final CI evidence | SHA-256 |
+| Prior source234 CI evidence | SHA-256 |
 | --- | --- |
 | `final-CI-green-receipt.private.json` | `a8d88d902cc06ec33642f256b81ed30dfdb279b5b797f9b30ecd007972c74e55` |
 | Final attempt 2 run metadata | `50064c82126cb5415c4884e61db556c69fede62d14cd08453480e9eda81bcaa0` |
@@ -113,7 +113,7 @@ These setup failures and all partial outputs remain preserved.
 The first four completed reference cohorts recorded96 rows: DuckDB25, SQLite24, PostgreSQL24 and Lakebase23.
 Neither repaired warehouse-only fixture occurs in those four cohorts, permitting unchanged-input reuse with genuine original file, row-key and case-byte proofs.
 The repaired SQL24 and Snowflake25 batches subsequently completed, bringing first-reference completion to145 rows across six backends.
-At that intermediate checkpoint only Spark24 remained in the first reference pass; the later successful completion and planned full reference-again pass are recorded below.
+At that intermediate checkpoint only Spark24 remained in the first reference pass; both full reference passes subsequently completed as recorded below.
 The Spark task failed before loading its first fixture because the serverless environment omitted DuckDB, an optional connector dependency required by the test loader.
 The preceding JSON-schema, PyYAML and wheel-installation stages had succeeded; the dependency audit identified only DuckDB as missing.
 The reviewed environment repair pins DuckDB1.5.6, matching the approved local runtime, without changing client code, wheels, cases or comparison rules.
@@ -122,11 +122,11 @@ That unproductive retry was cancelled after preserving the actual first task's F
 The coordinator now inspects individual task attempts rather than relying on parent status alone.
 The C5 continuation has both exact CODE approvals,19 passing controls and a passing unchanged stock local payload plan.
 Its actual reuse proof verifies and copies all145 completed rows against the C4 execution case bytes, including the two corrected view definitions.
-Corrected Spark job198082861716619 and task1008324566792432 completed SUCCESS on attempt0, recording and validating all24 reference cases.
+The corrected Spark reference job and task completed SUCCESS on attempt0, recording and validating all24 reference cases; their resource identities remain in the private terminal receipts.
 The complete first-reference169 observations are now assembled, and stock expectation generation passed.
 All24 Spark identities name clean source234 and reference43e, passed reference guards and an unloaded new core.
 Their actual runtime is Linuxaarch64, Python3.12.3, pandas2.2.3, NumPy2.1.3, PyArrow19.0.1 and DuckDB1.5.6.
-The planned reference-repeat completed all169 observations, including successful Spark job36970778378224/task884361068253579 on attempt0.
+The reference-repeat completed all169 observations, including the successful Spark repeat task on attempt0; its resource identities remain in the private terminal receipts.
 The unchanged stock determinism consumer passed before current-client execution began.
 The first73 current Python-core observations cover DuckDB25, SQLite24 and PostgreSQL24.
 A bounded early triage preserves all47 reference successes and finds no genuine regression; four clearer refusals and two exact-decimal diagnostic differences remain visible under existing compatibility entries.
@@ -140,12 +140,12 @@ Any owner acceptance after this started draw must remain an honest post-run disp
 That partial triage was not a final GO.
 The complete follow-up and its remaining policy/CI requirements are recorded below.
 Existing stock comparison/report/count consumers and exact-key completeness proofs provide the verdict; no new comparison framework or fabricated observations are authorized.
-Both independent CODE approvals are required before continuing execution.
+Both independent CODE approvals preceded the completed continuation execution.
 The owner authorized batch fixes and verification on existing inputs, with original failures retained and both reviews before checks.
 
 The unchanged `evidence.py` reporter computes its `INPUTS_SHA256` field from filenames beginning `h11.`, the legacy Phase1 recipe.
 This draw uses the Phase3 `ho3.` prefix, so that legacy field does not authenticate these inputs.
-The generated report must remain unchanged and be read with the actual stock `heldout.py` input digests below and the terminal continuation receipts once available.
+The generated report remains unchanged and must be read with the actual stock `heldout.py` input digests below and the completed terminal continuation receipts.
 This is a reporting limitation, not a change to the comparison, coverage or H11 threshold.
 
 | Actual Phase3 input identity | SHA-256 |
@@ -177,7 +177,7 @@ This is a reporting limitation, not a change to the comparison, coverage or H11 
 
 ## Complete same-input follow-up and remaining acceptance
 
-The corrected Spark Python-core task144217535390892 /288952878696704 succeeded on attempt0 and recorded24 observations, with all16 reference successes retained.
+The corrected Spark Python-core job and task succeeded on attempt0 and recorded24 observations, with all16 reference successes retained; their resource identities remain in the private terminal receipt.
 Its actual native module is the authenticated source234 ARM binary, SHA-256 `6f3204600805799d9e011ceabd6f19d02102bcd52daa7faeac0de203d189d54e`.
 Snowflake25 and Lakebase23 then completed; all169 Python-core observations preserve every reference success.
 The pure-Rust replay exposed one missing later-call boundary: Python had refused a missing target before starting native materialize.
@@ -232,6 +232,7 @@ The raw33/82 NO-GO report stays unchanged even if the owner accepts these bounde
 | Normal196-second package-check log | `e4e5dabcb17d7cd6d58a59238a0bcd9a87b513601975083477dade310802bad4` |
 | Actual normal landing log | `07f69b3d2c33d2f27797a39e2f72b19c6cd72fd0de379b8d437064aa86092dee` |
 | Current CI artifact-list network-failure diagnosis | `a616399375198e78a6a14d9af30dd1ad60acf23328d60d28de43017de77a141a` |
+| Successful final stock evidence generation | `b5f34fdbcc3ea3921bafb97f985582c49373c0dba0275b2d8fb802eefd60b4b7` |
 
 ## Required acceptance
 
@@ -247,7 +248,7 @@ Current CI and owner acceptance remain pending as stated above.
 | 5. Providers | All four actual warehouse kits completed the original 33 normal cases and both fault passes; exact-final offline and non-SQL provider CI passed |
 | 6. Differential sources | Original 200 each on DuckDB, SQLite and PostgreSQL, plus 20 each on Databricks SQL and Snowflake, retained under both finite applicability reviews; all classified raw divergences remain visible |
 | 7. Reference and ancestry | Explicit owner choice preserves frozen43e and defers new main89ef for Phase3. Actual common upstream f2ad is ancestor of both candidate and reference, with both independent policy acceptances; original main-check failure remains visible |
-| 8. Default routes | Exact source 234 client/build inputs retain reviewed default-core behavior; installed-wheel, wheel-smoke, all three cross-host jobs and final full CI passed |
+| 8. Default routes | Exact source 234 client/build inputs retain reviewed default-core behavior; installed-wheel, wheel-smoke, all three cross-host jobs and its source234 full CI passed; current ff86 CI remains pending |
 | 9. Sealed cases | The original draw and complete follow-up retain all40 cases and169 supported pairings; raw33/82 NO-GO and both pending post-run choices remain explicit |
 | 10. Boundaries and packaging | Final L0, full Rust L1, platform/wheel/runtime CI, normal dependency tree, absence of pyo3, all three size reports and W1 actual stock-consumer verification passed |
 | 11. Performance | Existing stock measurements and affected 27 five-repeat rows retained; both additional SQLite costs explicitly accepted; raw numerical FAIL reports remain FAIL with accepted-cost dispositions |
@@ -268,10 +269,11 @@ All three original C1 AdventureWorks cases on each warehouse leg have successful
 The owner-approved B-lite implementation removed the warehouse stand-in and its census legs, as recorded in `tracker-T3.3.md`.
 No dedicated warehouse census or stand-in execution is claimed; the original live outcomes and explicit per-leg counts close that bounded requirement beside the actual full-local census and shared real-source controls.
 Both reviewers independently verified this mapping; no new dataset, query, model call, fault injection or tooling was added.
-Both independent whole-phase exit prereads found no additional requirement gap beyond the explicitly pending final validation, readiness, sealed and evidence steps.
+Both historical whole-phase exit prereads found no additional requirement gap beyond the final validation, readiness, sealed and evidence steps then pending.
+Readiness and all comparison executions are now complete; current ff86 CI, the two owner dispositions, evidence publication and final GO opinions remain pending.
 The broad preliminary audit's sole census-mapping concern is closed by its separate addendum below.
 The focused whole-phase preread verified 37 primary/applicability inputs and 480 embedded file pins with zero mismatches.
-These prereads are not final GO opinions and do not substitute for unfinished execution.
+These prereads are not final GO opinions and do not substitute for the remaining acceptance conditions.
 
 | Whole-phase preread | SHA-256 |
 | --- | --- |
@@ -325,7 +327,7 @@ The earlier three negative-neighbor scenarios retain their actual measurements.
 After the complete-FK correction, all 27 affected rows across DuckDB, SQLite and PostgreSQL were measured through the stock runner, with five repeats each.
 No custom warehouse CPU record/replay campaign is required on the critical path.
 
-## Current source 234 ordinary continuation
+## Completed ordinary evidence on source234
 
 The stock phase-end wrapper stopped at preflight because its first-page GitHub lookup inspected only 30 of 35 artifacts and missed the unexpired native-wheel artifact.
 The exact source 234 production/test-ops artifacts and original sidecars were independently authenticated; the wrapper failure remains unchanged.
@@ -340,8 +342,8 @@ Their per-case table covers the 41 legacy inventory cases: 29 correct successes,
 That table is distinct from the seven315-record runner/cell files, 388 locked acceptance cases and separately retained warehouse cohorts.
 No successful macro return or manual `.done` stamp is claimed.
 W1 subsequently produced the complete successful consumer receipt cited above; an owned marker or a started copy alone would not establish publication completion.
-H4 readiness and the first draw have now executed as described above; the same-attempt continuation remains unfinished.
-Neither a readiness result nor ordinary acceptance substitutes for the pending sealed comparison verdict.
+H4 readiness, the first draw and the same-input continuation have completed as described above.
+The raw sealed result remains NO-GO33/82; ordinary acceptance does not substitute for the two pending post-run owner dispositions and final evidence opinions.
 
 ## Historical 15e commands and provenance
 
@@ -365,14 +367,16 @@ The original passed locked-gate evidence is retained and cited by its digest.
 No manual phase-end completion stamps were made.
 
 The stock `heldout_run.sh --execute` ran once and its marker remains intact; it must not be restarted.
-The pending commands are the approved same-attempt continuation's actual report/count disposition against the run-start register, followed by unchanged stock phase-end step-5 `evidence.py --heldout` and report-copy/identity commands.
-The continuation uses authentic exact source234 native/Java/Spark identities and both renewed independent code approvals.
+The same-input continuation's actual report/count commands against the run-start register have completed, preserving the raw NO-GO result.
+The unchanged stock phase-end step-5 `evidence.py --heldout` completed successfully, and all four generated reports were copied byte-exact to this packet.
+The completed continuation retains authentic source234 native/Java identities, the genuine ff86 RustSpark runner and both renewed independent code approvals.
 `draft-preparation-state.private.json`, SHA-256 `2c8a51bcf7aea317d12e299576437222cfd1801f22ed9479dd06b8603688f098`, is the historical preparation snapshot before W1, H4 reviews and the draw; its earlier pending state is preserved rather than rewritten.
 The optional `SDM_LIVE_CHECK_CMD` hook was unset; its stock NOT-RUN note must remain distinct from the mandatory live campaigns already executed.
 
 Private raw receipts, comparison details and original failed attempts remain in the coordinator's existing evidence store.
 Only reviewed public reports and identity digests belong in this package; credentials and raw private warehouse/model data do not.
-Final commands, generated reports, artifact digests and independent GO opinions will be attached after the remaining work actually finishes.
+Completed commands, generated reports and artifact digests are attached above.
+Independent final GO opinions remain pending until the actual owner dispositions and current ff86 CI satisfy the remaining conditions.
 
 ## Completed corrective evidence and accepted dispositions
 
@@ -398,9 +402,10 @@ This is separate from P3F2 FK restoration and does not authorize general relatio
 | `owner-answer-20261027-additional-sqlite-costs.primary.json` | `5d51c57de40aa4037f33cacd845fff3126f9d9f7bb9af4f6a1246802fa0c04bc` |
 
 The corrected test source and empty protected-path acknowledgment each have both exact CODE approvals and authentic normal package handoffs, with the original 93 control/refusal-map checks retained.
-Exact source 234 has landed, full CI is green, ordinary evidence is complete under the explicit frozen-reference disposition, and W1/H4 CODE readiness is accepted.
-The unfinished same-attempt sealed comparisons, final pack and both whole-phase GO opinions remain required before integration.
-No current owner decision remains pending, and no pending execution is described as passed.
+Exact source234 has landed, its full CI is green, ordinary evidence is complete under the explicit frozen-reference disposition, and W1/H4 CODE readiness is accepted.
+The judging repair subsequently landed at ff86, and every same-input comparison and stock report is complete.
+Two owner dispositions, current ff86 CI, reviewed evidence publication and both whole-phase GO opinions remain required before integration.
+No pending decision or execution is described as accepted or passed.
 
 ## Lessons from final validation
 
