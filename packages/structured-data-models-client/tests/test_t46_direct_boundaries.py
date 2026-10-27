@@ -1011,6 +1011,53 @@ def test_direct_generated_response_field_family_and_error_order(
         assert not observed[1]['events']
 
 
+@pytest.mark.parametrize(
+    'field,value,cause_name',
+    [
+        ('id', 4, 'ResponseContractError'),
+        ('forecast_step', 'bad', 'ResponseContractError'),
+        ('explanation', 4, 'TypeError'),
+        ('rankings', 4, 'TypeError'),
+        ('metadata', [['x']], 'ValueError'),
+        ('row_index', 2, None),
+    ],
+)
+def test_public_predict_run_loop_keeps_selected_causes(
+    monkeypatch, field, value, cause_name
+):
+    from sdm_client.errors import StructuredDataError
+
+    observed = []
+    for core in (False, True):
+        monkeypatch.setenv('SDM_CORE_ROUTES', CORE if core else '')
+        context = pd.DataFrame({'user_id': [1, 2, 3], 'target': [2, 4, 6]})
+        scoring = pd.DataFrame({'user_id': [4, 5]})
+        request = Request(context, scoring, target='target', task='regression')
+        transport = Scripted(item({field: value}))
+        with SDMClient('http://localhost:1', max_retries=0) as client:
+            client._transport.close()
+            client._transport = transport
+            with pytest.raises(StructuredDataError) as caught:
+                client.predict(request, model=KumoTabular())
+        failure = caught.value
+        observed.append(error(failure))
+        assert failure.code == 'INVALID_RESPONSE'
+        assert len(transport.calls) == 1
+        cause = failure.__cause__
+        if cause_name is None:
+            assert cause is None
+        else:
+            assert type(cause).__name__ == cause_name
+            assert failure.message.endswith(str(cause))
+            if cause_name in ('TypeError', 'ValueError'):
+                # A real reached native failure, not a synthetic replacement.
+                assert cause.__traceback__ is not None
+                assert cause.__context__ is None or cause.__suppress_context__
+        if core:
+            assert failure.__suppress_context__
+    assert observed[1] == observed[0]
+
+
 def later_schema_boundary(mode):
     events = []
     if mode.startswith('override'):
