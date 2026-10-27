@@ -132,9 +132,39 @@ def test_frame_outcome_uses_the_public_constructor_without_opening_sql(
     )
     monkeypatch.setattr(census, '_runner', lambda: runner)
     monkeypatch.setattr(Schema, 'from_data', constructor)
-    probe = next(p for p in census.probes(ROOT) if p['frame'] == 'duplicate-columns')
+    probe = next(p for p in census.probes(ROOT) if p.get('frame') == 'duplicate-columns')
     case = census._case(probe, 0, [])
     found = census._outcome(case, 'duckdb', frame='duplicate-columns')
     assert found['error'] == 'ValueError'
     assert found['stage'] == 'from_data'
     assert seen[0][0]['users'].columns.has_duplicates
+
+
+def test_words_writer_forwards_the_same_frame_recipe(
+    census: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    spec = importlib.util.spec_from_file_location(
+        't46_census_words', ROOT / 'contract/tools/census_words_record.py'
+    )
+    assert spec is not None and spec.loader is not None
+    writer = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(writer)
+    probe = next(p for p in census.probes(ROOT) if p.get('frame'))
+    fake = SimpleNamespace(
+        _routes=lambda: [], probes=lambda root: [probe], DATABASES=('duckdb',),
+        _case=census._case, MESSAGES=census.MESSAGES,
+        _runner=lambda: SimpleNamespace(_git=lambda root: {'sha': 'recording-test', 'clean': True}),
+    )
+    monkeypatch.setattr(writer, '_census', lambda: fake)
+    monkeypatch.setattr(writer, 'OUT', tmp_path / 'words.jsonl')
+    seen = []
+
+    def recording(arguments: list[str], **kwargs: Any) -> None:
+        cases = Path(arguments[arguments.index('--cases') + 1])
+        seen.append(json.loads((cases / '0.json').read_text()))
+        out = Path(arguments[arguments.index('--out') + 1])
+        out.write_text(json.dumps([{'result': 'refusal', 'message': 'test only'}]))
+
+    monkeypatch.setattr(writer.subprocess, 'run', recording)
+    assert writer.main(['--reference', str(tmp_path), '--reference-python', 'not-executed']) == 0
+    assert seen[0]['frame'] == probe['frame']
