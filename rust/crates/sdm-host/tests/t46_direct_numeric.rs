@@ -91,6 +91,76 @@ fn prepare_trace(
         }
     }
 }
+fn response_bytes(run: &HostRun, id: AttachmentId) -> Vec<u8> {
+    let Attachment::Bytes(bytes) = run.take_attachment(id).unwrap().unwrap() else {
+        panic!("response bytes")
+    };
+    bytes
+}
+
+fn finish_response(
+    run: &HostRun,
+    value: AttachmentId,
+    native_member: Option<&str>,
+) -> Result<HostRun, sdm_contract::CoreError> {
+    let mut data: Value = serde_json::from_slice(&response_bytes(run, value)).unwrap();
+    let mut buffers = Attachments::new();
+    for (n, name) in ["payload", "response", "rows"].iter().enumerate() {
+        let old = AttachmentId(data[*name].as_u64().unwrap() as u32);
+        buffers.insert(
+            AttachmentId(n as u32 + 2),
+            Attachment::Bytes(response_bytes(run, old)),
+        );
+        data[*name] = json!(n + 2);
+    }
+    let Attachment::Bytes(rows) = &buffers[&AttachmentId(4)] else {
+        panic!("rows")
+    };
+    let rows: Vec<Value> = serde_json::from_slice(rows).unwrap();
+    assert_eq!(data["scope"]["call_request_id"], "sdm-fixed");
+    assert_eq!(data["scope"]["request_id"], "direct-fixture");
+    let mut accepted = Vec::new();
+    let mut at = 0;
+    while at < rows.len() {
+        let checked = prepare(
+            json!({"stage":"check_response_rows","scope":data["scope"],"rows":rows[at..],"decimal_limit":4300}),
+            Attachments::new(),
+        )?;
+        let ready = checked["rows"].as_array().unwrap();
+        accepted.extend(ready.iter().cloned());
+        at += ready.len();
+        if checked["row"].is_null() {
+            continue;
+        }
+        let row = &checked["row"];
+        let literal_value = match native_member {
+            Some(member) => {
+                json!({"outcome":"value","value":{"kind":"list"},"members":[{"kind":"integer","digits":format!("0x{member}"),"radix":"hexadecimal"}]})
+            }
+            None => json!({"outcome":"failed","failure":{"ancestry":["syntax_error"]}}),
+        };
+        let literal = json!({"scope":data["scope"],"ordinal":row["row"]["ordinal"],"text":row["id"]["value"],"value":literal_value});
+        let selected = prepare(
+            json!({"stage":"select_response_member","checked":row,"literal":literal}),
+            Attachments::new(),
+        )
+        .unwrap();
+        let string = native_member.map(|member| json!({"scope":data["scope"],"ordinal":row["row"]["ordinal"],"value":{"outcome":"value","points":member.chars().map(u32::from).collect::<Vec<_>>()}}));
+        accepted.push(prepare(
+            json!({"stage":"attribute_response_row","selected":selected,"string":string}),
+            Attachments::new(),
+        )?);
+        at += 1;
+    }
+    buffers.insert(AttachmentId(5), bytes(json!(accepted)));
+    buffers.insert(
+        AttachmentId(1),
+        bytes(json!({"stage":"layout_response","data":data,"attributed":5})),
+    );
+    let layout = start(json!({"op":"prepare_request","input":1}), buffers);
+    Ok(layout)
+}
+
 fn arguments() -> Value {
     prepare(json!({"stage":"arguments", "context":{"kind":"frame"}, "predict":{"kind":"frame"}, "related":[], "task":{"value":"regression"}}), Attachments::new()).unwrap()
 }
@@ -214,7 +284,7 @@ fn direct_numeric_preparation_is_model_neutral_and_binds_one_tabular_call() {
                 rows(&[("0", vec![1., 2., 3., 7.]), ("1", vec![2., 4., 6., 8.])]),
             );
         }
-        attached.insert(AttachmentId(1),bytes(json!({"stage":"body","envelope":envelope,"context":2,"predict":3,"context_header":header(&["feature","target"],count),"predict_header":header(&["feature"],2),"task":task,"primary_key":[],"unicode_version":"15.0.0","inference":{}})));
+        attached.insert(AttachmentId(1),bytes(json!({"stage":"body","envelope":envelope,"context":2,"predict":3,"context_header":header(&["feature","target"],count),"predict_header":header(&["feature"],2),"task":task,"primary_key":[],"inference":{}})));
         let run = start(
             json!({"op":"predict","direct":1,"model":"kumo-tabular","request_id":"sdm-fixed","outputs":call["outputs"],"default_outputs":true}),
             attached,
@@ -279,13 +349,22 @@ fn direct_numeric_preparation_is_model_neutral_and_binds_one_tabular_call() {
                     .unwrap();
                 }
                 ControlMessage::Step(Step::Done {
-                    result: OperationResult::Predict(result),
+                    result: OperationResult::DecodedDirectResponse(decoded),
                     ..
                 }) => {
+                    let laid = finish_response(&run, decoded.value, None).unwrap();
+                    let message = next(&laid);
+                    let ControlMessage::Step(Step::Done {
+                        result: OperationResult::Predict(result),
+                        ..
+                    }) = message
+                    else {
+                        panic!("layout: {message:?}")
+                    };
                     assert_eq!(result.model, "kumo-tabular");
                     assert_eq!(result.request_id, "direct-fixture");
                     let Attachment::Arrow(rows) =
-                        run.take_attachment(result.result).unwrap().unwrap()
+                        laid.take_attachment(result.result).unwrap().unwrap()
                     else {
                         panic!("result Arrow")
                     };
@@ -454,7 +533,7 @@ fn nullable_cast_fault_is_core_selected_from_native_storage_and_values() {
                 }
                 let envelope = planned.unwrap();
                 let mut attached = data();
-                attached.insert(AttachmentId(1),bytes(json!({"stage":"body","envelope":envelope,"context":2,"predict":3,"context_header":context_header,"predict_header":predict_header,"task":"regression","primary_key":[],"unicode_version":"15.0.0","inference":{}})));
+                attached.insert(AttachmentId(1),bytes(json!({"stage":"body","envelope":envelope,"context":2,"predict":3,"context_header":context_header,"predict_header":predict_header,"task":"regression","primary_key":[],"inference":{}})));
                 let run = start(
                     json!({"op":"predict","direct":1,"model":"kumo-tabular","request_id":"sdm-fixed","outputs":call["outputs"],"default_outputs":true}),
                     attached,
@@ -544,11 +623,7 @@ fn direct_run(
     scoring: &[RecordBatch],
 ) -> HostRun {
     let mut attached = attached_batches(context, scoring);
-    let unicode_version = input
-        .get("unicode_version")
-        .cloned()
-        .unwrap_or_else(|| json!("15.0.0"));
-    attached.insert(AttachmentId(1), bytes(json!({"stage":"body","envelope":envelope,"context":2,"predict":3,"context_header":input["context_header"],"predict_header":input["predict_header"],"primary_key":key,"unicode_version":unicode_version,"task":"regression","inference":{}})));
+    attached.insert(AttachmentId(1), bytes(json!({"stage":"body","envelope":envelope,"context":2,"predict":3,"context_header":input["context_header"],"predict_header":input["predict_header"],"primary_key":key,"task":"regression","inference":{}})));
     start(
         json!({"op":"predict","direct":1,"model":"kumo-tabular","request_id":"sdm-fixed","outputs":["prediction"],"default_outputs":true}),
         attached,
@@ -764,13 +839,23 @@ fn direct_attribution_starts_as_written_and_reads_later_declared_keys() {
         )
         .unwrap();
         let ControlMessage::Step(Step::Done {
-            result: OperationResult::Predict(result),
+            result: OperationResult::DecodedDirectResponse(decoded),
             ..
         }) = next(&run)
         else {
             panic!("result")
         };
-        let Attachment::Arrow(result) = run.take_attachment(result.result).unwrap().unwrap() else {
+        let laid = finish_response(&run, decoded.value, None).unwrap();
+        let message = next(&laid);
+        let ControlMessage::Step(Step::Done {
+            result: OperationResult::Predict(result),
+            ..
+        }) = message
+        else {
+            panic!("layout: {message:?}")
+        };
+        let Attachment::Arrow(result) = laid.take_attachment(result.result).unwrap().unwrap()
+        else {
             panic!("result Arrow")
         };
         let batch = &result.batches[0];
@@ -853,13 +938,23 @@ fn direct_primitive_list_ids_cannot_hide_a_wrong_key() {
             Attachments::from([(AttachmentId(100), bytes(answer))]),
         )
         .unwrap();
-        let message = next(&run);
-        if first.contains('5') || first == "[0b101,]" {
-            let ControlMessage::Error { error } = message else {
-                panic!("wrong key must fail: {message:?}")
-            };
-            assert_eq!(error.sentence, sdm_contract::Sentence::TabularIdMismatch);
+        let ControlMessage::Step(Step::Done {
+            result: OperationResult::DecodedDirectResponse(decoded),
+            ..
+        }) = next(&run)
+        else {
+            panic!("decoded response")
+        };
+        let wrong = first.contains('5') || first == "[0b101,]";
+        let laid = finish_response(&run, decoded.value, Some(if wrong { "5" } else { "4" }));
+        if wrong {
+            assert_eq!(
+                laid.err().expect("wrong key must fail").sentence,
+                sdm_contract::Sentence::TabularIdMismatch
+            );
         } else {
+            let laid = laid.unwrap();
+            let message = next(&laid);
             assert!(
                 matches!(
                     message,
@@ -874,75 +969,76 @@ fn direct_primitive_list_ids_cannot_hide_a_wrong_key() {
     }
 }
 
+fn checked_native_row(text: &str) -> Value {
+    let scope = json!({"version":1,"model":"kumo-tabular","request_id":"server-nonce","call_request_id":"sdm-fixed","response_rows":2,"scoring_rows":2});
+    let rows = json!([{"ordinal":0,"row_index":"0","id":text,"key":{"t":"i64","v":"4"},"raw_in_batch":false,"prior_ordinal":null},{"ordinal":1,"row_index":"0","id":"[4]","key":{"t":"i64","v":"4"},"raw_in_batch":false,"prior_ordinal":0}]);
+    let checked = prepare(
+        json!({"stage":"check_response_rows","scope":scope,"rows":rows,"decimal_limit":640}),
+        Attachments::new(),
+    )
+    .unwrap();
+    assert_eq!(checked["rows"], json!([]));
+    assert_eq!(checked["row"]["row"]["ordinal"], 0);
+    checked["row"].clone()
+}
 #[test]
-fn literal_warnings_are_reached_per_answer_before_its_attribution() {
-    for first_warning in [false, true] {
-        let context = [RecordBatch::try_from_iter([
-            (
-                "0",
-                Arc::new(arrow_array::Int64Array::from(vec![1, 2, 3])) as ArrayRef,
-            ),
-            (
-                "1",
-                Arc::new(Float64Array::from(vec![2., 4., 6.])) as ArrayRef,
-            ),
-        ])
-        .unwrap()];
-        let scoring = [RecordBatch::try_from_iter([(
-            "0",
-            Arc::new(arrow_array::Int64Array::from(vec![4, 5])) as ArrayRef,
-        )])
-        .unwrap()];
-        let input = prelude(
-            &["user_id", "target"],
-            &["user_id"],
-            &context,
-            &scoring,
-            &["user_id"],
-        );
-        let envelope = plan(input.clone(), &context, &scoring);
-        let run = direct_run(&input, envelope, &["user_id"], &context, &scoring);
-        let ControlMessage::Step(Step::CallModel(call)) = next(&run) else {
-            panic!("call")
-        };
-        let answer = json!({"id":"direct-fixture","model":"kumo-tabular","metadata":{},"predictions":[{"row_index":0,"id":if first_warning {r"['\q']"} else {"[5]"},"prediction":10},{"row_index":1,"id":r"['\q']","prediction":11}]});
-        let reply = sdm_host::encode(&ControlMessage::ModelReply(ModelReply {
-            id: call.id,
-            outcome: ModelOutcome::Response {
-                status: 200,
-                body: AttachmentId(100),
-                content_type: "application/json".into(),
-            },
-        }))
-        .unwrap();
-        run.reply(
-            &reply,
-            Attachments::from([(AttachmentId(100), bytes(answer))]),
+fn reached_native_builtin_facts_control_caught_failure_and_attribution() {
+    // The frozen warning promoted to SyntaxError is caught; the successful
+    // string literal is checked. No core warning or language callback exists.
+    for promoted in [false, true] {
+        let checked = checked_native_row(r"['\q']");
+        let literal = json!({"scope":checked["scope"],"ordinal":0,"text":r"['\q']","value":if promoted {json!({"outcome":"failed","failure":{"ancestry":["syntax_error"]}})} else {json!({"outcome":"value","value":{"kind":"list"},"members":[{"kind":"unicode","points":[92,113]}]})}});
+        let selected = prepare(
+            json!({"stage":"select_response_member","checked":checked,"literal":literal}),
+            Attachments::new(),
         )
         .unwrap();
-        if first_warning {
-            assert!(matches!(next(&run), ControlMessage::Step(Step::Warnings)));
-            let out = run.take_warnings().unwrap().unwrap();
-            let ControlMessage::Warnings { warnings } = sdm_host::read(&out).unwrap() else {
-                panic!("warnings")
-            };
-            assert_eq!(warnings.len(), 1);
+        assert_eq!(selected["member"].is_null(), promoted);
+        let string = if promoted {
+            Value::Null
+        } else {
+            json!({"scope":checked["scope"],"ordinal":0,"value":{"outcome":"value","points":[92,113]}})
+        };
+        let attributed = prepare(
+            json!({"stage":"attribute_response_row","selected":selected,"string":string}),
+            Attachments::new(),
+        );
+        if promoted {
+            assert_eq!(attributed.unwrap()["id"], json!({"t":"i64","v":"4"}));
+        } else {
             assert_eq!(
-                warnings[0].sentence,
-                sdm_contract::Sentence::DirectLiteralEscape
-            );
-            assert_eq!(
-                warnings[0].fields["escape"],
-                sdm_contract::Detail::text(r"\q")
+                attributed.unwrap_err().sentence,
+                sdm_contract::Sentence::TabularIdMismatch
             );
         }
-        let ControlMessage::Error { error } = next(&run) else {
-            panic!("first attribution must fail")
-        };
-        assert_eq!(error.sentence, sdm_contract::Sentence::TabularIdMismatch);
-        assert_eq!(
-            error.fields["index"],
-            sdm_contract::Detail::Scalar(Scalar::UInt64(0))
-        );
     }
+}
+#[test]
+fn native_value_association_and_uncaught_string_failure_are_explicit() {
+    let checked = checked_native_row("[0x4,]");
+    let literal = json!({"scope":checked["scope"],"ordinal":0,"text":"[0x4,]","value":{"outcome":"value","value":{"kind":"list"},"members":[{"kind":"integer","digits":"0x4","radix":"hexadecimal"}]}});
+    let mut wrong = literal.clone();
+    wrong["scope"]["call_request_id"] = json!("other-call");
+    assert_eq!(
+        prepare(
+            json!({"stage":"select_response_member","checked":checked,"literal":wrong}),
+            Attachments::new()
+        )
+        .unwrap_err()
+        .sentence,
+        sdm_contract::Sentence::InvalidMessage
+    );
+    let selected = prepare(
+        json!({"stage":"select_response_member","checked":checked,"literal":literal}),
+        Attachments::new(),
+    )
+    .unwrap();
+    let string = json!({"scope":checked["scope"],"ordinal":0,"value":{"outcome":"failed","failure":{"ancestry":["value_error"]}}});
+    let error = prepare(
+        json!({"stage":"attribute_response_row","selected":selected,"string":string}),
+        Attachments::new(),
+    )
+    .unwrap_err();
+    assert_eq!(error.sentence, sdm_contract::Sentence::DirectNativeFailure);
+    assert_eq!(error.fields["stage"], sdm_contract::Detail::text("string"));
 }
