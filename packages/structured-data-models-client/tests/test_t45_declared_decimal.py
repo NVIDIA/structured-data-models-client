@@ -174,6 +174,12 @@ def test_declared_decimal_materialize_matches_frozen_native_behavior(
             )
 
         monkeypatch.setattr(RelationalMaterializer, '_get_model', legacy_model)
+        monkeypatch.setattr(
+            'sdm_client.materializers.relational._as_typed', legacy_model
+        )
+        monkeypatch.setattr(
+            'sdm_client.materializers.relational._to_declared', legacy_model
+        )
     observed = {'calls': []}
     events = []
     effect_reached = False
