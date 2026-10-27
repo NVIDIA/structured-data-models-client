@@ -59,7 +59,10 @@ pub use sdm_engine::time::{UnknownZone, Zones};
 /// (`capabilities()`), re-exported so a host reaches the request crate's
 /// table through the core (decision E30).
 pub use sdm_request::predict::{Capabilities, capabilities};
+pub use sdm_schema::frames::key_adoption::Adoption as FrameKeyAdoption;
+pub use sdm_schema::frames::key_advice::{Advice as FrameKeyAdvice, sample as native_frame_sample};
 pub use sdm_schema::frames::key_candidates::Candidates as FrameKeyCandidates;
+pub use sdm_schema::frames::object_infer::check_cell as check_frame_cell;
 /// A fixed native constructor source traversal, shared by all bindings.
 pub use sdm_schema::frames::object_infer::{
     Constructor as FrameObjectConstructor, Content as FrameObjectContent, Read as FrameObjectRead,

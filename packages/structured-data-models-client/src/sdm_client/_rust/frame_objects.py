@@ -12,12 +12,87 @@ of its results, including short-circuiting before a later native override.
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable, Mapping
 from decimal import Decimal
 from typing import Any
 
 import numpy as np
 import pandas as pd
 import pyarrow as pa
+
+from sdm_client._rust import errors
+
+
+def _scalar_storage(dtype: Any) -> bool:
+    """Whether the actual native storage can contain only scalar cells."""
+    physical = getattr(dtype, 'pyarrow_dtype', None)
+    if physical is not None:
+        while True:
+            if isinstance(physical, pa.BaseExtensionType):
+                physical = physical.storage_type
+            elif pa.types.is_dictionary(
+                physical
+            ) or pa.types.is_run_end_encoded(physical):
+                physical = physical.value_type
+            else:
+                break
+        return any(
+            getattr(pa.types, name)(physical)
+            for name in (
+                'is_integer',
+                'is_floating',
+                'is_decimal',
+                'is_boolean',
+                'is_string',
+                'is_large_string',
+                'is_string_view',
+                'is_date',
+                'is_time',
+                'is_timestamp',
+                'is_duration',
+                'is_null',
+            )
+            if hasattr(pa.types, name)
+        )
+    return bool(
+        pd.api.types.is_numeric_dtype(dtype)
+        or pd.api.types.is_bool_dtype(dtype)
+        or pd.api.types.is_datetime64_any_dtype(dtype)
+        or pd.api.types.is_timedelta64_dtype(dtype)
+        or isinstance(dtype, pd.StringDtype)
+        or dtype == 'str'
+    )
+
+
+def validate_cells(frame: pd.DataFrame, table: str) -> None:
+    """Present native storage/cell categories to the fixed core scalar rule."""
+    from sdm_client import _native
+
+    for name in frame.columns:
+        series = frame[name]
+        if _scalar_storage(series.dtype):
+            continue
+        for value in series:
+            if isinstance(value, str) or not isinstance(
+                value, (Iterable, Mapping, bytes, memoryview)
+            ):
+                kind = 'scalar'
+            elif isinstance(value, (bytes, bytearray, memoryview)):
+                kind = 'bytes'
+            elif isinstance(value, Mapping):
+                kind = 'mapping'
+            else:
+                kind = 'container'
+            try:
+                _native.check_frame_cell(
+                    f'{table}.{name}',
+                    kind,
+                    type(value).__name__ if kind != 'scalar' else '',
+                )
+            except _native.CoreError as error:
+                errors.raise_from_core(
+                    error.control, error.attachments, internal_context=error
+                )
 
 
 def _missing(value: Any) -> bool:

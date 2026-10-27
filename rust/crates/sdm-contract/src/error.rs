@@ -835,6 +835,8 @@ sentences! {
     FrameKeyNotUnique = "frame_key_not_unique", E::InvalidRequest;
     FrameNameEmpty = "frame_name_empty", E::InvalidRequest;
     FrameNameCharacters = "frame_name_characters", E::InvalidRequest;
+    FrameCellBytes = "frame_cell_bytes", E::UnsupportedRequest;
+    FrameCellContainer = "frame_cell_container", E::UnsupportedRequest;
     FrameCategoricalSample = "frame_categorical_sample", W::FrameSchema;
     FrameKeyAmbiguous = "frame_key_ambiguous", W::FrameSchema;
     FrameKeylessShared = "frame_keyless_shared", W::FrameSchema;

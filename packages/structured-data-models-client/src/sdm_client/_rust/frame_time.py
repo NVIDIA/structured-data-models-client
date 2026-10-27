@@ -17,8 +17,8 @@ from sdm_client._rust import codec
 
 
 def _scalar(value: Any) -> dict[str, Any]:
-    if type(value) is Decimal:
-        parts = value.as_tuple()
+    if isinstance(value, Decimal):
+        parts = Decimal.as_tuple(value)
         exponent = parts.exponent
         encoded = (
             {'kind': 'finite', 'value': exponent}
@@ -42,6 +42,11 @@ def _scalar(value: Any) -> dict[str, Any]:
             stamp.unit,
             str(stamp.tz) if stamp.tz is not None else None,
         )
+    elif isinstance(value, datetime.date):
+        scalar = {
+            't': 'date32',
+            'v': str(datetime.date.toordinal(value) - 719163),
+        }
     elif isinstance(value, (bool, np.bool_)):
         scalar = {'t': 'bool', 'v': bool(value)}
     elif isinstance(value, (int, np.integer)):
@@ -50,8 +55,11 @@ def _scalar(value: Any) -> dict[str, Any]:
         # repr is the value codec for an admitted built-in numeric scalar,
         # not the eventual native diagnostic presentation.
         scalar = {'t': 'f64', 'v': repr(float(value))}
-    elif type(value) is str:
-        scalar = {'t': 'utf8', 'v': value}
+    elif isinstance(value, str):
+        return {
+            'kind': 'text',
+            'value': [ord(point) for point in str.__str__(value)],
+        }
     else:
         raise codec.CodecError(
             'a native time first value has no typed scalar representation'

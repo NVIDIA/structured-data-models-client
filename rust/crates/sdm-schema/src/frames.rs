@@ -7,6 +7,8 @@
 
 pub(crate) mod decimal;
 mod decimal_storage;
+pub mod key_adoption;
+pub mod key_advice;
 pub mod key_candidates;
 pub(crate) mod object_decimal;
 pub mod object_infer;
@@ -92,7 +94,14 @@ impl<'a> Columns<'a> {
     fn read(&self, at: usize) -> Result<(Vec<Option<Value>>, Dtype), CoreError> {
         if let Some(native) = self.objects.get(&at) {
             let column = objects::read(self.batches, at, native.meaning)?;
-            return Ok((column.values.into_iter().map(|value| value.map(Value::Object)).collect(), column.dtype));
+            return Ok((
+                column
+                    .values
+                    .into_iter()
+                    .map(|value| value.map(Value::Object))
+                    .collect(),
+                column.dtype,
+            ));
         }
         let native = if let Some(native) = self.decimals.get(&at) {
             Some(decimal_storage::read(self.batches, at, native)?)
@@ -553,7 +562,12 @@ fn final_notices_with_samples(
     Ok(notices)
 }
 
-fn sample_notice(table: &str, column: &str, distinct: u64, present: u64) -> Option<CoreWarning> {
+pub(crate) fn sample_notice(
+    table: &str,
+    column: &str,
+    distinct: u64,
+    present: u64,
+) -> Option<CoreWarning> {
     (distinct >= 32 && distinct as f64 >= present as f64 * 0.5).then(|| {
         CoreWarning::new(
             Sentence::FrameCategoricalSample,
@@ -786,6 +800,7 @@ pub fn nominate_from(
         FrameNomination {
             table: crate::assemble::described_table(read.table, Some(Scalar::UInt64(0))),
             nominated_key,
+            missing: count.missing > 0,
         },
         notices,
     ))
@@ -1015,8 +1030,7 @@ pub fn choose_time_from_facts(
         }) = &first.first
         {
             let finite = matches!(exponent, FrameDecimalExponent::Finite { .. });
-            if digits.len() > 76
-                || !digits.bytes().all(|c| c.is_ascii_digit())
+            if !digits.bytes().all(|c| c.is_ascii_digit())
                 || (finite && (digits.is_empty() || (digits.len() > 1 && digits.starts_with('0'))))
                 || (matches!(exponent, FrameDecimalExponent::Infinity) && digits != "0")
             {

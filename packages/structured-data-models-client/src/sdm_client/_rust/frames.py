@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 
 from sdm_client._routing import RouteError
-from sdm_client._rust import codec, errors, frame_objects, results
+from sdm_client._rust import codec, errors, frame_counts, frame_objects, results
 from sdm_client._rust import schema as schemas
 from sdm_client._rust.frame_decimals import (
     native_decimal_column,
@@ -59,11 +59,25 @@ def _native_dtype(dtype: Any) -> Any:
 
 
 def _frame_example(
-    fields: dict[str, Any], native_types: Mapping[str, Mapping[str, Any]]
+    fields: dict[str, Any],
+    native_types: Mapping[str, Mapping[str, Any]],
+    native_examples: Mapping[tuple[str, tuple[str, ...]], frame_counts.Quality]
+    | None = None,
 ) -> str:
     # Primitive scalar spelling is native presentation, including NumPy's
     # own version-dependent repr. The core supplies selected typed values.
     columns = fields['columns']
+    if fields.get('native_quality'):
+        if native_examples is None:
+            raise codec.CodecError(
+                'native key presentation lost its source population'
+            )
+        observed = native_examples[(fields['table'], tuple(columns))]
+        if observed.example_row != fields.get('example_row'):
+            raise codec.CodecError(
+                'native key presentation selected a different source row'
+            )
+        return repr(observed.example)
     types = native_types[fields['table']]
     # Let the actual native library traverse a selected composite scalar.
     # A mixed numeric pandas row can widen its components; typed Arrow
@@ -123,6 +137,8 @@ def _frame_timestamp(
     # timezone implementation and unit. No original frame values are read.
     if fields['column'] in native_firsts.get(fields['table'], {}):
         return str(native_firsts[fields['table']][fields['column']])
+    if 'frame_native_text' in fields:
+        return ''.join(chr(point) for point in fields['frame_native_text'])
     value = fields['value']
     if 'frame_decimal_kind' in fields:
         kind = fields['frame_decimal_kind']
@@ -157,9 +173,13 @@ def _frame_timestamp(
 def _presentation(
     native_types: Mapping[str, Mapping[str, Any]],
     native_firsts: Mapping[str, Mapping[str, Any]] | None = None,
+    native_examples: Mapping[tuple[str, tuple[str, ...]], frame_counts.Quality]
+    | None = None,
 ) -> AbstractContextManager[None]:
     return errors.holding(
-        frame_example=lambda fields: _frame_example(fields, native_types),
+        frame_example=lambda fields: _frame_example(
+            fields, native_types, native_examples
+        ),
         frame_key=_frame_key,
         frame_key_candidate=_frame_key_candidate,
         frame_timestamp=lambda fields: _frame_timestamp(
@@ -181,6 +201,7 @@ def _final_notices(
     schema: Schema,
     notices: list[dict[str, Any]],
     native_types: Mapping[str, Mapping[str, Any]],
+    advice: dict[str, Any] | None = None,
 ) -> None:
     # Owner-approved host-only diagnostic exception (2026-10-26): this
     # existing pandas hint never changes the core's result or its inputs.
@@ -195,6 +216,9 @@ def _final_notices(
             column := _warn_dates_stored_as_text(cast('Table', table))
         ) is not None:
             dates[name] = column
+    if advice is not None:
+        _key_advice(schema, advice, dates, native_types)
+        return
     pending = []
     with _presentation(native_types):
         for notice in notices:
@@ -225,6 +249,106 @@ def _final_notices(
                     stacklevel=caller_stacklevel(),
                 )
         _show_held(pending)
+
+
+def _key_advice(
+    schema: Schema,
+    plan: dict[str, Any],
+    dates: dict[str, str],
+    native_types: Mapping[str, Mapping[str, Any]],
+) -> None:
+    """Consume actual native populations selected by final schema advice."""
+    from sdm_client import _native
+
+    state = _native.FrameKeyAdvice(codec.attachment(plan), dates)
+    examples: dict[tuple[str, tuple[str, ...]], frame_counts.Quality] = {}
+
+    def source(name: str) -> pd.DataFrame:
+        return cast('Table', schema.tables[name]).data
+
+    def observe(
+        name: str, frame: pd.DataFrame, columns: list[str]
+    ) -> frame_counts.Quality:
+        observed = frame_counts.quality(frame, columns)
+        examples[(name, tuple(columns))] = observed
+        return observed
+
+    try:
+        with _presentation(native_types, native_examples=examples):
+            try:
+                for name in state.declined_tables():
+                    frame = source(name)
+                    state.begin_declined(
+                        name, frame is None or bool(frame.empty)
+                    )
+                    while (column := state.declined_column()) is not None:
+                        if state.declined_distinct(
+                            int(frame[column].nunique(dropna=True)), len(frame)
+                        ):
+                            if state.declined_quality(
+                                observe(name, frame, [column]).facts()
+                            ):
+                                _show_held(
+                                    json.loads(
+                                        state.declined_notice(len(frame))
+                                    )
+                                )
+                for name in state.keyless_tables():
+                    frame = source(name)
+                    columns = state.keyless_columns(
+                        name, frame is None or bool(frame.empty)
+                    )
+                    for column in columns:
+                        if state.keyless_missing(
+                            bool(frame[column].isna().any())
+                        ):
+                            state.keyless_quality(
+                                name,
+                                column,
+                                observe(name, frame, [column]).facts(),
+                            )
+                    _show_held(json.loads(state.keyless_notice(name)))
+                _show_held(json.loads(state.ambiguous_notices()))
+            except _native.CoreError as error:
+                errors.raise_from_core(
+                    error.control, error.attachments, internal_context=error
+                )
+    finally:
+        examples.clear()
+
+
+def _sample_notices(schema: Schema, columns: list[dict[str, Any]]) -> None:
+    """Read each selected native cardinality after preceding advice effects."""
+    from sdm_client import _native
+
+    previous = None
+    empty = True
+    frame: Any = None
+    for column in columns:
+        name = column['table']
+        if name != previous:
+            previous = name
+            frame = cast('Table', schema.tables[name]).data
+            empty = frame is None or len(frame) == 0
+        if empty:
+            continue
+        field = column['column']['name']
+        exists = field in frame
+        distinct = int(frame[field].nunique(dropna=True)) if exists else 0
+        present = int(frame[field].count()) if exists else 0
+        sample = {
+            'column': column,
+            'exists': exists,
+            'distinct': distinct,
+            'present': present,
+        }
+        try:
+            notices = _native.frame_sample_facts(codec.attachment(sample))
+        except _native.CoreError as error:
+            errors.raise_from_core(
+                error.control, error.attachments, internal_context=error
+            )
+        _show_held(json.loads(notices))
 
 
 def _primitive_array(series: pd.Series) -> Any:
@@ -295,6 +419,7 @@ def _convert(
     *,
     check_header: bool = True,
     infer_objects: bool = True,
+    constructor_objects: bool = True,
 ) -> tuple[Any, dict[str, Any]]:
     # Validate one table before proceeding to the next.
     if check_header:
@@ -304,16 +429,20 @@ def _convert(
     arrays = []
     native_types = {}
     for ordinal, column in enumerate(frame.columns):
-        # A prior warning can introduce a duplicate label after metadata was
-        # fixed. Convert each physical column without replaying name lookup
-        # or duplicate-name policy before the core's remaining native guards.
-        series = frame.iloc[:, ordinal]
+        # Initial inference resolves each original name only when reached.
+        # Later metadata-fixed observations retain their physical positions.
+        series = (
+            frame[column]
+            if constructor_objects and infer_objects
+            else frame.iloc[:, ordinal]
+        )
         dtype = series.dtype
         decimal = native_decimal_column(series)
         object_values = None
-        if (isinstance(dtype, np.dtype) and dtype.kind == 'O') or type(
-            dtype
-        ) is pd.CategoricalDtype:
+        if constructor_objects and (
+            (isinstance(dtype, np.dtype) and dtype.kind == 'O')
+            or type(dtype) is pd.CategoricalDtype
+        ):
             observed = frame_objects.meaning(series) if infer_objects else None
             if not infer_objects or observed is not None:
                 descriptor: dict[str, Any] = {
@@ -476,6 +605,74 @@ def _observe(
     )
 
 
+def _adopt(
+    name: str,
+    frame: pd.DataFrame,
+    product: dict[str, Any],
+    native_types: Mapping[str, Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Advance fixed key products using their actual native populations."""
+    from sdm_client import _native
+
+    state = _native.FrameKeyAdoption(codec.attachment(product))
+    examples: dict[tuple[str, tuple[str, ...]], frame_counts.Quality] = {}
+
+    def observe(columns: list[str]) -> frame_counts.Quality:
+        observed = frame_counts.quality(frame, columns)
+        examples[(name, tuple(columns))] = observed
+        return observed
+
+    try:
+        with _presentation(native_types, native_examples=examples):
+            try:
+                validation = state.validation_columns()
+                if validation is not None:
+                    empty = bool(frame.empty)
+                    state.validation_empty(empty)
+                    if not empty:
+                        state.validation_quality(observe(validation).facts())
+                        missing = [
+                            column
+                            for column in state.missing_columns()
+                            if column in frame.columns
+                            and bool(frame[column].isna().any())
+                        ]
+                        rows = (
+                            len(frame)
+                            if state.validation_needs_rows()
+                            else None
+                        )
+                        state.validate(missing, rows)
+                columns = state.adoption_columns()
+                state.adopt(
+                    None
+                    if columns is None or frame.empty
+                    else observe(columns).facts()
+                )
+                for column in state.discriminators():
+                    state.discriminator(
+                        column, observe([*columns, column]).facts()
+                    )
+                for column in state.usable_columns():
+                    missing = (
+                        bool(frame[column].isna().any())
+                        if column in frame.columns
+                        else None
+                    )
+                    state.usable(column, missing)
+                adopted, notices = state.finish(
+                    len(frame) if state.needs_rows() else None
+                )
+            except _native.CoreError as error:
+                errors.raise_from_core(
+                    error.control, error.attachments, internal_context=error
+                )
+            _show_held(json.loads(notices))
+            return json.loads(adopted)
+    finally:
+        examples.clear()
+
+
 def _infer_table(
     name: str, frame: pd.DataFrame
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
@@ -484,18 +681,23 @@ def _infer_table(
         'primary_keys': {},
         'time_columns': {},
     }
-    converted, types = _convert(name, frame)
+    _check_header(name, frame)
+    frame_objects.validate_cells(frame, name)
+    converted, types = _convert(name, frame, check_header=False)
     finished = _describe(
         'column_meanings', {name: converted}, spec, {name: types}
     )
     result = results.expect(finished.result, results.InferredFrames)
     from sdm_client import _native
 
+    frame_objects.validate_cells(frame, name)
     candidates = _native.FrameKeyCandidates(
         finished.take(result.value), len(frame)
     )
     while (candidate := candidates.column()) is not None:
-        candidates.observe(int(frame[candidate].nunique(dropna=True)))
+        candidates.observe(
+            int(frame[candidate].nunique(dropna=True)), len(frame)
+        )
     nominee = candidates.selected()
     missing = None
     if nominee is not None:
@@ -507,15 +709,7 @@ def _infer_table(
     nomination, notices = candidates.finish(missing)
     nominated = json.loads(nomination)
     _show_held(json.loads(notices))
-    names = [
-        column['name'] for column in nominated['value']['table']['columns']
-    ]
-    converted, types = _observe(name, frame, names)
-    finished = _describe(
-        'adopt', {name: converted}, spec, {name: types}, inference=nominated
-    )
-    result = results.expect(finished.result, results.InferredFrames)
-    adopted = json.loads(finished.take(result.value))
+    adopted = _adopt(name, frame, nominated, {name: types})
     finished = _describe('time_facts', {}, spec, {}, inference=adopted)
     result = results.expect(finished.result, results.InferredFrames)
     plan = json.loads(finished.take(result.value))['value']
@@ -698,23 +892,13 @@ def from_data(
                 item['table']['name']: item
                 for item in json.loads(edited.take(result.value))['value']
             }
-            columns = [
-                column['name'] for column in inferred[name]['table']['columns']
-            ]
-            converted, types = _observe(name, originals[name], columns)
-            stated = _describe(
-                'stated_key',
-                {name: converted},
-                {
-                    'tables': [{'name': name, 'source': codec.relation(name)}],
-                    'primary_keys': {},
-                    'time_columns': {},
-                },
-                {name: types},
-                inference={'kind': 'inferred', 'value': [inferred[name]]},
+            adopted = _adopt(
+                name,
+                originals[name],
+                {'kind': 'inferred', 'value': [inferred[name]]},
+                {name: time_types[name]},
             )
-            result = results.expect(stated.result, results.InferredFrames)
-            inferred[name] = json.loads(stated.take(result.value))['value'][0]
+            inferred[name] = adopted['value'][0]
         spec = {
             'tables': [
                 {'name': name, 'source': codec.relation(name)}
@@ -777,7 +961,7 @@ def from_data(
             snapshots[name], native_types[name] = _observe(name, frame, names)
         try:
             finished = _describe(
-                'assemble',
+                'assemble_native',
                 snapshots,
                 spec,
                 native_types,
@@ -801,30 +985,13 @@ def from_data(
         schema = schemas.build(
             cls, None, assembled['description'], frames=originals
         )
-        _final_notices(schema, assembled['key_notices'], native_types)
+        _final_notices(
+            schema, assembled['key_notices'], native_types, assembled['advice']
+        )
         # These are the core-selected original automatic meanings. Presence
         # and cardinality are captured separately for each native iteration,
         # after the previous advice and after the date-as-text presentation.
-        for column in assembled['samples']:
-            name = column['table']
-            converted, types = _observe(
-                name, originals[name], [column['column']['name']]
-            )
-            sampled = _describe(
-                'sample',
-                {name: converted},
-                {
-                    'tables': [{'name': name, 'source': codec.relation(name)}],
-                    'primary_keys': {},
-                    'time_columns': {},
-                },
-                {name: types},
-                inference={'kind': 'sample_column', 'value': column},
-            )
-            sampled_result = results.expect(
-                sampled.result, results.InferredFrames
-            )
-            sampled.take(sampled_result.value)
+        _sample_notices(schema, assembled['samples'])
         with _presentation(time_types, time_firsts):
             _show_held(assembled['notices'])
         return schema

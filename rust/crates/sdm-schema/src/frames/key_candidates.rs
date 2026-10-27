@@ -59,10 +59,8 @@ impl Candidates {
         }
     }
 
-    pub fn observe(&mut self, distinct: u64) -> Result<(), CoreError> {
-        if distinct > self.rows {
-            return Err(invalid("native key cardinality exceeds its population"));
-        }
+    pub fn observe(&mut self, distinct: u64, rows: u64) -> Result<(), CoreError> {
+        self.rows = rows;
         let candidate = self
             .column()
             .ok_or_else(|| invalid("no native key population was selected"))?
@@ -110,6 +108,7 @@ impl Candidates {
             FrameNomination {
                 table: self.table,
                 nominated_key: selected.into_iter().collect(),
+                missing: missing.is_some_and(|(any, _)| any),
             },
             notices,
         ))

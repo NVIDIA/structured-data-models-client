@@ -58,6 +58,7 @@ pub enum FrameStage {
     Edit,
     StatedKey,
     Assemble,
+    AssembleNative,
     Sample,
     Table,
     Schema,
@@ -310,6 +311,18 @@ impl TimeChoice {
 pub struct FrameNomination {
     pub table: DescribedTable,
     pub nominated_key: Vec<String>,
+    /// Actual inferred-key isna.any result, before its possible warning.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub missing: bool,
+}
+
+/// Actual key-quality observations for one selected native population.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct NativeKeyQuality {
+    pub missing: u64,
+    pub duplicates: u64,
+    pub example_row: Option<u64>,
 }
 
 /// Key metadata/count fixed before a possible repeat warning is presented.
@@ -329,7 +342,7 @@ pub enum FrameScalar {
     /// It is neither an object handle nor a claim that the value is absent.
     Native,
     Text {
-        value: crate::scalar::UnicodeText,
+        value: crate::scalar::unicode::UnicodeText,
     },
     Value {
         value: Scalar,
@@ -393,6 +406,16 @@ pub struct FrameSchema {
     pub samples: Vec<FrameSampleColumn>,
     pub key_notices: Vec<CoreWarning>,
     pub notices: Vec<CoreWarning>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub advice: Option<FrameKeyAdvicePlan>,
+}
+
+/// Final declared schema populations before native keyless advice reads.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FrameKeyAdvicePlan {
+    pub description: SourceDescription,
+    pub infer_links: bool,
 }
 
 /// The fixed original meaning of one column whose cardinality decided it.
