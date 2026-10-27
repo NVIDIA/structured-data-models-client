@@ -363,7 +363,7 @@
       "moved": "T2.14b fix 4: the kind a date, time of day or timestamp candidate is given with (GivenCandidate::Typed), its equality left to Python (MID2 P2-2)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::numpy_warns_on_cast_overflow": {
-      "moved": "T2.14b fix 5 (KO2-88, the orchestrator's): FX-1's FLOAT32_OVERFLOW, which the core reports on every runtime, is shown as RuntimeWarning only where the installed NumPy warns of a float32 cast's overflow (1.24 or later), as the reference's NumPy shows it; how a warning is shown is the host's (KO2-32); T4.6: observe the installed native cast warning category at selected presentation without reclassifying the core-selected numeric fault"
+      "moved": "T2.14b fix 5 (KO2-88, the orchestrator's): FX-1's FLOAT32_OVERFLOW, which the core reports on every runtime, is shown as RuntimeWarning only where the installed NumPy warns of a float32 cast's overflow (1.24 or later), as the reference's NumPy shows it; how a warning is shown is the host's (KO2-32)"
     },
     "packages/structured-data-models-client/src/sdm_client/client.py::_empty_answer": {
       "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
