@@ -697,6 +697,21 @@ def error_from_core(
     if (
         sentence
         in {
+            'relational_row_bounds',
+            'relational_forecast_step_unexpected',
+            'relational_row_repeated',
+            'relational_id_missing',
+            'relational_id_mismatch',
+        }
+        and (present := _held().get('relational_response_value')) is not None
+    ):
+        # Rust selected the exact gathered-response diagnostic and value.
+        # Its native str/repr runs only now, outside _said's template-defect
+        # catch, so a real native formatting fault remains that actual fault.
+        fields[fields['native_field']] = present(fields)
+    if (
+        sentence
+        in {
             'direct_lookup',
             'direct_ambiguous',
             'direct_predict_dtype',

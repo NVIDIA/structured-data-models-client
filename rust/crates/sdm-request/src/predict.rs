@@ -45,6 +45,8 @@
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
+pub mod relational_response;
+
 use arrow_array::builder::{Float64Builder, ListBuilder, MapBuilder, MapFieldNames, StringBuilder};
 use arrow_array::{
     Array, ArrayRef, BooleanArray, Float64Array, Int64Array, RecordBatch, StringArray,
@@ -1527,6 +1529,36 @@ fn layout_as(
             true,
         ),
     };
+
+    layout_placed(
+        response,
+        placed,
+        text_ids,
+        answers,
+        attribution,
+        policy,
+        float_text,
+    )
+}
+
+/// Shared response-field construction after the owning adapter attributes
+/// each row. Relational native lineage and direct tabular attribution retain
+/// their separate guards before reaching this representation-only helper.
+fn layout_placed(
+    response: &PredictionResponse,
+    placed: Vec<(i64, Entity, Option<i64>)>,
+    text_ids: bool,
+    answers: AnswerType,
+    attribution: Attribution,
+    policy: AnswerPolicy,
+    float_text: fn(f64) -> String,
+) -> Result<Part, CoreError> {
+    if placed.len() != response.predictions.len() {
+        return Err(CoreError::protocol(
+            Sentence::InvalidMessage,
+            "placed answers have another response length",
+        ));
+    }
 
     let mut laid = Vec::with_capacity(placed.len());
     for (item, (row_index, id, forecast_step)) in response.predictions.iter().zip(placed) {
