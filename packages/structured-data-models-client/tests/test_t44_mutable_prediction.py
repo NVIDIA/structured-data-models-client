@@ -597,3 +597,85 @@ def test_public_task_kind_observations_preserve_preparation_order(
         ]
     observed['events'] = events
     assert observed == expected
+
+
+@pytest.mark.parametrize('core', [False, True], ids=['original', 'core'])
+@pytest.mark.parametrize(
+    'case',
+    ['refused-kind', 'refused-kind-repr-raises', 'refused-kind-repr-mutates'],
+)
+def test_native_task_refusal_retains_repr_and_fresh_details(
+    monkeypatch, core, case
+):
+    monkeypatch.setenv(
+        'SDM_CORE_ROUTES', 'client.predict/regression/frames' if core else ''
+    )
+    cell = '310' if int(pd.__version__.split('.')[0]) == 2 else '312'
+    expected = json.loads(
+        Path(__file__)
+        .with_name('t44_mutable_prediction_reference.json')
+        .read_text()
+    )['native_kind_refusal_cases'][cell][case]
+    events = []
+    retained = RuntimeError('retained native task-kind repr failure')
+    request = None
+    actual = None
+    observed = {'case': case}
+
+    class Kind(str):
+        def __hash__(self):
+            events.append('kind.hash')
+            return str.__hash__(self)
+
+        def __eq__(self, other):
+            events.append('kind.eq.' + str(other))
+            return str.__eq__(self, other)
+
+        def __repr__(self):
+            events.append('kind.repr')
+            if case == 'refused-kind-repr-raises':
+                raise retained
+            if case == 'refused-kind-repr-mutates':
+                request.task = dataclasses.replace(
+                    request.task, kind='regression'
+                )
+                events.append('task-replaced.regression')
+            return '<native task kind>'
+
+    def post(*args, **kwargs):
+        raise AssertionError('a refused task reached HTTP delivery')
+
+    with warnings.catch_warnings(record=True) as notices:
+        warnings.simplefilter('always')
+        try:
+            request = _request()
+            actual = Kind('unsupported_kind')
+            request.task = dataclasses.replace(request.task, kind=actual)
+            with SDMClient('http://localhost:1', max_retries=0) as client:
+                client._transport._session.post = post
+                client.predict(request, model=KumoRelational())
+            observed['outcome'] = 'success'
+        except Exception as error:
+            details = getattr(error, 'details', None)
+            identity = (
+                isinstance(details, dict) and details.get('task') is actual
+            )
+            observed.update(
+                outcome='error',
+                error={
+                    'type': type(error).__name__,
+                    'message': str(error),
+                    'code': getattr(error, 'code', None),
+                    'retained_identity': error is retained,
+                    'details': None
+                    if details is None
+                    else json.loads(json.dumps(details)),
+                    'details_task_identity': identity,
+                },
+            )
+        observed['warnings'] = [
+            {'type': type(item.message).__name__, 'message': str(item.message)}
+            for item in notices
+        ]
+    observed['events'] = events
+    assert observed == expected

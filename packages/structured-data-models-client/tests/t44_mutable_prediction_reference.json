@@ -15678,6 +15678,14 @@
     "312": {
       "receipt_sha256": "e8b2edc417c96378179647bf092a8eaf18ec1aa32a463828867c707a52045224",
       "producer_sha256": "9702ebc0c3ef0e3d6d8de30e4ccc233046d3a7774744529bbf3d735ee1bb500e"
+    },
+    "refusal-310": {
+      "receipt_sha256": "c72387bb8c899b7538f4db03a81edc2d90ddb1412d29103c17bb6192e0aa2318",
+      "producer_sha256": "4adb947def4520f7f269cb941721fd48fe4aa30af3b5e9a1aa7ea51dd67f7b5e"
+    },
+    "refusal-312": {
+      "receipt_sha256": "d43c3d8579e76ae52d5a82668a08e3c54f2138fc7396eed3e3cd9644dcff0db1",
+      "producer_sha256": "4adb947def4520f7f269cb941721fd48fe4aa30af3b5e9a1aa7ea51dd67f7b5e"
     }
   },
   "native_kind_cases": {
@@ -26308,6 +26316,214 @@
           {
             "event": "http-post"
           }
+        ]
+      }
+    }
+  },
+  "native_kind_refusal_cases": {
+    "310": {
+      "refused-kind": {
+        "case": "refused-kind",
+        "outcome": "error",
+        "error": {
+          "type": "UnsupportedRequestError",
+          "message": "[UNSUPPORTED_REQUEST] kumo-relational does not serve the task kind <native task kind>; it serves ['binary_classification', 'classification', 'forecasting', 'multiclass_classification', 'regression', 'temporal_link_prediction']",
+          "code": "UNSUPPORTED_REQUEST",
+          "retained_identity": false,
+          "details": {
+            "model": "kumo-relational",
+            "task": "unsupported_kind",
+            "supported": [
+              "binary_classification",
+              "classification",
+              "forecasting",
+              "multiclass_classification",
+              "regression",
+              "temporal_link_prediction"
+            ]
+          },
+          "details_task_identity": true
+        },
+        "warnings": [
+          {
+            "type": "SDMWarning",
+            "message": "2 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it."
+          }
+        ],
+        "events": [
+          "kind.hash",
+          "kind.hash",
+          "kind.eq.temporal_link_prediction",
+          "kind.eq.forecasting",
+          "kind.hash",
+          "kind.repr"
+        ]
+      },
+      "refused-kind-repr-raises": {
+        "case": "refused-kind-repr-raises",
+        "outcome": "error",
+        "error": {
+          "type": "RuntimeError",
+          "message": "retained native task-kind repr failure",
+          "code": null,
+          "retained_identity": true,
+          "details": null,
+          "details_task_identity": false
+        },
+        "warnings": [
+          {
+            "type": "SDMWarning",
+            "message": "2 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it."
+          }
+        ],
+        "events": [
+          "kind.hash",
+          "kind.hash",
+          "kind.eq.temporal_link_prediction",
+          "kind.eq.forecasting",
+          "kind.hash",
+          "kind.repr"
+        ]
+      },
+      "refused-kind-repr-mutates": {
+        "case": "refused-kind-repr-mutates",
+        "outcome": "error",
+        "error": {
+          "type": "UnsupportedRequestError",
+          "message": "[UNSUPPORTED_REQUEST] kumo-relational does not serve the task kind <native task kind>; it serves ['binary_classification', 'classification', 'forecasting', 'multiclass_classification', 'regression', 'temporal_link_prediction']",
+          "code": "UNSUPPORTED_REQUEST",
+          "retained_identity": false,
+          "details": {
+            "model": "kumo-relational",
+            "task": "regression",
+            "supported": [
+              "binary_classification",
+              "classification",
+              "forecasting",
+              "multiclass_classification",
+              "regression",
+              "temporal_link_prediction"
+            ]
+          },
+          "details_task_identity": false
+        },
+        "warnings": [
+          {
+            "type": "SDMWarning",
+            "message": "2 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it."
+          }
+        ],
+        "events": [
+          "kind.hash",
+          "kind.hash",
+          "kind.eq.temporal_link_prediction",
+          "kind.eq.forecasting",
+          "kind.hash",
+          "kind.repr",
+          "task-replaced.regression"
+        ]
+      }
+    },
+    "312": {
+      "refused-kind": {
+        "case": "refused-kind",
+        "outcome": "error",
+        "error": {
+          "type": "UnsupportedRequestError",
+          "message": "[UNSUPPORTED_REQUEST] kumo-relational does not serve the task kind <native task kind>; it serves ['binary_classification', 'classification', 'forecasting', 'multiclass_classification', 'regression', 'temporal_link_prediction']",
+          "code": "UNSUPPORTED_REQUEST",
+          "retained_identity": false,
+          "details": {
+            "model": "kumo-relational",
+            "task": "unsupported_kind",
+            "supported": [
+              "binary_classification",
+              "classification",
+              "forecasting",
+              "multiclass_classification",
+              "regression",
+              "temporal_link_prediction"
+            ]
+          },
+          "details_task_identity": true
+        },
+        "warnings": [
+          {
+            "type": "SDMWarning",
+            "message": "2 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it."
+          }
+        ],
+        "events": [
+          "kind.hash",
+          "kind.hash",
+          "kind.eq.temporal_link_prediction",
+          "kind.eq.forecasting",
+          "kind.hash",
+          "kind.repr"
+        ]
+      },
+      "refused-kind-repr-raises": {
+        "case": "refused-kind-repr-raises",
+        "outcome": "error",
+        "error": {
+          "type": "RuntimeError",
+          "message": "retained native task-kind repr failure",
+          "code": null,
+          "retained_identity": true,
+          "details": null,
+          "details_task_identity": false
+        },
+        "warnings": [
+          {
+            "type": "SDMWarning",
+            "message": "2 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it."
+          }
+        ],
+        "events": [
+          "kind.hash",
+          "kind.hash",
+          "kind.eq.temporal_link_prediction",
+          "kind.eq.forecasting",
+          "kind.hash",
+          "kind.repr"
+        ]
+      },
+      "refused-kind-repr-mutates": {
+        "case": "refused-kind-repr-mutates",
+        "outcome": "error",
+        "error": {
+          "type": "UnsupportedRequestError",
+          "message": "[UNSUPPORTED_REQUEST] kumo-relational does not serve the task kind <native task kind>; it serves ['binary_classification', 'classification', 'forecasting', 'multiclass_classification', 'regression', 'temporal_link_prediction']",
+          "code": "UNSUPPORTED_REQUEST",
+          "retained_identity": false,
+          "details": {
+            "model": "kumo-relational",
+            "task": "regression",
+            "supported": [
+              "binary_classification",
+              "classification",
+              "forecasting",
+              "multiclass_classification",
+              "regression",
+              "temporal_link_prediction"
+            ]
+          },
+          "details_task_identity": false
+        },
+        "warnings": [
+          {
+            "type": "SDMWarning",
+            "message": "2 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it."
+          }
+        ],
+        "events": [
+          "kind.hash",
+          "kind.hash",
+          "kind.eq.temporal_link_prediction",
+          "kind.eq.forecasting",
+          "kind.hash",
+          "kind.repr",
+          "task-replaced.regression"
         ]
       }
     }
