@@ -456,6 +456,15 @@ impl CoreError {
         self
     }
 
+    /// This error with each of `fields`.
+    #[must_use]
+    pub fn with_fields<'a>(mut self, fields: impl IntoIterator<Item = (&'a str, Detail)>) -> Self {
+        for (name, value) in fields {
+            self.fields.insert(name.to_owned(), value);
+        }
+        self
+    }
+
     /// A model serving endpoint's refusal saying `sentence`, a sentence of
     /// `ENDPOINT_REFUSED`, under the endpoint's `status` and the code it is
     /// raised under, if any ([`ErrorCode::EndpointRefused`]).
