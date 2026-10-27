@@ -69,10 +69,10 @@ impl Tables {
             .unwrap_or(character)
     }
 
-    fn extend_full(self, character: char, result: &mut Vec<char>) {
+    fn extend_full<T: From<char>>(self, character: char, result: &mut Vec<T>) {
         match self.full.binary_search_by_key(&character, |&(key, _)| key) {
-            Ok(index) => result.extend(self.full[index].1.chars()),
-            Err(_) => result.push(self.simple(character)),
+            Ok(index) => result.extend(self.full[index].1.chars().map(T::from)),
+            Err(_) => result.push(T::from(self.simple(character))),
         }
     }
 
@@ -98,6 +98,17 @@ pub(super) fn space(character: char) -> bool {
 }
 
 pub(super) fn lower(text: &[char], profile: CasingProfile) -> Vec<char> {
+    lower_points(text, Some, profile)
+}
+
+/// The same kernel over native codepoints. A non-scalar point is unchanged,
+/// neither Cased nor Case_Ignorable, so it is a real context boundary.
+/// This avoids separate kernels or per-scalar-run allocation on native data.
+pub(super) fn lower_points<T: Copy + From<char>>(
+    text: &[T],
+    scalar: fn(T) -> Option<char>,
+    profile: CasingProfile,
+) -> Vec<T> {
     let (version, full) = match profile {
         CasingProfile::Simple(version) => (version, false),
         CasingProfile::FullRoot(version) => (version, true),
@@ -106,7 +117,9 @@ pub(super) fn lower(text: &[char], profile: CasingProfile) -> Vec<char> {
     if !full {
         return text
             .iter()
-            .map(|&character| tables.simple(character))
+            .map(|&character| scalar(character)
+                .map(|character| T::from(tables.simple(character)))
+                .unwrap_or(character))
             .collect();
     }
 
@@ -117,20 +130,24 @@ pub(super) fn lower(text: &[char], profile: CasingProfile) -> Vec<char> {
     let mut next_cased = false;
     for (index, &character) in text.iter().enumerate().rev() {
         following[index] = next_cased;
-        if !tables.ignorable(character) {
-            next_cased = tables.cased(character);
+        let scalar = scalar(character);
+        if !scalar.is_some_and(|character| tables.ignorable(character)) {
+            next_cased = scalar.is_some_and(|character| tables.cased(character));
         }
     }
     let mut result = Vec::with_capacity(text.len());
     let mut preceding_cased = false;
     for (index, &character) in text.iter().enumerate() {
-        if character == '\u{3a3}' && preceding_cased && !following[index] {
-            result.push('\u{3c2}');
-        } else {
+        let scalar = scalar(character);
+        if scalar == Some('\u{3a3}') && preceding_cased && !following[index] {
+            result.push(T::from('\u{3c2}'));
+        } else if let Some(character) = scalar {
             tables.extend_full(character, &mut result);
+        } else {
+            result.push(character);
         }
-        if !tables.ignorable(character) {
-            preceding_cased = tables.cased(character);
+        if !scalar.is_some_and(|character| tables.ignorable(character)) {
+            preceding_cased = scalar.is_some_and(|character| tables.cased(character));
         }
     }
     result
