@@ -563,8 +563,81 @@ fn unknown_entity_failure_retains_the_text_snapshot_before_neighbor_draws() {
     );
 }
 
+// Native text input facts enter the useful PrepareFrames graph boundary.
+// The legacy raw materialize entry has no native dtype/encoding owner.
+fn native_graph(mut attached: Attachments) {
+    let native_tables: Vec<_> = [(8, "users"), (9, "orders")]
+        .into_iter()
+        .map(|(id, name)| {
+            let Attachment::Arrow(data) = &attached[&AttachmentId(id)] else {
+                panic!("native source rows")
+            };
+            let columns: Vec<_> = data
+                .schema
+                .fields()
+                .iter()
+                .map(|field| {
+                    let string = matches!(
+                        field.data_type(),
+                        arrow_schema::DataType::Utf8 | arrow_schema::DataType::LargeUtf8
+                    );
+                    json!({
+                        "name":field.name(),
+                        "origin":if string {
+                            json!({"pandas_string":{"storage":"python","missing":"pandas_na"}})
+                        } else {
+                            json!("builtin_primitive")
+                        },
+                        "strings":if string {json!("utf8")} else {Value::Null}
+                    })
+                })
+                .collect();
+            json!({"source":{"source":[name]},"columns":columns})
+        })
+        .collect();
+    attached.remove(&AttachmentId(2));
+    attached.remove(&AttachmentId(3));
+    attached.insert(
+        AttachmentId(100),
+        bytes(json!({
+            "stage":"graph","schema":1,"frames":7,"checkpoint":null,
+            "retained":null,"native_tables":native_tables,"values":5,
+            "options":[],"prediction_rows":2,"limits":{}
+        })),
+    );
+    let run = HostRun::start(
+        &sdm_host::default_root(),
+        &message(json!({"op":"prepare_frames","input":100})),
+        attached,
+    )
+    .unwrap_or_else(|error| panic!("{:?}", decoded(&error)));
+    let out = run
+        .next()
+        .unwrap_or_else(|error| panic!("{:?}", decoded(&error)));
+    let ControlMessage::Step(Step::Done {
+        result: OperationResult::PrepareFrames(value),
+        ..
+    }) = sdm_host::read(&out).unwrap()
+    else {
+        panic!("native graph must finish without model calls, fetches or warnings")
+    };
+    let Attachment::Bytes(raw) = run.take_attachment(value.value).unwrap().unwrap() else {
+        panic!("complete prepared graph data")
+    };
+    let graph: Value = serde_json::from_slice(&raw).unwrap();
+    assert_eq!(graph["value"], "graph");
+    assert_eq!(graph["data"]["native_tables"], json!(native_tables));
+    assert_eq!(graph["data"]["dropped_summary"], Value::Null);
+    let owner = AttachmentId(graph["data"]["owner"].as_u64().unwrap() as u32);
+    let Attachment::FrameGraph(owner) = run.take_attachment(owner).unwrap().unwrap() else {
+        panic!("a real retained FrameGraph, never a JSON token")
+    };
+    assert_eq!(graph["data"]["source"], owner.source());
+    assert!(!owner.source().is_empty());
+}
+
 #[test]
-fn text_identifying_columns_stay_explicitly_unfinished_for_both_offsets() {
+fn native_text_identifying_columns_own_a_valid_graph_for_both_offsets() {
     for large in [false, true] {
         let mut attached = inputs("age", "ordinary", large, 7);
         let Attachment::Bytes(raw) = &attached[&AttachmentId(1)] else {
@@ -608,32 +681,16 @@ fn text_identifying_columns_stay_explicitly_unfinished_for_both_offsets() {
                 false,
             ),
         );
-        let failed = HostRun::start(&sdm_host::default_root(), &materialize_message(), attached);
-        let error = match failed {
-            Ok(run) => terminal(&run).expect_err("text key remains unfinished"),
-            Err(error) => error,
-        };
-        assert_eq!(
-            decoded(&error)["error"]["fields"]["rule"],
-            json!({"t":"utf8","v":"frame_text_key"})
-        );
+        native_graph(attached);
     }
 }
 
 #[test]
-fn whole_text_semantic_family_is_unfinished_without_a_native_execution_profile() {
+fn native_text_semantic_columns_own_a_valid_graph_for_both_offsets() {
     for large in [false, true] {
-        let run = HostRun::start(
-            &sdm_host::default_root(),
-            &materialize_message(),
-            inputs("age", "prose", large, 7),
-        )
-        .unwrap();
-        let failed = terminal(&run).expect_err("unrepresented native lowercase profile");
-        assert_eq!(
-            decoded(&failed)["error"]["fields"]["rule"],
-            json!({"t":"utf8","v":"frame_text_features"})
-        );
+        for target in ["age", "category"] {
+            native_graph(inputs(target, "prose", large, 7));
+        }
     }
 }
 
