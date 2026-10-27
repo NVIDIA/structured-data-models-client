@@ -78,6 +78,24 @@ The authored depth-zero tests apply those native expected answers to both source
 Those tests have not run, and the shared fallback checks do not establish native AVX512 network or partition behavior.
 The forced branch witness remains distinct from naturally reachable public NumPy fallback and cross-producer coverage.
 
+### Fixture placement rule after the two guard failures
+
+The recorded fallback expectations belong to the test module; they must not create file I/O or unreadable source inclusions in `sdm-engine/src`.
+The first candidate failed because `l0_scan.py::check_sql` scans every source skeleton for `include_str!` and `include_bytes!`, including existing inline test modules.
+The second failed because Clippy bans `std::fs::read_to_string` in the inline library test, while `check_bans` treats every file below `src` as shipped and disallows a local suppression there.
+Adding another test-module wrapper, a suppression, another I/O method or a sorting entrypoint for integration tests does not address both rules.
+Neither guard changes.
+
+Use the existing recorded-data constant pattern from `tests/numpy_sort.rs`, with the immutable 123-control JSON as the single canonical expectation source.
+A small pinned writer may render those exact JSON bytes as a private test-only Rust constant, with no include macro, runtime file access or public test API.
+The generated file must carry its source, native producer and writer hashes, and its output hash must be recorded in the authoring receipt.
+Only that writer may modify the marked generated file; the JSON expectations and native receipt remain immutable.
+The constant stays inside an explicit inline test module so the vocabulary guard can recognize its test-only provenance as well.
+Root inspected and executed `scripts/rust_core/render_t46_fallback_controls.py`, writer SHA-256 `4e13d06ecb6fdfcfd53d45838e20b7f6d1d9152e868c806e56b1df7cdf4ca20b`, against canonical JSON SHA-256 `5e619c4cb1a968c65c446b7e79acc49fb091d3e486ad105de13fc0361469f4c1`.
+The resulting `src/index_sort/recorded.rs` hashes to `d8aa2b40a93c2332e720d86a24c293215a990ae0636fd428428ac07b615abe6a` and retains all 123 native records and their provenance without calculating any expected permutation.
+Rendering the recorded data is source authoring and supplies no candidate validation or new reference acquisition credit.
+The complete corrected source still requires two fresh independent whole-change reviews before any candidate checks.
+
 ## Remaining integration and profile inventory
 
 | Obligation | Current evidence and remaining work |
