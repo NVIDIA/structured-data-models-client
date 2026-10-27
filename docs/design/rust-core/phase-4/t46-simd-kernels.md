@@ -54,7 +54,7 @@ This is binary corroboration, not proof that a specific public input naturally r
 
 The audit also pins the official [GCC 14.2.0 algorithm header](https://raw.githubusercontent.com/gcc-mirror/gcc/releases/gcc-14.2.0/libstdc%2B%2B-v3/include/bits/stl_algo.h) and [heap header](https://raw.githubusercontent.com/gcc-mirror/gcc/releases/gcc-14.2.0/libstdc%2B%2B-v3/include/bits/stl_heap.h) as comparison sources.
 The exact Red Hat producer headers have not been acquired, and those official comparison files are not claimed to be the producer's installed headers.
-The policy's exact producer binding remains unestablished until the outstanding binary/source review and independent actual-fallback controls are complete.
+The policy's exact producer binding remains unestablished until the outstanding binary/source review and candidate comparison with independently acquired actual-fallback controls are complete.
 No fallback-unreachability proof is asserted.
 
 ## Tests and evidence
@@ -69,18 +69,21 @@ The authored eight-lane checks assert ordering and permutation preservation only
 The authored depth-zero check pins small-range GNU insertion ordering before the network base case.
 The authored GNU heap and introsort checks exercise forced internal heap paths and even/odd heap edges as invariants; they do not claim independently acquired native tie permutations.
 
-An immutable private acquisition packet proposes 123 nonempty controls against the actual wheel's six local `argsort_` specializations with depth forced to zero.
+Root inspected and executed an immutable private acquisition packet containing 123 nonempty controls against the actual wheel's six local `argsort_` specializations with depth forced to zero.
 It pins the ELF hash and function offsets, verifies the primitive-pointer/count ABI against source signatures and real call sites, derives load bias only from the same mapped ELF, and confines execution to a bounded separate process with guarded arrays.
 It imports no candidate or SDK, compiles no C++, and writes complete input/output bytes and permutations to a new receipt.
-That packet is unexecuted and awaits root inspection and authorization.
-Even once executed, its forced branch witness must remain distinct from naturally reachable public NumPy fallback and cross-producer coverage.
+The acquisition completed all 123 calls successfully, preserving guard regions and key bytes and checking complete ordered permutations.
+Its receipt hashes to `b3fa744af2117b91ff7a76b7e6ec13c7ea16d3fb5b6c0977fea93f1809889947` and the exact expected permutations are retained separately in `tests/data/t46_simd_fallback_controls.json`.
+The authored depth-zero tests apply those native expected answers to both source profiles, whose fallback policy is identical.
+Those tests have not run, and the shared fallback checks do not establish native AVX512 network or partition behavior.
+The forced branch witness remains distinct from naturally reachable public NumPy fallback and cross-producer coverage.
 
 ## Remaining integration and profile inventory
 
 | Obligation | Current evidence and remaining work |
 | --- | --- |
 | Pinned NumPy 2.5.3 AVX2 source | Exact archive/native identity, 129 independent public native controls and full source authored; source reviews and candidate checks pending. |
-| Pinned producer fallback | Exact compiler comment and compiled branch evidence; exact producer headers unacquired, forced actual-wheel controls unexecuted, whole binary/source binding review pending. |
+| Pinned producer fallback | Exact compiler comment, compiled branch evidence and 123 acquired actual-wheel depth-zero controls; exact producer headers unacquired, candidate comparison and whole binary/source binding review pending. |
 | Natural fallback reachability | No unreachable claim and no natural public-input witness; complete fallback is implemented independently of reachability. |
 | NumPy 2.5.3 AVX512 | Eight-lane source authored and invariants written; no actual AVX512 native acquisition or producer binding. |
 | NumPy 1.23.5 floor | Prior scalar source evidence only; required-cell native identity and public integration remain separate. |

@@ -97,7 +97,7 @@ fn adjust_heap<T: SimdKey>(keys: &[T], indices: &mut [usize], top: usize, value:
         indices[hole] = indices[child];
         hole = child;
     }
-    if len % 2 == 0 && child == (len - 2) / 2 {
+    if len.is_multiple_of(2) && child == (len - 2) / 2 {
         child = 2 * (child + 1);
         indices[hole] = indices[child - 1];
         hole = child - 1;
