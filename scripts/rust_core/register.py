@@ -250,31 +250,40 @@ def inventory_ids(root: Path) -> set[str]:
 def reference_outcomes(root: Path) -> dict[str, str]:
     r"""Each case's outcome in the committed reference (``success`` or
     ``refusal``), by case."""
-    return {
-        case: str(outcome['result'])
-        for case, outcome in _reference_lines(root).items()
-    }
+    return _outcomes(_reference_lines(root))
 
 
 def reference_refusals(root: Path) -> dict[str, str]:
     r"""The call each line the committed reference refuses stopped at, by
     the line's key: a row whose old outcome is ``none`` (a line with no
     baseline yet) moves the reference's own (T2.1r)."""
-    return {
-        case: outcome['stage']
-        for case, outcome in _reference_lines(root).items()
-        if outcome.get('result') == 'refusal'
-        and isinstance(outcome.get('stage'), str)
-    }
+    return _refusals(_reference_lines(root))
 
 
 def reference_codes(root: Path) -> dict[str, str | None]:
     r"""The code of each line the committed reference refuses, by the
     line's key: a row whose old outcome is ``none`` keeps the reference's
     own refusal where its code is the same (T3.12 fix 1)."""
+    return _codes(_reference_lines(root))
+
+
+def _outcomes(lines: dict[str, dict[str, Any]]) -> dict[str, str]:
+    return {case: str(outcome['result']) for case, outcome in lines.items()}
+
+
+def _refusals(lines: dict[str, dict[str, Any]]) -> dict[str, str]:
+    return {
+        case: outcome['stage']
+        for case, outcome in lines.items()
+        if outcome.get('result') == 'refusal'
+        and isinstance(outcome.get('stage'), str)
+    }
+
+
+def _codes(lines: dict[str, dict[str, Any]]) -> dict[str, str | None]:
     return {
         case: outcome.get('code')
-        for case, outcome in _reference_lines(root).items()
+        for case, outcome in lines.items()
         if outcome.get('result') == 'refusal'
     }
 
@@ -376,9 +385,14 @@ def problems(
         ]
     corpus = case_ids(root)
     inventory = inventory_ids(root)
-    accepted = reference_outcomes(root)
-    refused = reference_refusals(root)
-    codes = reference_codes(root)
+    # One fresh read supplies this validation's three projections. Nothing is
+    # cached by worktree path across later commits, resets or file edits.
+    reference = _reference_lines(root)
+    accepted, refused, codes = (
+        _outcomes(reference),
+        _refusals(reference),
+        _codes(reference),
+    )
     for entry in entries:
         where = entry['id']
         for case in entry['cases']:

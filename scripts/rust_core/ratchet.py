@@ -441,13 +441,31 @@ def git(repo: Path, *args: str) -> str:
     return done.stdout
 
 
+@dataclass
+class _ReadCache:
+    """Successful JSON-lines parses shared only within one gate invocation.
+
+    Git blob IDs identify immutable bytes, independently of path or commit.
+    This dedicated cache uses only jsonl's strict object-per-line semantics;
+    register.py's tolerant outcome reader and mutable observations are separate.
+    Consumers borrow these documents without modifying them.
+    Failures remain uncached so their diagnostics name the reached file.
+    """
+
+    json_lines: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+
+
 class Tree:
     r"""A commit's files, read from git through one ``git cat-file --batch``
     process."""
 
-    def __init__(self, repo: Path, sha: str) -> None:
+    def __init__(
+        self, repo: Path, sha: str, *, reads: _ReadCache | None = None
+    ) -> None:
         self.repo, self.sha = repo, sha
         self._cache: dict[str, str | None] = {}
+        self._blobs: dict[str, str] = {}
+        self._reads = reads if reads is not None else _ReadCache()
         self._batch: subprocess.Popen[bytes] | None = None
 
     def read(self, path: str) -> str | None:
@@ -473,11 +491,26 @@ class Tree:
                 text = data.decode('utf-8')
             except UnicodeDecodeError:
                 raise Unreadable(f'{path}: not UTF-8') from None
+            self._blobs[path] = header[0].decode('ascii')
         elif len(header) == 3:
             # Not a file (a tree): its contents are skipped.
             self._batch.stdout.read(int(header[2]) + 1)
         self._cache[path] = text
         return text
+
+    def json_lines(self, path: str) -> list[dict[str, Any]]:
+        """Borrow a strict JSON-lines document, parsed once per blob.
+
+        Missing files and non-blob entries retain read/jsonl's existing empty
+        result; malformed JSON is always refused with this path and line.
+        """
+        text = self.read(path)
+        blob = self._blobs.get(path)
+        if blob is None:
+            return jsonl(text, path)
+        if blob not in self._reads.json_lines:
+            self._reads.json_lines[blob] = jsonl(text, path)
+        return self._reads.json_lines[blob]
 
     def files(self, prefix: str) -> list[str]:
         # NUL-separated: under git's default core.quotePath a path with a
@@ -875,7 +908,7 @@ def baselines(tree: Tree) -> dict[str, dict[str, dict[str, Any]]]:
     found: dict[str, dict[str, dict[str, Any]]] = {}
     for runner in RUNNERS:
         path = f'{BASELINES}/{CELL}/{runner}.jsonl'
-        lines = jsonl(tree.read(path), path)
+        lines = tree.json_lines(path)
         by_case = {}
         for line in lines:
             if (
@@ -941,9 +974,7 @@ def reference_lines(tree: Tree) -> dict[str, dict[str, Any]]:
     r"""The committed ``python-ref`` lines, by case."""
     found: dict[str, dict[str, Any]] = {}
     for path in tree.files(REFERENCE):
-        found.update(
-            {line['case']: line for line in jsonl(tree.read(path), path)}
-        )
+        found.update({line['case']: line for line in tree.json_lines(path)})
     return found
 
 
@@ -1860,7 +1891,7 @@ def check_new_reference(
     # silently kept.
     lines: dict[Any, dict[str, Any]] = {}
     first: dict[Any, int] = {}
-    for number, line in enumerate(jsonl(candidate.read(path), path), 1):
+    for number, line in enumerate(candidate.json_lines(path), 1):
         case = line.get('case')
         if not isinstance(case, str) or not case:
             report.fail('reference', f'{path}:{number}: names no case')
@@ -1926,13 +1957,8 @@ def check_reference(
     policy = _yaml(checkpoint.read(POLICY), POLICY) or {}
     ordered = policy.get('ordered') if isinstance(policy, dict) else None
     for path in before:
-        old = {
-            line.get('case'): line
-            for line in jsonl(checkpoint.read(path), path)
-        }
-        new = {
-            line.get('case'): line for line in jsonl(candidate.read(path), path)
-        }
+        old = {line.get('case'): line for line in checkpoint.json_lines(path)}
+        new = {line.get('case'): line for line in candidate.json_lines(path)}
         for case, line in old.items():
             if new.get(case) == line:
                 continue
@@ -1959,7 +1985,7 @@ def check_keys(report: Report, candidate: Tree) -> None:
     found = [
         (path, line.get('case'))
         for path in candidate.files(REFERENCE)
-        for line in jsonl(candidate.read(path), path)
+        for line in candidate.json_lines(path)
     ]
     found += [
         (f'{BASELINES}/{CELL}/{runner}.jsonl', key)
@@ -2523,9 +2549,10 @@ def check(
         if not observation_files:
             report.fail('scope', f'{database}: no observations')
             return report
-    checkpoint = Tree(repo, checkpoint_sha)
+    reads = _ReadCache()
+    checkpoint = Tree(repo, checkpoint_sha, reads=reads)
     head = git(repo, 'rev-parse', 'HEAD^{commit}').strip()
-    candidate = Tree(repo, head)
+    candidate = Tree(repo, head, reads=reads)
     if git(repo, 'status', '--porcelain', '--untracked-files=no').strip():
         report.fail(
             'tree',
@@ -2706,18 +2733,20 @@ def accept(
     admits a case. A line that would be an ``INTERNAL_ERROR`` other than
     the old client's crash (:func:`old_client_crash`), which ``check``
     refuses, is left out."""
-    tree = Tree(repo, git(repo, 'rev-parse', 'HEAD^{commit}').strip())
-    reference = reference_lines(tree)
-    recorded = (
-        reference_lines(Tree(repo, checkpoint)) if checkpoint else reference
+    reads = _ReadCache()
+    tree = Tree(
+        repo, git(repo, 'rev-parse', 'HEAD^{commit}').strip(), reads=reads
     )
+    before = Tree(repo, checkpoint, reads=reads) if checkpoint else None
+    reference = reference_lines(tree)
+    recorded = reference_lines(before) if before is not None else reference
     expected = (
         effective(
-            baselines(Tree(repo, checkpoint)),
+            baselines(before),
             approved(_yaml(tree.read(REGISTER), REGISTER)),
             reference,
         )
-        if checkpoint
+        if before is not None
         else {}
     )
     policy = _yaml(tree.read(POLICY), POLICY)
@@ -2777,8 +2806,11 @@ def write_effective(repo: Path, checkpoint: str, out: Path) -> list[str]:
     r"""Writes :func:`effective`'s expectations for the candidate, ``repo``'s
     ``HEAD``, to ``out`` as :func:`check` does; returns the register's
     problems, writing nothing when there are any."""
-    candidate = Tree(repo, git(repo, 'rev-parse', 'HEAD^{commit}').strip())
-    before = Tree(repo, checkpoint)
+    reads = _ReadCache()
+    candidate = Tree(
+        repo, git(repo, 'rev-parse', 'HEAD^{commit}').strip(), reads=reads
+    )
+    before = Tree(repo, checkpoint, reads=reads)
     module = register_module()
     mine = _yaml(candidate.read(REGISTER), REGISTER)
     try:
