@@ -305,6 +305,9 @@ fn attachment_object<'local>(
     Ok(match attachment {
         Attachment::Bytes(bytes) => env.byte_array_from_slice(&bytes)?.into(),
         Attachment::FrameGraph(_)
+        | Attachment::FrameQuestion(_)
+        | Attachment::FramePopulation(_)
+        | Attachment::FrameLabelBatch(_)
         | Attachment::FrameTask(_)
         | Attachment::FrameReferences(_)
         | Attachment::FramePayload(_) => {
