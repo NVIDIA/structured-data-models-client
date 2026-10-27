@@ -41,6 +41,66 @@ ROUTES = ','.join(
 )
 
 
+# DT-3 and P3E-2 are approved register changes, not comparator exclusions.
+# All other native fields, ordering and words remain strict below.
+def dt3_no_time_body(body):
+    anchor = '__kumo_anchor_time'
+    assert body['task'].pop('anchor_time_column') == anchor
+    assert body['schema']['instance_table']['columns'].pop(anchor) == {
+        'dtype': 'timestamp[us]',
+        'stype': 'timestamp',
+        'nullable': False,
+    }
+    for side in ('context', 'predict'):
+        table = body[side]['instance_table']
+        at = table['columns'].index(anchor)
+        table['columns'].pop(at)
+        for row in table['rows']:
+            # The exact observed legacy sentinel wrap is what DT-3 drops.
+            assert row.pop(at) == '2262-04-11T23:47:16.709551Z'
+    assert_no_time_body(body)
+
+
+def assert_no_time_body(body):
+    assert 'anchor_time_column' not in body['task']
+    assert (
+        '__kumo_anchor_time' not in body['schema']['instance_table']['columns']
+    )
+    for side in ('context', 'predict'):
+        assert (
+            '__kumo_anchor_time' not in body[side]['instance_table']['columns']
+        )
+
+
+def p3e2_warning_codes(notices):
+    # These exact three notices are core-owned in the observed journeys.
+    codes = {
+        "Received custom 'num_neighbors' option; ignoring custom 'num_hops=1' option": 'HOPS_IGNORED',
+        '2 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it.': 'CONTEXT_ANSWERS',
+        'every context row has the same users.age, so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ.': 'CONTEXT_CONSTANT',
+    }
+    return [
+        {
+            **notice,
+            'message': f'[{codes[notice["message"]]}] {notice["message"]}',
+        }
+        if notice['message'] in codes
+        else dict(notice)
+        for notice in notices
+    ]
+
+
+def approved_no_time(observed, core):
+    expected = copy.deepcopy(observed)
+    if core:
+        for field in ('payloads', 'sent'):
+            for body in expected.get(field, []):
+                dt3_no_time_body(body)
+        if 'warnings' in expected:
+            expected['warnings'] = p3e2_warning_codes(expected['warnings'])
+    return expected
+
+
 @pytest.fixture(params=[False, True], ids=['original', 'core'])
 def core(request, monkeypatch):
     selected = request.param
@@ -124,8 +184,10 @@ def materialize(asked, target='age', **options):
 
 
 def inspection(request):
+    # Public payload ownership is a tuple; its JSON wire sequence is a list.
+    assert type(request.payloads) is tuple
     return {
-        'payloads': copy.deepcopy(request.payloads),
+        'payloads': copy.deepcopy(list(request.payloads)),
         'context_rows': request.context_rows,
         'predict_rows': request.predict_rows,
     }
@@ -173,6 +235,12 @@ def predict(request, target, frames, expected):
             client._transport = scripted
             result = client.predict(request, model=KumoRelational()).to_pandas()
     assert scripted.calls == expected['sent']
+    if (
+        expected['sent']
+        and 'anchor_time_column' not in expected['sent'][0]['task']
+    ):
+        for body in scripted.calls:
+            assert_no_time_body(body)
     assert json.loads(result.to_json(orient='split')) == expected['result']
     joined = result.merge(frames['users'], left_on='id', right_on='user_id')
     assert json.loads(joined.to_json(orient='split')) == expected['merged']
@@ -186,7 +254,9 @@ def predict(request, target, frames, expected):
 def test_text_journey_keeps_complete_frozen_payloads_and_results(
     core, storage, target, variant
 ):
-    expected = REFERENCE['records'][f'{storage}-{target}-{variant}']
+    expected = approved_no_time(
+        REFERENCE['records'][f'{storage}-{target}-{variant}'], core
+    )
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter('always')
         frames = shop(
@@ -217,7 +287,11 @@ def test_text_journey_keeps_complete_frozen_payloads_and_results(
 
 @pytest.mark.parametrize('unknown', [False, True])
 def test_text_snapshot_survives_mutation_and_failed_first_lookup(core, unknown):
-    expected = REFERENCE['records'][f'mutation-{unknown}']
+    expected = copy.deepcopy(REFERENCE['records'][f'mutation-{unknown}'])
+    if core:
+        for name in ('initial', 'cached', 'fresh'):
+            if name in expected:
+                expected[name] = approved_no_time(expected[name], True)
     frames = shop()
     asked = question(frames)
     if unknown:
@@ -242,7 +316,9 @@ def test_text_snapshot_survives_mutation_and_failed_first_lookup(core, unknown):
 
 
 def test_text_sanitization_warning_precedes_unknown_entity_error(core):
-    expected = REFERENCE['records']['drop-and-unknown']
+    expected = copy.deepcopy(REFERENCE['records']['drop-and-unknown'])
+    if core:
+        expected['warnings'] = p3e2_warning_codes(expected['warnings'])
     frames = shop()
     asked = question(frames)
     frames['orders'].loc[1, 'order_id'] = 0
@@ -425,9 +501,10 @@ def test_logical_string_metadata_does_not_refuse_physical_numeric_keys(
     )
     schema['users']['user_id'].dtype = 'string'
     asked = PredictiveQuery('PREDICT users.age FOR EACH users.user_id', schema)
-    expected = runtime_reference('key')[
-        f'metadata-single-users-text-{with_text}'
-    ]
+    expected = approved_no_time(
+        runtime_reference('key')[f'metadata-single-users-text-{with_text}'],
+        core,
+    )
     request = materialize(asked, model=KumoRelational())
     assert inspection(request) == {
         key: expected[key] for key in inspection(request)
@@ -443,9 +520,73 @@ def test_wide_numeric_key_metadata_keeps_safe_selected_uint64_rows(core):
     frames['orders']['user_id'] = pd.Series(np.repeat(keys, 8))
     asked = question(frames)
     assert asked.schema['users']['user_id'].dtype == 'string'
-    expected = runtime_reference('wide')['wide-metadata-safe-selection']
+    expected = approved_no_time(
+        runtime_reference('wide')['wide-metadata-safe-selection'], core
+    )
     request = materialize(asked)
     assert inspection(request) == {
         key: expected[key] for key in inspection(request)
     }
     predict(request, 'age', frames, expected)
+
+
+@pytest.mark.parametrize(
+    'timed,anchor',
+    [
+        (False, name)
+        for name in ('default', 'min', 'max', 'positive', 'negative', 'zoned')
+    ]
+    + [(True, name) for name in ('default', 'positive', 'negative', 'zoned')],
+)
+def test_registered_no_time_marker_and_ordinary_frame_anchor_round_trips(
+    core, timed, anchor
+):
+    frames = shop()
+    frames['users'] = frames['users'][['user_id', 'age', 'note']]
+    frames['users']['note'] = text(['red', 'blue'] * 4, 'python')
+    frames['orders'] = frames['orders'][['order_id', 'user_id', 'marker']]
+    if timed:
+        frames['orders']['at'] = pd.Series(
+            np.tile(
+                np.array(
+                    [-1800, -1500, -1200, -700, -500, 0, 500, 1200],
+                    dtype='int64',
+                ),
+                8,
+            ).view('datetime64[ms]')
+        )
+    schema = Schema.from_data(
+        frames,
+        primary_keys={'users': 'user_id', 'orders': 'order_id'},
+        time_columns={'orders': 'at'} if timed else {},
+    )
+    asked = PredictiveQuery('PREDICT users.age FOR EACH users.user_id', schema)
+    value = {
+        'min': pd.Timestamp.min,
+        'max': pd.Timestamp.max,
+        'positive': pd.Timestamp('1970-01-01T00:00:00.123456789'),
+        'negative': pd.Timestamp('1969-12-31T23:59:59.123456789'),
+        'zoned': pd.Timestamp('1970-01-01T01:00:00.123456789+01:00'),
+    }.get(anchor)
+    expected = runtime_reference('anchor')[f'{timed}-{anchor}']
+    no_time = not timed and anchor in ('default', 'min')
+    if no_time:
+        expected = approved_no_time(expected, core)
+    request = materialize(
+        asked, **({} if value is None else {'anchor_time': value})
+    )
+    assert inspection(request)['payloads'] == expected['payloads']
+    scripted = Scripted('age')
+    ids = [call['metadata']['request_id'] for call in expected['sent']]
+    with patch('sdm_client.adapters.relational._request_id', side_effect=ids):
+        with SDMClient('http://localhost:1', max_retries=0) as client:
+            client._transport.close()
+            client._transport = scripted
+            result = client.predict(request, model=KumoRelational()).to_pandas()
+    assert scripted.calls == expected['sent']
+    assert json.loads(result.to_json(orient='split')) == expected['result']
+    if core and no_time:
+        assert_no_time_body(request.payloads[0])
+        assert_no_time_body(scripted.calls[0])
+    else:
+        assert '__kumo_anchor_time' in request.predict.instance_table

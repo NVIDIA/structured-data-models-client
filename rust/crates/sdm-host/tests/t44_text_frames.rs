@@ -8,7 +8,8 @@ use std::sync::Arc;
 
 use arrow_array::cast::AsArray;
 use arrow_array::{
-    ArrayRef, Int32Array, Int64Array, LargeStringArray, RecordBatch, StringArray, UInt64Array,
+    ArrayRef, Int32Array, Int64Array, LargeStringArray, RecordBatch, StringArray,
+    TimestampMillisecondArray, UInt64Array,
 };
 use sdm_contract::data::AttachmentId;
 use sdm_contract::facts::PlatformFacts;
@@ -23,7 +24,55 @@ fn oracle(target: &str, variant: &str) -> Value {
         "../../../../packages/structured-data-models-client/tests/t44_text_reference.json"
     ))
     .unwrap();
-    all["records"][format!("python-{target}-{variant}")].clone()
+    dt3_no_time_record(all["records"][format!("python-{target}-{variant}")].clone())
+}
+
+// DT-3 is an approved payload change. Assert the exact old marker observation,
+// then construct the whole expected core body without that one column.
+fn dt3_no_time_record(mut observed: Value) -> Value {
+    for field in ["payloads", "sent"] {
+        if let Some(bodies) = observed[field].as_array_mut() {
+            for body in bodies {
+                assert_eq!(
+                    body["task"]
+                        .as_object_mut()
+                        .unwrap()
+                        .remove("anchor_time_column"),
+                    Some(json!("__kumo_anchor_time"))
+                );
+                assert_eq!(
+                    body["schema"]["instance_table"]["columns"]
+                        .as_object_mut()
+                        .unwrap()
+                        .remove("__kumo_anchor_time"),
+                    Some(json!({"dtype":"timestamp[us]","stype":"timestamp","nullable":false}))
+                );
+                for side in ["context", "predict"] {
+                    let table = &mut body[side]["instance_table"];
+                    let at = table["columns"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .position(|name| name == "__kumo_anchor_time")
+                        .unwrap();
+                    table["columns"].as_array_mut().unwrap().remove(at);
+                    for row in table["rows"].as_array_mut().unwrap() {
+                        assert_eq!(
+                            row.as_array_mut().unwrap().remove(at),
+                            json!("2262-04-11T23:47:16.709551Z")
+                        );
+                    }
+                }
+                assert!(body["task"].get("anchor_time_column").is_none());
+                assert!(
+                    body["schema"]["instance_table"]["columns"]
+                        .get("__kumo_anchor_time")
+                        .is_none()
+                );
+            }
+        }
+    }
+    observed
 }
 
 fn bytes(value: Value) -> Attachment {
@@ -629,10 +678,149 @@ fn logical_string_key_metadata_retains_actual_numeric_identifying_arrays() {
         let materialized = terminal(&run).unwrap_or_else(|error| panic!("{:?}", decoded(&error)));
         let expected = if wide {
             let observed: Value = serde_json::from_str(include_str!("../../../../packages/structured-data-models-client/tests/t44_text_wide_pandas3_reference.json")).unwrap();
-            observed["records"]["wide-metadata-safe-selection"].clone()
+            dt3_no_time_record(observed["records"]["wide-metadata-safe-selection"].clone())
         } else {
             oracle("age", "ordinary")
         };
         predict(&run, materialized, "age", &expected);
     }
+}
+
+fn anchor_inputs(timed: bool) -> Attachments {
+    let mut attached = inputs("age", "ordinary", false, 7);
+    let schema = json!({"tables":[
+        {"name":"users","source":{"source":["users"]},"columns":[column("user_id","int64","ID"),column("age","int32","numerical"),column("note","string","categorical")],"primary_key":["user_id"],"frame_key_form":"scalar","time_column":null},
+        {"name":"orders","source":{"source":["orders"]},"columns":if timed {vec![column("order_id","int64","ID"),column("user_id","int64","ID"),column("marker","int64","numerical"),column("at","date","timestamp")]} else {vec![column("order_id","int64","ID"),column("user_id","int64","ID"),column("marker","int64","numerical")]},"primary_key":["order_id"],"frame_key_form":"scalar","time_column":if timed {json!("at")} else {Value::Null}}],"links":[[{"table":"orders","column":"user_id"},{"table":"users","column":"user_id"}]]});
+    attached.insert(AttachmentId(1), bytes(schema));
+    attached.insert(
+        AttachmentId(8),
+        arrow(
+            vec![
+                ("user_id", ints(1..=8)),
+                (
+                    "age",
+                    Arc::new(Int32Array::from((21..29).collect::<Vec<_>>())),
+                ),
+                (
+                    "note",
+                    text(
+                        vec![
+                            Some("red"),
+                            Some("blue"),
+                            Some("red"),
+                            Some("blue"),
+                            Some("red"),
+                            Some("blue"),
+                            Some("red"),
+                            Some("blue"),
+                        ],
+                        false,
+                    ),
+                ),
+            ],
+            false,
+        ),
+    );
+    let mut columns = vec![
+        ("order_id", ints(0..64)),
+        ("user_id", ints((0..64).map(|row| row / 8 + 1))),
+        ("marker", ints(0..64)),
+    ];
+    if timed {
+        columns.push((
+            "at",
+            Arc::new(TimestampMillisecondArray::from(
+                (0..64)
+                    .map(|row| [-1800, -1500, -1200, -700, -500, 0, 500, 1200][row % 8])
+                    .collect::<Vec<_>>(),
+            )),
+        ));
+    }
+    attached.insert(AttachmentId(9), arrow(columns, false));
+    attached
+}
+
+#[test]
+fn dt3_no_time_marker_and_all_ordinary_frame_anchors_keep_their_separate_rules() {
+    let oracle: Value = serde_json::from_str(include_str!("../../../../packages/structured-data-models-client/tests/t44_text_anchor_pandas3_reference.json")).unwrap();
+    for timed in [false, true] {
+        for (name, anchor) in [
+            ("default", None),
+            ("min", Some(-i64::MAX)),
+            ("max", Some(i64::MAX)),
+            ("positive", Some(123_456_789)),
+            ("negative", Some(-876_543_211)),
+            ("zoned", Some(123_456_789)),
+        ] {
+            if timed && matches!(name, "min" | "max") {
+                continue;
+            }
+            let mut start: Value = serde_json::from_slice(&materialize_message()).unwrap();
+            if let Some(anchor) = anchor {
+                start["operation"]["anchor_time"] = json!({"t":"ts","v":anchor.to_string(),"unit":"ns","zone":if name == "zoned" {Some("+01:00")} else {None}});
+            }
+            let run = HostRun::start(
+                &sdm_host::default_root(),
+                &serde_json::to_vec(&start).unwrap(),
+                anchor_inputs(timed),
+            )
+            .unwrap();
+            let materialized =
+                terminal(&run).unwrap_or_else(|error| panic!("{:?}", decoded(&error)));
+            let observed = oracle["records"][format!("{timed}-{name}")].clone();
+            let no_time = !timed && matches!(name, "default" | "min");
+            let expected = if no_time {
+                dt3_no_time_record(observed)
+            } else {
+                observed
+            };
+            predict(&run, materialized, "age", &expected);
+        }
+    }
+}
+
+#[test]
+fn unresolved_entities_share_the_same_drop_summary_as_the_graph_notice() {
+    let mut attached = inputs("age", "ordinary", false, 9999);
+    let Attachment::Arrow(data) = &attached[&AttachmentId(9)] else {
+        panic!("rows")
+    };
+    let batch = &data.batches[0];
+    let mut columns = batch.columns().to_vec();
+    columns[0] = ints((0..64).map(|row| if row == 1 { 0 } else { row }));
+    let batch = RecordBatch::try_new(batch.schema(), columns).unwrap();
+    attached.insert(
+        AttachmentId(9),
+        Attachment::Arrow(ArrowData::new(batch.schema(), vec![batch])),
+    );
+    let run = HostRun::start(&sdm_host::default_root(), &materialize_message(), attached).unwrap();
+    let mut detail = None;
+    let failed = loop {
+        let out = match run.next() {
+            Ok(out) => out,
+            Err(error) => break error,
+        };
+        match sdm_host::read(&out).unwrap() {
+            ControlMessage::Step(Step::Warnings) => {
+                let warnings = decoded(&run.take_warnings().unwrap().unwrap());
+                for warning in warnings["warnings"].as_array().unwrap() {
+                    if warning["code"] == "FRAME_ROWS_DROPPED" {
+                        detail = Some(
+                            warning["fields"]["detail"]["v"]
+                                .as_str()
+                                .unwrap()
+                                .to_owned(),
+                        );
+                    }
+                }
+            }
+            other => panic!("only warnings precede unresolved entities: {other:?}"),
+        }
+    };
+    let expected = "[orders: 1 of 64 rows dropped (1 with a repeated primary key)]";
+    assert_eq!(detail.as_deref(), Some(expected));
+    assert_eq!(
+        decoded(&failed)["error"]["fields"]["detail"],
+        json!({"t":"utf8","v":format!(" {expected}")})
+    );
 }
