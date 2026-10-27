@@ -21,7 +21,7 @@ import pyarrow as pa
 import pytest
 from test_t42_frames import PATHS, projection
 
-from sdm_client import Relationship, Schema, StructuredDataError
+from sdm_client import Relationship, Schema
 
 
 def series(values, dtype):
