@@ -25,7 +25,6 @@ from sdm_client import (
     SDMWarning,
     StructuredDataError,
 )
-from sdm_client._routing import RouteError
 from sdm_client.materializers.relational import RelationalMaterializer
 
 REFERENCE = json.loads(
@@ -36,7 +35,11 @@ ROUTES = ','.join(
         'schema.from-data/frames/frames',
         'schema.from-data/mapping/frames',
         'query.materialize/indices-regression/frames',
+        'query.materialize/indices-binary/frames',
+        'query.materialize/indices-multiclass/frames',
         'client.predict/regression/frames',
+        'client.predict/binary/frames',
+        'client.predict/multiclass/frames',
     )
 )
 
@@ -253,7 +256,7 @@ def predict(request, target, frames, expected):
 @pytest.mark.parametrize('storage', ['python', 'pyarrow', 'utf8'])
 @pytest.mark.parametrize('target', ['age', 'category'])
 @pytest.mark.parametrize(
-    'variant', ['ordinary', 'chunks', 'allnull', 'batched']
+    'variant', ['ordinary', 'chunks', 'allnull', 'batched', 'prose']
 )
 def test_text_journey_keeps_complete_frozen_payloads_and_results(
     core, storage, target, variant
@@ -366,46 +369,24 @@ def test_text_warning_as_error_keeps_the_detached_snapshot(core):
     )
 
 
-@pytest.mark.parametrize('storage', ['python', 'pyarrow', 'utf8', 'largeutf8'])
-def test_text_graph_keys_remain_an_explicit_unfinished_core_family(
-    monkeypatch, storage
-):
-    monkeypatch.setenv('SDM_CORE_ROUTES', ROUTES)
-    frames = shop(storage)
-    frames['users']['user_id'] = text([f'u{i}' for i in range(1, 9)], storage)
-    frames['orders']['user_id'] = text(
-        [f'u{i}' for i in range(1, 9) for _ in range(8)], storage
-    )
-    asked = question(frames)
-    with pytest.raises((StructuredDataError, RouteError)) as failed:
-        asked.materialize(
-            indices=['u7', 'u8'],
-            num_context_samples=3,
-            num_neighbors=[3],
-            random_seed=7,
-        )
-    if storage != 'largeutf8':
-        assert isinstance(failed.value, StructuredDataError)
-        assert failed.value.code == 'UNSUPPORTED_REQUEST'
-        assert failed.value.details['rule'] == 'frame_text_key'
-
-
 def test_exact_largeutf8_native_materialization_keeps_its_frozen_failure_boundary(
     core,
 ):
     expected = REFERENCE['records']['largeutf8-age-ordinary']
     asked = question(shop('largeutf8'))
-    if core:
-        with pytest.raises(RouteError, match='large.*string'):
-            materialize(asked)
-    else:
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
         with pytest.raises(StructuredDataError) as failed:
             materialize(asked)
-        assert {
-            'type': type(failed.value).__name__,
-            'code': failed.value.code,
-            'message': str(failed.value),
-        } == expected['error']
+    assert {
+        'type': type(failed.value).__name__,
+        'code': failed.value.code,
+        'message': str(failed.value),
+    } == expected['error']
+    assert [
+        {'type': type(item.message).__name__, 'message': str(item.message)}
+        for item in caught
+    ] == expected['warnings']
 
 
 @pytest.mark.parametrize('invalid', ['duplicate', 'nonstring', 'object'])
@@ -427,8 +408,15 @@ def test_exact_largeutf8_guard_follows_existing_fresh_conversion_errors(
             materialize(asked)
     else:
         frames['users']['note'] = pd.Series(['object'] * 8, dtype=object)
-        with pytest.raises(RouteError, match='supports only NumPy'):
+        # The untouched category column still reaches the same native
+        # LargeUTF8 refusal, even when a later column becomes object text.
+        with pytest.raises(StructuredDataError) as failed:
             materialize(asked)
+        assert {
+            'type': type(failed.value).__name__,
+            'code': failed.value.code,
+            'message': str(failed.value),
+        } == REFERENCE['records']['largeutf8-age-ordinary']['error']
 
 
 def test_cached_text_snapshot_does_not_read_new_unsupported_native_values(core):
@@ -451,46 +439,29 @@ def runtime_reference(name):
 
 
 @pytest.mark.parametrize('storage', ['python', 'pyarrow', 'utf8'])
-@pytest.mark.parametrize('target', ['age', 'category'])
-def test_whole_text_stype_family_remains_unfinished_until_native_profiles_exist(
-    core, storage, target
-):
-    frames = shop(storage)
-    asked = question(frames, target, prose=True)
-    if core:
-        with pytest.raises(StructuredDataError) as failed:
-            materialize(asked, target)
-        assert failed.value.code == 'UNSUPPORTED_REQUEST'
-        assert failed.value.details['rule'] == 'frame_text_features'
-    else:
-        expected = REFERENCE['records'][f'{storage}-{target}-prose']
-        request = materialize(asked, target)
-        assert inspection(request) == {
-            key: expected[key] for key in inspection(request)
-        }
-        predict(request, target, frames, expected)
-
-
-@pytest.mark.parametrize('storage', ['python', 'pyarrow', 'utf8'])
-def test_unicode_text_reference_bodies_require_distinct_native_profiles(
+def test_unicode_text_reference_bodies_keep_distinct_native_profiles(
     core, storage
 ):
     frames = shop(storage)
     frames['users'].loc[6, 'note'] = 'ΟΣ'
     frames['users'].loc[7, 'note'] = 'İ'
     asked = question(frames, prose=True)
-    if core:
-        with pytest.raises(StructuredDataError) as failed:
-            materialize(asked)
-        assert failed.value.code == 'UNSUPPORTED_REQUEST'
-        assert failed.value.details['rule'] == 'frame_text_features'
-    else:
-        expected = runtime_reference('boundary')[f'unicode-{storage}']
+    expected = approved_no_time(
+        runtime_reference('boundary')[f'unicode-{storage}'], core
+    )
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
         request = materialize(asked)
         assert inspection(request) == {
             key: expected[key] for key in inspection(request)
         }
+        if core:
+            assert request._core is not None
         predict(request, 'age', frames, expected)
+    assert [
+        {'type': type(item.message).__name__, 'message': str(item.message)}
+        for item in caught
+    ] == expected['warnings']
 
 
 @pytest.mark.parametrize('with_text', [False, True])
