@@ -1,6 +1,6 @@
 # Phase 3 validation tracker
 
-Updated 2026-10-27, 03:22 UTC.
+Updated 2026-10-27, 03:58 UTC.
 Phase 3 / T3.10 is unfinished.
 The owner assigned existing Phase4work to a separate new agent; this coordinator continues Phase3.
 The coordinator alone edits this tracker; agents report results and next actions.
@@ -25,6 +25,8 @@ The coordinator alone edits this tracker; agents report results and next actions
   The genuine gate main/check7/check12 failure remains visible, while all nine other gate steps passed.
 - Owner approved only five physically unsupported sealed case/backend pairings: storedNaN on SQLite, and nanosecond-offset on PostgreSQL, Lakebase, Databricks SQL and Spark.
   Keep all40 frozen cases and every other pairing; continue the same started attempt without resetting its marker, changing data, or inventing passing observations.
+- Owner authorized fixing discovered bugs together, with two code reviews before checks, preserving failures and rerunning affected comparisons on the existing inputs.
+  Mechanical fixture repairs retain the original frozen files and record the changed digests of derived execution copies.
 - Preserve failed attempts, raw strict differences and original source/native/build identities; recording an observation is not comparison acceptance.
 - Use existing coverage only; do not add scenarios or new validation machinery.
 
@@ -68,7 +70,7 @@ Counts describe existing cases only.
 | R10 | **DONE: final-source full CI green** | Exact234 [fullCI40430848336](https://github.com/NVIDIA/structured-data-models-client/actions/runs/40430848336), attempt2:81successful jobs and2intentional skips. Java ARM SQLite retry121975118980 passed in2.5minutes; timing guard121975939188 passed | Original attempt1 job IDs, timeout and actual official artifact producers preserved. GitHub carried successful jobs forward; no new execution is claimed for those jobs |
 | R11 | **DONE: Snowflake identical-input comparison** | Full 10101-row source and original 10000-row draw verified; both complete current requests match the originals; all 10001 actual model26 predictions exactly equal old, RMSE ratio 1.0 on both batches and aggregate; SDK0 cleanup | Coordinator consumed receipt `8f48d1c7`; sampling unchanged; historical independent-draw 26.51% loss and failed recorder-mode attempt preserved |
 | R12 | **DONE: ordinary acceptance under approved frozen-reference policy** | All nine non-main gate steps PASS, including fullRustL1,364seeded tests,452self-checks and inventory388; seven clean234 runner/cell files each hold315records. Dependency/size checks and generated evidence passed, with zero regressions in the41-case legacy inventory report | Original machine gate stays FAILmain/check7/check12; owner exception and both independent alignment reviews retained separately, with no fabricated wrapper/stamp PASS |
-| R13 | Finish the same sealed attempt, final evidence and integration | W1SUCCESS verified20207files; both H4CODE approvals, Java admission, stock dry and fresh namespace checks passed. Actual sealed run stopped in old-reference SQLite fixture loading before Rust ran;25DuckDB reference rows retained, global marker remains | Owner approved five storage exclusions over2cases, retaining all40IDs and169applicable pairs. Author preparing minimal unchanged-stock-CLI continuation for both CODE reviews; then finish the same attempt, final pack/twoGO, normal signed no-ff merge/push and inspect automatic core CI |
+| R13 | Finish the same sealed attempt, final evidence and integration | Original-reference DuckDB25, SQLite24, PostgreSQL24 and Lakebase23 are complete:96 retained rows. The next old-reference batches exposed two authored view-fixture quoting errors, on SQL and Snowflake, before any candidate leg. Both repairs are grouped in the C3 private continuation; a reviewer found a control assertion that also needs correction before execution | Both reviewers finish the grouped review, then correct the control, obtain renewed approvals and run the17 small controls. Resume only unfinished reference SQL24, Snowflake25 and Spark24, then the planned full second reference pass and candidate comparisons. Preserve all40IDs/169pairs, original failures/marker and honest derived-input digests; finish evidence/twoGO and normal signed no-ff merge/push |
 | R14 | **DONE: existing Spark and Lakebase live provider kits** | Spark saved-answer correction has both CODE approvals, five controls and actual 99-answer readjudication PASS; Lakebase actually completed all 99 normal/fault cases on final15e, normal33 clean and both faults detected | Spark receipt `08a8d2c7`, Lakebase `d3f3825e`; original failures, all driver captures and source IDs preserved; cleanup verified and lease released |
 | R15 | **DONE: approved shared graph correction landed** | Owner-approved valid-link correction landed/frozen as cc51 with genuine official artifacts; local N3 quality is 2.4701% worse, current original DK/SF quality refreshes are 2.4323%/1.9583% worse, all within 5% | No sampling change; finite quality reviews and subsequent test-only source attribution remain separate acceptance steps |
 
@@ -98,7 +100,9 @@ The deadline does not lower correctness requirements.
 ## Lean remaining validation
 
 Use the existing source, CI, warehouse/model/performance results, W1 proof and readiness admissions.
-The continuation corrects only the five owner-approved storage applicability pairings, using byte-identical per-leg views and exact169-key completeness checks.
+The continuation applies the five owner-approved storage applicability pairings and repairs four quoting fields in two derived view fixtures, with exact169-key completeness checks.
+The original40 files remain immutable; both changed execution copies have explicitly different input digests.
+Reuse the96 completed reference rows only after verifying their inputs are unchanged; neither repaired warehouse-only fixture occurs in those cohorts.
 The planned second reference pass remains part of the original protocol.
 Do not create another draw, reset the marker, rerun completed campaigns or add another comparator/framework.
 Automatic post-merge CI still runs, while identical-full-tree CI reuse is allowed by the existing final gate.
@@ -109,8 +113,8 @@ A second full identical-tree matrix is not a new Phase3 closure barrier.
 
 - Final published Phase3head is `234c3adff5f4de8c2348bac3ecc17cfc6f43241f`, tree `d3460725323ea5e364e0f9adf9ddc109e97efbb4`; verified landing and actual stock protected-path ratchet passed.
 - FullCI40430848336 is green; local full gate64928 is terminal with main-only failure under the explicit owner-approved frozen-reference policy.
-- W1 source publication and H4 readiness are complete; the started sealed attempt remains unfinished after the original SQLite fixture failed to represent NaN.
-  The global marker, frozen input files, source/reference, register snapshot, failed log and passed25-row DuckDB reference result remain unchanged.
+- W1 source publication and H4 readiness are complete; the started sealed attempt remains unfinished after the storage exclusions and two view-fixture quoting failures.
+  The global marker, frozen input files, source/reference, register snapshot, failed attempts and all96 completed reference rows remain unchanged.
   No candidate sealed leg has executed yet.
   Previouscc51CI40418671928 is terminal failed on stale test expectations; the later AEA attempt failed only the coordinator's missing filename acknowledgment, corrected without tracked-source changes.
 - All27affected five-run timing rows are complete; all current owner cost dispositions are approved.
