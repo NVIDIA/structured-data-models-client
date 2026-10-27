@@ -696,3 +696,61 @@ fn entirely_invalid_partial_maps_leave_the_edge_absent() {
             .all(|name| name != "user_id")
     );
 }
+
+#[test]
+fn native_identifiers_and_classes_share_lossless_logical_payload_values() {
+    use sdm_contract::data::strings::StringEncoding;
+    use sdm_contract::scalar::unicode::UnicodeText;
+    use sdm_wire::json::Value as Logical;
+    let pair = UnicodeText::from_points([0xd83d, 0xde3a]).unwrap();
+    let scalar = UnicodeText::from("😺");
+    let lone = UnicodeText::from_points([0xd800]).unwrap();
+    let mut sample = family();
+    sample.kind = Kind::Multiclass;
+    sample.labels = Labels::Text(vec![pair.clone(), scalar.clone()]);
+    let (keys, encoding) =
+        sdm_engine::strings::encode(&[pair.clone(), scalar.clone(), lone.clone()]);
+    assert_eq!(encoding, StringEncoding::Utf8Surrogatepass);
+    sample.tables[0].columns[0].1 = SampledColumn::Strings(keys, encoding);
+    let built = build(&sample).unwrap();
+    let classes = built
+        .logical
+        .get("task")
+        .unwrap()
+        .get("target")
+        .unwrap()
+        .get("classes")
+        .unwrap();
+    assert_eq!(
+        classes,
+        &Logical::Array(vec![
+            Logical::Text(pair.clone()),
+            Logical::Text(scalar.clone())
+        ])
+    );
+    let related = built
+        .logical
+        .get("predict")
+        .unwrap()
+        .get("related_tables")
+        .unwrap()
+        .get("Users")
+        .unwrap()
+        .get("rows")
+        .unwrap();
+    let Logical::Array(rows) = related else {
+        panic!("related rows")
+    };
+    let Logical::Array(cells) = &rows[0] else {
+        panic!("related cells")
+    };
+    assert_eq!(cells[1], Logical::Text(lone));
+    // Inspection retains distinct points, while model JSON keeps the same
+    // native transport escapes and is not reparsed to reconstruct them.
+    assert!(
+        built
+            .bytes
+            .windows(12)
+            .any(|bytes| bytes == br"\ud83d\ude3a")
+    );
+}

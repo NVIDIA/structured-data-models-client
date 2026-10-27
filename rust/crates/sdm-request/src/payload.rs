@@ -629,6 +629,22 @@ fn arrow_column(
     })
 }
 
+fn string_cell(
+    values: &sdm_engine::strings::StringColumn<'_>,
+    row: usize,
+) -> Result<Value, CoreError> {
+    values
+        .get(row)
+        .map_err(|_| internal("native sampled text is malformed"))
+        .map(|value| match value {
+            None => Value::Null,
+            Some(value) => Value::Text(
+                UnicodeText::from_utf8_surrogatepass(value.as_bytes().to_vec())
+                    .expect("validated native text"),
+            ),
+        })
+}
+
 /// A column of `rows`: as sampled, or, for words, a `stringlist` of them,
 /// as the reference types a column holding lists (`_list_dtype_name`;
 /// a column of no rows holds no list, and is `string`).
@@ -647,18 +663,7 @@ fn sampled_column(
                 })?;
             let cells = rows
                 .iter()
-                .map(|&row| {
-                    values
-                        .get(row)
-                        .map_err(|_| internal("native sampled text is malformed"))
-                        .map(|value| match value {
-                            None => Value::Null,
-                            Some(value) => Value::Text(
-                                UnicodeText::from_utf8_surrogatepass(value.as_bytes().to_vec())
-                                    .expect("validated native text"),
-                            ),
-                        })
-                })
+                .map(|&row| string_cell(&values, row))
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(FrameColumn {
                 name: name.to_owned(),
@@ -942,16 +947,25 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
             .primary_key
             .as_deref()
             .ok_or_else(|| internal("an entity table has no key"))?;
-        let key_array = entity
+        let key_column = entity
             .columns
             .iter()
-            .find_map(|(n, column)| match column {
-                SampledColumn::Arrow(array) | SampledColumn::Strings(array, _) if n == key => {
-                    Some(array)
-                }
-                _ => None,
-            })
+            .find_map(|(name, column)| (name == key).then_some(column))
             .ok_or_else(|| internal("an entity key was not sampled"))?;
+        let (key_array, native_encoding) = match key_column {
+            SampledColumn::Arrow(array) => (array, None),
+            SampledColumn::Strings(array, encoding) => (array, Some(*encoding)),
+            SampledColumn::Words(_) => {
+                return Err(internal("an entity key cannot be normalized feature words"));
+            }
+        };
+        let native_strings = native_encoding
+            .map(|encoding| {
+                sdm_engine::strings::StringColumn::new(key_array.as_ref(), encoding).map_err(|_| {
+                    internal("native sampled key text does not match its explicit encoding")
+                })
+            })
+            .transpose()?;
         let mut first = vec![None; examples];
         for (row, &at) in entity.batch.iter().enumerate() {
             if at < examples && first[at].is_none() {
@@ -960,7 +974,11 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
         }
         let reference = unique_name(&occupied, &format!("{ENTITY_REFERENCE}_{role}"));
         occupied.push(reference.clone());
-        let source_dtype = key_dtype(key_array)?;
+        let source_dtype = if native_strings.is_some() {
+            Dtype::String
+        } else {
+            key_dtype(key_array)?
+        };
         let promote = source_dtype == Dtype::Int64 && first.iter().any(Option::is_none);
         let dtype = if promote || source_dtype == Dtype::Float32 {
             Dtype::Float64
@@ -972,7 +990,11 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
             .enumerate()
             .map(|(at, row)| match row {
                 Some(row) => {
-                    let value = cell(key_array, *row, &reference, source_dtype).map_err(|e| {
+                    let value = match &native_strings {
+                        Some(strings) => string_cell(strings, *row),
+                        None => cell(key_array, *row, &reference, source_dtype),
+                    }
+                    .map_err(|e| {
                         e.with_field("table", Detail::text(INSTANCE_TABLE))
                             .with_field("row", count(at))
                     })?;
