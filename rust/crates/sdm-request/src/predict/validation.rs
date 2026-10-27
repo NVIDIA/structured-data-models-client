@@ -286,7 +286,7 @@ pub fn native_constant(
     let points = |name, value: &UnicodeText| {
         (
             name,
-            Detail::List(value.points().map(|point| Scalar::UInt32(point)).collect()),
+            Detail::List(value.points().map(Scalar::UInt32).collect()),
         )
     };
     let mut fields = vec![("target", Detail::text(WIRE_TARGET))];
