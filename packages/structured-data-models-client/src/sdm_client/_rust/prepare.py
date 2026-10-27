@@ -151,7 +151,7 @@ def _native_value_call(
         selected.__context__ = original_context
 
 
-def _native_literal(text: str) -> Any:
+def _native_literal(text: str) -> tuple[Any, Exception | None]:
     """Reach the literal within its actual selected JSON-failure context."""
     try:
         # Rust has already selected the failed-JSON representation. This
@@ -159,7 +159,12 @@ def _native_literal(text: str) -> Any:
         # warning handlers; its result is not used to choose an SDK path.
         json.loads(text)
     except (ValueError, TypeError, RecursionError):
-        return ast.literal_eval(text)
+        # Only literal-conversion failures enter the core's literal catch
+        # policy. Unexpected JSON failures retain their original propagation.
+        try:
+            return ast.literal_eval(text), None
+        except Exception as error:
+            return None, error
     raise AssertionError(
         'core selected native literal conversion for a JSON value'
     )
@@ -172,13 +177,12 @@ def _attribute_native(checked: dict[str, Any]) -> dict[str, Any]:
         'ordinal': checked['row']['ordinal'],
         'text': text,
     }
-    native = None
-    native_error = None
-    try:
-        native = _native_literal(text)
-    except Exception as error:
-        native_error = error
-        literal['value'] = {'outcome': 'failed', 'failure': _failure(error)}
+    native, native_error = _native_literal(text)
+    if native_error is not None:
+        literal['value'] = {
+            'outcome': 'failed',
+            'failure': _failure(native_error),
+        }
     else:
         literal['value'] = {
             'outcome': 'value',
