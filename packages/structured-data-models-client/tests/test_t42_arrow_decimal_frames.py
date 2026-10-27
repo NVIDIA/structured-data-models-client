@@ -202,3 +202,77 @@ def test_decimal_key_relationships_are_assembled_in_core(
     )
     schema, _, _ = paired(monkeypatch, build, **options)
     assert len(schema.relationships) == 1
+
+
+def raw_series(bits, precision, scale, values):
+    make = pa.decimal128 if bits == 128 else pa.decimal256
+    raw = b''.join(
+        value.to_bytes(bits // 8, byteorder='little', signed=True)
+        for value in values
+    )
+    array = pa.Array.from_buffers(
+        make(precision, scale), len(values), [None, pa.py_buffer(raw)]
+    )
+    return pd.Series(pd.arrays.ArrowExtensionArray(array))
+
+
+@pytest.mark.parametrize('bits', [128, 256])
+@pytest.mark.parametrize('scale', [-129, -128, -1, 0, 1, 2, 129])
+@pytest.mark.parametrize('key', [False, True])
+def test_full_native_scale_descriptor_is_not_narrowed(monkeypatch, bits, scale, key):
+    # Both frozen runtime cells accept these descriptors, including native
+    # scale outside i8 and scale greater than precision.
+    name = 'value_id' if key else 'value'
+
+    def build():
+        return {'rows': pd.DataFrame({name: raw_series(bits, 1, scale, [0, 1])})}
+
+    schema, _, _ = paired(monkeypatch, build)
+    assert schema['rows'][name].dtype == ('float64' if scale > 0 else 'int64')
+    assert schema['rows'].primary_key == ('value_id' if key else None)
+
+
+@pytest.mark.parametrize('bits', [128, 256])
+@pytest.mark.parametrize(
+    'scale,values,expected',
+    [
+        (0, [-(2**63), 2**63 - 1], 'int64'),
+        (0, [-(2**63) - 1, 2**63], 'string'),
+        (-1, [-922337203685477580, 922337203685477580], 'int64'),
+        (-1, [-922337203685477581, 922337203685477581], 'string'),
+    ],
+)
+def test_native_decimal_range_uses_logical_scale_after_precision_fast_path(
+    monkeypatch, bits, scale, values, expected
+):
+    def build():
+        return {
+            'rows': pd.DataFrame(
+                {'value_id': raw_series(bits, 19, scale, values)}
+            )
+        }
+
+    schema, _, _ = paired(monkeypatch, build)
+    assert schema['rows']['value_id'].dtype == expected
+    assert schema['rows'].primary_key == 'value_id'
+
+
+@pytest.mark.parametrize('bits', [128, 256])
+@pytest.mark.parametrize('scale', [-129, 2, 129])
+def test_repeated_key_error_uses_original_native_decimal_scalar(
+    monkeypatch, bits, scale
+):
+    def build():
+        return {
+            'rows': pd.DataFrame(
+                {'value_id': raw_series(bits, 1, scale, [1, 1, 0])}
+            )
+        }
+
+    schema, _, (outcome, _) = paired(
+        monkeypatch, build, primary_keys={'rows': 'value_id'}
+    )
+    assert schema is None
+    assert outcome[0] == 'error'
+    assert outcome[2] == 'INVALID_REQUEST'
+    assert 'Decimal(' in outcome[3]
