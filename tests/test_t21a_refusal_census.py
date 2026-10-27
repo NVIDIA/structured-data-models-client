@@ -278,6 +278,7 @@ def test_a_case_naming_a_route_the_core_lacks_leaves_the_duckdb_refusals(
         probe
         for probe in census.probes(ROOT)
         if 'duckdb' in probe.get('databases', census.DATABASES)
+        and probe.get('frame') is None
     ][:8]
     cases = tmp_path / 'cases'
     cases.mkdir()

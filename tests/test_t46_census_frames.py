@@ -10,7 +10,9 @@ import importlib.util
 import json
 import os
 import sys
+from contextlib import nullcontext
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -94,3 +96,45 @@ def test_unknown_frame_recipe_fails_closed(census: Any, tmp_path: Path) -> None:
     path.write_text(json.dumps({'format': 'sdm-refusal-census/1', 'probes': [probe]}))
     with pytest.raises(census.CensusError, match='not a probe'):
         census.probes(tmp_path)
+
+
+def test_census_forces_the_existing_development_frame_routes(
+    census: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from sdm_client import _routing
+
+    monkeypatch.setattr(census, '_runner', lambda: SimpleNamespace(load_cases=lambda paths: []))
+    routes = set(census._routes())
+    assert set(_routing.FRAME_CONSTRUCTORS + _routing.FRAME_CONSUMERS) <= routes
+    assert set(getattr(_routing, 'DIRECT_CONSUMERS', ())) <= routes
+
+
+def test_frame_outcome_uses_the_public_constructor_without_opening_sql(
+    census: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from sdm_client import Schema
+
+    def forbidden(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError('a frame probe must not open a SQL source')
+
+    seen = []
+
+    def constructor(tables: Any, **options: Any) -> Any:
+        seen.append((tables, options))
+        raise ValueError('unit test stops at the public constructor boundary')
+
+    runner = SimpleNamespace(
+        _sibling=lambda name: SimpleNamespace(serve=lambda: nullcontext(('unused', None))),
+        load_bases=lambda: {},
+        _materialize_arguments=lambda given: given,
+        _open=forbidden,
+        _route_error=lambda error: False,
+    )
+    monkeypatch.setattr(census, '_runner', lambda: runner)
+    monkeypatch.setattr(Schema, 'from_data', constructor)
+    probe = next(p for p in census.probes(ROOT) if p['frame'] == 'duplicate-columns')
+    case = census._case(probe, 0, [])
+    found = census._outcome(case, 'duckdb', frame='duplicate-columns')
+    assert found['error'] == 'ValueError'
+    assert found['stage'] == 'from_data'
+    assert seen[0][0]['users'].columns.has_duplicates
