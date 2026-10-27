@@ -170,3 +170,161 @@ def test_rust_body_fields_use_the_same_authority_and_reached_target_checks():
     assert checked.rust_problems(document)[CASE] is not None
     document['observed']['shape.chain.addresses'] = document['observed'][CASE]
     assert 'shape.chain.addresses' not in checked.rust_problems(document)
+
+
+def scalar_only_pair(case):
+    """The actual Avito/Stack approved row positions have NO dtype exemption."""
+    old, new = pair()
+    for line, missing in ((old, True), (new, False)):
+        body = line['public']['payloads'][0]['parsed']
+        if case.endswith('avito'):
+            table, column, position = 'AdsInfo', 'LocationID', 3
+            columns = [
+                'instance_id',
+                'AdID',
+                'Price',
+                'LocationID',
+                'CategoryID',
+            ]
+            rows = [
+                [0, 10, 6, None if missing else 100, None],
+                [1, 20, 7, 200.0, None],
+            ]
+            targets = {
+                'Location': {
+                    'columns': ['instance_id', '__node_id'],
+                    'rows': [[0, 100], [1, 200]],
+                },
+                'Category': {
+                    'columns': ['instance_id', '__node_id'],
+                    'rows': [],
+                },
+            }
+            relations = [
+                {
+                    'source_table': table,
+                    'source_columns': [column],
+                    'target_table': 'Location',
+                    'target_columns': ['__node_id'],
+                },
+                {
+                    'source_table': table,
+                    'source_columns': ['CategoryID'],
+                    'target_table': 'Category',
+                    'target_columns': ['__node_id'],
+                },
+            ]
+            schema_columns = {
+                'LocationID': {'dtype': 'float64'},
+                'CategoryID': {'dtype': 'float64'},
+            }
+        else:
+            table, column, position = 'posts', 'OwnerUserId', 4
+            columns = [
+                'instance_id',
+                'Id',
+                'PostTypeId',
+                'CreationDate',
+                'OwnerUserId',
+                'ParentId',
+            ]
+            rows = [
+                [0, 10, 2, '2020-01-01', None if missing else 100, 10.0],
+                [1, 20, 2, '2020-01-01', 200.0, 20.0],
+            ]
+            targets = {
+                'users': {
+                    'columns': ['instance_id', '__node_id'],
+                    'rows': [[0, 100], [1, 200]],
+                }
+            }
+            relations = [
+                {
+                    'source_table': table,
+                    'source_columns': [column],
+                    'target_table': 'users',
+                    'target_columns': ['__node_id'],
+                },
+                {
+                    'source_table': table,
+                    'source_columns': ['ParentId'],
+                    'target_table': table,
+                    'target_columns': ['Id'],
+                },
+            ]
+            schema_columns = {
+                'OwnerUserId': {'dtype': 'float64'},
+                'ParentId': {'dtype': 'float64'},
+            }
+        body['schema'] = {
+            'related_tables': {table: {'columns': schema_columns}},
+            'relationships': relations,
+        }
+        body['context']['related_tables'] = {
+            table: {'columns': columns, 'rows': rows},
+            **targets,
+        }
+    return old, new, table, column, position
+
+
+@pytest.mark.parametrize(
+    'case',
+    [
+        'sample.parent-table.relbench-avito',
+        'sample.parent-table.relbench-stack',
+    ],
+)
+def test_scalar_only_approval_checks_actual_row_columns_without_dtype_paths(
+    case,
+):
+    old, new, _, _, _ = scalar_only_pair(case)
+    assert checked.payload_problem(old, new, case) is None
+    document = {
+        'observed': {
+            case: {
+                'core': {
+                    'predicted': {
+                        'body': new['public']['payloads'][0]['parsed']
+                    }
+                }
+            }
+        },
+        'reference': {case: old},
+    }
+    assert checked.rust_problems(document) == {case: None}
+
+
+@pytest.mark.parametrize(
+    'case',
+    [
+        'sample.parent-table.relbench-avito',
+        'sample.parent-table.relbench-stack',
+    ],
+)
+@pytest.mark.parametrize(
+    'change', ['other-instance', 'unknown', 'old-key', 'dtype', 'unlisted-cell']
+)
+def test_scalar_only_approval_never_excuses_wrong_targets_or_other_fields(
+    case, change
+):
+    old, new, table, column, position = scalar_only_pair(case)
+    body = new['public']['payloads'][0]['parsed']
+    rows = body['context']['related_tables'][table]['rows']
+    if change == 'other-instance':
+        rows[0][position] = 200
+    elif change == 'unknown':
+        rows[0][position] = 999
+    elif change == 'old-key':
+        rows[1][position] = 100
+    elif change == 'dtype':
+        body['schema']['related_tables'][table]['columns'][column]['dtype'] = (
+            'int64'
+        )
+    else:
+        rows[0][2] = 'changed'
+    assert checked.payload_problem(old, new, case) is not None
+    document = {
+        'observed': {case: {'core': {'predicted': {'body': body}}}},
+        'reference': {case: old},
+    }
+    assert checked.rust_problems(document)[case] is not None
