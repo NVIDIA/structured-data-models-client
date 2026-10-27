@@ -72,6 +72,7 @@ fn column(
     unique: bool,
 ) -> DescribedColumn {
     DescribedColumn {
+        untyped: false,
         name: name.into(),
         received,
         dtype,

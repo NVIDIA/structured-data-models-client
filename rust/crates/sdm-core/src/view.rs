@@ -569,6 +569,7 @@ pub(crate) fn describe(
                 expression: column.expr.clone(),
             });
             columns.push(DescribedColumn {
+                untyped: false,
                 name: column.name.clone(),
                 received,
                 dtype: column.dtype,

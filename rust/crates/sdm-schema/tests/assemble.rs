@@ -124,6 +124,7 @@ fn a_different_link_fallback_does_not_inherit_a_raw_columns_reason() {
 
 fn column(name: &str, dtype: Dtype, stype: Stype) -> InferredColumn {
     InferredColumn {
+        untyped: false,
         name: name.into(),
         dtype,
         stype,
@@ -548,6 +549,7 @@ fn the_columns_joined_on_are_marked_again_from_what_the_host_holds() {
     let mut stamped = description();
     stamped.links.clear();
     stamped.tables[0].columns[1] = DescribedColumn {
+        untyped: false,
         name: "user_id".into(),
         received: ColumnType::Int64,
         dtype: Dtype::Date,

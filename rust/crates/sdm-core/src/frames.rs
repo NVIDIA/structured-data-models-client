@@ -150,7 +150,8 @@ pub(crate) async fn run(
     }
     if matches!(
         manifest.stage,
-        FrameStage::Nominate
+        FrameStage::ColumnMeanings
+            | FrameStage::Nominate
             | FrameStage::Adopt
             | FrameStage::Time
             | FrameStage::StatedKey
@@ -175,9 +176,18 @@ pub(crate) async fn run(
         let Some(Attachment::Arrow(rows)) = attachments.remove(&binding.rows) else {
             return Err(invalid("inference requires current Arrow rows"));
         };
-        let columns =
-            sdm_schema::frames::Columns::new(&rows.schema, &rows.batches, &binding.decimals)?;
+        let columns = sdm_schema::frames::Columns::with_objects(
+            &rows.schema,
+            &rows.batches,
+            &binding.decimals,
+            &binding.objects,
+        )?;
         let (value, notices) = match (manifest.stage, inference) {
+            (FrameStage::ColumnMeanings, None) => {
+                let value =
+                    sdm_schema::frames::column_meanings(&table.name, &table.source, &columns)?;
+                (FrameInference::ColumnMeanings(Box::new(value)), vec![])
+            }
             (FrameStage::Nominate, None) => {
                 let (value, notices) =
                     sdm_schema::frames::nominate_from(&table.name, &table.source, &columns)?;
@@ -258,8 +268,12 @@ pub(crate) async fn run(
         let Some(Attachment::Arrow(rows)) = attachments.remove(&bound.rows) else {
             return Err(invalid("a frame binding does not name admitted Arrow data"));
         };
-        let columns =
-            sdm_schema::frames::Columns::new(&rows.schema, &rows.batches, &bound.decimals)?;
+        let columns = sdm_schema::frames::Columns::with_objects(
+            &rows.schema,
+            &rows.batches,
+            &bound.decimals,
+            &bound.objects,
+        )?;
         let read = if let Some(values) = &completed {
             let value = values
                 .iter()

@@ -236,7 +236,7 @@ def build(
                 ('name', column['name']),
                 ('dtype', dtype),
                 ('stype', column['stype']),
-                ('untyped', False),
+                ('untyped', column.get('untyped', False)),
                 ('stype_declared', column['name'] in timed),
                 ('_stype_before_key', column['stype_before_key']),
                 (

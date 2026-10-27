@@ -37,6 +37,7 @@ fn supports(stype: Stype, dtype: Dtype) -> bool {
 
 fn column(name: &str, dtype: Dtype, stype: Stype) -> DescribedColumn {
     DescribedColumn {
+        untyped: false,
         name: name.into(),
         received: match dtype {
             Dtype::String => ColumnType::Utf8,

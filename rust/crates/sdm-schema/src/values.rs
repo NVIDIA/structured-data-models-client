@@ -55,6 +55,8 @@ pub(crate) enum Value {
     /// Exact native Decimal comparison key within a fixed-type frame field.
     /// Provider/SQL preview Decimal inference retains its existing branch.
     Decimal(crate::frames::decimal::Unscaled),
+    /// Neutral typed native object/category source observations.
+    Object(crate::frames::object_decimal::Key),
 }
 
 /// The values of column `index` of `batches`, in row order.

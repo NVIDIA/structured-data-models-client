@@ -66,6 +66,7 @@ pub enum TextUnread {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InferredColumn {
     pub name: String,
+    pub untyped: bool,
     pub dtype: Dtype,
     pub stype: Stype,
     /// What the column meant before a key named after inference made it an
@@ -754,6 +755,7 @@ fn preview_with(
             primary.push(declared.name.clone());
         }
         columns.push(InferredColumn {
+            untyped: false,
             name: declared.name.clone(),
             dtype,
             stype,

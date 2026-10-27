@@ -203,6 +203,7 @@ pub fn described(held: &HeldSchema) -> Option<SourceDescription> {
         for column in &table.columns {
             let facts = column.source.clone()?;
             columns.push(DescribedColumn {
+                untyped: column.untyped,
                 name: column.name.clone(),
                 received: facts.received,
                 dtype: facts.dtype,

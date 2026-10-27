@@ -18,6 +18,7 @@ use sdm_schema::keys::{self, Counted};
 
 fn column(name: &str, unique: bool) -> InferredColumn {
     InferredColumn {
+        untyped: false,
         name: name.into(),
         dtype: Dtype::Int,
         stype: Stype::Id,
