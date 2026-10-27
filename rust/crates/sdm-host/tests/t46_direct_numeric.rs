@@ -81,7 +81,7 @@ fn arguments() -> Value {
     prepare(json!({"stage":"arguments", "context":{"kind":"frame"}, "predict":{"kind":"frame"}, "related":[], "task":{"value":"regression"}}), Attachments::new()).unwrap()
 }
 fn header(names: &[&str], rows: usize) -> Value {
-    json!({"rows":rows,"columns":names.iter().enumerate().map(|(ordinal,name)|json!({"ordinal":ordinal,"name":{"kind":"text","value":name},"physical":{"type":"float64"}})).collect::<Vec<_>>(),"duplicates":[]})
+    json!({"rows":rows,"columns":names.iter().enumerate().map(|(ordinal,name)|json!({"ordinal":ordinal,"name":{"kind":"text","value":name},"physical":{"type":"float64"},"float_storage":"nan_missing"})).collect::<Vec<_>>(),"duplicates":[]})
 }
 fn headers() -> Value {
     prepare(json!({"stage":"headers", "arguments":arguments(), "context":header(&["feature","target"],3), "predict":header(&["feature"],2), "target_context":{"positions":[1]}, "target_predict":{"positions":[]}, "predict_context":[[0]]}), Attachments::new()).unwrap()
@@ -114,7 +114,13 @@ fn early_arguments_need_no_headers_or_values_and_reject_unknown_task() {
 
 #[test]
 fn constructor_header_and_arrow_coherence_checks_each_axis() {
-    for axis in ["row_count", "field_count", "physical", "ordinal"] {
+    for axis in [
+        "row_count",
+        "field_count",
+        "physical",
+        "ordinal",
+        "float_storage",
+    ] {
         let mut header = headers();
         match axis {
             "row_count" => header["context"]["rows"] = json!(4),
@@ -122,6 +128,7 @@ fn constructor_header_and_arrow_coherence_checks_each_axis() {
                 header["context"]["columns"].as_array_mut().unwrap().pop();
             }
             "physical" => header["context"]["columns"][0]["physical"] = json!({"type":"int64"}),
+            "float_storage" => header["context"]["columns"][0]["float_storage"] = Value::Null,
             _ => header["context"]["columns"][0]["ordinal"] = json!(1),
         }
         let error=prepare(json!({"stage":"schema","headers":header,"context":2,"predict":3,"entity_table":"instance"}),halves()).unwrap_err();
@@ -135,109 +142,150 @@ fn constructor_header_and_arrow_coherence_checks_each_axis() {
 
 #[test]
 fn direct_numeric_preparation_is_model_neutral_and_binds_one_tabular_call() {
-    let prepared=prepare(json!({"stage":"schema","headers":headers(),"context":2,"predict":3,"entity_table":"instance"}),halves()).unwrap();
-    assert_eq!(prepared["task"], "regression");
-    assert_eq!(prepared["target"], "target");
-    assert_eq!(
-        prepared["description"]["tables"][0]["columns"][0]["dtype"],
-        "float64"
-    );
-    assert!(prepared.get("model").is_none());
-    let mut call = prepare(
-        json!({"stage":"model","model":"kumo-tabular"}),
-        Attachments::new(),
-    )
-    .unwrap();
-    call = prepare(
-        json!({"stage":"outputs","call":call,"kind":"regression"}),
-        Attachments::new(),
-    )
-    .unwrap();
-    call=prepare(json!({"stage":"capabilities","call":call,"kind":"regression","anchored":false,"relationships":false,"tables":1}),Attachments::new()).unwrap();
-    call = prepare(
-        json!({"stage":"task","call":call,"kind":"regression"}),
-        Attachments::new(),
-    )
-    .unwrap();
-    call = prepare(
-        json!({"stage":"capacity","call":call,"rows":3}),
-        Attachments::new(),
-    )
-    .unwrap();
-    let mut attached = halves();
-    attached.insert(AttachmentId(1),bytes(json!({"bound":call,"context":2,"predict":3,"context_header":header(&["feature","target"],3),"predict_header":header(&["feature"],2),"schema":prepared["schema"],"entity_table":"instance","target":"target","task":"regression","inference":{}})));
-    let run = start(
-        json!({"op":"predict","direct":1,"model":"kumo-tabular","request_id":"sdm-fixed","outputs":call["outputs"],"default_outputs":true}),
-        attached,
-    );
-    loop {
-        match next(&run) {
-            ControlMessage::Warnings { .. } => {}
-            ControlMessage::Step(Step::Warnings) => {
-                let out = run.take_warnings().unwrap().expect("pending warnings");
-                assert!(matches!(
-                    sdm_host::read(&out).unwrap(),
-                    ControlMessage::Warnings { .. }
-                ));
+    for after_advice in [false, true] {
+        let prepared=prepare(json!({"stage":"schema","headers":headers(),"context":2,"predict":3,"entity_table":"instance"}),halves()).unwrap();
+        assert_eq!(prepared["task"], "regression");
+        assert_eq!(prepared["target"], "target");
+        assert_eq!(
+            prepared["description"]["tables"][0]["columns"][0]["dtype"],
+            "float64"
+        );
+        assert!(prepared.get("model").is_none());
+        let mut call = prepare(
+            json!({"stage":"model","model":"kumo-tabular"}),
+            Attachments::new(),
+        )
+        .unwrap();
+        call = prepare(
+            json!({"stage":"outputs","call":call,"kind":"regression"}),
+            Attachments::new(),
+        )
+        .unwrap();
+        call=prepare(json!({"stage":"capabilities","call":call,"kind":"regression","anchored":false,"relationships":false,"tables":1}),Attachments::new()).unwrap();
+        call = prepare(
+            json!({"stage":"task","call":call,"kind":"regression"}),
+            Attachments::new(),
+        )
+        .unwrap();
+        call = prepare(
+            json!({"stage":"capacity","call":call,"rows":3}),
+            Attachments::new(),
+        )
+        .unwrap();
+        assert_eq!(
+            call["shape"],
+            json!({"kind":"regression","anchored":false,"relationships":false,"tables":1})
+        );
+        let mut schema = prepared["schema"].clone();
+        if after_advice {
+            schema["tables"][0]["columns"][0]["dtype"] = json!("string");
+            schema["tables"][0]["columns"][0]["stype"] = json!("text");
+        }
+        let input = json!({"bound":call,"context":2,"predict":3,"context_header":header(&["feature","target"],3),"predict_header":header(&["feature"],2),"schema":schema,"entity_table":"instance","target":"target","task":"regression"});
+        let overlap = prepare(json!({"stage":"overlap","input":input}), halves()).unwrap();
+        let mut input = input;
+        input.as_object_mut().unwrap().remove("bound");
+        input["overlap"] = overlap;
+        let envelope = prepare(json!({"stage":"envelope","input":input}), halves()).unwrap();
+        let mut attached = halves();
+        let count = if after_advice { 4 } else { 3 };
+        let task = if after_advice {
+            "forecasting"
+        } else {
+            "regression"
+        };
+        if after_advice {
+            attached.insert(
+                AttachmentId(2),
+                rows(&[("0", vec![1., 2., 3., 7.]), ("1", vec![2., 4., 6., 8.])]),
+            );
+        }
+        attached.insert(AttachmentId(1),bytes(json!({"stage":"body","envelope":envelope,"context":2,"predict":3,"context_header":header(&["feature","target"],count),"predict_header":header(&["feature"],2),"task":task,"inference":{}})));
+        let run = start(
+            json!({"op":"predict","direct":1,"model":"kumo-tabular","request_id":"sdm-fixed","outputs":call["outputs"],"default_outputs":true}),
+            attached,
+        );
+        loop {
+            match next(&run) {
+                ControlMessage::Warnings { .. } => {}
+                ControlMessage::Step(Step::Warnings) => {
+                    let out = run.take_warnings().unwrap().expect("pending warnings");
+                    assert!(matches!(
+                        sdm_host::read(&out).unwrap(),
+                        ControlMessage::Warnings { .. }
+                    ));
+                }
+                ControlMessage::Step(Step::CallModel(call)) => {
+                    let Attachment::Bytes(body) = run.take_attachment(call.body).unwrap().unwrap()
+                    else {
+                        panic!("body bytes")
+                    };
+                    let value: Value = serde_json::from_slice(&body).unwrap();
+                    assert_eq!(value["model"], "kumo-tabular");
+                    assert_eq!(
+                        value["task"],
+                        json!({"kind":task,"target":{"column_name":"target","dtype":"float64"}})
+                    );
+                    assert_eq!(
+                        value["context"]["instance_table"]["rows"],
+                        if after_advice {
+                            json!([["1.0", 2.], ["2.0", 4.], ["3.0", 6.], ["7.0", 8.]])
+                        } else {
+                            json!([[1., 2.], [2., 4.], [3., 6.]])
+                        }
+                    );
+                    assert_eq!(
+                        value["predict"]["instance_table"]["rows"],
+                        if after_advice {
+                            json!([["4.0"], ["5.0"]])
+                        } else {
+                            json!([[4.], [5.]])
+                        }
+                    );
+                    assert_eq!(value["metadata"]["request_id"], "sdm-fixed");
+                    assert!(value.get("inference").is_none());
+                    assert!(value["output"].get("prediction_statistic").is_none());
+                    let answer=br#"{"id":"direct-fixture","model":"kumo-tabular","metadata":{},"predictions":[{"row_index":0,"id":"0","prediction":10},{"row_index":1,"id":"1","prediction":11}]}"#;
+                    let reply = sdm_host::encode(&ControlMessage::ModelReply(ModelReply {
+                        id: call.id,
+                        outcome: ModelOutcome::Response {
+                            status: 200,
+                            body: AttachmentId(100),
+                            content_type: "application/json".into(),
+                        },
+                    }))
+                    .unwrap();
+                    run.reply(
+                        &reply,
+                        Attachments::from([(
+                            AttachmentId(100),
+                            Attachment::Bytes(answer.to_vec()),
+                        )]),
+                    )
+                    .unwrap();
+                }
+                ControlMessage::Step(Step::Done {
+                    result: OperationResult::Predict(result),
+                    ..
+                }) => {
+                    assert_eq!(result.model, "kumo-tabular");
+                    assert_eq!(result.request_id, "direct-fixture");
+                    let Attachment::Arrow(rows) =
+                        run.take_attachment(result.result).unwrap().unwrap()
+                    else {
+                        panic!("result Arrow")
+                    };
+                    assert_eq!(
+                        rows.batches
+                            .iter()
+                            .map(RecordBatch::num_rows)
+                            .sum::<usize>(),
+                        2
+                    );
+                    break;
+                }
+                other => panic!("expected tabular model call/result, got {other:?}"),
             }
-            ControlMessage::Step(Step::CallModel(call)) => {
-                let Attachment::Bytes(body) = run.take_attachment(call.body).unwrap().unwrap()
-                else {
-                    panic!("body bytes")
-                };
-                let value: Value = serde_json::from_slice(&body).unwrap();
-                assert_eq!(value["model"], "kumo-tabular");
-                assert_eq!(
-                    value["task"],
-                    json!({"kind":"regression","target":{"column_name":"target","dtype":"float64"}})
-                );
-                assert_eq!(
-                    value["context"]["instance_table"]["rows"],
-                    json!([[1., 2.], [2., 4.], [3., 6.]])
-                );
-                assert_eq!(
-                    value["predict"]["instance_table"]["rows"],
-                    json!([[4.], [5.]])
-                );
-                assert_eq!(value["metadata"]["request_id"], "sdm-fixed");
-                assert!(value.get("inference").is_none());
-                assert!(value["output"].get("prediction_statistic").is_none());
-                let answer=br#"{"id":"direct-fixture","model":"kumo-tabular","metadata":{},"predictions":[{"row_index":0,"id":"0","prediction":10},{"row_index":1,"id":"1","prediction":11}]}"#;
-                let reply = sdm_host::encode(&ControlMessage::ModelReply(ModelReply {
-                    id: call.id,
-                    outcome: ModelOutcome::Response {
-                        status: 200,
-                        body: AttachmentId(100),
-                        content_type: "application/json".into(),
-                    },
-                }))
-                .unwrap();
-                run.reply(
-                    &reply,
-                    Attachments::from([(AttachmentId(100), Attachment::Bytes(answer.to_vec()))]),
-                )
-                .unwrap();
-            }
-            ControlMessage::Step(Step::Done {
-                result: OperationResult::Predict(result),
-                ..
-            }) => {
-                assert_eq!(result.model, "kumo-tabular");
-                assert_eq!(result.request_id, "direct-fixture");
-                let Attachment::Arrow(rows) = run.take_attachment(result.result).unwrap().unwrap()
-                else {
-                    panic!("result Arrow")
-                };
-                assert_eq!(
-                    rows.batches
-                        .iter()
-                        .map(RecordBatch::num_rows)
-                        .sum::<usize>(),
-                    2
-                );
-                break;
-            }
-            other => panic!("expected tabular model call/result, got {other:?}"),
         }
     }
 }
@@ -281,7 +329,7 @@ fn bound(context_rows: usize) -> Value {
 }
 
 #[test]
-fn final_direct_input_must_agree_with_the_legitimately_checked_bound_call() {
+fn direct_prelude_must_agree_with_the_legitimately_checked_bound_call() {
     let prepared = prepare(json!({"stage":"schema","headers":headers(),"context":2,"predict":3,"entity_table":"instance"}),halves()).unwrap();
     for axis in [
         "task-ranking",
@@ -292,7 +340,7 @@ fn final_direct_input_must_agree_with_the_legitimately_checked_bound_call() {
         "schema-links",
     ] {
         let call = bound(3);
-        let mut input = json!({"bound":call,"context":2,"predict":3,"context_header":header(&["feature","target"],3),"predict_header":header(&["feature"],2),"schema":prepared["schema"],"entity_table":"instance","target":"target","task":"regression","inference":{}});
+        let mut input = json!({"bound":call,"context":2,"predict":3,"context_header":header(&["feature","target"],3),"predict_header":header(&["feature"],2),"schema":prepared["schema"],"entity_table":"instance","target":"target","task":"regression"});
         let mut attached = halves();
         match axis {
             "task-ranking" => input["task"] = json!("ranking"),
@@ -316,29 +364,11 @@ fn final_direct_input_must_agree_with_the_legitimately_checked_bound_call() {
                 attached.insert(AttachmentId(2), rows(&[("0", feature), ("1", target)]));
             }
         }
-        attached.insert(AttachmentId(1), bytes(input));
-        let run = start(
-            json!({"op":"predict","direct":1,"model":"kumo-tabular","request_id":"sdm-fixed","outputs":call["outputs"],"default_outputs":true}),
-            attached,
+        let error = prepare(json!({"stage":"overlap","input":input}), attached).unwrap_err();
+        assert_eq!(
+            error.sentence,
+            sdm_contract::Sentence::InvalidMessage,
+            "{axis}"
         );
-        loop {
-            match next(&run) {
-                ControlMessage::Error { error } => {
-                    assert_eq!(
-                        error.sentence,
-                        sdm_contract::Sentence::InvalidMessage,
-                        "{axis}"
-                    );
-                    break;
-                }
-                ControlMessage::Warnings { .. } => {}
-                ControlMessage::Step(Step::Warnings) => {
-                    let _ = run.take_warnings().unwrap();
-                }
-                other => panic!(
-                    "{axis}: contradictory bound/input facts must refuse before transport, got {other:?}"
-                ),
-            }
-        }
     }
 }
