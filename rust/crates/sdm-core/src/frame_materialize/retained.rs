@@ -6,8 +6,7 @@
 //! It owns the existing immutable graph/indexes and continuing neighbor state.
 //! No Python object, registry, callback or program position lives here.
 
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Condvar, Mutex};
 
 use sdm_contract::frames::materialize::{FrameNativeColumnRef, FrameNativeTable};
 use sdm_contract::ops::ColumnRef;
@@ -20,7 +19,8 @@ struct Owner {
     frames: Context,
     native: Arc<Vec<FrameNativeTable>>,
     source: String,
-    entered: AtomicBool,
+    entered: Mutex<bool>,
+    available: Condvar,
 }
 
 /// Host-owned native data, created only by core graph preparation.
@@ -58,7 +58,8 @@ impl RetainedFrameGraph {
                 frames,
                 native: Arc::new(native),
                 source,
-                entered: AtomicBool::new(false),
+                entered: Mutex::new(false),
+                available: Condvar::new(),
             }),
         }
     }
@@ -114,26 +115,33 @@ impl RetainedFrameGraph {
         })
     }
 
-    /// Unlinked prototype only: public frozen concurrency evidence must
-    /// settle this resource gate before it can become SDK behavior.
-    /// Existing per-Run busy handling is independent of this graph lease.
-    /// The lease covers only the current core call and carries no stage.
-    pub(crate) fn try_lease(&self) -> Result<GraphLease, CoreError> {
+    /// Serialize only a pure core call, as the original native sample call
+    /// retains the GIL. Other HostRuns sharing this materializer wait rather
+    /// than introducing a new public busy refusal. Native conversion and
+    /// warning presentation must happen after this lease is released.
+    /// Existing per-Run busy handling remains independent of this lease.
+    /// The lease is Send, carries no stage, and holds no mutex guard across
+    /// a core future. No Python callback may run while it is held.
+    pub(crate) fn lease(&self) -> Result<GraphLease, CoreError> {
+        let mut entered = self
+            .owner
+            .entered
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        while *entered {
+            entered = self
+                .owner
+                .available
+                .wait(entered)
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+        }
         if self.owner.frames.is_poisoned() {
             return Err(CoreError::protocol(
                 Sentence::RunPoisoned,
                 "a panic while using this retained frame graph poisoned its state",
             ));
         }
-        self.owner
-            .entered
-            .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
-            .map_err(|_| {
-                CoreError::protocol(
-                    Sentence::RunBusy,
-                    "another call is using this retained frame graph",
-                )
-            })?;
+        *entered = true;
         Ok(GraphLease {
             owner: Arc::clone(&self.owner),
         })
@@ -148,6 +156,14 @@ pub(crate) struct GraphLease {
 
 impl Drop for GraphLease {
     fn drop(&mut self) {
-        self.owner.entered.store(false, Ordering::Release);
+        let mut entered = self
+            .owner
+            .entered
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        *entered = false;
+        // Wake every waiter, including those that must observe a poisoned
+        // FrameRun after an unwind. No failed lease may strand a waiter.
+        self.owner.available.notify_all();
     }
 }

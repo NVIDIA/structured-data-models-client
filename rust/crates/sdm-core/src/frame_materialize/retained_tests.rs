@@ -110,7 +110,7 @@ fn every_rebound_batch_reuses_the_same_frame_and_prepared_graph_allocations() {
     let prepared = owner.prepared();
     let frames = owner.frames();
     for _ in 0..12 {
-        let lease = owner.try_lease().unwrap();
+        let lease = owner.lease().unwrap();
         assert!(Arc::ptr_eq(&prepared, &owner.prepared()));
         assert!(Arc::ptr_eq(&frames, &owner.frames()));
         let frame = lock(&frames);
@@ -123,30 +123,49 @@ fn every_rebound_batch_reuses_the_same_frame_and_prepared_graph_allocations() {
 }
 
 #[test]
-fn overlapping_owner_access_is_busy_and_does_not_change_neighbor_state() {
+fn overlapping_core_calls_wait_without_refusing_or_changing_neighbor_state() {
     let owner = owner();
     let before = lock(&owner.frames()).neighbors.checkpoint();
-    let lease = owner.try_lease().unwrap();
+    let lease = owner.lease().unwrap();
     let another = owner.clone();
-    let error = std::thread::spawn(move || {
-        another
-            .try_lease()
-            .err()
-            .expect("overlapping graph access succeeded")
-    })
-    .join()
-    .unwrap();
-    assert_eq!(error.code, sdm_contract::ErrorCode::RunBusy);
+    let released = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let observed = Arc::clone(&released);
+    let (started, waiting) = std::sync::mpsc::channel();
+    let second = std::thread::spawn(move || {
+        started.send(()).unwrap();
+        let _lease = another.lease().unwrap();
+        assert!(observed.load(std::sync::atomic::Ordering::Acquire));
+    });
+    waiting.recv().unwrap();
     assert_eq!(lock(&owner.frames()).neighbors.checkpoint(), before);
+    released.store(true, std::sync::atomic::Ordering::Release);
     drop(lease);
-    assert!(owner.try_lease().is_ok());
+    second.join().unwrap();
+    assert_eq!(lock(&owner.frames()).neighbors.checkpoint(), before);
+    assert!(owner.lease().is_ok());
+}
+
+#[test]
+fn another_query_on_the_same_source_has_an_independent_mutable_owner() {
+    let first = owner();
+    let second = owner();
+    assert_eq!(first.source(), second.source());
+    assert!(!Arc::ptr_eq(&first.frames(), &second.frames()));
+    let first_frames = first.frames();
+    let before = lock(&second.frames()).neighbors.checkpoint();
+    let _lease = first.lease().unwrap();
+    lock(&first_frames).neighbors = Mt19937::seeded(11);
+    assert_ne!(lock(&first_frames).neighbors.checkpoint(), before);
+    assert_eq!(lock(&second.frames()).neighbors.checkpoint(), before);
+    // A callback between core calls can independently enter this query.
+    assert!(second.lease().is_ok());
 }
 
 #[test]
 fn owner_and_active_lease_keep_rows_until_the_last_reference_is_released() {
     let owner = owner();
     let frames = Arc::downgrade(&owner.frames());
-    let lease = owner.try_lease().unwrap();
+    let lease = owner.lease().unwrap();
     let second = owner.clone();
     drop(owner);
     drop(second);
@@ -161,10 +180,10 @@ fn unwind_releases_the_owner_lease_without_resetting_neighbors() {
     let before = lock(&owner.frames()).neighbors.checkpoint();
     let held = owner.clone();
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let _lease = held.try_lease().unwrap();
+        let _lease = held.lease().unwrap();
         panic!("contained test unwind");
     }));
-    assert!(owner.try_lease().is_ok());
+    assert!(owner.lease().is_ok());
     assert_eq!(lock(&owner.frames()).neighbors.checkpoint(), before);
 }
 
@@ -173,14 +192,14 @@ fn a_panic_while_mutating_frame_state_cannot_reuse_a_partly_updated_owner() {
     let owner = owner();
     let held = owner.clone();
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let _lease = held.try_lease().unwrap();
+        let _lease = held.lease().unwrap();
         let frames = held.frames();
         let mut frames = lock(&frames);
         frames.neighbors = Mt19937::seeded(999);
         panic!("contained test frame-state unwind");
     }));
     let error = owner
-        .try_lease()
+        .lease()
         .err()
         .expect("a poisoned frame owner was reused");
     assert_eq!(error.code, sdm_contract::ErrorCode::RunPoisoned);
