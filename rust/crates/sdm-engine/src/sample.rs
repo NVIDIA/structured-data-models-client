@@ -115,6 +115,17 @@ pub fn descending_order(values: &[Option<i64>]) -> Vec<usize> {
 /// depth of twice the length's highest bit. Unstable, and deterministic:
 /// equal values come out in the order this exact algorithm leaves them.
 pub fn introsort_argsort(v: &[i64]) -> Vec<usize> {
+    scalar_argsort(v)
+}
+
+/// The same defined scalar index algorithm over typed values.
+///
+/// Callers must have partitioned missing and incomparable values before this
+/// kernel, including floating NaNs, and must have established scalar dispatch
+/// for their source family. This function neither chooses a runtime profile
+/// nor substitutes scalar ordering for a SIMD index sort. Signed zeroes compare
+/// equal; integers retain their full native width without float conversion.
+pub fn scalar_argsort<T: PartialOrd>(v: &[T]) -> Vec<usize> {
     const SMALL_QUICKSORT: usize = 16;
     let num = v.len();
     let mut t: Vec<usize> = (0..num).collect();
@@ -140,17 +151,17 @@ pub fn introsort_argsort(v: &[i64]) -> Vec<usize> {
                 if less(pm, pl, &t) {
                     t.swap(pm, pl);
                 }
-                let vp = v[t[pm]];
+                let vp = &v[t[pm]];
                 let mut pi = pl;
                 let mut pj = pr - 1;
                 t.swap(pm, pj);
                 loop {
                     pi += 1;
-                    while v[t[pi]] < vp {
+                    while &v[t[pi]] < vp {
                         pi += 1;
                     }
                     pj -= 1;
-                    while vp < v[t[pj]] {
+                    while vp < &v[t[pj]] {
                         pj -= 1;
                     }
                     if pi >= pj {
@@ -171,9 +182,9 @@ pub fn introsort_argsort(v: &[i64]) -> Vec<usize> {
             }
             for pi in pl + 1..=pr {
                 let vi = t[pi];
-                let vp = v[vi];
+                let vp = &v[vi];
                 let mut pj = pi;
-                while pj > pl && vp < v[t[pj - 1]] {
+                while pj > pl && vp < &v[t[pj - 1]] {
                     t[pj] = t[pj - 1];
                     pj -= 1;
                 }
@@ -191,8 +202,8 @@ pub fn introsort_argsort(v: &[i64]) -> Vec<usize> {
 }
 
 /// NumPy's generic `aheapsort` (`npysort/heapsort.cpp`) over the indices
-/// `a`, which [`introsort_argsort`] falls back to past its depth limit.
-fn heapsort_indices(v: &[i64], a: &mut [usize]) {
+/// `a`, which [`scalar_argsort`] falls back to past its depth limit.
+fn heapsort_indices<T: PartialOrd>(v: &[T], a: &mut [usize]) {
     let n = a.len();
     if n < 2 {
         return;
