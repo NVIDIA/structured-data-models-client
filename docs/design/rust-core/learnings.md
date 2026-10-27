@@ -7,6 +7,9 @@ This page holds what the first attempt, Phase 1 and Phase 2 taught, one lesson p
 It holds the process lessons as well as the product ones (the owner, 2026-10-21, RCA decision 9: "Yes"); the handbook ([orchestration/README.md](orchestration/README.md)) keeps the operating detail.
 Every design and design checkpoint is reviewed against it.
 
+Phase3 closure is still in progress.
+Its [final-validation observations](phase-3/evidence/README.md#lessons-from-final-validation) record the later fixture, SQL-evidence and cloud-task coordination failures without changing the earlier enforcement claims below.
+
 **How to read "Enforced by".**
 A rule is only as strong as what stops a breach.
 The owner, 2026-10-21: "The problem is all these "lessons" aren't being enforced, you just seem to be updating some random md file and not officially enforcing them."
