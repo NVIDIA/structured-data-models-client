@@ -289,11 +289,11 @@ fn direct_numeric_preparation_is_model_neutral_and_binds_one_tabular_call() {
                 rows(&[("0", vec![1., 2., 3., 7.]), ("1", vec![2., 4., 6., 8.])]),
             );
         }
-        attached.insert(AttachmentId(1),bytes(json!({"stage":"body","envelope":envelope,"context":2,"predict":3,"context_header":header(&["feature","target"],count),"predict_header":header(&["feature"],2),"task":task,"primary_key":[],"inference":{}})));
-        let run = start(
-            json!({"op":"predict","direct":1,"model":"kumo-tabular","request_id":"sdm-fixed","outputs":call["outputs"],"default_outputs":true}),
+        let run = encoded_prediction(
+            json!({"envelope":envelope,"context":2,"predict":3,"context_header":header(&["feature","target"],count),"predict_header":header(&["feature"],2),"task":task,"primary_key":[],"inference":{}}),
             attached,
-        );
+            json!({"op":"predict","direct":1,"model":"kumo-tabular","request_id":"sdm-fixed","outputs":call["outputs"],"default_outputs":true}),
+        ).unwrap();
         loop {
             match next(&run) {
                 ControlMessage::Warnings { .. } => {}
@@ -538,17 +538,12 @@ fn nullable_cast_fault_is_core_selected_from_native_storage_and_values() {
                 }
                 let envelope = planned.unwrap();
                 let mut attached = data();
-                attached.insert(AttachmentId(1),bytes(json!({"stage":"body","envelope":envelope,"context":2,"predict":3,"context_header":context_header,"predict_header":predict_header,"task":"regression","primary_key":[],"inference":{}})));
-                let run = start(
-                    json!({"op":"predict","direct":1,"model":"kumo-tabular","request_id":"sdm-fixed","outputs":call["outputs"],"default_outputs":true}),
+                let error = encoded_prediction(
+                    json!({"envelope":envelope,"context":2,"predict":3,"context_header":context_header,"predict_header":predict_header,"task":"regression","primary_key":[],"inference":{}}),
                     attached,
-                );
-                match next(&run) {
-                    ControlMessage::Error { error } => {
-                        assert_eq!(error.sentence, sdm_contract::Sentence::DirectWireNonFinite)
-                    }
-                    other => panic!("non-finite rows must fail before transport: {other:?}"),
-                }
+                    json!({"op":"predict","direct":1,"model":"kumo-tabular","request_id":"sdm-fixed","outputs":call["outputs"],"default_outputs":true}),
+                ).err().expect("nonfinite rows fail before transport");
+                assert_eq!(error.sentence, sdm_contract::Sentence::DirectWireNonFinite);
             }
         }
     }
@@ -626,12 +621,11 @@ fn direct_run(
     key: &[&str],
     context: &[RecordBatch],
     scoring: &[RecordBatch],
-) -> HostRun {
-    let mut attached = attached_batches(context, scoring);
-    attached.insert(AttachmentId(1), bytes(json!({"stage":"body","envelope":envelope,"context":2,"predict":3,"context_header":input["context_header"],"predict_header":input["predict_header"],"primary_key":key,"task":"regression","inference":{}})));
-    start(
+) -> Result<HostRun, sdm_contract::CoreError> {
+    encoded_prediction(
+        json!({"envelope":envelope,"context":2,"predict":3,"context_header":input["context_header"],"predict_header":input["predict_header"],"primary_key":key,"task":"regression","inference":{}}),
+        attached_batches(context, scoring),
         json!({"op":"predict","direct":1,"model":"kumo-tabular","request_id":"sdm-fixed","outputs":["prediction"],"default_outputs":true}),
-        attached,
     )
 }
 
@@ -754,10 +748,9 @@ fn direct_column_order_is_preserved_across_arrow_batches() {
         };
         let input = prelude(&cn, &pn, &context, &scoring, &[]);
         let envelope = plan(input.clone(), &context, &scoring);
-        let run = direct_run(&input, envelope, &[], &context, &scoring);
-        let ControlMessage::Error { error } = next(&run) else {
-            panic!("body must fail before transport")
-        };
+        let error = direct_run(&input, envelope, &[], &context, &scoring)
+            .err()
+            .expect("body must fail before transport");
         assert_eq!(
             error.sentence,
             if first_precision {
@@ -808,7 +801,7 @@ fn direct_attribution_starts_as_written_and_reads_later_declared_keys() {
         input["schema"]["tables"][0]["columns"][0]["stype"] = json!("text");
         let envelope = plan(input.clone(), &context, &scoring);
         let key = later_key.into_iter().collect::<Vec<_>>();
-        let run = direct_run(&input, envelope, &key, &context, &scoring);
+        let run = direct_run(&input, envelope, &key, &context, &scoring).unwrap();
         let ControlMessage::Step(Step::CallModel(call)) = next(&run) else {
             panic!("model call")
         };
@@ -924,7 +917,7 @@ fn direct_primitive_list_ids_cannot_hide_a_wrong_key() {
             &["user_id"],
         );
         let envelope = plan(input.clone(), &context, &scoring);
-        let run = direct_run(&input, envelope, &["user_id"], &context, &scoring);
+        let run = direct_run(&input, envelope, &["user_id"], &context, &scoring).unwrap();
         let ControlMessage::Step(Step::CallModel(call)) = next(&run) else {
             panic!("model call")
         };
@@ -1050,6 +1043,30 @@ fn native_value_association_and_uncaught_string_failure_are_explicit() {
     .unwrap_err();
     assert_eq!(error.sentence, sdm_contract::Sentence::DirectNativeFailure);
     assert_eq!(error.fields["stage"], sdm_contract::Detail::text("string"));
+}
+
+fn encoded_prediction(
+    mut input: Value,
+    attached: Attachments,
+    operation: Value,
+) -> Result<HostRun, sdm_contract::CoreError> {
+    let inference = input
+        .as_object_mut()
+        .unwrap()
+        .remove("inference")
+        .unwrap_or_else(|| json!({}));
+    let (mut body, payload) = encoded_body(input, attached)?;
+    body["payload"] = json!(2);
+    Ok(start(
+        operation,
+        Attachments::from([
+            (
+                AttachmentId(1),
+                bytes(json!({"stage":"encoded","body":body,"inference":inference})),
+            ),
+            (AttachmentId(2), Attachment::Bytes(payload)),
+        ]),
+    ))
 }
 
 fn encoded_body(
