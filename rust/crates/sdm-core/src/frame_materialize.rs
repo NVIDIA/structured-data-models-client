@@ -18,7 +18,7 @@ use sdm_contract::frames::{
     FRAME_CHECKPOINT_VERSION, FrameCheckpoint, FrameCheckpointManifest, FrameCheckpointMetadata,
     MaterializeFrames,
 };
-use sdm_contract::ops::{Dtype, HeldSchema, SamplerMemo, SourceDescription};
+use sdm_contract::ops::{Dtype, HeldSchema, SamplerMemo, SourceDescription, Stype};
 use sdm_contract::{CoreError, CoreWarning, Detail, HeldState, Scalar, Sentence};
 use sdm_engine::frames::Snapshot;
 use sdm_engine::graph::{Graph, Table};
@@ -53,6 +53,55 @@ pub(crate) struct PreparedGraph {
     pub source: String,
     pub description: SourceDescription,
     pub graph: Graph,
+}
+
+/// Actual selected raw tables and links of one graph snapshot. The useful
+/// context exists before native Text facts or request encoding are reached.
+/// Arrow arrays remain independently owned and are not serialized as model JSON.
+pub(crate) struct SampledContext {
+    source: String,
+    sampled: crate::subgraph::Walked,
+}
+
+impl SampledContext {
+    fn check_source(&self, source: &str) -> Result<(), CoreError> {
+        if self.source != source {
+            return Err(invalid("sampled context belongs to another frame graph"));
+        }
+        Ok(())
+    }
+
+    pub fn into_walked(self, source: &str) -> Result<crate::subgraph::Walked, CoreError> {
+        self.check_source(source)?;
+        Ok(self.sampled)
+    }
+
+    /// Only selected Text columns are transformed, after native input
+    /// conversion has supplied actual strings and the reached kernel fact.
+    /// Request schema, task and encoding policy remain the payload builder's.
+    pub fn into_words(
+        mut self,
+        source: &str,
+        profile: sdm_engine::words::CasingProfile,
+    ) -> Result<crate::subgraph::Walked, CoreError> {
+        self.check_source(source)?;
+        for table in &mut self.sampled.tables {
+            for (name, column) in &mut table.columns {
+                if !table
+                    .stypes
+                    .iter()
+                    .any(|(feature, stype)| feature == name && *stype == Stype::Text)
+                {
+                    continue;
+                }
+                let SampledColumn::Arrow(array) = column else {
+                    return Err(internal("a raw frame context already contains words"));
+                };
+                *column = SampledColumn::Words(crate::subgraph::frame_words(array, profile)?);
+            }
+        }
+        Ok(self.sampled)
+    }
 }
 
 /// The useful scalar labelled-context table before native prediction-entity
@@ -443,7 +492,7 @@ impl FrameRun {
         neighbor_values: Option<&[Value]>,
         excluded: &[(String, String)],
         seed: Option<u128>,
-    ) -> Result<crate::subgraph::Walked, CoreError> {
+    ) -> Result<SampledContext, CoreError> {
         if let Some(seed) = seed {
             let seed = u32::try_from(seed)
                 .ok()
@@ -537,6 +586,9 @@ impl FrameRun {
                 pairs: link.pairs,
             })
             .collect();
-        Ok(crate::subgraph::Walked { tables, links })
+        Ok(SampledContext {
+            source: self.source(),
+            sampled: crate::subgraph::Walked { tables, links },
+        })
     }
 }
