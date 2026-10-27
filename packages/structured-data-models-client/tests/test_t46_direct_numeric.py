@@ -1533,3 +1533,29 @@ def test_direct_row_index_decoder_and_attribution_precedence(monkeypatch, kind):
         )
     else:
         assert 'this batch asked about 2 rows' in new[1][-1]
+
+
+@pytest.mark.parametrize('index', [2**200, -(2**200), 0.0, -0.0, 1e20])
+def test_direct_exact_response_indices_precede_result_machine_width(
+    monkeypatch, index
+):
+    class Indexed(Scripted):
+        def predict(self, payload):
+            answer = super().predict(payload)
+            answer['predictions'][0]['row_index'] = index
+            return answer
+
+    def inputs():
+        return pd.DataFrame(
+            {'user_id': [1, 2, 3], 'target': [2, 4, 6]}
+        ), pd.DataFrame({'user_id': [4, 5]})
+
+    old = outcome(monkeypatch, inputs(), core=False, transport=Indexed())
+    new = outcome(monkeypatch, inputs(), core=True, transport=Indexed())
+    assert new == old
+    if index == 0:
+        assert new[1][0] == 'ok'
+    else:
+        assert new[1][2] == 'INVALID_RESPONSE'
+        assert f'row_index {int(index)}' in new[1][-1]
+        assert 'this batch asked about 2 rows' in new[1][-1]

@@ -1190,3 +1190,23 @@ fn boolean_and_numeric_halves_share_numeric_wire_categories() {
         json!([[0], [1]])
     );
 }
+
+#[test]
+fn direct_row_bounds_use_exact_decoded_digits_before_machine_width() {
+    let digits = "1606938044258990275541962092341162602522202993782792835301376";
+    for index in [digits.to_owned(), format!("-{digits}")] {
+        let scope = json!({"version":1,"model":"kumo-tabular","request_id":"response-nonce","call_request_id":"sdm-fixed","response_rows":1,"scoring_rows":2});
+        let row = json!({"ordinal":0,"row_index":index,"id":null,"key":null,"raw_in_batch":false,"prior_ordinal":null});
+        let error = prepare(
+            json!({"stage":"check_response_rows","scope":scope,"rows":[row],"decimal_limit":4300}),
+            Attachments::new(),
+        )
+        .unwrap_err();
+        assert_eq!(error.sentence, sdm_contract::Sentence::TabularRowBounds);
+        assert_eq!(error.fields["index"], sdm_contract::Detail::text(index));
+        assert_eq!(
+            error.fields["rows"],
+            sdm_contract::Detail::Scalar(Scalar::UInt64(2))
+        );
+    }
+}
