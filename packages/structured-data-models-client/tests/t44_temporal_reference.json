@@ -5618,5 +5618,111 @@
         ]
       }
     }
+  },
+  "wide_cases": {
+    "s-1600-time": {
+      "unit": "s",
+      "year": "1600",
+      "role": "time",
+      "constructor_accepted": true,
+      "accepted": false,
+      "stage": "materialize",
+      "error": {
+        "type": "StructuredDataError",
+        "code": "INVALID_REQUEST",
+        "message": "[INVALID_REQUEST] Out of bounds nanosecond timestamp: 1600-01-01 00:00:00"
+      }
+    },
+    "s-1600-feature": {
+      "unit": "s",
+      "year": "1600",
+      "role": "feature",
+      "constructor_accepted": true,
+      "accepted": false,
+      "stage": "materialize",
+      "error": {
+        "type": "StructuredDataError",
+        "code": "INVALID_REQUEST",
+        "message": "[INVALID_REQUEST] Out of bounds nanosecond timestamp: 1600-01-01 00:00:00"
+      }
+    },
+    "s-2263-time": {
+      "unit": "s",
+      "year": "2263",
+      "role": "time",
+      "constructor_accepted": true,
+      "accepted": false,
+      "stage": "materialize",
+      "error": {
+        "type": "StructuredDataError",
+        "code": "INVALID_REQUEST",
+        "message": "[INVALID_REQUEST] Out of bounds nanosecond timestamp: 2263-01-01 00:00:00"
+      }
+    },
+    "s-2263-feature": {
+      "unit": "s",
+      "year": "2263",
+      "role": "feature",
+      "constructor_accepted": true,
+      "accepted": false,
+      "stage": "materialize",
+      "error": {
+        "type": "StructuredDataError",
+        "code": "INVALID_REQUEST",
+        "message": "[INVALID_REQUEST] Out of bounds nanosecond timestamp: 2263-01-01 00:00:00"
+      }
+    },
+    "ms-1600-time": {
+      "unit": "ms",
+      "year": "1600",
+      "role": "time",
+      "constructor_accepted": true,
+      "accepted": false,
+      "stage": "materialize",
+      "error": {
+        "type": "StructuredDataError",
+        "code": "INVALID_REQUEST",
+        "message": "[INVALID_REQUEST] Out of bounds nanosecond timestamp: 1600-01-01 00:00:00"
+      }
+    },
+    "ms-1600-feature": {
+      "unit": "ms",
+      "year": "1600",
+      "role": "feature",
+      "constructor_accepted": true,
+      "accepted": false,
+      "stage": "materialize",
+      "error": {
+        "type": "StructuredDataError",
+        "code": "INVALID_REQUEST",
+        "message": "[INVALID_REQUEST] Out of bounds nanosecond timestamp: 1600-01-01 00:00:00"
+      }
+    },
+    "ms-2263-time": {
+      "unit": "ms",
+      "year": "2263",
+      "role": "time",
+      "constructor_accepted": true,
+      "accepted": false,
+      "stage": "materialize",
+      "error": {
+        "type": "StructuredDataError",
+        "code": "INVALID_REQUEST",
+        "message": "[INVALID_REQUEST] Out of bounds nanosecond timestamp: 2263-01-01 00:00:00"
+      }
+    },
+    "ms-2263-feature": {
+      "unit": "ms",
+      "year": "2263",
+      "role": "feature",
+      "constructor_accepted": true,
+      "accepted": false,
+      "stage": "materialize",
+      "error": {
+        "type": "StructuredDataError",
+        "code": "INVALID_REQUEST",
+        "message": "[INVALID_REQUEST] Out of bounds nanosecond timestamp: 2263-01-01 00:00:00"
+      }
+    }
   }
 }
