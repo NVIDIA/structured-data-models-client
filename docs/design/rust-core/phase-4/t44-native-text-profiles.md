@@ -76,14 +76,17 @@ An unknown-signature public policy is not established here, and no new refusal o
 
 ## Useful stages and retained state
 
-The actual identifying-key proof refines the initial nonkey-Text cut into six useful artifacts:
+The actual identifying-key proof refines the initial nonkey-Text cut into seven useful artifacts:
 
 1. Graph snapshot preparation constructs or rebinds the immutable graph and emits graph-drop notices.
 2. Labeled task preparation produces actual typed entity/anchor/target context rows before the reached native prediction-entity Series constructor.
+   The host snapshots list(indices) after the graph notice and before label sampling, retaining the native values rather than reconstructing them from Arrow.
 3. Completed task preparation consumes that genuine native constructor's values and produces task rows, narrowing and batch meaning before HOPS notices.
 4. Resolved sampling/request preparation consumes the late config/neighbor observations and applies the existing request-option policy before the reached native reference cast.
-5. Sampled-context preparation consumes the actual native reference values, validates references before neighbor conversion/draws, and returns selected raw typed tables, links and row maps.
-6. Payload preparation consumes the useful context and reached Text kernel facts, performs Rust normalization and reuses the existing request encoder.
+5. Whole-task reference preparation consumes the actual native reference values and validates every context and prediction reference before any neighbor seed reset or draw.
+   It returns concrete ordered node references bound to the complete task and graph.
+6. Sampled-context preparation consumes each batch's later native reference-cast values before seed reset, then returns selected raw typed tables, links and row maps through the existing sampler.
+7. Payload preparation consumes the useful context and reached Text kernel facts, performs Rust normalization and reuses the existing request encoder.
 
 Each is a fixed operation that returns a useful domain artifact through Done.
 There is no new Step, provider Fetch for native behavior, opaque suspended program or normalized host column.
@@ -105,9 +108,17 @@ The frozen retry proves the successfully built graph survives that failure and l
 The key receipts prove that a shared provider string cast is insufficient for native identifying keys.
 StringDtype storage Python and PyArrow preserve supplied floats as '7.0' and booleans as 'True', while exact Arrow UTF8 produces '7' and 'true'.
 The native Series owner must survive until its actual later conversion, rather than be reconstructed from Arrow and silently erase surviving object identity.
-The later reference cast is after HOPS and inference-config construction.
+The complete-task reference cast is after HOPS and inference-config construction.
+The actual get_node_id path also casts the retained native Series separately for each batch before its neighbor seed reset.
+These distinct reads cannot be replaced by one inferred conversion or an early conversion of the caller's values.
 Pandas2 resolves supplied None against a literal '<NA>' graph key and produces a full successful prediction; pandas3 preserves missingness and reports an unresolved reference.
 The consumer must retain that genuine native conversion between useful domain artifacts instead of inferring a blanket null policy.
+
+The complete-task regression receipts also demonstrate a preexisting frame neighbor-state defect.
+The frozen public journey rejects a later unknown prediction entity before sampling any batch, so a subsequent unseeded valid call has the same complete bodies and stream as a fresh control.
+The accepted categorical runtime instead sampled the first batch before rejecting the later entity, advancing the continuing stream.
+The new shared whole-task resolver validates every reference before the first batch and is covered by tests that pin both errors and the subsequent valid bodies and checkpoints.
+Its authoring does not yet establish execution or acceptance of this follow-up topic.
 
 Text identifying keys, exact native Arrow LargeUTF8 behavior, and the other unfinished frame families remain required Phase 4 work.
 Their native conversion and failure-order obligations are not inferred from the casing kernel or these nonkey Text receipts.
