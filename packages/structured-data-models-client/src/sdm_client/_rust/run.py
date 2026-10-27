@@ -355,6 +355,7 @@ def _steps(
                     failed.control,
                     failed.attachments,
                     driver_class=driver_class,
+                    internal_context=failed,
                 )
                 _answered(handle, failed, error)
             if error is not None:

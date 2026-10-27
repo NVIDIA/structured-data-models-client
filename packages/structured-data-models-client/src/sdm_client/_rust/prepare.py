@@ -74,16 +74,8 @@ def _prepared_run(
     except StructuredDataError as error:
         # The core selected this closed native exception or development
         # boundary. This mapping presents it; it performs no validation.
-        kind = {
-            'direct_lookup': TypeError,
-            'direct_ambiguous': ValueError,
-            'direct_predict_dtype': AttributeError,
-            'direct_nullable_cast': pd.errors.IntCastingNaNError,
-            'direct_schema_missing': KeyError,
-            'direct_unfinished': RouteError,
-        }.get(error._sentence)
-        if kind is not None:
-            raise kind(error.message) from None
+        if error._sentence == 'direct_unfinished':
+            raise RouteError(error.message) from None
         raise
     return finished
 
@@ -142,13 +134,7 @@ def _native_value_call(
         selected = native_error
     # The original native exception survives the plain-data decision.
     assert selected is not None  # Core selected the preserved native failure.
-    original_context = selected.__context__
-    try:
-        raise selected
-    finally:
-        # Raising again inside an active caller handler can overwrite this
-        # native context. Keep the actual conversion graph, cause and flags.
-        selected.__context__ = original_context
+    errors.raise_native(selected)
 
 
 def _native_literal(text: str) -> tuple[Any, Exception | None]:
@@ -273,12 +259,20 @@ def _response(finished: Finished) -> Finished:
     )
 
 
-def _lookup(index: pd.Index, value: Any) -> dict[str, Any]:
+def _lookup(
+    index: pd.Index,
+    value: Any,
+    failures: dict[tuple[str, int | None], Exception] | None = None,
+    source: str = '',
+    ordinal: int | None = None,
+) -> dict[str, Any]:
     # Membership/get_loc is a native Index observation, not target/schema
     # validation. Capture its fault without raising it before an earlier guard.
     try:
         found = value in index
-    except TypeError:
+    except TypeError as error:
+        if failures is not None:
+            failures[source, ordinal] = error
         return {'positions': [], 'unhashable': type(value).__name__}
     if not found:
         return {'positions': []}
@@ -386,9 +380,30 @@ def construct(
             'the partial direct request requires ordinary related-table mappings'
         )
     related = dict(related_tables or {})
+    native_lookups: dict[tuple[str, int | None], Exception] = {}
+
+    def lookup_fault(fields: Any) -> None:
+        errors.raise_native(
+            native_lookups[fields['lookup'], fields.get('ordinal')]
+        )
+
+    def ambiguous_fault(fields: Any) -> None:
+        values = context[target]
+        # Only the native truth conversion of the already selected guard.
+        if fields['source'] == 'known_target':
+            bool(values.notna().sum() == 0)
+        else:
+            bool(values.dropna().nunique() >= 2)
+
     with ExitStack() as holding:
         holding.enter_context(
             errors.holding(
+                direct_lookup=lookup_fault,
+                direct_ambiguous=ambiguous_fault,
+                direct_predict_dtype=lambda fields: (
+                    predict[predict.columns[fields['ordinal']]].dtype
+                ),
+                direct_schema_missing=lambda fields: context[fields['name']],
                 direct_task=lambda fields: task,
                 direct_frame_name=lambda fields: (
                     fields['name']
@@ -444,8 +459,12 @@ def construct(
                 'arguments': arguments,
                 'context': context_header,
                 'predict': predict_header,
-                'target_context': _lookup(context.columns, target),
-                'target_predict': _lookup(predict.columns, target),
+                'target_context': _lookup(
+                    context.columns, target, native_lookups, 'target_context'
+                ),
+                'target_predict': _lookup(
+                    predict.columns, target, native_lookups, 'target_predict'
+                ),
                 'predict_context': [
                     _lookup(context.columns, column)['positions']
                     for column in predict.columns
@@ -516,10 +535,18 @@ def construct(
                 'predict': 3,
                 'context_header': context_header,
                 'predict_header': predict_header,
-                'target_context': _lookup(context.columns, target),
+                'target_context': _lookup(
+                    context.columns, target, native_lookups, 'target_context'
+                ),
                 'context_predict': [
-                    _lookup(predict.columns, column)
-                    for column in context.columns
+                    _lookup(
+                        predict.columns,
+                        column,
+                        native_lookups,
+                        'context_predict',
+                        at,
+                    )
+                    for at, column in enumerate(context.columns)
                 ],
             },
             {
@@ -600,17 +627,6 @@ def _json(value: Any) -> Any:
             )
         entries.append((key, encoded))
     return {'entries': entries}
-
-
-def _cast_message(scored: pd.DataFrame, fields: Any) -> str:
-    """Present the native wording of the cast fault already selected by Rust."""
-    try:
-        scored.iloc[:, fields['ordinal']].dropna().astype('int64')
-    except pd.errors.IntCastingNaNError as error:
-        return str(error)
-    raise RouteError(
-        'the selected native cast fault no longer matches its captured column'
-    )
 
 
 def predict(
@@ -731,7 +747,9 @@ def predict(
         scored = request.predict.instance_table
         context_header, predict_header = _header(context), _header(scored)
         with errors.holding(
-            direct_nullable_cast=lambda fields: _cast_message(scored, fields)
+            direct_nullable_cast=lambda fields: (
+                scored.iloc[:, fields['ordinal']].dropna().astype('int64')
+            )
         ):
             envelope = _call(
                 {
@@ -806,7 +824,7 @@ def predict(
             else {'entries': []},
         }
     else:
-        request_id = _request_id()
+        request_id = ''
     operation = {
         'op': 'predict',
         'direct': 1,

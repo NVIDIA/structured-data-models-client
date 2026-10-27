@@ -77,10 +77,21 @@ fn lookup_bounds(read: &NativeLookup, count: usize) -> Result<(), CoreError> {
     }
     Ok(())
 }
-fn lookup(read: &NativeLookup, count: usize) -> Result<(), CoreError> {
+fn lookup(
+    read: &NativeLookup,
+    count: usize,
+    source: &'static str,
+    ordinal: Option<usize>,
+) -> Result<(), CoreError> {
     lookup_bounds(read, count)?;
     if let Some(kind) = &read.unhashable {
-        return Err(error(Sentence::DirectLookup).with_field("native_type", Detail::text(kind)));
+        let mut fault = error(Sentence::DirectLookup)
+            .with_field("native_type", Detail::text(kind))
+            .with_field("lookup", Detail::text(source));
+        if let Some(ordinal) = ordinal {
+            fault = fault.with_field("ordinal", Detail::Scalar(Scalar::UInt64(ordinal as u64)));
+        }
+        return Err(fault);
     }
     Ok(())
 }
@@ -340,19 +351,19 @@ pub(crate) async fn run(
             version(arguments.version, DIRECT_PREPARED_VERSION)?;
             header_shape(&context)?;
             header_shape(&predict)?;
-            lookup(&target_context, context.columns.len())?;
+            lookup(&target_context, context.columns.len(), "target_context", None)?;
             if context.rows == 0 {
                 return Err(error(Sentence::DirectEmpty));
             }
             if target_context.positions.is_empty() {
                 return Err(error(Sentence::DirectTargetMissing));
             }
-            lookup(&target_predict, predict.columns.len())?;
+            lookup(&target_predict, predict.columns.len(), "target_predict", None)?;
             if !target_predict.positions.is_empty() {
                 return Err(error(Sentence::DirectTargetScored));
             }
             if target_context.positions.len() > 1 {
-                return Err(error(Sentence::DirectAmbiguous));
+                return Err(error(Sentence::DirectAmbiguous).with_field("source", Detail::text("known_target")));
             }
             if predict_context.len() != predict.columns.len()
                 || predict_context
@@ -504,7 +515,7 @@ pub(crate) async fn run(
                             .count()
                             > 1
                         {
-                            return Err(error(Sentence::DirectPredictDtype));
+                            return Err(error(Sentence::DirectPredictDtype).with_field("ordinal", Detail::Scalar(Scalar::UInt64(at as u64))));
                         }
                         if !crate::edit::supports(stated.stype, dtype) {
                             return Err(error(Sentence::DirectScored)
@@ -524,7 +535,7 @@ pub(crate) async fn run(
             })?;
             let mut missing = Vec::new();
             for (at, (column, found)) in context_header.columns.iter().zip(&context_predict).enumerate() {
-                lookup(found, predict_header.columns.len())?;
+                lookup(found, predict_header.columns.len(), "context_predict", Some(at))?;
                 let identity = matches!(&column.name, HeaderName::Text { value } if table.primary_key.contains(value));
                 if !target_context.positions.contains(&at) && !identity && found.positions.is_empty() {
                     missing.push(at);
@@ -535,7 +546,7 @@ pub(crate) async fn run(
                     .with_field("half", Detail::text("context"))
                     .with_field("positions", positions(missing)));
             }
-            lookup(&target_context, context_header.columns.len())?;
+            lookup(&target_context, context_header.columns.len(), "target_context", None)?;
             if target_context.positions.is_empty() {
                 return Err(error(Sentence::DirectSchemaMissing).with_field("name", Detail::text(&target)));
             }
@@ -544,7 +555,7 @@ pub(crate) async fn run(
                 // any missing target. A remaining row reaches Series truth;
                 // an empty result returns before that comparison.
                 if context.batches.iter().any(|batch|(0..batch.num_rows()).any(|row|target_context.positions.iter().all(|&at|batch.column(at).is_valid(row)))) {
-                    return Err(error(Sentence::DirectAmbiguous));
+                    return Err(error(Sentence::DirectAmbiguous).with_field("source", Detail::text("target_variation")));
                 }
                 false
             } else {
