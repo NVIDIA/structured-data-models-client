@@ -6,9 +6,10 @@
 //! Binary buffers mean text only under an explicit closed data descriptor.
 //! Ordinary provider binary admission and key casting remain unchanged.
 
-use arrow_array::{Array, BinaryArray, LargeBinaryArray, LargeStringArray, StringArray};
+use arrow_array::{Array, ArrayRef, BinaryArray, LargeBinaryArray, LargeStringArray, StringArray};
 use sdm_contract::data::strings::StringEncoding;
 use sdm_contract::scalar::unicode::{UnicodeError, UnicodeSlice};
+use std::sync::Arc;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StringDataError {
@@ -102,6 +103,49 @@ impl<'a> StringColumn<'a> {
             Values::LargeSurrogatepass(values) => native!(values),
         }
     }
+}
+
+/// Encode one logical native text column without replacing codepoints.
+/// Ordinary text keeps Arrow UTF8; exceptional text has an explicit encoding
+/// that must travel with its independently useful column value.
+pub fn encode(values: &[sdm_contract::scalar::unicode::UnicodeText]) -> (ArrayRef, StringEncoding) {
+    if values.iter().all(|value| value.utf8().is_some()) {
+        (
+            Arc::new(StringArray::from_iter_values(
+                values
+                    .iter()
+                    .map(|value| value.utf8().expect("ordinary text established")),
+            )),
+            StringEncoding::Utf8,
+        )
+    } else {
+        (
+            Arc::new(BinaryArray::from_iter_values(
+                values.iter().map(|value| value.as_bytes()),
+            )),
+            StringEncoding::Utf8Surrogatepass,
+        )
+    }
+}
+
+/// Copy a selected logical value only where the caller needs owned task data.
+pub fn owned(
+    array: &ArrayRef,
+    encoding: StringEncoding,
+) -> Result<Vec<Option<sdm_contract::scalar::unicode::UnicodeText>>, StringDataError> {
+    let values = StringColumn::new(array.as_ref(), encoding)?;
+    (0..values.len())
+        .map(|row| {
+            values.get(row).map(|value| {
+                value.map(|value| {
+                    sdm_contract::scalar::unicode::UnicodeText::from_utf8_surrogatepass(
+                        value.as_bytes().to_vec(),
+                    )
+                    .expect("validated native text")
+                })
+            })
+        })
+        .collect()
 }
 
 #[cfg(test)]

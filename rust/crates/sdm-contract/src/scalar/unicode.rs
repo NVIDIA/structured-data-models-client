@@ -122,12 +122,16 @@ impl UnicodeText {
         &self.bytes
     }
 
-    pub fn is_empty(&self) -> bool { self.bytes.is_empty() }
+    pub fn is_empty(&self) -> bool {
+        self.bytes.is_empty()
+    }
 
     /// Move an ordinary UTF-8 value into String without another allocation.
     /// An exceptional value remains the same exact native text on failure.
     pub fn into_utf8(self) -> Result<String, Self> {
-        String::from_utf8(self.bytes).map_err(|error| Self { bytes: error.into_bytes() })
+        String::from_utf8(self.bytes).map_err(|error| Self {
+            bytes: error.into_bytes(),
+        })
     }
 
     /// An ordinary string view only where no surrogate codepoint occurs.
@@ -157,6 +161,22 @@ impl From<String> for UnicodeText {
         Self {
             bytes: text.into_bytes(),
         }
+    }
+}
+
+impl PartialEq<str> for UnicodeText {
+    fn eq(&self, text: &str) -> bool {
+        self.bytes == text.as_bytes()
+    }
+}
+impl PartialEq<&str> for UnicodeText {
+    fn eq(&self, text: &&str) -> bool {
+        self.bytes == text.as_bytes()
+    }
+}
+impl PartialEq<String> for UnicodeText {
+    fn eq(&self, text: &String) -> bool {
+        self.bytes == text.as_bytes()
     }
 }
 

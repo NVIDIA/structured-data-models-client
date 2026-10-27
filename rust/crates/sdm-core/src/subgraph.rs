@@ -914,7 +914,9 @@ fn first_of_each_key(
 }
 
 /// A text feature's values as the reference's words.
-fn words(array: &ArrayRef) -> Result<Vec<Vec<String>>, CoreError> {
+fn words(
+    array: &ArrayRef,
+) -> Result<Vec<Vec<sdm_contract::scalar::unicode::UnicodeText>>, CoreError> {
     if array.data_type() != &arrow_schema::DataType::Utf8 {
         // The schema's consistency check holds a text feature to text.
         return Err(internal("a text feature's values are not text"));
@@ -927,7 +929,7 @@ fn words(array: &ArrayRef) -> Result<Vec<Vec<String>>, CoreError> {
 pub(crate) fn frame_words(
     array: &ArrayRef,
     profile: sdm_engine::words::CasingProfile,
-) -> Result<Vec<Vec<String>>, CoreError> {
+) -> Result<Vec<Vec<sdm_contract::scalar::unicode::UnicodeText>>, CoreError> {
     words_with(array, |value| {
         sdm_engine::words::normalize_with_profile(value, profile)
     })
@@ -936,16 +938,20 @@ pub(crate) fn frame_words(
 fn words_with(
     array: &ArrayRef,
     normalize: impl Fn(Option<&str>) -> Vec<String>,
-) -> Result<Vec<Vec<String>>, CoreError> {
+) -> Result<Vec<Vec<sdm_contract::scalar::unicode::UnicodeText>>, CoreError> {
     use arrow_array::cast::AsArray;
 
     match array.data_type() {
-        arrow_schema::DataType::Utf8 => {
-            Ok(array.as_string::<i32>().iter().map(normalize).collect())
-        }
-        arrow_schema::DataType::LargeUtf8 => {
-            Ok(array.as_string::<i64>().iter().map(normalize).collect())
-        }
+        arrow_schema::DataType::Utf8 => Ok(array
+            .as_string::<i32>()
+            .iter()
+            .map(|value| normalize(value).into_iter().map(Into::into).collect())
+            .collect()),
+        arrow_schema::DataType::LargeUtf8 => Ok(array
+            .as_string::<i64>()
+            .iter()
+            .map(|value| normalize(value).into_iter().map(Into::into).collect())
+            .collect()),
         _ => Err(internal("a text feature's values are not text")),
     }
 }

@@ -293,7 +293,7 @@ fn kind_of(payload: &Value) -> Result<&str, CoreError> {
         return Err(bad_payload("not_an_object"));
     };
     match payload.get("task").and_then(|task| task.get("kind")) {
-        Some(Value::Text(kind)) => Ok(kind),
+        Some(Value::Text(kind)) => kind.utf8().ok_or_else(|| bad_payload("task")),
         _ => Err(bad_payload("task")),
     }
 }
@@ -664,7 +664,7 @@ fn member(value: &Value) -> String {
             Ok(n) => format!("n{:016x}", (n + 0.0).to_bits()),
             Err(_) => format!("t{token}"),
         },
-        Value::Text(text) => format!("s{text}"),
+        Value::Text(text) => format!("s{:?}", text.as_bytes()),
         Value::Bool(b) => format!("b{b}"),
         Value::Null => "z".to_owned(),
         other => format!("j{}", String::from_utf8_lossy(&other.to_bytes())),
@@ -813,18 +813,17 @@ pub fn preflight(
 /// other than `fast` on any payload that names one, else more context rows
 /// than the fast mode takes (`_asks_for_the_larger_context`).
 fn asks_for_the_larger_context(payloads: &[Value]) -> bool {
-    let modes: Vec<String> = payloads
+    let modes: Vec<&Value> = payloads
         .iter()
-        .filter_map(
-            |p| match p.get("inference").and_then(|i| i.get("run_mode")) {
-                None | Some(Value::Null) => None,
-                Some(Value::Text(mode)) => Some(mode.clone()),
-                Some(other) => Some(String::from_utf8_lossy(&other.to_bytes()).into_owned()),
-            },
-        )
+        .filter_map(|payload| {
+            payload
+                .get("inference")
+                .and_then(|inference| inference.get("run_mode"))
+        })
+        .filter(|value| !matches!(value, Value::Null))
         .collect();
     if !modes.is_empty() {
-        return modes.iter().any(|m| m != "fast");
+        return modes.iter().any(|mode| mode.as_text() != Some("fast"));
     }
     payloads
         .iter()
@@ -1224,7 +1223,7 @@ fn as_bool(value: &Value) -> Option<bool> {
     match value {
         Value::Bool(b) => Some(*b),
         Value::Text(text) => {
-            let text = text.trim().to_lowercase();
+            let text = text.utf8()?.trim().to_lowercase();
             if TRUE.contains(&text.as_str()) {
                 Some(true)
             } else if FALSE.contains(&text.as_str()) {
@@ -1249,7 +1248,7 @@ fn direct_bool_class(value: &Value) -> Option<bool> {
     let Value::Text(text) = value else {
         return as_bool(value);
     };
-    let text = text.trim_matches(sdm_engine::words::space);
+    let text = text.utf8()?.trim_matches(sdm_engine::words::space);
     if TRUE.iter().any(|token| text.eq_ignore_ascii_case(token)) {
         Some(true)
     } else if FALSE.iter().any(|token| text.eq_ignore_ascii_case(token)) {
@@ -1263,7 +1262,7 @@ fn direct_bool_class(value: &Value) -> Option<bool> {
 /// of an integer (trimmed), an integer, or a float that is whole.
 fn as_int(value: &Value) -> Option<i64> {
     match value {
-        Value::Text(text) => text.trim().parse::<i64>().ok(),
+        Value::Text(text) => text.utf8()?.trim().parse::<i64>().ok(),
         Value::Number(token) if is_integer_token(token) => token.parse::<i64>().ok(),
         Value::Number(token) => {
             let float: f64 = token.parse().ok()?;
@@ -1279,7 +1278,7 @@ fn as_int(value: &Value) -> Option<i64> {
 /// text first observes its reached native process limit before zero stripping.
 fn direct_integer_class(value: &Value, decimal_limit: u32) -> Option<String> {
     if let Value::Text(text) = value {
-        return integer_text_limited(text, decimal_limit);
+        return integer_text_limited(text.utf8()?, decimal_limit);
     }
     match entity(value, Some("int64")) {
         Entity::Integer(value) => Some(value.to_string()),
@@ -1293,7 +1292,7 @@ fn direct_integer_class(value: &Value, decimal_limit: u32) -> Option<String> {
 /// an integer past a double's range not one.
 fn as_float(value: &Value) -> Option<f64> {
     match value {
-        Value::Text(text) => text.trim().parse::<f64>().ok(),
+        Value::Text(text) => text.utf8()?.trim().parse::<f64>().ok(),
         Value::Number(token) => token
             .parse::<f64>()
             .ok()
@@ -1306,7 +1305,7 @@ fn as_float(value: &Value) -> Option<f64> {
 /// the established conversion; gathered text retains its approved Rust parser.
 fn direct_float_class(value: &Value) -> Option<f64> {
     match value {
-        Value::Text(text) => numeric_text(text),
+        Value::Text(text) => text.utf8().and_then(numeric_text),
         _ => as_float(value),
     }
 }
@@ -1377,7 +1376,9 @@ fn answer_of(
             None => as_int(value).map_or_else(|| written(value), Answer::Int),
         }),
         AnswerType::Text => Ok(match value {
-            Value::Text(text) => Answer::Text(text.clone()),
+            Value::Text(text) => text
+                .utf8()
+                .map_or_else(|| written(value), |text| Answer::Text(text.to_owned())),
             other => written(other),
         }),
     }
@@ -2325,7 +2326,8 @@ fn as_written_column(rows: &[&Row]) -> Option<(DataType, ArrayRef)> {
             DataType::Utf8,
             Arc::new(StringArray::from_iter(rows.iter().map(
                 |r| match &r.prediction {
-                    Answer::Text(t) | Answer::Written(Value::Text(t)) => Some(t.clone()),
+                    Answer::Text(t) => Some(t.clone()),
+                    Answer::Written(Value::Text(t)) => t.utf8().map(str::to_owned),
                     _ => None,
                 },
             ))),
@@ -2437,7 +2439,10 @@ pub(crate) fn entity(value: &Value, dtype: Option<&str>) -> Entity {
         }
         (_, Value::Bool(_)) => None,
         (Some(d), _) if d.starts_with("int") => match value {
-            Value::Text(text) => integer_text(text).map(|digits| integer(&digits)),
+            Value::Text(text) => text
+                .utf8()
+                .and_then(integer_text)
+                .map(|digits| integer(&digits)),
             Value::Number(token) if is_integer_token(token) => Some(integer(token)),
             Value::Number(token) => token
                 .parse::<f64>()
@@ -2447,7 +2452,7 @@ pub(crate) fn entity(value: &Value, dtype: Option<&str>) -> Entity {
             _ => None,
         },
         (Some(d), _) if d.starts_with("float") => match value {
-            Value::Text(text) => numeric_text(text).map(Entity::Float),
+            Value::Text(text) => text.utf8().and_then(numeric_text).map(Entity::Float),
             Value::Number(token) => token
                 .parse::<f64>()
                 .ok()
@@ -2459,7 +2464,10 @@ pub(crate) fn entity(value: &Value, dtype: Option<&str>) -> Entity {
     };
     read.unwrap_or_else(|| match value {
         Value::Null => Entity::None,
-        Value::Text(text) => Entity::Text(text.clone()),
+        Value::Text(text) => text.utf8().map_or_else(
+            || Entity::Written(value.clone()),
+            |text| Entity::Text(text.to_owned()),
+        ),
         Value::Number(token) if is_integer_token(token) => integer(token),
         other => Entity::Written(other.clone()),
     })
@@ -2480,7 +2488,7 @@ fn integer(digits: &str) -> Entity {
 /// object, which no id an answer names matches.
 fn instance_text(value: &Value, float_text: fn(f64) -> String) -> Option<String> {
     Some(match value {
-        Value::Text(text) => text.clone(),
+        Value::Text(text) => text.utf8()?.to_owned(),
         Value::Null => "None".to_owned(),
         Value::Bool(true) => "True".to_owned(),
         Value::Bool(false) => "False".to_owned(),

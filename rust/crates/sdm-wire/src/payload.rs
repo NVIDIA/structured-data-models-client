@@ -32,6 +32,7 @@
 
 use schemars::JsonSchema;
 use sdm_contract::ops::Stype;
+use sdm_contract::scalar::unicode::UnicodeText;
 use serde::Serialize;
 use serde::ser::SerializeMap;
 
@@ -126,7 +127,9 @@ pub struct Target {
 pub struct ClassTarget {
     pub column_name: String,
     pub dtype: Dtype,
-    pub classes: Vec<String>,
+    #[serde(serialize_with = "crate::json::serialize_texts")]
+    #[schemars(with = "Vec<String>")]
+    pub classes: Vec<UnicodeText>,
     /// A binary task's positive class; a multiclass task names none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(with = "String")]

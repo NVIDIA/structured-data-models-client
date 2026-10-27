@@ -795,7 +795,7 @@ fn constant(literal: &PqlLiteral) -> Result<Option<labels::Constant>, CoreError>
             Constant::Float(text.parse().map_err(|_| not_yet("condition_value"))?)
         }
         PqlLiteral::Bool { value } => Constant::Bool(*value),
-        PqlLiteral::String { value } => Constant::Text(value.clone()),
+        PqlLiteral::String { value } => Constant::Text(value.clone().into()),
         PqlLiteral::Time { value, offset, .. } => Constant::Time(time_constant(value, *offset)?),
         PqlLiteral::Array { .. } => return Err(unvalidated("a list compared with one value")),
     }))
@@ -1447,7 +1447,17 @@ fn unsigned(array: &ArrayRef) -> Result<Vec<Option<i64>>, CoreError> {
 /// read as a target by `labels::label` and `labels::label_classes`,
 /// T2.0c); a time or any other type is refused by name (`target_type`):
 /// the reference's task table takes none of them.
-fn static_column(array: &ArrayRef, rows: &[usize]) -> Result<labels::Column, CoreError> {
+fn static_column(
+    array: &ArrayRef,
+    rows: &[usize],
+    encoding: Option<sdm_contract::data::strings::StringEncoding>,
+) -> Result<labels::Column, CoreError> {
+    if let Some(encoding) = encoding {
+        return Ok(labels::Column::Text(
+            sdm_engine::strings::owned(&take(array, rows)?, encoding)
+                .map_err(|_| internal("native target text does not match its explicit encoding"))?,
+        ));
+    }
     use labels::Column;
     let taken = take(array, rows)?;
     let array = &taken;
@@ -1489,21 +1499,21 @@ fn static_column(array: &ArrayRef, rows: &[usize]) -> Result<labels::Column, Cor
             array
                 .as_string::<i32>()
                 .iter()
-                .map(|v| v.map(str::to_owned))
+                .map(|v| v.map(Into::into))
                 .collect(),
         ),
         DataType::LargeUtf8 => Column::Text(
             array
                 .as_string::<i64>()
                 .iter()
-                .map(|v| v.map(str::to_owned))
+                .map(|v| v.map(Into::into))
                 .collect(),
         ),
         DataType::Utf8View => Column::Text(
             array
                 .as_string_view()
                 .iter()
-                .map(|v| v.map(str::to_owned))
+                .map(|v| v.map(Into::into))
                 .collect(),
         ),
         _ => return Err(not_yet("target_type")),
@@ -1516,7 +1526,11 @@ fn static_column(array: &ArrayRef, rows: &[usize]) -> Result<labels::Column, Cor
 /// made a zone-less timestamp ([`Times::read`]), in nanoseconds; and an
 /// unsigned 64-bit column whole, past int64 too, which a condition
 /// compares without the target's signed reading (T2.10 fix 2).
-fn condition_column(array: &ArrayRef, rows: &[usize]) -> Result<labels::Column, CoreError> {
+fn condition_column(
+    array: &ArrayRef,
+    rows: &[usize],
+    encoding: Option<sdm_contract::data::strings::StringEncoding>,
+) -> Result<labels::Column, CoreError> {
     match array.data_type() {
         DataType::Timestamp(_, None) => {
             let all = times_ns(array, "")?;
@@ -1528,7 +1542,7 @@ fn condition_column(array: &ArrayRef, rows: &[usize]) -> Result<labels::Column, 
                 .iter()
                 .collect(),
         )),
-        _ => static_column(array, rows),
+        _ => static_column(array, rows, encoding),
     }
 }
 
@@ -4443,11 +4457,13 @@ struct Labelling<'a> {
     /// Each kept entity's key, which the examples index.
     entity_key: &'a ArrayRef,
     examples: &'a sample::Examples,
+    strings: BTreeMap<String, sdm_contract::data::strings::StringEncoding>,
 }
 
 /// One aggregated table's rows read for the examples: the rows, the
 /// example each is for, and its time.
 struct Fetched {
+    strings: BTreeMap<String, sdm_contract::data::strings::StringEncoding>,
     rows: RecordBatch,
     batch: Vec<usize>,
     times: Vec<Option<i64>>,
@@ -4493,9 +4509,9 @@ impl Labelling<'_> {
                     warn_float32_overflow(self.asker);
                 }
                 labels::Target::Column(if whole {
-                    static_column(array, self.entity_rows)?
+                    static_column(array, self.entity_rows, self.strings.get(column).copied())?
                 } else {
-                    condition_column(array, self.entity_rows)?
+                    condition_column(array, self.entity_rows, self.strings.get(column).copied())?
                 })
             }
             Shape::Aggregated(windowed) => aggregate_target(
@@ -4629,6 +4645,7 @@ async fn fetch_rows(
         )?,
     )?;
     Ok(Fetched {
+        strings: BTreeMap::new(),
         batch: batches(&rows, examples)?,
         times: times_ns(named(&rows, &time_column)?, &time_column)?,
         rows,
@@ -4655,7 +4672,9 @@ fn aggregate_target(
     let starts = shifted(anchors, windowed.start, field)?;
     let kept = match &windowed.filter {
         None => None,
-        Some(filter) => Some(labels::truth(&row_condition(filter, &fetched.rows)?)?.values),
+        Some(filter) => {
+            Some(labels::truth(&row_condition(filter, &fetched.rows, &fetched.strings)?)?.values)
+        }
     };
     let bounds = labels::Bounds {
         starts: Some(&starts),
@@ -4668,7 +4687,7 @@ fn aggregate_target(
             .ok_or_else(|| unvalidated("a list target with no column"))?;
         let array = named(&fetched.rows, name)?;
         let rows: Vec<usize> = (0..array.len()).collect();
-        let values = static_column(array, &rows)?;
+        let values = static_column(array, &rows, fetched.strings.get(name).copied())?;
         return labels::distinct(
             examples,
             &fetched.batch,
@@ -4715,18 +4734,24 @@ fn tested(target: labels::Target, test: &Test) -> labels::Target {
 }
 
 /// A filter, over every row read of the table it filters.
-fn row_condition(filter: &Shape, rows: &RecordBatch) -> Result<labels::Target, CoreError> {
+fn row_condition(
+    filter: &Shape,
+    rows: &RecordBatch,
+    strings: &BTreeMap<String, sdm_contract::data::strings::StringEncoding>,
+) -> Result<labels::Target, CoreError> {
     let every: Vec<usize> = (0..rows.num_rows()).collect();
     Ok(match filter {
-        Shape::Column(column) => {
-            labels::Target::Column(condition_column(named(rows, column)?, &every)?)
-        }
-        Shape::Condition { target, test } => tested(row_condition(target, rows)?, test),
-        Shape::Not(inner) => labels::Target::Not(Box::new(row_condition(inner, rows)?)),
+        Shape::Column(column) => labels::Target::Column(condition_column(
+            named(rows, column)?,
+            &every,
+            strings.get(column).copied(),
+        )?),
+        Shape::Condition { target, test } => tested(row_condition(target, rows, strings)?, test),
+        Shape::Not(inner) => labels::Target::Not(Box::new(row_condition(inner, rows, strings)?)),
         Shape::Both { op, left, right } => labels::Target::Both {
             op: *op,
-            left: Box::new(row_condition(left, rows)?),
-            right: Box::new(row_condition(right, rows)?),
+            left: Box::new(row_condition(left, rows, strings)?),
+            right: Box::new(row_condition(right, rows, strings)?),
         },
         Shape::Aggregated(_) => return Err(unvalidated("an aggregation in a filter")),
     })
@@ -4888,7 +4913,7 @@ mod tests {
             test: Test::Compare(op, constant),
         };
         let kept = |shape: &Shape| {
-            labels::truth(&row_condition(shape, &rows).unwrap())
+            labels::truth(&row_condition(shape, &rows, &BTreeMap::new()).unwrap())
                 .unwrap()
                 .values
         };

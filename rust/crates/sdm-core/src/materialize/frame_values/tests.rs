@@ -48,7 +48,7 @@ fn labelled_link_rows_preserve_typed_order_duplicates_and_decimal_scale() {
         let labels = Labels::Lists(values);
         let keys: ArrayRef = Arc::new(Int64Array::from(vec![1, 2]));
         let rows = labelled_rows(&keys, &[10, 20], &labels).unwrap();
-        let decoded = read_labels(&rows).unwrap();
+        let decoded = read_labels(&rows, label_encoding(&labels)).unwrap();
         assert_eq!(decoded.labels, labels);
         assert_eq!(decoded.anchors, [10, 20]);
     }
@@ -204,5 +204,32 @@ fn encoded_part_identity_binds_its_plan_context_range_summary_and_wire_bytes() {
         .unwrap(),
     ] {
         assert_ne!(original, changed);
+    }
+}
+
+#[test]
+fn labelled_native_strings_bind_exact_target_encoding_and_keep_units_distinct() {
+    use arrow_array::{ArrayRef, Int64Array};
+    use sdm_contract::data::strings::StringEncoding;
+    use sdm_contract::scalar::unicode::UnicodeText;
+    use sdm_engine::labels::{Labels, LinkValue};
+    let pair = UnicodeText::from_points([0xd83d, 0xde3a]).unwrap();
+    let scalar = UnicodeText::from("😺");
+    let lone = UnicodeText::from_points([0xd800]).unwrap();
+    let keys: ArrayRef = Arc::new(Int64Array::from(vec![1, 2, 3]));
+    for labels in [
+        Labels::Text(vec![pair.clone(), scalar.clone(), lone.clone()]),
+        Labels::Lists(vec![
+            vec![LinkValue::Text(pair.clone())],
+            vec![LinkValue::Text(scalar.clone())],
+            vec![LinkValue::Text(lone.clone())],
+        ]),
+    ] {
+        let encoding = label_encoding(&labels);
+        assert_eq!(encoding, Some(StringEncoding::Utf8Surrogatepass));
+        let rows = labelled_rows(&keys, &[10, 20, 30], &labels).unwrap();
+        assert_eq!(read_labels(&rows, encoding).unwrap().labels, labels);
+        assert!(read_labels(&rows, None).is_err());
+        assert!(read_labels(&rows, Some(StringEncoding::Utf8)).is_err());
     }
 }

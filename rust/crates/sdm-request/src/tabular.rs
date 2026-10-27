@@ -612,17 +612,19 @@ pub fn check_body(
                 let valid = matches!(cell, Value::Null)
                     || match (dtype, cell) {
                         (Dtype::Bool, Value::Bool(_)) | (Dtype::String, Value::Text(_)) => true,
-                        (
-                            Dtype::Int32 | Dtype::Int64,
-                            Value::Number(token) | Value::Text(token),
-                        ) => {
-                            sdm_wire::json::is_integer_token(token)
-                                && token.parse::<i64>().is_ok_and(|value| {
-                                    // Coherence uses the same canonical codec as EncodeBody:
-                                    // a wide int64 is lossless text, not a string column.
-                                    crate::payload::int_cell(i128::from(value), name)
-                                        .is_ok_and(|encoded| encoded == *cell)
-                                })
+                        (Dtype::Int32 | Dtype::Int64, Value::Number(_) | Value::Text(_)) => {
+                            let token = match cell {
+                                Value::Number(token) => Some(token.as_str()),
+                                Value::Text(token) => token.utf8(),
+                                _ => None,
+                            };
+                            token.is_some_and(|token| {
+                                sdm_wire::json::is_integer_token(token)
+                                    && token.parse::<i64>().is_ok_and(|value| {
+                                        crate::payload::int_cell(i128::from(value), name)
+                                            .is_ok_and(|encoded| encoded == *cell)
+                                    })
+                            })
                         }
                         (Dtype::Float32 | Dtype::Float64, Value::Number(token)) => {
                             token.parse::<f64>().is_ok_and(f64::is_finite)
@@ -653,7 +655,9 @@ fn entity_text(value: &Entity, float_text: fn(f64) -> String) -> String {
                 "False".into()
             }
         }
-        Entity::Written(Value::Text(s)) => s.clone(),
+        Entity::Written(Value::Text(s)) => s.utf8().map(str::to_owned).unwrap_or_else(|| {
+            String::from_utf8_lossy(&Value::Text(s.clone()).to_bytes()).into_owned()
+        }),
         Entity::Written(v) => String::from_utf8_lossy(&v.to_bytes()).into_owned(),
     }
 }

@@ -39,7 +39,7 @@ pub(crate) enum FrameStageError {
 }
 
 pub(crate) enum NativeSite {
-    Prediction,
+    Prediction { table: String },
     WholeReferences,
     BatchReferences,
     Text(ColumnRef),
@@ -61,8 +61,59 @@ impl FrameStageError {
                 diagnostic,
                 dropped_summary,
             } => {
+                if matches!(site, NativeSite::Prediction { .. }) {
+                    let eligible = failure.builtin.ancestry.iter().any(|kind| {
+                        matches!(
+                            kind,
+                            sdm_contract::prepare::BuiltinFailureClass::TypeError
+                                | sdm_contract::prepare::BuiltinFailureClass::ValueError
+                        )
+                    });
+                    if eligible
+                        == matches!(
+                            diagnostic,
+                            Some(NativeConstructionDiagnostic::NotReached) | None
+                        )
+                    {
+                        return protocol(
+                            "native constructor failure and reached diagnostic do not agree",
+                        );
+                    }
+                }
+                let constructor_message = match (&site, &diagnostic) {
+                    (
+                        NativeSite::Prediction { table },
+                        Some(NativeConstructionDiagnostic::Completed {
+                            first,
+                            dtype_display,
+                        }),
+                    ) => {
+                        let eligible = failure.builtin.ancestry.iter().any(|kind| {
+                            matches!(
+                                kind,
+                                sdm_contract::prepare::BuiltinFailureClass::TypeError
+                                    | sdm_contract::prepare::BuiltinFailureClass::ValueError
+                            )
+                        });
+                        if !eligible {
+                            return protocol(
+                                "a native constructor diagnostic followed an ineligible failure",
+                            );
+                        }
+                        let where_ = first
+                            .as_ref()
+                            .map(|first| {
+                                format!("; indices[{}] is {}", first.ordinal, first.native_repr)
+                            })
+                            .unwrap_or_default();
+                        Some(format!(
+                            "'indices' must hold values matching the primary key of '{table}', which is {dtype_display}{where_}"
+                        ))
+                    }
+                    _ => None,
+                };
                 let (stage, column) = match site {
-                    NativeSite::Prediction => ("prediction", None),
+                    NativeSite::Prediction { .. } => ("prediction", None),
                     NativeSite::WholeReferences => ("whole_references", None),
                     NativeSite::BatchReferences => ("batch_references", None),
                     NativeSite::Text(column) => ("text", Some(column)),
@@ -78,6 +129,11 @@ impl FrameStageError {
                         serde_json::to_string(&failure).expect("native failure facts serialize"),
                     ),
                 );
+                if let Some(message) = constructor_message {
+                    error = error
+                        .with_field("native_constructor_kind", Detail::text("value_error"))
+                        .with_field("native_constructor_message", Detail::text(message));
+                }
                 if let Some(diagnostic) = diagnostic {
                     error = error.with_field(
                         "diagnostic",
@@ -220,6 +276,8 @@ pub(super) fn label_rows(
         fetched.insert(
             fetch.table.name.clone(),
             Fetched {
+                strings: crate::frame_materialize::lock(frames)
+                    .string_encodings(&fetch.table.name)?,
                 times: times_ns(named(&selected.rows, time)?, time)?,
                 rows: selected.rows,
                 batch: selected.batch,
@@ -306,14 +364,18 @@ fn labelled_rows(
                 })
                 .collect::<Result<Vec<_>, _>>()?,
         )),
-        Some(LinkValue::Text(_)) => Arc::new(StringArray::from(
-            flat.iter()
-                .map(|value| match value {
-                    LinkValue::Text(value) => Ok(value.as_str()),
-                    _ => Err(mixed()),
-                })
-                .collect::<Result<Vec<_>, _>>()?,
-        )),
+        Some(LinkValue::Text(_)) => {
+            sdm_engine::strings::encode(
+                &flat
+                    .iter()
+                    .map(|value| match value {
+                        LinkValue::Text(value) => Ok(value.clone()),
+                        _ => Err(mixed()),
+                    })
+                    .collect::<Result<Vec<_>, _>>()?,
+            )
+            .0
+        }
         Some(LinkValue::Decimal(_, scale)) => {
             let scale = *scale;
             let values = flat
@@ -354,7 +416,35 @@ fn labelled_rows(
     .map_err(|_| protocol("typed link labels do not align with their entity and anchor rows"))
 }
 
-fn read_link_labels(target: &ArrayRef) -> Result<labels::Labels, CoreError> {
+/// Text representation belongs to the same typed labels, not to physical
+/// Binary inference or a separately replayed host conversion.
+fn label_encoding(labels: &labels::Labels) -> Option<sdm_contract::data::strings::StringEncoding> {
+    use sdm_contract::data::strings::StringEncoding;
+    let exceptional = match labels {
+        labels::Labels::Text(values) => values.iter().any(|value| value.utf8().is_none()),
+        labels::Labels::Lists(values)
+            if values
+                .iter()
+                .flatten()
+                .any(|value| matches!(value, labels::LinkValue::Text(_))) =>
+        {
+            values.iter().flatten().any(
+                |value| matches!(value, labels::LinkValue::Text(text) if text.utf8().is_none()),
+            )
+        }
+        _ => return None,
+    };
+    Some(if exceptional {
+        StringEncoding::Utf8Surrogatepass
+    } else {
+        StringEncoding::Utf8
+    })
+}
+
+fn read_link_labels(
+    target: &ArrayRef,
+    encoding: Option<sdm_contract::data::strings::StringEncoding>,
+) -> Result<labels::Labels, CoreError> {
     use sdm_engine::labels::LinkValue;
     let target = target
         .as_list_opt::<i32>()
@@ -368,6 +458,15 @@ fn read_link_labels(target: &ArrayRef) -> Result<labels::Labels, CoreError> {
                 ));
             }
             Ok(match values.data_type() {
+                _ if encoding.is_some() => sdm_engine::strings::owned(&values, encoding.unwrap())
+                    .map_err(|_| protocol("frame link text does not match its explicit encoding"))?
+                    .into_iter()
+                    .map(|value| {
+                        value
+                            .map(LinkValue::Text)
+                            .ok_or_else(|| protocol("frame link text contains missing values"))
+                    })
+                    .collect::<Result<Vec<_>, _>>()?,
                 DataType::Int64 => values
                     .as_primitive::<Int64Type>()
                     .values()
@@ -391,12 +490,12 @@ fn read_link_labels(target: &ArrayRef) -> Result<labels::Labels, CoreError> {
                 DataType::Utf8 => values
                     .as_string::<i32>()
                     .iter()
-                    .map(|value| LinkValue::Text(value.unwrap().to_owned()))
+                    .map(|value| LinkValue::Text(value.unwrap().into()))
                     .collect(),
                 DataType::LargeUtf8 => values
                     .as_string::<i64>()
                     .iter()
-                    .map(|value| LinkValue::Text(value.unwrap().to_owned()))
+                    .map(|value| LinkValue::Text(value.unwrap().into()))
                     .collect(),
                 DataType::Decimal128(_, scale) => values
                     .as_primitive::<Decimal128Type>()
@@ -525,13 +624,14 @@ fn prediction_type(
 fn task_identity(
     meaning: &FrameTaskMeaning,
     prediction: &FramePredictionType,
+    target_encoding: Option<sdm_contract::data::strings::StringEncoding>,
     rows: &ArrowData,
 ) -> Result<String, CoreError> {
     let mut meaning = meaning.clone();
     meaning.identity.clear();
     let mut identity = Identity::new("labelled-task");
     identity.value(&meaning)?;
-    identity.value(prediction)?;
+    identity.value(&(prediction, target_encoding))?;
     identity.arrow(rows)?;
     Ok(identity.finish())
 }
@@ -801,12 +901,14 @@ pub(crate) async fn labels(
         statistic: deferred.prediction_statistic,
         limits,
     };
-    meaning.identity = task_identity(&meaning, &prediction_type, &rows)?;
+    let target_encoding = label_encoding(&labelled.labels);
+    meaning.identity = task_identity(&meaning, &prediction_type, target_encoding, &rows)?;
     let context = asker.attach(Attachment::Arrow(rows))?;
     Ok(LabelledFrameTask {
         graph: graph.publish(asker)?,
         meaning,
         context: Some(context),
+        target_encoding,
         prediction_type,
     })
 }
@@ -819,7 +921,10 @@ struct BoundLabels {
     rows: ArrowData,
 }
 
-fn read_labels(rows: &RecordBatch) -> Result<task::LabelledContext, CoreError> {
+fn read_labels(
+    rows: &RecordBatch,
+    encoding: Option<sdm_contract::data::strings::StringEncoding>,
+) -> Result<task::LabelledContext, CoreError> {
     if rows
         .schema()
         .fields()
@@ -843,6 +948,19 @@ fn read_labels(rows: &RecordBatch) -> Result<task::LabelledContext, CoreError> {
         return Err(protocol("frame labeled targets contain a missing value"));
     }
     let labels = match target.data_type() {
+        _ if encoding.is_some() && !matches!(target.data_type(), DataType::List(_)) => {
+            labels::Labels::Text(
+                sdm_engine::strings::owned(target, encoding.unwrap())
+                    .map_err(|_| {
+                        protocol("frame target text does not match its explicit encoding")
+                    })?
+                    .into_iter()
+                    .map(|value| {
+                        value.ok_or_else(|| protocol("frame target text contains a missing value"))
+                    })
+                    .collect::<Result<Vec<_>, _>>()?,
+            )
+        }
         DataType::Float32 => {
             labels::Labels::Float(target.as_primitive::<Float32Type>().values().to_vec())
         }
@@ -854,17 +972,17 @@ fn read_labels(rows: &RecordBatch) -> Result<task::LabelledContext, CoreError> {
             target
                 .as_string::<i32>()
                 .iter()
-                .map(|value| value.unwrap().to_owned())
+                .map(|value| value.unwrap().into())
                 .collect(),
         ),
         DataType::LargeUtf8 => labels::Labels::Text(
             target
                 .as_string::<i64>()
                 .iter()
-                .map(|value| value.unwrap().to_owned())
+                .map(|value| value.unwrap().into())
                 .collect(),
         ),
-        DataType::List(_) => read_link_labels(target)?,
+        DataType::List(_) => read_link_labels(target, encoding)?,
         _ => {
             return Err(protocol(
                 "frame labeled targets do not have a supported task representation",
@@ -892,13 +1010,18 @@ fn bind_labels(
     )?;
     if value.meaning.version != FRAME_MATERIALIZATION_VERSION
         || value.meaning.source != graph.source
-        || task_identity(&value.meaning, &value.prediction_type, &rows)? != value.meaning.identity
+        || task_identity(
+            &value.meaning,
+            &value.prediction_type,
+            value.target_encoding,
+            &rows,
+        )? != value.meaning.identity
     {
         return Err(protocol(
             "frame labeled task no longer matches its query, rows or anchors",
         ));
     }
-    let labelled = read_labels(&one_batch(&rows)?)?;
+    let labelled = read_labels(&one_batch(&rows)?, value.target_encoding)?;
     if prediction_type(&graph, &value.meaning.entity, &labelled.keys)? != value.prediction_type {
         return Err(protocol(
             "frame prediction type no longer matches its original entity dtype",
@@ -946,7 +1069,7 @@ fn prediction_values(
             },
         ) => Ok((take_strings(attachments, &values)?, Some(values.encoding))),
         (
-            FramePredictionType::NativeString { .. },
+            FramePredictionType::NativeString { column, .. },
             FramePredictionValues::NativeString {
                 constructed:
                     NativeFrameConstruction::Failed {
@@ -955,7 +1078,9 @@ fn prediction_values(
                     },
             },
         ) => Err(FrameStageError::Native {
-            site: NativeSite::Prediction,
+            site: NativeSite::Prediction {
+                table: column.table.clone(),
+            },
             failure,
             diagnostic: Some(diagnostic),
             dropped_summary: graph.dropped_summary(),
@@ -1049,7 +1174,13 @@ pub(crate) fn task(
         &narrowed.anchors,
         &narrowed.labels,
     )?);
-    labelled.meaning.identity = task_identity(&labelled.meaning, &labelled.prediction_type, &rows)?;
+    labelled.target_encoding = label_encoding(&narrowed.labels);
+    labelled.meaning.identity = task_identity(
+        &labelled.meaning,
+        &labelled.prediction_type,
+        labelled.target_encoding,
+        &rows,
+    )?;
     labelled.context = None;
     let prediction_rows = predicted.len() as u64;
     let predicted_data = data(
@@ -1333,8 +1464,10 @@ fn selected_exclusions(
         for (table, columns) in caller {
             for column in columns {
                 if let Value::Text(column) = column {
-                    if !excluded.contains(&(table.clone(), column.clone())) {
-                        excluded.push((table.clone(), column));
+                    if let Ok(column) = column.into_utf8() {
+                        if !excluded.contains(&(table.clone(), column.clone())) {
+                            excluded.push((table.clone(), column));
+                        }
                     }
                 }
             }
@@ -1790,7 +1923,19 @@ fn bind_context(
             .map(|name| {
                 Ok((
                     name.clone(),
-                    payload::SampledColumn::Arrow(Arc::clone(named(&rows, &name)?)),
+                    match graph
+                        .native_column(&ColumnRef {
+                            table: table.name.clone(),
+                            column: name.clone(),
+                        })?
+                        .strings
+                    {
+                        Some(encoding) => payload::SampledColumn::Strings(
+                            Arc::clone(named(&rows, &name)?),
+                            encoding,
+                        ),
+                        None => payload::SampledColumn::Arrow(Arc::clone(named(&rows, &name)?)),
+                    },
                 ))
             })
             .collect::<Result<Vec<_>, CoreError>>()?;
@@ -1883,8 +2028,11 @@ fn bind_context(
             pairs,
         });
     }
-    identity.value(&value.text)?;
-    if value.text != text || identity.finish() != value.identity {
+    identity.value(&(&value.text, &value.text_identity_input))?;
+    if value.text != text
+        || value.text_identity_input != sdm_engine::words::simple_identity_input()
+        || identity.finish() != value.identity
+    {
         return Err(protocol(
             "sampled frame context no longer matches its plan, range, rows, links or text order",
         ));
@@ -1962,7 +2110,7 @@ fn normalize_text(
             .iter()
             .map(|column| column.column.clone())
             .collect::<Vec<_>>(),
-        failed.as_ref().map(|(column, _, _)| column),
+        failed.as_ref().map(|(column, _)| column),
     )?;
     let mut admitted = Vec::with_capacity(columns.len());
     for converted in columns {

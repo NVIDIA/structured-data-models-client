@@ -117,6 +117,8 @@ pub struct PreparedFrameGraph {
     /// Core-created typed graph ownership, independent of a staged workflow.
     pub owner: AttachmentId,
     pub native_tables: Vec<FrameNativeTable>,
+    /// Diagnostic data from this exact constructed graph, retained across failures.
+    pub dropped_summary: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -202,6 +204,8 @@ pub struct LabelledFrameTask {
     /// Present for the standalone labelled value; completed tasks retain
     /// these same actual rows through their immutable typed task owner.
     pub context: Option<AttachmentId>,
+    /// Logical text meaning of target or list-child buffers. Binary is never inferred as text.
+    pub target_encoding: Option<StringEncoding>,
     pub prediction_type: FramePredictionType,
 }
 
@@ -300,6 +304,8 @@ pub struct SampledFrameContext {
     /// genuine builtin astype(str) conversion. Host code chooses neither it
     /// nor the later character/word/casing policy.
     pub text: Vec<FrameTextColumn>,
+    /// Fixed complete Arrow lowercase probe selected by the shared core kernel.
+    pub text_identity_input: String,
 }
 
 /// The effective native result dtype at the reached astype(str) position.

@@ -39,6 +39,7 @@
 //! What the executor does by a path this does not port is refused by name
 //! ([`crate::not_yet`], register P1B-3).
 
+use sdm_contract::scalar::unicode::UnicodeText;
 use sdm_contract::{CoreError, Sentence};
 
 use crate::not_yet;
@@ -443,7 +444,7 @@ pub enum Constant {
     Int(i128),
     Float(f64),
     Bool(bool),
-    Text(String),
+    Text(UnicodeText),
     /// A date literal's time, nanoseconds since the epoch, with no zone.
     Time(i64),
 }
@@ -454,7 +455,7 @@ pub enum Labels {
     Float(Vec<f32>),
     Int(Vec<i64>),
     Bool(Vec<bool>),
-    Text(Vec<String>),
+    Text(Vec<UnicodeText>),
     Lists(Vec<Vec<LinkValue>>),
 }
 
@@ -512,7 +513,7 @@ pub enum LinkValue {
     Int(i64),
     Float(f32),
     Bool(bool),
-    Text(String),
+    Text(UnicodeText),
     Decimal(i128, i8),
 }
 
@@ -748,7 +749,7 @@ pub enum Column {
     Float(Vec<Option<f32>>),
     Int(Vec<Option<i64>>),
     Bool(Vec<Option<bool>>),
-    Text(Vec<Option<String>>),
+    Text(Vec<Option<UnicodeText>>),
     /// A decimal column's unscaled values, its declared precision and its
     /// scale: compared exactly in a condition, or a target
     /// ([`decimal_target`]).
@@ -816,7 +817,12 @@ fn decimal_target(values: &[Option<i128>], scale: i8, classes: bool) -> (Vec<boo
         *seen.entry((float + 0.0).to_bits()).or_insert(value) != value
     });
     let labels = if merged {
-        Labels::Text(present.iter().map(|&v| decimal_text(v, scale)).collect())
+        Labels::Text(
+            present
+                .iter()
+                .map(|&v| decimal_text(v, scale).into())
+                .collect(),
+        )
     } else {
         Labels::Float(floats)
     };
@@ -1058,7 +1064,7 @@ fn column_compare(column: &Column, op: RelOp, constant: &Constant) -> Result<Vec
             .collect(),
         (Column::Text(v), Constant::Text(t)) => v
             .iter()
-            .map(|x| x.as_deref().is_some_and(|x| apply(x, op, t.as_str())))
+            .map(|x| x.as_ref().is_some_and(|x| apply(x, op, t)))
             .collect(),
         (Column::Time(v), Constant::Time(t)) => v
             .iter()
@@ -1801,7 +1807,7 @@ mod tests {
     }
 
     fn text(t: &str) -> Constant {
-        Constant::Text(t.to_owned())
+        Constant::Text(t.into())
     }
 
     #[test]
@@ -1978,5 +1984,44 @@ mod tests {
         .unwrap();
         assert_eq!(out.mask, [true, false, true]);
         assert_eq!(out.labels, Labels::Bool(vec![false, true]));
+    }
+}
+
+#[cfg(test)]
+mod native_text_tests {
+    use super::*;
+    #[test]
+    fn native_label_equality_and_link_distinctness_keep_original_unicode_points() {
+        let pair = UnicodeText::from_points([0xd83d, 0xde3a]).unwrap();
+        let scalar = UnicodeText::from("😺");
+        let column = Column::Text(vec![
+            Some(pair.clone()),
+            Some(scalar.clone()),
+            Some(pair.clone()),
+            None,
+        ]);
+        let compared = label(&Target::Condition {
+            target: Box::new(Target::Column(column.clone())),
+            op: RelOp::Eq,
+            constant: Some(Constant::Text(pair.clone())),
+        })
+        .unwrap();
+        assert_eq!(compared.labels, Labels::Bool(vec![true, false, true]));
+        let listed = distinct(
+            1,
+            &[0, 0, 0, 0],
+            &column,
+            &[Some(1); 4],
+            Bounds {
+                starts: None,
+                ends: &[2],
+            },
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            listed.labels,
+            Labels::Lists(vec![vec![LinkValue::Text(pair), LinkValue::Text(scalar)]])
+        );
     }
 }

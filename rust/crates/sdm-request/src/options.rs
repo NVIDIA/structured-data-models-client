@@ -364,8 +364,8 @@ pub fn values(given: Option<&Value>) -> Result<Asked, CoreError> {
             ("exclude_cols_dict", v) => asked.exclude_cols_dict = Some(v.clone()),
             ("use_prediction_time", v) => asked.use_prediction_time = Some(v.clone()),
             ("return_embeddings", v) => asked.return_embeddings = Some(v.clone()),
-            ("prediction_statistic", Value::Text(text)) => {
-                asked.prediction_statistic = Some(text.clone());
+            ("prediction_statistic", Value::Text(text)) if text.utf8().is_some() => {
+                asked.prediction_statistic = text.utf8().map(str::to_owned);
             }
             ("prediction_statistic", v) => {
                 return Err(mistyped(Sentence::StatisticUnknown, name, "not_text")
@@ -436,8 +436,20 @@ fn lax_boolean(field: &str, value: &Value) -> Result<bool, CoreError> {
             Ok(1.0) => Ok(true),
             _ => Err(refused()),
         },
-        Value::Text(text) if FALSE.iter().any(|w| w.eq_ignore_ascii_case(text)) => Ok(false),
-        Value::Text(text) if TRUE.iter().any(|w| w.eq_ignore_ascii_case(text)) => Ok(true),
+        Value::Text(text)
+            if FALSE
+                .iter()
+                .any(|w| text.utf8().is_some_and(|text| w.eq_ignore_ascii_case(text))) =>
+        {
+            Ok(false)
+        }
+        Value::Text(text)
+            if TRUE
+                .iter()
+                .any(|w| text.utf8().is_some_and(|text| w.eq_ignore_ascii_case(text))) =>
+        {
+            Ok(true)
+        }
         _ => Err(refused()),
     }
 }
@@ -650,6 +662,7 @@ fn hop(given: &Value) -> Result<Hop, CoreError> {
         Value::Text(text) => {
             // A number DuckDB reads as written into the SQL: white space
             // around it, a sign, digits with a point and an exponent.
+            let text = text.utf8().ok_or_else(refused)?;
             let number = text.trim_ascii();
             let plain = number.bytes().any(|b| b.is_ascii_digit())
                 && number
@@ -660,13 +673,13 @@ fn hop(given: &Value) -> Result<Hop, CoreError> {
                 .ok()
                 .filter(|size| plain && size.is_finite())
             else {
-                return Ok(Hop::Expression(text.clone()));
+                return Ok(Hop::Expression(text.to_owned()));
             };
             if size < 0.0 {
                 // Preserve the caller's text origin: warehouse sizing
                 // arithmetic refuses text before SQL, while SQL-only
                 // providers evaluate the original expression in place.
-                return Ok(Hop::Expression(text.clone()));
+                return Ok(Hop::Expression(text.to_owned()));
             }
             // `'0' == 0` is false: a zero spelled as text ends nothing.
             return Ok(if size >= 1.0 {
@@ -746,7 +759,7 @@ fn context_anchor(given: &Value) -> Result<AskedAnchor, CoreError> {
     };
     match given {
         Value::Null => Ok(AskedAnchor::Absent),
-        Value::Text(text) if text == "entity" => Ok(AskedAnchor::Entity),
+        Value::Text(text) if text.utf8() == Some("entity") => Ok(AskedAnchor::Entity),
         Value::Object(_) => {
             // The contract's `ts` scalar: `t`, the value `v` as decimal
             // text, `unit` and `zone`.
@@ -1056,9 +1069,15 @@ fn option_refused(key: &str, reason: &'static str) -> CoreError {
 fn boolean_text(text: &str) -> Option<bool> {
     const FALSE: [&str; 6] = ["0", "off", "f", "false", "n", "no"];
     const TRUE: [&str; 6] = ["1", "on", "t", "true", "y", "yes"];
-    if FALSE.iter().any(|w| w.eq_ignore_ascii_case(text)) {
+    if FALSE
+        .iter()
+        .any(|w| text.utf8().is_some_and(|text| w.eq_ignore_ascii_case(text)))
+    {
         Some(false)
-    } else if TRUE.iter().any(|w| w.eq_ignore_ascii_case(text)) {
+    } else if TRUE
+        .iter()
+        .any(|w| text.utf8().is_some_and(|text| w.eq_ignore_ascii_case(text)))
+    {
         Some(true)
     } else {
         None
@@ -1175,7 +1194,10 @@ fn boolean(key: &str, value: &Value) -> Result<bool, CoreError> {
                 Err(option_refused(key, "not_a_boolean"))
             }
         }
-        Value::Text(text) => boolean_text(text).ok_or_else(|| option_refused(key, "not_a_boolean")),
+        Value::Text(text) => text
+            .utf8()
+            .and_then(boolean_text)
+            .ok_or_else(|| option_refused(key, "not_a_boolean")),
         _ => Err(option_refused(key, "not_a_boolean")),
     }
 }
@@ -1189,7 +1211,7 @@ fn estimators(key: &str, value: &Value) -> Result<u64, CoreError> {
         Value::Number(token) => {
             whole(token).ok_or_else(|| option_refused(key, "not_a_whole_number"))?
         }
-        Value::Text(text) => match whole_text(text) {
+        Value::Text(text) => match text.utf8().and_then(whole_text) {
             Some(Ok(n)) => n,
             Some(Err(_)) => return Err(option_refused(key, "out_of_range")),
             None => return Err(option_refused(key, "not_a_whole_number")),
@@ -1255,16 +1277,20 @@ pub fn options(kind: Kind, given: Option<&Value>) -> Result<Options, CoreError> 
                         // A null transform, which the engine's type takes
                         // (`TargetTransform | None`) and writes as null.
                         Value::Null => Ok(None),
-                        Value::Text(name) if TRANSFORMS.contains(&name.as_str()) => {
-                            Ok(Some(name.clone()))
+                        Value::Text(name)
+                            if name.utf8().is_some_and(|name| TRANSFORMS.contains(&name)) =>
+                        {
+                            Ok(name.utf8().map(str::to_owned))
                         }
                         _ => Err(option_refused(key, "not_a_transform")),
                     })
                     .collect::<Result<_, _>>()?;
             }
             "output_type" if kind == Kind::Regression => match value {
-                Value::Text(name) if OUTPUT_TYPES.contains(&name.as_str()) => {
-                    options.output_type = name.clone();
+                Value::Text(name)
+                    if name.utf8().is_some_and(|name| OUTPUT_TYPES.contains(&name)) =>
+                {
+                    options.output_type = name.utf8().unwrap().to_owned();
                 }
                 _ => return Err(option_refused(key, "not_an_output_type")),
             },

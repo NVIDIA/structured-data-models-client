@@ -10,8 +10,7 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use arrow_array::{
-    ArrayRef, BooleanArray, Float32Array, Int64Array, RecordBatch, StringArray,
-    TimestampNanosecondArray,
+    ArrayRef, BooleanArray, Float32Array, Int64Array, RecordBatch, TimestampNanosecondArray,
 };
 use arrow_schema::{DataType, Field, Schema, TimeUnit};
 use sdm_contract::data::{DataRequest, Filter};
@@ -418,6 +417,12 @@ pub(super) async fn label_context(
         entity_rows: &entity_rows,
         entity_key: &entity_key,
         examples: &examples,
+        strings: match &memo.frames {
+            Some(frames) => {
+                crate::frame_materialize::lock(frames).string_encodings(&entity.name)?
+            }
+            None => Default::default(),
+        },
     };
     let fetched = match &memo.frames {
         Some(frames) => super::frame_values::label_rows(&labelling, frames, labelled_fetches)?,
@@ -537,7 +542,7 @@ pub(super) fn labelled_rows(
         Labels::Float(values) => Arc::new(Float32Array::from(values.clone())),
         Labels::Int(values) => Arc::new(Int64Array::from(values.clone())),
         Labels::Bool(values) => Arc::new(BooleanArray::from(values.clone())),
-        Labels::Text(values) => Arc::new(StringArray::from(values.clone())),
+        Labels::Text(values) => sdm_engine::strings::encode(values).0,
         Labels::Lists(_) => {
             return Err(internal("the scalar label echo does not carry list labels"));
         }

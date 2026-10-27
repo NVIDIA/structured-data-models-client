@@ -646,6 +646,17 @@ impl Snapshot {
         self.entity_rows_many(table, &[keys])
     }
 
+    /// Small immutable logical text descriptors, independent of fetched rows.
+    pub fn string_encodings(
+        &self,
+        table: &str,
+    ) -> Result<BTreeMap<String, StringEncoding>, CoreError> {
+        self.tables
+            .get(table)
+            .map(|table| table.strings.clone())
+            .ok_or_else(|| invalid("unknown frame source table"))
+    }
+
     /// Keys selected from this snapshot retain the source column's explicit
     /// native encoding. This is distinct from later native cast outcomes.
     pub fn source_keys(

@@ -146,6 +146,7 @@ pub fn answer(endpoint: &str, body: &[u8]) -> Result<Value, CoreError> {
         )
     };
     // Python reads text, not bytes: a byte order mark is not JSON to it.
+    let text = text.utf8().ok_or_else(not_json)?;
     if text.starts_with('\u{feff}') {
         return Err(not_json());
     }
@@ -337,7 +338,7 @@ fn rest_body(body: &str, status: u16) -> (String, Option<String>) {
             .unwrap_or("request failed")
             .to_owned();
         let code = match read.get("error_code") {
-            Some(Value::Text(code)) => Some(code.clone()),
+            Some(Value::Text(code)) => code.utf8().map(str::to_owned),
             _ => None,
         };
         return (message, code);

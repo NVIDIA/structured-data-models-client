@@ -298,6 +298,37 @@ pub fn text_repr(text: &str) -> String {
     sink.into_string()
 }
 
+/// The same native representation over validated Unicode codepoints,
+/// including surrogate units that an ordinary Rust string cannot contain.
+pub fn points_repr(points: impl IntoIterator<Item = u32>) -> String {
+    let points: Vec<_> = points.into_iter().collect();
+    let quote = if points.contains(&u32::from('\'')) && !points.contains(&u32::from('"')) {
+        '"'
+    } else {
+        '\''
+    };
+    let mut output = String::new();
+    output.push(quote);
+    for point in points {
+        match char::from_u32(point) {
+            Some('\\') => output.push_str("\\\\"),
+            Some('\t') => output.push_str("\\t"),
+            Some('\n') => output.push_str("\\n"),
+            Some('\r') => output.push_str("\\r"),
+            Some(c) if c == quote => {
+                output.push('\\');
+                output.push(c);
+            }
+            Some(c) if printable(c) => output.push(c),
+            _ if point < 0x100 => output.push_str(&format!("\\x{point:02x}")),
+            _ if point < 0x10000 => output.push_str(&format!("\\u{point:04x}")),
+            _ => output.push_str(&format!("\\U{point:08x}")),
+        }
+    }
+    output.push(quote);
+    output
+}
+
 fn write_text_repr(text: &str, sink: &mut Sink) -> Result<(), Full> {
     let quote = if text.contains('\'') && !text.contains('"') {
         '"'
@@ -342,6 +373,19 @@ fn printable(c: char) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_points_keep_surrogate_units_and_the_existing_quote_policy() {
+        for ordinary in ["", "a'b", "a\"b", "\t\n\r\0", "é 😺"] {
+            assert_eq!(
+                points_repr(ordinary.chars().map(u32::from)),
+                text_repr(ordinary)
+            );
+        }
+        assert_eq!(points_repr([0xd83d, 0xde3a]), "'\\ud83d\\ude3a'");
+        assert_eq!(points_repr([0x1f63a]), "'😺'");
+        assert_eq!(points_repr([0x27, 0xd800]), "\"'\\ud800\"");
+    }
 
     #[test]
     fn floats_print_as_python_does() {

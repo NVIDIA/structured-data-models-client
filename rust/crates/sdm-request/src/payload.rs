@@ -49,6 +49,7 @@ use arrow_array::types::{
 use arrow_array::{Array, ArrayRef};
 use arrow_schema::{DataType, TimeUnit};
 use sdm_contract::ops::Stype;
+use sdm_contract::scalar::unicode::UnicodeText;
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 use sdm_engine::labels::Labels;
 use sdm_wire::json::Value;
@@ -92,13 +93,15 @@ pub const PAYLOAD_BYTES: usize = 30 * 1024 * 1024;
 #[derive(Debug, Clone)]
 pub enum SampledColumn {
     Arrow(ArrayRef),
-    Words(Vec<Vec<String>>),
+    /// Native text keeps its explicit encoding through the existing cell encoder.
+    Strings(ArrayRef, sdm_contract::data::strings::StringEncoding),
+    Words(Vec<Vec<UnicodeText>>),
 }
 
 impl SampledColumn {
     fn len(&self) -> usize {
         match self {
-            SampledColumn::Arrow(array) => array.len(),
+            SampledColumn::Arrow(array) | SampledColumn::Strings(array, _) => array.len(),
             SampledColumn::Words(words) => words.len(),
         }
     }
@@ -498,7 +501,9 @@ fn cell(array: &ArrayRef, row: usize, column: &str, dtype: Dtype) -> Result<Valu
                 }
                 TimeUnit::Nanosecond => array.as_primitive::<TimestampNanosecondType>().value(row),
             };
-            Ok(Value::Text(iso_microseconds(to_ns(value, *unit, column)?).into()))
+            Ok(Value::Text(
+                iso_microseconds(to_ns(value, *unit, column)?).into(),
+            ))
         }
         // A time of day, which the reference's engine reads as no time.
         DataType::Time32(_) | DataType::Time64(_) => Ok(Value::Null),
@@ -526,6 +531,8 @@ fn float_key(cell: &Value) -> Result<Value, CoreError> {
             .map_err(|_| internal("an integer key is not an integer"))?
             as f64,
         Value::Text(digits) => digits
+            .utf8()
+            .ok_or_else(|| internal("an integer key contains non-numeric native text"))?
             .parse::<i128>()
             .map_err(|_| internal("an integer key's digits do not read"))?
             as f64,
@@ -633,6 +640,32 @@ fn sampled_column(
 ) -> Result<FrameColumn, CoreError> {
     match column {
         SampledColumn::Arrow(array) => arrow_column(name, array, rows, key),
+        SampledColumn::Strings(array, encoding) => {
+            let values = sdm_engine::strings::StringColumn::new(array.as_ref(), *encoding)
+                .map_err(|_| {
+                    internal("native sampled text does not match its explicit encoding")
+                })?;
+            let cells = rows
+                .iter()
+                .map(|&row| {
+                    values
+                        .get(row)
+                        .map_err(|_| internal("native sampled text is malformed"))
+                        .map(|value| match value {
+                            None => Value::Null,
+                            Some(value) => Value::Text(
+                                UnicodeText::from_utf8_surrogatepass(value.as_bytes().to_vec())
+                                    .expect("validated native text"),
+                            ),
+                        })
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(FrameColumn {
+                name: name.to_owned(),
+                dtype: Dtype::String,
+                cells,
+            })
+        }
         SampledColumn::Words(words) => Ok(FrameColumn {
             name: name.to_owned(),
             dtype: if rows.is_empty() {
@@ -642,7 +675,7 @@ fn sampled_column(
             },
             cells: rows
                 .iter()
-                .map(|&row| Value::texts(words[row].iter().map(String::as_str)))
+                .map(|&row| Value::Array(words[row].iter().cloned().map(Value::Text).collect()))
                 .collect(),
         }),
     }
@@ -688,8 +721,8 @@ fn target(
     kind: Kind,
     labels: &Labels,
     float_text: fn(f64) -> String,
-) -> Result<(Dtype, Vec<Value>, Vec<String>), CoreError> {
-    let classes = |texts: Vec<String>| {
+) -> Result<(Dtype, Vec<Value>, Vec<UnicodeText>), CoreError> {
+    let classes = |texts: Vec<UnicodeText>| {
         let mut seen = BTreeSet::new();
         texts
             .into_iter()
@@ -705,19 +738,19 @@ fn target(
                     list.iter()
                         .map(|value| {
                             use sdm_engine::labels::LinkValue as L;
-                            let text = match value {
-                                L::Int(v) => v.to_string(),
+                            let text: UnicodeText = match value {
+                                L::Int(v) => v.to_string().into(),
                                 L::Float(v) => {
                                     if !v.is_finite() {
                                         return Err(not_finite(TARGET, f64::from(*v)));
                                     }
-                                    float_text(f64::from(*v))
+                                    float_text(f64::from(*v)).into()
                                 }
-                                L::Bool(v) => if *v { "True" } else { "False" }.to_owned(),
+                                L::Bool(v) => if *v { "True" } else { "False" }.into(),
                                 L::Text(v) => v.clone(),
-                                L::Decimal(v, scale) => decimal_text(*v, *scale),
+                                L::Decimal(v, scale) => decimal_text(*v, *scale).into(),
                             };
-                            Ok(Value::text(&text))
+                            Ok(Value::Text(text))
                         })
                         .collect::<Result<Vec<_>, _>>()
                         .map(Value::Array)
@@ -731,23 +764,23 @@ fn target(
         (Kind::Binary, Labels::Bool(values)) => (
             Dtype::Bool,
             values.iter().map(|v| Value::Bool(*v)).collect(),
-            vec!["false".to_owned(), "true".to_owned()],
+            vec!["false".into(), "true".into()],
         ),
         (Kind::Binary, _) => return Err(internal("a binary task's labels are not booleans")),
         (Kind::Multiclass, Labels::Bool(values)) => {
-            let texts: Vec<String> = values
+            let texts: Vec<UnicodeText> = values
                 .iter()
-                .map(|v| if *v { "True" } else { "False" }.to_owned())
+                .map(|v| if *v { "True" } else { "False" }.into())
                 .collect();
             (
                 Dtype::String,
-                texts.iter().map(|t| Value::text(t)).collect(),
+                texts.iter().cloned().map(Value::Text).collect(),
                 classes(texts),
             )
         }
         (Kind::Multiclass, Labels::Text(values)) => (
             Dtype::String,
-            values.iter().map(|t| Value::text(t)).collect(),
+            values.iter().cloned().map(Value::Text).collect(),
             classes(values.clone()),
         ),
         (Kind::Multiclass, Labels::Int(values)) => (
@@ -756,7 +789,12 @@ fn target(
                 .iter()
                 .map(|v| int_cell(i128::from(*v), TARGET))
                 .collect::<Result<_, _>>()?,
-            classes(values.iter().map(i64::to_string).collect()),
+            classes(
+                values
+                    .iter()
+                    .map(|value| value.to_string().into())
+                    .collect(),
+            ),
         ),
         (Kind::Multiclass, Labels::Float(values)) => {
             let mut seen = BTreeSet::new();
@@ -770,7 +808,7 @@ fn target(
                     .iter()
                     // Adding zero makes a negative zero positive.
                     .filter(|v| seen.insert((**v + 0.0).to_bits()))
-                    .map(|v| float_text(f64::from(*v)))
+                    .map(|v| float_text(f64::from(*v)).into())
                     .collect(),
             )
         }
@@ -908,7 +946,9 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
             .columns
             .iter()
             .find_map(|(n, column)| match column {
-                SampledColumn::Arrow(array) if n == key => Some(array),
+                SampledColumn::Arrow(array) | SampledColumn::Strings(array, _) if n == key => {
+                    Some(array)
+                }
                 _ => None,
             })
             .ok_or_else(|| internal("an entity key was not sampled"))?;

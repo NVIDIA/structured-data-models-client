@@ -437,6 +437,16 @@ impl FrameRun {
             self.keep(asker);
         }
     }
+    pub fn string_encodings(
+        &self,
+        table: &str,
+    ) -> Result<BTreeMap<String, StringEncoding>, CoreError> {
+        self.snapshot
+            .as_ref()
+            .ok_or_else(|| internal("frame graph is not constructed"))?
+            .string_encodings(table)
+    }
+
     pub fn source(&self) -> String {
         self.metadata
             .as_ref()

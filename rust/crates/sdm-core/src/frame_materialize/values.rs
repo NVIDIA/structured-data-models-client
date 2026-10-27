@@ -251,7 +251,10 @@ impl BoundGraph {
             );
         }
         let bound = Self::take_retained(attachments, value.owner)?;
-        if bound.source != value.source || bound.native.as_ref() != &value.native_tables {
+        if bound.source != value.source
+            || bound.native.as_ref() != &value.native_tables
+            || bound.dropped_summary() != value.dropped_summary
+        {
             return Err(
                 invalid("prepared frame graph no longer matches its native source facts")
                     .dropping(HeldState::SamplerState),
@@ -273,6 +276,7 @@ impl BoundGraph {
             source: self.source.clone(),
             owner: asker.attach(Attachment::FrameGraph(self.owner.clone()))?,
             native_tables: self.native.as_ref().clone(),
+            dropped_summary: frames.snapshot.as_ref().and_then(Snapshot::dropped_summary),
         })
     }
 
@@ -357,6 +361,7 @@ impl SampledContext {
             vec![anchor_rows.clone()],
         ))?;
         let mut value = SampledFrameContext {
+            text_identity_input: sdm_engine::words::simple_identity_input().to_owned(),
             version: FRAME_MATERIALIZATION_VERSION,
             plan,
             range,
@@ -469,7 +474,7 @@ impl SampledContext {
                 pairs: attach_batch(asker, pairs)?,
             });
         }
-        identity.value(&value.text)?;
+        identity.value(&(&value.text, &value.text_identity_input))?;
         value.identity = identity.finish();
         Ok(value)
     }

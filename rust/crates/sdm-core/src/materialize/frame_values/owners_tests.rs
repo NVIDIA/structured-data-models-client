@@ -89,9 +89,11 @@ fn task(graph: crate::RetainedFrameGraph, predictions: usize) -> BoundTask {
                 source: graph.source.clone(),
                 owner: AttachmentId(91),
                 native_tables: graph.native.as_ref().clone(),
+                dropped_summary: graph.dropped_summary(),
             },
             meaning,
             context: None,
+            target_encoding: None,
             prediction_type: FramePredictionType::CoreKey {
                 physical: sdm_contract::ColumnType::Int64,
             },
