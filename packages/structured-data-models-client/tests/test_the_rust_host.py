@@ -387,11 +387,21 @@ def _sentence_of(code: str) -> str:
 
 
 def _error(code: str, message: str, **more: Any) -> bytes:
+    sentence = _sentence_of(code)
+    fields = (
+        {
+            'model': {'t': 'utf8', 'v': 'kumo-tabular'},
+            'diagnostic': {'t': 'utf8', 'v': 'a prediction field is missing'},
+        }
+        if sentence == 'direct_response_contract'
+        else {}
+    )
     error = {
         'kind': 'internal',
         'code': code,
-        'sentence': _sentence_of(code),
+        'sentence': sentence,
         'message': message,
+        'fields': fields,
         **more,
     }
     return json.dumps({'message': 'error', 'error': error}).encode()

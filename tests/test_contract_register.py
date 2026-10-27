@@ -58,6 +58,36 @@ def _entry(document: dict[str, Any], entry_id: str) -> dict[str, Any]:
     return found
 
 
+def test_sql_restoration_keeps_the_three_warehouse_refusal_rows() -> None:
+    entry = _entry(COMMITTED, 'P2E-19')
+    assert (entry['status'], entry['approved_by']) == ('approved', 'owner')
+    assert entry['decision_ref'] == {
+        'file': 'docs/design/rust-core/phase-2/decisions.md',
+        'row': 'KO2-75',
+    }
+    rows = entry['case_outcomes']
+    assert {row['case'] for row in rows} == {
+        'target.aggregation.list-distinct@lakebase',
+        'target.aggregation.list-distinct@databricks-sql',
+        'target.aggregation.list-distinct@snowflake',
+    }
+    assert len(rows) == 3
+    for row in rows:
+        assert row['runner'] == 'python-core'
+        assert row['cell'] == 'ref-pandas3'
+        assert row['old'] == 'refusal - at predict (NimRequestError)'
+        assert row['new'] == (
+            'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)'
+        )
+        assert row['statements_differ'] == ['materialize']
+    restored = _entry(COMMITTED, 'P4E-1')
+    assert {row['case'] for row in restored['case_outcomes']} == {
+        'target.aggregation.list-distinct',
+        'target.aggregation.list-distinct@sqlite',
+        'target.aggregation.list-distinct@postgres',
+    }
+
+
 def _outcomes(
     old: str, new: str, approved_by: str | None = 'reviewer'
 ) -> Callable[[dict[str, Any]], None]:

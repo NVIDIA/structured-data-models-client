@@ -270,10 +270,10 @@ def test_table_owned_time_choice_does_not_reread_mutated_original(monkeypatch):
     )
     original = bridge._convert
 
-    def convert(name, frame):
+    def convert(name, frame, *, check_header=True):
         if name == 'later':
             first.loc[:, 'observed_at'] = stamps(['2024-01-01'] * 2)
-        return original(name, frame)
+        return original(name, frame, check_header=check_header)
 
     monkeypatch.setattr(bridge, '_convert', convert)
     schema, _ = describe(
