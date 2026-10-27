@@ -207,7 +207,7 @@ pub(crate) async fn run(
         {
             Some(values)
         }
-        None => None,
+        None if manifest.stage != FrameStage::Assemble => None,
         _ => {
             return Err(invalid(
                 "frame schema requires a complete inferred-table set",
