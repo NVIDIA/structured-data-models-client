@@ -142,7 +142,7 @@ fn finish_response(
                 };
                 json!({"outcome":"value","value":{"kind":"list"},"members":[member]})
             }
-            None => json!({"outcome":"failed","failure":{"ancestry":["syntax_error"]}}),
+            None => json!({"outcome":"failed","failure":{"ancestry":["value_error"]}}),
         };
         let literal = json!({"scope":data["scope"],"ordinal":row["row"]["ordinal"],"text":row["id"]["value"],"value":literal_value});
         let selected = prepare(
