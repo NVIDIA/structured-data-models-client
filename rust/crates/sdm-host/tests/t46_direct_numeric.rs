@@ -134,9 +134,11 @@ fn direct_numeric_preparation_is_model_neutral_and_binds_one_tabular_call() {
         Attachments::new(),
     )
     .unwrap();
-    for input in [json!({"stage":"outputs","call":call,"kind":"regression"})] {
-        call = prepare(input, Attachments::new()).unwrap();
-    }
+    call = prepare(
+        json!({"stage":"outputs","call":call,"kind":"regression"}),
+        Attachments::new(),
+    )
+    .unwrap();
     call=prepare(json!({"stage":"capabilities","call":call,"kind":"regression","anchored":false,"relationships":false,"tables":1}),Attachments::new()).unwrap();
     call = prepare(
         json!({"stage":"task","call":call,"kind":"regression"}),
@@ -151,7 +153,7 @@ fn direct_numeric_preparation_is_model_neutral_and_binds_one_tabular_call() {
     let mut attached = halves();
     attached.insert(AttachmentId(1),bytes(json!({"bound":call,"context":2,"predict":3,"context_header":header(&["feature","target"],3),"predict_header":header(&["feature"],2),"schema":prepared["schema"],"entity_table":"instance","target":"target","task":"regression","inference":{}})));
     let run = start(
-        json!({"op":"predict","direct":1,"model":"kumo-tabular","request_id":"sdm-fixed","outputs":[],"default_outputs":true}),
+        json!({"op":"predict","direct":1,"model":"kumo-tabular","request_id":"sdm-fixed","outputs":call["outputs"],"default_outputs":true}),
         attached,
     );
     loop {
