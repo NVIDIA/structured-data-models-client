@@ -95,13 +95,13 @@ def question(unit='ns', zone=None):
     )
 
 
-def materialize(asked, anchor='default', **options):
+def materialize(asked, anchor='default', *, neighbors=(2,), hops=1, **options):
     at = {} if anchor == 'default' else {'anchor_time': pd.Timestamp(anchor)}
     return asked.materialize(
         indices=[7, 8],
         num_context_samples=3,
-        num_neighbors=[2],
-        num_hops=1,
+        num_neighbors=list(neighbors),
+        num_hops=hops,
         random_seed=7,
         **at,
         **options,
@@ -228,3 +228,26 @@ def test_time_drop_warning_as_error_keeps_snapshot_before_selection(core):
         request = materialize(asked, observed['anchor'])
     _, sent = predict(request)
     assert sent == observed['sent']
+
+
+@pytest.mark.parametrize(
+    'case', ['two-hops', 'zero-neighbors', 'all-neighbors', 'two-calls']
+)
+def test_temporal_walk_and_call_boundaries_keep_recorded_payloads(core, case):
+    observed = REFERENCE['extra_cases'][case]
+    asked, _ = question()
+    options = (
+        {}
+        if observed['rows_per_call'] is None
+        else {'rows_per_call': observed['rows_per_call']}
+    )
+    request = materialize(
+        asked,
+        '1970-01-01T00:00:00.100000000',
+        neighbors=observed['neighbors'],
+        hops=observed['hops'],
+        **options,
+    )
+    result, sent = predict(request)
+    assert sent == observed['sent']
+    assert result['id'].tolist() == [7, 8]
