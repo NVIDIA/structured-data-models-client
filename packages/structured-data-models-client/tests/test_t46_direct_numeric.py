@@ -1297,7 +1297,10 @@ def test_direct_literal_integer_limit_and_selected_stringification(
         assert len(new[3]) == 1
         if error_type:
             assert new[1][1] is error_type
-            assert '640 digits' in new[1][-1]
+            assert sys.get_int_max_str_digits() == 640
+            with pytest.raises(ValueError) as native:
+                str(int(identifier[1:-1], 0))
+            assert new[1][-1] == str(native.value)
         else:
             assert new[1][0] == 'ok'
             assert new[1][1][0]['id'] == [4, 5]
@@ -1410,7 +1413,10 @@ def test_direct_encodes_rows_before_reached_inference_integer_display(
         assert not new[2]
         if earlier == 'none':
             assert new[1][1] is ValueError
-            assert '640 digits' in new[1][-1]
+            assert sys.get_int_max_str_digits() == 640
+            with pytest.raises(ValueError) as native:
+                str(10**650)
+            assert new[1][-1] == str(native.value)
         else:
             assert new[1][2] == 'INVALID_REQUEST'
             assert (
@@ -1604,7 +1610,10 @@ def test_direct_row_bounds_integer_display_observes_earlier_native_warning(
         assert len(new[3]) == 1
         if lower_limit:
             assert new[1][1] is ValueError
-            assert '640 digits' in new[1][-1]
+            assert sys.get_int_max_str_digits() == 640
+            with pytest.raises(ValueError) as native:
+                str(2**2200)
+            assert new[1][-1] == str(native.value)
             assert len(new[2]) == 1
         else:
             assert new[1][2] == 'INVALID_RESPONSE'
