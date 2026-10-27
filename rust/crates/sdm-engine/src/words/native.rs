@@ -23,31 +23,12 @@ pub(super) fn normalize(value: Option<UnicodeSlice<'_>>, profile: CasingProfile)
             .collect();
     }
     let clipped: Vec<_> = value.points().take(MAX_CHARS).collect();
-    let mut lower = Vec::with_capacity(clipped.len());
-    let mut run = Vec::new();
-    for point in clipped {
-        if let Some(character) = char::from_u32(point) {
-            run.push(character);
-        } else {
-            extend(&mut lower, &mut run, profile);
-            // A surrogate is neither Cased nor Case_Ignorable. Ending the
-            // scalar run preserves exactly its original sigma boundary.
-            lower.push(point);
-        }
-    }
-    extend(&mut lower, &mut run, profile);
+    let lower = casing::lower_points(&clipped, char::from_u32, profile);
     split::ranges(&lower, char::from_u32, casing::space)
         .into_iter()
         .map(|range| UnicodeText::from_points(lower[range].iter().copied())
             .expect("lowercase retains valid native codepoints"))
         .collect()
-}
-
-fn extend(output: &mut Vec<u32>, run: &mut Vec<char>, profile: CasingProfile) {
-    if !run.is_empty() {
-        output.extend(casing::lower(run, profile).into_iter().map(u32::from));
-        run.clear();
-    }
 }
 
 #[cfg(test)]
