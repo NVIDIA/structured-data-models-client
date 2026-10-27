@@ -251,3 +251,53 @@ def test_temporal_walk_and_call_boundaries_keep_recorded_payloads(core, case):
     result, sent = predict(request)
     assert sent == observed['sent']
     assert result['id'].tolist() == [7, 8]
+
+
+@pytest.mark.parametrize('unit', ['s', 'ms'])
+@pytest.mark.parametrize('year', ['1600', '2263'])
+@pytest.mark.parametrize('role', ['time', 'feature'])
+def test_wide_counts_stay_lossless_and_remain_an_unfinished_materializer_family(
+    core, unit, year, role
+):
+    _, frames = question(unit)
+    dates = np.tile(
+        np.array(
+            [
+                '2026-01-01',
+                '2026-01-02',
+                f'{year}-01-01',
+                '2026-01-04',
+                '2026-01-05',
+                '2026-01-06',
+                '2026-01-07',
+                '2026-01-08',
+            ],
+            dtype=f'datetime64[{unit}]',
+        ),
+        8,
+    )
+    frames['events']['at'] = pd.Series(dates)
+    raw = frames['events']['at'].astype('int64').tolist()
+    schema = Schema.from_data(
+        frames,
+        primary_keys={'users': 'user_id', 'events': 'event_id'},
+        time_columns={'events': 'at'} if role == 'time' else {},
+    )
+    assert str(frames['events']['at'].dtype) == f'datetime64[{unit}]'
+    assert frames['events']['at'].astype('int64').tolist() == raw
+    asked = PredictiveQuery('PREDICT users.age FOR EACH users.user_id', schema)
+    with pytest.raises(StructuredDataError) as failed:
+        materialize(asked, '2026-01-08')
+    if core:
+        # An unfinished seam path is not a new final range-refusal policy.
+        assert failed.value.code == 'UNSUPPORTED_REQUEST'
+        assert failed.value.details['rule'] == (
+            'frame_wide_timestamps'
+            if role == 'time'
+            else 'frame_untimed_timestamp_features'
+        )
+    else:
+        expected = REFERENCE['wide_cases'][f'{unit}-{year}-{role}']['error']
+        assert failed.value.code == expected['code']
+        assert str(failed.value) == expected['message']
+    assert frames['events']['at'].astype('int64').tolist() == raw
