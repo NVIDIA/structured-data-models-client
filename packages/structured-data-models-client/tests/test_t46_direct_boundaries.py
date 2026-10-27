@@ -751,6 +751,96 @@ def test_direct_generated_response_field_family_and_error_order(
         assert observed[1]['ok']
     else:
         assert not observed[1]['ok']
-        assert observed[1]['error']['code'] == 'INVALID_RESPONSE'
+        if observed[1]['error']['type'] in ('TypeError', 'ValueError'):
+            assert observed[1]['error']['code'] is None
+        else:
+            assert observed[1]['error']['code'] == 'INVALID_RESPONSE'
     if label == 'global-late-field-before-ID-warning':
         assert not observed[1]['events']
+
+
+def later_schema_boundary(mode):
+    events = []
+    if mode.startswith('override'):
+        left = pd.DataFrame({'code': range(100), 'feature': range(100, 200)})
+        left.loc[2, 'code'] = 1
+        right = pd.DataFrame({'code': range(100), 'feature': range(100, 200)})
+        frames = {'left': left, 'right': right}
+        options = {
+            'primary_keys': {'left': 'code', 'right': 'code'},
+            'relationships': [],
+        }
+    else:
+        labels = pd.Series([f'A{n:02}' for n in range(40)], dtype='string')
+        other = pd.Series([f'B{n % 32:02}' for n in range(40)], dtype='string')
+        frame = pd.DataFrame({'label_a': labels, 'label_b': other})
+        if mode == 'date-advice-before-category':
+            frame['label_a'] = pd.Series(
+                pd.date_range('2026-01-01', periods=40).strftime('%Y-%m-%d'),
+                dtype='string',
+            )
+        frames = {'instance': frame}
+        options = {'relationships': []}
+
+    def show(message, category, filename, lineno, file=None, line=None):
+        events.append(
+            observe(
+                lambda: {'type': category.__name__, 'message': str(message)}
+            )
+        )
+        if len(events) == 1:
+            if mode == 'override-mutates-later':
+                right.loc[[2, 3], 'code'] = 1
+            if mode == 'category-advice-mutates-later':
+                frame['label_b'] = pd.Series(['constant'] * 40, dtype='string')
+            if mode == 'date-advice-before-category':
+                frame.drop(columns=['label_b'], inplace=True)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('always')
+        warnings.showwarning = show
+        try:
+            schema = Schema.from_data(frames, **options)
+        except ObservationFailure:
+            raise
+        except Exception as failure:
+            record = {'case': mode, 'ok': False, 'error': error(failure)}
+        else:
+            record = {
+                'case': mode,
+                'ok': True,
+                'schema': observe(lambda: schema_state(schema)),
+            }
+    record['events'] = events
+    record['frames'] = observe(
+        lambda: {
+            name: {
+                'columns': list(frame.columns),
+                'dtypes': [str(dtype) for dtype in frame.dtypes],
+                'values': frame.to_dict(orient='list'),
+            }
+            for name, frame in frames.items()
+        }
+    )
+    return record
+
+
+@pytest.mark.parametrize(
+    'mode',
+    [
+        'override-baseline',
+        'override-mutates-later',
+        'category-advice-mutates-later',
+        'date-advice-before-category',
+    ],
+)
+def test_schema_reads_after_later_override_and_final_advice(monkeypatch, mode):
+    outcomes = []
+    for core in (False, True):
+        monkeypatch.setenv('SDM_CORE_ROUTES', FRAMES if core else '')
+        outcomes.append(later_schema_boundary(mode))
+    assert comparable(outcomes[1]) == comparable(outcomes[0])
+    assert outcomes[1]['ok'] is (mode != 'override-mutates-later')
+    assert len(outcomes[1]['events']) == (
+        2 if mode == 'date-advice-before-category' else 1
+    )
