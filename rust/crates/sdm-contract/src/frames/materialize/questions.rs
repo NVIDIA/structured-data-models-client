@@ -18,8 +18,7 @@ pub struct FrameQuestionOption {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct FrameQuestionInputs {
-    pub schema: AttachmentId,
-    pub query: AttachmentId,
+    pub question: PreparedFrameQuestion,
     pub candidates: Option<AttachmentId>,
     pub values: Option<AttachmentId>,
     /// Existing unrecognized option names for ordinary-call admission.
@@ -62,8 +61,21 @@ pub struct FrameDecomposition {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct PreparedFrameQuestions {
+    /// Reached immutable early call observations, reused without rereading native option objects.
+    pub call_values: Option<AttachmentId>,
     pub query: QueryFacts,
     pub decomposition: Option<FrameDecomposition>,
+}
+
+/// Useful resolved query data before any native option/candidate observation.
+/// Its exact core-created owner contains the same existing PQL validation,
+/// not another query schema or a suspended program position.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct PreparedFrameQuestion {
+    pub query: QueryFacts,
+    pub kind: Option<FrameQuestionKind>,
+    pub owner: AttachmentId,
 }
 
 /// The meaning of one independently gathered question for error presentation.

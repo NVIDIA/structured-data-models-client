@@ -232,6 +232,11 @@ impl FrameGraph {
 }
 
 #[pyclass(frozen, module = "sdm_client._native")]
+struct FrameQuestion {
+    owner: sdm_host::RetainedFrameQuestion,
+}
+
+#[pyclass(frozen, module = "sdm_client._native")]
 struct FrameTask {
     owner: sdm_host::RetainedFrameTask,
 }
@@ -326,6 +331,7 @@ fn to_python(py: Python<'_>, attachment: Attachment, retained: bool) -> PyResult
         )?
         .into_any(),
         Attachment::FrameGraph(owner) => Py::new(py, FrameGraph { owner })?.into_any(),
+        Attachment::FrameQuestion(owner) => Py::new(py, FrameQuestion { owner })?.into_any(),
         Attachment::FrameTask(owner) => Py::new(py, FrameTask { owner })?.into_any(),
         Attachment::FrameReferences(owner) => Py::new(py, FrameReferences { owner })?.into_any(),
         Attachment::FramePayload(owner) => Py::new(py, FramePayload { owner })?.into_any(),
@@ -590,6 +596,8 @@ fn attachments_from_python(
             Attachment::Bytes(bytes.as_bytes().to_vec())
         } else if value.is_exact_instance_of::<FrameGraph>() {
             Attachment::FrameGraph(value.extract::<PyRef<'_, FrameGraph>>()?.owner.clone())
+        } else if value.is_exact_instance_of::<FrameQuestion>() {
+            Attachment::FrameQuestion(value.extract::<PyRef<'_, FrameQuestion>>()?.owner.clone())
         } else if value.is_exact_instance_of::<FrameTask>() {
             Attachment::FrameTask(value.extract::<PyRef<'_, FrameTask>>()?.owner.clone())
         } else if value.is_exact_instance_of::<FrameReferences>() {
@@ -801,6 +809,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add("CoreError", py.get_type::<CoreError>())?;
     module.add_class::<ArrowStream>()?;
     module.add_class::<FrameGraph>()?;
+    module.add_class::<FrameQuestion>()?;
     module.add_class::<FrameTask>()?;
     module.add_class::<FrameReferences>()?;
     module.add_class::<FramePayload>()?;

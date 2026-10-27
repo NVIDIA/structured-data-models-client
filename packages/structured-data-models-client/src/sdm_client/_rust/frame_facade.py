@@ -61,8 +61,10 @@ class _Bindings:
 
 def _ids(kind: str, value: dict[str, Any]) -> list[int]:
     """Attachment fields of the fixed contract, never an arbitrary JSON scan."""
+    if kind == 'question':
+        return [value['owner']]
     if kind == 'questions':
-        return []
+        return [] if value['call_values'] is None else [value['call_values']]
     if kind == 'graph':
         return [value['owner']]
     if kind == 'labels':
@@ -147,6 +149,8 @@ def _bind(product: _Product, into: _Bindings) -> dict[str, Any]:
         }
 
     value = product.data
+    if product.kind == 'question':
+        return {**value, 'owner': bound[value['owner']]}
     if product.kind == 'graph':
         return graph(value)
     if product.kind == 'labels':
@@ -354,6 +358,7 @@ def _single(
     limits: dict[str, Any],
     *,
     cache: dict[str, Any],
+    call_values: bytes,
     part: dict[str, Any] | None = None,
 ) -> tuple[tuple[dict[str, Any], ...], results.QueryFacts, results.CoreRequest]:
     from sdm_client._rust.materialize import (
@@ -408,18 +413,7 @@ def _single(
                     'checkpoint': None,
                     'retained': retained,
                     'native_tables': native_tables,
-                    'values': bindings.json(
-                        _options(
-                            options,
-                            (
-                                'num_hops',
-                                'num_neighbors',
-                                'prediction_statistic',
-                            ),
-                            num_context_samples=num_context_samples,
-                        ),
-                        options=True,
-                    ),
+                    'values': bindings.add(call_values),
                     'options': sorted(set(options) - TAKEN),
                     'prediction_rows': len(indices),
                     'limits': limits,
@@ -784,7 +778,7 @@ def gather(
             candidates,
             limits,
         )
-        decomposition = questions['decomposition']
+        decomposition = questions.data['decomposition']
         if decomposition is None:
             return _single(
                 materializer,
@@ -794,6 +788,7 @@ def gather(
                 options,
                 limits,
                 cache=materializer._core_sampler_state,
+                call_values=questions.owners[questions.data['call_values']],
             )
         child_options = {
             name: options[name] for name in decomposition['child_options']
@@ -815,7 +810,7 @@ def gather(
                 limits,
                 part=scope,
             )
-            if child['decomposition'] is not None:
+            if child.data['decomposition'] is not None:
                 raise codec.CodecError(
                     'a core-selected frame part decomposed again'
                 )
@@ -831,6 +826,7 @@ def gather(
                     child_options,
                     limits,
                     cache={},
+                    call_values=child.owners[child.data['call_values']],
                     part=scope,
                 )
             )
@@ -856,7 +852,7 @@ def gather(
         )
         return (
             first_payloads,
-            results.QueryFacts.from_contract(questions['query']),
+            results.QueryFacts.from_contract(questions.data['query']),
             results.CoreRequest(
                 version=first_state.version,
                 parts=parts,
@@ -874,31 +870,45 @@ def _questions(
     limits: dict[str, Any],
     *,
     part: dict[str, Any] | None = None,
-) -> dict[str, Any]:
+) -> _Product:
     from sdm_client._rust.materialize import TAKEN, _candidates
     from sdm_client._rust.spec import held_schema
 
     bindings = _Bindings()
+    question = _adopt(
+        _prepare(
+            {
+                'stage': 'question',
+                'schema': bindings.json(held_schema(materializer.schema)),
+                'query': bindings.json(query),
+                'candidates_given': candidates is not None,
+                'statistic_given': 'prediction_statistic' in options,
+                'top_k_given': 'top_k' in options,
+            },
+            bindings,
+            {'frame_part': part},
+        ),
+        'question',
+    )
+    # No option/candidate object has been encoded before successful query
+    # resolution. Each later observation belongs to its reached domain.
+    bindings = _Bindings()
+    kind = question.data['kind']
+    names = {
+        None: ('prediction_statistic', 'num_hops', 'num_neighbors'),
+        'ranking': ('top_k', 'rows_per_call'),
+        'forecast': ('rows_per_call',),
+    }[kind]
+    extra = {'num_context_samples': num_context_samples} if kind is None else {}
     value = {
         'stage': 'questions',
         'input': {
-            'schema': bindings.json(held_schema(materializer.schema)),
-            'query': bindings.json(query),
+            'question': _bind(question, bindings),
             'candidates': None
             if candidates is None
             else bindings.json(_candidates(candidates)),
             'values': bindings.json(
-                _options(
-                    options,
-                    (
-                        'top_k',
-                        'prediction_statistic',
-                        'rows_per_call',
-                        'num_hops',
-                        'num_neighbors',
-                    ),
-                    num_context_samples=num_context_samples,
-                ),
+                _options(options, names, **extra),
                 options=True,
             ),
             'options': sorted(set(options) - TAKEN),
@@ -910,6 +920,9 @@ def _questions(
             'limits': limits,
         },
     }
-    return _adopt(
-        _prepare(value, bindings, {'frame_part': part}), 'questions'
-    ).data
+    try:
+        return _adopt(
+            _prepare(value, bindings, {'frame_part': part}), 'questions'
+        )
+    finally:
+        question.owners.clear()

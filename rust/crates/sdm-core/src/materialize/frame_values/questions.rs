@@ -8,17 +8,43 @@
 
 use super::*;
 
-pub(super) fn prepare(
-    input: FrameQuestionInputs,
+struct QuestionData {
+    description: SourceDescription,
+    validation: crate::pql::Validation,
+    facts: QueryFacts,
+}
+
+/// Independently useful immutable query meaning, without a host object.
+#[derive(Clone)]
+pub struct RetainedFrameQuestion {
+    data: Arc<QuestionData>,
+}
+
+impl std::fmt::Debug for RetainedFrameQuestion {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("RetainedFrameQuestion")
+            .field("facts", &self.data.facts)
+            .finish_non_exhaustive()
+    }
+}
+
+pub(super) fn resolve(
+    asker: &Asker,
+    schema_id: AttachmentId,
+    query_id: AttachmentId,
+    candidates_given: bool,
+    statistic_given: bool,
+    top_k_given: bool,
     facts: &HostFacts,
     zones: &dyn sdm_engine::time::Zones,
     attachments: &mut Attachments,
-) -> Result<PreparedFrameQuestions, CoreError> {
-    let held = take_json(attachments, input.schema)?;
+) -> Result<PreparedFrameQuestion, CoreError> {
+    let held = take_json(attachments, schema_id)?;
     let read = sdm_schema::held::read(held, &BTreeMap::new(), true)?;
     let mut description = read.description;
     consistent(&mut description, &read.types)?;
-    let query: String = take_json(attachments, input.query)?;
+    let query: String = take_json(attachments, query_id)?;
     let schema = query_schema(&description);
     let profile = Profile::resolve(&ProfileSpec {
         name: ProfileName::Relational,
@@ -29,12 +55,73 @@ pub(super) fn prepare(
     let query_facts = validation
         .facts(&schema)
         .ok_or_else(|| unresolved(&query, &validation.diagnostics))?;
+    let kind = if validation.ranking.is_some() {
+        Some(FrameQuestionKind::Ranking)
+    } else if validation.steps.is_some() {
+        Some(FrameQuestionKind::Forecast)
+    } else {
+        None
+    };
+    if let Some(plan) = validation.ranking.as_ref() {
+        crate::ranking::admit_question(plan, statistic_given)?;
+    } else {
+        if candidates_given {
+            return Err(crate::ranking::candidates_on_no_ranking());
+        }
+        if validation.steps.is_some() {
+            super::super::forecast_admission(top_k_given)?;
+        }
+    }
+    let owner = RetainedFrameQuestion {
+        data: Arc::new(QuestionData {
+            description,
+            validation,
+            facts: query_facts.clone(),
+        }),
+    };
+    Ok(PreparedFrameQuestion {
+        query: query_facts,
+        kind,
+        owner: asker.attach(Attachment::FrameQuestion(owner))?,
+    })
+}
+
+pub(super) fn prepare(
+    asker: &Asker,
+    input: FrameQuestionInputs,
+    attachments: &mut Attachments,
+) -> Result<PreparedFrameQuestions, CoreError> {
+    let Some(Attachment::FrameQuestion(owner)) = attachments.remove(&input.question.owner) else {
+        return Err(protocol(
+            "frame questions lack their actual resolved query owner",
+        ));
+    };
+    let data = &owner.data;
+    let kind = if data.validation.ranking.is_some() {
+        Some(FrameQuestionKind::Ranking)
+    } else if data.validation.steps.is_some() {
+        Some(FrameQuestionKind::Forecast)
+    } else {
+        None
+    };
+    if input.question.query != data.facts || input.question.kind != kind {
+        return Err(protocol(
+            "frame question facts no longer match their actual resolved query meaning",
+        ));
+    }
+    let description = &data.description;
+    let validation = &data.validation;
+    let query_facts = data.facts.clone();
+    let raw_values = input.values.and_then(|id| match attachments.get(&id) {
+        Some(Attachment::Bytes(bytes)) => Some(bytes.clone()),
+        _ => None,
+    });
     let values: Option<Value> = take_json_if(attachments, input.values)?;
     let candidates: Option<Vec<sdm_contract::ops::GivenCandidate>> =
         take_json_if(attachments, input.candidates)?;
-    let decomposition = if let Some(plan) = validation.ranking {
+    let decomposition = if let Some(plan) = validation.ranking.clone() {
         let prepared = crate::ranking::questions(
-            &description,
+            description,
             candidates.as_deref(),
             values.as_ref(),
             plan,
@@ -60,7 +147,7 @@ pub(super) fn prepare(
         if candidates.is_some() {
             return Err(crate::ranking::candidates_on_no_ranking());
         }
-        if let Some(plan) = validation.steps {
+        if let Some(plan) = validation.steps.clone() {
             forecast_questions(
                 &plan,
                 values.as_ref(),
@@ -91,12 +178,19 @@ pub(super) fn prepare(
                 input.prediction_rows,
                 &input.limits,
             )?;
-            reserved(&description)?;
-            kept_checks(&description)?;
+            reserved(description)?;
+            kept_checks(description)?;
             None
         }
     };
     Ok(PreparedFrameQuestions {
+        call_values: if decomposition.is_none() {
+            raw_values
+                .map(|bytes| asker.attach(Attachment::Bytes(bytes)))
+                .transpose()?
+        } else {
+            None
+        },
         query: query_facts,
         decomposition,
     })
