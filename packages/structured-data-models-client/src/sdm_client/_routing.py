@@ -474,6 +474,15 @@ FRAME_CONSTRUCTORS = (
 FRAME_CONSUMERS = MATERIALIZE['frames'] + PREDICT['frames']
 
 
+# The bounded direct constructor/predict journey remains opt-in.
+DIRECT_CONSTRUCTORS = (
+    'request.tabular/classification/frames',
+    'request.tabular/regression/frames',
+)
+DIRECT_PREDICT = ('client.predict/tabular/frames',)
+DIRECT_CONSUMERS = DIRECT_CONSTRUCTORS + DIRECT_PREDICT
+
+
 #: The Phase 3 defaults. Other paths retain their route until their slice
 #: is implemented; edits and inspection of a core-held schema inherit its
 #: source route rather than choosing another route at each accessor.
@@ -503,12 +512,23 @@ def forced() -> frozenset[str]:
             path not in CORE_ROUTED
             and path not in FRAME_CONSTRUCTORS
             and path not in FRAME_CONSUMERS
+            and path not in DIRECT_CONSUMERS
         ):
             raise RouteError(
                 f'{ENVIRONMENT} forces {path!r} onto the core, which has no '
                 f'route for it in this build'
             )
     return frozenset(named)
+
+
+def direct_constructor_on_core() -> bool:
+    named = {
+        part.strip() for part in os.environ.get(ENVIRONMENT, '').split(',')
+    } - {''}
+    return (
+        bool(named.intersection(DIRECT_CONSTRUCTORS))
+        and route(DIRECT_CONSTRUCTORS) == 'core'
+    )
 
 
 def frame_constructor_on_core() -> bool:

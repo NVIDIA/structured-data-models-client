@@ -372,7 +372,7 @@ fn decimal_text(value: i128, scale: i8) -> String {
 
 /// An integer cell: past the JSON-safe range, its digits as text; past
 /// int64, refused, as the reference refuses it.
-fn int_cell(value: i128, column: &str) -> Result<Value, CoreError> {
+pub(crate) fn int_cell(value: i128, column: &str) -> Result<Value, CoreError> {
     if value < i128::from(i64::MIN) || value > i128::from(i64::MAX) {
         // The range, for the host's words (the reference's
         // `_cell_json_value`), never the value (decision H17); the table and
@@ -392,7 +392,7 @@ fn int_cell(value: i128, column: &str) -> Result<Value, CoreError> {
     Ok(Value::int(value as i64))
 }
 
-fn float_cell(value: f64, column: &str) -> Result<Value, CoreError> {
+pub(crate) fn float_cell(value: f64, column: &str) -> Result<Value, CoreError> {
     if value.is_nan() {
         return Ok(Value::Null);
     }

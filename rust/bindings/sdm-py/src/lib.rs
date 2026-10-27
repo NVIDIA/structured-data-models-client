@@ -548,6 +548,8 @@ impl Run {
         // HostRun retains the sole manifest/attachment validation path.
         let frames = matches!(sdm_host::decode(&message), Ok(ControlMessage::Start(start))
         if match &start.operation {
+            sdm_contract::ops::Operation::PrepareRequest(_) => true,
+            sdm_contract::ops::Operation::Predict(request) => request.direct.is_some(),
             sdm_contract::ops::Operation::DescribeSource(request) => matches!(
                 request.provider, sdm_contract::data::ProviderChoice::Frames { .. }),
             sdm_contract::ops::Operation::Materialize(request) => matches!(

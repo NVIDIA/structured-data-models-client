@@ -172,6 +172,39 @@ def _final_notices(
         _show_held(pending)
 
 
+def _primitive_array(series: pd.Series) -> Any:
+    """Convert values only, independently of constructor/header policy."""
+    import pyarrow as pa
+
+    return pa.array(series, from_pandas=True)
+
+
+def _numeric_physical(dtype: Any) -> str | None:
+    """The physical width of the closed built-in numeric storage family."""
+    if isinstance(dtype, np.dtype) and dtype.isnative:
+        if (dtype.kind in 'biu' and dtype.itemsize <= 8) or (
+            dtype.kind == 'f' and dtype.itemsize in (4, 8)
+        ):
+            return 'bool' if dtype.kind == 'b' else dtype.name
+    if type(dtype) in (
+        pd.Int8Dtype,
+        pd.Int16Dtype,
+        pd.Int32Dtype,
+        pd.Int64Dtype,
+        pd.UInt8Dtype,
+        pd.UInt16Dtype,
+        pd.UInt32Dtype,
+        pd.UInt64Dtype,
+        pd.Float32Dtype,
+        pd.Float64Dtype,
+        pd.BooleanDtype,
+    ):
+        return (
+            'bool' if type(dtype) is pd.BooleanDtype else dtype.numpy_dtype.name
+        )
+    return None
+
+
 def _convert(name: str, frame: pd.DataFrame) -> tuple[Any, dict[str, Any]]:
     # Validate one table before proceeding to the next. No preliminary
     # all-table scan or native-object conversion is permitted here.
@@ -207,27 +240,7 @@ def _convert(name: str, frame: pd.DataFrame) -> tuple[Any, dict[str, Any]]:
     for column in frame.columns:
         series = frame[column]
         dtype = series.dtype
-        primitive = (
-            isinstance(dtype, np.dtype)
-            and dtype.isnative
-            and (
-                (dtype.kind in 'biu' and dtype.itemsize <= 8)
-                or (dtype.kind == 'f' and dtype.itemsize in (4, 8))
-            )
-        )
-        masked = type(dtype) in (
-            pd.Int8Dtype,
-            pd.Int16Dtype,
-            pd.Int32Dtype,
-            pd.Int64Dtype,
-            pd.UInt8Dtype,
-            pd.UInt16Dtype,
-            pd.UInt32Dtype,
-            pd.UInt64Dtype,
-            pd.Float32Dtype,
-            pd.Float64Dtype,
-            pd.BooleanDtype,
-        )
+        numeric = _numeric_physical(dtype) is not None
         temporal = (
             isinstance(dtype, np.dtype)
             and dtype.isnative
@@ -263,7 +276,7 @@ def _convert(name: str, frame: pd.DataFrame) -> tuple[Any, dict[str, Any]]:
             # Arrow timestamps also remain unfinished: native scalar
             # boxing can overflow or turn a present ns MIN into NaT, which
             # affects time choice at its consumed row and constructor stage.
-        if not (primitive or masked or temporal or text or arrow):
+        if not (numeric or temporal or text or arrow):
             raise RouteError(
                 f'the partial frame constructor supports only NumPy or pandas masked numeric and Boolean columns, native datetimes, built-in pandas strings, or built-in Arrow integer, Boolean or string columns: {name}.{column}'
             )
@@ -277,7 +290,7 @@ def _convert(name: str, frame: pd.DataFrame) -> tuple[Any, dict[str, Any]]:
         arrays.append(
             series.array.__arrow_array__()
             if arrow
-            else pa.array(series, from_pandas=True)
+            else _primitive_array(series)
         )
         native_types[column] = dtype
     return pa.Table.from_arrays(arrays, names=list(frame.columns)), native_types

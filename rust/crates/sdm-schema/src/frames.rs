@@ -396,32 +396,7 @@ pub fn read(
     let mut all_values = Vec::new();
     for (at, field) in schema.fields().iter().enumerate() {
         let values = values::column(batches, at, Floats::Frame)?;
-        let dtype = match field.data_type() {
-            DataType::Boolean => Dtype::Bool,
-            DataType::Int8
-            | DataType::Int16
-            | DataType::Int32
-            | DataType::Int64
-            | DataType::UInt8
-            | DataType::UInt16
-            | DataType::UInt32 => Dtype::Int64,
-            DataType::UInt64 => {
-                if values
-                    .iter()
-                    .flatten()
-                    .any(|v| matches!(v, Value::Int(n) if *n > i128::from(i64::MAX)))
-                {
-                    Dtype::String
-                } else {
-                    Dtype::Int64
-                }
-            }
-            DataType::Float32 => Dtype::Float32,
-            DataType::Float64 => Dtype::Float64,
-            DataType::Timestamp(_, _) => Dtype::Date,
-            DataType::Utf8 => Dtype::String,
-            _ => return Err(crate::not_yet("frame_native_family")),
-        };
+        let dtype = column_dtype(field.data_type(), &values)?;
         let stype = match dtype {
             Dtype::Int64 | Dtype::Float32 | Dtype::Float64 => Stype::Numerical,
             Dtype::Bool => Stype::Categorical,
@@ -503,4 +478,58 @@ fn check_name(name: &str) -> Result<(), CoreError> {
         .with_field("characters", texts(&characters)));
     }
     Ok(())
+}
+
+/// Native constructor distinctness over present numeric values, shared by
+/// direct constant-target advice and frame schema/key inference.
+pub fn present_distinct(batches: &[RecordBatch], column: usize) -> Result<usize, CoreError> {
+    Ok(values::distinct(&values::column(
+        batches,
+        column,
+        Floats::Frame,
+    )?))
+}
+
+fn column_dtype(physical: &DataType, values: &[Option<Value>]) -> Result<Dtype, CoreError> {
+    Ok(match physical {
+        DataType::Boolean => Dtype::Bool,
+        DataType::Int8
+        | DataType::Int16
+        | DataType::Int32
+        | DataType::Int64
+        | DataType::UInt8
+        | DataType::UInt16
+        | DataType::UInt32 => Dtype::Int64,
+        DataType::UInt64 => {
+            if values
+                .iter()
+                .flatten()
+                .any(|v| matches!(v, Value::Int(n) if *n > i128::from(i64::MAX)))
+            {
+                Dtype::String
+            } else {
+                Dtype::Int64
+            }
+        }
+        DataType::Float32 => Dtype::Float32,
+        DataType::Float64 => Dtype::Float64,
+        DataType::Timestamp(_, _) => Dtype::Date,
+        DataType::Utf8 => Dtype::String,
+        _ => return Err(crate::not_yet("frame_native_family")),
+    })
+}
+
+/// Storage inference without table-name, key or time-choice side effects.
+pub fn storage_dtypes(schema: &Schema, batches: &[RecordBatch]) -> Result<Vec<Dtype>, CoreError> {
+    schema
+        .fields()
+        .iter()
+        .enumerate()
+        .map(|(at, field)| {
+            column_dtype(
+                field.data_type(),
+                &values::column(batches, at, Floats::Frame)?,
+            )
+        })
+        .collect()
 }

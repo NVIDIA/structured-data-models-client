@@ -41,6 +41,8 @@ def held_schema(schema: Schema) -> dict[str, Any]:
         for column_name, column in table.columns.items():
             written: dict[str, Any] = {
                 'name': column_name,
+                'untyped': column.untyped,
+                'stype_declared': column.stype_declared,
                 'dtype': column.dtype,
                 'stype': str(column.stype),
                 'stype_before_key': (

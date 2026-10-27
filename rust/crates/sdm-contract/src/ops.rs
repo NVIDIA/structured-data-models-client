@@ -41,6 +41,7 @@ pub enum Operation {
     EditSchema(EditSchema),
     Materialize(Materialize),
     Predict(Predict),
+    PrepareRequest(crate::prepare::PrepareRequest),
     /// Operations only tests reach, built only with the `test-ops` feature,
     /// which a shipped build leaves off; not part of the contract's schema.
     #[cfg(feature = "test-ops")]
@@ -67,6 +68,7 @@ impl Operation {
             Operation::EditSchema(_) => "edit_schema",
             Operation::Materialize(_) => "materialize",
             Operation::Predict(_) => "predict",
+            Operation::PrepareRequest(_) => "prepare_request",
             #[cfg(feature = "test-ops")]
             Operation::Test(_) => "test",
         }
@@ -103,8 +105,10 @@ impl Operation {
                 named.extend(m.values.map(|id| (id, Bytes)));
                 named
             }
+            Operation::PrepareRequest(p) => vec![(p.input, Bytes)],
             Operation::Predict(p) => {
                 let mut named = Vec::new();
+                named.extend(p.direct.map(|id| (id, Bytes)));
                 if let Some(state) = &p.state {
                     named.push((state.payload, Bytes));
                     named.push((state.query, Bytes));
@@ -152,6 +156,7 @@ pub enum OperationResult {
     EditSchema(SchemaEdited),
     Materialize(Materialized),
     Predict(Predicted),
+    PrepareRequest(crate::prepare::PreparedRequest),
     #[cfg(feature = "test-ops")]
     #[schemars(skip)]
     Test(TestResult),
@@ -660,6 +665,12 @@ pub struct HeldTable {
 #[serde(deny_unknown_fields)]
 pub struct HeldColumn {
     pub name: String,
+    /// Native inference carried no type, independently of its placeholder dtype.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub untyped: bool,
+    /// The caller explicitly assigned this meaning, rather than inference.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub stype_declared: bool,
     /// The column's data type as the host names it, on the client's wire
     /// ([`Dtype::wire_name`]).
     pub dtype: String,
@@ -1366,6 +1377,9 @@ pub struct HeldRanking {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Predict {
+    /// Closed model-neutral direct-frame input, separate from gathered state.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub direct: Option<AttachmentId>,
     /// The request state `materialize` answered, as the host held it since;
     /// absent where the host holds a request the core did not
     /// materialize, which [`Predict::held`] gives instead. A start naming
@@ -1388,7 +1402,8 @@ pub struct Predict {
     /// as given (a name repeated, kept), which the core checks against the
     /// model as the client's `_prepare` does: an empty list refused
     /// (`INVALID_REQUEST`), a name the model does not produce refused
-    /// (`UNSUPPORTED_REQUEST`). Empty when [`Predict::default_outputs`].
+    /// (`UNSUPPORTED_REQUEST`). Empty when [`Predict::default_outputs`]
+    /// for gathered inputs; direct inputs repeat their bound resolved outputs.
     pub outputs: Vec<String>,
     /// The caller named no outputs: the core asks the task's default ones
     /// (a regression's `prediction`, a classification's `prediction` and
@@ -1508,6 +1523,12 @@ pub struct Predicted {
 #[derive(JsonSchema)]
 #[schemars(deny_unknown_fields)]
 pub struct Attachments {
+    #[schemars(rename = "PrepareRequest.input")]
+    pub prepare_request_input: crate::prepare::Preparation,
+    #[schemars(rename = "PreparedRequest.value")]
+    pub prepared_request_value: crate::prepare::PreparedValue,
+    #[schemars(rename = "Predict.direct")]
+    pub predict_direct: crate::prepare::DirectPredict,
     #[schemars(rename = "Frames.manifest")]
     pub frames_manifest: crate::frames::FrameManifest,
     #[schemars(rename = "Materialize.frames")]
