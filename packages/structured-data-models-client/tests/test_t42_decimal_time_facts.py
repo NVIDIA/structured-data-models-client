@@ -41,8 +41,8 @@ def replaced(monkeypatch, bits, scale, variant, *, core):
     if name != 'observed_at':
         frame.rename(columns={'observed_at': name}, inplace=True)
     values = (
-        [None] * 100 if variant == 'null'
-        else [0] * 100 if variant in ('constant', 'multiple')
+        [None] * 100 if variant in ('null', 'null_windowed')
+        else [0] * 100 if variant in ('constant', 'constant_windowed', 'multiple')
         else [0] + [None] * 99 if variant == 'sparse'
         else list(range(100))
     )
@@ -60,7 +60,7 @@ def replaced(monkeypatch, bits, scale, variant, *, core):
                 if variant == 'empty':
                     frame.drop(frame.index, inplace=True)
                     frame[name] = raw_series(bits, 3, scale, [])
-                elif variant in ('null', 'sparse'):
+                elif variant in ('null', 'null_windowed', 'sparse'):
                     make = getattr(pa, f'decimal{bits}')
                     # Preserve the exact native validity rather than casting
                     # a missing cell to a numeric value for the time read.
@@ -83,7 +83,10 @@ def replaced(monkeypatch, bits, scale, variant, *, core):
 
         warnings.showwarning = mutate
         try:
-            schema = Schema.from_data({'rows': frame})
+            frames = {'rows': frame}
+            if variant.endswith('_windowed'):
+                frames['anchor'] = pd.DataFrame({'anchor_id': [1, 2]})
+            schema = Schema.from_data(frames)
         except Exception as error:
             outcome = ('error', type(error), str(error))
             native_trace = [item.name for item in traceback.extract_tb(error.__traceback__)]
@@ -115,7 +118,11 @@ def test_frozen_native_first_boxing_happens_after_missing_key_advice(
 @pytest.mark.parametrize('bits', WIDTHS)
 @pytest.mark.parametrize('scale', [2, 129])
 @pytest.mark.parametrize(
-    'variant', ['empty', 'null', 'constant', 'sparse', 'multiple', 'load', 'birth']
+    'variant',
+    [
+        'empty', 'null', 'constant', 'sparse', 'multiple', 'load', 'birth',
+        'constant_windowed', 'null_windowed',
+    ],
 )
 def test_first_scalar_plan_retains_skips_counts_order_and_native_constant(
     monkeypatch, bits, scale, variant
@@ -123,5 +130,5 @@ def test_first_scalar_plan_retains_skips_counts_order_and_native_constant(
     old = replaced(monkeypatch, bits, scale, variant, core=False)
     new = replaced(monkeypatch, bits, scale, variant, core=True)
     assert new[:2] == old[:2]
-    if variant in ('empty', 'null', 'load', 'birth'):
+    if variant in ('empty', 'null', 'null_windowed', 'load', 'birth'):
         assert new[0][0] == 'ok'
