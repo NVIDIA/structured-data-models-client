@@ -205,7 +205,7 @@ def test_decimal_key_relationships_are_assembled_in_core(
 
 
 def raw_series(bits, precision, scale, values):
-    make = pa.decimal128 if bits == 128 else pa.decimal256
+    make = getattr(pa, f'decimal{bits}')
     raw = b''.join(
         value.to_bytes(bits // 8, byteorder='little', signed=True)
         for value in values
@@ -214,6 +214,24 @@ def raw_series(bits, precision, scale, values):
         make(precision, scale), len(values), [None, pa.py_buffer(raw)]
     )
     return pd.Series(pd.arrays.ArrowExtensionArray(array))
+
+
+@pytest.mark.parametrize(
+    'bits', [bits for bits in (32, 64) if hasattr(pa, f'decimal{bits}')]
+)
+@pytest.mark.parametrize('scale', [-129, -2, 0, 2, 129])
+@pytest.mark.parametrize('key', [False, True])
+def test_small_native_decimal_widths_use_the_same_constructor_stages(
+    monkeypatch, bits, scale, key
+):
+    name = 'value_id' if key else 'value'
+
+    def build():
+        return {'rows': pd.DataFrame({name: raw_series(bits, 1, scale, [0, 1])})}
+
+    schema, _, _ = paired(monkeypatch, build)
+    assert schema['rows'][name].dtype == ('float64' if scale > 0 else 'int64')
+    assert schema['rows'].primary_key == (name if key else None)
 
 
 @pytest.mark.parametrize('bits', [128, 256])
