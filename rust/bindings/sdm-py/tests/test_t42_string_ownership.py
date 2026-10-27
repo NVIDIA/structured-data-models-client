@@ -74,7 +74,9 @@ def test_string_table_owns_buffers_across_drop_and_schema_rebinding(
     snapshot = run.take_attachment(result['frame_rows'])
     del run
     gc.collect()
-    owned = pa.RecordBatchReader.from_stream(snapshot).read_all()
+    owned = pa.RecordBatchReader._import_from_c_capsule(
+        snapshot.__arrow_c_stream__()
+    ).read_all()
     assert owned['value'].to_pylist() == expected
     assert owned.schema.field('value').type == pa.string()
     del owned
