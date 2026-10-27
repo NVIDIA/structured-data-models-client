@@ -2328,6 +2328,40 @@
         {
           "type": "object",
           "properties": {
+            "stage": {
+              "type": "string",
+              "const": "model_catalogue"
+            }
+          },
+          "required": [
+            "stage"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "position": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint",
+              "minimum": 0
+            },
+            "stage": {
+              "type": "string",
+              "const": "model_lookup"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
             "call": {
               "$ref": "#/$defs/CallPreparation"
             },
@@ -2449,6 +2483,10 @@
               ],
               "default": null
             },
+            "defer_outputs": {
+              "type": "boolean",
+              "default": false
+            },
             "stage": {
               "type": "string",
               "const": "task"
@@ -2459,6 +2497,32 @@
             "stage",
             "call",
             "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "call": {
+              "$ref": "#/$defs/CallPreparation"
+            },
+            "unsupported": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "uint",
+                "minimum": 0
+              }
+            },
+            "stage": {
+              "type": "string",
+              "const": "output_admission"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "call",
+            "unsupported"
           ]
         },
         {
@@ -2647,6 +2711,9 @@
                 "null"
               ]
             },
+            "native_outputs": {
+              "type": "boolean"
+            },
             "phase": {
               "type": "string",
               "const": "task_accepted"
@@ -2690,10 +2757,59 @@
               "type": "string"
             },
             "admitted": {
+              "type": "boolean"
+            },
+            "phase": {
+              "type": "string",
+              "const": "task_admitted"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "phase",
+            "version",
+            "model",
+            "outputs",
+            "named",
+            "shape",
+            "kind",
+            "admitted"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "version": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "model": {
+              "type": "string"
+            },
+            "outputs": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "named": {
+              "type": "boolean"
+            },
+            "shape": {
+              "$ref": "#/$defs/CallShape"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "admitted": {
               "type": [
                 "boolean",
                 "null"
               ]
+            },
+            "native_outputs": {
+              "type": "boolean"
             },
             "context_rows": {
               "type": "integer",
@@ -2806,7 +2922,6 @@
       ]
     },
     "RelationalPreparation": {
-      "description": "Model-specific preflight questions over actual native data observations.",
       "oneOf": [
         {
           "type": "object",
@@ -2820,6 +2935,124 @@
             "data"
           ],
           "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "string",
+              "const": "output_vocabulary"
+            }
+          },
+          "required": [
+            "data"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "call": {
+              "$ref": "#/$defs/CallPreparation"
+            },
+            "parts": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "distinct_sources": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "uint",
+                "minimum": 0
+              }
+            },
+            "data": {
+              "type": "string",
+              "const": "output_shapes"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "data",
+            "call",
+            "parts",
+            "distinct_sources"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "explanation": {
+              "type": "boolean"
+            },
+            "item": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "data": {
+              "type": "string",
+              "const": "output_meaning"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "data",
+            "explanation"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "columns": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/NativeOutputPresence"
+              }
+            },
+            "data": {
+              "type": "string",
+              "const": "output_absence"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "data",
+            "columns"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "call": {
+              "$ref": "#/$defs/CallPreparation"
+            },
+            "population": {
+              "$ref": "#/$defs/NativeOutputAbsence"
+            },
+            "display": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              }
+            },
+            "data": {
+              "type": "string",
+              "const": "output_notice"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "data",
+            "call",
+            "population",
+            "display"
+          ]
         },
         {
           "type": "object",
@@ -3192,6 +3425,80 @@
             "context_rows"
           ]
         }
+      ]
+    },
+    "NativeOutputPresence": {
+      "type": "object",
+      "properties": {
+        "meaning": {
+          "$ref": "#/$defs/NativeOutputMeaning"
+        },
+        "nonempty": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "meaning"
+      ]
+    },
+    "NativeOutputMeaning": {
+      "type": "object",
+      "properties": {
+        "explanation": {
+          "type": "boolean"
+        },
+        "item": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "role": {
+          "$ref": "#/$defs/NativeOutputRole"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "explanation",
+        "role"
+      ]
+    },
+    "NativeOutputRole": {
+      "description": "Model-specific preflight questions over actual native data observations.",
+      "type": "string",
+      "enum": [
+        "explanation",
+        "candidate",
+        "item",
+        "other"
+      ]
+    },
+    "NativeOutputAbsence": {
+      "type": "object",
+      "properties": {
+        "columns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/NativeOutputPresence"
+          }
+        },
+        "absent": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "columns",
+        "absent"
       ]
     },
     "RelationalTaskMeaning": {
@@ -6315,6 +6622,57 @@
           "properties": {
             "data": {
               "type": "string",
+              "const": "output_vocabulary"
+            },
+            "value": {
+              "$ref": "#/$defs/NativeOutputVocabulary"
+            }
+          },
+          "required": [
+            "data",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "string",
+              "const": "output_meaning"
+            },
+            "value": {
+              "$ref": "#/$defs/NativeOutputMeaning"
+            }
+          },
+          "required": [
+            "data",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "string",
+              "const": "output_absence"
+            },
+            "value": {
+              "$ref": "#/$defs/NativeOutputAbsence"
+            }
+          },
+          "required": [
+            "data",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "string",
               "const": "empty"
             },
             "value": {
@@ -6457,6 +6815,41 @@
         "classification",
         "regression",
         "summarized"
+      ]
+    },
+    "NativeOutputVocabulary": {
+      "type": "object",
+      "properties": {
+        "explanation": {
+          "type": "string"
+        },
+        "item_fields": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "empty_values": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/NativeOutputEmpty"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "explanation",
+        "item_fields",
+        "empty_values"
+      ]
+    },
+    "NativeOutputEmpty": {
+      "type": "string",
+      "enum": [
+        "null",
+        "mapping",
+        "list",
+        "tuple"
       ]
     },
     "RelationalCallFields": {
@@ -7078,6 +7471,7 @@
         "direct_frame",
         "direct_related",
         "direct_unknown_model",
+        "relational_output_shapes",
         "direct_task",
         "direct_wire_non_finite",
         "direct_wire_fraction",
