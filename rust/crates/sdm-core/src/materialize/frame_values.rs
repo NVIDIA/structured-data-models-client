@@ -363,7 +363,11 @@ pub(crate) async fn labels(
     zones: &dyn sdm_engine::time::Zones,
     attachments: &mut Attachments,
 ) -> Result<LabelledFrameTask, CoreError> {
-    let graph = BoundGraph::bind(asker, graph_value, attachments)?;
+    let mut graph = BoundGraph::bind(asker, graph_value, attachments)?;
+    // Snapshot/index ownership is immutable. Labels use call-local entity
+    // entropy, not the shared neighbor stream, and shared temporal kernels
+    // can suspend. Actual FrameRun accesses remain individually locked.
+    graph.release_access();
     let query: String = take_json(attachments, query)?;
     let values: Option<Value> = take_json_if(attachments, values)?;
     let mut deferred = options::values(values.as_ref())?;

@@ -46,9 +46,10 @@ Mutable FrameRun/neighbors belong to one actual cached RelationalMaterializer/mo
 Separate PredictiveQuery objects on the same Schema therefore require independent initial neighbor streams, even if immutable snapshot storage is shared.
 Source identity is a coherence check, never an instruction to intern or merge mutable owners.
 
-A prototype fixed-call lease currently prevents overlapping operations on the same mutable neighbor owner using the existing RUN_BUSY code.
-It is unlinked and is not an approved public concurrency policy.
-The original C++ call retains the GIL while its batch settings explicitly support concurrent execution contexts, so the frozen public ownership witness must decide whether short pure-Rust graph access should block/serialize instead of introducing a new cross-HostRun busy refusal.
+The fixed pure-core-call lease now waits for overlapping access to the same mutable neighbor owner, using a brief mutex/condition-variable admission gate.
+It no longer invents a cross-HostRun RUN_BUSY refusal.
+The existing per-Run busy contract remains separate.
+The original C++ sample call retains the GIL, while the current native binding detaches the GIL during core calls, so waiting for pure Rust access does not hold Python execution hostage.
 It is released on ordinary return, error, cancellation or unwind and does not roll back reached neighbor progression.
 A FrameRun mutex poisoned during mutation causes existing RUN_POISONED rather than silent reuse of partially updated state.
 The lease carries no stage and is not retained while the host performs a native conversion between calls.
@@ -80,17 +81,61 @@ That handoff must clear an earlier raw checkpoint and retain/export the same liv
 It must never overwrite reached neighbor state with a stale snapshot from an earlier stage or batch.
 Ordinary raw/provider capture remains unchanged.
 
-The actual public reentrant/native-warning/concurrent materialize behavior remains an open compatibility proof.
-The source lease protects only one core call; it ends before native conversions and native warning presentation and does not serialize an entire public materialize journey.
-Two public journeys sharing one materializer could still interleave those calls and its continuing neighbor stream.
-Fresh call-specific leases do not by themselves establish the correct random-state authority.
-No blanket public busy refusal, whole-call lock or new serialization policy is approved or implemented by this source checkpoint.
+The root executed an immutable frozen-reference ownership witness against original public source `43e55f4f58924384c3cb52f67c8ed2e73ba45fa1` on CPython 3.10 and 3.12.
+Each cell contains fourteen case bundles and forty actual public materialize calls, with no observer, setup or network failures and no model calls.
+The result receipt digests are `5ac982b76a9e85a598a9613640e37ff801c40bb5af11af4351ddf32f69549f5a` and `9abf91cae7c6f8965ff59e239c0f29ae7a928423e42b62cfeb6544b4c024bcfb` respectively.
+Both cells agree on the following observed boundaries.
+
+| Public boundary | Actual observation |
+| --- | --- |
+| Repeated unseeded calls on one query | One cached model/sampler/native RNG continues between calls. |
+| Fresh query on the same Schema | A distinct model/sampler starts its own seed-123 stream. |
+| Explicit seeded batches | Every reached batch resets before its draw. |
+| Invalid native count dtype with a new seed | The seed reset survives failure, with no draw consumed. |
+| Warning-as-error before sampling | No reset or draw occurs; the already constructed graph/model remains cached. |
+| Text conversion failure after the second draw | Both reached draws remain consumed, matching a successful two-draw control. |
+| Reentry between draws on the same query | The nested call advances/resets the outer call's continuing stream. |
+| Reentry on a fresh query | Its independent stream leaves the outer stream unchanged. |
+| Two warm threads under an explicit between-draw schedule | Both calls succeed and match the equivalent same-thread schedule. |
+| Two cold initializers held at an explicit constructor barrier | Both independently construct and complete; the later cached assignment determines subsequent continuation. |
+
+The witness records complete ordinary and lossless native payloads, selected neighbors and actual owner identities rather than treating the legacy NumPy global state as a native RNG checkpoint.
+Its conversion reentry and cold scheduling barriers are explicit observer effects, and do not claim that an ordinary builtin cast naturally invokes a callback.
+These are frozen reference observations, not candidate evidence.
+They reject a whole-public-call lock, blanket cross-HostRun busy failure, source-hash RNG interning and invented singleflight cold construction.
+The source lease ends before native conversions and native warning presentation, so public journeys sharing a materializer can interleave those calls and its continuing stream.
+
+The asynchronous label consumer explicitly releases its graph access lease before awaiting shared label kernels.
+Labels use call-local entity entropy and individually locked FrameRun access, rather than consuming the continuing neighbor RNG.
+Source inspection found that shared `Labelling::read` still routes temporal aggregate reads through provider `fetch_rows`.
+That kernel needs the existing local frame lookup/snapshot path at shared composition before temporal labels can run as a complete native frame journey.
+Holding a graph gate across that foreign suspension would be invalid.
+Static labels, frame time bounds and entity selection already use local frame branches.
+The final composed path must also establish poison and cancellation behavior at each actual mutable FrameRun access; these source-owner tests alone do not establish HostRun behavior.
+
+## Isolated native ownership source
+
+The new, unconnected `_rust/frame_native.py` module holds the fresh converter's original native dtype owners in an immutable source/column mapping.
+It resolves only explicit core-provided source Relations and columns, preserves dotted source names, and neither infers logical aliases nor reads a caller Schema on reuse.
+The actual whole prediction constructor uses that retained dtype, while the actual selected Text conversion uses whole-column `fillna('').astype(str)` before Rust-owned normalization.
+Successful results retain their actual native Series; failed conversions retain the exact exception without manufacturing Arrow values or starting diagnostic work early.
+The companion stores no graph indexes, mutable RNG, full frame copy, callback, registry or workflow continuation.
+Its lifetime must follow one cached materializer's exact core graph owner, including downstream warning/conversion failure.
+
+Native exception capture preserves actual traceback, cause, context and suppression, builtin ancestry including KeyError and StructuredDataError, raw class lineage and the deepest native module.
+Capture does not observe native error text or select an SDK code, wrapper, phrase match or sanitization detail.
+Explicit native message/name reads are uncached and leave failures at those observation points untouched.
+Raw qualified class lineage is descriptive metadata, not canonical class identity authority.
+The final guard must establish any exact relational-error ancestry fact without importing or invoking the old engine on the new default path.
+The source module does not yet choose the final core-selected text-observation interface, bind failure DTOs or perform warning presentation.
+It is not a completed facade.
 
 ## Source tests and execution status
 
 The new identity, range, native profile and conversion-order tests were written before their consumers.
 The snapshot replay and link-alignment tests were written before the corresponding replay methods.
-The retained-owner allocation-reuse, busy-state, final-reference release and unwind/poison tests were written before the owner implementation.
+The retained-owner allocation-reuse, blocking-overlap, independent-query, final-reference release and unwind/poison tests were written before their corresponding owner changes.
+Native observation tests were written before the new local owner module, covering exact exception identity, untouched StructuredDataError display, repeated message observations, native display failure, source-bound dtype identity and actual whole-column results.
 These are source tests and have not been executed.
 Only formatter WRITE on the explicitly owned handwritten files is permitted before two independent whole-code approvals.
 No candidate import, test, lint, type check, build, generator, native probe or live call has run for this checkpoint.
@@ -114,6 +159,7 @@ The source now aligns mixed native string offset/byte representations after the 
 The existing key consumers still need their shared single UnicodeText logical meaning at final composition.
 
 Retained lag columns, ranking/forecast decomposition, complete HostRun journey twins and the native retained-owner facade remain required before the complete Text package can be claimed.
+Whole-task/per-batch native reference fallback, stopped constructor diagnostics, lossless StringData export and native kernel facts still require their concrete fixed facade composition.
 HostRun no-rebuild, release, cancellation and concurrent-owner twins require the final fixed operation/typed attachment wiring and have not been executed or claimed by the core owner unit sources.
 The final frame native error guard must preserve guarded versus unguarded warning contexts, actual native ancestry and the existing graph-drop summary.
 Direct NativeFailure alone lacks the frame guard's KeyError/StructuredDataError/relational-error and native-class facts.

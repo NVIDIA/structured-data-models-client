@@ -1,0 +1,143 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+"""Source-first native ownership and observation-boundary regressions."""
+
+from __future__ import annotations
+
+import pandas as pd
+import pytest
+
+from sdm_client._rust.frame_native import (
+    NativeColumn,
+    NativeFrameColumns,
+    NativeFrameFailure,
+    convert_text,
+)
+from sdm_client.errors import StructuredDataError
+
+
+class DisplayFailure(Exception):
+    def __init__(self):
+        self.reads = 0
+
+    def __str__(self):
+        self.reads += 1
+        return f'observation {self.reads}'
+
+
+def test_capture_keeps_exception_identity_without_observing_native_text():
+    error = DisplayFailure()
+    context = ValueError('original context')
+    try:
+        try:
+            raise context
+        except ValueError:
+            raise error
+    except DisplayFailure as caught:
+        held = NativeFrameFailure.capture(caught)
+        traceback = caught.__traceback__
+    assert held.error is error
+    assert held.traceback is traceback
+    assert held.context is context
+    assert held.cause is None
+    assert held.facts.deepest_module == __name__
+    assert error.reads == 0
+    # A later core-selected presentation can observe the native message at
+    # distinct positions. Caching it would change a stateful exception.
+    assert held.read_message() == 'observation 1'
+    assert held.read_message() == 'observation 2'
+    assert held.read_type_name() == 'DisplayFailure'
+
+
+def test_structured_failure_capture_never_calls_native_display():
+    class Preserved(StructuredDataError):
+        def __str__(self):
+            raise AssertionError('StructuredDataError was displayed')
+
+    error = Preserved('preserve me', code='INVALID_REQUEST')
+    held = NativeFrameFailure.capture(error)
+    assert held.error is error
+    assert 'structured_data_error' in held.facts.ancestry
+    assert held.facts.deepest_module is None
+
+
+def test_key_error_is_not_lost_in_the_direct_conversion_ancestry():
+    error = KeyError('missing')
+    held = NativeFrameFailure.capture(error)
+    assert held.facts.ancestry == ('key_error',)
+    assert held.read_message() == "'missing'"
+
+
+def test_native_display_failure_remains_the_actual_failure_at_that_boundary():
+    failure = RuntimeError('display failed')
+
+    class Unprintable(TypeError):
+        def __str__(self):
+            raise failure
+
+    held = NativeFrameFailure.capture(Unprintable())
+    assert held.facts.ancestry == ('type_error',)
+    with pytest.raises(RuntimeError) as caught:
+        held.read_message()
+    assert caught.value is failure
+
+
+def test_source_binding_uses_the_original_dtype_and_does_not_infer_aliases():
+    dtype = pd.StringDtype(storage='python')
+    columns = {'input_users': {'id': dtype}}
+    held = NativeFrameColumns(columns)
+    columns.clear()
+    binding = {'source': {'source': ['input_users']}, 'column': 'id'}
+    assert held.dtype(binding) is dtype
+    native = held.prediction(binding, ['a', None])
+    assert isinstance(native, NativeColumn)
+    assert native.values.dtype == dtype
+    assert native.values.iloc[0] == 'a'
+    assert native.values.iloc[1] is pd.NA
+    with pytest.raises(KeyError):
+        held.dtype({'source': {'source': ['users']}, 'column': 'id'})
+
+
+def test_whole_text_conversion_does_not_lower_split_or_cap():
+    value = 'CAPITAL ' + 'x' * 301
+    selected = pd.Series([value, None], dtype=pd.StringDtype(storage='python'))
+    converted = convert_text(selected)
+    assert isinstance(converted, NativeColumn)
+    assert converted.values.iloc[0] == value
+    assert converted.values.iloc[1] == ''
+    assert selected.iloc[1] is pd.NA
+
+
+def test_a_dotted_source_remains_one_relation_part():
+    dtype = pd.StringDtype(storage='python')
+    columns = NativeFrameColumns({'users.snapshot': {'id': dtype}})
+    assert (
+        columns.dtype(
+            {'source': {'source': ['users.snapshot']}, 'column': 'id'}
+        )
+        is dtype
+    )
+    with pytest.raises(ValueError):
+        columns.dtype(
+            {'source': {'source': ['users', 'snapshot']}, 'column': 'id'}
+        )
+
+
+def test_prediction_retains_the_actual_whole_constructor_exception():
+    failure = TypeError('native value cannot stringify')
+
+    class BadString:
+        def __str__(self):
+            raise failure
+
+    columns = NativeFrameColumns(
+        {'input_users': {'id': pd.StringDtype('python')}}
+    )
+    converted = columns.prediction(
+        {'source': {'source': ['input_users']}, 'column': 'id'}, [BadString()]
+    )
+    assert isinstance(converted, NativeFrameFailure)
+    assert converted.error is failure
+    assert converted.facts.ancestry == ('type_error',)
