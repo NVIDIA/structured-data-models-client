@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 pub const DIRECT_PREPARED_VERSION: u32 = 1;
 pub const CALL_PREPARATION_VERSION: u32 = 2;
 pub const DIRECT_OVERLAP_VERSION: u32 = 1;
-pub const TABULAR_ENVELOPE_VERSION: u32 = 1;
+pub const TABULAR_ENVELOPE_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -202,7 +202,6 @@ pub struct TabularColumn {
 pub struct TabularColumns {
     pub dtypes: Vec<(String, Dtype)>,
     pub columns: Vec<TabularColumn>,
-    pub primary_key: Vec<String>,
     pub target: String,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -289,6 +288,10 @@ pub enum DirectPredict {
         context_header: FrameHeader,
         predict_header: FrameHeader,
         task: String,
+        /// Read from the same captured native table after text advice.
+        primary_key: Vec<String>,
+        /// Actual builtin native Unicode database version used by literal decoding.
+        unicode_version: String,
         #[serde(default)]
         inference: DirectInference,
     },

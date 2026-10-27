@@ -18,6 +18,8 @@ use sdm_wire::json::Value;
 use sdm_wire::response::PredictionResponse;
 use std::collections::{BTreeMap, BTreeSet};
 
+mod key_literal;
+
 fn text(value: impl Into<String>) -> Value {
     Value::Text(value.into())
 }
@@ -387,7 +389,6 @@ pub fn envelope(
         TabularColumns {
             dtypes: dtypes.into_iter().collect(),
             columns,
-            primary_key: table.primary_key.clone(),
             target: target.to_owned(),
         },
         notices,
@@ -400,6 +401,7 @@ pub fn body(
     plan: &TabularColumns,
     context: &[RecordBatch],
     scoring: &[RecordBatch],
+    primary_key: &[String],
     kind: &str,
     outputs: &[String],
     request_id: &str,
@@ -433,10 +435,10 @@ pub fn body(
         })
         .collect();
     let mut instance = object([("columns", Value::Object(columns))]);
-    if !plan.primary_key.is_empty() {
+    if !primary_key.is_empty() {
         instance.set(
             "primary_key",
-            Value::Array(plan.primary_key.iter().map(text).collect()),
+            Value::Array(primary_key.iter().map(text).collect()),
         );
     }
     let encode = |batches: &[RecordBatch]| -> Result<Value, CoreError> {
@@ -450,24 +452,28 @@ pub fn body(
                     .collect()
             })
             .unwrap_or_default();
-        let mut rows = Vec::new();
-        for batch in batches {
-            for row in 0..batch.num_rows() {
-                rows.push(Value::Array(
-                    names
-                        .iter()
-                        .enumerate()
-                        .map(|(at, name)| {
-                            let dtype = dtypes.get(name.as_str()).copied().ok_or_else(|| {
-                                invalid(Sentence::DirectSchemaMissing)
-                                    .with_field("name", Detail::text(name))
-                            })?;
-                            cell(raw(batch.column(at), row)?, dtype, name, float_text)
-                        })
-                        .collect::<Result<_, _>>()?,
-                ));
+        let count = batches.iter().map(RecordBatch::num_rows).sum();
+        let mut rows = vec![Vec::with_capacity(names.len()); count];
+        // The native encoder consumes a whole column before the next, across
+        // every Arrow batch, then transposes. Competing failures keep that order.
+        for (at, name) in names.iter().enumerate() {
+            let dtype = dtypes.get(name.as_str()).copied().ok_or_else(|| {
+                invalid(Sentence::DirectSchemaMissing).with_field("name", Detail::text(name))
+            })?;
+            let mut position = 0;
+            for batch in batches {
+                for row in 0..batch.num_rows() {
+                    rows[position].push(cell(
+                        raw(batch.column(at), row)?,
+                        dtype,
+                        name,
+                        float_text,
+                    )?);
+                    position += 1;
+                }
             }
         }
+        let rows = rows.into_iter().map(Value::Array).collect();
         Ok(object([
             ("format", text("arrays")),
             ("columns", Value::Array(names.iter().map(text).collect())),
@@ -508,109 +514,200 @@ pub fn body(
     Ok(result)
 }
 
-/// Shared response decoding plus direct batch attribution/key restoration.
-pub fn layout(
-    payload: &Value,
-    response: &PredictionResponse,
+/// Call-local response attribution. Each checked row exposes only its reached
+/// literal notices before its ID comparison resumes; this is not serialized state.
+pub struct ResponseLayout {
+    part: Part,
+    ids: Vec<Option<String>>,
+    keys: Option<Vec<Entity>>,
+    key_texts: BTreeSet<String>,
+    rows: usize,
+    seen: BTreeSet<usize>,
+    next: usize,
+    unicode_version: String,
     float_text: fn(f64) -> String,
-) -> Result<Part, CoreError> {
-    let mut part = predict::layout_tabular(payload, response, float_text)?;
-    let rows = match payload
-        .get("predict")
-        .and_then(|p| p.get("instance_table"))
-        .and_then(|t| t.get("rows"))
-    {
-        Some(Value::Array(rows)) => rows,
-        _ => return Err(predict::bad_response("predict", "not_an_array")),
-    };
-    let instance = payload.get("schema").and_then(|s| s.get("instance_table"));
-    let key = match instance.and_then(|s| s.get("primary_key")) {
-        Some(Value::Array(keys)) if keys.len() == 1 => keys[0].as_text(),
-        _ => None,
-    };
-    let columns = payload
-        .get("predict")
-        .and_then(|p| p.get("instance_table"))
-        .and_then(|t| t.get("columns"));
-    let key_at = match (key, columns) {
-        (Some(key), Some(Value::Array(columns))) => {
-            columns.iter().position(|c| c.as_text() == Some(key))
+}
+pub struct RowCheck {
+    index: usize,
+    at: usize,
+    answered: Option<String>,
+    named: Option<key_literal::Name>,
+    pub notices: Vec<CoreWarning>,
+}
+impl ResponseLayout {
+    pub fn new(
+        payload: &Value,
+        response: &PredictionResponse,
+        unicode_version: &str,
+        float_text: fn(f64) -> String,
+    ) -> Result<Self, CoreError> {
+        if !key_literal::supported(unicode_version) {
+            return Err(CoreError::protocol(
+                Sentence::InvalidMessage,
+                "unknown native Unicode database profile",
+            ));
         }
-        _ => None,
-    };
-    let dtype = key.and_then(|key| {
-        instance
-            .and_then(|s| s.get("columns"))
-            .and_then(|c| c.get(key))
-            .and_then(|c| c.get("dtype"))
-            .and_then(Value::as_text)
-    });
-    let keys: Option<Vec<Entity>> = key_at.map(|key_at| {
-        rows.iter()
-            .map(|row| {
-                if let Value::Array(cells) = row {
-                    cells
-                        .get(key_at)
-                        .map_or(Entity::None, |v| predict::entity(v, dtype))
-                } else {
-                    Entity::None
-                }
-            })
-            .collect()
-    });
-    let key_texts: BTreeSet<String> = keys
-        .as_ref()
-        .into_iter()
-        .flatten()
-        .map(|key| entity_text(key, float_text))
-        .collect();
-    let mut seen = BTreeSet::new();
-    for row in &mut part.rows {
+        let part = predict::layout_tabular(payload, response, float_text)?;
+        let rows = match payload
+            .get("predict")
+            .and_then(|p| p.get("instance_table"))
+            .and_then(|t| t.get("rows"))
+        {
+            Some(Value::Array(rows)) => rows,
+            _ => return Err(predict::bad_response("predict", "not_an_array")),
+        };
+        let instance = payload.get("schema").and_then(|s| s.get("instance_table"));
+        let key = match instance.and_then(|s| s.get("primary_key")) {
+            Some(Value::Array(keys)) if keys.len() == 1 => keys[0].as_text(),
+            _ => None,
+        };
+        let columns = payload
+            .get("predict")
+            .and_then(|p| p.get("instance_table"))
+            .and_then(|t| t.get("columns"));
+        let key_at = match (key, columns) {
+            (Some(key), Some(Value::Array(columns))) => {
+                columns.iter().position(|c| c.as_text() == Some(key))
+            }
+            _ => None,
+        };
+        let dtype = key.and_then(|key| {
+            instance
+                .and_then(|s| s.get("columns"))
+                .and_then(|c| c.get(key))
+                .and_then(|c| c.get("dtype"))
+                .and_then(Value::as_text)
+        });
+        let keys: Option<Vec<Entity>> = key_at.map(|at| {
+            rows.iter()
+                .map(|row| match row {
+                    Value::Array(cells) => cells
+                        .get(at)
+                        .map_or(Entity::None, |v| predict::entity(v, dtype)),
+                    _ => Entity::None,
+                })
+                .collect()
+        });
+        let key_texts = keys
+            .as_ref()
+            .into_iter()
+            .flatten()
+            .map(|key| entity_text(key, float_text))
+            .collect();
+        Ok(Self {
+            part,
+            ids: response
+                .predictions
+                .iter()
+                .map(|item| item.id.clone())
+                .collect(),
+            keys,
+            key_texts,
+            rows: rows.len(),
+            seen: BTreeSet::new(),
+            next: 0,
+            unicode_version: unicode_version.into(),
+            float_text,
+        })
+    }
+    pub fn next_row(&mut self) -> Result<Option<RowCheck>, CoreError> {
+        let Some(row) = self.part.rows.get(self.next) else {
+            return Ok(None);
+        };
         let at = usize::try_from(row.row_index)
             .ok()
-            .filter(|&n| n < rows.len())
+            .filter(|&n| n < self.rows)
             .ok_or_else(|| {
                 invalid(Sentence::TabularRowBounds)
                     .with_field("index", Detail::Scalar(Scalar::Int64(row.row_index)))
-                    .with_field("rows", Detail::Scalar(Scalar::UInt64(rows.len() as u64)))
+                    .with_field("rows", Detail::Scalar(Scalar::UInt64(self.rows as u64)))
             })?;
-        if !seen.insert(at) {
+        if self.seen.contains(&at) {
             return Err(invalid(Sentence::TabularRowRepeated)
                 .with_field("index", Detail::Scalar(Scalar::UInt64(at as u64))));
         }
-        if let Some(keys) = &keys {
-            if let Some(answered) = response
-                .predictions
-                .get(row.answer_index as usize)
-                .and_then(|item| item.id.as_deref())
-            {
-                let named = key_named(answered, float_text)
-                    .or_else(|| key_texts.contains(answered).then(|| answered.to_owned()));
-                if named.is_some_and(|named| named != entity_text(&keys[at], float_text)) {
-                    return Err(invalid(Sentence::TabularIdMismatch)
-                        .with_field("index", Detail::Scalar(Scalar::UInt64(at as u64)))
-                        .with_field("id", Detail::text(answered))
-                        .with_field("expected", Detail::Scalar(entity_scalar(&keys[at]))));
+        let answered = self.ids[self.next].clone();
+        let mut notices = Vec::new();
+        let named = if self.keys.is_some() {
+            if let Some(answered) = &answered {
+                let read = key_literal::read(answered, &self.unicode_version, self.float_text);
+                for (ordinal, notice) in read.notices.into_iter().enumerate() {
+                    notices.push(
+                        CoreWarning::new(
+                            Sentence::DirectLiteralEscape,
+                            "a response key literal has an escape notice",
+                        )
+                        .with_field("literal", Detail::text(answered))
+                        .with_field("ordinal", Detail::Scalar(Scalar::UInt64(ordinal as u64)))
+                        .with_field("escape", Detail::text(notice.escape))
+                        .with_field(
+                            "escape_kind",
+                            Detail::text(if notice.octal {
+                                "octal escape"
+                            } else {
+                                "escape"
+                            }),
+                        ),
+                    );
                 }
+                read.name.or_else(|| {
+                    self.key_texts
+                        .contains(answered)
+                        .then(|| key_literal::Name::Primitive(answered.clone()))
+                })
+            } else {
+                None
             }
-            if !matches!(&keys[at], Entity::None) {
-                row.id = keys[at].clone();
+        } else {
+            None
+        };
+        let index = self.next;
+        self.next += 1;
+        Ok(Some(RowCheck {
+            index,
+            at,
+            answered,
+            named,
+            notices,
+        }))
+    }
+    pub fn accept(&mut self, check: RowCheck) -> Result<(), CoreError> {
+        if let Some(keys) = &self.keys {
+            let wrong = match &check.named {
+                Some(key_literal::Name::Different) => true,
+                Some(key_literal::Name::Primitive(text)) => {
+                    text != &entity_text(&keys[check.at], self.float_text)
+                }
+                None => false,
+            };
+            if wrong {
+                return Err(invalid(Sentence::TabularIdMismatch)
+                    .with_field("index", Detail::Scalar(Scalar::UInt64(check.at as u64)))
+                    .with_field("id", Detail::text(check.answered.as_deref().unwrap_or("")))
+                    .with_field("expected", Detail::Scalar(entity_scalar(&keys[check.at]))));
+            }
+            if !matches!(&keys[check.at], Entity::None) {
+                self.part.rows[check.index].id = keys[check.at].clone();
             }
         }
+        self.seen.insert(check.at);
+        Ok(())
     }
-    let missing: Vec<_> = (0..rows.len()).filter(|n| !seen.contains(n)).collect();
-    if !missing.is_empty() {
-        return Err(invalid(Sentence::TabularRowsUnanswered).with_field(
-            "missing",
-            Detail::List(
-                missing
-                    .into_iter()
-                    .map(|n| Scalar::UInt64(n as u64))
-                    .collect(),
-            ),
-        ));
+    pub fn finish(self) -> Result<Part, CoreError> {
+        let missing: Vec<_> = (0..self.rows).filter(|n| !self.seen.contains(n)).collect();
+        if !missing.is_empty() {
+            return Err(invalid(Sentence::TabularRowsUnanswered).with_field(
+                "missing",
+                Detail::List(
+                    missing
+                        .into_iter()
+                        .map(|n| Scalar::UInt64(n as u64))
+                        .collect(),
+                ),
+            ));
+        }
+        Ok(self.part)
     }
-    Ok(part)
 }
 
 fn entity_text(value: &Entity, float_text: fn(f64) -> String) -> String {
@@ -640,27 +737,102 @@ fn entity_scalar(value: &Entity) -> Scalar {
         Entity::Written(v) => Scalar::Utf8(String::from_utf8_lossy(&v.to_bytes()).into_owned()),
     }
 }
-fn key_named(value: &str, float_text: fn(f64) -> String) -> Option<String> {
-    if value.len() > 1024 {
-        return None;
-    }
-    if let Ok(Value::Array(parts)) = sdm_wire::json::read(value.as_bytes()) {
-        if let [part] = parts.as_slice() {
-            return Some(entity_text(&predict::entity(part, None), float_text));
+/// Native str() for the closed primitive values a numeric key ID can name.
+/// Float spellings are read as floats before presentation, rather than kept as
+/// their JSON exponent token. Text deliberately keeps its spelling.
+fn primitive_text(value: &Value, float_text: fn(f64) -> String) -> Option<String> {
+    match value {
+        Value::Null => Some("None".into()),
+        Value::Bool(value) => Some(if *value { "True" } else { "False" }.into()),
+        Value::Text(value) => Some(value.clone()),
+        Value::Number(token) => {
+            if let Some(integer) = sdm_wire::response::integer_text(token) {
+                Some(integer)
+            } else {
+                sdm_wire::response::numeric_text(token).map(float_text)
+            }
         }
+        _ => None,
     }
-    let part = value.trim().strip_prefix('[')?.strip_suffix(']')?.trim();
-    if matches!(part, "True" | "False" | "None") {
-        return Some(part.to_owned());
-    }
-    let quote = part.chars().next()?;
-    if !matches!(quote, '\'' | '"') {
+}
+
+/// One Python numeric literal, with a single optional unary sign. This is a
+/// bounded scalar grammar, not expression evaluation. Exact integer digits stay
+/// exact even when the response names a value outside the admitted key width.
+fn literal_number(value: &str, float_text: fn(f64) -> String) -> Option<String> {
+    if !value.is_ascii() {
         return None;
     }
-    let content = part.strip_prefix(quote)?.strip_suffix(quote)?;
-    // Numeric/Boolean keys sent as strings contain no Python escapes.
-    // Plain quoted strings are read as text; no expression or nested value is evaluated.
-    (!content.contains(['\'', '"', '\\'])).then(|| content.to_owned())
+    let (negative, body) = match value.as_bytes().first() {
+        Some(b'-') => (true, value[1..].trim()),
+        Some(b'+') => (false, value[1..].trim()),
+        _ => (false, value),
+    };
+    if body.starts_with(['+', '-']) {
+        return None;
+    }
+    let prefix = body.get(..2).unwrap_or("").to_ascii_lowercase();
+    let radix = match prefix.as_str() {
+        "0x" => Some(16),
+        "0o" => Some(8),
+        "0b" => Some(2),
+        _ => None,
+    };
+    if let Some(radix) = radix {
+        let digits = body[2..].strip_prefix('_').unwrap_or(&body[2..]);
+        if digits.is_empty() {
+            return None;
+        }
+        let bytes = digits.as_bytes();
+        let mut decimal = vec![0_u32];
+        for (at, digit) in digits.chars().enumerate() {
+            if digit == '_' {
+                if at == 0
+                    || !char::from(bytes[at - 1]).is_digit(radix)
+                    || !bytes
+                        .get(at + 1)
+                        .is_some_and(|b| char::from(*b).is_digit(radix))
+                {
+                    return None;
+                }
+                continue;
+            }
+            let mut carry = digit.to_digit(radix)?;
+            for place in &mut decimal {
+                let next = *place * radix + carry;
+                *place = next % 10;
+                carry = next / 10;
+            }
+            while carry > 0 {
+                decimal.push(carry % 10);
+                carry /= 10;
+            }
+        }
+        let digits: String = decimal
+            .into_iter()
+            .rev()
+            .map(|d| char::from_digit(d, 10).unwrap())
+            .collect();
+        return Some(if negative && digits != "0" {
+            format!("-{digits}")
+        } else {
+            digits
+        });
+    }
+    let signed = if negative {
+        format!("-{body}")
+    } else {
+        body.to_owned()
+    };
+    if !body.contains(['.', 'e', 'E']) {
+        // Unlike int(text), a decimal literal cannot have a nonzero leading zero.
+        let digits = body.replace('_', "");
+        if digits.len() > 1 && digits.starts_with('0') && digits.bytes().any(|b| b != b'0') {
+            return None;
+        }
+        return sdm_wire::response::integer_text(&signed);
+    }
+    sdm_wire::response::numeric_text(&signed).map(float_text)
 }
 
 /// Direct one-shot leakage advice, before schema consistency/body encoding.
@@ -704,7 +876,12 @@ pub fn leakage(
         return Ok((0, None));
     };
     let native = native_schema.tables.iter().find(|t| t.name == entity);
-    let Ok(dtypes) = widths(table, native, scoring, arriving, storage) else {
+    let arriving: Vec<_> = arriving
+        .iter()
+        .filter(|(name, _)| table.primary_key.contains(name))
+        .cloned()
+        .collect();
+    let Ok(dtypes) = widths(table, native, scoring, &arriving, storage) else {
         return Ok((0, None));
     };
     let key =
@@ -721,6 +898,17 @@ pub fn leakage(
             if values.iter().any(|v| matches!(v, Value::Null)) {
                 return Ok(None);
             }
+            // Both halves have the same wire dtype. Numeric identity ignores
+            // spelling (including signed zero); text keeps its literal spelling.
+            let values = values
+                .into_iter()
+                .map(|value| match value {
+                    Value::Number(token) => {
+                        Value::Number(sdm_contract::data::exact_number_text(&token))
+                    }
+                    other => other,
+                })
+                .collect();
             Ok(Some(Value::Array(values).to_bytes()))
         };
     let mut answered = BTreeSet::new();

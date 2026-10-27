@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import json
 import math
+import unicodedata
+import warnings
 from collections.abc import Sequence
 from contextlib import ExitStack
 from typing import TYPE_CHECKING, Any
@@ -26,6 +28,7 @@ from sdm_client._rust import (
 )
 from sdm_client._rust.run import run
 from sdm_client.errors import StructuredDataError
+from sdm_client.schema import _as_key_tuple
 
 if TYPE_CHECKING:
     from sdm_client import Request, Schema, SDMClient
@@ -443,6 +446,13 @@ def predict(
         # A leakage warning may have replaced Request's references. Capture
         # the adapter's references now and retain them across its text advice.
         schema = request.schema
+        # Capture the table object as the adapter does. A missing table remains
+        # a core-selected schema error in Envelope, before this reference is used.
+        table = (
+            schema.tables.get(request.entity_table)
+            if schema is not None
+            else None
+        )
         context = request.context.instance_table
         scored = request.predict.instance_table
         context_header, predict_header = _header(context), _header(scored)
@@ -471,6 +481,9 @@ def predict(
             )
         # The same captured frames are read after text advice. In-place edits
         # are visible, while replacement Request references are not recaptured.
+        assert table is not None  # Envelope proved the captured entity exists.
+        primary_key = list(_as_key_tuple(table.primary_key))
+        task = request.task.kind
         context_header, predict_header = _header(context), _header(scored)
         value = {
             'stage': 'body',
@@ -479,7 +492,9 @@ def predict(
             'predict': 3,
             'context_header': context_header,
             'predict_header': predict_header,
-            'task': request.task.kind,
+            'task': task,
+            'primary_key': primary_key,
+            'unicode_version': unicodedata.unidata_version,
             'inference': _json(request.inference),
         }
         attached = {
@@ -497,11 +512,12 @@ def predict(
     endpoint = getattr(client._transport, 'model_endpoint', None)
     if endpoint is not None:
         operation['model_endpoint'] = endpoint
-    finished = run(
-        operation,
-        {1: codec.attachment(value), **attached},
-        model=lambda body: prediction._send(client, call['model'], body),
-    )
+    with errors.holding(direct_literal_notice=_literal_notice):
+        finished = run(
+            operation,
+            {1: codec.attachment(value), **attached},
+            model=lambda body: prediction._send(client, call['model'], body),
+        )
     answered = results.expect(finished.result, results.Predicted)
     table = prediction._table(finished.take(answered.result))
     result = prediction._result(
@@ -516,3 +532,23 @@ def predict(
     if names is not None:
         result._names_its_rows = names == b'true'
     return result
+
+
+def _literal_notice(fields: dict[str, Any]) -> tuple[str, type[Warning]]:
+    """Present the reached parser warning in this native runtime's own words."""
+    import ast
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        try:
+            ast.parse(fields['literal'].lstrip(' \t'), mode='eval')
+        except (
+            SyntaxError,
+            ValueError,
+            TypeError,
+            MemoryError,
+            RecursionError,
+        ):
+            pass
+    selected = caught[fields['ordinal']]
+    return str(selected.message), selected.category
