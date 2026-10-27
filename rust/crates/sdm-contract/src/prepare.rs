@@ -159,11 +159,39 @@ pub struct PreparedDirectTask {
 /// Native capability observations retained independently of the later task read.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+pub struct NativeCallCapabilities {
+    pub temporal: bool,
+    pub link_prediction: bool,
+    pub forecasting: bool,
+}
+
+/// Shared model vocabulary for actual native lookup and comparison kernels.
+/// Positions identify default-output entries without a native object handle.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CallVocabulary {
+    pub default_kinds: Vec<String>,
+    pub temporal_tasks: Vec<String>,
+    pub link_prediction: String,
+    pub forecasting: String,
+    pub tasks: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct NativeDefaultOutput {
+    pub position: Option<usize>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct CallShape {
     pub kind: String,
     pub anchored: bool,
     pub relationships: bool,
     pub tables: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native: Option<NativeCallCapabilities>,
 }
 
 /// Each call state has useful resolved facts, never a native action/handle.
@@ -194,6 +222,8 @@ pub enum CallPreparation {
         named: bool,
         shape: CallShape,
         kind: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        admitted: Option<bool>,
     },
     Bound {
         version: u32,
@@ -202,6 +232,8 @@ pub enum CallPreparation {
         named: bool,
         shape: CallShape,
         kind: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        admitted: Option<bool>,
         context_rows: usize,
     },
 }
@@ -411,12 +443,17 @@ pub enum Preparation {
     Model {
         model: String,
     },
+    CallVocabulary {
+        call: CallPreparation,
+    },
     Outputs {
         call: CallPreparation,
         #[serde(default)]
         outputs: Option<Vec<String>>,
         #[serde(default)]
         kind: Option<String>,
+        #[serde(default)]
+        native_default: Option<NativeDefaultOutput>,
     },
     Capabilities {
         call: CallPreparation,
@@ -424,10 +461,14 @@ pub enum Preparation {
         anchored: bool,
         relationships: bool,
         tables: usize,
+        #[serde(default)]
+        native: Option<NativeCallCapabilities>,
     },
     Task {
         call: CallPreparation,
         kind: String,
+        #[serde(default)]
+        admitted: Option<bool>,
     },
     Capacity {
         call: CallPreparation,

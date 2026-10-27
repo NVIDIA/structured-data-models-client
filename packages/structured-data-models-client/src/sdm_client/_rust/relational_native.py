@@ -14,6 +14,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import re
+import sys
 from collections.abc import Mapping
 from typing import Any
 
@@ -41,9 +42,21 @@ def prepare(request: Any, model: Any, outputs: Any) -> dict[str, Any]:
 
     model_id = model if isinstance(model, str) else spec_for(model).model_id
     call = _call({'stage': 'model', 'model': model_id})
+    words = _call({'stage': 'call_vocabulary', 'call': call})
     if outputs is None:
+        # Only this reached dictionary lookup observes the actual public key.
+        # Its values are core vocabulary positions, not native model policy.
+        defaults = {
+            sys.intern(kind): position
+            for position, kind in enumerate(words['default_kinds'])
+        }
+        position = defaults.get(request.task.kind)
         call = _call(
-            {'stage': 'outputs', 'call': call, 'kind': request.task.kind}
+            {
+                'stage': 'outputs',
+                'call': call,
+                'native_default': {'position': position},
+            }
         )
     else:
         call = _call(
@@ -51,8 +64,20 @@ def prepare(request: Any, model: Any, outputs: Any) -> dict[str, Any]:
         )
     kind = request.task.kind
     anchored = bool(request.task.options.get('anchor_time_column'))
+    temporal = anchored or kind in frozenset(
+        sys.intern(word) for word in words['temporal_tasks']
+    )
     relationships = bool(request.schema.relationships)
     tables = len(request.schema)
+    linked = kind == sys.intern(words['link_prediction'])
+    forecasting = kind == sys.intern(words['forecasting'])
+    # The original capability object retains both equality results before
+    # model validation asks for their truth, in this order.
+    native = {
+        'temporal': temporal,
+        'link_prediction': bool(linked),
+        'forecasting': bool(forecasting),
+    }
     call = _call(
         {
             'stage': 'capabilities',
@@ -61,9 +86,22 @@ def prepare(request: Any, model: Any, outputs: Any) -> dict[str, Any]:
             'anchored': anchored,
             'relationships': relationships,
             'tables': tables,
+            'native': native,
         }
     )
-    call = _call({'stage': 'task', 'call': call, 'kind': request.task.kind})
+    kind = request.task.kind
+    admitted = kind in frozenset(sys.intern(word) for word in words['tasks'])
+
+    def refused_task(_fields: Any) -> tuple[str, Any]:
+        # Refusal presentation rereads the public owner: repr may itself
+        # mutate it before the old exception's details take their fresh read.
+        shown = repr(request.task.kind)
+        return shown, request.task.kind
+
+    with errors.holding(relational_model_task=refused_task):
+        call = _call(
+            {'stage': 'task', 'call': call, 'kind': kind, 'admitted': admitted}
+        )
     return _call(
         {
             'stage': 'capacity',

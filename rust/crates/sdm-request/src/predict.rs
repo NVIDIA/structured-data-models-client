@@ -52,6 +52,7 @@ use arrow_array::{
     Array, ArrayRef, BooleanArray, Float64Array, Int64Array, RecordBatch, StringArray,
 };
 use arrow_schema::{DataType, Field, Schema};
+use sdm_contract::prepare::{CallVocabulary, NativeCallCapabilities};
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 use sdm_wire::json::{Value, is_integer_token};
 use sdm_wire::response::{
@@ -71,6 +72,17 @@ pub const REGRESSION_FIELDS: [&str; 1] = ["prediction"];
 
 /// The outputs a classification asks for when the caller names none.
 pub const CLASSIFICATION_FIELDS: [&str; 2] = ["prediction", "probabilities"];
+
+const DEFAULT_KINDS: [&str; 6] = [
+    "classification",
+    "binary_classification",
+    "multiclass_classification",
+    "regression",
+    "forecasting",
+    "temporal_link_prediction",
+];
+const FORECASTING: &str = "forecasting";
+const LINK_PREDICTION: &str = "temporal_link_prediction";
 
 /// The task kinds whose call this build writes.
 const CALLED: [&str; 4] = [
@@ -528,6 +540,47 @@ pub fn resolve_model(model: &str) -> Result<&'static str, CoreError> {
     Ok(model_spec(model)?.id)
 }
 
+/// The actual native lookup vocabulary, drawn from the shared model policy.
+pub fn call_vocabulary(model: &str) -> Result<CallVocabulary, CoreError> {
+    let spec = model_spec(model)?;
+    Ok(CallVocabulary {
+        default_kinds: if spec.id == TABULAR {
+            vec!["classification".to_owned(), "regression".to_owned()]
+        } else {
+            DEFAULT_KINDS
+                .iter()
+                .map(|kind| (*kind).to_owned())
+                .collect()
+        },
+        temporal_tasks: vec![FORECASTING.to_owned(), LINK_PREDICTION.to_owned()],
+        link_prediction: LINK_PREDICTION.to_owned(),
+        forecasting: FORECASTING.to_owned(),
+        tasks: spec.tasks.iter().map(|kind| (*kind).to_owned()).collect(),
+    })
+}
+
+/// Resolve one actual native dictionary lookup without re-comparing its key.
+pub fn resolve_native_defaults(
+    model: &str,
+    position: Option<usize>,
+) -> Result<Vec<String>, CoreError> {
+    let words = call_vocabulary(model)?;
+    let kind = match position {
+        Some(position) => words
+            .default_kinds
+            .get(position)
+            .map(String::as_str)
+            .ok_or_else(|| {
+                CoreError::protocol(
+                    Sentence::InvalidMessage,
+                    "a native default-output position is invalid",
+                )
+            })?,
+        None => "",
+    };
+    resolve_outputs(model, kind, None)
+}
+
 /// Ordered explicit outputs or model-specific defaults, with empty checked now.
 pub fn resolve_outputs(
     model: &str,
@@ -562,13 +615,30 @@ pub fn validate_shape(
     linked: bool,
     tables: usize,
 ) -> Result<(), CoreError> {
+    validate_native_shape(model, kind, anchored, linked, tables, None)
+}
+
+/// Shared shape policy over the reached native comparison results, when present.
+pub fn validate_native_shape(
+    model: &str,
+    kind: &str,
+    anchored: bool,
+    linked: bool,
+    tables: usize,
+    native: Option<&NativeCallCapabilities>,
+) -> Result<(), CoreError> {
     let spec = model_spec(model)?;
-    let temporal = anchored || matches!(kind, "forecasting" | "temporal_link_prediction");
+    let temporal = native.map_or_else(
+        || anchored || matches!(kind, FORECASTING | LINK_PREDICTION),
+        |facts| facts.temporal,
+    );
     let needed = |shape: &str| match shape {
         "relationships" => linked,
         "multiple_tables" => tables > 1,
-        "link_prediction" => kind == "temporal_link_prediction",
-        "forecasting" => kind == "forecasting",
+        "link_prediction" => {
+            native.map_or_else(|| kind == LINK_PREDICTION, |facts| facts.link_prediction)
+        }
+        "forecasting" => native.map_or_else(|| kind == FORECASTING, |facts| facts.forecasting),
         "temporal" => temporal,
         "static" => !temporal,
         _ => false,
@@ -591,15 +661,30 @@ pub fn validate_shape(
 
 /// Shared task then supported-output policy, without reading native row counts.
 pub fn validate_task_outputs(model: &str, kind: &str, outputs: &[String]) -> Result<(), CoreError> {
+    validate_native_task_outputs(model, kind, outputs, None)
+}
+
+/// Task admission from actual native membership, followed by shared output policy.
+pub fn validate_native_task_outputs(
+    model: &str,
+    kind: &str,
+    outputs: &[String],
+    admitted: Option<bool>,
+) -> Result<(), CoreError> {
     let spec = model_spec(model)?;
-    if !spec.tasks.contains(&kind) {
-        return Err(unsupported(
+    if !admitted.unwrap_or_else(|| spec.tasks.contains(&kind)) {
+        let mut error = unsupported(
             Sentence::ModelLacksTask,
             spec.id,
             "the model does not serve the task's kind",
         )
         .with_field("task", Detail::text(kind))
-        .with_field("supported", texts(sorted(spec.tasks))));
+        .with_field("supported", texts(sorted(spec.tasks)));
+        if admitted.is_some() {
+            error.public_details = Some(error.fields.clone());
+            error = error.with_field("native_model_task", Detail::Scalar(Scalar::Bool(true)));
+        }
+        return Err(error);
     }
     let mut unknown: Vec<&str> = outputs
         .iter()

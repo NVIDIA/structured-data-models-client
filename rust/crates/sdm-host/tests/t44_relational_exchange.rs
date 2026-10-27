@@ -88,6 +88,7 @@ fn bound(kind: &str) -> CallPreparation {
             call: model,
             outputs: None,
             kind: Some(kind.into()),
+            native_default: None,
         },
         Attachments::new(),
     );
@@ -98,6 +99,7 @@ fn bound(kind: &str) -> CallPreparation {
             anchored: true,
             relationships: true,
             tables: 3,
+            native: None,
         },
         Attachments::new(),
     );
@@ -105,6 +107,7 @@ fn bound(kind: &str) -> CallPreparation {
         Preparation::Task {
             call: shape,
             kind: kind.into(),
+            admitted: None,
         },
         Attachments::new(),
     );
