@@ -12,7 +12,7 @@ import json
 import warnings
 from collections.abc import Mapping, Sequence
 from contextlib import AbstractContextManager
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import pandas as pd
@@ -25,7 +25,7 @@ from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.errors import StructuredDataError
 
 if TYPE_CHECKING:
-    from sdm_client.schema import Relationship, Schema
+    from sdm_client.schema import Relationship, Schema, Table
 
 
 # Only successful Schema-stage final notices wait for the native pandas hint.
@@ -136,7 +136,9 @@ def _final_notices(
 
     dates = {}
     for name, table in schema.tables.items():
-        if (column := _warn_dates_stored_as_text(table)) is not None:
+        if (
+            column := _warn_dates_stored_as_text(cast('Table', table))
+        ) is not None:
             dates[name] = column
     pending = []
     with _presentation(native_types):
