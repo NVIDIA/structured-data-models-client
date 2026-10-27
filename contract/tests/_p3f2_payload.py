@@ -197,7 +197,12 @@ def payload_problem(want: dict[str, Any], got: dict[str, Any], case_key: str):
     """Compare every request field; only actual approved FK improvements differ."""
     fields = authority().get((case_key, 'python-core'), ())
     old, new = payloads(want), payloads(got)
-    difference = comparison()._path_of(new, old, 'public.payloads', fields)
+    difference = comparison()._path_of(
+        comparison()._lossless(new),
+        comparison()._lossless(old),
+        'public.payloads',
+        fields,
+    )
     if difference is not None or not fields:
         return difference
     filled = 0
@@ -225,7 +230,12 @@ def rust_problems(document):
         for value in new:
             if isinstance(value.get('metadata'), dict):
                 value['metadata'].pop('request_id', None)
-        problem = comparison()._path_of(new, old, 'core.predicted.body', fields)
+        problem = comparison()._path_of(
+            comparison()._lossless(new),
+            comparison()._lossless(old),
+            'core.predicted.body',
+            fields,
+        )
         filled = 0
         if problem is None:
             for before, after in zip(old, new, strict=True):
