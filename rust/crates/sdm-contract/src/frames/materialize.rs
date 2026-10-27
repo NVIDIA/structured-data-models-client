@@ -326,14 +326,14 @@ pub enum FramePreparation {
     },
     References {
         plan: FrameRequestPlan,
-        /// Actual complete-task native astype(str) result, preserving missingness.
-        converted: AttachmentId,
+        /// Actual complete-task native astype(str) outcome, preserving missingness.
+        converted: FrameReferenceValues,
     },
     Context {
         references: ResolvedFrameReferences,
         range: FrameBatchRange,
-        /// Actual later per-batch native cast, before seed reset and draws.
-        converted: AttachmentId,
+        /// Actual later per-batch native cast outcome, before reset and draws.
+        converted: FrameReferenceValues,
     },
     Payload {
         context: SampledFrameContext,
