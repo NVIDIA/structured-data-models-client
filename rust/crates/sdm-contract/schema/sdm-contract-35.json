@@ -2331,6 +2331,23 @@
             "call": {
               "$ref": "#/$defs/CallPreparation"
             },
+            "stage": {
+              "type": "string",
+              "const": "call_vocabulary"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "call"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "call": {
+              "$ref": "#/$defs/CallPreparation"
+            },
             "outputs": {
               "type": [
                 "array",
@@ -2345,6 +2362,17 @@
               "type": [
                 "string",
                 "null"
+              ],
+              "default": null
+            },
+            "native_default": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/NativeDefaultOutput"
+                },
+                {
+                  "type": "null"
+                }
               ],
               "default": null
             },
@@ -2379,6 +2407,17 @@
               "format": "uint",
               "minimum": 0
             },
+            "native": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/NativeCallCapabilities"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
             "stage": {
               "type": "string",
               "const": "capabilities"
@@ -2402,6 +2441,13 @@
             },
             "kind": {
               "type": "string"
+            },
+            "admitted": {
+              "type": [
+                "boolean",
+                "null"
+              ],
+              "default": null
             },
             "stage": {
               "type": "string",
@@ -2595,6 +2641,12 @@
             "kind": {
               "type": "string"
             },
+            "admitted": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "phase": {
               "type": "string",
               "const": "task_accepted"
@@ -2637,6 +2689,12 @@
             "kind": {
               "type": "string"
             },
+            "admitted": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "context_rows": {
               "type": "integer",
               "format": "uint",
@@ -2662,7 +2720,6 @@
       ]
     },
     "CallShape": {
-      "description": "Native capability observations retained independently of the later task read.",
       "type": "object",
       "properties": {
         "kind": {
@@ -2678,6 +2735,16 @@
           "type": "integer",
           "format": "uint",
           "minimum": 0
+        },
+        "native": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NativeCallCapabilities"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false,
@@ -2686,6 +2753,27 @@
         "anchored",
         "relationships",
         "tables"
+      ]
+    },
+    "NativeCallCapabilities": {
+      "description": "Native capability observations retained independently of the later task read.",
+      "type": "object",
+      "properties": {
+        "temporal": {
+          "type": "boolean"
+        },
+        "link_prediction": {
+          "type": "boolean"
+        },
+        "forecasting": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "temporal",
+        "link_prediction",
+        "forecasting"
       ]
     },
     "ModelEndpoint": {
@@ -4376,6 +4464,27 @@
             "kind",
             "members"
           ]
+        },
+        {
+          "description": "Complete postorder container data. Child ordinals are local to this\nvalue's nodes, never attachment handles or instructions. Scalars use\nthe same exact integer/float/Unicode facts as the ordinary form.",
+          "type": "object",
+          "properties": {
+            "nodes": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/NativeTreeNode"
+              }
+            },
+            "kind": {
+              "type": "string",
+              "const": "tree"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "nodes"
+          ]
         }
       ]
     },
@@ -4419,6 +4528,87 @@
             "points"
           ]
         }
+      ]
+    },
+    "NativeTreeNode": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "$ref": "#/$defs/NativeValue"
+            },
+            "kind": {
+              "type": "string",
+              "const": "scalar"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "children": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              }
+            },
+            "kind": {
+              "type": "string",
+              "const": "array"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "children"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "members": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/NativeTreeMember"
+              }
+            },
+            "kind": {
+              "type": "string",
+              "const": "object"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "members"
+          ]
+        }
+      ]
+    },
+    "NativeTreeMember": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/NativeObjectKey"
+        },
+        "value": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "value"
       ]
     },
     "BoundRelationalRow": {
@@ -5994,6 +6184,20 @@
       "required": [
         "columns"
       ]
+    },
+    "NativeDefaultOutput": {
+      "type": "object",
+      "properties": {
+        "position": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
     },
     "PreparedValue": {
       "description": "The closed data value answered by one fixed preparation stage.",
@@ -8943,10 +9147,15 @@
               "$ref": "#/$defs/FrameBatchRange"
             },
             "previous": {
-              "type": "array",
-              "items": {
-                "$ref": "#/$defs/PreparedFrameLabelBatch"
-              }
+              "description": "The last actual evaluated batch and its immutable accepted-prefix facts.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/PreparedFrameLabelBatch"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "converted": {
               "$ref": "#/$defs/FrameReferenceValues"
@@ -8961,7 +9170,6 @@
             "stage",
             "population",
             "range",
-            "previous",
             "converted"
           ]
         },
@@ -9873,11 +10081,17 @@
         "owner": {
           "$ref": "#/$defs/AttachmentId"
         },
-        "batches": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/FrameBatchRange"
-          }
+        "rows": {
+          "description": "Complete candidate row count, independent of the number of reached batches.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "batch_rows": {
+          "description": "Fixed core-selected native lookup width, with a possibly shorter last range.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
         }
       },
       "additionalProperties": false,
@@ -9886,7 +10100,8 @@
         "meaning",
         "prediction_type",
         "owner",
-        "batches"
+        "rows",
+        "batch_rows"
       ]
     },
     "FrameTaskMeaning": {
