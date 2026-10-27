@@ -149,6 +149,15 @@ pub(crate) fn coherent(header: &FrameHeader, rows: &ArrowData) -> Result<(), Cor
     }
     for (n, column) in header.columns.iter().enumerate() {
         let field = rows.schema.field(n);
+        let floating = matches!(
+            field.data_type(),
+            arrow_schema::DataType::Float32 | arrow_schema::DataType::Float64
+        );
+        if floating != column.float_storage.is_some() {
+            return Err(invalid(
+                "a direct floating column lacks coherent native storage facts",
+            ));
+        }
         let physical = sdm_contract::ColumnType::from_arrow(field.name(), field.data_type())?;
         if field.name() != &n.to_string() || Some(physical) != column.physical {
             return Err(invalid(
@@ -225,6 +234,12 @@ pub(crate) async fn run(
     mut attached: Attachments,
 ) -> Result<OperationResult, CoreError> {
     let value = match input {
+        Preparation::Overlap { input } => {
+            serde_json::to_value(overlap(&asker, input, &mut attached).await?)
+        }
+        Preparation::Envelope { input } => {
+            serde_json::to_value(envelope(&asker, input, &mut attached).await?)
+        }
         Preparation::Arguments {
             context,
             predict,
@@ -522,6 +537,12 @@ pub(crate) async fn run(
                 model,
                 outputs,
                 named,
+                shape: CallShape {
+                    kind,
+                    anchored,
+                    relationships,
+                    tables,
+                },
             })
         }
         Preparation::Task { call, kind } => {
@@ -530,6 +551,7 @@ pub(crate) async fn run(
                 model,
                 outputs,
                 named,
+                shape,
             } = call
             else {
                 return Err(invalid("task validation requires a shape-accepted call"));
@@ -541,6 +563,7 @@ pub(crate) async fn run(
                 model,
                 outputs,
                 named,
+                shape,
                 kind,
             })
         }
@@ -550,6 +573,7 @@ pub(crate) async fn run(
                 model,
                 outputs,
                 named,
+                shape,
                 kind,
             } = call
             else {
@@ -562,6 +586,7 @@ pub(crate) async fn run(
                 model,
                 outputs,
                 named,
+                shape,
                 kind,
                 context_rows: rows,
             })
@@ -581,112 +606,138 @@ pub(crate) fn stype(value: Stype) -> String {
         .unwrap_or_default()
 }
 
-/// Predict only after the host has reached and completed each native bind read.
-pub(crate) async fn predict(
-    asker: Asker,
-    input: DirectPredict,
-    request: sdm_contract::ops::Predict,
-    mut attached: Attachments,
-) -> Result<OperationResult, CoreError> {
+/// Shared policy checks the earlier accepted observations, not later warning effects.
+struct Bound<'a> {
+    model: &'a str,
+    outputs: &'a [String],
+    named: bool,
+    kind: &'a str,
+    shape: &'a CallShape,
+    context_rows: usize,
+}
+fn checked_bound(call: &CallPreparation) -> Result<Bound<'_>, CoreError> {
     let CallPreparation::Bound {
         version: v,
         model,
         outputs,
         named,
         kind,
-        ..
-    } = input.bound
+        shape,
+        context_rows,
+    } = call
     else {
-        return Err(invalid("direct predict requires a bound call value"));
+        return Err(invalid("direct data requires a bound call value"));
     };
-    version(v, CALL_PREPARATION_VERSION)?;
-    if model != request.model || outputs != request.outputs || named == request.default_outputs {
+    version(*v, CALL_PREPARATION_VERSION)?;
+    policy::resolve_model(model)?;
+    policy::validate_shape(
+        model,
+        &shape.kind,
+        shape.anchored,
+        shape.relationships,
+        shape.tables,
+    )?;
+    policy::validate_task_outputs(model, kind, outputs)?;
+    policy::validate_capacity(model, *context_rows)?;
+    Ok(Bound {
+        model,
+        outputs,
+        named: *named,
+        kind,
+        shape,
+        context_rows: *context_rows,
+    })
+}
+fn arriving(rows: &ArrowData) -> Result<Vec<(String, sdm_contract::ops::Dtype)>, CoreError> {
+    Ok(rows
+        .schema
+        .fields()
+        .iter()
+        .zip(sdm_schema::frames::storage_dtypes(
+            &rows.schema,
+            &rows.batches,
+        )?)
+        .map(|(f, d)| (f.name().clone(), d))
+        .collect())
+}
+fn float_storage(header: &FrameHeader) -> Vec<Option<FloatStorage>> {
+    header.columns.iter().map(|c| c.float_storage).collect()
+}
+async fn overlap(
+    asker: &Asker,
+    input: DirectPrelude,
+    attached: &mut Attachments,
+) -> Result<DirectOverlap, CoreError> {
+    let bound = checked_bound(&input.bound)?;
+    // These are the observations consumed before any one-shot advice can
+    // mutate native values or replace the references the adapter later takes.
+    if input.task != bound.kind
+        || input.context_header.rows != bound.context_rows
+        || input.schema.tables.len() != bound.shape.tables
+        || (!input.schema.links.is_empty()) != bound.shape.relationships
+    {
         return Err(invalid(
-            "direct predict envelope disagrees with its bound call",
+            "direct prelude task, capacity or schema shape disagrees with its bound call",
         ));
     }
-    if model != policy::TABULAR {
+    if bound.model != policy::TABULAR {
         return Err(error(Sentence::DirectUnfinished).with_field(
             "family",
             Detail::text("the completed KumoTabular direct prediction family"),
         ));
     }
-    let native_schema = input.schema.clone();
-    let read = read_schema(input.schema)?;
-    if input.empty {
-        if input.context.is_some() || input.predict.is_some() || input.predict_header.rows != 0 {
-            return Err(invalid(
-                "empty direct predict must name no Arrow halves and no scoring rows",
-            ));
-        }
-        let table = read
-            .description
-            .tables
-            .iter()
-            .find(|t| t.name == input.entity_table);
-        let scoring_names = names(&input.predict_header)?;
-        let names_rows = table.is_some_and(|table| {
-            !table.primary_key.is_empty()
-                && table
-                    .primary_key
-                    .iter()
-                    .all(|key| scoring_names.contains(key))
-        });
-        let payload = sdm_wire::json::Value::Object(vec![(
-            "task".into(),
-            sdm_wire::json::Value::Object(vec![(
-                "kind".into(),
-                sdm_wire::json::Value::text(&kind),
-            )]),
-        )]);
-        return crate::predict::finish_direct(
-            &asker,
-            policy::empty(&model, &payload),
-            outputs,
-            Some(names_rows),
-        );
-    }
-    let context_header = input
-        .context_header
-        .ok_or_else(|| invalid("nonempty direct prediction lacks a context header"))?;
-    let context = take_rows(
-        &mut attached,
-        input
-            .context
-            .ok_or_else(|| invalid("nonempty direct prediction lacks context rows"))?,
-    )?;
-    let scoring = take_rows(
-        &mut attached,
-        input
-            .predict
-            .ok_or_else(|| invalid("nonempty direct prediction lacks scoring rows"))?,
-    )?;
-    coherent(&context_header, &context)?;
+    let context = take_rows(attached, input.context)?;
+    let scoring = take_rows(attached, input.predict)?;
+    coherent(&input.context_header, &context)?;
     coherent(&input.predict_header, &scoring)?;
-    let context = renamed(&context_header, &context)?;
+    let context = renamed(&input.context_header, &context)?;
     let scoring = renamed(&input.predict_header, &scoring)?;
-    let arriving = sdm_schema::frames::storage_dtypes(&scoring.schema, &scoring.batches)?;
-    let arriving: Vec<_> = scoring
-        .schema
-        .fields()
-        .iter()
-        .zip(arriving)
-        .map(|(field, dtype)| (field.name().clone(), dtype))
-        .collect();
-    if let Some(warning) = sdm_request::tabular::leakage(
+    let read = read_schema(input.schema.clone())?;
+    let (shown, notice) = sdm_request::tabular::leakage(
         &read.description,
-        &native_schema,
+        &input.schema,
         &input.entity_table,
         &context.batches,
         &scoring.batches,
-        &arriving,
+        &arriving(&scoring)?,
+        &float_storage(&input.predict_header),
         &input.target,
         crate::pql::float_text,
-    )? {
-        asker.warn(warning);
+    )?;
+    if let Some(notice) = notice {
+        asker.warn(notice);
+        asker.flush_warnings().await;
     }
-    // Consistency is consumed at the adapter's body boundary, rather than
-    // rerunning constructor target/feature checks on the current frames.
+    Ok(DirectOverlap {
+        version: DIRECT_OVERLAP_VERSION,
+        bound: input.bound,
+        shown,
+        predict_rows: input.predict_header.rows,
+    })
+}
+async fn envelope(
+    asker: &Asker,
+    input: DirectEnvelope,
+    attached: &mut Attachments,
+) -> Result<TabularEnvelope, CoreError> {
+    version(input.overlap.version, DIRECT_OVERLAP_VERSION)?;
+    let bound = checked_bound(&input.overlap.bound)?;
+    if input.overlap.shown > input.overlap.predict_rows {
+        return Err(invalid("overlap count exceeds its captured scoring rows"));
+    }
+    if bound.model != policy::TABULAR {
+        return Err(invalid(
+            "a tabular envelope requires a checked tabular call",
+        ));
+    }
+    // Fresh adapter captures are after overlap advice. They are not a second
+    // model-policy boundary: source warning effects can change these facts.
+    let context = take_rows(attached, input.context)?;
+    let scoring = take_rows(attached, input.predict)?;
+    coherent(&input.context_header, &context)?;
+    coherent(&input.predict_header, &scoring)?;
+    let scoring = renamed(&input.predict_header, &scoring)?;
+    let read = read_schema(input.schema.clone())?;
     for table in &read.description.tables {
         for column in &table.columns {
             if !crate::edit::supports(column.stype, column.dtype) {
@@ -702,24 +753,133 @@ pub(crate) async fn predict(
         }
     }
     sdm_schema::assemble::check_links(&read.description, &read.types)?;
-    let (payload, notices) = sdm_request::tabular::body(
+    let (columns, notices) = sdm_request::tabular::envelope(
         &read.description,
-        &native_schema,
+        &input.schema,
         &input.entity_table,
-        &context.batches,
+        &names(&input.context_header)?,
         &scoring.batches,
-        &arriving,
+        &arriving(&scoring)?,
+        &float_storage(&input.predict_header),
         &input.target,
         &input.task,
+        crate::edit::supports,
+    )?;
+    if !notices.is_empty() {
+        for notice in notices {
+            asker.warn(notice);
+        }
+        asker.flush_warnings().await;
+    }
+    Ok(TabularEnvelope {
+        version: TABULAR_ENVELOPE_VERSION,
+        bound: input.overlap.bound,
+        columns,
+    })
+}
+
+/// Consume source-position body observations with the earlier resolved columns.
+pub(crate) async fn predict(
+    asker: Asker,
+    input: DirectPredict,
+    request: sdm_contract::ops::Predict,
+    mut attached: Attachments,
+) -> Result<OperationResult, CoreError> {
+    let call = match &input {
+        DirectPredict::Empty { bound, .. } => bound,
+        DirectPredict::Body { envelope, .. } => {
+            version(envelope.version, TABULAR_ENVELOPE_VERSION)?;
+            &envelope.bound
+        }
+    };
+    let bound = checked_bound(call)?;
+    if bound.model != request.model
+        || bound.outputs != request.outputs
+        || bound.named == request.default_outputs
+    {
+        return Err(invalid(
+            "direct predict envelope disagrees with its bound call",
+        ));
+    }
+    if bound.model != policy::TABULAR {
+        return Err(error(Sentence::DirectUnfinished).with_field(
+            "family",
+            Detail::text("the completed KumoTabular direct prediction family"),
+        ));
+    }
+    let outputs = bound.outputs.to_vec();
+    let named = bound.named;
+    let model = bound.model.to_owned();
+    let kind = bound.kind.to_owned();
+    let (envelope, context, scoring, task, inference) = match input {
+        DirectPredict::Empty {
+            schema,
+            entity_table,
+            predict_header,
+            ..
+        } => {
+            if predict_header.rows != 0 {
+                return Err(invalid("empty direct predict has scoring rows"));
+            }
+            let read = read_schema(schema)?;
+            let table = read
+                .description
+                .tables
+                .iter()
+                .find(|t| t.name == entity_table);
+            let scoring_names = names(&predict_header)?;
+            let names_rows = table.is_some_and(|t| {
+                !t.primary_key.is_empty()
+                    && t.primary_key.iter().all(|key| scoring_names.contains(key))
+            });
+            let payload = sdm_wire::json::Value::Object(vec![(
+                "task".into(),
+                sdm_wire::json::Value::Object(vec![(
+                    "kind".into(),
+                    sdm_wire::json::Value::text(&kind),
+                )]),
+            )]);
+            return crate::predict::finish_direct(
+                &asker,
+                policy::empty(&model, &payload),
+                outputs,
+                Some(names_rows),
+            );
+        }
+        DirectPredict::Body {
+            envelope,
+            context,
+            predict,
+            context_header,
+            predict_header,
+            task,
+            inference,
+        } => {
+            let context = take_rows(&mut attached, context)?;
+            let scoring = take_rows(&mut attached, predict)?;
+            coherent(&context_header, &context)?;
+            coherent(&predict_header, &scoring)?;
+            (
+                envelope,
+                renamed(&context_header, &context)?,
+                renamed(&predict_header, &scoring)?,
+                task,
+                inference,
+            )
+        }
+    };
+    // Text advice has already been presented. Current contents of those same
+    // captured frames and the later task/inference reads are intentionally fresh.
+    let payload = sdm_request::tabular::body(
+        &envelope.columns,
+        &context.batches,
+        &scoring.batches,
+        &task,
         &outputs,
         &request.request_id,
-        input.inference,
-        crate::edit::supports,
+        inference,
         crate::pql::float_text,
     )?;
-    for warning in notices {
-        asker.warn(warning);
-    }
     let bytes = policy::call_bytes(&payload)?;
     let answer = crate::predict::call(
         &asker,

@@ -6,13 +6,15 @@
 //! Native equality facts describe ordered headers; the core owns validation.
 
 use crate::data::AttachmentId;
-use crate::ops::{Given, HeldSchema, SourceDescription};
+use crate::ops::{Dtype, Given, HeldSchema, SourceDescription, Stype};
 use crate::{ColumnType, Scalar};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 pub const DIRECT_PREPARED_VERSION: u32 = 1;
-pub const CALL_PREPARATION_VERSION: u32 = 1;
+pub const CALL_PREPARATION_VERSION: u32 = 2;
+pub const DIRECT_OVERLAP_VERSION: u32 = 1;
+pub const TABULAR_ENVELOPE_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -50,6 +52,15 @@ pub struct HeaderColumn {
     pub ordinal: usize,
     pub name: HeaderName,
     pub physical: Option<ColumnType>,
+    /// Native missingness representation, not a casting decision.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub float_storage: Option<FloatStorage>,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum FloatStorage {
+    NanMissing,
+    ValidityMasked,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -91,6 +102,16 @@ pub struct PreparedDirectRequest {
     pub schema: HeldSchema,
 }
 
+/// Native capability observations retained independently of the later task read.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CallShape {
+    pub kind: String,
+    pub anchored: bool,
+    pub relationships: bool,
+    pub tables: usize,
+}
+
 /// Each call state has useful resolved facts, never a native action/handle.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "phase", rename_all = "snake_case", deny_unknown_fields)]
@@ -110,12 +131,14 @@ pub enum CallPreparation {
         model: String,
         outputs: Vec<String>,
         named: bool,
+        shape: CallShape,
     },
     TaskAccepted {
         version: u32,
         model: String,
         outputs: Vec<String>,
         named: bool,
+        shape: CallShape,
         kind: String,
     },
     Bound {
@@ -123,14 +146,82 @@ pub enum CallPreparation {
         model: String,
         outputs: Vec<String>,
         named: bool,
+        shape: CallShape,
         kind: String,
         context_rows: usize,
     },
 }
 
+/// Fresh observations at the pre-warning one-shot overlap boundary.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct DirectPrelude {
+    pub bound: CallPreparation,
+    pub context: AttachmentId,
+    pub predict: AttachmentId,
+    pub context_header: FrameHeader,
+    pub predict_header: FrameHeader,
+    pub schema: HeldSchema,
+    pub entity_table: String,
+    pub target: String,
+    pub task: String,
+}
+/// Core-checked prelude and overlap counts, before adapter reference capture.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct DirectOverlap {
+    pub version: u32,
+    pub bound: CallPreparation,
+    pub shown: usize,
+    pub predict_rows: usize,
+}
+/// The adapter captures these references after the earlier overlap advice.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct DirectEnvelope {
+    pub overlap: DirectOverlap,
+    pub context: AttachmentId,
+    pub predict: AttachmentId,
+    pub context_header: FrameHeader,
+    pub predict_header: FrameHeader,
+    pub schema: HeldSchema,
+    pub entity_table: String,
+    pub target: String,
+    pub task: String,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TabularColumn {
+    pub name: String,
+    pub dtype: Dtype,
+    pub stype: Stype,
+}
+/// Core-resolved schema and wire widths, before text advice and row encoding.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TabularColumns {
+    pub dtypes: Vec<(String, Dtype)>,
+    pub columns: Vec<TabularColumn>,
+    pub primary_key: Vec<String>,
+    pub target: String,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TabularEnvelope {
+    pub version: u32,
+    pub bound: CallPreparation,
+    pub columns: TabularColumns,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "stage", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Preparation {
+    Overlap {
+        input: DirectPrelude,
+    },
+    Envelope {
+        input: DirectEnvelope,
+    },
     Arguments {
         context: FrameForm,
         predict: FrameForm,
@@ -180,28 +271,27 @@ pub enum Preparation {
     },
 }
 
-/// Reached predict input, distinct from gathered HeldRequest/state payloads.
+/// Source-position body observations after core-selected text advice.
+/// Later values/kind may legitimately differ from the checked prelude.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct DirectPredict {
-    pub bound: CallPreparation,
-    #[serde(default)]
-    pub empty: bool,
-    #[serde(default)]
-    pub context: Option<AttachmentId>,
-    #[serde(default)]
-    pub predict: Option<AttachmentId>,
-    #[serde(default)]
-    pub context_header: Option<FrameHeader>,
-    pub predict_header: FrameHeader,
-    pub schema: HeldSchema,
-    pub entity_table: String,
-    #[serde(default)]
-    pub target: String,
-    #[serde(default)]
-    pub task: String,
-    #[serde(default)]
-    pub inference: DirectInference,
+#[serde(tag = "stage", rename_all = "snake_case", deny_unknown_fields)]
+pub enum DirectPredict {
+    Empty {
+        bound: CallPreparation,
+        schema: HeldSchema,
+        entity_table: String,
+        predict_header: FrameHeader,
+    },
+    Body {
+        envelope: TabularEnvelope,
+        context: AttachmentId,
+        predict: AttachmentId,
+        context_header: FrameHeader,
+        predict_header: FrameHeader,
+        task: String,
+        #[serde(default)]
+        inference: DirectInference,
+    },
 }
 
 /// The closed data value answered by one fixed preparation stage.
@@ -212,6 +302,8 @@ pub enum PreparedValue {
     Headers(ConstructorHeaders),
     Request(PreparedDirectRequest),
     Call(CallPreparation),
+    Overlap(DirectOverlap),
+    Envelope(TabularEnvelope),
 }
 
 /// Ordered flat primitive inference values; exact integer digits do not

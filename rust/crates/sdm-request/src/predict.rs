@@ -1196,15 +1196,19 @@ fn answer_type(payload: &Value) -> Result<AnswerType, CoreError> {
     if kind != "classification" {
         called(payload)?;
     }
+    Ok(declared_answers(payload, kind))
+}
+
+fn declared_answers(payload: &Value, kind: &str) -> AnswerType {
     if !classifies(kind) {
-        return Ok(AnswerType::Float);
+        return AnswerType::Float;
     }
-    Ok(match target_dtype(payload) {
+    match target_dtype(payload) {
         Some(d) if d.starts_with("bool") => AnswerType::Bool,
         Some(d) if d.starts_with("int") => AnswerType::Int,
         Some(d) if d.starts_with("float") => AnswerType::FloatClass,
         _ => AnswerType::Text,
-    })
+    }
 }
 
 /// The spellings a declared boolean is read back from (`_as_bool`).
@@ -1380,7 +1384,30 @@ pub fn layout(
     response: &PredictionResponse,
     float_text: fn(f64) -> String,
 ) -> Result<Part, CoreError> {
-    let answers = answer_type(payload)?;
+    layout_as(payload, response, float_text, answer_type(payload)?)
+}
+
+/// Direct tabular answers follow the later wire task, without rerunning
+/// gathered admission after a source warning changed that task.
+pub(crate) fn layout_tabular(
+    payload: &Value,
+    response: &PredictionResponse,
+    float_text: fn(f64) -> String,
+) -> Result<Part, CoreError> {
+    layout_as(
+        payload,
+        response,
+        float_text,
+        declared_answers(payload, kind_of(payload)?),
+    )
+}
+
+fn layout_as(
+    payload: &Value,
+    response: &PredictionResponse,
+    float_text: fn(f64) -> String,
+    answers: AnswerType,
+) -> Result<Part, CoreError> {
     let (names, rows) = instance_table(payload, "predict").ok_or_else(|| bad_payload("predict"))?;
     let (placed, text_ids) = match names.iter().position(|n| n.starts_with(ENTITY_REF)) {
         Some(reference) => {
