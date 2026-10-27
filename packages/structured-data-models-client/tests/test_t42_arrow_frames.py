@@ -204,28 +204,97 @@ def test_arrow_uint64_bounds_and_inferred_explicit_links(monkeypatch, wide):
 
 
 @pytest.mark.parametrize('unit', ['s', 'ms', 'us', 'ns'])
+@pytest.mark.parametrize('zone', [None, 'UTC', 'America/Los_Angeles'])
 @pytest.mark.parametrize(
-    'zone', [None, 'UTC', 'America/Los_Angeles', 'Asia/Kathmandu']
+    'variant',
+    [
+        'high',
+        'minimum_first',
+        'minimum_last',
+        'minimum_constant',
+        'ordinary',
+        'null',
+    ],
 )
-@pytest.mark.parametrize('values', [[-1, 0, 1, None], [1, 1], [], [None, None]])
-def test_arrow_timestamp_units_counts_zones_and_native_constant_notice(
-    monkeypatch, unit, zone, values
+def test_arrow_timestamp_native_boundary_remains_on_default(
+    monkeypatch, unit, zone, variant
 ):
+    # Frozen public witnesses: coarse scalar boxing may overflow only at
+    # the first present row; a valid ns MIN boxes NaT and changes comparison
+    # semantics. Reversing the same raw counts changes the time choice.
+    values = {
+        'high': [2**63 - 2, 2**63 - 1],
+        'minimum_first': [-(2**63), 0],
+        'minimum_last': [0, -(2**63)],
+        'minimum_constant': [-(2**63), -(2**63)],
+        'ordinary': [-1, 0, 1],
+        'null': [None, None],
+    }[variant]
     dtype = pa.timestamp(unit, zone)
     frame = pd.DataFrame({'observed_at': series(values, dtype)})
     original = frame['observed_at'].array.__arrow_array__()
     frames = {'events': frame, 'users': pd.DataFrame({'user_id': [1, 2]})}
-    schema, _ = paired(monkeypatch, frames)
-    assert schema['events']['observed_at'].dtype == 'timestamp[us]'
-    assert schema['events'].primary_key is None
-    assert schema['events'].data is frame
+    monkeypatch.delenv('SDM_CORE_ROUTES', raising=False)
+    overflow = unit != 'ns' and variant in (
+        'high',
+        'minimum_first',
+        'minimum_constant',
+    )
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        if overflow:
+            with pytest.raises(OverflowError) as error:
+                Schema.from_data(frames)
+            assert str(error.value) == (
+                'date value out of range'
+                if unit == 'us'
+                else 'Python int too large to convert to C int'
+            )
+            assert not caught
+        else:
+            schema = Schema.from_data(frames)
+            rejected = variant in ('null', 'minimum_first', 'minimum_constant')
+            assert schema['events'].time_column == (
+                None if rejected else 'observed_at'
+            )
+            assert schema['events']['observed_at'].dtype == 'timestamp[us]'
+            assert schema['events'].primary_key is None
+            expected = []
+            if rejected:
+                reason = (
+                    'no row holds a value'
+                    if variant == 'null'
+                    else 'every row holds NaT'
+                )
+                expected = [
+                    (
+                        'Some time columns were inferred, or refused, on a '
+                        'guess about what a column holds:\n'
+                        '- events.observed_at was not taken as the time column '
+                        f'because {reason}. If it does say when a row became '
+                        "true, name it: time_columns={'events': 'observed_at'}.",
+                        SDMWarning,
+                    )
+                ]
+            assert [(str(n.message), n.category) for n in caught] == expected
     assert frame['observed_at'].array.__arrow_array__().equals(original)
-    snapshot = schema.snapshot()
-    before = projection(snapshot)
-    assert projection(pickle.loads(pickle.dumps(snapshot))) == before
-    frame['observed_at'] = series([0] * len(frame), dtype)
-    paired(monkeypatch, frames, time_columns={'events': 'observed_at'})
-    assert projection(snapshot) == before
+    assert original.cast(pa.int64()).to_pylist() == values
+    monkeypatch.setenv('SDM_CORE_ROUTES', PATHS)
+    with pytest.raises(RouteError, match='partial frame constructor'):
+        Schema.from_data(frames)
+
+
+@pytest.mark.parametrize('unit', ['s', 'ms', 'us', 'ns'])
+@pytest.mark.parametrize('zone', [None, 'UTC', 'America/Los_Angeles'])
+@pytest.mark.parametrize('values', [[], [None, None], [1, 2]])
+@pytest.mark.parametrize('name', ['observed_at', 'value'])
+def test_arrow_timestamp_whole_family_remains_unfinished(
+    monkeypatch, unit, zone, values, name
+):
+    frame = pd.DataFrame({name: series(values, pa.timestamp(unit, zone))})
+    monkeypatch.setenv('SDM_CORE_ROUTES', PATHS)
+    with pytest.raises(RouteError, match='partial frame constructor'):
+        Schema.from_data({'rows': frame})
 
 
 @pytest.mark.parametrize('dtype', [pa.string(), pa.large_string()])
@@ -322,7 +391,7 @@ def test_arrow_schema_domain_rules_never_reenter_python_inference(monkeypatch):
             {
                 'event_id': series([10, 11], pa.uint8()),
                 'user_id': series([1, 2], pa.int64()),
-                'at': series([1, 2], pa.timestamp('ns', 'UTC')),
+                'active': series([True, False], pa.bool_()),
             }
         ),
     }
