@@ -102,6 +102,47 @@ def to_datetime(ser: pd.Series, column_name: str | None = None) -> pd.Series:
     return ser
 
 
+_RELATIVE_FIELDS = frozenset(
+    {
+        'years',
+        'months',
+        'weeks',
+        'days',
+        'hours',
+        'minutes',
+        'seconds',
+        'milliseconds',
+        'microseconds',
+        'nanoseconds',
+    }
+)
+
+
+def shift_time(time: pd.Timestamp, offset: pd.DateOffset) -> pd.Timestamp:
+    r"""``time`` moved by ``offset``, unchanged by an offset that moves nothing.
+
+    pandas 3.1 takes even an empty offset through microseconds, which puts
+    :obj:`pandas.Timestamp.min`, the anchor of a graph without a time column,
+    out of range.
+    """
+    return time if _moves_nothing(offset) else time + offset
+
+
+def _moves_nothing(offset: pd.DateOffset) -> bool:
+    r"""Whether ``offset`` is a plain relative offset of no length.
+
+    Any other offset is applied, since one that replaces a field, rolls to an
+    anchor or normalizes can move a time even with a zero multiple.
+    """
+    if type(offset) is not pd.DateOffset or offset.normalize:
+        return False
+    if not set(offset.kwds) <= _RELATIVE_FIELDS:
+        return False
+    return offset.n == 0 or (
+        bool(offset.kwds) and not any(offset.kwds.values())
+    )
+
+
 _MIN_DAYS_IN_MONTH = 28
 _MAX_DAYS_IN_MONTH = 31
 _MIN_DAYS_IN_YEAR = 365

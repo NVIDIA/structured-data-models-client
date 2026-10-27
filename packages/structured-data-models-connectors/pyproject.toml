@@ -61,10 +61,7 @@ sqlite = [
     "adbc-driver-sqlite",
 ]
 duckdb = [
-    # 2.0 warns on an Arrow fetch from a DB-API cursor, which the engine
-    # makes for every table and sample it reads. Lifting this moves those
-    # reads off the cursor.
-    "duckdb>=1.5.0,<2",
+    "duckdb>=1.5.0",
 ]
 snowflake = [
     # 5.0 empties `DEFAULT_CONFIGURATION` and rewrites keyword names through
