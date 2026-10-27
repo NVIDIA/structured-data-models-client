@@ -40,8 +40,10 @@ def paired(monkeypatch, build, **options):
             warnings.simplefilter('always')
             try:
                 schema = Schema.from_data(frames, **options)
-            except StructuredDataError as error:
-                outcome = ('error', type(error), error.code, str(error))
+            except Exception as error:
+                outcome = (
+                    'error', type(error), getattr(error, 'code', None), str(error)
+                )
             else:
                 outcome = ('ok', projection(schema))
         outcomes.append(
