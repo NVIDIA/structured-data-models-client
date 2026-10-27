@@ -17,6 +17,12 @@ Native name sorting and display occur at that selected presentation boundary, pr
 
 Working contract 34 adds one closed `PrepareRequest` family with explicit arguments, headers, schema, model, outputs, capabilities, task and capacity stages.
 Each returned state contains useful typed facts and an explicit version, without native handles, callbacks or a workflow interpreter.
+Constructor schema inference first returns a useful ConstructorSchema value with settled meaning and delivers its advice.
+Only then does FinishConstructor consume fresh observations of the same original frames for scored compatibility, missing features and target advice.
+It does not repeat the earlier empty-context, known-target, scored-target or extra-column guards after warning-side edits.
+Fresh duplicate target columns follow the native DataFrame dropna and truth boundary, including success when no complete target row remains.
+A final ConstructorTask consumes only current native table and column names plus the selected target dtype after constant-target advice, returning useful model-neutral task metadata.
+Core selects NoTable and NoColumn, while native selected-error presentation supplies names without early sorting or encoding; no legacy Schema or Table validator is invoked.
 The constructor result is model neutral and is used to build the public objects, without retaining a second schema snapshot on Request.
 It is distinct from a per-call model-bound value.
 Accepted capability facts remain in the bound call, including the independently consumed capability kind, anchor, relationship truth and table count.
@@ -57,6 +63,8 @@ The transport and presentation functions are shared with existing core predictio
 Direct response attribution recognizes the closed primitive list/key forms emitted by numeric/Boolean/string widening, before restoring caller keys.
 Direct and gathered answers share one layout implementation, with gathered admission unchanged.
 Numeric class restoration uses the existing wire integer and floating text grammar, including supported Unicode decimal digits and single underscores, while preserving malformed-value pass-through and probability-key collision protection.
+Final integer class restoration observes the current native decimal digit limit after all ID conversion effects and counts original digits, including leading zeroes, before canonicalization.
+Whole finite numeric classes use the existing exact conversion kernel and integer JSON carrier, preserving typed int64 values and wider native item integers without a new result shape or integer runtime.
 
 Tests were authored and pushed before production implementation.
 Public tests compare constructor inspection, exact scripted bodies, results, warnings, native negative precedence, repeated mutations, precision, supplied schema flags and wire widths.

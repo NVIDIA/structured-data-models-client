@@ -35,8 +35,9 @@ pub fn resolved_attachments(
             if let Some(Attachment::Bytes(bytes)) = attachments.get(&request.input) {
                 let input: sdm_contract::prepare::Preparation = serde_json::from_slice(bytes)
                     .map_err(|_| invalid("unreadable direct preparation input", request.input))?;
-                if let sdm_contract::prepare::Preparation::LayoutResponse { data, attributed } =
-                    &input
+                if let sdm_contract::prepare::Preparation::LayoutResponse {
+                    data, attributed, ..
+                } = &input
                 {
                     named.extend(
                         [data.payload, data.response, data.rows, *attributed]
@@ -50,6 +51,11 @@ pub fn resolved_attachments(
                     }
                     sdm_contract::prepare::Preparation::Schema {
                         context, predict, ..
+                    }
+                    | sdm_contract::prepare::Preparation::FinishConstructor {
+                        context,
+                        predict,
+                        ..
                     } => Some((context, predict)),
                     sdm_contract::prepare::Preparation::Overlap { input } => {
                         Some((input.context, input.predict))
