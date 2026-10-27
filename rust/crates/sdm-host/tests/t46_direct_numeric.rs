@@ -150,7 +150,7 @@ fn finish_response(
             Attachments::new(),
         )
         .unwrap();
-        let string = native_member.map(|member| json!({"scope":data["scope"],"ordinal":row["row"]["ordinal"],"value":{"outcome":"value","points":member.chars().map(u32::from).collect::<Vec<_>>()}}));
+        let string = native_member.map(|(member, _)| json!({"scope":data["scope"],"ordinal":row["row"]["ordinal"],"value":{"outcome":"value","points":member.chars().map(u32::from).collect::<Vec<_>>()}}));
         accepted.push(prepare(
             json!({"stage":"attribute_response_row","selected":selected,"string":string}),
             Attachments::new(),
@@ -951,7 +951,11 @@ fn direct_primitive_list_ids_cannot_hide_a_wrong_key() {
             panic!("decoded response")
         };
         let wrong = first.contains('5') || first == "[0b101,]";
-        let laid = finish_response(&run, decoded.value, Some(if wrong { "5" } else { "4" }));
+        let laid = finish_response(
+            &run,
+            decoded.value,
+            Some((if wrong { "5" } else { "4" }, first.contains('\''))),
+        );
         if wrong {
             assert_eq!(
                 laid.err().expect("wrong key must fail").sentence,
