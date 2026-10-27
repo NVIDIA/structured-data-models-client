@@ -12,6 +12,8 @@ Errors that need native label or task presentation obtain it only after the core
 Rust owns constructor guards, inferred or supplied schema interpretation, model policy, dtype widening, wire precision, response attribution and empty results.
 Unknown task is refused before header lookup or Arrow conversion.
 Native lookup faults remain facts until the core reaches the corresponding source guard.
+Related-table arguments carry only ordered native frame forms; their unused native names stay local until the core selects a frame-name or whole-related diagnostic.
+Native name sorting and display occur at that selected presentation boundary, preserving earlier frame errors, unencodable diagnostic names and mixed-key comparison failures without adding successful related-table support.
 
 Working contract 34 adds one closed `PrepareRequest` family with explicit arguments, headers, schema, model, outputs, capabilities, task and capacity stages.
 Each returned state contains useful typed facts and an explicit version, without native handles, callbacks or a workflow interpreter.
@@ -29,6 +31,7 @@ Only after both row encoders succeed does Python draw the native request identif
 Native decimal-integer display failures therefore follow earlier row failures and retain their original exception.
 Final `Predict.direct` verifies that the actual encoded payload agrees with its typed schema, shapes, kind, model and outputs, then adds metadata/inference in Rust and sends the same encoded rows.
 No row re-encoding, earlier-policy replay, partial JSON fragment, native callback or opaque resume state is introduced.
+Integer-cell coherence roundtrips through the same shared integer codec that encodes the rows, accepting its canonical lossless int64 text and rejecting alternate or incompatible spellings.
 In-place warning-side edits are visible, replacement Request frame/schema references are not recaptured after text advice, and the later task kind/inference reads remain fresh.
 The frozen source permits context growth and task replacement during text advice, so earlier model policy is not rerun against those later effects.
 Empty scoring retains its separate input with no later context or inference observations.
@@ -53,6 +56,7 @@ An error-only presenter obtains the selected pandas cast exception wording at th
 The transport and presentation functions are shared with existing core prediction.
 Direct response attribution recognizes the closed primitive list/key forms emitted by numeric/Boolean/string widening, before restoring caller keys.
 Direct and gathered answers share one layout implementation, with gathered admission unchanged.
+Numeric class restoration uses the existing wire integer and floating text grammar, including supported Unicode decimal digits and single underscores, while preserving malformed-value pass-through and probability-key collision protection.
 
 Tests were authored and pushed before production implementation.
 Public tests compare constructor inspection, exact scripted bodies, results, warnings, native negative precedence, repeated mutations, precision, supplied schema flags and wire widths.

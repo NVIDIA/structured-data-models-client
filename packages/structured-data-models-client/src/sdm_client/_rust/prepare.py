@@ -369,7 +369,8 @@ def construct(
                 direct_context_labels=lambda fields: sorted(
                     map(str, context.columns)
                 ),
-                direct_related=lambda fields: repr(sorted(related)),
+                direct_related_names=lambda fields: sorted(related),
+                direct_related=lambda fields: repr(fields['related_tables']),
                 direct_columns=lambda fields: repr(
                     [
                         (
@@ -399,9 +400,7 @@ def construct(
                 'stage': 'arguments',
                 'context': _form(context),
                 'predict': _form(predict),
-                'related': [
-                    (name, _form(frame)) for name, frame in related.items()
-                ],
+                'related': [_form(frame) for frame in related.values()],
                 # Given remains unchanged: no eager repr of invalid arguments.
                 'task': codec.given(task)
                 if type(task) is str and _text(task)
