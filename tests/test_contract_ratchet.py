@@ -372,6 +372,27 @@ def test_duckdb_fixture_declares_its_scope_without_changing_production_default(
         ), aggregate
 
 
+def test_one_check_parses_unchanged_reference_bytes_once_for_all_rules(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    landed = checkpoint_of(repo)
+    commit(repo)
+    original = ratchet.jsonl
+    reads = []
+
+    def read(text: str | None, name: str) -> list[dict[str, Any]]:
+        if name.startswith('contract/reference/'):
+            reads.append(name)
+        return original(text, name)
+
+    monkeypatch.setattr(ratchet, 'jsonl', read)
+    assert check(repo, landed) == []
+    assert reads == [
+        path.relative_to(repo).as_posix()
+        for path in sorted((repo / 'contract/reference').glob('*.jsonl'))
+    ]
+
+
 def rules(problems: list[str]) -> set[str]:
     return {problem.split(':', 1)[0] for problem in problems}
 
