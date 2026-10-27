@@ -3948,6 +3948,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
                     seed: (!unseeded).then(|| seed.to_u128()).flatten(),
                 },
             )?
+                .into_walked(&memo.memo.source)?
         } else {
             crate::subgraph::Walk {
                 asker,
