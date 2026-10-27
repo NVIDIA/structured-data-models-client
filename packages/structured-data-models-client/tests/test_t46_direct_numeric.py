@@ -1118,3 +1118,28 @@ def test_direct_primitive_literal_float_and_string_float_ids(
     )
     assert new == old
     assert new[1][2] == 'INVALID_RESPONSE' if wrong else new[1][0] == 'ok'
+
+
+@pytest.mark.parametrize('form', ['[({}),]', r"['\x3{}',]"])
+@pytest.mark.parametrize('wrong', [False, True])
+def test_direct_grouped_or_escaped_primitive_key_ids(monkeypatch, form, wrong):
+    class Identified(Scripted):
+        def predict(self, payload):
+            answer = super().predict(payload)
+            for item in answer['predictions']:
+                at = item['row_index']
+                item['id'] = form.format(5 if wrong or at else 4)
+            return answer
+
+    frames = (
+        pd.DataFrame({'user_id': [1, 2, 3], 'target': [2, 4, 6]}),
+        pd.DataFrame({'user_id': [4, 5]}),
+    )
+    old = outcome(monkeypatch, frames, core=False, transport=Identified())
+    new = outcome(monkeypatch, frames, core=True, transport=Identified())
+    assert new == old
+    if wrong:
+        assert new[1][2] == 'INVALID_RESPONSE'
+    else:
+        assert new[1][0] == 'ok'
+        assert new[1][1][0]['id'] == [4, 5]
