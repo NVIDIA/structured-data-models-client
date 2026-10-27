@@ -4,7 +4,9 @@ This is the source composition for built-in Arrow Decimal frame constructors und
 Dependency reconciliation, canonical schema generation, two independent exact code approvals and actual package execution remain required before acceptance.
 The unchanged frozen public source produced 97 constructor/edge cases in each of CP312/pandas3 and CP310/pandas2, with identical record arrays.
 Its accepted native domain includes scale outside i8 and scale greater than precision.
-Those observations cover128/256; a separate frozen packet is pending for native32/64 and timestamp-candidate mutation before the full family can be accepted.
+Another 86 width/time cases ran in each runtime, for 366 actual frozen observations across both packets.
+The latter semantic projections agree after excluding runtime trace locations and original timestamp units.
+The source composition remains based on an unapproved direct-prediction dependency and has not been imported, built, checked or tested.
 
 ## Host and core boundary
 
@@ -33,6 +35,14 @@ Their ordinary closed Decimal scalar carries the unscaled digits, and a parallel
 The Python presenter reconstructs Decimal from its digit tuple without context arithmetic, then uses actual native scalar or mixed-row presentation at the reached stage.
 Each new constructor stage captures fresh native descriptors after earlier warning effects while keeping already inferred meanings fixed.
 
+The metadata-only time-facts boundary selects ordered timestamp first-value reads in Rust, excluding primary keys, load stamps and birth dates by the shared policy.
+Python then performs actual native `dropna`, `iloc[0]` and equality operations at that reached source position.
+An original Arrow Decimal scalar conversion can raise before returning any facts, including the observed `decimal.InvalidOperation` at native scales outside i8 after missing-key advice.
+The completed product carries counts, native equality and a typed first scalar; a Decimal retains its actual native sign/digits/exponent separately from the scale-zero column buffers.
+The shared Rust count policy decides empty, sparse and constant refusals.
+Only call-local actual first objects are retained for a later core-selected diagnostic, so their native presentation is not reconstructed early from physical integers.
+Original timestamp metadata and named skip reasons remain intact even when the later Arrow observation contains only the selected physical candidates.
+
 Legacy Table describe returns detached `frame_rows` with an optional `frame_decimals` bytes attachment for logical declarations.
 Both are taken before the run is dropped and rebound under fresh attachment ids.
 The control message retains fixed-size handles, and the descriptor bytes remain proportional to columns rather than rows.
@@ -44,5 +54,9 @@ The partial frame materializer still lacks logical Decimal value consumption and
 The existing whole Decimal family remains outside that unfinished development route until materialization, wire/session conversion and checkpoint propagation consume the original descriptor.
 Default public routing is unchanged.
 Frame setters retain the existing frame-edit route pending the broader frame-edit migration.
-Mixed timestamp-candidate mutation into Decimal needs actual native conversion/read evidence before full mutation parity can be claimed.
+Later native earliest-value conversion among multiple varying candidates remains separate from the implemented first-scalar product and still requires composition and actual proof.
+Native32/64 key-shaped nonempty columns can fail in actual Arrow `unique`, while complete whole-valued non-key columns can fail later in `dictionary_encode` during keyless advice.
+Empty and nullable successes prove that these are reached operation failures rather than a whole-width type refusal.
+The exact Rust mantissa implementation currently permits some of these cases to succeed, which is an observable difference requiring a real native cardinality boundary or an explicit improvement decision.
+The public paired tests retain those actual failures and do not mark this gap as parity.
 This constructor composition does not complete T4.2 or Phase 4.
