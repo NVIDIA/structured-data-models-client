@@ -319,33 +319,41 @@ def test_native_override_mapping_order_controls_first_error(
     assert found[1] == found[0]
 
 
-def test_unproved_native_text_probe_stays_on_unchanged_default_route(
-    monkeypatch,
+@pytest.mark.parametrize('dated', [False, True])
+def test_builtin_text_preserves_schema_and_date_advice_on_both_routes(
+    monkeypatch, dated
 ):
-    from sdm_client._routing import RouteError
-
     frame = pd.DataFrame(
         {
             'user_id': [1, 2, 3],
             'stamp': pd.Series(
-                [
-                    '2024-01-01',
-                    '2024-01-02',
-                    '2024-01-03',
-                ],
+                ['2024-01-01', '2024-01-02', '2024-01-03']
+                if dated
+                else ['first', 'second', 'third'],
                 dtype='str',
             ),
         }
     )
     monkeypatch.delenv('SDM_CORE_ROUTES', raising=False)
-    with pytest.warns(SDMWarning, match='holds dates but is stored as text'):
+    with warnings.catch_warnings(record=True) as old_notices:
+        warnings.simplefilter('always')
         legacy = Schema.from_data({'users': frame})
     assert legacy['users'].time_column is None
     monkeypatch.setenv('SDM_CORE_ROUTES', PATHS)
-    # A development route gap is not a newly admitted SDK refusal or a
-    # warning the new core is allowed to suppress. Default remains old.
-    with pytest.raises(RouteError, match='numeric and Boolean'):
-        Schema.from_data({'users': frame})
+    with warnings.catch_warnings(record=True) as new_notices:
+        warnings.simplefilter('always')
+        core = Schema.from_data({'users': frame})
+    assert projection(core) == projection(legacy)
+    assert core['users'].data is frame
+    assert [(type(n.message), str(n.message)) for n in new_notices] == [
+        (type(n.message), str(n.message)) for n in old_notices
+    ]
+    assert len(old_notices) == int(dated)
+    if dated:
+        assert isinstance(old_notices[0].message, SDMWarning)
+        assert 'holds dates but is stored as text' in str(
+            old_notices[0].message
+        )
 
 
 @pytest.mark.parametrize('key', [('user_id', 'user_id'), ('user_id', 'score')])
@@ -371,8 +379,6 @@ def test_constructor_key_sequences_and_native_composite_examples(
 @pytest.mark.parametrize(
     'family',
     [
-        'text',
-        'date_text',
         'object',
         'categorical',
     ],
@@ -383,8 +389,6 @@ def test_unfinished_native_families_are_not_forced_through_numeric_constructor(
     from sdm_client._routing import RouteError
 
     values = {
-        'text': pd.Series(['a', 'b'], dtype='str'),
-        'date_text': pd.Series(['2024-01-01', '2024-01-02'], dtype='str'),
         'object': pd.Series([1, 2], dtype=object),
         'categorical': pd.Series(['a', 'b'], dtype='category'),
     }
