@@ -47,6 +47,35 @@ fn part(request_id: &str, rows: Vec<Row>) -> Part {
 }
 
 #[test]
+fn gathered_regression_retains_its_existing_prediction_admission() {
+    use sdm_wire::json;
+    let payload = json::read(br#"{"model":"kumo-relational","task":{"kind":"regression","target":{"column_name":"target","dtype":"int64"}},"predict":{"instance_table":{"format":"arrays","columns":[],"rows":[[]]}}}"#).unwrap();
+    for (prediction, accepted) in [
+        ("2".to_owned(), true),
+        ("2.0".to_owned(), true),
+        ("1.5".to_owned(), true),
+        ("1".to_owned() + &"0".repeat(660), false),
+        ("false".to_owned(), false),
+        (r#""2""#.to_owned(), false),
+        ("[]".to_owned(), false),
+        ("{}".to_owned(), false),
+    ] {
+        let answer = format!(
+            r#"{{"id":"r","model":"kumo-relational","metadata":{{}},"predictions":[{{"row_index":0,"prediction":{prediction}}}]}}"#
+        );
+        let response = sdm_wire::response::PredictionResponse::read(
+            &json::read_answer(answer.as_bytes()).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            sdm_request::predict::layout(&payload, &response, |v| v.to_string()).is_ok(),
+            accepted,
+            "{prediction}"
+        );
+    }
+}
+
+#[test]
 fn parts_are_merged_as_the_reference_merges_them() {
     // None: refused, as the reference's merge refuses nothing to merge.
     assert_eq!(merge(vec![]).unwrap_err().code, ErrorCode::InternalError);
