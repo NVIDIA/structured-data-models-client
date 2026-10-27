@@ -233,3 +233,43 @@ fn labelled_native_strings_bind_exact_target_encoding_and_keep_units_distinct() 
         assert!(read_labels(&rows, Some(StringEncoding::Utf8)).is_err());
     }
 }
+
+#[test]
+fn native_constructor_refusal_uses_the_reached_first_bad_element_and_dtype() {
+    use sdm_contract::prepare::{BuiltinFailureClass, NativeFailure};
+    let failure = FrameNativeFailure {
+        builtin: NativeFailure {
+            ancestry: vec![BuiltinFailureClass::ValueError],
+        },
+        key_error: false,
+        structured_data_error: false,
+        relational_error: false,
+        deepest_module: Some("pandas.core".into()),
+        python_unicode_database: "14.0.0".into(),
+    };
+    let error = FrameStageError::Native {
+        site: NativeSite::Prediction {
+            table: "users".into(),
+        },
+        failure,
+        diagnostic: Some(NativeConstructionDiagnostic::Completed {
+            first: Some(UncastableFrameInput {
+                ordinal: 2,
+                native_repr: "'bad'".into(),
+            }),
+            dtype_display: "string".into(),
+        }),
+        dropped_summary: None,
+    }
+    .into_core();
+    assert_eq!(
+        error.fields["native_constructor_kind"],
+        Detail::text("value_error")
+    );
+    assert_eq!(
+        error.fields["native_constructor_message"],
+        Detail::text(
+            "'indices' must hold values matching the primary key of 'users', which is string; indices[2] is 'bad'"
+        )
+    );
+}

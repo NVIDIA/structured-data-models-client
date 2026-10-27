@@ -115,3 +115,23 @@ fn child_options(options: Vec<FrameQuestionOption>) -> Result<Vec<String>, CoreE
     }
     Ok(kept)
 }
+
+/// Reuse the existing part wording before the host presents any error.
+pub(crate) fn in_part(error: CoreError, scope: Option<&FrameQuestionScope>) -> CoreError {
+    let Some(scope) = scope else {
+        return error;
+    };
+    match scope.kind {
+        FrameQuestionKind::Forecast => super::in_step(error, scope.position, scope.parts),
+        FrameQuestionKind::Ranking => error
+            .with_field(
+                "ranking_candidate",
+                Detail::Scalar(Scalar::UInt32(scope.position)),
+            )
+            .with_field(
+                "ranking_parts",
+                Detail::Scalar(Scalar::UInt64(u64::from(scope.parts))),
+            )
+            .in_part(Sentence::PartRankingCandidate),
+    }
+}

@@ -749,7 +749,21 @@ def error_from_core(
                         fields['before'] + repr(value) + fields['after']
                     )
         details['diagnostic'] = fields['diagnostic']
-    said = _said(sentence, fields)
+    native_graph_cause = (
+        sentence == 'frame_native_internal'
+        and fields.get('native_cause_kind') == 'runtime_error'
+    )
+    if native_graph_cause:
+        # This exact builtin cause is selected by the shared core's native
+        # dtype rule. No native object or caller display is evaluated here.
+        with holding(
+            frame_native_message=lambda observed: observed[
+                'native_cause_message'
+            ]
+        ):
+            said = _said(sentence, fields)
+    else:
+        said = _said(sentence, fields)
     part = error.get('part')
     if part is not None:
         # The part of a question asked in parts it happened in, the core's
@@ -760,6 +774,8 @@ def error_from_core(
         said = f'{said} {_said(part, fields)}'
     made = _instance(cls, said, code, details)
     made._sentence = sentence
+    if native_graph_cause:
+        made.__cause__ = RuntimeError(fields['native_cause_message'])
     if sentence == 'direct_response_contract':
         made.__cause__ = (
             response_cause

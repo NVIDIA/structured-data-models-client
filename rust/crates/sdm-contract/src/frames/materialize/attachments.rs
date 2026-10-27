@@ -75,6 +75,11 @@ impl FramePreparation {
     /// identifies no program position and cannot construct a new owner.
     pub fn retained_owner(&self) -> Option<AttachmentId> {
         match self {
+            Self::Questions { input } => {
+                out.extend([(input.schema, Bytes), (input.query, Bytes)]);
+                out.extend(input.candidates.map(|id| (id, Bytes)));
+                out.extend(input.values.map(|id| (id, Bytes)));
+            }
             Self::Graph { retained, .. } => *retained,
             Self::Labels { graph, .. } => Some(graph.owner),
             Self::Task { labelled, .. } => Some(labelled.graph.owner),
@@ -83,7 +88,9 @@ impl FramePreparation {
             Self::Context { references, .. } => Some(references.plan.task.labelled.graph.owner),
             Self::Payload { context, .. } => Some(context.plan.task.labelled.graph.owner),
             Self::Request { plan, .. } => Some(plan.task.labelled.graph.owner),
-            Self::AssessFailure { .. } | Self::ReportFailure { .. } => None,
+            Self::Questions { .. } | Self::AssessFailure { .. } | Self::ReportFailure { .. } => {
+                None
+            }
         }
     }
 

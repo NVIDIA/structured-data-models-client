@@ -132,3 +132,49 @@ fn type_errors_do_not_append_graph_drop_detail() {
     .unwrap();
     assert_eq!(error.fields.get("detail"), Some(&Detail::text("")));
 }
+
+#[test]
+fn native_part_truth_is_reached_only_after_structured_pass_through() {
+    let scope = FrameQuestionScope {
+        kind: FrameQuestionKind::Forecast,
+        position: 2,
+        parts: 3,
+    };
+    let mut failure = facts(vec![]);
+    assert!(
+        native_guard::assess_in_part(
+            FrameErrorOrigin::Engine,
+            failure.clone(),
+            None,
+            Some(&scope),
+            Some(true)
+        )
+        .is_err()
+    );
+    failure.structured_data_error = true;
+    let first = native_guard::assess_in_part(
+        FrameErrorOrigin::Engine,
+        failure.clone(),
+        None,
+        Some(&scope),
+        None,
+    )
+    .unwrap();
+    assert_eq!(first.category, FrameNativeCategory::PassThrough);
+    assert!(first.part.is_none());
+    let reached = native_guard::assess_in_part(
+        FrameErrorOrigin::Engine,
+        failure,
+        None,
+        Some(&scope),
+        Some(true),
+    )
+    .unwrap()
+    .part
+    .unwrap();
+    assert_eq!(reached.sentence, Sentence::PartForecastStepOutran);
+    assert_eq!(
+        reached.fields["forecast_step"],
+        Detail::Scalar(Scalar::UInt32(2))
+    );
+}

@@ -164,6 +164,38 @@ fn validate_native(
             if column.name != *field.name() {
                 return Err(invalid("frame native origins change original column order"));
             }
+            if column.origin == sdm_contract::frames::materialize::FrameNativeOrigin::ArrowDtype
+                && field.data_type() == &DataType::LargeUtf8
+            {
+                let name = description
+                    .tables
+                    .iter()
+                    .find(|described| described.source == table.source)
+                    .map(|described| described.name.as_str())
+                    .ok_or_else(|| invalid("native table lacks its logical name"))?;
+                let message = format!(
+                    "Encountered unsupported data type 'large_string[pyarrow]' for column '{}' in table '{}'. Please either cast the column to a supported type before building the table (for example df['{}'] = df['{}'].astype('int64')) or remove the column from this table.",
+                    column.name, name, column.name, column.name
+                );
+                let mut error = CoreError::new(
+                    Sentence::FrameNativeInternal,
+                    "the native engine does not admit exact Arrow large_string dtype",
+                )
+                .with_field("native_type", Detail::text("RuntimeError"))
+                .with_field(
+                    "message_points",
+                    Detail::List(
+                        message
+                            .chars()
+                            .map(|point| Scalar::UInt32(u32::from(point)))
+                            .collect(),
+                    ),
+                )
+                .with_field("native_cause_kind", Detail::text("runtime_error"))
+                .with_field("native_cause_message", Detail::text(message));
+                error.public_details = Some(Default::default());
+                return Err(error);
+            }
             if let Some(encoding) = column.strings {
                 for batch in &data.batches {
                     let values = batch

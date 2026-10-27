@@ -7,8 +7,10 @@
 //! This source candidate has no execution or validation evidence.
 //! Graph/task/request policy stays here; native owners and I/O stay in the host.
 
+mod lags;
 mod native_guard;
 mod owners;
+pub(crate) mod questions;
 pub use owners::{RetainedFramePayload, RetainedFrameReferences, RetainedFrameTask};
 #[cfg(test)]
 mod native_guard_tests;
@@ -173,8 +175,15 @@ pub(crate) async fn run(
     mut attachments: Attachments,
     facts: HostFacts,
     zones: Arc<dyn sdm_engine::time::Zones>,
+    part_scope: Option<FrameQuestionScope>,
 ) -> Result<OperationResult, CoreError> {
     let value = match input {
+        FramePreparation::Questions { input } => PreparedFrameValue::Questions(questions::prepare(
+            input,
+            &facts,
+            &*zones,
+            &mut attachments,
+        )?),
         input @ FramePreparation::Graph { .. } => {
             PreparedFrameValue::Graph(graph(&asker, input, &mut attachments)?)
         }
@@ -209,7 +218,7 @@ pub(crate) async fn run(
             text,
             values,
         } => {
-            let next = payload_part(&asker, context, text, values, Vec::new(), &mut attachments)
+            let next = payload_part(&asker, context, text, values, &mut attachments)
                 .map_err(FrameStageError::into_core)?;
             PreparedFrameValue::Part(publish_part(&asker, next)?)
         }
@@ -220,9 +229,14 @@ pub(crate) async fn run(
             origin,
             failure,
             signature,
-        } => {
-            PreparedFrameValue::FailureAssessment(native_guard::assess(origin, failure, signature)?)
-        }
+            window_outran,
+        } => PreparedFrameValue::FailureAssessment(native_guard::assess_in_part(
+            origin,
+            failure,
+            signature,
+            part_scope.as_ref(),
+            window_outran,
+        )?),
         FramePreparation::ReportFailure { report } => return Err(native_guard::report(report)?),
     };
     Ok(OperationResult::PrepareFrames(PreparedFrames {
@@ -1120,7 +1134,7 @@ pub(crate) fn task(
         &bound.labelled.keys,
         &bound.graph,
     )?;
-    if keys::missing(&predicted) {
+    if prediction_encoding.is_none() && keys::missing(&predicted) {
         return Err(invalid(
             Sentence::IndexMissing,
             "an entity to predict for is missing",
@@ -1139,10 +1153,16 @@ pub(crate) fn task(
     }
     let values: Option<Value> = take_json_if(attachments, values)?;
     let deferred = options::values(values.as_ref())?;
-    deferred
+    let lag_steps = deferred
         .lag_timesteps
-        .map(|lag| lag.refusal(bound.asked.range.is_some()))
-        .transpose()?;
+        .map(|lag| {
+            lag.refusal(
+                bound.asked.range.is_some() && bound.asked.task != options::Kind::TemporalLink,
+            )
+        })
+        .transpose()?
+        .unwrap_or(0);
+    let lags = lags::FrameLags::prepare(&bound, &predicted, prediction_encoding, lag_steps)?;
     if bound.value.meaning.requested_context.is_none()
         && bound.labelled.keys.len() >= options::RunMode::Fast.context_examples()
     {
@@ -1217,6 +1237,7 @@ pub(crate) fn task(
         prediction_rows,
         rows_per_call,
         calls,
+        lag_steps,
     };
     completed.identity = completed_identity(&completed, &predicted_data)?;
     let labels = BoundLabels {
@@ -1237,6 +1258,7 @@ pub(crate) fn task(
         predicted: predicted_data,
         rows,
         owner: None,
+        lags,
     }
     .publish(asker)
     .map_err(FrameStageError::from)
@@ -1253,6 +1275,7 @@ fn completed_identity(
         value.prediction_rows,
         value.rows_per_call,
         value.calls,
+        value.lag_steps,
     ))?;
     identity.arrow(predicted)?;
     Ok(identity.finish())
@@ -1300,6 +1323,7 @@ struct BoundTask {
     predicted: ArrowData,
     rows: Arc<TaskRows>,
     owner: Option<RetainedFrameTask>,
+    lags: Option<Arc<lags::FrameLags>>,
 }
 
 impl BoundTask {
@@ -1345,6 +1369,11 @@ fn bind_task(
         };
         let graph = BoundGraph::bind(asker, value.labelled.graph.clone(), attachments)?;
         return owner.bind(graph, value);
+    }
+    if value.lag_steps != 0 {
+        return Err(protocol(
+            "raw completed lag data requires its actual core-created task owner",
+        ));
     }
     let labels = bind_labels(asker, value.labelled.clone(), attachments)?;
     let predicted = take_arrow(
@@ -1402,6 +1431,7 @@ fn bind_task(
         predicted,
         rows,
         owner: None,
+        lags: None,
     })
 }
 
@@ -2215,7 +2245,6 @@ pub(crate) fn payload_part(
     value: SampledFrameContext,
     text: NativeFrameText,
     values: Option<AttachmentId>,
-    lags: Vec<payload::LagColumn>,
     attachments: &mut Attachments,
 ) -> Result<EncodedCall, FrameStageError> {
     let mut context = bind_context(asker, value, attachments)?;
@@ -2277,6 +2306,26 @@ pub(crate) fn payload_part(
             .into());
         }
     }
+    let lags = context
+        .plan
+        .task
+        .lags
+        .as_ref()
+        .map(|lags| {
+            let trained = context.plan.task.labels.labelled.keys.len();
+            let largest = usize::try_from(
+                context
+                    .plan
+                    .task
+                    .value
+                    .rows_per_call
+                    .min(context.plan.task.value.prediction_rows),
+            )
+            .map_err(|_| protocol("native lag batch exceeds host address space"))?;
+            lags.columns(trained, largest, context.value.range)
+        })
+        .transpose()?
+        .unwrap_or_default();
     let values: Option<Value> = take_json_if(attachments, values)?;
     let flags = options::values(values.as_ref())?;
     let (use_prediction_time, return_embeddings) = options::request_flags(&flags)?;

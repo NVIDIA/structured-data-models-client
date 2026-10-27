@@ -104,6 +104,7 @@ fn task(graph: crate::RetainedFrameGraph, predictions: usize) -> BoundTask {
         prediction_rows: predictions as u64,
         rows_per_call: 1,
         calls: predictions as u32,
+        lag_steps: 0,
     };
     let asked = Arc::new(Asked {
         entity_table: "users".into(),
@@ -138,6 +139,7 @@ fn task(graph: crate::RetainedFrameGraph, predictions: usize) -> BoundTask {
         predicted,
         rows,
         owner: None,
+        lags: None,
     }
 }
 

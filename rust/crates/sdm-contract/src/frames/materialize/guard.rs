@@ -9,6 +9,8 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::prepare::NativeFailure;
+use crate::{Detail, Sentence};
+use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -45,6 +47,14 @@ pub enum FrameNativeCategory {
 /// signature observation. No field denotes a native operation to execute.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+pub struct FramePartPresentation {
+    pub sentence: Sentence,
+    pub fields: BTreeMap<String, Detail>,
+}
+
+/// Final part wording after the original structured native error truth fact.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct FrameFailureAssessment {
     pub origin: FrameErrorOrigin,
     pub failure: FrameNativeFailure,
@@ -52,6 +62,7 @@ pub struct FrameFailureAssessment {
     /// This is present only at the reached TypeError signature boundary.
     pub signature: Option<Vec<u32>>,
     pub category: FrameNativeCategory,
+    pub part: Option<FramePartPresentation>,
 }
 
 /// Final native observations in their distinct original positions.

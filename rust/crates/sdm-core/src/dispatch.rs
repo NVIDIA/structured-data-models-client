@@ -122,11 +122,37 @@ pub fn start(
             Run::new(move |asker| crate::prepare::run(asker, input, attachments))
         }
         Operation::PrepareFrames(request) => {
+            use sdm_contract::frames::materialize::FrameQuestionKind;
+            let scope = request.part;
+            if scope.as_ref().is_some_and(|scope| {
+                scope.parts == 0
+                    || (scope.kind == FrameQuestionKind::Forecast
+                        && (scope.position == 0 || scope.position > scope.parts))
+            }) {
+                return Err(CoreError::protocol(
+                    Sentence::InvalidMessage,
+                    "invalid frame question scope",
+                ));
+            }
             let input: sdm_contract::frames::materialize::FramePreparation =
-                take_json(&mut attachments, request.input)?;
+                take_json(&mut attachments, request.input).map_err(|error| {
+                    crate::materialize::frame_values::questions::in_part(error, scope.as_ref())
+                })?;
             Run::new(move |asker| {
                 crate::materialize::frame_values::carry(&asker, &input, &attachments);
-                crate::materialize::frame_values::run(asker, input, attachments, facts, zones)
+                let pending = crate::materialize::frame_values::run(
+                    asker,
+                    input,
+                    attachments,
+                    facts,
+                    zones,
+                    scope.clone(),
+                );
+                async move {
+                    pending.await.map_err(|error| {
+                        crate::materialize::frame_values::questions::in_part(error, scope.as_ref())
+                    })
+                }
             })
         }
         Operation::Predict(request) => {

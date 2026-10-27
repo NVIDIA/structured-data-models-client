@@ -76,7 +76,46 @@ pub(super) fn assess(
         failure,
         signature,
         category,
+        part: None,
     })
+}
+
+/// A structured native exception reaches its part wrapper only after the
+/// original guard has selected pass-through. Native truth is observed then,
+/// and the same shared error policy selects the existing part sentence.
+pub(super) fn assess_in_part(
+    origin: FrameErrorOrigin,
+    failure: FrameNativeFailure,
+    signature: Option<Vec<u32>>,
+    scope: Option<&FrameQuestionScope>,
+    window_outran: Option<bool>,
+) -> Result<FrameFailureAssessment, CoreError> {
+    let mut assessment = assess(origin, failure, signature)?;
+    if let Some(window_outran) = window_outran {
+        let scope = scope
+            .filter(|_| {
+                assessment.category == FrameNativeCategory::PassThrough
+                    && assessment.failure.structured_data_error
+            })
+            .ok_or_else(|| {
+                protocol(
+                    "native part truth was observed before its reached structured error boundary",
+                )
+            })?;
+        let placeholder = CoreError::new(Sentence::Internal, "native error part meaning")
+            .with_field(
+                "window_outran_the_data",
+                Detail::Scalar(Scalar::Bool(window_outran)),
+            );
+        let selected = questions::in_part(placeholder, Some(scope));
+        assessment.part = Some(FramePartPresentation {
+            sentence: selected
+                .part
+                .ok_or_else(|| internal("native part meaning lacks its sentence"))?,
+            fields: selected.fields,
+        });
+    }
+    Ok(assessment)
 }
 
 fn measured(said: UnicodeText) -> UnicodeText {

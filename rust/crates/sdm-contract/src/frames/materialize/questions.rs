@@ -65,3 +65,13 @@ pub struct PreparedFrameQuestions {
     pub query: QueryFacts,
     pub decomposition: Option<FrameDecomposition>,
 }
+
+/// The meaning of one independently gathered question for error presentation.
+/// This selects no native action and identifies no suspended computation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FrameQuestionScope {
+    pub kind: FrameQuestionKind,
+    pub position: u32,
+    pub parts: u32,
+}

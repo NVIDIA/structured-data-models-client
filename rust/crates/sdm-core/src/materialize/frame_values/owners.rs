@@ -22,6 +22,7 @@ struct Definition {
     predictions: u64,
     per_call: u64,
     calls: u32,
+    lag_steps: u64,
 }
 
 impl Definition {
@@ -35,6 +36,7 @@ impl Definition {
             predictions: value.prediction_rows,
             per_call: value.rows_per_call,
             calls: value.calls,
+            lag_steps: value.lag_steps,
         }
     }
 }
@@ -47,6 +49,7 @@ struct TaskData {
     labelled: Arc<task::LabelledContext>,
     asked: Arc<Asked>,
     rows: Arc<TaskRows>,
+    lags: Option<Arc<lags::FrameLags>>,
 }
 
 /// Actual immutable context/prediction data and the already parsed task.
@@ -76,6 +79,7 @@ impl RetainedFrameTask {
                 labelled: Arc::clone(&bound.labels.labelled),
                 asked: Arc::clone(&bound.labels.asked),
                 rows: Arc::clone(&bound.rows),
+                lags: bound.lags.clone(),
             }),
         }
     }
@@ -115,6 +119,7 @@ impl RetainedFrameTask {
             predicted: self.data.predicted.clone(),
             rows: Arc::clone(&self.data.rows),
             owner: Some(self.clone()),
+            lags: self.data.lags.clone(),
         })
     }
 }

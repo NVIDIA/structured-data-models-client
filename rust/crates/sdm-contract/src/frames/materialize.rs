@@ -10,10 +10,12 @@
 mod attachments;
 mod guard;
 mod native;
+mod questions;
+pub use questions::*;
 
 pub use guard::{
     FrameErrorOrigin, FrameFailureAssessment, FrameNativeCategory, FrameNativeFailure,
-    FrameNativeReport,
+    FrameNativeReport, FramePartPresentation,
 };
 
 pub use native::{
@@ -36,6 +38,8 @@ pub const FRAME_MATERIALIZATION_VERSION: u32 = 1;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct PrepareFrames {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub part: Option<FrameQuestionScope>,
     /// FramePreparation as input-sized JSON with explicitly declared owners.
     pub input: AttachmentId,
 }
@@ -226,6 +230,8 @@ pub struct CompletedFrameTask {
     pub prediction_rows: u64,
     pub rows_per_call: u64,
     pub calls: u32,
+    /// Validated lag input retained by this task's actual immutable owner.
+    pub lag_steps: u64,
 }
 
 /// Ordered offsets in the task's prediction half, independent of ids.
@@ -370,10 +376,14 @@ pub struct MaterializedFrames {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "stage", rename_all = "snake_case", deny_unknown_fields)]
 pub enum FramePreparation {
+    Questions {
+        input: FrameQuestionInputs,
+    },
     AssessFailure {
         origin: FrameErrorOrigin,
         failure: FrameNativeFailure,
         signature: Option<Vec<u32>>,
+        window_outran: Option<bool>,
     },
     ReportFailure {
         report: FrameNativeReport,
@@ -450,6 +460,7 @@ pub enum FramePreparation {
     deny_unknown_fields
 )]
 pub enum PreparedFrameValue {
+    Questions(PreparedFrameQuestions),
     FailureAssessment(FrameFailureAssessment),
     Graph(PreparedFrameGraph),
     Labels(LabelledFrameTask),
