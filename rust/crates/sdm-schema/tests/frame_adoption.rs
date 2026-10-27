@@ -4,7 +4,10 @@
 
 //! Frozen frame nomination, fresh adoption, and later time observations.
 
-use arrow_array::{ArrayRef, BooleanArray, Int64Array, RecordBatch, TimestampMicrosecondArray};
+use arrow_array::{
+    ArrayRef, BooleanArray, Float32Array, Float64Array, Int64Array, RecordBatch,
+    TimestampMicrosecondArray,
+};
 use sdm_contract::data::Relation;
 use sdm_contract::ops::Stype;
 use sdm_contract::{Detail, Scalar, Sentence};
@@ -187,4 +190,69 @@ fn only_earlier_timestamp_candidates_are_read_after_repeat_advice() {
     let (plain, _) = adopt(plain, &original.schema(), std::slice::from_ref(&original)).unwrap();
     let result = choose_time(plain, &stamped.schema(), std::slice::from_ref(&stamped)).unwrap();
     assert_eq!(result.table.time_column, None);
+}
+
+#[test]
+fn fresh_time_candidates_read_numeric_values_at_their_physical_float_width() {
+    for two in [false, true] {
+        for narrow in [false, true] {
+            for nullable in [false, true] {
+                let key = integer((0..100).map(|n| (n != 0).then_some(n)).collect());
+                let mut fields = vec![
+                    ("user_id", key.clone()),
+                    (
+                        "event_a",
+                        Arc::new(TimestampMicrosecondArray::from_iter_values(
+                            (0..100).map(|n| 1_700_000_000_000_000 + n * 86_400_000_000),
+                        )) as ArrayRef,
+                    ),
+                ];
+                if two {
+                    fields.push((
+                        "event_b",
+                        Arc::new(TimestampMicrosecondArray::from_iter_values(
+                            (0..100).map(|n| 1_800_000_000_000_000 + n * 86_400_000_000),
+                        )) as ArrayRef,
+                    ));
+                }
+                let original = RecordBatch::try_from_iter(fields).unwrap();
+                let (nomination, missing) = nominate(
+                    "instance",
+                    &Relation::named("instance"),
+                    &original.schema(),
+                    std::slice::from_ref(&original),
+                )
+                .unwrap();
+                assert_eq!(missing[0].sentence, Sentence::KeyNoValueColumn);
+                let offsets = (0..100)
+                    .map(|n| (!nullable || n != 0).then_some(1.7e18 + f64::from(n) * 86400e9));
+                let earlier: ArrayRef = if narrow {
+                    Arc::new(Float32Array::from(
+                        offsets.map(|n| n.map(|v| v as f32)).collect::<Vec<_>>(),
+                    ))
+                } else {
+                    Arc::new(Float64Array::from(offsets.collect::<Vec<_>>()))
+                };
+                let mut fields = vec![("user_id", key), ("event_a", earlier)];
+                if two {
+                    fields.push((
+                        "event_b",
+                        Arc::new(Float64Array::from_iter_values(
+                            (0..100).map(|n| 1.8e18 + f64::from(n) * 86400e9),
+                        )) as ArrayRef,
+                    ));
+                }
+                let fresh = RecordBatch::try_from_iter(fields).unwrap();
+                let (adopted, _) =
+                    adopt(nomination, &fresh.schema(), std::slice::from_ref(&fresh)).unwrap();
+                let selected = choose_time(
+                    adopted,
+                    &fresh.schema(),
+                    &[fresh.slice(0, 37), fresh.slice(37, 63)],
+                )
+                .unwrap();
+                assert_eq!(selected.table.time_column.as_deref(), Some("event_a"));
+            }
+        }
+    }
 }

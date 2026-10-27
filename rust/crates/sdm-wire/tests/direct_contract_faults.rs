@@ -80,3 +80,32 @@ fn whole_direct_steps_keep_exact_digits_and_numeric_overflow_keeps_its_origin() 
         assert_eq!(fault.reason, reason);
     }
 }
+
+#[test]
+fn generated_float_conversion_fault_is_distinct_from_boolean_and_nonfinite_refusal() {
+    let wide = "1".to_owned() + &"0".repeat(400);
+    for member in ["\"bad\"".to_owned(), "null".into(), "[]".into(), wide] {
+        for fields in [
+            format!(r#""probabilities":{{"x":{member}}}"#),
+            format!(r#""scores":[{member}]"#),
+            format!(r#""embeddings":[{member}]"#),
+            format!(r#""quantiles":{{"x":{member}}}"#),
+        ] {
+            let value = response(&fields);
+            let fault = PredictionResponse::read_direct(&value).unwrap_err();
+            assert_eq!(fault.native, Some(NativeFault::Float));
+            assert_eq!(fault.reason, "not_a_number");
+            // Gathered faults retain their established diagnostic policy.
+            assert_ne!(
+                PredictionResponse::read(&value).unwrap_err().native,
+                Some(NativeFault::Float)
+            );
+        }
+    }
+    for (member, reason) in [("true", "not_a_number"), (r#""NaN""#, "not_finite")] {
+        let fault = PredictionResponse::read_direct(&response(&format!(r#""scores":[{member}]"#)))
+            .unwrap_err();
+        assert_eq!(fault.reason, reason);
+        assert_eq!(fault.native, None);
+    }
+}

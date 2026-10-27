@@ -11,6 +11,7 @@ import math
 import sys
 import warnings
 
+import numpy as np
 import pandas as pd
 import pytest
 from test_t46_direct_numeric import CORE
@@ -1299,3 +1300,119 @@ def test_schema_reads_after_later_override_and_final_advice(monkeypatch, mode):
     assert len(outcomes[1]['events']) == (
         2 if mode == 'date-advice-before-category' else 1
     )
+
+
+@pytest.mark.parametrize(
+    'field', ['probabilities', 'scores', 'embeddings', 'quantiles']
+)
+@pytest.mark.parametrize(
+    'value,native_type',
+    [
+        ('not-a-number', ValueError),
+        (None, TypeError),
+        (10**400, OverflowError),
+        ('NaN', None),
+        (True, None),
+    ],
+)
+@pytest.mark.parametrize('active', [False, True])
+def test_public_finite_response_keeps_actual_nested_conversion_context(
+    monkeypatch, field, value, native_type, active
+):
+    # Frozen generated _finite wraps a failed native float conversion from
+    # None; rejection after a successful conversion has no such inner cause.
+    from sdm_client.errors import StructuredDataError
+
+    observed = []
+    for core in (False, True):
+        monkeypatch.setenv('SDM_CORE_ROUTES', CORE if core else '')
+        context = pd.DataFrame({'user_id': [1, 2, 3], 'target': [2, 4, 6]})
+        scoring = pd.DataFrame({'user_id': [4, 5]})
+        request = Request(context, scoring, target='target', task='regression')
+        member = (
+            {'x': value} if field in ('probabilities', 'quantiles') else [value]
+        )
+        transport = Scripted(item({field: member}))
+
+        def call():
+            with SDMClient('http://localhost:1', max_retries=0) as client:
+                client._transport.close()
+                client._transport = transport
+                with pytest.raises(StructuredDataError) as caught:
+                    client.predict(request, model=KumoTabular())
+            return caught.value
+
+        caller = None
+        if active:
+            try:
+                raise LookupError('outer-active-caller')
+            except LookupError as outer:
+                caller = outer
+                failure = call()
+        else:
+            failure = call()
+        assert len(transport.calls) == 1
+        assert failure.code == 'INVALID_RESPONSE'
+        generated = failure.__cause__
+        assert type(generated).__name__ == 'ResponseContractError'
+        assert failure.__context__ is generated
+        assert failure.__suppress_context__
+        assert generated.__cause__ is None
+        assert generated.__traceback__ is not None
+        if native_type is None:
+            assert not generated.__suppress_context__
+            assert generated.__context__ is caller
+            nested = None
+        else:
+            assert generated.__suppress_context__
+            nested = generated.__context__
+            assert type(nested) is native_type
+            assert nested.__cause__ is None
+            assert not nested.__suppress_context__
+            assert nested.__context__ is caller
+            assert nested.__traceback__ is not None
+        observed.append(
+            (error(failure), None if nested is None else str(nested))
+        )
+    assert observed[1] == observed[0]
+
+
+@pytest.mark.parametrize(
+    'storage', ['float32', 'Float32', 'float64', 'Float64']
+)
+@pytest.mark.parametrize('two', [False, True])
+def test_fresh_time_candidates_preserve_physical_float_width(
+    monkeypatch, storage, two
+):
+    observed = []
+    for core in (False, True):
+        monkeypatch.setenv('SDM_CORE_ROUTES', FRAMES if core else '')
+        frame = pd.DataFrame(
+            {
+                'user_id': pd.Series([None, *range(1, 100)], dtype='Int64'),
+                'event_a': pd.date_range('2024-01-01', periods=100),
+            }
+        )
+        if two:
+            frame['event_b'] = pd.date_range('2025-01-01', periods=100)
+        events = []
+
+        def show(message, category, filename, lineno, file=None, line=None):
+            events.append((str(message), category))
+            if len(events) == 1:
+                offsets = np.arange(100, dtype='float64') * 86400e9
+                frame['event_a'] = pd.Series(1.7e18 + offsets, dtype=storage)
+                if two:
+                    frame['event_b'] = 1.8e18 + offsets
+
+        with warnings.catch_warnings():
+            warnings.simplefilter('always')
+            warnings.showwarning = show
+            schema = Schema.from_data({'events': frame}, relationships=())
+        observed.append(
+            (schema['events'].time_column, schema_state(schema), events)
+        )
+        assert str(frame['event_a'].dtype) == storage
+    assert observed[1] == observed[0]
+    assert observed[1][0] == 'event_a'
+    assert len(observed[1][2]) == 1
