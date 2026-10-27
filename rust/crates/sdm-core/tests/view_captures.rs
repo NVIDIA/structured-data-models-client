@@ -359,20 +359,29 @@ fn replay_spec(
     let mut requests = Vec::new();
     // The `FROM` of the last preview of each table's rows, by base table.
     let mut froms: Vec<(Vec<String>, String)> = Vec::new();
-    let ended = |run: &mut sdm_core::Run, at, requests, stray, ended| Replayed {
-        asked: at,
-        stray,
-        ended,
-        requests,
-        warnings: run.take_warnings(),
-        notes: Vec::new(),
+    let mut warnings = Vec::new();
+    let ended = |run: &mut sdm_core::Run, at, requests, stray, ended, mut warnings: Vec<_>| {
+        warnings.extend(run.take_warnings());
+        Replayed {
+            asked: at,
+            stray,
+            ended,
+            requests,
+            warnings,
+            notes: Vec::new(),
+        }
     };
     loop {
         let step = match run.next() {
             Ok(step) => step,
-            Err(error) => return ended(&mut run, at, requests, None, Err(error)),
+            Err(error) => return ended(&mut run, at, requests, None, Err(error), warnings),
         };
         match step {
+            Step::Warnings => {
+                let notices = run.take_warnings();
+                assert!(!notices.is_empty(), "a warning boundary had no notices");
+                warnings.extend(notices);
+            }
             Step::Done { result } => {
                 let OperationResult::DescribeSource(described) = result else {
                     panic!("not a description");
@@ -382,7 +391,7 @@ fn replay_spec(
                     panic!("no description attached");
                 };
                 let description = serde_json::from_slice(&bytes).unwrap();
-                let mut replayed = ended(&mut run, at, requests, None, Ok(description));
+                let mut replayed = ended(&mut run, at, requests, None, Ok(description), warnings);
                 replayed.notes = described.notes;
                 return replayed;
             }
@@ -447,7 +456,7 @@ fn replay_spec(
                         );
                         let error =
                             sdm_contract::CoreError::new(sdm_contract::Sentence::Internal, "stray");
-                        return ended(&mut run, at, requests, Some(stray), Err(error));
+                        return ended(&mut run, at, requests, Some(stray), Err(error), warnings);
                     };
                     let answer = match recorded["result"].as_str() {
                         Some(digest) => {

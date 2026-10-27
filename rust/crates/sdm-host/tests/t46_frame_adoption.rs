@@ -73,9 +73,22 @@ fn phase(stage: &str, rows: RecordBatch, prior: Option<Value>) -> (Value, Vec<Se
         let out = match run.next() {
             Ok(out) | Err(out) => out,
         };
+        if let Some(notices) = run.take_warnings().unwrap() {
+            let ControlMessage::Warnings { warnings: notices } = sdm_host::read(&notices).unwrap()
+            else {
+                panic!("warning buffer did not carry warnings")
+            };
+            warnings.extend(notices.into_iter().map(|w| w.sentence));
+        }
         match sdm_host::read(&out).unwrap() {
             ControlMessage::Warnings { warnings: notices } => {
                 warnings.extend(notices.into_iter().map(|w| w.sentence))
+            }
+            ControlMessage::Step(Step::Warnings) => {
+                assert!(
+                    !warnings.is_empty(),
+                    "an inference warning boundary had no notices"
+                );
             }
             ControlMessage::Step(Step::Done {
                 result: OperationResult::InferredFrames(result),

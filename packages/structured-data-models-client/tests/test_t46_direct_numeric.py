@@ -1819,7 +1819,18 @@ def test_direct_constructor_schema_advice_precedes_fresh_frame_guards(
             if change == 'warning-error':
                 warnings.simplefilter('error', SDMWarning)
 
-            def show(message, category, filename, lineno, file=None, line=None):
+            def show(
+                message,
+                category,
+                filename,
+                lineno,
+                file=None,
+                line=None,
+                *,
+                context=context,
+                events=events,
+                predict=predict,
+            ):
                 events.append((str(message), category))
                 if len(events) != 1:
                     return
@@ -1920,7 +1931,14 @@ def test_direct_class_restoration_uses_fresh_decimal_limit(
                 warnings.simplefilter('always')
 
                 def show(
-                    message, category, filename, lineno, file=None, line=None
+                    message,
+                    category,
+                    filename,
+                    lineno,
+                    file=None,
+                    line=None,
+                    *,
+                    events=events,
                 ):
                     events.append((str(message), category))
                     if lower:
@@ -2028,7 +2046,18 @@ def test_direct_constructor_task_reads_native_schema_after_constant_advice(
         with warnings.catch_warnings():
             warnings.simplefilter('always')
 
-            def show(message, category, filename, lineno, file=None, line=None):
+            def show(
+                message,
+                category,
+                filename,
+                lineno,
+                file=None,
+                line=None,
+                *,
+                events=events,
+                schema=schema,
+                target=target,
+            ):
                 events.append((str(message), category))
                 if restore:
                     schema['instance'].columns['target'] = target

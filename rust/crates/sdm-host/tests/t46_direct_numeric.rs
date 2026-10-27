@@ -5,7 +5,7 @@
 //! Plain-data direct numeric preparation and tabular prediction through HostRun.
 //! Frozen reference: request.py:372-488, base.py:218-310 and tabular.py:171-333.
 
-use arrow_array::{ArrayRef, Float64Array, RecordBatch};
+use arrow_array::{Array, ArrayRef, Float64Array, RecordBatch};
 use sdm_contract::data::AttachmentId;
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::ops::{Operation, OperationResult};
@@ -692,7 +692,6 @@ fn explicit_text_target_returns_before_the_regression_meaning_override() {
 
 #[test]
 fn direct_regression_keeps_the_complete_generated_prediction_value_family() {
-    use arrow_array::Array;
     use arrow_array::cast::AsArray;
     use arrow_array::types::{Float64Type, Int64Type};
     let context = [RecordBatch::try_from_iter([
@@ -1611,6 +1610,14 @@ fn argument_forms_select_errors_without_serializing_unused_native_names() {
     ] {
         let error = prepare(json!({"stage":"arguments","context":{"kind":context},"predict":{"kind":predict},"related":related,"task":{"value":"unknown"}}), Attachments::new()).unwrap_err();
         assert_eq!(error.sentence, sentence);
+        if sentence == sdm_contract::Sentence::DirectFrame {
+            assert_eq!(error.fields["form"], sdm_contract::Detail::text("dict"));
+            assert_eq!(
+                error.fields["native_type"],
+                sdm_contract::Detail::text("dict")
+            );
+            assert!(!error.fields.contains_key("hint"));
+        }
         assert_eq!(
             error.fields.get("related_ordinal"),
             ordinal
@@ -1845,7 +1852,6 @@ fn direct_boolean_layout_strips_all_native_whitespace_and_preserves_collisions()
 
 #[test]
 fn numeric_class_layout_uses_the_existing_numeric_text_grammar_and_collision_rule() {
-    use arrow_array::Array;
     use arrow_array::cast::AsArray;
     use arrow_array::types::{Float64Type, Int64Type};
     for (integer, label, second_key, expected_key, expected_number) in [
