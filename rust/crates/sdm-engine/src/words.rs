@@ -22,6 +22,10 @@
 //! `words.json`, recorded in the reference's environment, holds the
 //! lowering of every code point and the words of 772 values (T1.26b).
 
+mod casing;
+
+pub use casing::{CasingProfile, UnicodeDataVersion, simple_identity_input};
+
 /// The most words a value keeps (`max_words`).
 pub const MAX_WORDS: usize = 50;
 /// The most characters a value is cut to before it is split
@@ -60,14 +64,33 @@ pub fn normalize(value: Option<&str>) -> Vec<String> {
         .chars()
         .take(MAX_CHARS)
         .flat_map(lower_case)
-        .map(|c| if punctuation(c) { ' ' } else { c })
         .collect();
+    split_words(lower, space)
+}
+
+/// Normalize a native frame value with its observed casing data profile.
+///
+/// The native cast selects its kernel at materialization time, after option
+/// warnings and successful sampling. The caller supplies that input fact;
+/// every character transformation and word-selection rule runs here.
+/// The provider-facing [`normalize`] retains its existing casing behavior.
+pub fn normalize_with_profile(value: Option<&str>, profile: CasingProfile) -> Vec<String> {
+    let text: Vec<_> = value.unwrap_or("").chars().take(MAX_CHARS).collect();
+    split_words(casing::lower(&text, profile), casing::space)
+}
+
+fn split_words(mut lower: Vec<char>, space: fn(char) -> bool) -> Vec<String> {
+    for character in &mut lower {
+        if punctuation(*character) {
+            *character = ' ';
+        }
+    }
     // `<br\s*/?>`, each match a space, scanned left to right without
     // overlap as `re.sub` scans.
     let mut text = String::with_capacity(lower.len());
     let mut at = 0;
     while at < lower.len() {
-        if let Some(end) = line_break(&lower, at) {
+        if let Some(end) = line_break(&lower, at, space) {
             text.push(' ');
             at = end;
         } else {
@@ -83,7 +106,7 @@ pub fn normalize(value: Option<&str>) -> Vec<String> {
 }
 
 /// The end of a `<br\s*/?>` starting at `at`, if one does.
-fn line_break(text: &[char], at: usize) -> Option<usize> {
+fn line_break(text: &[char], at: usize, space: fn(char) -> bool) -> Option<usize> {
     if text.get(at..at + 3)? != ['<', 'b', 'r'] {
         return None;
     }

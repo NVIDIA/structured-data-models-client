@@ -31,6 +31,8 @@ import re
 import subprocess
 import sys
 
+import unicode_data
+
 REPO = pathlib.Path(__file__).resolve().parents[2]
 RUST = REPO / 'rust'
 NOTICES = (
@@ -51,6 +53,9 @@ TERMS = re.compile(
 #: arrow-rs repository's LICENSE.txt and NOTICE.txt, which arrow-pyarrow's
 #: manifest names but its published package does not carry.
 SAME_TERMS_AS = {'arrow-pyarrow': 'arrow-schema'}
+
+UNICODE_DATA = REPO / 'rust/crates/sdm-engine/data/LICENSE-UNICODE.txt'
+UNICODE_PROVENANCE = REPO / 'rust/crates/sdm-engine/data/CASING-PROVENANCE.json'
 
 HEADER = f"""\
 Third-party Rust code in structured-data-models-client
@@ -184,6 +189,31 @@ def render() -> str:
         + '\n\n\n'.join(sections)
         + '\n\n\n'
         + STD.format(toolchain=_toolchain())
+        + unicode_data_notice()
+    )
+
+
+def unicode_data_notice() -> str:
+    """Terms of the pinned lowercase and character-property data."""
+    provenance = json.loads(UNICODE_PROVENANCE.read_text(encoding='utf-8'))
+    if provenance['license']['sha256'] != unicode_data.LICENSE_SHA256:
+        raise ValueError(
+            'Unicode data provenance does not name the pinned terms'
+        )
+    data = unicode_data.pinned(UNICODE_DATA, unicode_data.LICENSE_SHA256)
+    versions = ', '.join(provenance['profiles'])
+    return (
+        '\n\nUnicode lowercase data\n======================\n\n'
+        'The core includes lowercase mappings and case/whitespace properties '
+        f'derived from the official Unicode Character Database versions {versions}.\n'
+        'Copyright (c) 1991-2026 Unicode, Inc. Licensed under Unicode-3.0.\n'
+        'scripts/rust_core/generate_text_unicode.py records official input '
+        'URLs, pinned hashes, generator/helper hashes and derived bytes in '
+        'rust/crates/sdm-engine/data/CASING-PROVENANCE.json.\n'
+        'The lowercase algorithm is first-party Rust; no third-party '
+        'implementation code is vendored.\n\n'
+        + data.decode('utf-8').strip()
+        + '\n'
     )
 
 
