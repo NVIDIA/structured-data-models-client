@@ -259,7 +259,9 @@ def run(
         if owned_frame:
             attachments.clear()
             held = None
-        errors.raise_from_core(refused.control, refused.attachments)
+        errors.raise_from_core(
+            refused.control, refused.attachments, internal_context=refused
+        )
     if owned_frame:
         attachments.clear()
         held = None
@@ -343,9 +345,11 @@ def _steps(
         refused: Refused | None = None
         while True:
             error: StructuredDataError | None = None
+            internal_context: BaseException | None = None
             try:
                 control, sent = handle.next()
             except core.CoreError as failed:
+                internal_context = failed
                 _warn(handle, quiet, given, kept, warning_presentation)
                 error = errors.error_from_core(
                     failed.control,
@@ -354,14 +358,15 @@ def _steps(
                 )
                 _answered(handle, failed, error)
             if error is not None:
-                # Raised outside the handler, so nothing is its context.
+                # Preserve the selected public cause, with only incidental
+                # internal core context removed from its native chain.
                 if refused is not None:
                     # The call's own failure, as the caller sees it, carrying
                     # what the core carried on its end of the run.
                     _carried(error, refused.raised)
                     _of_the_part(error, refused.raised)
                     raise refused.raised
-                errors.raise_error(error)
+                errors.raise_error(error, internal_context=internal_context)
             _warn(handle, quiet, given, kept, warning_presentation)
             step = codec.read(control, sent)
             if step['message'] != 'step':
@@ -426,6 +431,7 @@ def _steps(
                         refused.control,
                         refused.attachments,
                         driver_class=driver_class,
+                        internal_context=refused,
                     )
     except BaseException:
         if owned_frame:
@@ -494,7 +500,9 @@ def _call(
     try:
         handle.reply(reply, attached)
     except core.CoreError as failed:
-        errors.raise_from_core(failed.control, failed.attachments)
+        errors.raise_from_core(
+            failed.control, failed.attachments, internal_context=failed
+        )
     return refused
 
 
