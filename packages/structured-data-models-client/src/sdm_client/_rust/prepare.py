@@ -239,7 +239,13 @@ def _response(finished: Finished) -> Finished:
     data.update(payload=2, response=3, rows=4)
     attached[5] = codec.attachment(accepted)
     return _prepared_run(
-        {'stage': 'layout_response', 'data': data, 'attributed': 5}, attached
+        {
+            'stage': 'layout_response',
+            'data': data,
+            'attributed': 5,
+            'decimal_limit': getter() if getter else 0,
+        },
+        attached,
     )
 
 
@@ -455,13 +461,64 @@ def construct(
                 answer['description'],
                 frames={entity_table: context},
             )
+        # Schema inference advice has now been presented. These are the same
+        # original native frames, observed again only for the remaining guards.
+        context_header, predict_header = _header(context), _header(predict)
+        answer = _call(
+            {
+                'stage': 'finish_constructor',
+                'schema': answer,
+                'context': 2,
+                'predict': 3,
+                'context_header': context_header,
+                'predict_header': predict_header,
+                'target_context': _lookup(context.columns, target),
+                'context_predict': [
+                    _lookup(predict.columns, column)
+                    for column in context.columns
+                ],
+            },
+            {
+                2: _buffers(context, context_header),
+                3: _buffers(predict, predict_header),
+            },
+        )
+        # Task construction reaches only the selected native metadata now.
+        # No Schema/Table __getitem__ validation or unrelated column meaning
+        # is consumed by this conversion.
+        task_tables = schema.tables
+        holding.enter_context(
+            errors.holding(
+                direct_task_tables=lambda fields: sorted(task_tables),
+                direct_task_column=lambda fields: {
+                    'table': task_tables[entity_table].name,
+                    'columns': sorted(task_tables[entity_table].columns),
+                },
+            )
+        )
+        table = task_tables.get(entity_table)
+        column = None if table is None else table.columns.get(target)
+        task_data = _call(
+            {
+                'stage': 'constructor_task',
+                'prepared': answer,
+                'entity_table': entity_table,
+                'tables': [_name(name) for name in task_tables],
+                'table': None
+                if table is None
+                else {
+                    'columns': [_name(name) for name in table.columns],
+                    'target_dtype': None if column is None else column.dtype,
+                },
+            }
+        )
     request.schema = schema
     request.task = Task(
-        kind=answer['task'],
+        kind=task_data['kind'],
         target=Target(
-            column_name=answer['target'],
-            dtype=schema[entity_table][answer['target']].dtype,
-            table_name=entity_table,
+            column_name=task_data['target'],
+            dtype=task_data['dtype'],
+            table_name=task_data['table'],
         ),
         entity_table=entity_table if related else None,
         options=dict(task_options or {}),

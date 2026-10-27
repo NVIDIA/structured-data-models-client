@@ -635,6 +635,19 @@ def error_from_core(
         cls = StructuredDataError
     sentence = error['sentence']
     if (
+        sentence == 'no_table'
+        and (present := _held().get('direct_task_tables')) is not None
+    ):
+        fields['tables'] = present(fields)
+        details['tables'] = fields['tables']
+    if (
+        sentence == 'no_column'
+        and (present := _held().get('direct_task_column')) is not None
+    ):
+        shown = present(fields)
+        fields.update(shown)
+        details.update(shown)
+    if (
         sentence == 'direct_related'
         and (present := _held().get('direct_related_names')) is not None
     ):

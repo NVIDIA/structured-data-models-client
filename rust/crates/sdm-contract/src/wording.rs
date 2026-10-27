@@ -714,7 +714,7 @@ pub fn template(sentence: Sentence) -> Template {
             r#"predict has column(s) {host.direct_columns} that context does not; the model is shown context first, so it cannot score a feature it has never been given"#,
         ),
         S::DirectMissing => said(
-            r#"predict is missing column(s) {columns!r} that context carries. Every feature the model is shown has to be supplied for the rows being scored; drop them from context, or supply them"#,
+            r#"predict is missing column(s) {host.direct_columns} that context carries. Every feature the model is shown has to be supplied for the rows being scored; drop them from context, or supply them"#,
         ),
         S::DirectDuplicateColumns => {
             said(r#"table {table!r} has duplicate column name(s) {host.direct_duplicates}"#)

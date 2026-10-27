@@ -441,6 +441,7 @@ pub fn layout(
     response: &PredictionResponse,
     scope: &ResponseScope,
     attributed: Vec<AttributedDirectRow>,
+    decimal_limit: u32,
     float_text: fn(f64) -> String,
 ) -> Result<Part, CoreError> {
     let (actual, rows) = decode(payload, response, float_text)?;
@@ -506,7 +507,7 @@ pub fn layout(
             ),
         ));
     }
-    let mut part = predict::layout_tabular(payload, response, float_text)?;
+    let mut part = predict::layout_tabular(payload, response, decimal_limit, float_text)?;
     for (row, accepted) in part.rows.iter_mut().zip(attributed) {
         row.id = entity(&accepted.id)?;
     }
