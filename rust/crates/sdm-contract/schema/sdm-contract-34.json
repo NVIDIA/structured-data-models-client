@@ -413,6 +413,40 @@
         {
           "type": "object",
           "properties": {
+            "input": {
+              "$ref": "#/$defs/DirectPrelude"
+            },
+            "stage": {
+              "type": "string",
+              "const": "overlap"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "input"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "input": {
+              "$ref": "#/$defs/DirectEnvelope"
+            },
+            "stage": {
+              "type": "string",
+              "const": "envelope"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "input"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
             "context": {
               "$ref": "#/$defs/FrameForm"
             },
@@ -669,108 +703,33 @@
         }
       ]
     },
-    "FrameForm": {
-      "oneOf": [
-        {
-          "type": "object",
-          "properties": {
-            "kind": {
-              "type": "string",
-              "const": "frame"
-            }
-          },
-          "required": [
-            "kind"
-          ],
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "properties": {
-            "kind": {
-              "type": "string",
-              "const": "dict"
-            }
-          },
-          "required": [
-            "kind"
-          ],
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "properties": {
-            "kind": {
-              "type": "string",
-              "const": "series"
-            }
-          },
-          "required": [
-            "kind"
-          ],
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "properties": {
-            "native_type": {
-              "type": "string"
-            },
-            "kind": {
-              "type": "string",
-              "const": "other"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "kind",
-            "native_type"
-          ]
-        }
-      ]
-    },
-    "Given": {
-      "description": "A value a caller gave an edit or `describe_source`: the value, as the\ncontract writes it, or a value of the host's own no contract type holds\n(a key named by a number, a set of names, a relationship that is not\none), which the core refuses as the reference refuses it.\n\nThe conformance rule every host holds to (decision E101): the host's\nnull or none is `{\"value\": null}`; text is the value; a finite, ordered\ncollection read once without error, every member non-null text, is a\nlist of those texts; a collection with a null, non-text or nested\nmember, a collection with no order, a mapping, binary data, a number, a\nboolean, a temporal value or anything else is `unreadable`. Text the\nhost cannot encode as UTF-8 is the host's encoding refusal, and an\nerror raised while reading a collection is the caller's, never\n`unreadable`. Whether a value is valid (an empty key, a column the\ntable lacks) is the core's call, never the host's.\n\nA value no contract type holds may instead be given `{\"spelled\":\n\"<text>\"}`, the text the host's language shows it as (in Python, its\n`repr`): the core takes it as `unreadable` and names it in its refusal\n(`given`), as the reference names it, a value of the caller's own call\n(KO2-86, T2.14b).",
-      "oneOf": [
-        {
-          "type": "string",
-          "enum": [
-            "unreadable"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "value": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "value"
-          ],
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "properties": {
-            "spelled": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "spelled"
-          ],
-          "additionalProperties": false
-        }
-      ]
-    },
-    "ConstructorArguments": {
+    "DirectPrelude": {
+      "description": "Fresh observations at the pre-warning one-shot overlap boundary.",
       "type": "object",
       "properties": {
-        "version": {
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0
+        "bound": {
+          "$ref": "#/$defs/CallPreparation"
+        },
+        "context": {
+          "$ref": "#/$defs/AttachmentId"
+        },
+        "predict": {
+          "$ref": "#/$defs/AttachmentId"
+        },
+        "context_header": {
+          "$ref": "#/$defs/FrameHeader"
+        },
+        "predict_header": {
+          "$ref": "#/$defs/FrameHeader"
+        },
+        "schema": {
+          "$ref": "#/$defs/HeldSchema"
+        },
+        "entity_table": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
         },
         "task": {
           "type": "string"
@@ -778,9 +737,239 @@
       },
       "additionalProperties": false,
       "required": [
-        "version",
+        "bound",
+        "context",
+        "predict",
+        "context_header",
+        "predict_header",
+        "schema",
+        "entity_table",
+        "target",
         "task"
       ]
+    },
+    "CallPreparation": {
+      "description": "Each call state has useful resolved facts, never a native action/handle.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "version": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "model": {
+              "type": "string"
+            },
+            "phase": {
+              "type": "string",
+              "const": "model_resolved"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "phase",
+            "version",
+            "model"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "version": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "model": {
+              "type": "string"
+            },
+            "outputs": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "named": {
+              "type": "boolean"
+            },
+            "phase": {
+              "type": "string",
+              "const": "outputs_resolved"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "phase",
+            "version",
+            "model",
+            "outputs",
+            "named"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "version": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "model": {
+              "type": "string"
+            },
+            "outputs": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "named": {
+              "type": "boolean"
+            },
+            "shape": {
+              "$ref": "#/$defs/CallShape"
+            },
+            "phase": {
+              "type": "string",
+              "const": "shape_accepted"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "phase",
+            "version",
+            "model",
+            "outputs",
+            "named",
+            "shape"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "version": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "model": {
+              "type": "string"
+            },
+            "outputs": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "named": {
+              "type": "boolean"
+            },
+            "shape": {
+              "$ref": "#/$defs/CallShape"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "phase": {
+              "type": "string",
+              "const": "task_accepted"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "phase",
+            "version",
+            "model",
+            "outputs",
+            "named",
+            "shape",
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "version": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "model": {
+              "type": "string"
+            },
+            "outputs": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "named": {
+              "type": "boolean"
+            },
+            "shape": {
+              "$ref": "#/$defs/CallShape"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "context_rows": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "phase": {
+              "type": "string",
+              "const": "bound"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "phase",
+            "version",
+            "model",
+            "outputs",
+            "named",
+            "shape",
+            "kind",
+            "context_rows"
+          ]
+        }
+      ]
+    },
+    "CallShape": {
+      "description": "Native capability observations retained independently of the later task read.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "anchored": {
+          "type": "boolean"
+        },
+        "relationships": {
+          "type": "boolean"
+        },
+        "tables": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "anchored",
+        "relationships",
+        "tables"
+      ]
+    },
+    "AttachmentId": {
+      "description": "Names an attachment that travels beside a control message: Arrow data\n(a fetch's result, a key set, a predict result) or bytes (a model\nrequest or response body).",
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
     },
     "FrameHeader": {
       "type": "object",
@@ -827,6 +1016,17 @@
           "anyOf": [
             {
               "$ref": "#/$defs/ColumnType"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "float_storage": {
+          "description": "Native missingness representation, not a casting decision.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FloatStorage"
             },
             {
               "type": "null"
@@ -1343,78 +1543,12 @@
         "uint64"
       ]
     },
-    "NativeLookup": {
-      "type": "object",
-      "properties": {
-        "positions": {
-          "type": "array",
-          "items": {
-            "type": "integer",
-            "format": "uint",
-            "minimum": 0
-          }
-        },
-        "unhashable": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "positions"
+    "FloatStorage": {
+      "type": "string",
+      "enum": [
+        "nan_missing",
+        "validity_masked"
       ]
-    },
-    "ConstructorHeaders": {
-      "type": "object",
-      "properties": {
-        "version": {
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0
-        },
-        "task": {
-          "type": "string"
-        },
-        "context": {
-          "$ref": "#/$defs/FrameHeader"
-        },
-        "predict": {
-          "$ref": "#/$defs/FrameHeader"
-        },
-        "target": {
-          "type": "integer",
-          "format": "uint",
-          "minimum": 0
-        },
-        "predict_context": {
-          "type": "array",
-          "items": {
-            "type": "array",
-            "items": {
-              "type": "integer",
-              "format": "uint",
-              "minimum": 0
-            }
-          }
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "version",
-        "task",
-        "context",
-        "predict",
-        "target",
-        "predict_context"
-      ]
-    },
-    "AttachmentId": {
-      "description": "Names an attachment that travels beside a control message: Arrow data\n(a fetch's result, a key set, a predict result) or bytes (a model\nrequest or response body).",
-      "type": "integer",
-      "format": "uint32",
-      "minimum": 0
     },
     "HeldSchema": {
       "description": "A schema as a host holds it, as plain data (contract v28, T3.16): its\ntables, columns, meanings, keys, time columns and links as they stand,\nhowever the host came to hold them (described, built by hand, edited,\ncopied or unpickled), and, on each column the source was asked of,\nwhat the source said of it ([`SourceFacts`]). `edit_schema` and\n`materialize` read it as it is; `materialize` asks the source for the\nfacts of a column that carries none, as `describe_source` reads them.",
@@ -2142,182 +2276,260 @@
         "column"
       ]
     },
-    "CallPreparation": {
-      "description": "Each call state has useful resolved facts, never a native action/handle.",
+    "DirectEnvelope": {
+      "description": "The adapter captures these references after the earlier overlap advice.",
+      "type": "object",
+      "properties": {
+        "overlap": {
+          "$ref": "#/$defs/DirectOverlap"
+        },
+        "context": {
+          "$ref": "#/$defs/AttachmentId"
+        },
+        "predict": {
+          "$ref": "#/$defs/AttachmentId"
+        },
+        "context_header": {
+          "$ref": "#/$defs/FrameHeader"
+        },
+        "predict_header": {
+          "$ref": "#/$defs/FrameHeader"
+        },
+        "schema": {
+          "$ref": "#/$defs/HeldSchema"
+        },
+        "entity_table": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        },
+        "task": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "overlap",
+        "context",
+        "predict",
+        "context_header",
+        "predict_header",
+        "schema",
+        "entity_table",
+        "target",
+        "task"
+      ]
+    },
+    "DirectOverlap": {
+      "description": "Core-checked prelude and overlap counts, before adapter reference capture.",
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "bound": {
+          "$ref": "#/$defs/CallPreparation"
+        },
+        "shown": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "predict_rows": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "bound",
+        "shown",
+        "predict_rows"
+      ]
+    },
+    "FrameForm": {
       "oneOf": [
         {
           "type": "object",
           "properties": {
-            "version": {
-              "type": "integer",
-              "format": "uint32",
-              "minimum": 0
-            },
-            "model": {
-              "type": "string"
-            },
-            "phase": {
-              "type": "string",
-              "const": "model_resolved"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "phase",
-            "version",
-            "model"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "version": {
-              "type": "integer",
-              "format": "uint32",
-              "minimum": 0
-            },
-            "model": {
-              "type": "string"
-            },
-            "outputs": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            "named": {
-              "type": "boolean"
-            },
-            "phase": {
-              "type": "string",
-              "const": "outputs_resolved"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "phase",
-            "version",
-            "model",
-            "outputs",
-            "named"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "version": {
-              "type": "integer",
-              "format": "uint32",
-              "minimum": 0
-            },
-            "model": {
-              "type": "string"
-            },
-            "outputs": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            "named": {
-              "type": "boolean"
-            },
-            "phase": {
-              "type": "string",
-              "const": "shape_accepted"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "phase",
-            "version",
-            "model",
-            "outputs",
-            "named"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "version": {
-              "type": "integer",
-              "format": "uint32",
-              "minimum": 0
-            },
-            "model": {
-              "type": "string"
-            },
-            "outputs": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            "named": {
-              "type": "boolean"
-            },
             "kind": {
-              "type": "string"
-            },
-            "phase": {
               "type": "string",
-              "const": "task_accepted"
+              "const": "frame"
             }
           },
-          "additionalProperties": false,
           "required": [
-            "phase",
-            "version",
-            "model",
-            "outputs",
-            "named",
             "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "dict"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "series"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "native_type": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "other"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "native_type"
+          ]
+        }
+      ]
+    },
+    "Given": {
+      "description": "A value a caller gave an edit or `describe_source`: the value, as the\ncontract writes it, or a value of the host's own no contract type holds\n(a key named by a number, a set of names, a relationship that is not\none), which the core refuses as the reference refuses it.\n\nThe conformance rule every host holds to (decision E101): the host's\nnull or none is `{\"value\": null}`; text is the value; a finite, ordered\ncollection read once without error, every member non-null text, is a\nlist of those texts; a collection with a null, non-text or nested\nmember, a collection with no order, a mapping, binary data, a number, a\nboolean, a temporal value or anything else is `unreadable`. Text the\nhost cannot encode as UTF-8 is the host's encoding refusal, and an\nerror raised while reading a collection is the caller's, never\n`unreadable`. Whether a value is valid (an empty key, a column the\ntable lacks) is the core's call, never the host's.\n\nA value no contract type holds may instead be given `{\"spelled\":\n\"<text>\"}`, the text the host's language shows it as (in Python, its\n`repr`): the core takes it as `unreadable` and names it in its refusal\n(`given`), as the reference names it, a value of the caller's own call\n(KO2-86, T2.14b).",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "unreadable"
           ]
         },
         {
           "type": "object",
           "properties": {
-            "version": {
-              "type": "integer",
-              "format": "uint32",
-              "minimum": 0
-            },
-            "model": {
+            "value": {
               "type": "string"
-            },
-            "outputs": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            "named": {
-              "type": "boolean"
-            },
-            "kind": {
+            }
+          },
+          "required": [
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "spelled": {
               "type": "string"
-            },
-            "context_rows": {
+            }
+          },
+          "required": [
+            "spelled"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ConstructorArguments": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "task": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "task"
+      ]
+    },
+    "NativeLookup": {
+      "type": "object",
+      "properties": {
+        "positions": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          }
+        },
+        "unhashable": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "positions"
+      ]
+    },
+    "ConstructorHeaders": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "task": {
+          "type": "string"
+        },
+        "context": {
+          "$ref": "#/$defs/FrameHeader"
+        },
+        "predict": {
+          "$ref": "#/$defs/FrameHeader"
+        },
+        "target": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "predict_context": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
               "type": "integer",
               "format": "uint",
               "minimum": 0
-            },
-            "phase": {
-              "type": "string",
-              "const": "bound"
             }
-          },
-          "additionalProperties": false,
-          "required": [
-            "phase",
-            "version",
-            "model",
-            "outputs",
-            "named",
-            "kind",
-            "context_rows"
-          ]
+          }
         }
+      },
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "task",
+        "context",
+        "predict",
+        "target",
+        "predict_context"
       ]
     },
     "PreparedValue": {
@@ -2334,6 +2546,12 @@
         },
         {
           "$ref": "#/$defs/CallPreparation"
+        },
+        {
+          "$ref": "#/$defs/DirectOverlap"
+        },
+        {
+          "$ref": "#/$defs/TabularEnvelope"
         }
       ]
     },
@@ -2525,80 +2743,167 @@
         "unique"
       ]
     },
-    "DirectPredict": {
-      "description": "Reached predict input, distinct from gathered HeldRequest/state payloads.",
+    "TabularEnvelope": {
       "type": "object",
       "properties": {
+        "version": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
         "bound": {
           "$ref": "#/$defs/CallPreparation"
         },
-        "empty": {
-          "type": "boolean",
-          "default": false
-        },
-        "context": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/AttachmentId"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
-        },
-        "predict": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/AttachmentId"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
-        },
-        "context_header": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/FrameHeader"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
-        },
-        "predict_header": {
-          "$ref": "#/$defs/FrameHeader"
-        },
-        "schema": {
-          "$ref": "#/$defs/HeldSchema"
-        },
-        "entity_table": {
-          "type": "string"
-        },
-        "target": {
-          "type": "string",
-          "default": ""
-        },
-        "task": {
-          "type": "string",
-          "default": ""
-        },
-        "inference": {
-          "$ref": "#/$defs/DirectInference",
-          "default": {
-            "entries": []
-          }
+        "columns": {
+          "$ref": "#/$defs/TabularColumns"
         }
       },
       "additionalProperties": false,
       "required": [
+        "version",
         "bound",
-        "predict_header",
-        "schema",
-        "entity_table"
+        "columns"
+      ]
+    },
+    "TabularColumns": {
+      "description": "Core-resolved schema and wire widths, before text advice and row encoding.",
+      "type": "object",
+      "properties": {
+        "dtypes": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/$defs/Dtype"
+              }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+          }
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TabularColumn"
+          }
+        },
+        "primary_key": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "target": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "dtypes",
+        "columns",
+        "primary_key",
+        "target"
+      ]
+    },
+    "TabularColumn": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "dtype": {
+          "$ref": "#/$defs/Dtype"
+        },
+        "stype": {
+          "$ref": "#/$defs/Stype"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "dtype",
+        "stype"
+      ]
+    },
+    "DirectPredict": {
+      "description": "Source-position body observations after core-selected text advice.\nLater values/kind may legitimately differ from the checked prelude.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "bound": {
+              "$ref": "#/$defs/CallPreparation"
+            },
+            "schema": {
+              "$ref": "#/$defs/HeldSchema"
+            },
+            "entity_table": {
+              "type": "string"
+            },
+            "predict_header": {
+              "$ref": "#/$defs/FrameHeader"
+            },
+            "stage": {
+              "type": "string",
+              "const": "empty"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "bound",
+            "schema",
+            "entity_table",
+            "predict_header"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "envelope": {
+              "$ref": "#/$defs/TabularEnvelope"
+            },
+            "context": {
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "predict": {
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "context_header": {
+              "$ref": "#/$defs/FrameHeader"
+            },
+            "predict_header": {
+              "$ref": "#/$defs/FrameHeader"
+            },
+            "task": {
+              "type": "string"
+            },
+            "inference": {
+              "$ref": "#/$defs/DirectInference",
+              "default": {
+                "entries": []
+              }
+            },
+            "stage": {
+              "type": "string",
+              "const": "body"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "envelope",
+            "context",
+            "predict",
+            "context_header",
+            "predict_header",
+            "task"
+          ]
+        }
       ]
     },
     "DirectInference": {
@@ -7340,6 +7645,7 @@
         "direct_float_precision",
         "direct_option_integer",
         "direct_predict_dtype",
+        "direct_nullable_cast",
         "direct_answers_shown",
         "direct_lookup",
         "direct_ambiguous",
