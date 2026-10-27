@@ -41,13 +41,27 @@ fn start(operation: Value, attached: Attachments) -> HostRun {
 fn bytes(value: Value) -> Attachment {
     Attachment::Bytes(serde_json::to_vec(&value).unwrap())
 }
+fn next(run: &HostRun) -> ControlMessage {
+    let out = match run.next() {
+        Ok(out) | Err(out) => out,
+    };
+    sdm_host::read(&out).unwrap()
+}
+
 fn prepare(value: Value, more: Attachments) -> Result<Value, sdm_contract::CoreError> {
     let mut attached = more;
     attached.insert(AttachmentId(1), bytes(value));
     let run = start(json!({"op":"prepare_request","input":1}), attached);
     loop {
-        match sdm_host::read(&run.next().unwrap()).unwrap() {
+        match next(&run) {
             ControlMessage::Warnings { .. } => {}
+            ControlMessage::Step(Step::Warnings) => {
+                let out = run.take_warnings().unwrap().expect("pending warnings");
+                assert!(matches!(
+                    sdm_host::read(&out).unwrap(),
+                    ControlMessage::Warnings { .. }
+                ));
+            }
             ControlMessage::Error { error } => return Err(error),
             ControlMessage::Step(Step::Done {
                 result: OperationResult::PrepareRequest(result),
@@ -157,8 +171,15 @@ fn direct_numeric_preparation_is_model_neutral_and_binds_one_tabular_call() {
         attached,
     );
     loop {
-        match sdm_host::read(&run.next().unwrap()).unwrap() {
+        match next(&run) {
             ControlMessage::Warnings { .. } => {}
+            ControlMessage::Step(Step::Warnings) => {
+                let out = run.take_warnings().unwrap().expect("pending warnings");
+                assert!(matches!(
+                    sdm_host::read(&out).unwrap(),
+                    ControlMessage::Warnings { .. }
+                ));
+            }
             ControlMessage::Step(Step::CallModel(call)) => {
                 let Attachment::Bytes(body) = run.take_attachment(call.body).unwrap().unwrap()
                 else {
