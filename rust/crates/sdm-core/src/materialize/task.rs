@@ -318,6 +318,7 @@ impl BatchLayout {
     }
 }
 
+#[derive(Clone, Copy)]
 pub(super) struct LabelDraw<'a> {
     pub(super) entity: &'a Table,
     pub(super) key: &'a str,
@@ -336,11 +337,87 @@ pub(super) struct LabelDraw<'a> {
     pub(super) entity_filter: Option<&'a str>,
 }
 
+/// Complete candidate rows and anchors before their target is read.
+/// This is independently useful sampled task data, without a callback or
+/// suspended execution state.
+#[derive(Clone)]
+pub(super) struct ExamplePopulation {
+    pub(super) sampled: RecordBatch,
+    pub(super) entity_key: ArrayRef,
+    pub(super) kept: Vec<usize>,
+    pub(super) examples: sample::Examples,
+}
+
+impl ExamplePopulation {
+    pub(super) fn keys(&self) -> Result<ArrayRef, CoreError> {
+        take(&self.entity_key, &self.examples.index)
+    }
+}
+
+pub(super) fn example_population(
+    draw: &LabelDraw<'_>,
+    sampled: EntitySample,
+) -> Result<ExamplePopulation, CoreError> {
+    let mut rng = default_rng(draw.entropy);
+    let examples = match &draw.span {
+        Some((start, end)) => sample::temporal_examples(
+            &mut rng,
+            sampled.kept.len(),
+            sampled.entity_time.as_deref(),
+            draw.context_anchor,
+            timeframe(*start, *end, "anchor_time")?,
+            draw.earliest.unwrap_or(TIME_MAX),
+            draw.trials,
+        )?,
+        None if draw.anchor_entity => sample::entity_examples(
+            &mut rng,
+            sampled.kept.len(),
+            sampled.entity_time.as_deref().unwrap_or_default(),
+            sample::MISSING_ANCHOR,
+        ),
+        None => sample::static_examples(
+            &mut rng,
+            sampled.kept.len(),
+            sampled.entity_time.as_deref(),
+            draw.context_anchor,
+        ),
+    };
+    Ok(ExamplePopulation {
+        sampled: sampled.sampled,
+        entity_key: sampled.entity_key,
+        kept: sampled.kept,
+        examples,
+    })
+}
+
 pub(super) async fn label_context(
     asker: &Asker,
     memo: &mut Memo<'_>,
     draw: LabelDraw<'_>,
     sampled: EntitySample,
+) -> Result<LabelledContext, CoreError> {
+    let population = example_population(&draw, sampled)?;
+    label_population(asker, memo, draw, population, None).await
+}
+
+pub(super) async fn label_population(
+    asker: &Asker,
+    memo: &mut Memo<'_>,
+    draw: LabelDraw<'_>,
+    population: ExamplePopulation,
+    native_rows: Option<RecordBatch>,
+) -> Result<LabelledContext, CoreError> {
+    let kept = population.kept.len();
+    let labelled = evaluate_population(asker, memo, draw, population, native_rows).await?;
+    finish_context(asker, memo, draw, labelled, kept).await
+}
+
+pub(super) async fn evaluate_population(
+    asker: &Asker,
+    memo: &mut Memo<'_>,
+    draw: LabelDraw<'_>,
+    population: ExamplePopulation,
+    native_rows: Option<RecordBatch>,
 ) -> Result<LabelledContext, CoreError> {
     let LabelDraw {
         entity,
@@ -348,45 +425,23 @@ pub(super) async fn label_context(
         asked,
         read_times,
         labelled_fetches,
-        fetches,
-        windows,
-        entropy,
-        context_anchor,
-        anchor_entity,
-        span,
-        earliest,
-        context_examples,
-        trials,
-        entity_filter,
+        fetches: _,
+        windows: _,
+        entropy: _,
+        context_anchor: _,
+        anchor_entity: _,
+        span: _,
+        earliest: _,
+        context_examples: _,
+        trials: _,
+        entity_filter: _,
     } = draw;
-    let EntitySample {
+    let ExamplePopulation {
         sampled,
         entity_key,
-        entity_time,
         kept,
-    } = sampled;
-    let mut rng = default_rng(entropy);
-    let examples = match &span {
-        Some((start, end)) => sample::temporal_examples(
-            &mut rng,
-            kept.len(),
-            entity_time.as_deref(),
-            context_anchor,
-            timeframe(*start, *end, "anchor_time")?,
-            earliest.unwrap_or(TIME_MAX),
-            trials,
-        )?,
-        None if anchor_entity => sample::entity_examples(
-            &mut rng,
-            kept.len(),
-            entity_time.as_deref().unwrap_or_default(),
-            sample::MISSING_ANCHOR,
-        ),
-        None => {
-            sample::static_examples(&mut rng, kept.len(), entity_time.as_deref(), context_anchor)
-        }
-    };
-
+        examples,
+    } = population;
     // A NaN key a source hands over, which the reference reads as missing
     // where it reads floats into NumPy-backed pandas (Postgres's rows), is
     // a missing key its sampler cannot coerce (`_coerce_id`'s `int` or
@@ -409,13 +464,20 @@ pub(super) async fn label_context(
     }
     // Their labels, as the reference's executor computes them over the
     // rows read for them (decision E19).
-    let entity_rows: Vec<usize> = examples.index.iter().map(|&i| kept[i]).collect();
+    let entity_rows: Vec<usize> = match &native_rows {
+        Some(rows) => (0..rows.num_rows()).collect(),
+        None => examples.index.iter().map(|&i| kept[i]).collect(),
+    };
+    let sampled = native_rows.as_ref().unwrap_or(&sampled);
     let labelling = Labelling {
         asker,
         times: read_times,
-        sampled: &sampled,
+        sampled,
         entity_rows: &entity_rows,
         entity_key: &entity_key,
+        native_keys: native_rows
+            .as_ref()
+            .and_then(|rows| rows.column_by_name(key)),
         examples: &examples,
         strings: match &memo.frames {
             Some(frames) => {
@@ -476,7 +538,43 @@ pub(super) async fn label_context(
     let labelled_rows: Vec<usize> = (0..labelled.mask.len())
         .filter(|&row| labelled.mask[row])
         .collect();
-    let gathered = labelled_rows.len().min(context_examples);
+    let gathered = labelled_rows.len();
+    let rows: Vec<usize> = labelled_rows[..gathered]
+        .iter()
+        .map(|&row| examples.index[row])
+        .collect();
+    let anchors = labelled_rows[..gathered]
+        .iter()
+        .map(|&row| examples.anchors[row])
+        .collect();
+    Ok(LabelledContext {
+        keys: take(&entity_key, &rows)?,
+        anchors,
+        labels: labelled.labels.truncated(gathered),
+    })
+}
+
+/// Existing context admission and coverage policy, after reached candidate reads.
+pub(super) async fn finish_context(
+    asker: &Asker,
+    memo: &mut Memo<'_>,
+    draw: LabelDraw<'_>,
+    labelled: LabelledContext,
+    kept: usize,
+) -> Result<LabelledContext, CoreError> {
+    let LabelDraw {
+        entity,
+        read_times,
+        fetches,
+        windows,
+        context_anchor,
+        anchor_entity,
+        context_examples,
+        trials,
+        entity_filter,
+        ..
+    } = draw;
+    let gathered = labelled.keys.len().min(context_examples);
     if gathered == 0 {
         let ends: Vec<Offset> = windows.iter().map(|w| w.end).collect();
         let mut aggregated: Vec<&Table> = Vec::new();
@@ -497,7 +595,7 @@ pub(super) async fn label_context(
         )
         .await);
     }
-    if kept.len() >= trials && gathered < context_examples / 2 {
+    if kept >= trials && gathered < context_examples / 2 {
         // The reference warns of it once in a process: given on every run
         // that meets it, and once in a process by the host
         // ([`ONCE_PER_PROCESS`], decision E52).
@@ -513,19 +611,7 @@ pub(super) async fn label_context(
             )
         });
     }
-    let rows: Vec<usize> = labelled_rows[..gathered]
-        .iter()
-        .map(|&row| examples.index[row])
-        .collect();
-    let anchors = labelled_rows[..gathered]
-        .iter()
-        .map(|&row| examples.anchors[row])
-        .collect();
-    Ok(LabelledContext {
-        keys: take(&entity_key, &rows)?,
-        anchors,
-        labels: labelled.labels.truncated(gathered),
-    })
+    Ok(labelled.narrow(Some(context_examples)))
 }
 
 /// The useful scalar labelled-context table before native prediction-entity

@@ -11,10 +11,16 @@ import json
 from pathlib import Path
 import warnings
 
+import numpy as np
 import pandas as pd
 import pytest
 
-from sdm_client import StructuredDataError
+from sdm_client import (
+    KumoRelational,
+    PredictiveQuery,
+    Schema,
+    StructuredDataError,
+)
 from sdm_client.materializers.relational import RelationalMaterializer
 
 from test_t44_text_frames import (
@@ -81,19 +87,19 @@ def test_public_native_reference_fallback_preserves_payload_and_cause(
 
         monkeypatch.setattr(RelationalMaterializer, '_get_model', legacy_model)
     original = pd.Series.astype
-    counts = {'whole': 0, 'batch': 0}
+    counts = {'labels': 0, 'whole': 0, 'batch': 0}
     faults = []
 
     def astype(series, dtype, *args, **kwargs):
         # Actual frozen values distinguish these two useful native domains.
-        # The eight-row label lookup remains separately covered by its receipt.
+        # Eight sampled rows are the earlier actual label-source lookup.
         size = len(series)
-        if size not in (4, 5):
+        if size not in (4, 5, 8):
             return original(series, dtype, *args, **kwargs)
         values = series.tolist()
         if not all(type(value) is str and value in keys for value in values):
             return original(series, dtype, *args, **kwargs)
-        site = 'whole' if size == 5 else 'batch'
+        site = 'labels' if size == 8 else 'whole' if size == 5 else 'batch'
         counts[site] += 1
         wanted = case['case']
         inject = (
@@ -110,6 +116,19 @@ def test_public_native_reference_fallback_preserves_payload_and_cause(
             or (
                 site == 'batch'
                 and wanted == 'batch-type-both'
+                and counts[site] <= 2
+            )
+        )
+        inject = (
+            inject
+            or (
+                site == 'labels'
+                and wanted == 'label-type-once'
+                and counts[site] == 1
+            )
+            or (
+                site == 'labels'
+                and wanted == 'label-type-both'
                 and counts[site] <= 2
             )
         )
@@ -146,6 +165,94 @@ def test_public_native_reference_fallback_preserves_payload_and_cause(
             )
             assert list(request.payloads) == expected['outcome']['payloads']
     assert faults
+    assert [
+        {'type': type(item.message).__name__, 'message': str(item.message)}
+        for item in caught
+    ] == expected['warnings']
+
+
+@pytest.mark.parametrize(
+    'case',
+    REFERENCE['chunk_cells'][CELL],
+    ids=lambda record: (
+        f'{record["shape"]}-fault-{record["second_label_fault"]}'
+    ),
+)
+def test_native_label_ranges_stop_at_actual_context_completeness(
+    core, case, monkeypatch
+):
+    expected = copy.deepcopy(case)
+    count = 25000
+    frame = pd.DataFrame(
+        {
+            'user_id': pd.Series(
+                [f'u{i}' for i in range(count)],
+                dtype=pd.StringDtype(storage='python'),
+            ),
+            'age': np.arange(count, dtype=float),
+        }
+    )
+    if case['shape'] == 'sparse':
+        frame.loc[np.arange(count) % 4 != 0, 'age'] = np.nan
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_data(
+            {'users': frame}, primary_keys={'users': 'user_id'}, time_columns={}
+        )
+        asked = PredictiveQuery(
+            'PREDICT users.age FOR EACH users.user_id', schema
+        )
+    if core:
+        for payload in expected['outcome'].get('payloads', []):
+            dt3_no_time_body(payload)
+        expected['warnings'] = p3e2_warning_codes(expected['warnings'])
+    original = pd.Series.astype
+    observed = []
+    faults = []
+
+    def astype(series, dtype, *args, **kwargs):
+        if len(series) not in (5000, 10000):
+            return original(series, dtype, *args, **kwargs)
+        values = series.tolist()
+        if not all(
+            type(value) is str and value.startswith('u') for value in values
+        ):
+            return original(series, dtype, *args, **kwargs)
+        if dtype is str:
+            observed.append(len(series))
+        if len(observed) == 2 and case['second_label_fault']:
+            faults.append(len(series))
+            raise TypeError('explicit second label chunk witness')
+        return original(series, dtype, *args, **kwargs)
+
+    monkeypatch.setattr(pd.Series, 'astype', astype)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        if expected['outcome']['kind'] == 'error':
+            with pytest.raises(StructuredDataError) as failure:
+                asked.materialize(
+                    model=KumoRelational(),
+                    indices=['u24999'],
+                    num_context_samples=1001,
+                    num_neighbors=[1],
+                    num_hops=1,
+                    random_seed=7,
+                )
+            assert chain(failure.value) == expected['outcome']['chain']
+        else:
+            request = asked.materialize(
+                model=KumoRelational(),
+                indices=['u24999'],
+                num_context_samples=1001,
+                num_neighbors=[1],
+                num_hops=1,
+                random_seed=7,
+            )
+            assert list(request.payloads) == expected['outcome']['payloads']
+            assert request.context_rows == expected['outcome']['context_rows']
+            assert request.predict_rows == expected['outcome']['predict_rows']
+    assert observed == expected['label_cast_rows']
+    assert len(faults) == expected['native_faults']
     assert [
         {'type': type(item.message).__name__, 'message': str(item.message)}
         for item in caught

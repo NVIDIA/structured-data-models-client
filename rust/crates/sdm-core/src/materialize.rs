@@ -4475,6 +4475,7 @@ struct Labelling<'a> {
     entity_rows: &'a [usize],
     /// Each kept entity's key, which the examples index.
     entity_key: &'a ArrayRef,
+    native_keys: Option<&'a ArrayRef>,
     examples: &'a sample::Examples,
     strings: BTreeMap<String, sdm_contract::data::strings::StringEncoding>,
 }

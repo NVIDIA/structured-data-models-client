@@ -21,6 +21,10 @@ RECEIPTS = {
         'r2': '32b24b0290bfdb7232e23c81e9d64bb6e0b6613e58141382c5256742f41d2b0d',
     },
 }
+CHUNK_RECEIPTS = {
+    '310': '2a5fc688bf9dafa49643bc6a00dc9aad505d3608e8748a3924924319e6c8a90d',
+    '312': 'f1afe4c53b3e9de8b2cb690bfec976285e62d4dcca7d786b91b489c6d2ddb686',
+}
 REFERENCE = '43e55f4f58924384c3cb52f67c8ed2e73ba45fa1'
 
 
@@ -39,6 +43,8 @@ def record(receipts: Path) -> dict:
                 if version == 'r1' and item['case'] not in (
                     'whole-type-once',
                     'whole-overflow-once',
+                    'batch-type-once',
+                    'batch-type-both',
                 ):
                     continue
                 outcome = item['outcome']
@@ -50,12 +56,45 @@ def record(receipts: Path) -> dict:
                 records.append(
                     {
                         'storage': item['storage'],
-                        'case': item['case'],
+                        'case': item['case'].replace('batch-', 'label-', 1)
+                        if version == 'r1' and item['case'].startswith('batch-')
+                        else item['case'],
                         'outcome': outcome,
                         'warnings': item['warnings'],
                     }
                 )
         result['cells']['pandas2' if cell == '310' else 'pandas3'] = records
+    result['chunk_receipts'] = CHUNK_RECEIPTS
+    result['chunk_cells'] = {}
+    for cell, expected in CHUNK_RECEIPTS.items():
+        raw = (receipts / f'fallback-r4-{cell}.json').read_bytes()
+        assert hashlib.sha256(raw).hexdigest() == expected
+        observed = json.loads(raw)
+        assert observed['reference'] == REFERENCE and observed['cell'] == cell
+        assert observed['network_attempts'] == []
+        records = []
+        for item in observed['records']:
+            outcome = item['outcome']
+            if outcome['kind'] == 'error':
+                outcome = {'kind': 'error', 'chain': outcome['error']['chain']}
+            records.append(
+                {
+                    'shape': item['shape'],
+                    'second_label_fault': item['second_label_fault'],
+                    'outcome': outcome,
+                    'warnings': item['warnings'],
+                    'label_cast_rows': [
+                        step['rows']
+                        for step in item['trace']
+                        if step['site'] == 'labels'
+                        and step['target'] == "<class 'str'>"
+                    ],
+                    'native_faults': len(item['faults']),
+                }
+            )
+        result['chunk_cells']['pandas2' if cell == '310' else 'pandas3'] = (
+            records
+        )
     return result
 
 

@@ -76,7 +76,10 @@ impl FramePreparation {
     pub fn retained_owner(&self) -> Option<AttachmentId> {
         match self {
             Self::Graph { retained, .. } => *retained,
-            Self::Labels { graph, .. } => Some(graph.owner),
+            Self::Population { graph, .. } => Some(graph.owner),
+            Self::LabelBatch { population, .. } | Self::Labels { population, .. } => {
+                Some(population.graph.owner)
+            }
             Self::Task { labelled, .. } => Some(labelled.graph.owner),
             Self::Plan { task, .. } => Some(task.labelled.graph.owner),
             Self::References { plan, .. } => Some(plan.task.labelled.graph.owner),
@@ -123,7 +126,7 @@ impl FramePreparation {
                 out.extend(retained.iter().map(|owner| (*owner, FrameGraph)));
                 out.extend(values.iter().map(|values| (*values, Bytes)));
             }
-            Self::Labels {
+            Self::Population {
                 graph: value,
                 query,
                 values,
@@ -132,6 +135,33 @@ impl FramePreparation {
                 graph(value, &mut out);
                 out.push((*query, Bytes));
                 out.extend(values.iter().map(|values| (*values, Bytes)));
+            }
+            Self::LabelBatch {
+                population,
+                previous,
+                converted: values,
+                ..
+            } => {
+                graph(&population.graph, &mut out);
+                out.push((population.owner, AttachmentKind::FramePopulation));
+                out.extend(
+                    previous
+                        .iter()
+                        .map(|batch| (batch.owner, AttachmentKind::FrameLabelBatch)),
+                );
+                converted(values, &mut out);
+            }
+            Self::Labels {
+                population,
+                batches,
+            } => {
+                graph(&population.graph, &mut out);
+                out.push((population.owner, AttachmentKind::FramePopulation));
+                out.extend(
+                    batches
+                        .iter()
+                        .map(|batch| (batch.owner, AttachmentKind::FrameLabelBatch)),
+                );
             }
             Self::Task {
                 labelled,

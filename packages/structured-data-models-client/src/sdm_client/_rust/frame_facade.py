@@ -73,6 +73,10 @@ def _ids(kind: str, value: dict[str, Any]) -> list[int]:
         return [] if value['call_values'] is None else [value['call_values']]
     if kind == 'graph':
         return [value['owner']]
+    if kind == 'label_batch':
+        return [value['owner']]
+    if kind == 'population':
+        return _ids('graph', value['graph']) + [value['owner']]
     if kind == 'labels':
         return _ids('graph', value['graph']) + (
             [] if value['context'] is None else [value['context']]
@@ -159,6 +163,14 @@ def _bind(product: _Product, into: _Bindings) -> dict[str, Any]:
         return {**value, 'owner': bound[value['owner']]}
     if product.kind == 'graph':
         return graph(value)
+    if product.kind == 'label_batch':
+        return {**value, 'owner': bound[value['owner']]}
+    if product.kind == 'population':
+        return {
+            **value,
+            'graph': graph(value['graph']),
+            'owner': bound[value['owner']],
+        }
     if product.kind == 'labels':
         return labels(value)
     if product.kind == 'task':
@@ -298,7 +310,16 @@ def _references(
         axis=0,
         ignore_index=True,
     )
-    converted = convert_references(selected, columns.dtype(native), whole=whole)
+    return _reference_result(
+        convert_references(selected, columns.dtype(native), whole=whole),
+        bindings,
+    )
+
+
+def _reference_result(
+    converted: NativeColumn | NativeFrameFailure | NativeReferenceCastFailure,
+    bindings: _Bindings,
+) -> tuple[dict[str, Any], NativeFrameFailure | None]:
     if isinstance(converted, NativeReferenceCastFailure):
         return {
             'kind': 'native_string',
@@ -442,10 +463,10 @@ def _single(
         # public materializer. Keep this call's list independent of reentry.
         prediction_indices = list(indices)
         bindings = _Bindings()
-        labelled = adopt(
+        population = adopt(
             _prepare(
                 {
-                    'stage': 'labels',
+                    'stage': 'population',
                     'graph': _bind(graph, bindings),
                     'query': bindings.json(query),
                     'values': bindings.json(
@@ -475,8 +496,88 @@ def _single(
                 bindings,
                 state,
             ),
-            'labels',
+            'population',
         )
+        label_batches = []
+        population_type = population.data['prediction_type']
+        try:
+            for candidate_range in population.data['batches']:
+                bindings = _Bindings()
+                native_failure = None
+                if population_type['kind'] == 'core_key':
+                    converted = {'kind': 'core_keys', 'values': None}
+                else:
+                    native = population_type['native']
+                    candidate_rows = _table(
+                        population.owners[population.data['owner']].keys()
+                    ).slice(
+                        candidate_range['start'],
+                        candidate_range['stop'] - candidate_range['start'],
+                    )
+                    selected = _native_series(
+                        candidate_rows.column('entity'),
+                        columns,
+                        native,
+                        _string_encoding(graph.data, native),
+                        native['column'],
+                    )
+                    selected.index = pd.Index(
+                        candidate_rows.column('index').to_numpy()
+                    )
+                    converted, native_failure = _reference_result(
+                        convert_references(
+                            selected, columns.dtype(native), whole=False
+                        ),
+                        bindings,
+                    )
+                try:
+                    evidence = adopt(
+                        _prepare(
+                            {
+                                'stage': 'label_batch',
+                                'population': _bind(population, bindings),
+                                'range': candidate_range,
+                                'previous': [
+                                    _bind(batch, bindings)
+                                    for batch in label_batches
+                                ],
+                                'converted': converted,
+                            },
+                            bindings,
+                            state,
+                        ),
+                        'label_batch',
+                    )
+                except StructuredDataError as error:
+                    _native_rejected(
+                        error, native_failure, graph.data, part=part
+                    )
+                    raise
+                label_batches.append(evidence)
+                if evidence.data['complete']:
+                    break
+            bindings = _Bindings()
+            labelled = adopt(
+                _prepare(
+                    {
+                        'stage': 'labels',
+                        'population': _bind(population, bindings),
+                        'batches': [
+                            _bind(batch, bindings) for batch in label_batches
+                        ],
+                    },
+                    bindings,
+                    state,
+                ),
+                'labels',
+            )
+        finally:
+            population.owners.clear()
+            for batch in label_batches:
+                batch.owners.clear()
+            label_batches.clear()
+            candidate_rows = None
+            selected = None
         bindings = _Bindings()
         prediction_type = labelled.data['prediction_type']
         native_failure = None

@@ -284,7 +284,9 @@ pub fn check_attachments(
             (Some(Attachment::Bytes(_)), AttachmentKind::Bytes)
             | (Some(Attachment::Arrow(_)), AttachmentKind::Arrow)
             | (Some(Attachment::FrameGraph(_)), AttachmentKind::FrameGraph) => {}
-            (Some(Attachment::FrameQuestion(_)), AttachmentKind::FrameQuestion)
+            (Some(Attachment::FrameLabelBatch(_)), AttachmentKind::FrameLabelBatch)
+            | (Some(Attachment::FramePopulation(_)), AttachmentKind::FramePopulation)
+            | (Some(Attachment::FrameQuestion(_)), AttachmentKind::FrameQuestion)
             | (Some(Attachment::FrameTask(_)), AttachmentKind::FrameTask)
             | (Some(Attachment::FrameReferences(_)), AttachmentKind::FrameReferences)
             | (Some(Attachment::FramePayload(_)), AttachmentKind::FramePayload) => {}

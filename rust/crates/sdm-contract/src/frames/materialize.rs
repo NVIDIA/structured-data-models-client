@@ -200,6 +200,29 @@ pub struct FrameTextColumn {
     pub native: FrameNativeColumnRef,
 }
 
+/// Complete candidate population and task meaning, before any label lookup.
+/// The owner retains actual ordered sampled rows and anchors, not execution state.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct PreparedFramePopulation {
+    pub graph: PreparedFrameGraph,
+    pub meaning: FrameTaskMeaning,
+    pub prediction_type: FramePredictionType,
+    pub owner: AttachmentId,
+    pub batches: Vec<FrameBatchRange>,
+}
+
+/// Actual evaluated label rows for one candidate range. Completeness is
+/// derived from the complete earlier label evidence, not a resume request.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct PreparedFrameLabelBatch {
+    pub population: String,
+    pub range: FrameBatchRange,
+    pub complete: bool,
+    pub owner: AttachmentId,
+}
+
 /// Actual entity/anchor/target Arrow rows before native entity construction.
 /// The local host retains the graph's original native key dtype owner.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -420,7 +443,7 @@ pub enum FramePreparation {
         prediction_rows: u64,
         limits: FrameLimits,
     },
-    Labels {
+    Population {
         graph: PreparedFrameGraph,
         query: AttachmentId,
         /// Task-option observations after graph notice/list(indices).
@@ -433,6 +456,16 @@ pub enum FramePreparation {
         anchor_entity: bool,
         num_context_samples: Option<u64>,
         limits: FrameLimits,
+    },
+    LabelBatch {
+        population: PreparedFramePopulation,
+        range: FrameBatchRange,
+        previous: Vec<PreparedFrameLabelBatch>,
+        converted: FrameReferenceValues,
+    },
+    Labels {
+        population: PreparedFramePopulation,
+        batches: Vec<PreparedFrameLabelBatch>,
     },
     Task {
         labelled: LabelledFrameTask,
@@ -486,6 +519,8 @@ pub enum PreparedFrameValue {
     Questions(PreparedFrameQuestions),
     FailureAssessment(FrameFailureAssessment),
     Graph(PreparedFrameGraph),
+    Population(PreparedFramePopulation),
+    LabelBatch(PreparedFrameLabelBatch),
     Labels(LabelledFrameTask),
     Task(CompletedFrameTask),
     Plan(FrameRequestPlan),

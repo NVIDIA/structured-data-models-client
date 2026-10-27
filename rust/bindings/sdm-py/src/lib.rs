@@ -237,6 +237,23 @@ struct FrameQuestion {
 }
 
 #[pyclass(frozen, module = "sdm_client._native")]
+struct FrameLabelBatch {
+    owner: sdm_host::RetainedFrameLabelBatch,
+}
+
+#[pyclass(frozen, module = "sdm_client._native")]
+struct FramePopulation {
+    owner: sdm_host::RetainedFramePopulation,
+}
+
+#[pymethods]
+impl FramePopulation {
+    fn keys(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        to_python(py, Attachment::Arrow(self.owner.keys()), true)
+    }
+}
+
+#[pyclass(frozen, module = "sdm_client._native")]
 struct FrameTask {
     owner: sdm_host::RetainedFrameTask,
 }
@@ -331,6 +348,8 @@ fn to_python(py: Python<'_>, attachment: Attachment, retained: bool) -> PyResult
         )?
         .into_any(),
         Attachment::FrameGraph(owner) => Py::new(py, FrameGraph { owner })?.into_any(),
+        Attachment::FrameLabelBatch(owner) => Py::new(py, FrameLabelBatch { owner })?.into_any(),
+        Attachment::FramePopulation(owner) => Py::new(py, FramePopulation { owner })?.into_any(),
         Attachment::FrameQuestion(owner) => Py::new(py, FrameQuestion { owner })?.into_any(),
         Attachment::FrameTask(owner) => Py::new(py, FrameTask { owner })?.into_any(),
         Attachment::FrameReferences(owner) => Py::new(py, FrameReferences { owner })?.into_any(),
@@ -596,6 +615,14 @@ fn attachments_from_python(
             Attachment::Bytes(bytes.as_bytes().to_vec())
         } else if value.is_exact_instance_of::<FrameGraph>() {
             Attachment::FrameGraph(value.extract::<PyRef<'_, FrameGraph>>()?.owner.clone())
+        } else if value.is_exact_instance_of::<FrameLabelBatch>() {
+            Attachment::FrameLabelBatch(
+                value.extract::<PyRef<'_, FrameLabelBatch>>()?.owner.clone(),
+            )
+        } else if value.is_exact_instance_of::<FramePopulation>() {
+            Attachment::FramePopulation(
+                value.extract::<PyRef<'_, FramePopulation>>()?.owner.clone(),
+            )
         } else if value.is_exact_instance_of::<FrameQuestion>() {
             Attachment::FrameQuestion(value.extract::<PyRef<'_, FrameQuestion>>()?.owner.clone())
         } else if value.is_exact_instance_of::<FrameTask>() {
@@ -810,6 +837,8 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<ArrowStream>()?;
     module.add_class::<FrameGraph>()?;
     module.add_class::<FrameQuestion>()?;
+    module.add_class::<FramePopulation>()?;
+    module.add_class::<FrameLabelBatch>()?;
     module.add_class::<FrameTask>()?;
     module.add_class::<FrameReferences>()?;
     module.add_class::<FramePayload>()?;

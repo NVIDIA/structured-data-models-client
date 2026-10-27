@@ -61,6 +61,8 @@ pub enum AttachmentKind {
     /// A core-created immutable frame graph and its continuing native stream.
     FrameGraph,
     FrameQuestion,
+    FramePopulation,
+    FrameLabelBatch,
     FrameTask,
     FrameReferences,
     FramePayload,

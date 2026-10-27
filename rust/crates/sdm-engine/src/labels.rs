@@ -460,6 +460,25 @@ pub enum Labels {
 }
 
 impl Labels {
+    /// Append aligned native label batches without changing their logical
+    /// family or the distinction between native Unicode points.
+    pub fn extend(&mut self, other: &Self) -> Result<(), CoreError> {
+        match (self, other) {
+            (Self::Float(into), Self::Float(from)) => into.extend_from_slice(from),
+            (Self::Int(into), Self::Int(from)) => into.extend_from_slice(from),
+            (Self::Bool(into), Self::Bool(from)) => into.extend_from_slice(from),
+            (Self::Text(into), Self::Text(from)) => into.extend_from_slice(from),
+            (Self::Lists(into), Self::Lists(from)) => into.extend_from_slice(from),
+            _ => {
+                return Err(CoreError::protocol(
+                    Sentence::InvalidMessage,
+                    "native label batches do not share their actual source family",
+                ));
+            }
+        }
+        Ok(())
+    }
+
     pub fn len(&self) -> usize {
         match self {
             Labels::Float(v) => v.len(),
