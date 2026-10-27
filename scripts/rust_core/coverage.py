@@ -73,6 +73,7 @@ or not of its shape) is refused by name. Exit status 0 when every rule holds,
 from __future__ import annotations
 
 import argparse
+import ast
 import functools
 import importlib.util
 import json
@@ -921,6 +922,20 @@ _WAREHOUSE_SAMPLE = re.compile(
 _CONSTRAINTS = re.compile(
     r"FROM duckdb_constraints\(\)\s+WHERE table_name = '((?:[^']|'')+)'"
 )
+# The existing Databricks PK/UNIQUE lookup, with positional schema/table
+# parameters. Match the whole query, including its filters and catalog join.
+_DATABRICKS_CONSTRAINTS = re.compile(
+    r'SELECT tc\.constraint_type, tc\.constraint_name, kcu\.column_name '
+    r'FROM (?P<catalog>`(?:[^`]|``)+`)\.information_schema\.table_constraints tc '
+    r'JOIN (?P=catalog)\.information_schema\.key_column_usage kcu '
+    r'ON tc\.constraint_catalog = kcu\.constraint_catalog '
+    r'AND tc\.constraint_schema = kcu\.constraint_schema '
+    r'AND tc\.constraint_name = kcu\.constraint_name '
+    r'WHERE tc\.table_schema = lower\(\?\) '
+    r'AND tc\.table_name = lower\(\?\) '
+    r"AND tc\.constraint_type IN \('PRIMARY KEY', 'UNIQUE'\)"
+)
+_EMPTY_ROWS = '4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945'
 #: A PQL query's first column reference before its ``FOR``: its target,
 #: with or without an ``EVALUATE`` or ``EXPLAIN`` before ``PREDICT``, for
 #: each entity (``FOR EACH t.c``) or for the ones it names (``FOR t.c = 1``,
@@ -1110,7 +1125,59 @@ def _undeclared(line: dict[str, Any]) -> set[str]:
     r"""The source tables the reference found no declared constraint on:
     its read of their constraints answered no row."""
     rows: dict[str, list[Any]] = {}
+    warehouse_rows: dict[str, list[bool]] = {}
+    ambiguous = False
     for statement in _statements(line):
+        if str(line.get('case')).endswith(
+            '@databricks-sql'
+        ) and _DATABRICKS_CONSTRAINTS.fullmatch(
+            ' '.join(statement['sql'].split())
+        ):
+            parameters = statement.get('parameters')
+            names: list[str] = []
+            if isinstance(parameters, list) and len(parameters) == 2:
+                for parameter in parameters:
+                    if not (
+                        isinstance(parameter, dict)
+                        and set(parameter) == {'type', 'value'}
+                        and parameter['type'] == 'builtins.str'
+                        and isinstance(parameter['value'], str)
+                        and len(parameter['value']) <= 4096
+                    ):
+                        break
+                    try:
+                        name = ast.literal_eval(parameter['value'])
+                    except (SyntaxError, ValueError, RecursionError):
+                        break
+                    if not isinstance(name, str) or not name:
+                        break
+                    names.append(name)
+            if len(names) != 2:
+                # An unreadable table parameter cannot safely be assigned
+                # to any of the otherwise unconstrained source tables.
+                ambiguous = True
+                continue
+            results = statement['results']
+            result = results[0] if len(results) == 1 else None
+            values = result.get('values') if isinstance(result, dict) else None
+            empty = (
+                statement.get('error', 'missing') is None
+                and isinstance(result, dict)
+                and result.get('method') == 'fetchall'
+                and isinstance(result.get('rows'), int)
+                and not isinstance(result['rows'], bool)
+                and result['rows'] == 0
+                and result.get('digest') == _EMPTY_ROWS
+                and isinstance(values, dict)
+                and values.get('columns')
+                == ['constraint_type', 'constraint_name', 'column_name']
+                and values.get('types') == ['string'] * 3
+                and values.get('unencodable') == []
+                and values.get('ordered') == _EMPTY_ROWS
+                and values.get('unordered') == _EMPTY_ROWS
+            )
+            warehouse_rows.setdefault(_relation_key(names[1]), []).append(empty)
+            continue
         read = _CONSTRAINTS.search(statement['sql'])
         if read is None or 'FOREIGN KEY' in statement['sql']:
             continue
@@ -1118,7 +1185,12 @@ def _undeclared(line: dict[str, Any]) -> set[str]:
             r.get('rows') if isinstance(r, dict) else None
             for r in statement['results']
         )
-    return {table for table, counts in rows.items() if counts == [0]}
+    free = {table for table, counts in rows.items() if counts == [0]}
+    if not ambiguous:
+        free.update(
+            table for table, empty in warehouse_rows.items() if empty == [True]
+        )
+    return free
 
 
 def _keys(value: Any) -> set[str]:
