@@ -349,6 +349,11 @@ pub fn predict_rows(payload: &Value) -> Option<usize> {
 /// after it unnumberable, `INTERNAL_ERROR`, as the client refuses it.
 pub fn call_starts(payloads: &[Value]) -> Result<Vec<usize>, CoreError> {
     let counted: Vec<Option<usize>> = payloads.iter().map(predict_rows).collect();
+    call_starts_from_counts(&counted)
+}
+
+/// The same numbering policy over reached native row-count observations.
+pub fn call_starts_from_counts(counted: &[Option<usize>]) -> Result<Vec<usize>, CoreError> {
     if counted
         .iter()
         .take(counted.len().saturating_sub(1))
@@ -1002,6 +1007,12 @@ fn is_chosen(value: &Value) -> bool {
 /// T1.28a's fix round 1), before the model is called.
 pub fn call_bytes(call: &Value) -> Result<Vec<u8>, CoreError> {
     let bytes = call.to_bytes();
+    check_call_bytes(&bytes)?;
+    Ok(bytes)
+}
+
+/// Admission over the bytes actually encoded by the host's native encoder.
+pub fn check_call_bytes(bytes: &[u8]) -> Result<(), CoreError> {
     if bytes.len() > crate::payload::PAYLOAD_BYTES {
         return Err(CoreError::new(
             Sentence::CallPastEndpoint,
@@ -1014,7 +1025,7 @@ pub fn call_bytes(call: &Value) -> Result<Vec<u8>, CoreError> {
             Detail::Scalar(Scalar::UInt64(crate::payload::PAYLOAD_BYTES as u64)),
         ));
     }
-    Ok(bytes)
+    Ok(())
 }
 
 /// The entity a row is about, as the result gives it: as the reference's

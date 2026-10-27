@@ -8,6 +8,7 @@
 pub mod relational;
 
 pub use relational::{
+    RelationalCallFields, RelationalEncodedCall, RelationalStatistic,
     NativeTargetEquality, RelationalContextFacts, RelationalPreparation, RelationalPrepared,
     RelationalConstantTarget, RelationalTargetNaming, RelationalTargetPopulation, RelationalTargetRole,
     RelationalTargetUse, RelationalTaskMeaning,
@@ -266,6 +267,9 @@ pub struct TabularEnvelope {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "stage", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Preparation {
+    CallRelational {
+        input: RelationalEncodedCall,
+    },
     Relational {
         input: RelationalPreparation,
     },

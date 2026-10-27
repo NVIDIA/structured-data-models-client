@@ -421,6 +421,27 @@ pub(crate) async fn call_response(
     endpoint: Option<&ModelEndpoint>,
     direct: bool,
 ) -> Result<(Value, PredictionResponse), CoreError> {
+    call_response_with_contract(asker, bytes, endpoint, direct, None).await
+}
+
+/// Native gathered calls keep gathered integer widths and the generated
+/// decoder's exact selected error presentation as separate choices.
+pub(crate) async fn call_native_response(
+    asker: &Asker,
+    bytes: Vec<u8>,
+    endpoint: Option<&ModelEndpoint>,
+    model: &str,
+) -> Result<(Value, PredictionResponse), CoreError> {
+    call_response_with_contract(asker, bytes, endpoint, false, Some(model)).await
+}
+
+async fn call_response_with_contract(
+    asker: &Asker,
+    bytes: Vec<u8>,
+    endpoint: Option<&ModelEndpoint>,
+    direct: bool,
+    native_model: Option<&str>,
+) -> Result<(Value, PredictionResponse), CoreError> {
     let serving = endpoint.map(
         |ModelEndpoint::ServingEndpoint {
              name,
@@ -509,7 +530,13 @@ pub(crate) async fn call_response(
         PredictionResponse::read(&answer)
     };
     let response = decoded.map_err(|error| {
-        if direct {
+        if let Some(model) = native_model {
+            let mut selected = direct_contract_error(&answer, error)
+                .with_field("model", Detail::text(model))
+                .with_field("native_relational_contract", Detail::Scalar(Scalar::Bool(true)));
+            selected.public_details = Some(std::collections::BTreeMap::new());
+            selected
+        } else if direct {
             direct_contract_error(&answer, error)
         } else {
             refused(error)

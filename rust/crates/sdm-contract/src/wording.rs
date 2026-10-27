@@ -766,6 +766,9 @@ pub fn template(sentence: Sentence) -> Template {
         S::DirectResponseContract => {
             said(r#"{model} returned a response that does not match the contract: {diagnostic}"#)
         }
+        S::RelationalNotGathered => said(
+            r#"a relational request has to be gathered first, and this one was not. Build it with PredictiveQuery(...).materialize(indices=[...], model='kumo-relational'). A schema of one table is gathered for the tabular model unless the relational one is named, rather than with Request(context=..., predict=...), which is the single-table form"#,
+        ),
         S::TabularRowBounds => {
             said(r#"the response names row_index {index}, and this batch asked about {rows} rows"#)
         }

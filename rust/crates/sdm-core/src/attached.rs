@@ -93,6 +93,10 @@ pub fn resolved_attachments(
                     _ => {}
                 }
                 let rows = match input {
+                    sdm_contract::prepare::Preparation::CallRelational { input } => {
+                        named.push((input.body, AttachmentKind::Bytes));
+                        None
+                    }
                     sdm_contract::prepare::Preparation::EncodeBody { input } => {
                         Some((input.context, input.predict))
                     }

@@ -283,6 +283,7 @@ pub(crate) async fn run(
     mut attached: Attachments,
 ) -> Result<OperationResult, CoreError> {
     let value = match input {
+        Preparation::CallRelational { input } => return relational::call(asker, input, attached).await,
         Preparation::Relational { input } => serde_json::to_value(relational::prepare(&asker, input)?),
         Preparation::EncodeBody { input } => return encode_body(&asker, input, attached),
         Preparation::RelationalReferenceColumn { facts } => serde_json::to_value(

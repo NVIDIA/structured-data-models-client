@@ -8,6 +8,37 @@
 
 use super::*;
 
+/// Concrete fields selected by shared request policy. Native values and
+/// shallow container copies remain in the host until the transport encodes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RelationalCallFields {
+    pub model: String,
+    pub outputs: Vec<String>,
+    pub statistic: RelationalStatistic,
+    pub inference_options: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "source", rename_all = "snake_case", deny_unknown_fields)]
+pub enum RelationalStatistic {
+    Absent,
+    Retained,
+    Default { value: String },
+}
+
+/// One strict native JSON encoding at its actual transport boundary.
+/// The bytes are authoritative, including native Unicode escaping and
+/// members not interpreted by the SDK. No native owner crosses this value.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RelationalEncodedCall {
+    pub call: CallPreparation,
+    pub body: AttachmentId,
+    pub request_id: String,
+    pub model_endpoint: Option<crate::ops::ModelEndpoint>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct RelationalContextFacts {
@@ -81,12 +112,35 @@ pub struct RelationalConstantTarget {
     pub wire_target: bool,
     pub query: Vec<u32>,
     pub naming: RelationalTargetNaming,
+    pub question_truth: Option<bool>,
 }
 
 /// Model-specific preflight questions over actual native data observations.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "data", rename_all = "snake_case", deny_unknown_fields)]
 pub enum RelationalPreparation {
+    Payloads {
+        call: CallPreparation,
+        present: bool,
+    },
+    CallFields {
+        call: CallPreparation,
+        meaning: RelationalTaskMeaning,
+        statistic_chosen: Option<bool>,
+    },
+    Inference {
+        call: CallPreparation,
+        /// Original native sorted-set refusal population, by ordinal.
+        refused: Vec<usize>,
+        /// Reached native membership of output_type, only for a refusal.
+        statistic_option: Option<bool>,
+    },
+    CallCounts {
+        rows: Vec<Option<usize>>,
+    },
+    ScoringRows {
+        rows: Vec<Option<usize>>,
+    },
     Context {
         call: CallPreparation,
         facts: RelationalContextFacts,
@@ -104,6 +158,10 @@ pub enum RelationalPreparation {
         population: RelationalTargetPopulation,
         wire_target: bool,
         query: Vec<u32>,
+    },
+    QuestionMeaning {
+        target: RelationalConstantTarget,
+        truth: bool,
     },
     Constant {
         call: CallPreparation,
@@ -123,8 +181,16 @@ pub enum RelationalPreparation {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(tag = "data", content = "value", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(
+    tag = "data",
+    content = "value",
+    rename_all = "snake_case",
+    deny_unknown_fields
+)]
 pub enum RelationalPrepared {
+    Empty(bool),
+    Fields(RelationalCallFields),
+    Starts(Vec<usize>),
     Call(CallPreparation),
     Task(RelationalTaskMeaning),
     Targets(RelationalTargetPopulation),

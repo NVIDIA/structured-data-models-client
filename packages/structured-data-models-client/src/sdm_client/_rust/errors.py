@@ -485,8 +485,26 @@ def source_values(source: Any) -> dict[str, Callable[[dict[str, Any]], Any]]:
     return values
 
 
+class _ObservedRepr:
+    """A native repr already reached before the core selected its sentence."""
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+    def __repr__(self) -> str:
+        return self.text
+
+
 def _fields(given: Mapping[str, Any]) -> dict[str, Any]:
-    return {name: _detail(value) for name, value in given.items()}
+    fields = {name: _detail(value) for name, value in given.items()}
+    if fields.get('native_relational_constant'):
+        if 'target_points' in fields:
+            fields['target'] = ''.join(map(chr, fields['target_points']))
+        if 'question_repr_points' in fields:
+            fields['question'] = _ObservedRepr(
+                ''.join(map(chr, fields['question_repr_points']))
+            )
+    return fields
 
 
 def _timestamp(value: codec.Temporal) -> Any:
@@ -665,6 +683,17 @@ def error_from_core(
         cls = StructuredDataError
     sentence = error['sentence']
     if (
+        fields.get('native_relational_constant')
+        and (present := _held().get('relational_target')) is not None
+    ):
+        details['target'] = present(fields)
+    if (
+        fields.get('native_relational_inference')
+        and (present := _held().get('relational_unsupported')) is not None
+    ):
+        fields['unsupported'] = present(fields)
+        details['unsupported'] = fields['unsupported']
+    if (
         sentence == 'no_table'
         and (present := _held().get('direct_task_tables')) is not None
     ):
@@ -763,7 +792,8 @@ def error_from_core(
                     fields['diagnostic'] = (
                         fields['before'] + repr(value) + fields['after']
                     )
-        details['diagnostic'] = fields['diagnostic']
+        if not fields.get('native_relational_contract'):
+            details['diagnostic'] = fields['diagnostic']
     native_graph_cause = (
         sentence == 'frame_native_internal'
         and fields.get('native_cause_kind') == 'runtime_error'

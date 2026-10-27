@@ -202,6 +202,21 @@ class DatabricksServingTransport:
     def predict(self, payload: dict[str, Any]) -> dict[str, Any]:
         return self._decoded(self._answered(payload))
 
+    def encode_prediction(self, payload: dict[str, Any]) -> bytes:
+        """Native request encoding before the core wraps serving records."""
+        self._require_open()
+        _check_encodable(payload)
+        try:
+            return json.dumps(
+                payload, allow_nan=False, separators=(',', ':')
+            ).encode('utf-8')
+        except (TypeError, ValueError) as error:
+            raise StructuredDataError(
+                f'this request carries a value that cannot be sent as JSON: '
+                f'{error}',
+                code='INVALID_REQUEST',
+            ) from error
+
     @property
     def model_endpoint(self) -> dict[str, Any]:
         r"""This endpoint as the core is told of it (``Predict``'s
