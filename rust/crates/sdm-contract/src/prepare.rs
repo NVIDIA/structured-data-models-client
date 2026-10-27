@@ -263,9 +263,13 @@ pub enum Preparation {
         rows: Vec<DecodedDirectRow>,
         decimal_limit: u32,
     },
-    SelectResponseMember {
+    InterpretResponseJson {
         checked: CheckedDirectRow,
-        literal: LiteralObservation,
+        json: JsonObservation,
+    },
+    SelectResponseMember {
+        interpreted: InterpretedDirectRow,
+        literal: Option<LiteralObservation>,
     },
     AttributeResponseRow {
         selected: SelectedDirectMember,
@@ -452,7 +456,7 @@ pub enum PrimitiveOption {
     Value(Scalar),
 }
 
-pub const DIRECT_RESPONSE_VERSION: u32 = 1;
+pub const DIRECT_RESPONSE_VERSION: u32 = 2;
 
 /// Owned model response data. The attachments are data, never resume handles.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -505,6 +509,9 @@ pub enum DirectRowId {
     Unkeyed,
     Absent,
     LengthLimitedText,
+    NativeJsonText {
+        value: String,
+    },
     JsonValue {
         value: BuiltinValue,
         members: Option<Vec<BuiltinValue>>,
@@ -513,7 +520,7 @@ pub enum DirectRowId {
         value: String,
     },
 }
-/// Literal-built builtin facts. Nonprimitive members do not acquire display text.
+/// Native parsed builtin facts. Nonprimitive members do not acquire display text.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum BuiltinValue {
@@ -552,7 +559,7 @@ pub struct NativeFailure {
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "outcome", rename_all = "snake_case", deny_unknown_fields)]
-pub enum NativeLiteralValue {
+pub enum NativeParsedValue {
     Value {
         value: BuiltinValue,
         members: Option<Vec<BuiltinValue>>,
@@ -567,14 +574,31 @@ pub struct LiteralObservation {
     pub scope: ResponseScope,
     pub ordinal: usize,
     pub text: String,
-    pub value: NativeLiteralValue,
+    pub value: NativeParsedValue,
+}
+/// An actual native JSON conversion of one reached eligible ID.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct JsonObservation {
+    pub scope: ResponseScope,
+    pub ordinal: usize,
+    pub text: String,
+    pub value: NativeParsedValue,
+}
+/// Native JSON data with the core's checked representation and catch policy.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct InterpretedDirectRow {
+    pub checked: CheckedDirectRow,
+    pub json: JsonObservation,
 }
 /// A selected member of a checked row, independently useful builtin data.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SelectedDirectMember {
     pub checked: CheckedDirectRow,
-    pub literal: LiteralObservation,
+    pub json: JsonObservation,
+    pub literal: Option<LiteralObservation>,
     pub member: Option<BuiltinValue>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -595,6 +619,7 @@ pub struct StringObservation {
 pub struct AttributedDirectRow {
     pub decimal_limit: u32,
     pub row: DecodedDirectRow,
+    pub json: Option<JsonObservation>,
     pub literal: Option<LiteralObservation>,
     pub string: Option<StringObservation>,
     pub id: Scalar,

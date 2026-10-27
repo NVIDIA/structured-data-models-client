@@ -137,50 +137,78 @@ def _native_value_call(
     errors.raise_native(selected)
 
 
-def _native_literal(text: str) -> tuple[Any, Exception | None]:
-    """Reach the literal within its actual selected JSON-failure context."""
+def _native_json(text: str) -> tuple[Any, Exception | None]:
+    """Observe actual native JSON conversion without choosing fallback."""
     try:
-        # Rust has already selected the failed-JSON representation. This
-        # native conversion supplies the actual exception visible to Python
-        # warning handlers; its result is not used to choose an SDK path.
-        json.loads(text)
-    except (ValueError, TypeError, RecursionError):
-        # Only literal-conversion failures enter the core's literal catch
-        # policy. Unexpected JSON failures retain their original propagation.
+        return json.loads(text), None
+    except Exception as error:
+        return None, error
+
+
+def _native_literal(
+    text: str, json_error: Exception
+) -> tuple[Any, Exception | None]:
+    """Evaluate a selected literal within the same native JSON exception."""
+    original_context = json_error.__context__
+    original_traceback = json_error.__traceback__
+    try:
+        raise json_error
+    except Exception as selected:
+        # Re-entering an existing exception inside a caller handler can
+        # replace its scanner context. Restore it before any AST warnings.
+        selected.__context__ = original_context
+        selected.__traceback__ = original_traceback
         try:
             return ast.literal_eval(text), None
         except Exception as error:
             return None, error
-    raise AssertionError(
-        'core selected native literal conversion for a JSON value'
-    )
+
+
+def _parsed_value(native: Any, failure: Exception | None) -> dict[str, Any]:
+    if failure is not None:
+        return {'outcome': 'failed', 'failure': _failure(failure)}
+    return {
+        'outcome': 'value',
+        'value': _builtin(native),
+        'members': [_builtin(v) for v in native]
+        if type(native) is list
+        else None,
+    }
 
 
 def _attribute_native(checked: dict[str, Any]) -> dict[str, Any]:
     text = checked['id']['value']
-    literal = {
-        'scope': checked['scope'],
-        'ordinal': checked['row']['ordinal'],
-        'text': text,
-    }
-    native, native_error = _native_literal(text)
-    if native_error is not None:
-        literal['value'] = {
-            'outcome': 'failed',
-            'failure': _failure(native_error),
-        }
-    else:
-        literal['value'] = {
-            'outcome': 'value',
-            'value': _builtin(native),
-            'members': [_builtin(v) for v in native]
-            if type(native) is list
-            else None,
+    native, json_error = _native_json(text)
+    interpreted = _native_value_call(
+        {
+            'stage': 'interpret_response_json',
+            'checked': checked,
+            'json': {
+                'scope': checked['scope'],
+                'ordinal': checked['row']['ordinal'],
+                'text': text,
+                'value': _parsed_value(native, json_error),
+            },
+        },
+        json_error,
+    )
+    literal = None
+    native_error = None
+    if interpreted['checked']['id']['representation'] == 'native_literal_text':
+        assert (
+            json_error is not None
+        )  # Core selected the held failed conversion.
+        native, native_error = _native_literal(text, json_error)
+        literal = {
+            'scope': checked['scope'],
+            'ordinal': checked['row']['ordinal'],
+            'text': text,
+            'value': _parsed_value(native, native_error),
         }
     selected = _native_value_call(
         {
             'stage': 'select_response_member',
-            'checked': checked,
+            'interpreted': interpreted,
             'literal': literal,
         },
         native_error,
@@ -239,8 +267,8 @@ def _response(finished: Finished) -> Finished:
         if checked['row'] is not None:
             accepted.append(_attribute_native(checked['row']))
             at += 1
-        # The first pure path is one linear call. Subsequent slices are bounded
-        # so a fallback on every row never resends a growing response or key set.
+        # Native JSON is observed only for the reached checked row. Bounded
+        # later slices never replay a growing response or scoring-key set.
         end = min(len(rows), at + 256)
     attached = {
         n: buffers[name]
