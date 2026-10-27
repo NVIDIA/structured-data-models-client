@@ -239,18 +239,6 @@ pub(crate) fn description(
         .as_ref()
         .map(|state| state.description.clone())
         .unwrap_or_else(|| read.description.clone());
-    // This first opt-in consumer accepts numeric scalar identifiers.
-    // Boolean feature columns and all constructor admission stay unchanged.
-    if description.tables.iter().any(|table| {
-        table.primary_key.iter().any(|key| {
-            table
-                .columns
-                .iter()
-                .any(|column| column.name == *key && column.dtype == Dtype::Bool)
-        })
-    }) {
-        return Err(sdm_engine::not_yet("frame_boolean_key"));
-    }
     Ok((description, read.types))
 }
 
