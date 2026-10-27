@@ -808,4 +808,34 @@ mod tests {
         };
         assert_eq!(values[3], original[3]);
     }
+
+    #[test]
+    fn native_response_containers_do_not_multiply_json_transport_depth() {
+        for levels in [1, 90, 125] {
+            let mut value = Value::text("retained-leaf");
+            for _ in 0..levels {
+                value = Value::Array(vec![value]);
+            }
+            let encoded = native(&value).unwrap();
+            let bytes = serde_json::to_vec(&encoded).unwrap();
+            // Ordinary serde remains sufficient for the intermediate, not
+            // an operation-specific escape from its recursion limit.
+            let decoded: NativeValue = serde_json::from_slice(&bytes).unwrap();
+            assert_eq!(logical(&decoded).unwrap(), value);
+        }
+    }
+
+    #[test]
+    fn original_response_depth_boundary_is_unchanged() {
+        for (levels, accepted) in [(125, true), (126, false)] {
+            let mut prediction = "\"retained-leaf\"".to_owned();
+            for _ in 0..levels {
+                prediction = format!("[{prediction}]");
+            }
+            let response = format!(
+                "{{\"id\":\"depth\",\"model\":\"kumo-relational\",\"metadata\":{{}},\"predictions\":[{{\"row_index\":0,\"id\":\"3\",\"prediction\":{prediction}}}]}}"
+            );
+            assert_eq!(sdm_wire::json::read_answer(response.as_bytes()).is_ok(), accepted);
+        }
+    }
 }

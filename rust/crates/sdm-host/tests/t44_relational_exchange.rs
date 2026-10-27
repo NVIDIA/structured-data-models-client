@@ -161,6 +161,15 @@ impl OwnedPart {
 }
 
 fn exchange(payload: &Value, child: usize, classification: bool) -> (CallPreparation, OwnedPart) {
+    exchange_prediction(payload, child, classification, None)
+}
+
+fn exchange_prediction(
+    payload: &Value,
+    child: usize,
+    classification: bool,
+    nested_prediction: Option<&Value>,
+) -> (CallPreparation, OwnedPart) {
     let kind = payload["task"]["kind"].as_str().unwrap();
     let bound = bound(kind);
     let request_id = format!("host-call-{child}");
@@ -198,6 +207,9 @@ fn exchange(payload: &Value, child: usize, classification: bool) -> (CallPrepara
                 "id":source[row][0].as_i64().unwrap().to_string(),
                 "prediction":if classification { json!(true) } else { json!([[0.0,1.0],[10.0,11.0]][child][row]) }
             });
+            if let Some(prediction) = nested_prediction {
+                answer["prediction"] = prediction.clone();
+            }
             if classification {
                 let positive = [[0.8, 0.2], [0.6, 0.9]][child][row];
                 answer["probabilities"] = json!({"False":1.0-positive,"True":positive});
@@ -326,13 +338,51 @@ fn exchange(payload: &Value, child: usize, classification: bool) -> (CallPrepara
             kind: kind.chars().map(u32::from).collect(),
             classification,
             dtype_truth: classification.then_some(true),
-            numeric_prefix: classification.then_some(true),
+            numeric_prefix: classification.then(|| {
+                ["int", "float", "bool"].iter().any(|prefix| {
+                    payload["task"]["target"]["dtype"].as_str().unwrap().starts_with(prefix)
+                })
+            }),
         },
         target_rows: AttachmentId(5),
     };
     let completion = start(Preparation::CompleteRelationalResponse { part }, attached);
     let part = done(&completion);
     (bound, OwnedPart::take(&completion, part))
+}
+
+#[test]
+fn deep_builtin_predictions_keep_wire_depth_across_all_response_products() {
+    let fixture: Value = serde_json::from_str(include_str!(
+        "../../../../packages/structured-data-models-client/tests/t44_mutable_prediction_reference.json"
+    ))
+    .unwrap();
+    let payload = &fixture["cases"]["r2/control"]["wire"][0];
+    assert_eq!(payload["task"]["target"]["dtype"], "string");
+    for levels in [0, 90, 125] {
+        let mut prediction = json!("retained-leaf");
+        for _ in 0..levels {
+            prediction = json!([prediction]);
+        }
+        let (bound, part) = exchange_prediction(payload, 0, true, Some(&prediction));
+        let mut attached = Attachments::new();
+        let part = part.attach(&mut attached);
+        let (result, rows) = finish(
+            bound,
+            RelationalAggregation::Calls {
+                parts: vec![part],
+                counted: vec![Some(2)],
+                known_empty: false,
+            },
+            attached,
+        );
+        assert_eq!(rows.batches[0].num_rows(), 2);
+        assert_eq!(result.lineage.len(), 2);
+        assert_eq!(result.answer_details.get("calls_answered"), Some(&1));
+        assert_eq!(result.answer_details.get("rows_answered"), Some(&2));
+        assert_eq!(result.lineage[0].source_row, Some(1));
+        assert_eq!(result.lineage[1].source_row, Some(0));
+    }
 }
 
 fn children(calls: &[(CallPreparation, OwnedPart)]) -> (Vec<RelationalCallResult>, Attachments) {
