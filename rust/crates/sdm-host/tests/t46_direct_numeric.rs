@@ -372,3 +372,86 @@ fn direct_prelude_must_agree_with_the_legitimately_checked_bound_call() {
         );
     }
 }
+
+#[test]
+fn nullable_cast_fault_is_core_selected_from_native_storage_and_values() {
+    for storage in ["nan_missing", "validity_masked"] {
+        for null in [false, true] {
+            for infinity in [f64::INFINITY, f64::NEG_INFINITY] {
+                let call = bound(3);
+                let prepared = prepare(json!({"stage":"schema","headers":headers(),"context":2,"predict":3,"entity_table":"instance"}),halves()).unwrap();
+                let mut schema = prepared["schema"].clone();
+                schema["tables"][0]["columns"][0]["dtype"] = json!("int64");
+                let mut context_header = header(&["feature", "target"], 3);
+                context_header["columns"][0]["physical"] = json!({"type":"int64"});
+                context_header["columns"][0]["float_storage"] = Value::Null;
+                let mut values = vec![Some(1.), Some(infinity)];
+                if null {
+                    values.push(None);
+                }
+                let mut predict_header = header(&["feature"], values.len());
+                predict_header["columns"][0]["float_storage"] = json!(storage);
+                let context = RecordBatch::try_from_iter([
+                    (
+                        "0",
+                        Arc::new(arrow_array::Int64Array::from(vec![1, 2, 3])) as ArrayRef,
+                    ),
+                    (
+                        "1",
+                        Arc::new(Float64Array::from(vec![2., 4., 6.])) as ArrayRef,
+                    ),
+                ])
+                .unwrap();
+                let scoring = RecordBatch::try_from_iter([(
+                    "0",
+                    Arc::new(Float64Array::from(values)) as ArrayRef,
+                )])
+                .unwrap();
+                let data = || {
+                    Attachments::from([
+                        (
+                            AttachmentId(2),
+                            Attachment::Arrow(ArrowData::new(
+                                context.schema(),
+                                vec![context.clone()],
+                            )),
+                        ),
+                        (
+                            AttachmentId(3),
+                            Attachment::Arrow(ArrowData::new(
+                                scoring.schema(),
+                                vec![scoring.clone()],
+                            )),
+                        ),
+                    ])
+                };
+                let input = json!({"bound":call,"context":2,"predict":3,"context_header":context_header,"predict_header":predict_header,"schema":schema,"entity_table":"instance","target":"target","task":"regression"});
+                let overlap = prepare(json!({"stage":"overlap","input":input}), data()).unwrap();
+                let mut input = input;
+                input.as_object_mut().unwrap().remove("bound");
+                input["overlap"] = overlap;
+                let planned = prepare(json!({"stage":"envelope","input":input}), data());
+                if storage == "nan_missing" && null {
+                    assert_eq!(
+                        planned.unwrap_err().sentence,
+                        sdm_contract::Sentence::DirectNullableCast
+                    );
+                    continue;
+                }
+                let envelope = planned.unwrap();
+                let mut attached = data();
+                attached.insert(AttachmentId(1),bytes(json!({"stage":"body","envelope":envelope,"context":2,"predict":3,"context_header":context_header,"predict_header":predict_header,"task":"regression","inference":{}})));
+                let run = start(
+                    json!({"op":"predict","direct":1,"model":"kumo-tabular","request_id":"sdm-fixed","outputs":call["outputs"],"default_outputs":true}),
+                    attached,
+                );
+                match next(&run) {
+                    ControlMessage::Error { error } => {
+                        assert_eq!(error.sentence, sdm_contract::Sentence::DirectWireNonFinite)
+                    }
+                    other => panic!("non-finite rows must fail before transport: {other:?}"),
+                }
+            }
+        }
+    }
+}
