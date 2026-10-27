@@ -473,6 +473,7 @@ def test_no_refusal_on_the_census_s_core_route_says_a_generic_sentence(
                         'case': census._case(probe, number, routes),
                         'options': probe.get('options', {}),
                         'model': probe.get('model', 'KumoRelational'),
+                        'frame': probe.get('frame'),
                     }
                 )
             )
@@ -534,6 +535,7 @@ def _routed(census: Any, probes: list[dict[str, Any]]) -> list[dict[str, Any]]:
                         'case': census._case(probe, number, routes),
                         'options': probe.get('options', {}),
                         'model': probe.get('model', 'KumoRelational'),
+                        'frame': probe.get('frame'),
                     }
                 )
             )

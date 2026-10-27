@@ -69,6 +69,7 @@ def main(argv: list[str] | None = None) -> int:
                         'case': census._case(probe, number, routes),
                         'options': probe.get('options', {}),
                         'model': probe.get('model', 'KumoRelational'),
+                        'frame': probe.get('frame'),
                     }
                 ),
                 encoding='utf-8',

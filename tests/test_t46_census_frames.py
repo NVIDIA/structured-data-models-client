@@ -33,23 +33,32 @@ def census() -> Any:
     return module
 
 
-def test_frame_probes_cover_the_current_constructor_and_consumer_sites(census: Any) -> None:
+def test_frame_probes_cover_the_current_constructor_and_consumer_sites(
+    census: Any,
+) -> None:
     probes = census.probes(ROOT)
     frame = [probe for probe in probes if probe.get('frame') is not None]
     assert {probe['frame'] for probe in frame} == set(census.FRAME_RECIPES)
     required = {
-        'rule:frame_boolean_key', 'rule:frame_native_family',
-        'rule:frame_temporal_aggregation', 'rule:frame_temporal_entity',
-        'rule:frame_text_features', 'rule:frame_text_key',
-        'rule:frame_time_type', 'rule:frame_untimed_timestamp_features',
-        'rule:frame_wide_timestamps', 'rule:direct_numeric_storage',
+        'rule:frame_boolean_key',
+        'rule:frame_native_family',
+        'rule:frame_temporal_aggregation',
+        'rule:frame_temporal_entity',
+        'rule:frame_text_features',
+        'rule:frame_text_key',
+        'rule:frame_time_type',
+        'rule:frame_untimed_timestamp_features',
+        'rule:frame_wide_timestamps',
+        'rule:direct_numeric_storage',
     }
     assert required <= {probe['site'] for probe in frame}
     assert all(probe['databases'] == ['duckdb'] for probe in frame)
     assert all('outcomes' not in probe for probe in frame)
 
 
-def test_constructor_recipes_contain_the_intended_native_fault(census: Any) -> None:
+def test_constructor_recipes_contain_the_intended_native_fault(
+    census: Any,
+) -> None:
     duplicate, _ = census._frame_probe('duplicate-columns')
     assert duplicate['users'].columns.has_duplicates
     nonstrings, _ = census._frame_probe('nonstring-columns')
@@ -70,10 +79,16 @@ def test_route_passes_frame_recipe_without_rewriting_case_schema(
     probe = next(p for p in census.probes(ROOT) if p.get('frame'))
     case = census._case(probe, 0, ['schema.from-data/frames/frames'])
     assert 'frame' not in case['input']
-    (tmp_path / '0.json').write_text(json.dumps({
-        'case': case, 'options': {}, 'model': 'KumoRelational',
-        'frame': probe['frame'],
-    }))
+    (tmp_path / '0.json').write_text(
+        json.dumps(
+            {
+                'case': case,
+                'options': {},
+                'model': 'KumoRelational',
+                'frame': probe['frame'],
+            }
+        )
+    )
     seen = []
 
     def outcome(*args: Any, **kwargs: Any) -> dict[str, str]:
@@ -85,7 +100,10 @@ def test_route_passes_frame_recipe_without_rewriting_case_schema(
     census.route(tmp_path, tmp_path / 'recorded.json', 'duckdb', core=True)
     assert seen[0][1]['frame'] == probe['frame']
     assert seen[0][2] == 'schema.from-data/frames/frames'
-    assert json.loads((tmp_path / 'recorded.json').read_text())[0]['stage'] == 'from_data'
+    assert (
+        json.loads((tmp_path / 'recorded.json').read_text())[0]['stage']
+        == 'from_data'
+    )
 
 
 def test_unknown_frame_recipe_fails_closed(census: Any, tmp_path: Path) -> None:
@@ -93,7 +111,9 @@ def test_unknown_frame_recipe_fails_closed(census: Any, tmp_path: Path) -> None:
     path.parent.mkdir()
     probe = dict(next(p for p in census.probes(ROOT) if p.get('frame')))
     probe['frame'] = 'unrecorded-python-expression()'
-    path.write_text(json.dumps({'format': 'sdm-refusal-census/1', 'probes': [probe]}))
+    path.write_text(
+        json.dumps({'format': 'sdm-refusal-census/1', 'probes': [probe]})
+    )
     with pytest.raises(census.CensusError, match='not a probe'):
         census.probes(tmp_path)
 
@@ -103,7 +123,9 @@ def test_census_forces_the_existing_development_frame_routes(
 ) -> None:
     from sdm_client import _routing
 
-    monkeypatch.setattr(census, '_runner', lambda: SimpleNamespace(load_cases=lambda paths: []))
+    monkeypatch.setattr(
+        census, '_runner', lambda: SimpleNamespace(load_cases=lambda paths: [])
+    )
     routes = set(census._routes())
     assert set(_routing.FRAME_CONSTRUCTORS + _routing.FRAME_CONSUMERS) <= routes
     assert set(getattr(_routing, 'DIRECT_CONSUMERS', ())) <= routes
@@ -124,7 +146,9 @@ def test_frame_outcome_uses_the_public_constructor_without_opening_sql(
         raise ValueError('unit test stops at the public constructor boundary')
 
     runner = SimpleNamespace(
-        _sibling=lambda name: SimpleNamespace(serve=lambda: nullcontext(('unused', None))),
+        _sibling=lambda name: SimpleNamespace(
+            serve=lambda: nullcontext(('unused', None))
+        ),
         load_bases=lambda: {},
         _materialize_arguments=lambda given: given,
         _open=forbidden,
@@ -132,7 +156,9 @@ def test_frame_outcome_uses_the_public_constructor_without_opening_sql(
     )
     monkeypatch.setattr(census, '_runner', lambda: runner)
     monkeypatch.setattr(Schema, 'from_data', constructor)
-    probe = next(p for p in census.probes(ROOT) if p.get('frame') == 'duplicate-columns')
+    probe = next(
+        p for p in census.probes(ROOT) if p.get('frame') == 'duplicate-columns'
+    )
     case = census._case(probe, 0, [])
     found = census._outcome(case, 'duckdb', frame='duplicate-columns')
     assert found['error'] == 'ValueError'
@@ -151,9 +177,14 @@ def test_words_writer_forwards_the_same_frame_recipe(
     spec.loader.exec_module(writer)
     probe = next(p for p in census.probes(ROOT) if p.get('frame'))
     fake = SimpleNamespace(
-        _routes=lambda: [], probes=lambda root: [probe], DATABASES=('duckdb',),
-        _case=census._case, MESSAGES=census.MESSAGES,
-        _runner=lambda: SimpleNamespace(_git=lambda root: {'sha': 'recording-test', 'clean': True}),
+        _routes=lambda: [],
+        probes=lambda root: [probe],
+        DATABASES=('duckdb',),
+        _case=census._case,
+        MESSAGES=census.MESSAGES,
+        _runner=lambda: SimpleNamespace(
+            _git=lambda root: {'sha': 'recording-test', 'clean': True}
+        ),
     )
     monkeypatch.setattr(writer, '_census', lambda: fake)
     monkeypatch.setattr(writer, 'OUT', tmp_path / 'words.jsonl')
@@ -163,8 +194,15 @@ def test_words_writer_forwards_the_same_frame_recipe(
         cases = Path(arguments[arguments.index('--cases') + 1])
         seen.append(json.loads((cases / '0.json').read_text()))
         out = Path(arguments[arguments.index('--out') + 1])
-        out.write_text(json.dumps([{'result': 'refusal', 'message': 'test only'}]))
+        out.write_text(
+            json.dumps([{'result': 'refusal', 'message': 'test only'}])
+        )
 
     monkeypatch.setattr(writer.subprocess, 'run', recording)
-    assert writer.main(['--reference', str(tmp_path), '--reference-python', 'not-executed']) == 0
+    assert (
+        writer.main(
+            ['--reference', str(tmp_path), '--reference-python', 'not-executed']
+        )
+        == 0
+    )
     assert seen[0]['frame'] == probe['frame']

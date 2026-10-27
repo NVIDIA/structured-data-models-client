@@ -37,6 +37,16 @@ fixes, or null) and ``where`` (``<path>:<line>``, relative to DIR).
 DIR's probe list (:data:`PROBES`), and on a probe naming no site there: the
 census step's site check, which the gate runs on the candidate.
 
+An optional ``frame`` names one literal native-input recipe for the public
+``Schema.from_data`` or direct ``Request`` calls. Its SQL case envelope is
+only for the unchanged case validator; the recipe supplies the actual
+frame inputs. The existing recorder runs these calls on both routes, with
+the already supported development frame routes forced only on python-core.
+Earlier public guards remain visible outcomes, never evidence that a
+defensive Rust site was reached. Adding or moving probes requires fresh
+canonical census and wording recordings; source inventory alone is not a
+recorded result.
+
 ``run`` runs every probe on both routes on ``--database`` (the first run
 is DuckDB's; SQLite and Postgres are reported unmeasured until the core
 runs there, never as zero hits): python-core in this interpreter, every
@@ -113,6 +123,26 @@ TEMPLATE = {
     'why': 'a refusal census probe',
     'source': 'contract/refusal-census.json',
 }
+# The census also exercises public native-frame calls that the SQL contract
+# case format cannot express. These are literal recipe names, never code or
+# recorded outcomes. They share the existing two-route census recorder.
+FRAME_RECIPES = (
+    'duplicate-columns',
+    'nonstring-columns',
+    'empty-tables',
+    'invalid-table-name',
+    'not-a-frame',
+    'boolean-key',
+    'native-family',
+    'temporal-aggregation',
+    'temporal-entity',
+    'text-features',
+    'text-key',
+    'invalid-time-type',
+    'untimed-timestamps',
+    'wide-timestamps',
+    'direct-numeric-storage',
+)
 
 
 class CensusError(Exception):
@@ -291,6 +321,7 @@ def probes(root: Path) -> list[dict[str, Any]]:
             or probe.get('model', 'KumoRelational')
             not in ('KumoRelational', 'KumoTabular')
             or not set(probe.get('databases', DATABASES)) <= set(DATABASES)
+            or ('frame' in probe and probe['frame'] not in FRAME_RECIPES)
         ):
             raise CensusError(f'{PROBES}: probe {at} is not a probe')
     return listed
@@ -333,12 +364,22 @@ def _runner() -> ModuleType:
 def _case(
     probe: dict[str, Any], number: int, routes: list[str]
 ) -> dict[str, Any]:
+    given = probe['input']
+    if probe.get('frame') is not None:
+        # Keep the unchanged contract case envelope for validation and route
+        # selection. Frame data come from the named recipe, not SQL setup.
+        given = {
+            'base': 'shop',
+            'pql': 'PREDICT users.age FOR EACH users.user_id',
+            'materialize': {'indices': [7, 8], 'anchor_time': '2024-03-01'},
+            **given,
+        }
     return {
         **TEMPLATE,
         'id': f'census.{number}',
         'paths': routes[:1],
         'routes': routes,
-        'input': probe['input'],
+        'input': given,
         'until': probe['until'],
         'expect': {'outcome': 'success', 'stage': probe['until']},
     }
@@ -347,14 +388,115 @@ def _case(
 def _routes() -> list[str]:
     r"""Every route the cases name that this build's core has (the client's
     ``_routing.CORE_ROUTED``): a case's warehouse route the core has none
-    for yet is not forced (T3.20 r3)."""
+    for yet is not forced (T3.20 r3). Frame probes also force the routing
+    module's explicitly supported development paths.
+    """
     from sdm_client import _routing
 
     runner = _runner()
     found: set[str] = set()
     for case, _ in runner.load_cases([REPO / 'contract/cases']):
         found.update(case['routes'])
-    return sorted(found & _routing.CORE_ROUTED)
+    development = set(
+        _routing.FRAME_CONSTRUCTORS
+        + _routing.FRAME_CONSUMERS
+        + getattr(_routing, 'DIRECT_CONSUMERS', ())
+    )
+    return sorted((found & _routing.CORE_ROUTED) | development)
+
+
+def _frame_probe(recipe: str) -> tuple[dict[Any, Any], dict[str, Any]]:
+    r"""Actual native inputs for the frame public calls, without SDK calls."""
+    import numpy as np
+    import pandas as pd
+
+    if recipe not in FRAME_RECIPES:
+        raise CensusError(f'unknown frame recipe {recipe!r}')
+    if recipe == 'direct-numeric-storage':
+        return {
+            'context': pd.DataFrame(
+                {
+                    'feature': pd.Series(
+                        ['a', 'b', 'c'], dtype=pd.StringDtype(storage='python')
+                    ),
+                    'target': [1, 2, 3],
+                }
+            ),
+            'predict': pd.DataFrame(
+                {
+                    'feature': pd.Series(
+                        ['d', 'e'], dtype=pd.StringDtype(storage='python')
+                    ),
+                }
+            ),
+        }, {}
+    if recipe == 'empty-tables':
+        return {}, {}
+    if recipe == 'invalid-table-name':
+        return {7: pd.DataFrame({'value': [1, 2]})}, {}
+    if recipe == 'not-a-frame':
+        return {'users': [1, 2]}, {}
+    if recipe == 'duplicate-columns':
+        return {'users': pd.DataFrame([[1, 2]], columns=['id', 'id'])}, {}
+    if recipe == 'nonstring-columns':
+        return {'users': pd.DataFrame({1: [1, 2]})}, {}
+    if recipe == 'native-family':
+        return {'users': pd.DataFrame({'nested': [{'value': 1}]})}, {}
+    if recipe == 'boolean-key':
+        return {
+            'users': pd.DataFrame({'user_id': [False, True], 'age': [21, 22]})
+        }, {
+            'primary_keys': {'users': 'user_id'},
+            'time_columns': {},
+        }
+    users = pd.DataFrame({'user_id': np.arange(1, 9), 'age': np.arange(21, 29)})
+    orders = pd.DataFrame(
+        {
+            'order_id': np.arange(80),
+            'user_id': np.repeat(np.arange(1, 9), 10),
+            'amount': np.arange(80, dtype=np.float32),
+        }
+    )
+    options: dict[str, Any] = {
+        'primary_keys': {'users': 'user_id', 'orders': 'order_id'},
+        'time_columns': {},
+    }
+    if recipe == 'text-key':
+        users['user_id'] = pd.Series(
+            [f'u{i}' for i in range(1, 9)],
+            dtype=pd.StringDtype(storage='python'),
+        )
+        orders['user_id'] = pd.Series(
+            [f'u{i}' for i in range(1, 9) for _ in range(10)],
+            dtype=pd.StringDtype(storage='python'),
+        )
+    if recipe == 'text-features':
+        orders['note'] = pd.Series(
+            [f'note {i}' for i in range(80)],
+            dtype=pd.StringDtype(storage='python'),
+        )
+    if recipe in (
+        'untimed-timestamps',
+        'wide-timestamps',
+        'temporal-aggregation',
+    ):
+        dates = np.array(
+            ['2263-01-01' if recipe == 'wide-timestamps' else '2024-02-01']
+            * 80,
+            dtype='datetime64[s]',
+        )
+        orders['at'] = pd.Series(dates)
+        options['time_columns'] = {
+            'orders': None if recipe == 'untimed-timestamps' else 'at'
+        }
+    if recipe == 'temporal-entity':
+        users['joined'] = pd.Series(
+            np.array(['2024-01-01'] * 8, dtype='datetime64[s]')
+        )
+        options['time_columns'] = {'users': 'joined'}
+    if recipe == 'invalid-time-type':
+        options['time_columns'] = {'orders': 'amount'}
+    return {'users': users, 'orders': orders}, options
 
 
 def _outcome(
@@ -362,6 +504,8 @@ def _outcome(
     database: str,
     options: dict[str, Any] | None = None,
     model: str = 'KumoRelational',
+    *,
+    frame: str | None = None,
 ) -> dict[str, Any]:
     r"""The public calls of one probe in this interpreter: its outcome,
     and a refusal's ``details`` rule. ``options`` are materialize's keyword
@@ -371,7 +515,7 @@ def _outcome(
     import warnings
 
     import sdm_client
-    from sdm_client import PredictiveQuery, Schema, SDMClient
+    from sdm_client import PredictiveQuery, Request, Schema, SDMClient
 
     runner = _runner()
     serve = runner._sibling('scripted_endpoint').serve
@@ -379,17 +523,43 @@ def _outcome(
     given = case['input']
     arguments = runner._materialize_arguments(given['materialize'])
     arguments.update(options or {})
-    from_source = runner._from_source_arguments(given.get('from_source', {}))
-    connection, cleanup, _ = runner._open(case, bases, database)
-    stage = 'from_source'
+    from_source = (
+        runner._from_source_arguments(given.get('from_source', {}))
+        if frame is None
+        else {}
+    )
+
+    def cleanup() -> None:
+        pass
+
+    if frame is None:
+        connection, cleanup, _ = runner._open(case, bases, database)
+    stage = 'from_source' if frame is None else 'from_data'
     try:
         with serve() as (url, _), warnings.catch_warnings():
             warnings.simplefilter('ignore')
-            schema = Schema.from_source(
-                runner._source(database, connection), **from_source
-            )
-            runner._edit(schema, given.get('edits', []))
-            if case['until'] != 'from_source':
+            if frame == 'direct-numeric-storage':
+                frames, _ = _frame_probe(frame)
+                stage = 'request'
+                request = Request(
+                    frames['context'],
+                    frames['predict'],
+                    target='target',
+                    task='regression',
+                )
+            elif frame is not None:
+                frames, from_data = _frame_probe(frame)
+                schema = Schema.from_data(frames, **from_data)
+            else:
+                schema = Schema.from_source(
+                    runner._source(database, connection), **from_source
+                )
+            if frame != 'direct-numeric-storage':
+                runner._edit(schema, given.get('edits', []))
+            if (
+                case['until'] != 'from_source'
+                and frame != 'direct-numeric-storage'
+            ):
                 stage = 'materialize'
                 request = PredictiveQuery(given['pql'], schema).materialize(
                     **arguments
@@ -440,7 +610,13 @@ def route(cases: Path, out: Path, database: str, core: bool) -> None:
             os.environ['SDM_CORE_ROUTES'] = ''
         try:
             lines.append(
-                _outcome(case, database, probe['options'], probe['model'])
+                _outcome(
+                    case,
+                    database,
+                    probe['options'],
+                    probe['model'],
+                    frame=probe.get('frame'),
+                )
             )
         finally:
             os.environ.pop('SDM_CORE_ROUTES', None)
@@ -488,6 +664,7 @@ def run(
                         'case': case,
                         'options': probe.get('options', {}),
                         'model': probe.get('model', 'KumoRelational'),
+                        'frame': probe.get('frame'),
                     }
                 )
             )
