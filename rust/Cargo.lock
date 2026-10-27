@@ -1668,6 +1668,7 @@ name = "sdm-engine"
 version = "1.0.0"
 dependencies = [
  "arrow-array",
+ "arrow-ipc",
  "arrow-schema",
  "arrow-select",
  "jiff",
