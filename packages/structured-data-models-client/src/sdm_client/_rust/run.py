@@ -361,7 +361,7 @@ def _steps(
                     _carried(error, refused.raised)
                     _of_the_part(error, refused.raised)
                     raise refused.raised
-                raise error from None
+                errors.raise_error(error)
             _warn(handle, quiet, given, kept, warning_presentation)
             step = codec.read(control, sent)
             if step['message'] != 'step':
