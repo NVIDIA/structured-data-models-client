@@ -1378,6 +1378,23 @@
         {
           "type": "object",
           "properties": {
+            "input": {
+              "$ref": "#/$defs/DirectBody"
+            },
+            "stage": {
+              "type": "string",
+              "const": "encode_body"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "input"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
             "scope": {
               "$ref": "#/$defs/ResponseScope"
             },
@@ -1767,151 +1784,12 @@
         }
       ]
     },
-    "CheckedDirectRow": {
+    "DirectBody": {
+      "description": "Later observations of the same captured frames, before native inference.",
       "type": "object",
       "properties": {
-        "scope": {
-          "$ref": "#/$defs/ResponseScope"
-        },
-        "row": {
-          "$ref": "#/$defs/DecodedDirectRow"
-        },
-        "decimal_limit": {
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0
-        },
-        "id": {
-          "$ref": "#/$defs/DirectRowId"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "scope",
-        "row",
-        "decimal_limit",
-        "id"
-      ]
-    },
-    "DirectRowId": {
-      "oneOf": [
-        {
-          "type": "object",
-          "properties": {
-            "representation": {
-              "type": "string",
-              "const": "unkeyed"
-            }
-          },
-          "required": [
-            "representation"
-          ],
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "properties": {
-            "representation": {
-              "type": "string",
-              "const": "absent"
-            }
-          },
-          "required": [
-            "representation"
-          ],
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "properties": {
-            "representation": {
-              "type": "string",
-              "const": "length_limited_text"
-            }
-          },
-          "required": [
-            "representation"
-          ],
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "properties": {
-            "value": {
-              "$ref": "#/$defs/BuiltinValue"
-            },
-            "members": {
-              "type": [
-                "array",
-                "null"
-              ],
-              "items": {
-                "$ref": "#/$defs/BuiltinValue"
-              }
-            },
-            "representation": {
-              "type": "string",
-              "const": "json_value"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "representation",
-            "value"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "value": {
-              "type": "string"
-            },
-            "representation": {
-              "type": "string",
-              "const": "native_literal_text"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "representation",
-            "value"
-          ]
-        }
-      ]
-    },
-    "SelectedDirectMember": {
-      "description": "A selected member of a checked row, independently useful builtin data.",
-      "type": "object",
-      "properties": {
-        "checked": {
-          "$ref": "#/$defs/CheckedDirectRow"
-        },
-        "literal": {
-          "$ref": "#/$defs/LiteralObservation"
-        },
-        "member": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/BuiltinValue"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "checked",
-        "literal"
-      ]
-    },
-    "DirectPrelude": {
-      "description": "Fresh observations at the pre-warning one-shot overlap boundary.",
-      "type": "object",
-      "properties": {
-        "bound": {
-          "$ref": "#/$defs/CallPreparation"
+        "envelope": {
+          "$ref": "#/$defs/TabularEnvelope"
         },
         "context": {
           "$ref": "#/$defs/AttachmentId"
@@ -1925,30 +1803,47 @@
         "predict_header": {
           "$ref": "#/$defs/FrameHeader"
         },
-        "schema": {
-          "$ref": "#/$defs/HeldSchema"
-        },
-        "entity_table": {
-          "type": "string"
-        },
-        "target": {
-          "type": "string"
-        },
         "task": {
           "type": "string"
+        },
+        "primary_key": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "additionalProperties": false,
       "required": [
-        "bound",
+        "envelope",
         "context",
         "predict",
         "context_header",
         "predict_header",
-        "schema",
-        "entity_table",
-        "target",
-        "task"
+        "task",
+        "primary_key"
+      ]
+    },
+    "TabularEnvelope": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "bound": {
+          "$ref": "#/$defs/CallPreparation"
+        },
+        "columns": {
+          "$ref": "#/$defs/TabularColumns"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "bound",
+        "columns"
       ]
     },
     "CallPreparation": {
@@ -2166,6 +2061,102 @@
         "anchored",
         "relationships",
         "tables"
+      ]
+    },
+    "TabularColumns": {
+      "description": "Core-resolved schema and wire widths, before text advice and row encoding.",
+      "type": "object",
+      "properties": {
+        "dtypes": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/$defs/Dtype"
+              }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+          }
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TabularColumn"
+          }
+        },
+        "target": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "dtypes",
+        "columns",
+        "target"
+      ]
+    },
+    "Dtype": {
+      "description": "PQL's data types.",
+      "type": "string",
+      "enum": [
+        "bool",
+        "int",
+        "byte",
+        "int16",
+        "int32",
+        "int64",
+        "float",
+        "float32",
+        "float64",
+        "string",
+        "binary",
+        "date",
+        "time",
+        "timedelta",
+        "floatlist",
+        "intlist",
+        "stringlist",
+        "unsupported"
+      ]
+    },
+    "TabularColumn": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "dtype": {
+          "$ref": "#/$defs/Dtype"
+        },
+        "stype": {
+          "$ref": "#/$defs/Stype"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "dtype",
+        "stype"
+      ]
+    },
+    "Stype": {
+      "description": "PQL's semantic types.",
+      "type": "string",
+      "enum": [
+        "numerical",
+        "categorical",
+        "multicategorical",
+        "ID",
+        "text",
+        "timestamp",
+        "sequence",
+        "image",
+        "unsupported"
       ]
     },
     "FrameHeader": {
@@ -2729,6 +2720,190 @@
         "validity_masked"
       ]
     },
+    "CheckedDirectRow": {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "$ref": "#/$defs/ResponseScope"
+        },
+        "row": {
+          "$ref": "#/$defs/DecodedDirectRow"
+        },
+        "decimal_limit": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "id": {
+          "$ref": "#/$defs/DirectRowId"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "scope",
+        "row",
+        "decimal_limit",
+        "id"
+      ]
+    },
+    "DirectRowId": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "representation": {
+              "type": "string",
+              "const": "unkeyed"
+            }
+          },
+          "required": [
+            "representation"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "representation": {
+              "type": "string",
+              "const": "absent"
+            }
+          },
+          "required": [
+            "representation"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "representation": {
+              "type": "string",
+              "const": "length_limited_text"
+            }
+          },
+          "required": [
+            "representation"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "$ref": "#/$defs/BuiltinValue"
+            },
+            "members": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "$ref": "#/$defs/BuiltinValue"
+              }
+            },
+            "representation": {
+              "type": "string",
+              "const": "json_value"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "representation",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "string"
+            },
+            "representation": {
+              "type": "string",
+              "const": "native_literal_text"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "representation",
+            "value"
+          ]
+        }
+      ]
+    },
+    "SelectedDirectMember": {
+      "description": "A selected member of a checked row, independently useful builtin data.",
+      "type": "object",
+      "properties": {
+        "checked": {
+          "$ref": "#/$defs/CheckedDirectRow"
+        },
+        "literal": {
+          "$ref": "#/$defs/LiteralObservation"
+        },
+        "member": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BuiltinValue"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "checked",
+        "literal"
+      ]
+    },
+    "DirectPrelude": {
+      "description": "Fresh observations at the pre-warning one-shot overlap boundary.",
+      "type": "object",
+      "properties": {
+        "bound": {
+          "$ref": "#/$defs/CallPreparation"
+        },
+        "context": {
+          "$ref": "#/$defs/AttachmentId"
+        },
+        "predict": {
+          "$ref": "#/$defs/AttachmentId"
+        },
+        "context_header": {
+          "$ref": "#/$defs/FrameHeader"
+        },
+        "predict_header": {
+          "$ref": "#/$defs/FrameHeader"
+        },
+        "schema": {
+          "$ref": "#/$defs/HeldSchema"
+        },
+        "entity_table": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        },
+        "task": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "bound",
+        "context",
+        "predict",
+        "context_header",
+        "predict_header",
+        "schema",
+        "entity_table",
+        "target",
+        "task"
+      ]
+    },
     "HeldSchema": {
       "description": "A schema as a host holds it, as plain data (contract v28, T3.16): its\ntables, columns, meanings, keys, time columns and links as they stand,\nhowever the host came to hold them (described, built by hand, edited,\ncopied or unpickled), and, on each column the source was asked of,\nwhat the source said of it ([`SourceFacts`]). `edit_schema` and\n`materialize` read it as it is; `materialize` asks the source for the\nfacts of a column that carries none, as `describe_source` reads them.",
       "type": "object",
@@ -2928,21 +3103,6 @@
         "stype"
       ]
     },
-    "Stype": {
-      "description": "PQL's semantic types.",
-      "type": "string",
-      "enum": [
-        "numerical",
-        "categorical",
-        "multicategorical",
-        "ID",
-        "text",
-        "timestamp",
-        "sequence",
-        "image",
-        "unsupported"
-      ]
-    },
     "SourceFacts": {
       "description": "What the source said of one column ([`DescribedColumn`]'s facts), which\na host keeps on the column and hands back whole (contract v28, T3.16).",
       "type": "object",
@@ -2993,30 +3153,6 @@
         "received",
         "nullable",
         "unique"
-      ]
-    },
-    "Dtype": {
-      "description": "PQL's data types.",
-      "type": "string",
-      "enum": [
-        "bool",
-        "int",
-        "byte",
-        "int16",
-        "int32",
-        "int64",
-        "float",
-        "float32",
-        "float64",
-        "string",
-        "binary",
-        "date",
-        "time",
-        "timedelta",
-        "floatlist",
-        "intlist",
-        "stringlist",
-        "unsupported"
       ]
     },
     "ExactNumber": {
@@ -3336,6 +3472,9 @@
           "$ref": "#/$defs/TabularEnvelope"
         },
         {
+          "$ref": "#/$defs/EncodedDirectBody"
+        },
+        {
           "$ref": "#/$defs/DirectResponseData"
         },
         {
@@ -3537,7 +3676,8 @@
         "unique"
       ]
     },
-    "TabularEnvelope": {
+    "EncodedDirectBody": {
+      "description": "A complete valid tabular envelope before optional metadata/inference.\nIt is independently inspectable wire data, without deferred commands.",
       "type": "object",
       "properties": {
         "version": {
@@ -3550,70 +3690,57 @@
         },
         "columns": {
           "$ref": "#/$defs/TabularColumns"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "primary_key": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "context_shape": {
+          "$ref": "#/$defs/EncodedTableShape"
+        },
+        "predict_shape": {
+          "$ref": "#/$defs/EncodedTableShape"
+        },
+        "payload": {
+          "$ref": "#/$defs/AttachmentId"
         }
       },
       "additionalProperties": false,
       "required": [
         "version",
         "bound",
-        "columns"
+        "columns",
+        "kind",
+        "primary_key",
+        "context_shape",
+        "predict_shape",
+        "payload"
       ]
     },
-    "TabularColumns": {
-      "description": "Core-resolved schema and wire widths, before text advice and row encoding.",
+    "EncodedTableShape": {
       "type": "object",
       "properties": {
-        "dtypes": {
-          "type": "array",
-          "items": {
-            "type": "array",
-            "prefixItems": [
-              {
-                "type": "string"
-              },
-              {
-                "$ref": "#/$defs/Dtype"
-              }
-            ],
-            "minItems": 2,
-            "maxItems": 2
-          }
-        },
         "columns": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/TabularColumn"
+            "type": "string"
           }
         },
-        "target": {
-          "type": "string"
+        "rows": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
         }
       },
       "additionalProperties": false,
       "required": [
-        "dtypes",
         "columns",
-        "target"
-      ]
-    },
-    "TabularColumn": {
-      "type": "object",
-      "properties": {
-        "name": {
-          "type": "string"
-        },
-        "dtype": {
-          "$ref": "#/$defs/Dtype"
-        },
-        "stype": {
-          "$ref": "#/$defs/Stype"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "name",
-        "dtype",
-        "stype"
+        "rows"
       ]
     },
     "CheckedDirectRows": {
@@ -3681,30 +3808,8 @@
         {
           "type": "object",
           "properties": {
-            "envelope": {
-              "$ref": "#/$defs/TabularEnvelope"
-            },
-            "context": {
-              "$ref": "#/$defs/AttachmentId"
-            },
-            "predict": {
-              "$ref": "#/$defs/AttachmentId"
-            },
-            "context_header": {
-              "$ref": "#/$defs/FrameHeader"
-            },
-            "predict_header": {
-              "$ref": "#/$defs/FrameHeader"
-            },
-            "task": {
-              "type": "string"
-            },
-            "primary_key": {
-              "description": "Read from the same captured native table after text advice.",
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
+            "body": {
+              "$ref": "#/$defs/EncodedDirectBody"
             },
             "inference": {
               "$ref": "#/$defs/DirectInference",
@@ -3714,19 +3819,13 @@
             },
             "stage": {
               "type": "string",
-              "const": "body"
+              "const": "encoded"
             }
           },
           "additionalProperties": false,
           "required": [
             "stage",
-            "envelope",
-            "context",
-            "predict",
-            "context_header",
-            "predict_header",
-            "task",
-            "primary_key"
+            "body"
           ]
         }
       ]
@@ -8508,7 +8607,7 @@
         "direct_constant_regression",
         "direct_constant_class",
         "direct_text_categorical",
-        "tabular_row_missing",
+        "direct_response_contract",
         "tabular_row_bounds",
         "tabular_row_repeated",
         "tabular_rows_unanswered",
