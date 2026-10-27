@@ -1559,3 +1559,49 @@ def test_direct_exact_response_indices_precede_result_machine_width(
         assert new[1][2] == 'INVALID_RESPONSE'
         assert f'row_index {int(index)}' in new[1][-1]
         assert 'this batch asked about 2 rows' in new[1][-1]
+
+
+@pytest.mark.parametrize('lower_limit', [False, True])
+def test_direct_row_bounds_integer_display_observes_earlier_native_warning(
+    monkeypatch, lower_limit
+):
+    import sys
+
+    class Indexed(Scripted):
+        def predict(self, payload):
+            answer = super().predict(payload)
+            answer['predictions'][0]['id'] = (
+                r"[4+1, '\q']" if lower_limit else 'opaque-a'
+            )
+            answer['predictions'][1]['row_index'] = 2**2200
+            return answer
+
+    def inputs():
+        return pd.DataFrame(
+            {'user_id': [1, 2, 3], 'target': [2, 4, 6]}
+        ), pd.DataFrame({'user_id': [4, 5]})
+
+    limit = sys.get_int_max_str_digits()
+    try:
+
+        def lower(request, context, predict):
+            sys.set_int_max_str_digits(640)
+
+        options = {
+            'transport': Indexed(),
+            'on_warning': lower if lower_limit else None,
+        }
+        old = outcome(monkeypatch, inputs(), core=False, **options)
+        sys.set_int_max_str_digits(limit)
+        options['transport'] = Indexed()
+        new = outcome(monkeypatch, inputs(), core=True, **options)
+        assert new == old
+        assert len(new[3]) == 1
+        if lower_limit:
+            assert new[1][1] is ValueError
+            assert '640 digits' in new[1][-1]
+            assert len(new[2]) == 1
+        else:
+            assert new[1][2] == 'INVALID_RESPONSE'
+    finally:
+        sys.set_int_max_str_digits(limit)

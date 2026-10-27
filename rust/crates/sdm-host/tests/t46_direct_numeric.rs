@@ -1227,3 +1227,25 @@ fn direct_row_bounds_use_exact_decoded_digits_before_machine_width() {
         );
     }
 }
+
+#[test]
+fn wide_bounds_are_reached_after_earlier_native_conversion_outcome() {
+    let checked = checked_native_row(r"[4+1, '\q']");
+    let literal = json!({"scope":checked["scope"],"ordinal":0,"text":r"[4+1, '\q']","value":{"outcome":"failed","failure":{"ancestry":["value_error"]}}});
+    let selected = prepare(
+        json!({"stage":"select_response_member","checked":checked,"literal":literal}),
+        Attachments::new(),
+    )
+    .unwrap();
+    let accepted = prepare(
+        json!({"stage":"attribute_response_row","selected":selected,"string":null}),
+        Attachments::new(),
+    )
+    .unwrap();
+    assert_eq!(accepted["id"], json!({"t":"i64","v":"4"}));
+    let index = "9".repeat(663);
+    let row = json!({"ordinal":1,"row_index":index,"id":"opaque-b","key":null,"raw_in_batch":false,"prior_ordinal":null});
+    let error=prepare(json!({"stage":"check_response_rows","scope":checked["scope"],"rows":[row],"decimal_limit":640}),Attachments::new()).unwrap_err();
+    assert_eq!(error.sentence, sdm_contract::Sentence::TabularRowBounds);
+    assert_eq!(error.fields["index"], sdm_contract::Detail::text(index));
+}
