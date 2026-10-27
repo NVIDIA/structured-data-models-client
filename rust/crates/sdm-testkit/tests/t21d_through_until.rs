@@ -97,7 +97,6 @@ fn every_call_through_until_is_named_with_the_recorders_inputs() {
             wanted.push("materialize");
         }
         if case.until == Until::Predict {
-            direct: None,
             wanted.push("predict");
         }
         assert_eq!(named(&made), wanted, "{}", case.id);
@@ -130,7 +129,6 @@ fn every_call_through_until_is_named_with_the_recorders_inputs() {
             assert_eq!(made.seed, base.seed, "{}", case.id);
         }
         if given.and_then(|c| c.predict.as_ref()).is_none() && case.until == Until::Predict {
-            direct: None,
             assert_eq!(
                 core.predict.as_ref().unwrap().model,
                 recorded.predict.as_ref().unwrap().model,
