@@ -159,7 +159,14 @@ pub(super) fn prepare(
             RelationalPrepared::Call(call)
         }
         RelationalPreparation::CallCounts { rows } => {
-            RelationalPrepared::Starts(policy::call_starts_from_counts(&rows)?)
+            RelationalPrepared::Starts(policy::call_starts_from_counts(&rows).map_err(|_| {
+                let mut error = CoreError::new(
+                    Sentence::RelationalRowsUncounted,
+                    "a later native call cannot be numbered from unknown prior row counts",
+                );
+                error.public_details = Some(BTreeMap::new());
+                error
+            })?)
         }
         RelationalPreparation::ScoringRows { rows } => RelationalPrepared::Empty(
             !rows.is_empty() && rows.iter().all(|count| *count == Some(0)),

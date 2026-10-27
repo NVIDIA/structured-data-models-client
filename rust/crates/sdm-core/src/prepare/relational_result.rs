@@ -81,7 +81,22 @@ pub(crate) fn validate_ranking(
     })
 }
 
-pub(crate) fn describe(scope: RelationalPartScope) -> RelationalPartDescription {
+pub(crate) fn describe(scope: RelationalPartScope) -> Result<RelationalPartDescription, CoreError> {
+    let paid = match &scope {
+        RelationalPartScope::Ranking {
+            completed, total, ..
+        } => {
+            if completed.len() > *total as usize
+                || completed.iter().collect::<BTreeSet<_>>().len() != completed.len()
+            {
+                return Err(invalid(
+                    "completed ranking parts exceed or repeat the question",
+                ));
+            }
+            (!completed.is_empty()).then_some(completed.len())
+        }
+        _ => None,
+    };
     let (sentence, fields) = match scope {
         RelationalPartScope::Steps { step, total } => (
             Sentence::PartForecastStep,
@@ -93,7 +108,9 @@ pub(crate) fn describe(scope: RelationalPartScope) -> RelationalPartDescription 
                 ),
             ]),
         ),
-        RelationalPartScope::Ranking { position, total } => (
+        RelationalPartScope::Ranking {
+            position, total, ..
+        } => (
             Sentence::PartRankingCandidate,
             BTreeMap::from([
                 (
@@ -107,7 +124,14 @@ pub(crate) fn describe(scope: RelationalPartScope) -> RelationalPartDescription 
             ]),
         ),
     };
-    RelationalPartDescription { sentence, fields }
+    let mut fields = fields;
+    if let Some(paid) = paid {
+        fields.insert(
+            "parts_answered".into(),
+            Detail::Scalar(Scalar::UInt64(paid as u64)),
+        );
+    }
+    Ok(RelationalPartDescription { sentence, fields })
 }
 
 fn probabilities(
@@ -119,10 +143,8 @@ fn probabilities(
             given
                 .iter()
                 .map(|(key, value)| match value {
-                    Scalar::Float64(value) if value.is_finite() => Ok((key.clone(), *value)),
-                    _ => Err(invalid(
-                        "rank confidence has a nonfinite or non-double probability",
-                    )),
+                    Scalar::Float64(value) => Ok((key.clone(), *value)),
+                    _ => Err(invalid("rank confidence has a non-double probability")),
                 })
                 .collect()
         })

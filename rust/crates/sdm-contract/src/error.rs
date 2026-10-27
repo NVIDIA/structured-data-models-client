@@ -958,6 +958,7 @@ sentences! {
     DirectTextCategorical = "direct_text_categorical", W::FrameSchema;
     DirectResponseContract = "direct_response_contract", E::InvalidResponse;
     RelationalNotGathered = "relational_not_gathered", E::UnsupportedRequest;
+    RelationalRowsUncounted = "relational_rows_uncounted", E::InternalError;
     TabularRowBounds = "tabular_row_bounds", E::InvalidResponse;
     TabularRowRepeated = "tabular_row_repeated", E::InvalidResponse;
     TabularRowsUnanswered = "tabular_rows_unanswered", E::InvalidResponse;

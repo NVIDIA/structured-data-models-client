@@ -246,11 +246,35 @@ def predict(client: Any, request: Any, model: Any, outputs: Any) -> Any:
             positions_, rewritten.parts, strict=True
         )
     }
+    with errors.holding(
+        candidates=lambda fields: [given[at] for at in fields['candidates']],
+        candidate=lambda fields: given[fields['candidate']],
+        part_candidate=lambda fields: given[fields['ranking_candidate']],
+    ):
+        return _parts(client, request, model, outputs, positions_, given)
+
+
+def _parts(
+    client: Any,
+    request: Any,
+    model: Any,
+    outputs: Any,
+    positions_: tuple[int, ...],
+    given: dict[int, Any],
+) -> Any:
+    rewritten = request._decomposition
+    ranking = rewritten.kind == RANKING
     total = len(request.parts)
+    answered = []
 
     def scope(position: int, about: Any) -> dict[str, Any]:
         return (
-            {'kind': 'ranking', 'position': position, 'total': total}
+            {
+                'kind': 'ranking',
+                'position': position,
+                'total': total,
+                'completed': [at for at, _ in answered],
+            }
             if ranking
             else {'kind': 'steps', 'step': about, 'total': total}
         )
@@ -290,7 +314,6 @@ def predict(client: Any, request: Any, model: Any, outputs: Any) -> Any:
             }
         )
     children = []
-    answered = []
     for position, part, (_, about) in zip(
         positions_, request.parts, rewritten.parts, strict=True
     ):
@@ -307,9 +330,16 @@ def predict(client: Any, request: Any, model: Any, outputs: Any) -> Any:
             if children:
                 if ranking:
                     held = getattr(error, 'details', None)
+                    paid = _call(
+                        {
+                            'stage': 'describe_relational_part',
+                            'scope': scope(position, about),
+                        }
+                    )
+                    paid = errors.decoded(paid['fields'])
                     error.details = {  # type: ignore[attr-defined]
                         **(held if isinstance(held, dict) else {}),
-                        'parts_answered': len(children),
+                        'parts_answered': paid['parts_answered'],
                     }
                 else:
                     result, details = _finish_parts(

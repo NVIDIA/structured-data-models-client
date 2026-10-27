@@ -324,7 +324,7 @@ pub(crate) async fn run(
             relational_result::validate_ranking(&asker, outputs, total_parts, cold, model)?,
         ),
         Preparation::DescribeRelationalPart { scope } => serde_json::to_value(
-            relational_result::describe(scope),
+            relational_result::describe(scope)?,
         ),
         Preparation::CheckResponseRows {
             scope,

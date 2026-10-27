@@ -7,56 +7,18 @@
 # core are gone, and the bridge is deleted in Phase 5 with the old route.
 # Frozen meanwhile (E50).
 
-r"""``predict`` on the core: the model call and its answer (T1.11d).
+r"""Shared native transport and result presentation for core predictions.
 
-``SDMClient.predict`` of a request materialized on the core over a DuckDB
-source comes here on the core route, after the client's own checks of its
-arguments' types (the request a ``Request``, the outputs a sequence of
-names). Everything else the old route runs before and after the call is
-the core's from T1.28b (the design's "Host-held semantics" rows it moved):
-the model and output checks and the default outputs (``_prepare``), the
-answer to a request with no rows, the adapter's checks of the context
-(``_preflight``), the parts merged into one result and the notice of an
-output the answer left out, each notice a code and fields this client
-words (:mod:`.errors`).
+Gathered prediction uses :mod:`.relational_predict` to retain the live public
+request containers between fixed core operations.
+Model rules, attribution, numbering, aggregation and output policy belong to
+Rust; native traversal, conversion, I/O and result objects belong to Python.
+The direct tabular path shares the transport and presentation helpers here.
 
-The core's ``predict`` takes the request state ``materialize`` answered,
-which the request held since (its version, and its payload and query as
-the request holds them now), the model's id, the outputs the caller named
-(or that it named none), and the id this call carries, drawn as the
-adapter draws one; it makes the call the adapter makes, which this host
-sends through the client's own transport, reads the answer as the client's
-bindings read it, and lays it out: one row per answer, ordered by
-``row_index``, under the entity it is about, with its prediction (a class
-as the target's own type), its probabilities, from T2.13 its explanation
-and metadata, beside the result's explanation, and from T2.9 a
-regression's quantiles. The endpoint's answer
-reaches the core as its JSON, every non-finite number Python's reader made
-of it written as a token the core reads as the same number (an infinity as
-the overflowing ``1e400``, a NaN as ``NaN``), so both hosts read it alike.
-
-What the endpoint itself wrote in a refusal (HTTP 4xx or 5xx) is shown as
-on the old route (decision E47, owner decision 2026-10-10, an exception to
-H17 for the endpoint's own text only): the refusal is raised as the
-client's transport raises it and its adapter explains it, a
-:class:`~sdm_client.errors.NimRequestError` with the endpoint's status,
-``code``, message (its ``detail`` or ``title``) and details
-(``endpoint_code``, ``diagnosis`` and its other fields, as the transport
-reads them), the same class, message and details as the old route's. That
-text is the endpoint's, so a request value it echoes back is shown, which
-the owner accepted; to it the client adds only its own explanations, as on
-the old route: the adapter's naming of the tables and columns of our schema
-a refusal is about, and the Databricks transport's naming of the serving
-endpoint (both the user's own configuration), never a value, a credential
-or a URL. The transport's exception, and with it the endpoint's URL and any
-credential the URL holds, is not chained, nor any other context. As on the
-old route, an endpoint that echoes a credential of ours in its own text has
-it shown: a scrub of such echoes was tried and removed (E47). A failed transport
-(the endpoint could not be reached, or its answer could not be read) is
-told to the core, which ends the run with ``TRANSPORT_ERROR``; any other
-error of the transport keeps its code and gets a fixed sentence.
-
-Nothing here imports the relational engine.
+Endpoint refusals preserve their endpoint-written text and adapter explanation
+under decision E47.
+Transport failures are reported to the core without leaking transport context.
+No optional relational engine is imported by this module.
 """
 
 from __future__ import annotations
@@ -65,10 +27,9 @@ import json
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
-from sdm_client._rust import codec, errors, results
-from sdm_client._rust.run import Refused, TransportFailed, run
+from sdm_client._rust import codec, results
+from sdm_client._rust.run import Refused, TransportFailed
 from sdm_client.core.transport import EndpointFailed
-from sdm_client.decompose import RANKING
 from sdm_client.errors import NimRequestError, StructuredDataError
 
 if TYPE_CHECKING:

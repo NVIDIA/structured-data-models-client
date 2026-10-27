@@ -135,8 +135,16 @@ pub struct ValidatedRelationalRanking {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum RelationalPartScope {
-    Steps { step: u32, total: u32 },
-    Ranking { position: u32, total: u32 },
+    Steps {
+        step: u32,
+        total: u32,
+    },
+    Ranking {
+        position: u32,
+        total: u32,
+        #[serde(default)]
+        completed: Vec<u32>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

@@ -772,6 +772,9 @@ pub fn template(sentence: Sentence) -> Template {
         S::RelationalNotGathered => said(
             r#"a relational request has to be gathered first, and this one was not. Build it with PredictiveQuery(...).materialize(indices=[...], model='kumo-relational'). A schema of one table is gathered for the tabular model unless the relational one is named, rather than with Request(context=..., predict=...), which is the single-table form"#,
         ),
+        S::RelationalRowsUncounted => said(
+            r#"a request sent in several calls has a call whose rows could not be counted, so the rows of the calls after it cannot be numbered"#,
+        ),
         S::TabularRowBounds => {
             said(r#"the response names row_index {index}, and this batch asked about {rows} rows"#)
         }
