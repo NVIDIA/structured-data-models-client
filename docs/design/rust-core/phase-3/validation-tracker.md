@@ -1,8 +1,9 @@
 # Phase 3 validation tracker
 
-Updated 2026-10-27, 13:38 UTC.
+Updated 2026-10-27, 15:37 UTC.
 Phase 3 / T3.10 is accepted, merged and pushed to `rust-core` at `38071e0fb3e5f89c9ca5b74c72bec55ba32c6190`.
-Final pre-merge CI is green; root continues observing automatic post-merge CI40512864743 as requested.
+Both final pre-merge CI40473118676 and automatic post-merge CI40512864743 are GREEN:81successful jobs and2intentional skips each.
+Phase3 validation, signed integration and requested CI observation are complete.
 The owner assigned existing Phase4work to a separate new agent; this coordinator continues Phase3.
 The coordinator alone edits this tracker; agents report results and next actions.
 
@@ -77,7 +78,7 @@ Counts describe existing cases only.
 | R10 | **DONE: final-source full CI green** | [CI40473118676](https://github.com/NVIDIA/structured-data-models-client/actions/runs/40473118676) attempt2 SUCCESS on exactff86:81successful jobs,2intentional skips. Selected Java ARM SQLite retry passed145seconds and timing guard passed; all978root/202contract tooling tests passed | Final receipt SHA2553d3ac pins all83jobs. Original79successful jobs retain actual times, two skip API timestamp anomalies remain explicit, original download failure preserved; no full-matrix restart |
 | R11 | **DONE: Snowflake identical-input comparison** | Full 10101-row source and original 10000-row draw verified; both complete current requests match the originals; all 10001 actual model26 predictions exactly equal old, RMSE ratio 1.0 on both batches and aggregate; SDK0 cleanup | Coordinator consumed receipt `8f48d1c7`; sampling unchanged; historical independent-draw 26.51% loss and failed recorder-mode attempt preserved |
 | R12 | **DONE: ordinary acceptance under approved frozen-reference policy** | All nine non-main gate steps PASS, including fullRustL1,364seeded tests,452self-checks and inventory388; seven clean234 runner/cell files each hold315records. Dependency/size checks and generated evidence passed, with zero regressions in the41-case legacy inventory report | Original machine gate stays FAILmain/check7/check12; owner exception and both independent alignment reviews retained separately, with no fabricated wrapper/stamp PASS |
-| R13 | **DONE: final acceptance and signed integration** | Both whole-phase FINAL GO opinions, actual owner approvals and green final CI complete. Final docs68cc3f03 passed both CODE reviews and normal201-second handoff. Signed core merge38071e0f is pushed; entire tree equals testedff4402 | Epic/checkpoint/provenance checks pass; GitHub API confirms both expected parents/tree; local core clean. Root observes automatic post-merge CI40512864743, initially6success/6running/1skip and no failure, separately from completed source CI |
+| R13 | **DONE: final acceptance and signed integration** | Both whole-phase FINAL GO opinions, actual owner approvals and green final CI complete. Final docs68cc3f03 passed both CODE reviews and normal201-second handoff. Signed core merge38071e0f is pushed; entire tree equals testedff4402 | Epic/checkpoint/provenance checks pass; GitHub API confirms both expected parents/tree; local core clean. Automatic post-merge CI40512864743 is also GREEN:81success/2skip, receipt SHA76d309ba; no validation, integration or CI work remains |
 | R14 | **DONE: existing Spark and Lakebase live provider kits** | Spark saved-answer correction has both CODE approvals, five controls and actual 99-answer readjudication PASS; Lakebase actually completed all 99 normal/fault cases on final15e, normal33 clean and both faults detected | Spark receipt `08a8d2c7`, Lakebase `d3f3825e`; original failures, all driver captures and source IDs preserved; cleanup verified and lease released |
 | R15 | **DONE: approved shared graph correction landed** | Owner-approved valid-link correction landed/frozen as cc51 with genuine official artifacts; local N3 quality is 2.4701% worse, current original DK/SF quality refreshes are 2.4323%/1.9583% worse, all within 5% | No sampling change; finite quality reviews and subsequent test-only source attribution remain separate acceptance steps |
 | R16 | **DONE: batch replay and numeric judging repairs** | Candidate931306ef6 has both exact CODE approvals and normal196-second package handoff; normally landed/pushedff86cd1c9 with all4 protected filenames acknowledged. Real Rust validation preserves own schema/strict guards; numeric equality stays confined to exact JSON payload values | Missing RustSpark24 now genuinely executed underff86 from saved fetches and published once with authentic Spark configuration. All other source234 producers remain unchanged. New final-source full CI is R10; no client/API/dependency changes |
@@ -105,15 +106,16 @@ That target was missed after the Java tail exposed a real shared Rust graph defe
 The graph correction, affected comparisons, ordinary acceptance, final CI and same-draw continuation are now complete; the missed deadline and original failures remain recorded.
 The deadline does not lower correctness requirements.
 
-## Closure and continuing CI observation
+## Closure and completed CI observation
 
 All original data/model comparisons, runtime checks, accepted performance/memory evidence, ordinary acceptance, same-draw evidence and final reviews are complete.
 The final source CI passed before the signed integration, and the complete merge tree is identical to that tested source.
 Original raw H11 NO-GO33/82, raw main/check7/check12 failures and numerical target failures remain preserved under the exact owner-approved dispositions.
 The final documentation is published separately, with both CODE approvals and its normal package check complete.
 
-Root continues watching [automatic core-push CI40512864743](https://github.com/NVIDIA/structured-data-models-client/actions/runs/40512864743) under the owner's “keep watching CI” instruction.
-At13:37UTC it is running on actual merge38071e0f, with6successful jobs,6running jobs,1intentional skip and no reported failure.
+[Automatic core-push CI40512864743](https://github.com/NVIDIA/structured-data-models-client/actions/runs/40512864743) completed SUCCESS on actual merge38071e0f, with81successful jobs and2intentional skips.
+All83unique job records and the actual parent run are verified; receipt SHA76d309ba preserves their hashes.
+The owner's requested CI observation is complete, with no failures remaining.
 This run started automatically from the authorized push; no additional manual matrix or live campaign was launched.
 No owner decision remains unanswered.
 
@@ -143,7 +145,7 @@ No owner decision remains unanswered.
 - Source234 and earlier ordinary-gate/native/JAR/live/model/notebook/provider/performance/memory results retain their authentic identities under both source-impact opinions.
   The genuine main/check7/check12 failure remains beside the owner's frozen-reference exception; no successful raw wrapper, counter or numerical performance result is fabricated.
 - All Phase3 authors/reviewers and local heavy jobs are terminal, with all handoffs consumed.
-  Root owns only automatic post-merge CI40512864743 observation and will collect its actual result and act on any failure.
+  Automatic post-merge CI40512864743 is terminal SUCCESS; all83jobs are verified and no Phase3 job or decision remains pending.
   The coordination reminder remains disabled, with no matching active cron entry; no monitoring machinery was added.
 - Phase4 remains owned by the separate coordinator.
   Its rebase target is actual published core merge `38071e0fb3e5f89c9ca5b74c72bec55ba32c6190`; this coordinator has not moved any Phase4 ref.
