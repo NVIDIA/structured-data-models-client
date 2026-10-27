@@ -8,7 +8,7 @@
 use sdm_engine::words::{CasingProfile, UnicodeDataVersion, normalize_with_profile};
 use serde_json::{Value, json};
 
-fn column<'a>(table: &'a Value, name: &str) -> usize {
+fn column(table: &Value, name: &str) -> usize {
     table["columns"]
         .as_array()
         .unwrap()

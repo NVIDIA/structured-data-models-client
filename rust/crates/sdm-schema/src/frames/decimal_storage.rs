@@ -105,12 +105,14 @@ pub(crate) fn read(
         NativeDecimal::Decimal64 { .. } => Some((i128::from(i64::MIN), i128::from(i64::MAX))),
         _ => None,
     };
-    if let Some((low, high)) = limits {
-        if column.values.iter().flatten().any(|value| {
+    if let Some((low, high)) = limits
+        && column.values.iter().flatten().any(|value| {
             !matches!(value, decimal::Unscaled::Decimal128(value) if low <= *value && *value <= high)
-        }) {
-            return Err(invalid("native Decimal mantissa exceeds its declared original width"));
-        }
+        })
+    {
+        return Err(invalid(
+            "native Decimal mantissa exceeds its declared original width",
+        ));
     }
     let (precision, scale) = match *native {
         NativeDecimal::Decimal32 { precision, scale }

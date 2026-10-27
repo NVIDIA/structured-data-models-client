@@ -135,14 +135,14 @@ impl<'a> Columns<'a> {
     fn scales(&self) -> BTreeMap<usize, i32> {
         self.decimals
             .iter()
-            .filter_map(|(&at, native)| {
+            .map(|(&at, native)| {
                 let scale = match native {
                     NativeDecimal::Decimal32 { scale, .. }
                     | NativeDecimal::Decimal64 { scale, .. }
                     | NativeDecimal::Decimal128 { scale, .. }
                     | NativeDecimal::Decimal256 { scale, .. } => *scale,
                 };
-                Some((at, scale))
+                (at, scale)
             })
             .collect()
     }

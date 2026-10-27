@@ -624,7 +624,7 @@ impl Snapshot {
                 "selected relationship repeats a source position within one example",
             ));
         }
-        let selected = take(&source.rows, source_rows, &[edge.fkey.clone()])?;
+        let selected = take(&source.rows, source_rows, std::slice::from_ref(&edge.fkey))?;
         let keys = encoded_keys(
             named(&selected, &edge.fkey)?,
             source.strings.get(&edge.fkey).copied(),

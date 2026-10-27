@@ -93,13 +93,10 @@ fn local_labels_keep_coarse_second_order_and_original_rows_without_resampling() 
         .temporal_rows(
             &edge,
             &integers(vec![1, 2, 1, 3]),
-            &vec![
-                TemporalWindow {
-                    lower: Some(0),
-                    upper: 1
-                };
-                4
-            ],
+            &[TemporalWindow {
+                lower: Some(0),
+                upper: 1,
+            }; 4],
             &["id".into(), "time".into()],
         )
         .unwrap();
@@ -272,13 +269,10 @@ fn a_temporal_self_edge_keeps_initial_seeds_then_new_nodes_per_example() {
         .temporal_rows(
             &edge,
             &integers(vec![1, 2]),
-            &vec![
-                TemporalWindow {
-                    lower: None,
-                    upper: 2
-                };
-                2
-            ],
+            &[TemporalWindow {
+                lower: None,
+                upper: 2,
+            }; 2],
             &["id".into()],
         )
         .unwrap();
