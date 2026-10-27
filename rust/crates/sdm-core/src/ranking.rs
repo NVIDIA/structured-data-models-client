@@ -59,23 +59,29 @@ pub(crate) fn candidates_on_no_ranking() -> CoreError {
     )
 }
 
-/// A member of the call's option values, as the host gave it.
-fn given<'a>(inputs: &'a Inputs, name: &str) -> Option<&'a Value> {
-    inputs.values.as_ref().and_then(|values| values.get(name))
+/// Complete independently useful ranking questions before any graph or rows
+/// are read. Both provider materialization and frame preparation use this
+/// exact preflight, literal writer, candidate order and capacity policy.
+pub(crate) struct RankedQuestions {
+    pub top_k: Option<u32>,
+    pub parts: Vec<(u32, String, String)>,
 }
 
-/// A ranking gathered: each distinct candidate's question, in the order
-/// the candidates were given, each gathered as the client's `_in_parts`
-/// gathers a part.
-pub(crate) async fn materialize(
-    asker: Asker,
-    inputs: Inputs,
+pub(crate) fn questions(
+    description: &sdm_contract::ops::SourceDescription,
+    candidates: Option<&[sdm_contract::ops::GivenCandidate]>,
+    values: Option<&Value>,
     plan: RankingPlan,
-    facts: Option<QueryFacts>,
-) -> Result<OperationResult, CoreError> {
+    entities: u64,
+    most_parts: Option<u32>,
+    most_entities: Option<u64>,
+) -> Result<RankedQuestions, CoreError> {
     // `parts_of`: a statistic is a regression's, and each part is a
     // classification.
-    if given(&inputs, "prediction_statistic").is_some() {
+    if values
+        .and_then(|value| value.get("prediction_statistic"))
+        .is_some()
+    {
         return Err(refused(
             Sentence::RankingStatistic,
             "prediction_statistic applies only to a regression, and a ranking is ordered by how \
@@ -100,7 +106,7 @@ pub(crate) async fn materialize(
             "query",
         ));
     }
-    let Some(given_candidates) = &inputs.candidates else {
+    let Some(given_candidates) = candidates else {
         return Err(refused(
             Sentence::CandidatesMissing,
             "a ranking is over candidates, which have to be named",
@@ -127,7 +133,7 @@ pub(crate) async fn materialize(
             "candidates",
         ));
     }
-    let most = inputs.most_parts.unwrap_or(MOST_PARTS);
+    let most = most_parts.unwrap_or(MOST_PARTS);
     if kept.len() > most as usize {
         return Err(refused(
             Sentence::TooManyCandidates,
@@ -139,8 +145,7 @@ pub(crate) async fn materialize(
     }
     // How the column ranked travels (`_how_the_column_travels`), which
     // decides how each candidate is written.
-    let dtype = inputs
-        .description
+    let dtype = description
         .tables
         .iter()
         .find(|t| t.name == ranked.table)
@@ -160,7 +165,7 @@ pub(crate) async fn materialize(
         questions.push((*position, named, question));
     }
     // `_candidates_to_rank`: the call's `top_k`, else the query's.
-    let top_k = match given(&inputs, "top_k") {
+    let top_k = match values.and_then(|value| value.get("top_k")) {
         Some(value) => Some(sdm_request::options::top_k(value)?),
         None => plan
             .top_k
@@ -176,12 +181,7 @@ pub(crate) async fn materialize(
     // each question gathers whole, held as many times over as there are
     // questions (`refuse_more_entities_than_fit_in_memory`), past the
     // host's limit, 100,000 where it names none.
-    let per_call =
-        sdm_request::options::rows_one_call_scores(asked_rows_per_call(inputs.values.as_ref())?);
-    let entities = inputs.indices.as_ref().map_or(0, |data| {
-        data.batches.iter().map(|b| b.num_rows()).sum::<usize>()
-    });
-    let entities = u64::try_from(entities).unwrap_or(u64::MAX);
+    let per_call = sdm_request::options::rows_one_call_scores(asked_rows_per_call(values)?);
     let parts = u64::try_from(kept.len()).unwrap_or(u64::MAX);
     if entities > per_call {
         return Err(CoreError::new(
@@ -195,7 +195,40 @@ pub(crate) async fn materialize(
         .with_field("parts", Detail::Scalar(Scalar::UInt64(parts)))
         .with_field("rows_per_call", Detail::Scalar(Scalar::UInt64(per_call))));
     }
-    refuse_entities(entities, parts, inputs.most_entities)?;
+    refuse_entities(entities, parts, most_entities)?;
+    Ok(RankedQuestions {
+        top_k,
+        parts: questions,
+    })
+}
+
+/// A ranking gathered: each distinct candidate's question, in the order
+/// the candidates were given, each gathered as the client's `_in_parts`
+/// gathers a part.
+pub(crate) async fn materialize(
+    asker: Asker,
+    inputs: Inputs,
+    plan: RankingPlan,
+    facts: Option<QueryFacts>,
+) -> Result<OperationResult, CoreError> {
+    let entities = inputs.indices.as_ref().map_or(0, |data| {
+        data.batches
+            .iter()
+            .map(|batch| batch.num_rows())
+            .sum::<usize>()
+    });
+    let RankedQuestions {
+        top_k,
+        parts: questions,
+    } = questions(
+        &inputs.description,
+        inputs.candidates.as_deref(),
+        inputs.values.as_ref(),
+        plan,
+        u64::try_from(entities).unwrap_or(u64::MAX),
+        inputs.most_parts,
+        inputs.most_entities,
+    )?;
     // Each question gathered with the call's values but `top_k`, which is
     // the whole ranking's, each by a materializer of its own, so with no
     // memo of another's reads; the materializer's own memo is left as it

@@ -415,29 +415,15 @@ fn read_link_labels(target: &ArrayRef) -> Result<labels::Labels, CoreError> {
     Ok(labels::Labels::Lists(lists))
 }
 
-/// The initial graph call owns the actual early checks and immutable snapshot.
-/// Its caller presents the separate drop warning after this value is retained.
-pub(crate) fn graph(
-    asker: &Asker,
-    input: FramePreparation,
-    attachments: &mut Attachments,
-) -> Result<PreparedFrameGraph, CoreError> {
-    let FramePreparation::Graph {
-        schema,
-        frames,
-        checkpoint,
-        retained,
-        native_tables: native,
-        values,
-        options: option_names,
-        prediction_rows,
-        limits,
-    } = input
-    else {
-        return Err(protocol("graph preparation requires graph source values"));
-    };
-    let values: Option<Value> = take_json_if(attachments, values)?;
-    let asked = options::values(values.as_ref())?;
+/// Existing early call guards shared by metadata-only preflight and graph
+/// construction. They run before native frame export on the public facade.
+fn check_call(
+    values: Option<&Value>,
+    option_names: &[String],
+    prediction_rows: u64,
+    limits: &FrameLimits,
+) -> Result<(), CoreError> {
+    let asked = options::values(values)?;
     options::run_mode(
         asked.num_context_samples,
         asked.num_context_samples_given.as_deref(),
@@ -460,6 +446,32 @@ pub(crate) fn graph(
     }
     refuse_entities(prediction_rows, 1, limits.entities)?;
     options::statistic(asked.prediction_statistic.as_deref())?;
+    Ok(())
+}
+
+/// The initial graph call owns the actual early checks and immutable snapshot.
+/// Its caller presents the separate drop warning after this value is retained.
+pub(crate) fn graph(
+    asker: &Asker,
+    input: FramePreparation,
+    attachments: &mut Attachments,
+) -> Result<PreparedFrameGraph, CoreError> {
+    let FramePreparation::Graph {
+        schema,
+        frames,
+        checkpoint,
+        retained,
+        native_tables: native,
+        values,
+        options: option_names,
+        prediction_rows,
+        limits,
+    } = input
+    else {
+        return Err(protocol("graph preparation requires graph source values"));
+    };
+    let values: Option<Value> = take_json_if(attachments, values)?;
+    check_call(values.as_ref(), &option_names, prediction_rows, &limits)?;
     let held: sdm_contract::ops::HeldSchema = take_json(attachments, schema)?;
     if let Some(owner) = retained {
         if checkpoint.is_some() {
