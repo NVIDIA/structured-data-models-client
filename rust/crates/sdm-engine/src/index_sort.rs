@@ -364,10 +364,10 @@ mod tests {
 
     #[test]
     fn all_actual_wheel_forced_fallback_permutations_match_both_depth_zero_profiles() {
-        let data: serde_json::Value = serde_json::from_str(include_str!(
-            "../tests/data/t46_simd_fallback_controls.json"
-        ))
-        .unwrap();
+        let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/data/t46_simd_fallback_controls.json");
+        let recorded = std::fs::read_to_string(fixture).unwrap();
+        let data: serde_json::Value = serde_json::from_str(&recorded).unwrap();
         assert_eq!(data["numpy"], "2.5.3");
         assert_eq!(data["naturally_reachable_public_fallback_witness"], false);
         let records = data["records"].as_array().unwrap();

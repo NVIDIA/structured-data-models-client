@@ -59,7 +59,7 @@ No fallback-unreachability proof is asserted.
 
 ## Tests and evidence
 
-Tests-first commit `a5e792346` retains all 129 independently recorded public native AVX2 permutations among the preceding acquisition's 184 controls.
+Tests-first commit `62b657f4d` retains all 129 independently recorded public native AVX2 permutations among the preceding acquisition's 184 controls.
 It selects only the six dtypes that the pinned source dispatches through SIMD and retains exact little-endian input bytes and full output permutations.
 Those controls cover empty/singleton inputs, duplicate ties, network thresholds, maximum sentinels, unsigned extremes, zero/subnormal/infinity values and partition-sized organ-pipe inputs.
 No expected permutation is calculated with a second copy of the proposed Rust algorithm.
