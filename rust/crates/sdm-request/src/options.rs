@@ -1069,15 +1069,9 @@ fn option_refused(key: &str, reason: &'static str) -> CoreError {
 fn boolean_text(text: &str) -> Option<bool> {
     const FALSE: [&str; 6] = ["0", "off", "f", "false", "n", "no"];
     const TRUE: [&str; 6] = ["1", "on", "t", "true", "y", "yes"];
-    if FALSE
-        .iter()
-        .any(|w| text.utf8().is_some_and(|text| w.eq_ignore_ascii_case(text)))
-    {
+    if FALSE.iter().any(|w| w.eq_ignore_ascii_case(text)) {
         Some(false)
-    } else if TRUE
-        .iter()
-        .any(|w| text.utf8().is_some_and(|text| w.eq_ignore_ascii_case(text)))
-    {
+    } else if TRUE.iter().any(|w| w.eq_ignore_ascii_case(text)) {
         Some(true)
     } else {
         None
