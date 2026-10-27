@@ -37,6 +37,9 @@ use std::process::{Command, Stdio};
 
 use serde_json::Value;
 
+#[path = "support/p3f2.rs"]
+mod p3f2;
+
 fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..")
 }
@@ -211,7 +214,12 @@ fn operations(id: &str) -> Vec<String> {
 
 /// Why rust-host's `line` does not answer as python-ref's `wanted`, if it
 /// does not.
-fn problem(id: &str, line: &Value, wanted: &Value) -> Option<String> {
+fn problem(
+    id: &str,
+    line: &Value,
+    wanted: &Value,
+    approved: Option<&Option<String>>,
+) -> Option<String> {
     if line["identity"]["runner"] != "rust-host" {
         return Some("not rust-host's".to_owned());
     }
@@ -250,9 +258,15 @@ fn problem(id: &str, line: &Value, wanted: &Value) -> Option<String> {
         .map(|b| vec![without_request_id(b)])
         .unwrap_or_default();
     let mut found = Vec::new();
-    differences(&Value::Array(sent), &Value::Array(written), "", &mut found);
-    if !found.is_empty() {
-        return Some(format!("the payload differs: {}", found.join("; ")));
+    if let Some(problem) = approved {
+        if problem.is_some() {
+            return problem.clone();
+        }
+    } else {
+        differences(&Value::Array(sent), &Value::Array(written), "", &mut found);
+        if !found.is_empty() {
+            return Some(format!("the payload differs: {}", found.join("; ")));
+        }
     }
     let columns: BTreeSet<&str> = predicted["result"]["columns"]
         .as_array()
@@ -280,6 +294,8 @@ fn answers_as_the_reference(database: &str) {
     assert!(!ids.is_empty(), "no T2.11 case authored on {database}");
     let observed = observe("contract/cases/s1", &ids, database);
     let reference = reference();
+    // Same approved-field reader and reached-key checks as the Python consumer.
+    let approved = p3f2::problems(&root(), &observed, &reference);
     let pending = named("pending", "rust:");
     let mut problems = Vec::new();
     for id in ids {
@@ -287,7 +303,7 @@ fn answers_as_the_reference(database: &str) {
         let found = match (observed.get(&key), reference.get(&key)) {
             (None, _) => Some("not observed".to_owned()),
             (_, None) => Some("no python-ref line".to_owned()),
-            (Some(line), Some(wanted)) => problem(&id, line, wanted),
+            (Some(line), Some(wanted)) => problem(&id, line, wanted, approved.get(&key)),
         };
         match (found, pending.contains(&key)) {
             (Some(why), false) => problems.push(format!("{key}: {why}")),

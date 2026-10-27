@@ -583,10 +583,13 @@ def test_python_core_answers_each_case_as_the_reference_does(
         assert _outcome(line) == expected, (
             f'{case_key}: {_outcome(line)} where the native source has {expected}'
         )
-        found = differences(payloads(want), payloads(line))
-        assert not found, f'{case_key}: the payload differs: ' + '; '.join(
-            found
+        # P3F-2 alone permits scalar FK fills and their numeric dtype effect.
+        # The shared check retains all other fields and validates reached keys.
+        approved = _module(
+            'p3f2_payload', Path(__file__).with_name('_p3f2_payload.py')
         )
+        found = approved.payload_problem(want, line, case_key)
+        assert found is None, f'{case_key}: the payload differs: {found}'
         assert line['public']['result'] == want['public']['result'], (
             f'{case_key}: the result differs'
         )
