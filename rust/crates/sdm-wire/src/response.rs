@@ -43,6 +43,11 @@
 
 use crate::json::{Value, is_integer_token, whole};
 
+// Model responses enter through json::read_answer, which retains the
+// registered lone-surrogate replacement policy. Their textual identifiers
+// and JSON member names therefore have ordinary UTF-8 views even though
+// request-side logical values can now retain exceptional native text.
+
 /// Why a response is not one the contract describes: the field, and the
 /// fault, never the value.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -265,7 +270,11 @@ impl PredictionItem {
         };
         let id = match value.get("id") {
             None | Some(Value::Null) => None,
-            Some(Value::Text(text)) => Some(text.clone()),
+            Some(Value::Text(text)) => Some(
+                text.utf8()
+                    .ok_or_else(|| refused("prediction.id", "not_text"))?
+                    .to_owned(),
+            ),
             Some(_) => return Err(refused("prediction.id", "not_text")),
         };
         let row_index = match value.get("row_index") {
@@ -407,7 +416,10 @@ impl PredictionItem {
 fn required_text(value: &Value, name: &str, field: &'static str) -> Result<String, Refused> {
     match value.get(name) {
         None => Err(refused(field, "missing")),
-        Some(Value::Text(text)) => Ok(text.clone()),
+        Some(text @ Value::Text(_)) => text
+            .as_text()
+            .map(str::to_owned)
+            .ok_or_else(|| refused(field, "not_text").with_value(text)),
         Some(value) => Err(refused(field, "not_text").with_value(value)),
     }
 }
@@ -482,7 +494,10 @@ pub fn mapping(member: &Value, field: &'static str) -> Result<Value, Refused> {
         let (Some(a), Some(b), None) = (chars.next(), chars.next(), chars.next()) else {
             return None;
         };
-        Some((Value::Text(a.to_string().into()), Value::Text(b.to_string().into())))
+        Some((
+            Value::Text(a.to_string().into()),
+            Value::Text(b.to_string().into()),
+        ))
     };
     match member {
         Value::Object(_) => Ok(member.clone()),
@@ -496,11 +511,12 @@ pub fn mapping(member: &Value, field: &'static str) -> Result<Value, Refused> {
                         [key, value] => (key.clone(), value.clone()),
                         _ => return Err(not()),
                     },
-                    Value::Text(text) => pair_of(text).ok_or_else(not)?,
+                    Value::Text(text) => text.utf8().and_then(pair_of).ok_or_else(not)?,
                     Value::Object(two) => match two.as_slice() {
-                        [(first, _), (second, _)] => {
-                            (Value::Text(first.clone().into()), Value::Text(second.clone().into()))
-                        }
+                        [(first, _), (second, _)] => (
+                            Value::Text(first.clone().into()),
+                            Value::Text(second.clone().into()),
+                        ),
                         _ => return Err(not()),
                     },
                     _ => return Err(not()),
@@ -518,11 +534,13 @@ pub fn mapping(member: &Value, field: &'static str) -> Result<Value, Refused> {
                 Ok(Value::Object(
                     built
                         .into_iter()
-                        .filter_map(|(k, v)| match k {
-                            Value::Text(name) => Some((name, v)),
-                            _ => None,
+                        .map(|(k, v)| match k {
+                            Value::Text(name) => {
+                                name.into_utf8().map(|name| (name, v)).map_err(|_| not())
+                            }
+                            _ => Err(not()),
                         })
-                        .collect(),
+                        .collect::<Result<_, _>>()?,
                 ))
             } else {
                 Ok(Value::Array(
@@ -551,6 +569,8 @@ pub fn mappings(value: &Value) -> Result<Vec<Value>, Refused> {
             .map(|(at, member)| one(member).map_err(|fault| fault.at(RefusalAt::Index(at))))
             .collect(),
         Value::Text(text) => text
+            .utf8()
+            .ok_or_else(|| refused(FIELD, "not_a_mapping").native(NativeFault::Iter, value))?
             .chars()
             .map(|c| one(&Value::Text(c.to_string().into())))
             .collect(),
@@ -573,7 +593,7 @@ pub fn mappings(value: &Value) -> Result<Vec<Value>, Refused> {
 /// `{NaN: 2}`).
 fn key_of(key: &Value) -> Option<String> {
     match key {
-        Value::Text(text) => Some(crate::key::text(text)),
+        Value::Text(text) => text.utf8().map(crate::key::text),
         Value::Null => Some(crate::key::MISSING.to_owned()),
         Value::Bool(b) => Some(crate::key::boolean(*b)),
         Value::Number(token) if is_integer_token(token) => Some(crate::key::exact(token)),
@@ -591,7 +611,7 @@ fn key_of(key: &Value) -> Option<String> {
 fn number(value: &Value, field: &'static str) -> Result<f64, Refused> {
     let read = match value {
         Value::Number(token) => token.parse::<f64>().ok(),
-        Value::Text(text) => numeric_text(text),
+        Value::Text(text) => text.utf8().and_then(numeric_text),
         _ => None,
     };
     match read {
@@ -760,6 +780,20 @@ mod tests {
     /// taken (`json::read_answer`).
     fn answer(text: &str) -> Value {
         crate::json::read_answer(text.as_bytes()).unwrap()
+    }
+
+    #[test]
+    fn response_text_retains_the_registered_answer_decoding_policy() {
+        let value = answer(
+            r#"{"id":"\ud800","model":"\ud83d\ude3a","predictions":[{"id":"\udfff","row_index":0,"rankings":[["\ud800x"]],"scores":["1.5"]}],"metadata":{}}"#,
+        );
+        let response = PredictionResponse::read(&value).unwrap();
+        assert_eq!(response.id, "�");
+        assert_eq!(response.model, "😺");
+        let item = &response.predictions[0];
+        assert_eq!(item.id.as_deref(), Some("�"));
+        assert_eq!(item.rankings, Some(vec![answer(r#"{"�":"x"}"#)]));
+        assert_eq!(item.scores, Some(vec![1.5]));
     }
 
     /// T2.13: `dict(value)` as the bindings' `_dict_or_none` makes it, each
