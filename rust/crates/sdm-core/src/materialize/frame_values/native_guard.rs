@@ -91,21 +91,27 @@ pub(super) fn assess_in_part(
     window_outran: Option<bool>,
 ) -> Result<FrameFailureAssessment, CoreError> {
     let mut assessment = assess(origin, failure, signature)?;
-    if let Some(window_outran) = window_outran {
-        let scope = scope
-            .filter(|_| {
-                assessment.category == FrameNativeCategory::PassThrough
-                    && assessment.failure.structured_data_error
-            })
-            .ok_or_else(|| {
-                protocol(
-                    "native part truth was observed before its reached structured error boundary",
-                )
-            })?;
+    let reached = scope.filter(|_| {
+        assessment.category == FrameNativeCategory::PassThrough
+            && assessment.failure.structured_data_error
+    });
+    let selection = match (reached, window_outran) {
+        (Some(scope), None) if scope.kind == FrameQuestionKind::Ranking => Some((scope, false)),
+        (Some(scope), Some(window)) if scope.kind == FrameQuestionKind::Forecast => {
+            Some((scope, window))
+        }
+        (_, Some(_)) => {
+            return Err(protocol(
+                "native part truth was observed before its reached forecast error boundary",
+            ));
+        }
+        _ => None,
+    };
+    if let Some((scope, window)) = selection {
         let placeholder = CoreError::new(Sentence::Internal, "native error part meaning")
             .with_field(
                 "window_outran_the_data",
-                Detail::Scalar(Scalar::Bool(window_outran)),
+                Detail::Scalar(Scalar::Bool(window)),
             );
         let selected = questions::in_part(placeholder, Some(scope));
         assessment.part = Some(FramePartPresentation {
