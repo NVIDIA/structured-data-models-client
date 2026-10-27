@@ -190,6 +190,15 @@ pub struct Walked {
     pub links: Vec<WalkedLink>,
 }
 
+/// Native temporal-hop bounds in floor seconds. Calendar offsets are
+/// widened by the existing core offset policy before entering this read;
+/// the label executor subsequently applies its exact nanosecond bounds.
+#[derive(Debug, Clone, Copy)]
+pub struct TemporalWindow {
+    pub lower: Option<i128>,
+    pub upper: i128,
+}
+
 impl Snapshot {
     pub fn new(graph: &Graph, mut input: BTreeMap<String, RecordBatch>) -> Result<Self, CoreError> {
         let mut tables = BTreeMap::new();
@@ -618,6 +627,67 @@ impl Snapshot {
         arrays.push(Arc::new(Int64Array::from(vec![1; rows.len()])));
         RecordBatch::try_new(Arc::new(Schema::new(fields)), arrays)
             .map_err(|_| invalid("frame lookup columns do not align"))
+    }
+
+    /// A complete temporal neighborhood for label computation, without a
+    /// provider, random draw, source scan or second adjacency index.
+    /// The original LocalSampler query hop uses this same sanitized CSC
+    /// order and a native mapper keyed by (example, original source row).
+    pub fn temporal_rows(
+        &self,
+        edge: &Edge,
+        keys: &ArrayRef,
+        windows: &[TemporalWindow],
+        columns: &[String],
+    ) -> Result<WalkedTable, CoreError> {
+        if windows.len() != keys.len() {
+            return Err(invalid("frame label windows do not align with entity keys"));
+        }
+        let adjacency = self
+            .adjacency
+            .iter()
+            .find(|adjacency| !adjacency.reversed && adjacency.edge == *edge)
+            .ok_or_else(|| invalid("frame label read names an absent relationship"))?;
+        let source = &self.tables[&edge.src];
+        let time = source
+            .time
+            .as_ref()
+            .ok_or_else(|| invalid("frame label read requires a temporal source"))?;
+        let entities = self.entity_rows(&edge.dst, keys)?;
+        let mut selected = Vec::new();
+        let mut seen = BTreeSet::new();
+        if edge.src == edge.dst {
+            // The native mapper starts with all entity seeds, even for a
+            // self relationship, before appending reached temporal nodes.
+            for (batch, &row) in entities.iter().enumerate() {
+                selected.push((batch, row));
+                seen.insert((batch, row));
+            }
+        }
+        for (batch, (&entity, window)) in entities.iter().zip(windows).enumerate() {
+            let group = &adjacency.groups[entity];
+            let second = |row: usize| {
+                // Adjacency contains only rows that survived null-time
+                // sanitization, and groups sort by this exact coarse time.
+                i128::from(time[row].unwrap().div_euclid(NANOS_PER_SECOND))
+            };
+            let begin = window.lower.map_or(0, |lower| {
+                group.partition_point(|&row| second(row) <= lower)
+            });
+            let end = begin + group[begin..].partition_point(|&row| second(row) <= window.upper);
+            for &row in &group[begin..end] {
+                if edge.src != edge.dst || seen.insert((batch, row)) {
+                    selected.push((batch, row));
+                }
+            }
+        }
+        let source_rows = selected.iter().map(|&(_, row)| row).collect::<Vec<_>>();
+        Ok(WalkedTable {
+            name: edge.src.clone(),
+            rows: take(&source.rows, &source_rows, columns)?,
+            batch: selected.iter().map(|&(batch, _)| batch).collect(),
+            source_rows,
+        })
     }
 
     /// The local sampler's node mapper and edge order, per example and hop.

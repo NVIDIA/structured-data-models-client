@@ -107,9 +107,16 @@ The source lease ends before native conversions and native warning presentation,
 
 The asynchronous label consumer explicitly releases its graph access lease before awaiting shared label kernels.
 Labels use call-local entity entropy and individually locked FrameRun access, rather than consuming the continuing neighbor RNG.
-Source inspection found that shared `Labelling::read` still routes temporal aggregate reads through provider `fetch_rows`.
-That kernel needs the existing local frame lookup/snapshot path at shared composition before temporal labels can run as a complete native frame journey.
-Holding a graph gate across that foreign suspension would be invalid.
+Source inspection found that shared `Labelling::read` routed temporal aggregate reads through provider `fetch_rows`.
+The isolated source now stages the smallest `label_context` hook: when its existing `memo.frames` is present, it obtains rows through `frame_values::label_rows`; provider calls keep their existing `Labelling::read` branch.
+The local adapter uses `Snapshot::temporal_rows` over the existing sanitized adjacency groups, with no new key/CSC representation and no random generator parameter.
+The original local query hop widens pooled calendar bounds into floor seconds, reads its complete temporal neighborhood, and reapplies exact calendar/nanosecond predicates in label execution.
+This source therefore reuses existing `offset_seconds` for both broad ends and existing `Labelling::build`/`aggregate_target` for exact predicates, filters, typed aggregates and distinct lists.
+Within a coarse second it preserves the same original source order as the existing snapshot adjacency; it does not resort by nanosecond time before order-sensitive reductions.
+Repeated examples retain separate node ownership, and a self-edge retains the native mapper's initial entity seeds before newly reached nodes.
+The method binary-searches existing groups and takes selected columns, without scanning the source or borrowing the continuing RNG.
+This is source-only kernel and hook authoring on the old base; the current independent review candidate is unchanged.
+Holding a graph gate across a foreign suspension remains invalid, so the label consumer still releases its access lease before shared awaits.
 Static labels, frame time bounds and entity selection already use local frame branches.
 The final composed path must also establish poison and cancellation behavior at each actual mutable FrameRun access; these source-owner tests alone do not establish HostRun behavior.
 
@@ -136,6 +143,8 @@ The new identity, range, native profile and conversion-order tests were written 
 The snapshot replay and link-alignment tests were written before the corresponding replay methods.
 The retained-owner allocation-reuse, blocking-overlap, independent-query, final-reference release and unwind/poison tests were written before their corresponding owner changes.
 Native observation tests were written before the new local owner module, covering exact exception identity, untouched StructuredDataError display, repeated message observations, native display failure, source-bound dtype identity and actual whole-column results.
+Local temporal source tests precede the new snapshot method and cover coarse-time/source ordering, sanitized rows, repeated examples, empty windows, self-edge seeds and application of the existing exact label predicates.
+A separate source test covers widened signed month bounds and floor-second negative anchors.
 These are source tests and have not been executed.
 Only formatter WRITE on the explicitly owned handwritten files is permitted before two independent whole-code approvals.
 No candidate import, test, lint, type check, build, generator, native probe or live call has run for this checkpoint.
@@ -160,6 +169,7 @@ The existing key consumers still need their shared single UnicodeText logical me
 
 Retained lag columns, ranking/forecast decomposition, complete HostRun journey twins and the native retained-owner facade remain required before the complete Text package can be claimed.
 Whole-task/per-batch native reference fallback, stopped constructor diagnostics, lossless StringData export and native kernel facts still require their concrete fixed facade composition.
+The isolated `task.rs` local-read hook must be reconciled against the exact approved shared task kernel and linked together with the frame domain module; it must not be copied into an immutable review candidate during review.
 HostRun no-rebuild, release, cancellation and concurrent-owner twins require the final fixed operation/typed attachment wiring and have not been executed or claimed by the core owner unit sources.
 The final frame native error guard must preserve guarded versus unguarded warning contexts, actual native ancestry and the existing graph-drop summary.
 Direct NativeFailure alone lacks the frame guard's KeyError/StructuredDataError/relational-error and native-class facts.
