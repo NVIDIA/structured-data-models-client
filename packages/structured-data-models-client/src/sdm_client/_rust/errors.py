@@ -684,6 +684,10 @@ def error_from_core(
                     iter(value)
             except (TypeError, ValueError) as failed:
                 fields['diagnostic'] = str(failed)
+                # This presentation may run inside an internal CoreError
+                # handler. Its incidental context is not a model response
+                # cause; retain the actual native exception without showing it.
+                failed.__suppress_context__ = True
                 response_cause = failed
             if fields.get('before') or fields.get('after'):
                 fields['diagnostic'] = (
@@ -722,11 +726,14 @@ def raise_from_core(
     *,
     driver_class: str | None = None,
 ) -> NoReturn:
-    r"""Raises the exception an ``error`` control message is, ``from None``."""
+    r"""Raise the public exception, retaining only its selected explicit cause."""
     error = error_from_core(control, attachments, driver_class=driver_class)
-    if error.__cause__ is not None:
-        raise error from error.__cause__
-    raise error from None
+    raise_error(error)
+
+
+def raise_error(error: StructuredDataError) -> NoReturn:
+    """Raise a presented error with its selected cause and no implicit context."""
+    raise error from error.__cause__
 
 
 def numpy_warns_on_cast_overflow() -> bool:
