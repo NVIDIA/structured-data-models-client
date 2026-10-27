@@ -189,6 +189,8 @@ class NativeColumn:
                 type=pa.large_binary(),
             )
             return pa.table({'values': array}), 'utf8_surrogatepass'
+        if pa.types.is_null(array.type):
+            array = array.cast(pa.string())
         return pa.table({'values': array}), 'utf8'
 
     def text_facts(self, identity_input: str) -> dict[str, Any]:

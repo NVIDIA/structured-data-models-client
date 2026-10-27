@@ -34,7 +34,8 @@ def native_inputs(
 
     from sdm_client._rust.frame_native import NativeColumn, NativeFrameColumns
     from sdm_client._rust.frames import _check_header
-    from sdm_client._rust.spec import held_schema
+    from sdm_client._rust.spec import held_table, _links
+    from sdm_client._rust.frame_source import typed_table, time_feature
 
     checkpoint = state.get('held', {}).get('frame_checkpoint')
     if checkpoint is not None and 'owner' in checkpoint:
@@ -47,38 +48,56 @@ def native_inputs(
     exported = []
     native_tables = []
     native_types = {}
+    held_tables = []
     for name, table in schema.tables.items():
         frame = table.data
         if type(frame) is not pd.DataFrame:
             raise RouteError(
                 'frame materialization requires built-in DataFrames'
             )
+        frame = typed_table(table, state)
         _check_header(name, frame)
+        held_tables.append(held_table(name, table))
         arrays = []
         origins = []
         types = {}
         for ordinal, column in enumerate(frame.columns):
-            series = frame.iloc[:, ordinal]
+            series = time_feature(table, column, frame.iloc[:, ordinal], state)
             dtype = series.dtype
             encoding = None
-            if type(dtype) is pd.StringDtype and dtype.storage in (
-                'python',
-                'pyarrow',
+            object_text = pd.api.types.is_object_dtype(
+                dtype
+            ) and pd.api.types.infer_dtype(series, skipna=True) in (
+                'string',
+                'empty',
+            )
+            if (
+                object_text
+                or type(dtype) is pd.StringDtype
+                and dtype.storage
+                in (
+                    'python',
+                    'pyarrow',
+                )
             ):
                 values, encoding = NativeColumn(series).arrow()
                 array = values.column(0)
-                origin: Any = {
-                    'pandas_string': {
-                        'storage': dtype.storage,
-                        'missing': 'pandas_na'
-                        if dtype.na_value is pd.NA
-                        else 'floating_nan',
+                origin: Any = (
+                    'builtin_primitive'
+                    if object_text
+                    else {
+                        'pandas_string': {
+                            'storage': dtype.storage,
+                            'missing': 'pandas_na'
+                            if dtype.na_value is pd.NA
+                            else 'floating_nan',
+                        }
                     }
-                }
+                )
             else:
                 values, converted_types = _convert(
                     name,
-                    frame.iloc[:, ordinal : ordinal + 1],
+                    pd.DataFrame({column: series}),
                     check_header=False,
                 )
                 array = values.column(0)
@@ -97,15 +116,16 @@ def native_inputs(
             origins.append(
                 {'name': column, 'origin': origin, 'strings': encoding}
             )
-        source = codec.relation(name)
+        source_name = getattr(table, 'source_name', name)
+        source = codec.relation(source_name)
         exported.append(
             (source, pa.Table.from_arrays(arrays, names=list(frame.columns)))
         )
         native_tables.append({'source': source, 'columns': origins})
-        native_types[name] = types
+        native_types[source_name] = types
     return (
         exported,
-        held_schema(schema),
+        {'tables': held_tables, 'links': _links(schema)},
         NativeFrameColumns(native_types),
         native_tables,
     )

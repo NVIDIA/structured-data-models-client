@@ -931,6 +931,7 @@ sentences! {
     DirectPredictDtype = "direct_predict_dtype", E::InvalidRequest;
     DirectNullableCast = "direct_nullable_cast", E::InvalidRequest;
     DirectNativeFailure = "direct_native_failure", E::InvalidRequest;
+    FrameDecimalFraction = "frame_decimal_fraction", E::InvalidRequest;
     FrameNativeFailure = "frame_native_failure", E::InvalidRequest;
     FrameNativeInternal = "frame_native_internal", E::InternalError;
     FrameNativeSignature = "frame_native_signature", E::InternalError;

@@ -1,0 +1,68 @@
+// SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+// All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+
+//! Live declared meaning of one reached native source column.
+//! Native owners stay local; no future column declaration is captured here.
+
+use super::*;
+use crate::ops::HeldColumn;
+
+/// Actual native storage and inference observations, without schema policy.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FrameColumnFacts {
+    pub object: bool,
+    pub string: bool,
+    pub arrow_decimal: bool,
+    pub inferred: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FrameColumnInputs {
+    pub table: String,
+    pub source: Relation,
+    pub column: HeldColumn,
+    pub designated_time: bool,
+    pub facts: FrameColumnFacts,
+}
+
+/// The resolved logical type of one source column. These meanings select
+/// no native callback and carry no execution position.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum FrameColumnKind {
+    Original,
+    DecimalFloat,
+    DecimalInteger,
+    DecimalString,
+    TextTime,
+    TextFeatureTime,
+    NativeTime,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FrameColumnMeaning {
+    pub input: FrameColumnInputs,
+    pub kind: FrameColumnKind,
+}
+
+/// Complete native fractional-mask observations before the whole-value map.
+/// Repr is observed only for the first actual fractional element.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FrameIntegerColumn {
+    pub meaning: FrameColumnMeaning,
+    pub fractional: bool,
+    pub example: Option<String>,
+}
+
+/// A complete independently useful typed source column, before sanitization.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TypedFrameSourceColumn {
+    pub values: AttachmentId,
+    pub strings: Option<StringEncoding>,
+}

@@ -7,6 +7,7 @@
 
 pub(crate) mod identity;
 mod retained;
+pub(crate) mod time_columns;
 pub(crate) mod values;
 
 pub use retained::RetainedFrameGraph;

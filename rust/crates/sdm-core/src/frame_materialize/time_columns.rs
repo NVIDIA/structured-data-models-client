@@ -22,7 +22,7 @@ use sdm_engine::time::text::{Reader, Unread};
 
 /// Converted values and the existing warning's actual raw missingness facts.
 /// Native presentation and warning order remain with the parent frame read.
-pub(super) struct ConvertedTimeColumn {
+pub(crate) struct ConvertedTimeColumn {
     pub values: ArrayRef,
     pub unread: u64,
     pub examples: Vec<Scalar>,
@@ -34,7 +34,7 @@ fn protocol(message: &str) -> CoreError {
 
 /// Convert one complete original native text column when its schema names
 /// time meaning. Already typed columns retain the existing typed consumer.
-pub(super) fn convert(
+pub(crate) fn convert(
     table: &DescribedTable,
     column: &DescribedColumn,
     array: ArrayRef,

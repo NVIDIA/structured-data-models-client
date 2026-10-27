@@ -400,7 +400,7 @@ FROM_SOURCE_TABLES = {
     'snowflake-semantic-view': FROM_SOURCE_SNOWFLAKE_SEMANTIC_VIEW,
 }
 MATERIALIZE = {
-    'frames': ('query.materialize/indices-regression/frames',),
+    'frames': _on(MATERIALIZE_DUCKDB, 'frames'),
     'duckdb': MATERIALIZE_DUCKDB,
     'sqlite': MATERIALIZE_SQLITE,
     'postgres': MATERIALIZE_POSTGRES,
@@ -411,7 +411,7 @@ MATERIALIZE = {
     'snowflake-semantic-view': MATERIALIZE_SNOWFLAKE_SEMANTIC_VIEW,
 }
 PREDICT = {
-    'frames': ('client.predict/regression/frames',),
+    'frames': _on(PREDICT_DUCKDB, 'frames'),
     'duckdb': PREDICT_DUCKDB,
     'sqlite': PREDICT_SQLITE,
     'postgres': PREDICT_POSTGRES,
@@ -469,8 +469,8 @@ FRAME_CONSTRUCTORS = (
     'schema.from-data/mapping/frames',
 )
 
-# The first fixed numeric static consumer is opt-in, like its constructors.
-# Remaining frame families and tasks retain their existing default route.
+# The complete frame consumer inventory is available for explicit opt-in.
+# Default-route publication follows the whole-candidate package gates.
 FRAME_CONSUMERS = MATERIALIZE['frames'] + PREDICT['frames']
 
 

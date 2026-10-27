@@ -61,6 +61,10 @@ class _Bindings:
 
 def _ids(kind: str, value: dict[str, Any]) -> list[int]:
     """Attachment fields of the fixed contract, never an arbitrary JSON scan."""
+    if kind in ('column_meaning', 'integer_column'):
+        return []
+    if kind == 'source_column':
+        return [value['values']]
     if kind == 'question':
         return [value['owner']]
     if kind == 'questions':

@@ -30,46 +30,56 @@ if TYPE_CHECKING:
     from sdm_client.schema import Schema
 
 
-def held_schema(schema: Schema) -> dict[str, Any]:
-    r"""``schema`` as the contract's ``HeldSchema``."""
+def held_column(name: str, column: Any) -> dict[str, Any]:
+    """One live existing HeldColumn, observed at its reached native boundary."""
+    written: dict[str, Any] = {
+        'name': name,
+        'untyped': column.untyped,
+        'stype_declared': column.stype_declared,
+        'dtype': column.dtype,
+        'stype': str(column.stype),
+        'stype_before_key': None
+        if column._stype_before_key is None
+        else str(column._stype_before_key),
+    }
+    if column._source is not None:
+        written['source'] = column._source.to_contract()
+    return written
+
+
+def held_table(name: str, table: Any) -> dict[str, Any]:
+    """One existing table at its native construction boundary."""
     from sdm_client.schema import Table, _as_key_tuple
 
-    tables = []
-    for name, table in schema.tables.items():
-        key = table.primary_key
-        columns = []
-        for column_name, column in table.columns.items():
-            written: dict[str, Any] = {
-                'name': column_name,
-                'untyped': column.untyped,
-                'stype_declared': column.stype_declared,
-                'dtype': column.dtype,
-                'stype': str(column.stype),
-                'stype_before_key': (
-                    None
-                    if column._stype_before_key is None
-                    else str(column._stype_before_key)
-                ),
-            }
-            if column._source is not None:
-                written['source'] = column._source.to_contract()
-            columns.append(written)
-        held: dict[str, Any] = {
-            'name': name,
-            'source': codec.relation(getattr(table, 'source_name', name)),
-            'columns': columns,
-            'primary_key': [] if key is None else list(_as_key_tuple(key)),
-            'time_column': table.time_column,
-        }
-        if isinstance(table, Table) and key is not None:
-            held['frame_key_form'] = (
-                'scalar' if isinstance(key, str) else 'sequence'
-            )
-        repeated = getattr(table, 'duplicate_keys', None)
-        if repeated is not None:
-            held['duplicate_keys'] = codec.integer('u64', int(repeated))
-        tables.append(held)
-    return {'tables': tables, 'links': _links(schema)}
+    key = table.primary_key
+    held: dict[str, Any] = {
+        'name': name,
+        'source': codec.relation(getattr(table, 'source_name', name)),
+        'columns': [
+            held_column(column_name, column)
+            for column_name, column in table.columns.items()
+        ],
+        'primary_key': [] if key is None else list(_as_key_tuple(key)),
+        'time_column': table.time_column,
+    }
+    if isinstance(table, Table) and key is not None:
+        held['frame_key_form'] = (
+            'scalar' if isinstance(key, str) else 'sequence'
+        )
+    repeated = getattr(table, 'duplicate_keys', None)
+    if repeated is not None:
+        held['duplicate_keys'] = codec.integer('u64', int(repeated))
+    return held
+
+
+def held_schema(schema: Schema) -> dict[str, Any]:
+    r"""``schema`` as the contract's ``HeldSchema``."""
+    return {
+        'tables': [
+            held_table(name, table) for name, table in schema.tables.items()
+        ],
+        'links': _links(schema),
+    }
 
 
 def _links(schema: Schema) -> list[list[dict[str, str]]]:

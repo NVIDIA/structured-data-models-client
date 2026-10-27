@@ -8,6 +8,8 @@
 //! Input-sized task data, node maps, sampled rows and links remain attachments.
 
 mod attachments;
+mod columns;
+pub use columns::*;
 mod guard;
 mod native;
 mod questions;
@@ -376,6 +378,16 @@ pub struct MaterializedFrames {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "stage", rename_all = "snake_case", deny_unknown_fields)]
 pub enum FramePreparation {
+    ColumnMeaning {
+        input: FrameColumnInputs,
+    },
+    IntegerColumn {
+        input: FrameIntegerColumn,
+    },
+    TimeColumn {
+        meaning: FrameColumnMeaning,
+        values: crate::data::strings::StringData,
+    },
     Question {
         schema: AttachmentId,
         query: AttachmentId,
@@ -467,6 +479,9 @@ pub enum FramePreparation {
     deny_unknown_fields
 )]
 pub enum PreparedFrameValue {
+    ColumnMeaning(FrameColumnMeaning),
+    IntegerColumn(FrameIntegerColumn),
+    SourceColumn(TypedFrameSourceColumn),
     Question(PreparedFrameQuestion),
     Questions(PreparedFrameQuestions),
     FailureAssessment(FrameFailureAssessment),
