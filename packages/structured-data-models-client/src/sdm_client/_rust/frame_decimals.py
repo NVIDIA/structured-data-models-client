@@ -11,15 +11,13 @@ No native scalar is converted and no schema meaning is chosen here.
 
 from __future__ import annotations
 
-from typing import Any
-
 import pandas as pd
 import pyarrow as pa
 
 
 def native_decimal_column(
     series: pd.Series,
-) -> tuple[pa.ChunkedArray, dict[str, Any]] | None:
+) -> tuple[pa.ChunkedArray, dict[str, str | int]] | None:
     """Export an exact built-in native Decimal column at its consumed stage.
 
     The caller binds the returned descriptor to the same field and frame
