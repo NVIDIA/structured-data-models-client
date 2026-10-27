@@ -261,7 +261,7 @@
       "gone": "T3.17: the choice of template by field, rule and fields is the core's choice of sentence"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::error_from_core": {
-      "moved": "T4.4: present explicit core public_details and selected native frame/relational diagnostics; execute only the reached host-held formatting value, preserve native response causes, and retain the core-selected frame internal cause; no bridge admission or diagnostic rule is added."
+      "moved": "T4.4: present explicit shared public_details and selected native frame/relational diagnostics; execute reached host-held formatting outside the formatter-defect catch, preserve native response causes and core-selected internal cause. Native model-task refusal uses the existing shared sentence, actual reached repr and a fresh native task owner for public details; no host task admission or diagnostic policy."
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::raise_from_core": {
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added; T4.6: use the shared public raise boundary so core-selected explicit native/generated causes survive while only the introduced internal CoreError context is removed"
