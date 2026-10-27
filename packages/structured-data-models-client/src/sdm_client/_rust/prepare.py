@@ -20,13 +20,7 @@ import numpy as np
 import pandas as pd
 
 from sdm_client._routing import RouteError
-from sdm_client._rust import (
-    codec,
-    errors,
-    frames,
-    results,
-    spec,
-)
+from sdm_client._rust import codec, errors, frames, results, spec
 from sdm_client._rust.run import Finished, run
 from sdm_client.errors import StructuredDataError
 from sdm_client.schema import _as_key_tuple

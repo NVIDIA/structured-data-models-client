@@ -598,8 +598,12 @@ impl Admit {
             .zip(schema.fields())
             .map(|(array, admitted)| self.array(admitted.name(), array, admitted.data_type()))
             .collect::<Result<Vec<_>, _>>()?;
-        RecordBatch::try_new(Arc::clone(schema), columns)
-            .map_err(|e| Fail::Refused(internal("", &e)))
+        RecordBatch::try_new_with_options(
+            Arc::clone(schema),
+            columns,
+            &arrow_array::RecordBatchOptions::new().with_row_count(Some(batch.num_rows())),
+        )
+        .map_err(|e| Fail::Refused(internal("", &e)))
     }
 
     /// `array`, of a type [`admitted_type`] took, as `admitted`.
