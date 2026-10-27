@@ -98,6 +98,55 @@ fn response_bytes(run: &HostRun, id: AttachmentId) -> Vec<u8> {
     bytes
 }
 
+// Plain native JSON observations for these closed primitive test fixtures.
+// Resource-failure cases below supply their observed failure explicitly.
+fn fixture_builtin(value: &Value) -> Value {
+    match value {
+        Value::Null => json!({"kind":"null"}),
+        Value::Bool(value) => json!({"kind":"boolean","value":value}),
+        Value::String(value) => {
+            json!({"kind":"unicode","points":value.chars().map(u32::from).collect::<Vec<_>>()})
+        }
+        Value::Number(value) if value.is_i64() => {
+            json!({"kind":"integer","digits":format!("{:#x}",value.as_i64().unwrap()),"radix":"hexadecimal"})
+        }
+        Value::Number(value) if value.is_u64() => {
+            json!({"kind":"integer","digits":format!("{:#x}",value.as_u64().unwrap()),"radix":"hexadecimal"})
+        }
+        Value::Number(value) => {
+            json!({"kind":"float","bits":value.as_f64().unwrap().to_be_bytes()})
+        }
+        Value::Array(_) => json!({"kind":"list"}),
+        Value::Object(_) => json!({"kind":"dictionary"}),
+    }
+}
+fn fixture_json_value(value: &Value) -> Value {
+    json!({"outcome":"value","value":fixture_builtin(value),"members":value.as_array().map(|items|items.iter().map(fixture_builtin).collect::<Vec<_>>())})
+}
+fn interpret_fixture_json(checked: &Value) -> Value {
+    let text = checked["id"]["value"].as_str().unwrap();
+    let outcome = match serde_json::from_str::<Value>(text) {
+        Ok(value) => fixture_json_value(&value),
+        Err(_) => json!({"outcome":"failed","failure":{"ancestry":["value_error"]}}),
+    };
+    prepare(json!({"stage":"interpret_response_json","checked":checked,"json":{"scope":checked["scope"],"ordinal":checked["row"]["ordinal"],"text":text,"value":outcome}}),Attachments::new()).unwrap()
+}
+fn fixture_member_text(text: &str) -> Option<String> {
+    let value: Value = serde_json::from_str(text).ok()?;
+    let members = value.as_array()?;
+    if members.len() != 1 {
+        return None;
+    }
+    Some(match &members[0] {
+        Value::Null => "None".to_owned(),
+        Value::Bool(true) => "True".to_owned(),
+        Value::Bool(false) => "False".to_owned(),
+        Value::String(value) => value.clone(),
+        value @ Value::Number(_) => value.to_string(),
+        _ => panic!("nonprimitive test JSON member needs an explicit native string observation"),
+    })
+}
+
 fn finish_response(
     run: &HostRun,
     value: AttachmentId,
@@ -153,13 +202,24 @@ fn finish_response_limit(
             }
             None => json!({"outcome":"failed","failure":{"ancestry":["value_error"]}}),
         };
-        let literal = json!({"scope":data["scope"],"ordinal":row["row"]["ordinal"],"text":row["id"]["value"],"value":literal_value});
+        let interpreted = interpret_fixture_json(row);
+        let is_literal = interpreted["checked"]["id"]["representation"] == "native_literal_text";
+        let literal = if is_literal {
+            json!({"scope":data["scope"],"ordinal":row["row"]["ordinal"],"text":row["id"]["value"],"value":literal_value})
+        } else {
+            Value::Null
+        };
         let selected = prepare(
-            json!({"stage":"select_response_member","checked":row,"literal":literal}),
+            json!({"stage":"select_response_member","interpreted":interpreted,"literal":literal}),
             Attachments::new(),
         )
         .unwrap();
-        let string = native_member.map(|(member, _)| json!({"scope":data["scope"],"ordinal":row["row"]["ordinal"],"value":{"outcome":"value","points":member.chars().map(u32::from).collect::<Vec<_>>()}}));
+        let displayed = if is_literal {
+            native_member.map(|(member, _)| member.to_owned())
+        } else {
+            fixture_member_text(row["id"]["value"].as_str().unwrap())
+        };
+        let string = displayed.map(|member| json!({"scope":data["scope"],"ordinal":row["row"]["ordinal"],"value":{"outcome":"value","points":member.chars().map(u32::from).collect::<Vec<_>>()}}));
         accepted.push(prepare(
             json!({"stage":"attribute_response_row","selected":selected,"string":string}),
             Attachments::new(),
@@ -1327,7 +1387,7 @@ fn direct_primitive_list_ids_cannot_hide_a_wrong_key() {
 }
 
 fn checked_native_row(text: &str) -> Value {
-    let scope = json!({"version":1,"model":"kumo-tabular","request_id":"server-nonce","call_request_id":"sdm-fixed","response_rows":2,"scoring_rows":2});
+    let scope = json!({"version":2,"model":"kumo-tabular","request_id":"server-nonce","call_request_id":"sdm-fixed","response_rows":2,"scoring_rows":2});
     let rows = json!([{"ordinal":0,"row_index":"0","id":text,"key":{"t":"i64","v":"4"},"raw_in_batch":false,"prior_ordinal":null},{"ordinal":1,"row_index":"0","id":"[4]","key":{"t":"i64","v":"4"},"raw_in_batch":false,"prior_ordinal":0}]);
     let checked = prepare(
         json!({"stage":"check_response_rows","scope":scope,"rows":rows,"decimal_limit":640}),
@@ -1346,7 +1406,7 @@ fn reached_native_builtin_facts_control_caught_failure_and_attribution() {
         let checked = checked_native_row(r"['\q']");
         let literal = json!({"scope":checked["scope"],"ordinal":0,"text":r"['\q']","value":if promoted {json!({"outcome":"failed","failure":{"ancestry":["syntax_error"]}})} else {json!({"outcome":"value","value":{"kind":"list"},"members":[{"kind":"unicode","points":[92,113]}]})}});
         let selected = prepare(
-            json!({"stage":"select_response_member","checked":checked,"literal":literal}),
+            json!({"stage":"select_response_member","interpreted":interpret_fixture_json(&checked),"literal":literal}),
             Attachments::new(),
         )
         .unwrap();
@@ -1378,7 +1438,7 @@ fn native_value_association_and_uncaught_string_failure_are_explicit() {
     wrong["scope"]["call_request_id"] = json!("other-call");
     assert_eq!(
         prepare(
-            json!({"stage":"select_response_member","checked":checked,"literal":wrong}),
+            json!({"stage":"select_response_member","interpreted":interpret_fixture_json(&checked),"literal":wrong}),
             Attachments::new()
         )
         .unwrap_err()
@@ -1386,7 +1446,7 @@ fn native_value_association_and_uncaught_string_failure_are_explicit() {
         sdm_contract::Sentence::InvalidMessage
     );
     let selected = prepare(
-        json!({"stage":"select_response_member","checked":checked,"literal":literal}),
+        json!({"stage":"select_response_member","interpreted":interpret_fixture_json(&checked),"literal":literal}),
         Attachments::new(),
     )
     .unwrap();
@@ -2144,7 +2204,7 @@ fn boolean_and_numeric_halves_share_numeric_wire_categories() {
 fn direct_row_bounds_use_exact_decoded_digits_before_machine_width() {
     let digits = "1606938044258990275541962092341162602522202993782792835301376";
     for index in [digits.to_owned(), format!("-{digits}")] {
-        let scope = json!({"version":1,"model":"kumo-tabular","request_id":"response-nonce","call_request_id":"sdm-fixed","response_rows":1,"scoring_rows":2});
+        let scope = json!({"version":2,"model":"kumo-tabular","request_id":"response-nonce","call_request_id":"sdm-fixed","response_rows":1,"scoring_rows":2});
         let row = json!({"ordinal":0,"row_index":index,"id":null,"key":null,"raw_in_batch":false,"prior_ordinal":null});
         let error = prepare(
             json!({"stage":"check_response_rows","scope":scope,"rows":[row],"decimal_limit":4300}),
@@ -2165,7 +2225,7 @@ fn wide_bounds_are_reached_after_earlier_native_conversion_outcome() {
     let checked = checked_native_row(r"[4+1, '\q']");
     let literal = json!({"scope":checked["scope"],"ordinal":0,"text":r"[4+1, '\q']","value":{"outcome":"failed","failure":{"ancestry":["value_error"]}}});
     let selected = prepare(
-        json!({"stage":"select_response_member","checked":checked,"literal":literal}),
+        json!({"stage":"select_response_member","interpreted":interpret_fixture_json(&checked),"literal":literal}),
         Attachments::new(),
     )
     .unwrap();
@@ -2233,4 +2293,91 @@ fn encoded_body_facts_and_rows_must_agree_before_transport() {
         };
         assert_eq!(error.sentence, sdm_contract::Sentence::InvalidMessage);
     }
+}
+
+#[test]
+fn actual_json_resource_outcome_precedes_fallback_and_is_bound_to_the_source_row() {
+    let text = "[".repeat(300) + "0" + &"]".repeat(300);
+    let checked = checked_native_row(&text);
+    assert_eq!(checked["id"]["representation"], "native_json_text");
+    let observation = json!({"scope":checked["scope"],"ordinal":0,"text":text,"value":{"outcome":"failed","failure":{"ancestry":["recursion_error"]}}});
+    let interpreted = prepare(
+        json!({"stage":"interpret_response_json","checked":checked,"json":observation}),
+        Attachments::new(),
+    )
+    .unwrap();
+    assert_eq!(
+        interpreted["checked"]["id"]["representation"],
+        "native_literal_text"
+    );
+    let literal = json!({"scope":checked["scope"],"ordinal":0,"text":text,"value":{"outcome":"failed","failure":{"ancestry":["syntax_error"]}}});
+    let selected = prepare(
+        json!({"stage":"select_response_member","interpreted":interpreted,"literal":literal}),
+        Attachments::new(),
+    )
+    .unwrap();
+    let attributed = prepare(
+        json!({"stage":"attribute_response_row","selected":selected,"string":null}),
+        Attachments::new(),
+    )
+    .unwrap();
+    assert_eq!(attributed["id"], json!({"t":"i64","v":"4"}));
+    assert_eq!(attributed["json"], observation);
+
+    // A different native runtime succeeds on this JSON, so its singleton
+    // nested-list value reaches native stringification and then key mismatch.
+    let mut parsed = observation.clone();
+    parsed["value"] =
+        json!({"outcome":"value","value":{"kind":"list"},"members":[{"kind":"list"}]});
+    let interpreted = prepare(
+        json!({"stage":"interpret_response_json","checked":checked,"json":parsed}),
+        Attachments::new(),
+    )
+    .unwrap();
+    let selected = prepare(
+        json!({"stage":"select_response_member","interpreted":interpreted,"literal":null}),
+        Attachments::new(),
+    )
+    .unwrap();
+    assert_eq!(selected["member"], json!({"kind":"list"}));
+    let string = json!({"scope":checked["scope"],"ordinal":0,"value":{"outcome":"value","points":[91,48,93]}});
+    assert_eq!(
+        prepare(
+            json!({"stage":"attribute_response_row","selected":selected,"string":string}),
+            Attachments::new()
+        )
+        .unwrap_err()
+        .sentence,
+        sdm_contract::Sentence::TabularIdMismatch
+    );
+
+    for change in ["scope", "ordinal", "text", "kind"] {
+        let mut wrong = observation.clone();
+        match change {
+            "scope" => wrong["scope"]["call_request_id"] = json!("another-call"),
+            "ordinal" => wrong["ordinal"] = json!(1),
+            "text" => wrong["text"] = json!("[4]"),
+            _ => {
+                wrong["value"] = json!({"outcome":"value","value":{"kind":"tuple"},"members":null})
+            }
+        }
+        assert_eq!(
+            prepare(
+                json!({"stage":"interpret_response_json","checked":checked,"json":wrong}),
+                Attachments::new()
+            )
+            .unwrap_err()
+            .sentence,
+            sdm_contract::Sentence::InvalidMessage
+        );
+    }
+    let mut uncaught = observation.clone();
+    uncaught["value"] = json!({"outcome":"failed","failure":{"ancestry":["memory_error"]}});
+    let error = prepare(
+        json!({"stage":"interpret_response_json","checked":checked,"json":uncaught}),
+        Attachments::new(),
+    )
+    .unwrap_err();
+    assert_eq!(error.sentence, sdm_contract::Sentence::DirectNativeFailure);
+    assert_eq!(error.fields["stage"], sdm_contract::Detail::text("json"));
 }
