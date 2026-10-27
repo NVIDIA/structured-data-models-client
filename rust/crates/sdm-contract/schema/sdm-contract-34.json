@@ -978,13 +978,18 @@
     "AttributedDirectRow": {
       "type": "object",
       "properties": {
-        "decimal_limit": {
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0
-        },
         "row": {
           "$ref": "#/$defs/DecodedDirectRow"
+        },
+        "json": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/JsonObservation"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "literal": {
           "anyOf": [
@@ -1012,12 +1017,12 @@
       },
       "additionalProperties": false,
       "required": [
-        "decimal_limit",
         "row",
         "id"
       ]
     },
-    "LiteralObservation": {
+    "JsonObservation": {
+      "description": "An actual native JSON conversion of one reached eligible ID.",
       "type": "object",
       "properties": {
         "scope": {
@@ -1032,7 +1037,7 @@
           "type": "string"
         },
         "value": {
-          "$ref": "#/$defs/NativeLiteralValue"
+          "$ref": "#/$defs/NativeParsedValue"
         }
       },
       "additionalProperties": false,
@@ -1043,7 +1048,7 @@
         "value"
       ]
     },
-    "NativeLiteralValue": {
+    "NativeParsedValue": {
       "oneOf": [
         {
           "type": "object",
@@ -1091,7 +1096,7 @@
       ]
     },
     "BuiltinValue": {
-      "description": "Literal-built builtin facts. Nonprimitive members do not acquire display text.",
+      "description": "Native parsed builtin facts. Nonprimitive members do not acquire display text.",
       "oneOf": [
         {
           "type": "object",
@@ -1316,6 +1321,32 @@
         "recursion_error"
       ]
     },
+    "LiteralObservation": {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "$ref": "#/$defs/ResponseScope"
+        },
+        "ordinal": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "text": {
+          "type": "string"
+        },
+        "value": {
+          "$ref": "#/$defs/NativeParsedValue"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "scope",
+        "ordinal",
+        "text",
+        "value"
+      ]
+    },
     "StringObservation": {
       "type": "object",
       "properties": {
@@ -1412,11 +1443,6 @@
                 "$ref": "#/$defs/DecodedDirectRow"
               }
             },
-            "decimal_limit": {
-              "type": "integer",
-              "format": "uint32",
-              "minimum": 0
-            },
             "stage": {
               "type": "string",
               "const": "check_response_rows"
@@ -1426,8 +1452,7 @@
           "required": [
             "stage",
             "scope",
-            "rows",
-            "decimal_limit"
+            "rows"
           ]
         },
         {
@@ -1436,8 +1461,36 @@
             "checked": {
               "$ref": "#/$defs/CheckedDirectRow"
             },
+            "json": {
+              "$ref": "#/$defs/JsonObservation"
+            },
+            "stage": {
+              "type": "string",
+              "const": "interpret_response_json"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "checked",
+            "json"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "interpreted": {
+              "$ref": "#/$defs/InterpretedDirectRow"
+            },
             "literal": {
-              "$ref": "#/$defs/LiteralObservation"
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/LiteralObservation"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "stage": {
               "type": "string",
@@ -1447,8 +1500,7 @@
           "additionalProperties": false,
           "required": [
             "stage",
-            "checked",
-            "literal"
+            "interpreted"
           ]
         },
         {
@@ -2899,11 +2951,6 @@
         "row": {
           "$ref": "#/$defs/DecodedDirectRow"
         },
-        "decimal_limit": {
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0
-        },
         "id": {
           "$ref": "#/$defs/DirectRowId"
         }
@@ -2912,7 +2959,6 @@
       "required": [
         "scope",
         "row",
-        "decimal_limit",
         "id"
       ]
     },
@@ -2961,6 +3007,23 @@
           "type": "object",
           "properties": {
             "value": {
+              "type": "string"
+            },
+            "representation": {
+              "type": "string",
+              "const": "native_json_text"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "representation",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "value": {
               "$ref": "#/$defs/BuiltinValue"
             },
             "members": {
@@ -3002,6 +3065,23 @@
         }
       ]
     },
+    "InterpretedDirectRow": {
+      "description": "Native JSON data with the core's checked representation and catch policy.",
+      "type": "object",
+      "properties": {
+        "checked": {
+          "$ref": "#/$defs/CheckedDirectRow"
+        },
+        "json": {
+          "$ref": "#/$defs/JsonObservation"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "checked",
+        "json"
+      ]
+    },
     "SelectedDirectMember": {
       "description": "A selected member of a checked row, independently useful builtin data.",
       "type": "object",
@@ -3009,8 +3089,18 @@
         "checked": {
           "$ref": "#/$defs/CheckedDirectRow"
         },
+        "json": {
+          "$ref": "#/$defs/JsonObservation"
+        },
         "literal": {
-          "$ref": "#/$defs/LiteralObservation"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LiteralObservation"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "member": {
           "anyOf": [
@@ -3026,7 +3116,7 @@
       "additionalProperties": false,
       "required": [
         "checked",
-        "literal"
+        "json"
       ]
     },
     "DirectPrelude": {
