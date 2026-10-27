@@ -4,6 +4,8 @@
 
 //! The fixed model-neutral constructor and per-call native observation boundary.
 
+pub(crate) mod relational_response;
+
 use crate::run::{ArrowData, Asker, Attachment, Attachments};
 use arrow_array::{RecordBatch, RecordBatchOptions};
 use arrow_schema::{Field, Schema};
@@ -281,6 +283,30 @@ pub(crate) async fn run(
 ) -> Result<OperationResult, CoreError> {
     let value = match input {
         Preparation::EncodeBody { input } => return encode_body(&asker, input, attached),
+        Preparation::RelationalReferenceColumn { facts } => serde_json::to_value(
+            sdm_request::predict::relational_response::reference_column(facts)?,
+        ),
+        Preparation::CheckRelationalRows { attribution, rows } => serde_json::to_value(
+            sdm_request::predict::relational_response::check_rows(attribution, rows)?,
+        ),
+        Preparation::CheckRelationalForecast { bound, forecasting } => serde_json::to_value(
+            sdm_request::predict::relational_response::check_forecast(bound, forecasting)?,
+        ),
+        Preparation::RelationalWithoutInstance { checked } => serde_json::to_value(
+            sdm_request::predict::relational_response::without_instance(checked)?,
+        ),
+        Preparation::AttributeRelationalInstance { checked, instance } => serde_json::to_value(
+            sdm_request::predict::relational_response::attribute_instance(checked, instance)?,
+        ),
+        Preparation::CheckRelationalCoverage { data, attribution, rows } => serde_json::to_value(
+            relational_response::coverage(data, attribution, rows, attached)?,
+        ),
+        Preparation::RelationalTargetMeaning { kind } => serde_json::to_value(
+            sdm_request::predict::relational_response::target_meaning(&kind)?,
+        ),
+        Preparation::CompleteRelationalResponse { part } => serde_json::to_value(
+            relational_response::complete(&asker, part, attached)?,
+        ),
         Preparation::CheckResponseRows {
             scope,
             rows,

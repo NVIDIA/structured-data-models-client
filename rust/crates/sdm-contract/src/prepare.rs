@@ -11,6 +11,9 @@ use crate::{ColumnType, Scalar};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+pub mod relational_response;
+pub use relational_response::*;
+
 pub const DIRECT_PREPARED_VERSION: u32 = 1;
 pub const CALL_PREPARATION_VERSION: u32 = 2;
 pub const DIRECT_OVERLAP_VERSION: u32 = 1;
@@ -258,6 +261,35 @@ pub enum Preparation {
     EncodeBody {
         input: DirectBody,
     },
+    RelationalReferenceColumn {
+        facts: RelationalReferenceColumns,
+    },
+    CheckRelationalRows {
+        attribution: RelationalAttribution,
+        rows: Vec<DecodedRelationalRow>,
+    },
+    CheckRelationalForecast {
+        bound: BoundRelationalRow,
+        forecasting: bool,
+    },
+    RelationalWithoutInstance {
+        checked: CheckedRelationalRow,
+    },
+    AttributeRelationalInstance {
+        checked: CheckedRelationalRow,
+        instance: RelationalInstanceText,
+    },
+    CheckRelationalCoverage {
+        data: RelationalResponseData,
+        attribution: RelationalAttribution,
+        rows: AttachmentId,
+    },
+    RelationalTargetMeaning {
+        kind: Vec<u32>,
+    },
+    CompleteRelationalResponse {
+        part: RelationalResponsePart,
+    },
     CheckResponseRows {
         scope: ResponseScope,
         rows: Vec<DecodedDirectRow>,
@@ -438,6 +470,14 @@ pub enum PreparedValue {
     Rows(CheckedDirectRows),
     Member(SelectedDirectMember),
     Attributed(AttributedDirectRow),
+    RelationalResponse(RelationalResponseData),
+    RelationalReference(RelationalReferenceColumn),
+    RelationalRows(CheckedRelationalRows),
+    RelationalForecast(CheckedRelationalRow),
+    RelationalAttributed(AttributedRelationalRow),
+    RelationalAttribution(RelationalAttribution),
+    RelationalTarget(RelationalTargetMeaning),
+    RelationalPart(RelationalResponsePart),
 }
 
 /// Ordered flat primitive inference values; exact integer digits do not

@@ -960,6 +960,14 @@ sentences! {
     TabularRowRepeated = "tabular_row_repeated", E::InvalidResponse;
     TabularRowsUnanswered = "tabular_rows_unanswered", E::InvalidResponse;
     TabularIdMismatch = "tabular_id_mismatch", E::InvalidResponse;
+    RelationalRowMissing = "relational_row_missing", E::InvalidResponse;
+    RelationalRowBounds = "relational_row_bounds", E::InvalidResponse;
+    RelationalForecastStepMissing = "relational_forecast_step_missing", E::InvalidResponse;
+    RelationalForecastStepUnexpected = "relational_forecast_step_unexpected", E::InvalidResponse;
+    RelationalRowRepeated = "relational_row_repeated", E::InvalidResponse;
+    RelationalIdMissing = "relational_id_missing", E::InvalidResponse;
+    RelationalIdMismatch = "relational_id_mismatch", E::InvalidResponse;
+    RelationalRowsUnanswered = "relational_rows_unanswered", E::InvalidResponse;
     NotYetPredict = "not_yet_predict", E::UnsupportedRequest;
     ResponseUnread = "response_unread", E::InvalidResponse;
     ExplanationNotAMapping = "explanation_not_a_mapping", E::InvalidResponse;

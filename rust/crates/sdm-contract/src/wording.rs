@@ -774,6 +774,26 @@ pub fn template(sentence: Sentence) -> Template {
         S::TabularIdMismatch => said(
             r#"the response pairs row_index {index} with id {id!r}, and this batch asked about {expected!r} there"#,
         ),
+        S::RelationalRowMissing => said(
+            r#"the response is missing a row_index, so its answer cannot be attributed to an entity"#,
+        ),
+        S::RelationalRowBounds => said(
+            r#"the response names row_index {index}, and this batch asked about {rows} rows"#,
+        ),
+        S::RelationalForecastStepMissing => said(
+            r#"a forecast answer for row {index} names no step, so its place in the horizon is unknown"#,
+        ),
+        S::RelationalForecastStepUnexpected => said(
+            r#"a {kind} answer carries a forecast step, which only a forecast has"#,
+        ),
+        S::RelationalRowRepeated => said(r#"the response answers {where} more than once"#),
+        S::RelationalIdMissing => said(
+            r#"the answer for row {index} carries no id, and this batch asked under {expected}, so the two cannot be matched"#,
+        ),
+        S::RelationalIdMismatch => said(
+            r#"the response pairs row_index {index} with id {id!r}, and this batch asked about {expected} there"#,
+        ),
+        S::RelationalRowsUnanswered => said(r#"the response left row(s) {missing!r} unanswered"#),
         S::NotYetPredict => said(
             r#"predicting this request needs the {rule!r} rule, which is not one this client's core supports yet"#,
         ),

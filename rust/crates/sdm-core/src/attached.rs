@@ -83,6 +83,15 @@ pub fn resolved_attachments(
                             .map(|id| (id, AttachmentKind::Bytes)),
                     );
                 }
+                match &input {
+                    sdm_contract::prepare::Preparation::CheckRelationalCoverage { data, rows, .. } => {
+                        named.extend([data.response, data.rows, *rows].into_iter().map(|id| (id, AttachmentKind::Bytes)));
+                    }
+                    sdm_contract::prepare::Preparation::CompleteRelationalResponse { part } => {
+                        named.extend([part.data.response, part.data.rows, part.rows, part.target_rows].into_iter().map(|id| (id, AttachmentKind::Bytes)));
+                    }
+                    _ => {}
+                }
                 let rows = match input {
                     sdm_contract::prepare::Preparation::EncodeBody { input } => {
                         Some((input.context, input.predict))
