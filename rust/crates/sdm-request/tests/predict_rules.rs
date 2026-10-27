@@ -235,3 +235,71 @@ fn a_regression_s_column_is_typed_as_pandas_types_it() {
     let written: Vec<Option<&str>> = batch.column(3).as_string::<i32>().iter().collect();
     assert_eq!(written, [Some("NaN"), Some("true")]);
 }
+
+#[test]
+fn gathered_class_predictions_and_probability_keys_retain_the_original_grammar() {
+    use sdm_wire::json;
+    for (dtype, token, key, prediction, spelled) in [
+        ("int64", r#""10""#, "10", Answer::Int(10), "10"),
+        (
+            "int64",
+            r#""1_0""#,
+            "1_0",
+            Answer::Written(Value::text("1_0")),
+            "1_0",
+        ),
+        (
+            "int64",
+            r#""١٠""#,
+            "١٠",
+            Answer::Written(Value::text("١٠")),
+            "١٠",
+        ),
+        (
+            "int64",
+            "9.19e18",
+            "1",
+            Answer::Int(9_190_000_000_000_000_000),
+            "1",
+        ),
+        (
+            "int64",
+            "9.21e18",
+            "1",
+            Answer::Written(Value::Number("9.21e18".into())),
+            "1",
+        ),
+        (
+            "int64",
+            "-9.21e18",
+            "1",
+            Answer::Written(Value::Number("-9.21e18".into())),
+            "1",
+        ),
+        ("float64", r#""10.5""#, "10.5", Answer::Float(10.5), "10.5"),
+        (
+            "float64",
+            r#""1_0.5""#,
+            "1_0.5",
+            Answer::Written(Value::text("1_0.5")),
+            "1_0.5",
+        ),
+        (
+            "float64",
+            r#""١٠.5""#,
+            "١٠.5",
+            Answer::Written(Value::text("١٠.5")),
+            "١٠.5",
+        ),
+    ] {
+        let payload = json::read(format!(r#"{{"model":"kumo-relational","task":{{"kind":"multiclass_classification","target":{{"column_name":"target","dtype":"{dtype}"}}}},"predict":{{"instance_table":{{"format":"arrays","columns":[],"rows":[[]]}}}}}}"#).as_bytes()).unwrap();
+        let value = json::read_answer(format!(r#"{{"id":"server","model":"kumo-relational","metadata":{{}},"predictions":[{{"row_index":0,"id":"0","prediction":{token},"probabilities":{{"{key}":0.75}}}}]}}"#).as_bytes()).unwrap();
+        let response = sdm_wire::response::PredictionResponse::read(&value).unwrap();
+        let part = sdm_request::predict::layout(&payload, &response, |v| v.to_string()).unwrap();
+        assert_eq!(part.rows[0].prediction, prediction, "{dtype}/{token}");
+        assert_eq!(
+            part.rows[0].probabilities.as_deref(),
+            Some([(spelled.to_owned(), 0.75)].as_slice())
+        );
+    }
+}
