@@ -32,8 +32,6 @@ PRIMITIVES = [
     pa.uint16(),
     pa.uint32(),
     pa.uint64(),
-    pa.float32(),
-    pa.float64(),
     pa.bool_(),
     pa.string(),
     pa.large_string(),
@@ -102,44 +100,64 @@ def test_arrow_primitive_metadata_snapshot_and_mutation(
         assert projection(snapshot) == before
 
 
+@pytest.mark.parametrize('width', [32, 64])
+@pytest.mark.parametrize(
+    'variant', ['signed_zero', 'nan_sign', 'nan_payload', 'nan_signaling']
+)
+def test_arrow_float_native_nomination_boundary_remains_on_default(
+    monkeypatch, width, variant
+):
+    # Frozen public witness: Arrow nunique nominates a two-row key from
+    # different bits, then pandas duplicate equality refuses that key.
+    # A 100-row case hides this boundary because both counts clear 99%.
+    quiet = 0x7FC00000 if width == 32 else 0x7FF8000000000000
+    signaling = 0x7F800001 if width == 32 else 0x7FF0000000000001
+    sign = 1 << (width - 1)
+    bits = {
+        'signed_zero': [0, sign],
+        'nan_sign': [quiet, quiet | sign],
+        'nan_payload': [quiet | 1, quiet | 2],
+        'nan_signaling': [signaling, quiet | 1],
+    }[variant]
+    raw = np.array(bits, dtype=f'uint{width}')
+    dtype = pa.float32() if width == 32 else pa.float64()
+    array = pa.Array.from_buffers(dtype, 2, [None, pa.py_buffer(raw)])
+    frame = pd.DataFrame(
+        {'user_id': pd.Series(pd.arrays.ArrowExtensionArray(array))}
+    )
+    monkeypatch.delenv('SDM_CORE_ROUTES', raising=False)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        with pytest.raises(StructuredDataError) as error:
+            Schema.from_data({'users': frame})
+    example = '-0.0' if variant == 'signed_zero' else 'nan'
+    assert error.value.code == 'INVALID_REQUEST'
+    assert str(error.value) == (
+        '[INVALID_REQUEST] users.user_id is not unique enough to identify '
+        'a row: 1 of 2 rows repeat a value already used, e.g. ' + example
+    )
+    assert not caught
+    monkeypatch.setenv('SDM_CORE_ROUTES', PATHS)
+    with pytest.raises(RouteError, match='partial frame constructor'):
+        Schema.from_data({'users': frame})
+
+
 @pytest.mark.parametrize('dtype', [pa.float32(), pa.float64()])
 @pytest.mark.parametrize(
-    'variant', ['nan', 'nan_duplicate', 'null', 'zeros', 'infinities']
+    'values', [[], [None, None], [1, 2], [np.nan, np.nan], [0.0, -0.0]]
 )
-@pytest.mark.parametrize('explicit', [False, True])
-def test_arrow_float_valid_nan_null_and_native_scalar_spelling(
-    monkeypatch, dtype, variant, explicit
+@pytest.mark.parametrize('name', ['user_id', 'value'])
+def test_arrow_float_whole_family_remains_unfinished(
+    monkeypatch, dtype, values, name
 ):
-    tail = {
-        'nan': [np.nan],
-        'nan_duplicate': [np.nan, np.nan],
-        'null': [None],
-        'zeros': [-0.0],
-        'infinities': [-np.inf, np.inf],
-    }[variant]
-    values = list(range(100 - len(tail))) + tail
-    frame = pd.DataFrame({'user_id': series(values, dtype)})
-    options = {'primary_keys': {'users': 'user_id'}} if explicit else {}
-    schema, notices = paired(monkeypatch, {'users': frame}, **options)
-    if variant == 'null' and explicit:
-        assert schema is None
-    else:
-        assert schema['users'].primary_key == 'user_id'
-        assert schema['users'].duplicate_keys == (
-            1 if variant in ('nan_duplicate', 'zeros') else 0
-        )
-    if variant == 'nan_duplicate':
-        assert all('e.g. nan.' in notice for notice in notices)
-    elif variant == 'zeros':
-        assert all('e.g. -0.0.' in notice for notice in notices)
-    elif variant == 'null':
-        assert 'have no value' in notices[0]
-    else:
-        assert not notices
+    frame = pd.DataFrame({name: series(values, dtype)})
+    monkeypatch.setenv('SDM_CORE_ROUTES', PATHS)
+    with pytest.raises(RouteError, match='partial frame constructor'):
+        Schema.from_data({'rows': frame})
 
 
-@pytest.mark.parametrize('left', [pa.int64(), pa.float32(), pa.float64()])
-@pytest.mark.parametrize('right', [pa.int64(), pa.float32(), pa.float64()])
+@pytest.mark.parametrize('left', [pa.int32(), pa.uint64()])
+@pytest.mark.parametrize('right', [pa.int64(), pa.uint32()])
 @pytest.mark.parametrize(
     'key', ['user_id', ['user_id'], ('user_id',), ('user_id', 'group')]
 )
@@ -154,26 +172,6 @@ def test_arrow_repeated_key_forms_and_native_composite_row(
         monkeypatch, {'users': frame}, primary_keys={'users': key}
     )
     assert notices
-
-
-@pytest.mark.parametrize('dtype', [pa.float32(), pa.float64()])
-@pytest.mark.parametrize('other', ['arrow', 'numpy', 'masked'])
-def test_arrow_present_nan_composite_uses_native_row_presentation(
-    monkeypatch, dtype, other
-):
-    values = list(range(98)) + [np.nan, np.nan]
-    group = {
-        'arrow': lambda: series(values, pa.float64()),
-        'numpy': lambda: pd.Series([*range(98), 98, 98], dtype='float64'),
-        'masked': lambda: pd.Series([*range(98), 98, 98], dtype='Float64'),
-    }[other]()
-    frame = pd.DataFrame({'user_id': series(values, dtype), 'group': group})
-    _, notices = paired(
-        monkeypatch,
-        {'users': frame},
-        primary_keys={'users': ('user_id', 'group')},
-    )
-    assert 'e.g. nan.' in notices[0]
 
 
 @pytest.mark.parametrize('wide', [False, True])
