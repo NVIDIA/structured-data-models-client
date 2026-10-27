@@ -70,7 +70,7 @@ pub(crate) fn layout(
     }
     let value = json::read_answer(&bytes(&mut attached, data.response)?)
         .map_err(|_| invalid("direct decoded response is unreadable"))?;
-    let response = PredictionResponse::read(&value)
+    let response = PredictionResponse::read_direct(&value)
         .map_err(|_| invalid("direct decoded response has another shape"))?;
     let decoded: Vec<DecodedDirectRow> = take_json(&mut attached, data.rows)?;
     let (scope, actual) = rows::decode(&payload, &response, crate::pql::float_text)?;

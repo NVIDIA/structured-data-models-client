@@ -503,15 +503,92 @@ pub(crate) async fn call_response(
         (Reply::Fetch(_), _) => return Err(internal("a model call was answered as a fetch")),
         (Reply::Failed(error), _) => return Err(error),
     };
-    let response = PredictionResponse::read(&answer).map_err(|error| {
-        if direct && error.field == "prediction.row_index" && error.reason == "missing" {
-            CoreError::new(
-                Sentence::TabularRowMissing,
-                "a tabular response lacks row attribution",
-            )
+    let decoded = if direct {
+        PredictionResponse::read_direct(&answer)
+    } else {
+        PredictionResponse::read(&answer)
+    };
+    let response = decoded.map_err(|error| {
+        if direct {
+            direct_contract_error(&answer, error)
         } else {
             refused(error)
         }
     })?;
     Ok((answer, response))
+}
+
+/// Display an already selected decoder fault without a second validator.
+/// The shared decoder supplies its actual item ordinal; the existing common
+/// value formatter supplies Python-compatible quoted JSON values.
+fn direct_contract_error(answer: &Value, error: sdm_wire::response::Refused) -> CoreError {
+    use sdm_pql::float_repr::Shown;
+    fn shown(value: &Value) -> Shown {
+        match value {
+            Value::Null => Shown::None,
+            Value::Bool(value) => Shown::Bool(*value),
+            Value::Text(value) => Shown::Text(value.clone()),
+            Value::Number(token) if json::is_integer_token(token) => {
+                Shown::Int(sdm_wire::response::integer_text(token).unwrap_or_else(|| token.clone()))
+            }
+            Value::Number(token) => Shown::Float(token.parse().unwrap_or(f64::NAN)),
+            Value::Array(values) => Shown::List(values.iter().map(shown).collect()),
+            Value::Object(values) => Shown::Dict(
+                values
+                    .iter()
+                    .map(|(key, value)| (Shown::Text(key.clone()), shown(value)))
+                    .collect(),
+            ),
+        }
+    }
+    let item = error
+        .item
+        .and_then(|ordinal| match answer.get("predictions") {
+            Some(Value::Array(items)) => items.get(ordinal),
+            _ => None,
+        });
+    let value = item.and_then(|item| {
+        error
+            .field
+            .strip_prefix("prediction.")
+            .and_then(|field| item.get(field))
+    });
+    let diagnostic = match (error.field, error.reason) {
+        ("prediction.row_index", "missing") => {
+            "PredictionItem response is missing required field 'row_index'".to_owned()
+        }
+        ("prediction.row_index", "null") => {
+            "PredictionItem response has a null 'row_index', which the contract requires".to_owned()
+        }
+        ("prediction.row_index", "not_whole") => {
+            let Some(value) = value else {
+                return refused(error);
+            };
+            let reason = if matches!(value, Value::Number(_)) {
+                "which is not a whole number"
+            } else {
+                "where the contract requires a whole number"
+            };
+            format!(
+                "PredictionItem response has 'row_index' = {}, {reason}",
+                shown(value).repr()
+            )
+        }
+        ("prediction.probabilities", "not_an_object") => {
+            let Some(value) = value else {
+                return refused(error);
+            };
+            format!(
+                "response carries {} where the contract requires an object",
+                shown(value).repr()
+            )
+        }
+        _ => return refused(error),
+    };
+    CoreError::new(
+        Sentence::DirectResponseContract,
+        "the direct model response violates its generated contract",
+    )
+    .with_field("model", Detail::text(sdm_request::predict::TABULAR))
+    .with_field("diagnostic", Detail::text(diagnostic))
 }

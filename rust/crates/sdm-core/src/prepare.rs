@@ -234,6 +234,7 @@ pub(crate) async fn run(
     mut attached: Attachments,
 ) -> Result<OperationResult, CoreError> {
     let value = match input {
+        Preparation::EncodeBody { input } => return encode_body(&asker, input, attached),
         Preparation::CheckResponseRows {
             scope,
             rows,
@@ -798,6 +799,54 @@ async fn envelope(
 }
 
 /// Consume source-position body observations with the earlier resolved columns.
+fn encode_body(
+    asker: &Asker,
+    input: DirectBody,
+    mut attached: Attachments,
+) -> Result<OperationResult, CoreError> {
+    version(input.envelope.version, TABULAR_ENVELOPE_VERSION)?;
+    let bound = checked_bound(&input.envelope.bound)?;
+    if bound.model != policy::TABULAR {
+        return Err(invalid("encoded direct body belongs to another model"));
+    }
+    let outputs = bound.outputs.to_vec();
+    let context = take_rows(&mut attached, input.context)?;
+    let predict = take_rows(&mut attached, input.predict)?;
+    coherent(&input.context_header, &context)?;
+    coherent(&input.predict_header, &predict)?;
+    let context = renamed(&input.context_header, &context)?;
+    let predict = renamed(&input.predict_header, &predict)?;
+    let payload = sdm_request::tabular::body(
+        &input.envelope.columns,
+        &context.batches,
+        &predict.batches,
+        &input.primary_key,
+        &input.task,
+        &outputs,
+        crate::pql::float_text,
+    )?;
+    let body = EncodedDirectBody {
+        version: ENCODED_DIRECT_BODY_VERSION,
+        bound: input.envelope.bound,
+        columns: input.envelope.columns,
+        kind: input.task,
+        primary_key: input.primary_key,
+        context_shape: EncodedTableShape {
+            columns: names(&input.context_header)?,
+            rows: input.context_header.rows,
+        },
+        predict_shape: EncodedTableShape {
+            columns: names(&input.predict_header)?,
+            rows: input.predict_header.rows,
+        },
+        payload: asker.attach(Attachment::Bytes(payload.to_bytes()))?,
+    };
+    let value = asker.attach(Attachment::Bytes(
+        serde_json::to_vec(&body).map_err(|_| invalid("encoded direct body cannot serialize"))?,
+    ))?;
+    Ok(OperationResult::PrepareRequest(PreparedRequest { value }))
+}
+
 pub(crate) async fn predict(
     asker: Asker,
     input: DirectPredict,
@@ -806,9 +855,9 @@ pub(crate) async fn predict(
 ) -> Result<OperationResult, CoreError> {
     let call = match &input {
         DirectPredict::Empty { bound, .. } => bound,
-        DirectPredict::Body { envelope, .. } => {
-            version(envelope.version, TABULAR_ENVELOPE_VERSION)?;
-            &envelope.bound
+        DirectPredict::Encoded { body, .. } => {
+            version(body.version, ENCODED_DIRECT_BODY_VERSION)?;
+            &body.bound
         }
     };
     let bound = checked_bound(call)?;
@@ -830,7 +879,7 @@ pub(crate) async fn predict(
     let named = bound.named;
     let model = bound.model.to_owned();
     let kind = bound.kind.to_owned();
-    let (envelope, context, scoring, task, primary_key, inference) = match input {
+    let payload = match input {
         DirectPredict::Empty {
             schema,
             entity_table,
@@ -865,43 +914,16 @@ pub(crate) async fn predict(
                 Some(names_rows),
             );
         }
-        DirectPredict::Body {
-            envelope,
-            context,
-            predict,
-            context_header,
-            predict_header,
-            task,
-            primary_key,
-            inference,
-        } => {
-            let context = take_rows(&mut attached, context)?;
-            let scoring = take_rows(&mut attached, predict)?;
-            coherent(&context_header, &context)?;
-            coherent(&predict_header, &scoring)?;
-            (
-                envelope,
-                renamed(&context_header, &context)?,
-                renamed(&predict_header, &scoring)?,
-                task,
-                primary_key,
-                inference,
-            )
+        DirectPredict::Encoded { body, inference } => {
+            let Some(Attachment::Bytes(bytes)) = attached.remove(&body.payload) else {
+                return Err(invalid("encoded direct body bytes are missing"));
+            };
+            let payload = sdm_wire::json::read(&bytes)
+                .map_err(|_| invalid("encoded direct body is unreadable"))?;
+            sdm_request::tabular::check_body(&payload, &body, &outputs)?;
+            sdm_request::tabular::complete_body(payload, &request.request_id, inference)?
         }
     };
-    // Text advice has already been presented. Current contents of those same
-    // captured frames and the later task/inference reads are intentionally fresh.
-    let payload = sdm_request::tabular::body(
-        &envelope.columns,
-        &context.batches,
-        &scoring.batches,
-        &primary_key,
-        &task,
-        &outputs,
-        &request.request_id,
-        inference,
-        crate::pql::float_text,
-    )?;
     let bytes = policy::call_bytes(&payload)?;
     let (response_value, response) =
         crate::predict::call_response(&asker, bytes, request.model_endpoint.as_ref(), true).await?;

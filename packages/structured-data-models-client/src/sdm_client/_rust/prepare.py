@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import ast
+import decimal
 import json
 import math
 import struct
@@ -649,7 +650,6 @@ def predict(
         task = request.task.kind
         context_header, predict_header = _header(context), _header(scored)
         value = {
-            'stage': 'body',
             'envelope': envelope,
             'context': 2,
             'predict': 3,
@@ -657,17 +657,35 @@ def predict(
             'predict_header': predict_header,
             'task': task,
             'primary_key': primary_key,
-            'inference': _json(request.inference),
         }
         attached = {
             2: _buffers(context, context_header),
             3: _buffers(scored, predict_header),
         }
+    if not empty:
+        encoded = _prepared_run(
+            {'stage': 'encode_body', 'input': value}, attached
+        )
+        body_result = results.expect(encoded.result, results.Prepared)
+        body = json.loads(encoded.take(body_result.value))
+        attached = {2: encoded.take(body['payload'])}
+        body['payload'] = 2
+        # Both encoders have finished before native ID/inference observations.
+        request_id = _request_id()
+        value = {
+            'stage': 'encoded',
+            'body': body,
+            'inference': _json(request.inference)
+            if request.inference
+            else {'entries': []},
+        }
+    else:
+        request_id = _request_id()
     operation = {
         'op': 'predict',
         'direct': 1,
         'model': call['model'],
-        'request_id': _request_id(),
+        'request_id': request_id,
         'outputs': call['outputs'],
         'default_outputs': not call['named'],
     }
@@ -680,7 +698,12 @@ def predict(
         model=lambda body: prediction._send(client, call['model'], body),
     )
     if not empty:
-        finished = _response(finished)
+        with errors.holding(
+            direct_row_index=lambda fields: str(
+                int(decimal.Decimal(fields['index']))
+            )
+        ):
+            finished = _response(finished)
     answered = results.expect(finished.result, results.Predicted)
     table = prediction._table(finished.take(answered.result))
     result = prediction._result(
