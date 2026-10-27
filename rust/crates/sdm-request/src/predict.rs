@@ -1242,6 +1242,23 @@ fn as_bool(value: &Value) -> Option<bool> {
     }
 }
 
+/// Direct Boolean classes use the native strip set, including U+001C..U+001F.
+/// Only the six ASCII spellings can match, so ASCII-insensitive comparison
+/// preserves native lowercasing without a Unicode casing profile.
+fn direct_bool_class(value: &Value) -> Option<bool> {
+    let Value::Text(text) = value else {
+        return as_bool(value);
+    };
+    let text = text.trim_matches(sdm_engine::words::space);
+    if TRUE.iter().any(|token| text.eq_ignore_ascii_case(token)) {
+        Some(true)
+    } else if FALSE.iter().any(|token| text.eq_ignore_ascii_case(token)) {
+        Some(false)
+    } else {
+        None
+    }
+}
+
 /// A class read back as the target's integer (`as_declared`'s `int`): text
 /// of an integer (trimmed), an integer, or a float that is whole.
 fn as_int(value: &Value) -> Option<i64> {
@@ -1342,7 +1359,13 @@ fn answer_of(
         _ if non_finite(value).is_some() => {
             Ok(Answer::NonFinite(non_finite(value).unwrap_or(f64::NAN)))
         }
-        AnswerType::Bool => Ok(as_bool(value).map_or_else(|| written(value), Answer::Bool)),
+        AnswerType::Bool => {
+            let read = match policy {
+                AnswerPolicy::Gathered => as_bool(value),
+                AnswerPolicy::Direct { .. } => direct_bool_class(value),
+            };
+            Ok(read.map_or_else(|| written(value), Answer::Bool))
+        }
         AnswerType::Int => Ok(match policy.decimal_limit() {
             Some(limit) => direct_integer_class(value, limit).map_or_else(
                 || written(value),
@@ -1403,13 +1426,20 @@ fn spelled_with_limit(
         .map(|(class, p)| {
             let as_written = Value::Text(class.clone());
             let key = match answers {
-                AnswerType::Bool => as_bool(&as_written).map(|b| {
-                    if b {
-                        "True".to_owned()
+                AnswerType::Bool => {
+                    let read = if decimal_limit.is_some() {
+                        direct_bool_class(&as_written)
                     } else {
-                        "False".to_owned()
-                    }
-                }),
+                        as_bool(&as_written)
+                    };
+                    read.map(|b| {
+                        if b {
+                            "True".to_owned()
+                        } else {
+                            "False".to_owned()
+                        }
+                    })
+                }
                 AnswerType::Int => match decimal_limit {
                     Some(limit) => direct_integer_class(&as_written, limit),
                     None => as_int(&as_written).map(|n| n.to_string()),
