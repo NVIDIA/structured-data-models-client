@@ -93,7 +93,8 @@ pub struct FrameNativeTable {
 pub struct PreparedFrameGraph {
     pub version: u32,
     pub source: String,
-    pub checkpoint: FrameCheckpoint,
+    /// Core-created typed graph ownership, independent of a staged workflow.
+    pub owner: AttachmentId,
     pub native_tables: Vec<FrameNativeTable>,
 }
 
@@ -274,6 +275,8 @@ pub struct NativeTextFacts {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct EncodedFramePart {
+    pub identity: String,
+    pub context_identity: String,
     pub range: FrameBatchRange,
     pub payload: AttachmentId,
     pub answering: u64,
@@ -300,6 +303,8 @@ pub enum FramePreparation {
         schema: AttachmentId,
         frames: AttachmentId,
         checkpoint: Option<FrameCheckpoint>,
+        /// A live typed owner avoids replaying raw checkpoint source data.
+        retained: Option<AttachmentId>,
         native_tables: Vec<FrameNativeTable>,
         /// Existing early client call-value observations, before graph notices.
         values: Option<AttachmentId>,

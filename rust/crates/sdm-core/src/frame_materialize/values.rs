@@ -16,10 +16,10 @@ use sdm_contract::frames::materialize::{
     FRAME_MATERIALIZATION_VERSION, FrameNativeTable, PreparedFrameGraph, SampledFrameContext,
     SampledFrameLink, SampledFrameTable,
 };
-use sdm_contract::frames::{FrameCheckpointManifest, FrameInput};
 use sdm_engine::strings::StringColumn;
 
 use super::identity::Identity;
+use super::retained::{GraphLease, RetainedFrameGraph};
 use super::*;
 
 pub(crate) fn take_arrow(
@@ -113,10 +113,12 @@ fn positional(values: &[usize]) -> Result<ArrayRef, CoreError> {
 /// A useful graph has the actual domain graph and the actual detached owner.
 /// The native facts are source meanings, independent of all attachment ids.
 pub(crate) struct BoundGraph {
-    pub prepared: PreparedGraph,
+    pub prepared: Arc<PreparedGraph>,
     pub frames: Context,
-    pub native: Vec<FrameNativeTable>,
+    pub native: Arc<Vec<FrameNativeTable>>,
     pub source: String,
+    owner: RetainedFrameGraph,
+    _lease: GraphLease,
 }
 
 fn native_identity(source: &str, native: &[FrameNativeTable]) -> Result<String, CoreError> {
@@ -198,85 +200,68 @@ impl BoundGraph {
             frame.prepare_graph(asker, description)?
         };
         let source = native_identity(&prepared.source, &native)?;
+        Self::from_owner(RetainedFrameGraph::new(prepared, frames, native, source))
+    }
+
+    fn from_owner(owner: RetainedFrameGraph) -> Result<Self, CoreError> {
+        let lease = owner.try_lease()?;
         Ok(Self {
-            prepared,
-            frames,
-            native,
-            source,
+            prepared: owner.prepared(),
+            frames: owner.frames(),
+            native: owner.native(),
+            source: owner.source().to_owned(),
+            owner,
+            _lease: lease,
         })
     }
 
-    /// Reconstruct only declared owners. No arbitrary integer can become an
-    /// attachment id, and the checkpoint is verified before it is published.
+    pub fn take_retained(
+        attachments: &mut Attachments,
+        id: AttachmentId,
+    ) -> Result<Self, CoreError> {
+        let Some(Attachment::FrameGraph(owner)) = attachments.remove(&id) else {
+            return Err(invalid(
+                "prepared graph does not name a core-created retained graph owner",
+            ));
+        };
+        Self::from_owner(owner)
+    }
+
+    /// Borrow the declared core-created owner in O(schema), without reading
+    /// raw source rows, detaching foreign Arrow or reconstructing indexes.
     pub fn bind(
         asker: &Asker,
         value: PreparedFrameGraph,
         attachments: &mut Attachments,
     ) -> Result<Self, CoreError> {
-        if value.version != FRAME_MATERIALIZATION_VERSION
-            || value.checkpoint.version != FRAME_CHECKPOINT_VERSION
-        {
+        if value.version != FRAME_MATERIALIZATION_VERSION {
             return Err(
                 invalid("unknown prepared frame graph version").dropping(HeldState::SamplerState)
             );
         }
-        let manifest: FrameCheckpointManifest = take_json(attachments, value.checkpoint.manifest)?;
-        let metadata: FrameCheckpointMetadata = take_json(attachments, manifest.metadata)?;
-        let tables = bound_tables(manifest.tables, attachments)?;
-        let actual = fingerprint(&metadata.description, &tables)?;
-        if actual != metadata.source {
-            return Err(invalid(
-                "prepared frame checkpoint no longer matches its immutable source",
-            )
-            .dropping(HeldState::SamplerState));
-        }
-        if native_identity(&actual, &value.native_tables)? != value.source {
+        let bound = Self::take_retained(attachments, value.owner)?;
+        if bound.source != value.source || bound.native.as_ref() != &value.native_tables {
             return Err(
                 invalid("prepared frame graph no longer matches its native source facts")
                     .dropping(HeldState::SamplerState),
             );
         }
-        let neighbors = Mt19937::from_checkpoint(&metadata.neighbors)
-            .ok_or_else(|| invalid("invalid prepared frame neighbor state"))?;
-        let description = metadata.description.clone();
-        let frames = Arc::new(Mutex::new(FrameRun {
-            tables,
-            metadata: Some(metadata),
-            snapshot: None,
-            neighbors,
-            entropy: None,
-        }));
-        let bound = Self::prepare(asker, frames, description, value.native_tables)?;
+        lock(&bound.frames).carry(asker, None);
+        // Shared composition supplies this typed ownership handoff. It must
+        // replace any raw checkpoint and retain the same live neighbor state.
+        asker.keep_retained_frame(bound.owner.clone());
         Ok(bound)
     }
 
     pub fn publish(&self, asker: &Asker) -> Result<PreparedFrameGraph, CoreError> {
         let mut frames = lock(&self.frames);
         frames.keep(asker);
-        let metadata = frames
-            .metadata
-            .as_ref()
-            .ok_or_else(|| internal("prepared graph lacks checkpoint metadata"))?;
-        let metadata = attach_json(asker, metadata)?;
-        let tables = frames
-            .tables
-            .iter()
-            .map(|(source, data)| {
-                Ok(FrameInput {
-                    source: source.clone(),
-                    rows: asker.attach(Attachment::Arrow(data.clone()))?,
-                })
-            })
-            .collect::<Result<Vec<_>, CoreError>>()?;
-        let manifest = attach_json(asker, &FrameCheckpointManifest { metadata, tables })?;
+        asker.keep_retained_frame(self.owner.clone());
         Ok(PreparedFrameGraph {
             version: FRAME_MATERIALIZATION_VERSION,
             source: self.source.clone(),
-            checkpoint: FrameCheckpoint {
-                version: FRAME_CHECKPOINT_VERSION,
-                manifest,
-            },
-            native_tables: self.native.clone(),
+            owner: asker.attach(Attachment::FrameGraph(self.owner.clone()))?,
+            native_tables: self.native.as_ref().clone(),
         })
     }
 
@@ -312,6 +297,13 @@ impl BoundGraph {
             .as_ref()
             .ok_or_else(|| internal("bound graph lacks its immutable snapshot"))?
             .selected_rows(table, rows, columns)
+    }
+
+    pub fn dropped_summary(&self) -> Option<String> {
+        lock(&self.frames)
+            .snapshot
+            .as_ref()
+            .and_then(Snapshot::dropped_summary)
     }
 
     pub fn selected_link_pairs(
