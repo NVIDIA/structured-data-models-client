@@ -353,6 +353,21 @@ def check(
     ).problems
 
 
+def test_duckdb_fixture_declares_its_scope_without_changing_production_default(
+    repo: Path, tmp_path: Path
+) -> None:
+    checkpoint = checkpoint_of(repo)
+    commit(repo)
+    files = (observe(repo, tmp_path, 'python-core'),)
+    assert check(repo, checkpoint, files) == []
+    aggregate = ratchet.check(repo, checkpoint, list(files)).problems
+    for database in ('sqlite', 'postgres'):
+        assert any(
+            f'@{database}:' in problem and 'not observed' in problem
+            for problem in aggregate
+        ), aggregate
+
+
 def rules(problems: list[str]) -> set[str]:
     return {problem.split(':', 1)[0] for problem in problems}
 
