@@ -329,7 +329,7 @@ pub enum FrameScalar {
     /// It is neither an object handle nor a claim that the value is absent.
     Native,
     Text {
-        value: crate::scalar::UnicodeText,
+        value: crate::scalar::unicode::UnicodeText,
     },
     Value {
         value: Scalar,
