@@ -61,6 +61,15 @@ def _frame_example(
                 np.zeros(1, dtype=bool),
             )
             pieces.append(pd.Series(native))
+        elif type(dtype) is pd.ArrowDtype:
+            import pyarrow as pa
+
+            # Preserve the selected scalar's native validity. The pandas
+            # list constructor would convert a present Arrow NaN to null.
+            native = pd.arrays.ArrowExtensionArray(
+                pa.array([value], type=dtype.pyarrow_dtype, from_pandas=False)
+            )
+            pieces.append(pd.Series(native))
         else:
             pieces.append(pd.Series([value], dtype=dtype))
     selected = pd.concat(pieces, axis=1)
@@ -91,6 +100,13 @@ def _frame_timestamp(
     # timezone implementation and unit. No original frame values are read.
     value = fields['value']
     dtype = native_types[fields['table']][fields['column']]
+    if type(dtype) is pd.ArrowDtype:
+        import pyarrow as pa
+
+        native = pd.arrays.ArrowExtensionArray(
+            pa.array([value.value], type=dtype.pyarrow_dtype)
+        )
+        return str(native[0])
     if type(dtype) is pd.DatetimeTZDtype:
         stamp = pd.Timestamp(value.value, unit=value.unit, tz='UTC').tz_convert(
             dtype.tz
@@ -241,15 +257,45 @@ def _convert(name: str, frame: pd.DataFrame) -> tuple[Any, dict[str, Any]]:
             'python',
             'pyarrow',
         )
-        if not (primitive or masked or temporal or text):
+        arrow = False
+        if (
+            type(dtype) is pd.ArrowDtype
+            and type(series.array) is pd.arrays.ArrowExtensionArray
+        ):
+            physical = dtype.pyarrow_dtype
+            arrow = (
+                (
+                    pa.types.is_integer(physical)
+                    and physical.bit_width in (8, 16, 32, 64)
+                )
+                or (
+                    pa.types.is_floating(physical)
+                    and physical.bit_width in (32, 64)
+                )
+                or pa.types.is_boolean(physical)
+                or pa.types.is_string(physical)
+                or pa.types.is_large_string(physical)
+                or (
+                    pa.types.is_timestamp(physical)
+                    and physical.unit in ('s', 'ms', 'us', 'ns')
+                )
+            )
+        if not (primitive or masked or temporal or text or arrow):
             raise RouteError(
-                f'the partial frame constructor supports only NumPy or pandas masked numeric and Boolean columns, native datetimes, or built-in pandas strings: {name}.{column}'
+                f'the partial frame constructor supports only NumPy or pandas masked numeric and Boolean columns, native datetimes, built-in pandas strings, or built-in Arrow columns of those physical families: {name}.{column}'
             )
         # Convert values only. DataFrame export may add a non-Range index
         # column, which the public schema constructor never describes.
         # Native conversion supplies validity: NumPy NaNs become null;
         # a masked float's unmasked NaN remains a present Arrow value.
-        arrays.append(pa.array(series, from_pandas=True))
+        # An exact built-in Arrow array already carries native validity,
+        # chunks, units and zones, including valid NaNs. Do not reconstruct
+        # it from Python values or apply pandas missing-value inference.
+        arrays.append(
+            series.array.__arrow_array__()
+            if arrow
+            else pa.array(series, from_pandas=True)
+        )
         native_types[column] = dtype
     return pa.Table.from_arrays(arrays, names=list(frame.columns)), native_types
 
