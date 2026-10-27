@@ -7,13 +7,14 @@
 use super::retained::RetainedFrameGraph;
 use super::*;
 use arrow_array::Int64Array;
-use sdm_contract::ops::{DescribedColumn, DescribedTable};
+use sdm_contract::frames::materialize::{FrameNativeColumn, FrameNativeOrigin, FrameNativeTable};
+use sdm_contract::ops::{ColumnRef, DescribedColumn, DescribedTable};
 
 fn owner() -> RetainedFrameGraph {
     let description = SourceDescription {
         tables: vec![DescribedTable {
             name: "users".into(),
-            source: "users".into(),
+            source: "input_users".into(),
             columns: vec![DescribedColumn {
                 name: "id".into(),
                 received: sdm_contract::ColumnType::Int64,
@@ -38,7 +39,7 @@ fn owner() -> RetainedFrameGraph {
         RecordBatch::try_from_iter([("id", Arc::new(Int64Array::from(vec![1, 2, 3])) as ArrayRef)])
             .unwrap();
     let tables = vec![(
-        Relation::from("users"),
+        Relation::from("input_users"),
         ArrowData::new(rows.schema(), vec![rows.clone()]),
     )];
     let source = fingerprint(&description, &tables).unwrap();
@@ -62,9 +63,45 @@ fn owner() -> RetainedFrameGraph {
             graph,
         },
         frames,
-        vec![],
+        vec![FrameNativeTable {
+            source: "input_users".into(),
+            columns: vec![FrameNativeColumn {
+                name: "id".into(),
+                origin: FrameNativeOrigin::BuiltinPrimitive,
+                strings: None,
+            }],
+        }],
         source,
     )
+}
+
+#[test]
+fn native_source_binding_is_core_resolved_independently_of_logical_aliases() {
+    let owner = owner();
+    let binding = owner
+        .native_binding(&ColumnRef {
+            table: "users".into(),
+            column: "id".into(),
+        })
+        .unwrap();
+    assert_eq!(binding.source, Relation::from("input_users"));
+    assert_eq!(binding.column, "id");
+    assert!(
+        owner
+            .native_binding(&ColumnRef {
+                table: "input_users".into(),
+                column: "id".into()
+            })
+            .is_err()
+    );
+    assert!(
+        owner
+            .native_binding(&ColumnRef {
+                table: "users".into(),
+                column: "missing".into()
+            })
+            .is_err()
+    );
 }
 
 #[test]

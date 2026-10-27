@@ -145,8 +145,30 @@ pub struct FrameTaskMeaning {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum FramePredictionType {
-    CoreKey { physical: ColumnType },
-    NativeString { column: ColumnRef },
+    CoreKey {
+        physical: ColumnType,
+    },
+    NativeString {
+        column: ColumnRef,
+        native: FrameNativeColumnRef,
+    },
+}
+
+/// Exact immutable source-column ownership, resolved by the core graph.
+/// Logical schema aliases are never interpreted by the native converter.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FrameNativeColumnRef {
+    pub source: Relation,
+    pub column: String,
+}
+
+/// One core-selected logical Text feature and its actual native owner.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FrameTextColumn {
+    pub column: ColumnRef,
+    pub native: FrameNativeColumnRef,
 }
 
 /// Actual entity/anchor/target Arrow rows before native entity construction.
@@ -215,6 +237,7 @@ pub struct ResolvedFrameReferences {
 #[serde(deny_unknown_fields)]
 pub struct SampledFrameTable {
     pub name: String,
+    pub source: Relation,
     pub primary_key: Option<String>,
     pub rows: AttachmentId,
     /// UInt64 original source positions for immutable native dtype conversion.
@@ -248,7 +271,7 @@ pub struct SampledFrameContext {
     /// Their missing-value input meaning is the empty string, before the
     /// genuine builtin astype(str) conversion. Host code chooses neither it
     /// nor the later character/word/casing policy.
-    pub text: Vec<ColumnRef>,
+    pub text: Vec<FrameTextColumn>,
 }
 
 /// The effective native result dtype at the reached astype(str) position.

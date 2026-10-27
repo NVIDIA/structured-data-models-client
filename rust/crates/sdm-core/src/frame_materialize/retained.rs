@@ -9,7 +9,8 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use sdm_contract::frames::materialize::FrameNativeTable;
+use sdm_contract::frames::materialize::{FrameNativeColumnRef, FrameNativeTable};
+use sdm_contract::ops::ColumnRef;
 use sdm_contract::{CoreError, Sentence};
 
 use super::{Context, PreparedGraph};
@@ -26,6 +27,8 @@ struct Owner {
 /// A binding's exact frozen owner class can hold this value directly.
 /// Cloning shares immutable indexes and the existing FrameRun, without
 /// exporting source rows through foreign Arrow or rebuilding a graph.
+/// Mutable ownership is per cached materializer/model, never interned by
+/// source identity or shared merely because another query has the same Schema.
 #[derive(Clone)]
 pub struct RetainedFrameGraph {
     owner: Arc<Owner>,
@@ -76,8 +79,44 @@ impl RetainedFrameGraph {
         Arc::clone(&self.owner.native)
     }
 
-    /// Like HostRun's existing enter boundary, overlapping calls fail busy
-    /// instead of blocking while another operation uses the same state.
+    pub(crate) fn native_binding(
+        &self,
+        column: &ColumnRef,
+    ) -> Result<FrameNativeColumnRef, CoreError> {
+        let absent = || {
+            CoreError::protocol(
+                Sentence::InvalidMessage,
+                "native source binding names an absent immutable graph column",
+            )
+        };
+        let table = self
+            .owner
+            .prepared
+            .graph
+            .table(&column.table)
+            .filter(|table| table.column(&column.column).is_some())
+            .ok_or_else(absent)?;
+        let native = self
+            .owner
+            .native
+            .iter()
+            .find(|native| native.source == table.source)
+            .and_then(|native| {
+                native
+                    .columns
+                    .iter()
+                    .find(|native| native.name == column.column)
+            })
+            .ok_or_else(absent)?;
+        Ok(FrameNativeColumnRef {
+            source: table.source.clone(),
+            column: native.name.clone(),
+        })
+    }
+
+    /// Unlinked prototype only: public frozen concurrency evidence must
+    /// settle this resource gate before it can become SDK behavior.
+    /// Existing per-Run busy handling is independent of this graph lease.
     /// The lease covers only the current core call and carries no stage.
     pub(crate) fn try_lease(&self) -> Result<GraphLease, CoreError> {
         if self.owner.frames.is_poisoned() {

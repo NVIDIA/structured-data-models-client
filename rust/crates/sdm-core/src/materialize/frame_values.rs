@@ -323,6 +323,7 @@ fn prediction_type(
     if origin.strings.is_some() {
         Ok(FramePredictionType::NativeString {
             column: entity.clone(),
+            native: graph.native_binding(entity)?,
         })
     } else {
         Ok(FramePredictionType::CoreKey {
@@ -1456,14 +1457,19 @@ fn bind_context(
         } else {
             None
         };
-        if table.stypes != stypes || table.primary_key != primary {
+        if table.source != domain.source || table.stypes != stypes || table.primary_key != primary {
             return Err(protocol(
                 "sampled frame columns no longer match their graph and exclusions",
             ));
         }
         let rows = take_arrow(attachments, table.rows)?;
         let source_rows = take_arrow(attachments, table.source_rows)?;
-        identity.value(&(&table.name, &table.primary_key, &table.stypes))?;
+        identity.value(&(
+            &table.name,
+            &table.source,
+            &table.primary_key,
+            &table.stypes,
+        ))?;
         identity.arrow(&rows)?;
         identity.arrow(&source_rows)?;
         let rows = one_batch(&rows)?;
@@ -1514,9 +1520,13 @@ fn bind_context(
             .collect::<Result<Vec<_>, CoreError>>()?;
         for (column, stype) in &stypes {
             if *stype == Stype::Text {
-                text.push(ColumnRef {
+                let logical = ColumnRef {
                     table: table.name.clone(),
                     column: column.clone(),
+                };
+                text.push(FrameTextColumn {
+                    native: graph.native_binding(&logical)?,
+                    column: logical,
                 });
             }
         }
@@ -1667,7 +1677,12 @@ fn normalize_text(
         } => (completed, Some((column, failure, message))),
     };
     check_text_order(
-        &context.value.text,
+        &context
+            .value
+            .text
+            .iter()
+            .map(|column| column.column.clone())
+            .collect::<Vec<_>>(),
         &columns
             .iter()
             .map(|column| column.column.clone())

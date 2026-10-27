@@ -22,6 +22,10 @@ Typed list labels preserve the existing Int, Float, Bool, Text and Decimal link-
 `sdm-core/src/frame_materialize/values.rs` explicitly reads and publishes the named Arrow and metadata attachments.
 It binds native dtype-origin facts to the unchanged existing graph value fingerprint.
 It publishes actual sampled raw columns, original source positions, example ownership, links and anchors rather than model JSON row trees.
+Prediction construction and each selected Text feature now include a core-resolved FrameNativeColumnRef containing the exact original source Relation and column.
+Sampled tables carry their actual source as well as their logical table name, and rebinding validates that source against the immutable graph.
+Those source bindings participate in task/context identities.
+The native facade must use the explicit source binding to find its retained dtype/value owner and must neither infer aliases nor reread a caller Schema after checkpoint reuse.
 `sdm-core/src/frame_materialize/identity.rs` binds source/task/plan/reference/context meanings to actual ordered values without input ids, output ids, buffer addresses or Arrow chunk boundaries.
 The identity algorithm extends the existing RowConverter-based fingerprint and is a coherence check rather than authentication.
 
@@ -38,8 +42,13 @@ The retained-owner repair replaces those repeated raw-table bindings with the ex
 `sdm-core/src/frame_materialize/retained.rs` owns the immutable graph/index allocations and the existing continuing neighbor stream directly.
 The owner has no Python object, registry lookup, task rows, program counter or suspended workflow.
 Its constructor is crate-private and is reached only after actual graph/native-source validation.
+Mutable FrameRun/neighbors belong to one actual cached RelationalMaterializer/model engine, rather than a Schema or a source fingerprint.
+Separate PredictiveQuery objects on the same Schema therefore require independent initial neighbor streams, even if immutable snapshot storage is shared.
+Source identity is a coherence check, never an instruction to intern or merge mutable owners.
 
-A fixed-call lease prevents overlapping operations on the same mutable neighbor owner using the existing RUN_BUSY code.
+A prototype fixed-call lease currently prevents overlapping operations on the same mutable neighbor owner using the existing RUN_BUSY code.
+It is unlinked and is not an approved public concurrency policy.
+The original C++ call retains the GIL while its batch settings explicitly support concurrent execution contexts, so the frozen public ownership witness must decide whether short pure-Rust graph access should block/serialize instead of introducing a new cross-HostRun busy refusal.
 It is released on ordinary return, error, cancellation or unwind and does not roll back reached neighbor progression.
 A FrameRun mutex poisoned during mutation causes existing RUN_POISONED rather than silent reuse of partially updated state.
 The lease carries no stage and is not retained while the host performs a native conversion between calls.
@@ -107,6 +116,9 @@ The existing key consumers still need their shared single UnicodeText logical me
 Retained lag columns, ranking/forecast decomposition, complete HostRun journey twins and the native retained-owner facade remain required before the complete Text package can be claimed.
 HostRun no-rebuild, release, cancellation and concurrent-owner twins require the final fixed operation/typed attachment wiring and have not been executed or claimed by the core owner unit sources.
 The final frame native error guard must preserve guarded versus unguarded warning contexts, actual native ancestry and the existing graph-drop summary.
+Direct NativeFailure alone lacks the frame guard's KeyError/StructuredDataError/relational-error and native-class facts.
+Native error text also needs its actual observation boundary: the original guard preserves StructuredDataError without reading its string, while TypeError signature detection consumes native text at its own point.
+An early unconditional `str(error)` or a copied Python error-policy table is not a valid native facade implementation.
 The existing unfinished-family guards and refusal census must be reconciled with actual admission at composition.
 
 Rebase, serialized shared ownership, canonical generation, two independent exact-source approvals and candidate checks follow the actual approved preceding landing.
