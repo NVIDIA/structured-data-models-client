@@ -108,7 +108,7 @@ fn fixture_builtin(value: &Value) -> Value {
             json!({"kind":"unicode","points":value.chars().map(u32::from).collect::<Vec<_>>()})
         }
         Value::Number(value) if value.is_i64() => {
-            json!({"kind":"integer","digits":format!("{:#x}",value.as_i64().unwrap()),"radix":"hexadecimal"})
+            json!({"kind":"integer","digits":if value.as_i64().unwrap() < 0 { format!("-0x{:x}", value.as_i64().unwrap().unsigned_abs()) } else { format!("{:#x}", value.as_i64().unwrap()) },"radix":"hexadecimal"})
         }
         Value::Number(value) if value.is_u64() => {
             json!({"kind":"integer","digits":format!("{:#x}",value.as_u64().unwrap()),"radix":"hexadecimal"})
@@ -2371,6 +2371,22 @@ fn actual_json_resource_outcome_precedes_fallback_and_is_bound_to_the_source_row
             sdm_contract::Sentence::InvalidMessage
         );
     }
+    assert!(
+        prepare(
+            json!({"stage":"interpret_response_json","checked":checked}),
+            Attachments::new()
+        )
+        .is_err()
+    );
+    assert_eq!(
+        prepare(
+            json!({"stage":"select_response_member","interpreted":interpreted,"literal":literal}),
+            Attachments::new()
+        )
+        .unwrap_err()
+        .sentence,
+        sdm_contract::Sentence::InvalidMessage
+    );
     let mut uncaught = observation.clone();
     uncaught["value"] = json!({"outcome":"failed","failure":{"ancestry":["memory_error"]}});
     let error = prepare(
