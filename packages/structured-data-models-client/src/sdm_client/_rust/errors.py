@@ -671,14 +671,10 @@ def error_from_core(
     ):
         present(fields)
     if sentence == 'direct_response_contract':
-        from decimal import Decimal
-
         from sdm_api.generated.tfm_api import ResponseContractError
 
         if 'offending' in fields:
-            value = json.loads(
-                fields['offending'], parse_int=lambda token: int(Decimal(token))
-            )
+            value = codec.restored_json(fields['offending'])
             try:
                 if fields.get('native') == 'dict':
                     # The core selected the failed conversion. Preserve its

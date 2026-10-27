@@ -812,7 +812,7 @@ def predict(
         table.to_pylist(),
         model=answered.model,
         request_id=answered.request_id,
-        metadata=json.loads(finished.take(answered.metadata)),
+        metadata=codec.restored_json(finished.take(answered.metadata)),
         outputs=answered.outputs,
         by_step=False,
     )
