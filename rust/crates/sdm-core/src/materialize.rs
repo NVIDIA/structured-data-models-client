@@ -99,7 +99,7 @@ use sdm_engine::random::{Entropy, default_rng};
 use sdm_engine::sample::{self, SEED_END, SEED_START};
 use sdm_engine::time::Instant;
 use sdm_engine::time::offset::{Offset, timeframe};
-use sdm_engine::time::text::{Reader, Unread};
+use sdm_engine::time::text::{ColumnPlan, Reader, Unread};
 use sdm_request::options::{self, AskedAnchor, AskedSeed, Kind as Task};
 use sdm_request::payload::{self, RESERVED, Sampled};
 
@@ -953,6 +953,16 @@ pub(crate) struct Times {
     /// Each windowed table's stored value, by the schema's name of the
     /// table: the text read, or none where its column held no text.
     stored: Mutex<BTreeMap<String, Option<String>>>,
+    /// Complete-column interpretation is local to this run. NativeFrame
+    /// already supplies typed data through its existing graph owner.
+    client_columns: Mutex<BTreeMap<(String, String), ClientTimeColumn>>,
+}
+
+#[derive(Clone, Copy)]
+struct ClientTimeColumn {
+    plan: Option<ColumnPlan>,
+    min: Option<i64>,
+    max: Option<i64>,
 }
 
 impl Times {
@@ -962,6 +972,7 @@ impl Times {
         Times {
             reader,
             text,
+            client_columns: Mutex::new(BTreeMap::new()),
             stored: Mutex::new(
                 memo.stored_times
                     .iter()
@@ -969,6 +980,70 @@ impl Times {
                     .collect(),
             ),
         }
+    }
+
+    /// A raw Host declaring ClientRules supplies the original column using
+    /// the existing complete Scan operation. Bounds summaries and selected
+    /// fetches cannot decide the original column's day order. This retains
+    /// only fixed reading facts/bounds and adds no provider or sampler.
+    async fn client_column(
+        &self,
+        asker: &Asker,
+        table: &Table,
+        name: &str,
+    ) -> Result<ClientTimeColumn, CoreError> {
+        let key = (table.name.clone(), name.to_owned());
+        if let Some(column) = self
+            .client_columns
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(&key)
+            .copied()
+        {
+            return Ok(column);
+        }
+        let original = ask(
+            asker,
+            DataRequest::Scan {
+                table: table.source.clone(),
+                columns: vec![name.to_owned()],
+                filters: vec![],
+                limit: None,
+            },
+        )
+        .await?;
+        let original = one_batch(&original)?;
+        let array = named(&original, name)?;
+        let (plan, values) = if matches!(array.data_type(), DataType::Utf8 | DataType::LargeUtf8) {
+            let values = match array.data_type() {
+                DataType::Utf8 => array.as_string::<i32>().iter().collect::<Vec<_>>(),
+                _ => array.as_string::<i64>().iter().collect::<Vec<_>>(),
+            };
+            let (plan, read) = self
+                .reader
+                .plan(&values, table.time_column.as_deref() == Some(name))
+                .map_err(text_unread)?;
+            let read = read
+                .into_iter()
+                .map(|at| {
+                    at.map(|at| at.to_count(ArrowUnit::Nanosecond, name))
+                        .transpose()
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            (Some(plan), read)
+        } else {
+            (None, self.bounds(array, name, true)?)
+        };
+        let column = ClientTimeColumn {
+            plan,
+            min: values.iter().flatten().copied().min(),
+            max: values.iter().flatten().copied().max(),
+        };
+        self.client_columns
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(key, column);
+        Ok(column)
     }
 
     /// Each table's stored value read so far, for the memo the run leaves.
@@ -1115,7 +1190,7 @@ impl Times {
                 let values: Vec<Option<&str>> = array.as_string::<i32>().iter().collect();
                 let read = match self.text {
                     Some(TextTimes::ValueByValue) => self.reader.each(&values),
-                    Some(TextTimes::ClientRules) => return Err(not_yet("text_time_rules")),
+                    Some(TextTimes::ClientRules) => self.reader.column(&values, true),
                     None => return Err(not_yet("text_times")),
                 }
                 .map_err(text_unread)?;
@@ -1135,7 +1210,7 @@ impl Times {
 
     /// `batch`, fetched from `table`, with each column whose meaning is a
     /// timestamp read so.
-    pub(crate) fn read(
+    pub(crate) async fn read(
         &self,
         asker: &Asker,
         table: &Table,
@@ -1149,11 +1224,12 @@ impl Times {
             let timestamp = table
                 .column(field.name())
                 .is_some_and(|c| c.stype == sdm_contract::ops::Stype::Timestamp);
-            match timestamp
-                .then(|| self.column(asker, table, field.name(), array))
-                .transpose()?
-                .flatten()
-            {
+            let converted = if timestamp {
+                self.column(asker, table, field.name(), array).await?
+            } else {
+                None
+            };
+            match converted {
                 Some(read) => {
                     read_any = true;
                     fields.push(arrow_schema::Field::new(
@@ -1178,13 +1254,20 @@ impl Times {
 
     /// Column `name` of `table` read to a zone-less timestamp, or `None`
     /// when it is one already or of a type no reading takes.
-    fn column(
+    async fn column(
         &self,
         asker: &Asker,
         table: &Table,
         name: &str,
         array: &ArrayRef,
     ) -> Result<Option<ArrayRef>, CoreError> {
+        let client = if self.text == Some(TextTimes::ClientRules)
+            && matches!(array.data_type(), DataType::Utf8 | DataType::LargeUtf8)
+        {
+            Some(self.client_column(asker, table, name).await?)
+        } else {
+            None
+        };
         macro_rules! unzoned {
             ($t:ty) => {
                 Arc::new(
@@ -1226,12 +1309,22 @@ impl Times {
                     .collect::<Result<Vec<_>, _>>()?;
                 Arc::new(TimestampNanosecondArray::from(nanos))
             }
-            DataType::Utf8 => {
-                let text = array.as_string::<i32>();
-                let values: Vec<Option<&str>> = text.iter().collect();
+            _ if array.data_type() == &DataType::Utf8
+                || (self.text == Some(TextTimes::ClientRules)
+                    && array.data_type() == &DataType::LargeUtf8) =>
+            {
+                let values: Vec<Option<&str>> = match array.data_type() {
+                    DataType::Utf8 => array.as_string::<i32>().iter().collect(),
+                    _ => array.as_string::<i64>().iter().collect(),
+                };
                 let read = match self.text {
                     Some(TextTimes::ValueByValue) => self.reader.each(&values),
-                    Some(TextTimes::ClientRules) => return Err(not_yet("text_time_rules")),
+                    Some(TextTimes::ClientRules) => client
+                        .and_then(|column| column.plan)
+                        .ok_or_else(|| {
+                            internal("ClientRules source has no complete text-column plan")
+                        })?
+                        .read(&values),
                     None => return Err(not_yet("text_times")),
                 }
                 .map_err(text_unread)?;
@@ -1692,6 +1785,14 @@ async fn read_bounds(
     times: &Times,
     tables: &[(&Table, String)],
 ) -> Result<Vec<(Option<i64>, Option<i64>)>, CoreError> {
+    if times.text == Some(TextTimes::ClientRules) {
+        let mut bounds = Vec::with_capacity(tables.len());
+        for (table, column) in tables {
+            let read = times.client_column(asker, table, column).await?;
+            bounds.push((read.min, read.max));
+        }
+        return Ok(bounds);
+    }
     let answer = ask(
         asker,
         DataRequest::TimeBounds {
@@ -3632,22 +3733,24 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         let looked_up = if let Some(frames) = &frames {
             crate::frame_materialize::lock(frames).lookup(entity, &all_keys, &entity_read)?
         } else {
-            read_times.read(
-                asker,
-                entity,
-                one_batch(
-                    &ask(
-                        asker,
-                        sample::by_pkey(
-                            entity,
-                            entity_read.clone(),
-                            key_set(asker, sample::seeds(Arc::clone(&all_keys), vec![])?)?,
-                            true,
-                        )?,
-                    )
-                    .await?,
-                )?,
-            )?
+            read_times
+                .read(
+                    asker,
+                    entity,
+                    one_batch(
+                        &ask(
+                            asker,
+                            sample::by_pkey(
+                                entity,
+                                entity_read.clone(),
+                                key_set(asker, sample::seeds(Arc::clone(&all_keys), vec![])?)?,
+                                true,
+                            )?,
+                        )
+                        .await?,
+                    )?,
+                )
+                .await?
         };
         let positions = batches(&looked_up, examples_total)?;
         // A key the source enforces unique is held by one row each: a
@@ -4641,29 +4744,31 @@ async fn fetch_rows(
         .clone()
         .ok_or_else(|| internal("the aggregated table has no time column"))?;
     let seeds = sample::seeds(keys, vec![(SEED_END, ends), (SEED_START, starts)])?;
-    let rows = times.read(
-        asker,
-        table,
-        one_batch(
-            &ask(
-                asker,
-                times
-                    .windowed(
-                        asker,
-                        table,
-                        sample::by_time(
+    let rows = times
+        .read(
+            asker,
+            table,
+            one_batch(
+                &ask(
+                    asker,
+                    times
+                        .windowed(
+                            asker,
                             table,
-                            &fetch.edge.fkey,
-                            table.ordered(&fetch.columns),
-                            key_set(asker, seeds)?,
-                            true,
-                        )?,
-                    )
-                    .await?,
-            )
-            .await?,
-        )?,
-    )?;
+                            sample::by_time(
+                                table,
+                                &fetch.edge.fkey,
+                                table.ordered(&fetch.columns),
+                                key_set(asker, seeds)?,
+                                true,
+                            )?,
+                        )
+                        .await?,
+                )
+                .await?,
+            )?,
+        )
+        .await?;
     Ok(Fetched {
         strings: BTreeMap::new(),
         batch: batches(&rows, examples)?,

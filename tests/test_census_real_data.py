@@ -2,57 +2,30 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""The guard under the real-data counts of the two rules kept until Phase 4
-(KO2-22; T2.16a, check 2's ``docs/design/rust-core/phase-2/evidence/census/
-real-data.md``).
+r"""Current source policy behind the historical real-data refusal counts.
 
-Both counts are zero by construction, so they hold only while the code
-says so:
-
-- ``text_time_rules`` fires only when a provider declares
-  ``TextTimes::ClientRules`` (``sdm-core/src/materialize.rs``); no provider
-  in the tree declares it, every SQL provider declaring ``ValueByValue``;
-- ``model`` fires only for a ``KumoTabular`` request
-  (``sdm-request/src/predict.rs``); the real-data benchmark's six tasks ask
-  every question of ``KumoRelational``.
-
-A provider declaring the client rules, or a benchmark asking the tabular
-model, fails here, and the counts are to be measured again.
+T4.4 implements ClientRules; it is no longer an intentionally unreachable
+temporary refusal whose count can be inferred from SQL provider selection.
+SQL providers retain ValueByValue, and the benchmark still asks relational
+questions, so its model-refusal count retains that narrower explanation.
 """
 
 from __future__ import annotations
 
-import re
+import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-#: The places ``ClientRules`` may be named: its definition and the core's
-#: two refusals of it.
-ALLOWED = {
-    'rust/crates/sdm-contract/src/data.rs': 1,
-    'rust/crates/sdm-core/src/materialize.rs': 2,
-}
 SQL_PROVIDERS = ('duckdb', 'sqlite', 'postgres')
 
 
-def _sources() -> list[Path]:
-    found = [
-        *ROOT.glob('rust/crates/*/src/**/*.rs'),
-        *ROOT.glob('rust/bindings/*/src/**/*.rs'),
-        *ROOT.glob('packages/*/src/**/*.py'),
-    ]
-    assert found, 'no source read'
-    return found
-
-
-def test_no_provider_reads_text_times_by_the_client_rules():
-    named = {}
-    for path in _sources():
-        text = path.read_text(encoding='utf-8')
-        count = len(re.findall(r'\bClientRules\b|["\']client_rules["\']', text))
-        if count:
-            named[path.relative_to(ROOT).as_posix()] = count
-    assert named == ALLOWED
+def test_client_rules_are_implemented_and_sql_keeps_its_declared_reading():
+    source = (ROOT / 'rust/crates/sdm-core/src/materialize.rs').read_text()
+    assert 'not_yet("text_time_rules")' not in source
+    probes = json.loads((ROOT / 'contract/refusal-census.json').read_text())
+    assert all(
+        probe['site'] != 'rule:text_time_rules' for probe in probes['probes']
+    )
     for name in SQL_PROVIDERS:
         source = (ROOT / f'rust/crates/sdm-data/src/{name}.rs').read_text()
         assert 'text_times: Some(TextTimes::ValueByValue)' in source, name

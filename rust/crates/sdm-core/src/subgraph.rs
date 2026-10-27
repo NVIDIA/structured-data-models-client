@@ -426,22 +426,25 @@ impl Walk<'_> {
                 }
                 let seeds = take_array(named(&frame, fkey)?, &first_row)?;
                 let columns = sample_columns(self.graph, dst_table, self.excluded);
-                let answer = self.times.read(
-                    self.asker,
-                    dst_table,
-                    one_batch(
-                        &ask(
-                            self.asker,
-                            sample::by_pkey(
-                                dst_table,
-                                columns.clone(),
-                                key_set(self.asker, sample::seeds(seeds, vec![])?)?,
-                                false,
-                            )?,
-                        )
-                        .await?,
-                    )?,
-                )?;
+                let answer = self
+                    .times
+                    .read(
+                        self.asker,
+                        dst_table,
+                        one_batch(
+                            &ask(
+                                self.asker,
+                                sample::by_pkey(
+                                    dst_table,
+                                    columns.clone(),
+                                    key_set(self.asker, sample::seeds(seeds, vec![])?)?,
+                                    false,
+                                )?,
+                            )
+                            .await?,
+                        )?,
+                    )
+                    .await?;
                 if answer.num_rows() > 0 {
                     let positions = batches(&answer, distinct.len())?;
                     let mut answered: Vec<Option<usize>> = vec![None; distinct.len()];
@@ -603,7 +606,8 @@ impl Walk<'_> {
             let src_table = table_named(self.graph, src)?;
             let answer = self
                 .times
-                .read(self.asker, src_table, one_batch(&answer)?)?;
+                .read(self.asker, src_table, one_batch(&answer)?)
+                .await?;
             if answer.num_rows() == 0 {
                 continue;
             }

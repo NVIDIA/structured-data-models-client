@@ -180,10 +180,59 @@ pub struct Reader {
     year: i64,
 }
 
+/// Fixed reading facts decided by one complete source column. Applying
+/// this value to selected rows never infers their day order again.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ColumnPlan {
+    reader: Reader,
+    order: Order,
+    utc: bool,
+}
+
+impl ColumnPlan {
+    pub fn read(&self, values: &[Option<&str>]) -> Result<Vec<Option<Instant>>, Unread> {
+        let read = values
+            .iter()
+            .map(|value| value.map_or(Read::Missing, |value| self.reader.one(value, self.order)))
+            .collect::<Vec<_>>();
+        if read.iter().any(|read| matches!(read, Read::Outside { .. })) {
+            return Err(Unread::Outside);
+        }
+        if !self.utc && mixed(&read) {
+            return Err(Unread::MixedZones);
+        }
+        Ok(read
+            .into_iter()
+            .map(|read| match read {
+                Read::Time(at, _) => Some(at),
+                _ => None,
+            })
+            .collect())
+    }
+}
+
 impl Reader {
     /// A reader for a run whose clock is in `year`.
     pub fn new(year: i64) -> Reader {
         Reader { year }
+    }
+
+    /// Read every original row before publishing a reusable column plan.
+    /// The caller retains only these facts and typed bounds, not the source.
+    pub fn plan(
+        &self,
+        values: &[Option<&str>],
+        utc: bool,
+    ) -> Result<(ColumnPlan, Vec<Option<Instant>>), Unread> {
+        let read = self.column(values, utc)?;
+        Ok((
+            ColumnPlan {
+                reader: *self,
+                order: decided_order(values).unwrap_or(Order::MonthFirst),
+                utc,
+            },
+            read,
+        ))
     }
 
     /// A two-digit year in the hundred years around the clock's: from 50
@@ -464,6 +513,23 @@ mod tests {
 
     fn at(text: &str) -> Option<String> {
         Some(format!("{text}.000000000"))
+    }
+
+    #[test]
+    fn complete_column_plan_keeps_late_day_order_for_selected_rows() {
+        let reader = Reader::new(2026);
+        let selected = [Some("01/02/2024")];
+        assert_eq!(reader.column(&selected, true), Err(Unread::Order));
+        let mut original = vec![Some("01/02/2024"); 1005];
+        original[1004] = Some("15/03/2024");
+        let (plan, all) = reader.plan(&original, true).unwrap();
+        assert_eq!(plan.read(&selected).unwrap(), all[..1]);
+        assert_eq!(
+            all[0].map(|at| at.civil(0).to_string()),
+            at("2024-02-01T00:00:00")
+        );
+        original[1003] = Some("03/15/2024");
+        assert_eq!(reader.plan(&original, true), Err(Unread::Order));
     }
 
     #[test]

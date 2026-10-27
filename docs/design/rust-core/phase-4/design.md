@@ -250,6 +250,11 @@ It does not settle temporal aggregation, timed entities, text-time rules, rankin
 - Implement RS-3 and RS-4 using the registered algorithms and explicit state; retain the already shipped RS-1/RS-2 behavior and verify no regression in SQL paths.
 - Enable `TextTimes::ClientRules` using `sdm-engine::time::text`'s fixed-format reader and whole-column shape/day-order decisions, preserving existing approved out-of-format refusals.
   Remove both `text_time_rules` refusals in `sdm-core::materialize`, including timestamp features as well as time columns; no call delegates parsing to pandas.
+  The native frame source already prepares complete original columns before selection and supplies typed arrays through its existing owner.
+  A raw Arrow Host declaring `ClientRules` supplies a complete column through the existing unfiltered, unlimited `Scan` request before its bounds or selected timestamp values are interpreted.
+  The core retains only a run-local fixed reading plan and typed bounds for that column, so a late deciding or conflicting original row governs selected rows too.
+  A designated time column accepts offsets converted to UTC; an ordinary timestamp feature preserves the fixed reader's mixed-offset refusal.
+  This adds no source provider or sampler, host parser, persistent cache, or change to SQL providers' `ValueByValue` reading.
 - Test indices and supplied predict frames, zero/missing/repeated keys, null and duplicate time/key sanitization, static/temporal/keyless neighbors, tied cuts, composite/decimal relationships, seeded/unseeded call sequences and failure-state continuation.
 - Include frame ranking and multi-step forecasting, UTC/named-zone/fold cases, DT-3's public frame/H24 proof, schema mutation and result inspection/merge through Python and rust-host.
 - Dependencies: T4.2 and T4.3; preserve each path's observed ordering/null behavior, and obtain approval before accepting any proposed changed model inputs.
