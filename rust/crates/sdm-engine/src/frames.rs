@@ -463,6 +463,89 @@ impl Snapshot {
         take(&table.rows, &rows, columns)
     }
 
+    /// Rebind an already selected raw context to this immutable snapshot.
+    /// Positions are original source ordinals, including repetitions, and
+    /// must have survived sanitization. This does not reset or draw a stream.
+    pub fn selected_rows(
+        &self,
+        table: &str,
+        rows: &[usize],
+        columns: &[String],
+    ) -> Result<RecordBatch, CoreError> {
+        let table = self
+            .tables
+            .get(table)
+            .ok_or_else(|| invalid("selected rows name an unknown frame"))?;
+        if rows
+            .iter()
+            .any(|row| table.valid.binary_search(row).is_err())
+        {
+            return Err(invalid(
+                "selected rows name an absent or sanitized frame position",
+            ));
+        }
+        take(&table.rows, rows, columns)
+    }
+
+    /// Replay one selected relationship using immutable source positions and
+    /// example ownership. No stream is read and no neighborhood is resampled.
+    pub fn selected_link_pairs(
+        &self,
+        edge: &Edge,
+        source_rows: &[usize],
+        source_batch: &[usize],
+        target_rows: &[usize],
+        target_batch: &[usize],
+    ) -> Result<Vec<(usize, usize)>, CoreError> {
+        if source_rows.len() != source_batch.len() || target_rows.len() != target_batch.len() {
+            return Err(invalid(
+                "selected relationship rows do not align with example ownership",
+            ));
+        }
+        let source = self
+            .tables
+            .get(&edge.src)
+            .ok_or_else(|| invalid("selected relationship source is absent"))?;
+        let target = self
+            .tables
+            .get(&edge.dst)
+            .ok_or_else(|| invalid("selected relationship target is absent"))?;
+        if source_rows
+            .iter()
+            .any(|row| source.valid.binary_search(row).is_err())
+            || target_rows
+                .iter()
+                .any(|row| target.valid.binary_search(row).is_err())
+        {
+            return Err(invalid(
+                "selected relationship names an absent or sanitized source position",
+            ));
+        }
+        let targets = target_rows
+            .iter()
+            .zip(target_batch)
+            .enumerate()
+            .map(|(position, (&row, &batch))| ((batch, row), position))
+            .collect::<BTreeMap<_, _>>();
+        if targets.len() != target_rows.len() {
+            return Err(invalid(
+                "selected relationship repeats a source position within one example",
+            ));
+        }
+        let keys = read_keys(named(&source.rows, &edge.fkey)?)?;
+        Ok(source_rows
+            .iter()
+            .zip(source_batch)
+            .enumerate()
+            .filter_map(|(position, (&row, &batch))| {
+                let target_row = keys[row].as_ref().and_then(|key| target.index.get(key))?;
+                targets
+                    .get(&(batch, *target_row))
+                    .map(|&target_position| (position, target_position))
+            })
+            .collect())
+    }
+
     pub fn entity_rows(&self, table: &str, keys: &ArrayRef) -> Result<Vec<usize>, CoreError> {
         self.entity_rows_many(table, &[keys])
     }
