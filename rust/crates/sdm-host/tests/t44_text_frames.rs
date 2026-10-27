@@ -818,7 +818,7 @@ fn complete_task_reference_validation_precedes_draws_and_seed_resets() {
         assert_eq!(error["error"]["sentence"], "frame_task_references");
         assert_eq!(
             error["error"]["fields"],
-            json!({"table":{"t":"utf8","v":"users"},"rows":{"t":"u64","v":1},"detail":{"t":"utf8","v":""}})
+            json!({"table":{"t":"utf8","v":"users"},"rows":{"t":"u64","v":"1"},"detail":{"t":"utf8","v":""}})
         );
         let (state, owned) = checkpoint(&run);
         let neighbors = checkpoint_neighbors(&state, &owned);
