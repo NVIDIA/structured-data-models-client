@@ -121,7 +121,9 @@ No language step, warning acknowledgment protocol, generic workflow interpreter,
 
 Direct model-contract errors retain the generated decoder's selected item ordinal, member path and actual offending value across its complete reached field family.
 The direct parser follows generated field order, with embeddings before quantiles, explanation and metadata, while gathered ordering stays unchanged.
-Core selects the diagnostic and caught-versus-native-conversion failure; Python supplies only reached native representation and exception presentation, preserving generated ResponseContractError causes and uncaught native dict/iteration errors.
+Core selects the diagnostic and native conversion failure; Python supplies only reached native representation and exception presentation.
+The generated decoder's TypeError and ValueError failures retain the SDK INVALID_RESPONSE wrapper and their actual native cause, while generated contract failures retain ResponseContractError causes.
+Optional item id and forecast_step diagnostics retain the generated helper owner `prediction`; required item fields and object diagnostics retain `PredictionItem`.
 Accepted direct whole forecast steps retain exact digits through a native-item carrier when they exceed the Arrow int64 width.
 That native reconstruction uses maintained exact conversion without imposing a new late integer-display limit.
 The same shared decoder keeps gathered width admission unchanged, while its explicit direct mode preserves exact canonical row-integer digits through bounds checking before result-table narrowing.
