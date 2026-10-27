@@ -44,3 +44,75 @@ fn shared_decoder_preserves_gathered_admission_and_fault_ordinal() {
         ("prediction.probabilities", "not_an_object", Some(1))
     );
 }
+
+#[test]
+fn gathered_whole_float_boundary_precedes_later_fields_without_limiting_direct() {
+    let bound = 1u128 << 127;
+    // Exact adjacent binary64 integers, independently represented as u128.
+    let inside = bound - (1u128 << 74);
+    let outside = bound + (1u128 << 75);
+    for (token, digits, gathered_admits) in [
+        ("0".to_owned(), "0".to_owned(), true),
+        (format!("-{bound}"), format!("-{bound}"), true),
+        ((bound - 1).to_string(), (bound - 1).to_string(), true),
+        (format!("-{}", bound + 1), format!("-{}", bound + 1), false),
+        (bound.to_string(), bound.to_string(), false),
+        (format!("-{bound}.0"), format!("-{bound}"), false),
+        (format!("{bound}.0"), bound.to_string(), false),
+        (format!("-{inside}.0"), format!("-{inside}"), true),
+        (format!("{inside}.0"), inside.to_string(), true),
+        (format!("-{outside}.0"), format!("-{outside}"), false),
+        (format!("{outside}.0"), outside.to_string(), false),
+    ] {
+        for mode in 0..3 {
+            let first = if mode == 1 {
+                r#", "probabilities":[]"#
+            } else {
+                ""
+            };
+            let second = if mode == 2 {
+                r#", "probabilities":[]"#
+            } else {
+                ""
+            };
+            let body = json::read(format!(r#"{{"id":"r","model":"kumo-relational","metadata":{{}},"predictions":[{{"row_index":{token}{first}}},{{"row_index":1{second}}}]}}"#).as_bytes()).unwrap();
+            let gathered = PredictionResponse::read(&body);
+            if !gathered_admits {
+                let fault = gathered.unwrap_err();
+                assert_eq!(
+                    (fault.field, fault.reason, fault.item),
+                    ("prediction.row_index", "out_of_range", Some(0)),
+                    "{token}/{mode}"
+                );
+            } else if mode == 0 {
+                assert_eq!(gathered.unwrap().predictions[0].row_index.digits(), digits);
+            } else {
+                let fault = gathered.unwrap_err();
+                assert_eq!(
+                    (fault.field, fault.reason, fault.item),
+                    (
+                        "prediction.probabilities",
+                        "not_an_object",
+                        Some(usize::from(mode == 2))
+                    ),
+                    "{token}/{mode}"
+                );
+            }
+            let direct = PredictionResponse::read_direct(&body);
+            if mode == 0 {
+                assert_eq!(direct.unwrap().predictions[0].row_index.digits(), digits);
+            } else {
+                let fault = direct.unwrap_err();
+                assert_eq!(
+                    (fault.field, fault.reason, fault.item),
+                    (
+                        "prediction.probabilities",
+                        "not_an_object",
+                        Some(usize::from(mode == 2))
+                    ),
+                    "{token}/{mode}"
+                );
+            }
+        }
+    }
+}

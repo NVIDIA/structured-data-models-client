@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import math
 import re
 import socket
 import sys
@@ -59,6 +60,7 @@ CORE = ','.join(
     + _routing.PREDICT_DUCKDB
 )
 QUERY = 'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id'
+_I128_BOUND = 2**127
 # The credential the echoing endpoint's URL carries, put together at run
 # time as main's adbe935b does, so no credential-shaped literal is left in
 # the tree for a secret scanner to report.
@@ -152,6 +154,145 @@ def _answering(status: int, body: bytes) -> Iterator[tuple[str, list[bytes]]]:
 def _predict(url: str, request: Request, **arguments: Any) -> Any:
     with SDMClient(url, max_retries=0) as client:
         return client.predict(request, model=KumoRelational(), **arguments)
+
+
+@pytest.mark.parametrize(
+    'token,admitted',
+    [
+        pytest.param('0', True, id='zero'),
+        pytest.param(str(-_I128_BOUND), True, id='integer-min'),
+        pytest.param(str(_I128_BOUND - 1), True, id='integer-max'),
+        pytest.param(str(-_I128_BOUND - 1), False, id='integer-below'),
+        pytest.param(str(_I128_BOUND), False, id='integer-above'),
+        pytest.param(str(-_I128_BOUND) + '.0', False, id='float-min'),
+        pytest.param(str(_I128_BOUND) + '.0', False, id='float-positive-bound'),
+        pytest.param(
+            repr(math.nextafter(float(-_I128_BOUND), 0.0)),
+            True,
+            id='negative-inside',
+        ),
+        pytest.param(
+            repr(math.nextafter(float(_I128_BOUND), 0.0)),
+            True,
+            id='positive-inside',
+        ),
+        pytest.param(
+            repr(math.nextafter(float(-_I128_BOUND), -math.inf)),
+            False,
+            id='negative-outside',
+        ),
+        pytest.param(
+            repr(math.nextafter(float(_I128_BOUND), math.inf)),
+            False,
+            id='positive-outside',
+        ),
+    ],
+)
+@pytest.mark.parametrize('mode', ['clean', 'same-field', 'later-item'])
+def test_gathered_whole_float_index_admission_precedes_later_fields(
+    monkeypatch, token, admitted, mode
+):
+    monkeypatch.setenv(_routing.ENVIRONMENT, ','.join(_routing.PREDICT_DUCKDB))
+    # The public already-gathered constructor needs no sampling or source read.
+    connection = duckdb.connect()
+    try:
+        schema = Schema({}, source=DuckDBSource(connection))
+        payload = {
+            'model': 'kumo-relational',
+            'task': {
+                'kind': 'regression',
+                'target': {'column_name': 'TARGET', 'dtype': 'float32'},
+                'entity_table_names': ['users'],
+            },
+            'schema': {
+                'instance_table': {
+                    'columns': {
+                        'instance_id': {'dtype': 'int64'},
+                        '__kumo_entity_ref_0': {'dtype': 'int64'},
+                    }
+                },
+                'related_tables': {
+                    'users': {'columns': {'user_id': {'dtype': 'int64'}}}
+                },
+                'relationships': [
+                    {
+                        'source_columns': ['__kumo_entity_ref_0'],
+                        'target_columns': ['user_id'],
+                        'target_table': 'users',
+                    }
+                ],
+            },
+            'context': {
+                'instance_table': {
+                    'format': 'arrays',
+                    'columns': ['instance_id', 'TARGET'],
+                    'rows': [[0, 1.0], [1, 2.0]],
+                }
+            },
+            'predict': {
+                'instance_table': {
+                    'format': 'arrays',
+                    'columns': ['instance_id', '__kumo_entity_ref_0'],
+                    'rows': [[2, 7], [3, 9]],
+                }
+            },
+            'output': {'fields': ['prediction']},
+        }
+        request = Request.materialized(
+            payloads=(payload,),
+            schema=schema,
+            query=QUERY,
+            indices=[7, 9],
+            entity_table='users',
+        )
+        first = (
+            '"row_index":'
+            + token
+            + ',"prediction":1.25'
+            + (',"probabilities":[]' if mode == 'same-field' else '')
+        )
+        second = '"row_index":1,"prediction":2.5' + (
+            ',"probabilities":[]' if mode == 'later-item' else ''
+        )
+        reply = (
+            '{"id":"r","model":"kumo-relational","metadata":{},"predictions":[{'
+            + first
+            + '},{'
+            + second
+            + '}]}'
+        ).encode()
+
+        class Scripted:
+            calls = 0
+
+            def close(self):
+                pass
+
+            def predict_body(self, body):
+                self.calls += 1
+                return reply
+
+        transport = Scripted()
+        with SDMClient('http://localhost:1', max_retries=0) as client:
+            client._transport.close()
+            client._transport = transport
+            with pytest.raises(StructuredDataError) as caught:
+                client.predict(request, model=KumoRelational())
+        assert transport.calls == 1
+        assert caught.value.code == 'INVALID_RESPONSE'
+        if mode != 'clean' and admitted:
+            expected = ('prediction.probabilities', 'not_an_object')
+        elif mode == 'clean' and token == '0':
+            # The approved predecessor reaches its later required ID guard.
+            expected = ('prediction.id', 'missing')
+        else:
+            expected = ('prediction.row_index', 'out_of_range')
+        assert (
+            caught.value.details['field'],
+            caught.value.details['reason'],
+        ) == expected
+    finally:
+        connection.close()
 
 
 def _both(
