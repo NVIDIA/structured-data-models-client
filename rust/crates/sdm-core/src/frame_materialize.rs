@@ -510,7 +510,7 @@ mod parent_hop_tests {
         let column = |name: &str| json!({"name":name,"dtype":"int64","stype":"ID"});
         let held: HeldSchema = serde_json::from_value(json!({"tables":[
             {"name":"users","source":{"source":["users"]},"columns":[column("user_id")],"primary_key":["user_id"],"time_column":null},
-            {"name":"orders","source":{"source":["orders"]},"columns":[column("order_id"),column("user_id")],"primary_key":["order_id"],"time_column":null}
+            {"name":"orders","source":{"source":["orders"]},"columns":[column("order_id"),column("user_id"),{"name":"row_value","dtype":"int64","stype":"numerical"}],"primary_key":["order_id"],"time_column":null}
         ],"links":[[{"table":"orders","column":"user_id"},{"table":"users","column":"user_id"}]]})).unwrap();
         let description = sdm_schema::held::read(held, &BTreeMap::new(), true)
             .unwrap()
@@ -530,6 +530,10 @@ mod parent_hop_tests {
                 (
                     "user_id",
                     Arc::new(Int64Array::from(vec![1; 12])) as ArrayRef,
+                ),
+                (
+                    "row_value",
+                    Arc::new(Int64Array::from_iter_values(0..12)) as ArrayRef,
                 ),
             ])
             .unwrap(),
@@ -564,10 +568,18 @@ mod parent_hop_tests {
             .iter()
             .find(|table| table.name == "orders")
             .map(|table| {
-                table
-                    .batch
-                    .column_by_name("order_id")
-                    .unwrap()
+                // Nonentity primary keys are not projected as model features.
+                // This ordinary numeric feature carries those same source row
+                // identities through the actual FrameRun projection.
+                let (_, SampledColumn::Arrow(values)) = table
+                    .columns
+                    .iter()
+                    .find(|(name, _)| name == "row_value")
+                    .expect("the sampled source-row feature")
+                else {
+                    panic!("the numeric source-row feature must stay Arrow");
+                };
+                values
                     .as_any()
                     .downcast_ref::<Int64Array>()
                     .unwrap()
@@ -681,12 +693,12 @@ mod parent_hop_tests {
                     frame.neighbors.checkpoint()
                 );
                 let value = asker.attach(Attachment::Bytes(serde_json::to_vec(&json!({"selected":selected,"neighbors":frame.metadata.as_ref().unwrap().neighbors})).unwrap()))?;
-                Ok(sdm_contract::ops::OperationResult::Prepared(
+                Ok(sdm_contract::ops::OperationResult::PrepareRequest(
                     PreparedRequest { value },
                 ))
             });
             let Step::Done {
-                result: sdm_contract::ops::OperationResult::Prepared(value),
+                result: sdm_contract::ops::OperationResult::PrepareRequest(value),
             } = run.next().unwrap()
             else {
                 panic!("a fixed native frame walk must finish without I/O")

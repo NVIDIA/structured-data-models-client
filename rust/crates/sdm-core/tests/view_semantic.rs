@@ -286,6 +286,10 @@ fn describe_view(definition: &str, spec: SourceSpec) -> (SourceDescription, Vec<
                         .unwrap();
                 }
             }
+            Step::Warnings => {
+                let notices = run.take_warnings();
+                assert!(!notices.is_empty(), "a warning boundary had no notices");
+            }
             Step::CallModel(_) => panic!("a description called a model"),
         }
     };
