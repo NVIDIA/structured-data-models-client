@@ -686,6 +686,18 @@ def error_from_core(
         cls = StructuredDataError
     sentence = error['sentence']
     if (
+        sentence == 'model_lacks_task'
+        and fields.get('native_model_task')
+        and (present := _held().get('relational_model_task')) is not None
+    ):
+        # Execute actual repr only after Rust selects this refusal, outside
+        # _said's formatting-defect catch. Details retain the later native
+        # owner read, including any mutation caused by that repr.
+        shown, actual = present(fields)
+        fields['task'] = _ObservedRepr(shown)
+        details['task'] = actual
+        details.pop('native_model_task', None)
+    if (
         fields.get('native_relational_constant')
         and (present := _held().get('relational_target')) is not None
     ):

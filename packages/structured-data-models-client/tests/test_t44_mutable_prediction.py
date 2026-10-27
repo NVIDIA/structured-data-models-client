@@ -12,6 +12,7 @@ Materialization stays on the original route to isolate prediction ownership.
 from __future__ import annotations
 
 import copy
+import dataclasses
 import json
 import warnings
 from pathlib import Path
@@ -39,6 +40,13 @@ FAULT_REFERENCE = json.loads(
     .with_name('t44_mutable_prediction_reference.json')
     .read_text()
 )['fault_cases']
+NATIVE_KIND_REFERENCE = json.loads(
+    Path(__file__)
+    .with_name('t44_mutable_prediction_reference.json')
+    .read_text()
+)['native_kind_cases'][
+    '310' if int(pd.__version__.split('.')[0]) == 2 else '312'
+]
 
 
 def _request(*, batched=False):
@@ -455,6 +463,134 @@ def test_native_part_fault_and_instance_comparison_parity(
             observed['outcome'] = 'success'
         except Exception as error:
             observed.update(outcome='error', error=_error_record(error))
+        observed['warnings'] = [
+            {'type': type(item.message).__name__, 'message': str(item.message)}
+            for item in notices
+        ]
+    observed['events'] = events
+    assert observed == expected
+
+
+@pytest.mark.parametrize('core', [False, True], ids=['original', 'core'])
+@pytest.mark.parametrize('case', list(NATIVE_KIND_REFERENCE))
+def test_public_task_kind_observations_preserve_preparation_order(
+    monkeypatch, core, case
+):
+    monkeypatch.setenv(
+        'SDM_CORE_ROUTES', 'client.predict/regression/frames' if core else ''
+    )
+    expected = copy.deepcopy(NATIVE_KIND_REFERENCE[case])
+    events = []
+    hashes = 0
+    equalities = 0
+    retained = RuntimeError('retained native task-kind failure')
+    observed = {'case': case}
+    request = None
+
+    class ObservedKind(str):
+        def __hash__(self):
+            nonlocal hashes
+            hashes += 1
+            events.append({'event': 'kind.hash', 'ordinal': hashes})
+            if (
+                case
+                in (
+                    'raise-default-hash',
+                    'explicit-raise-capability-hash',
+                    'anchored-explicit-raise-admission-hash',
+                )
+                and hashes == 1
+            ) or (case == 'raise-admission-hash' and hashes == 3):
+                raise retained
+            if case == 'mutate-default-task' and hashes == 1:
+                request.task = dataclasses.replace(
+                    request.task, kind='regression'
+                )
+                events.append({'event': 'task-replaced', 'kind': 'regression'})
+            if case == 'mutate-admission-payload' and hashes == 3:
+                request.payloads[0]['metadata']['kind_observation'] = (
+                    'admission'
+                )
+                events.append({'event': 'payload-mutated'})
+            return str.__hash__(self)
+
+        def __eq__(self, other):
+            nonlocal equalities
+            equalities += 1
+            events.append(
+                {'event': 'kind.eq', 'other': str(other), 'ordinal': equalities}
+            )
+            if (
+                case == 'raise-capability-equality'
+                and other == 'temporal_link_prediction'
+            ):
+                raise retained
+            if (
+                case == 'mutate-capability-task'
+                and other == 'temporal_link_prediction'
+            ):
+                request.task = dataclasses.replace(
+                    request.task, kind='regression'
+                )
+                events.append({'event': 'task-replaced', 'kind': 'regression'})
+            return str.__eq__(self, other)
+
+    def post(url, *, data, **kwargs):
+        events.append({'event': 'http-post'})
+        sent = json.loads(data)
+        observed['wire'] = sent
+        table = sent['predict']['instance_table']
+        at = table['columns'].index('instance_id')
+        response = requests.Response()
+        response.status_code = 200
+        response._content = json.dumps(
+            {
+                'id': 'kind-reference',
+                'model': 'kumo-relational',
+                'metadata': {},
+                'predictions': [
+                    {'row_index': i, 'id': str(row[at]), 'prediction': 'a'}
+                    for i, row in enumerate(table['rows'])
+                ],
+            }
+        ).encode()
+        response._content_consumed = True
+        return response
+
+    if 'wire' in expected:
+        monkeypatch.setattr(
+            'sdm_client.adapters.relational._request_id',
+            lambda: expected['wire']['metadata']['request_id'],
+        )
+    with warnings.catch_warnings(record=True) as notices:
+        warnings.simplefilter('always')
+        try:
+            request = _request()
+            request.task = dataclasses.replace(
+                request.task, kind=ObservedKind(request.task.kind)
+            )
+            if case == 'anchored-explicit-raise-admission-hash':
+                request.task.options['anchor_time_column'] = '__native_anchor'
+            outputs = ('prediction',) if 'explicit-' in case else None
+            with SDMClient('http://localhost:1', max_retries=0) as client:
+                client._transport._session.post = post
+                answer = client.predict(
+                    request, model=KumoRelational(), outputs=outputs
+                )
+                observed['result'] = json.loads(
+                    answer.to_pandas().to_json(orient='split')
+                )
+            observed['outcome'] = 'success'
+        except Exception as error:
+            observed.update(
+                outcome='error',
+                error={
+                    'type': type(error).__name__,
+                    'message': str(error),
+                    'code': getattr(error, 'code', None),
+                    'retained_identity': error is retained,
+                },
+            )
         observed['warnings'] = [
             {'type': type(item.message).__name__, 'message': str(item.message)}
             for item in notices
