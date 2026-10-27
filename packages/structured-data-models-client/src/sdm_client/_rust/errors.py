@@ -610,6 +610,7 @@ def error_from_core(
     attachments: dict[int, Any],
     *,
     driver_class: str | None = None,
+    internal_context: BaseException | None = None,
 ) -> StructuredDataError:
     r"""The exception an ``error`` control message raises as, saying the
     core's sentence; the sentence's name is kept on it (``_sentence``), so
@@ -666,10 +667,25 @@ def error_from_core(
         # Keep it outside _said's formatting-defect catch.
         fields['index'] = present(fields)
     if (
-        sentence == 'direct_schema_missing'
-        and (present := _held().get('direct_schema_missing')) is not None
+        sentence
+        in {
+            'direct_lookup',
+            'direct_ambiguous',
+            'direct_predict_dtype',
+            'direct_nullable_cast',
+            'direct_schema_missing',
+        }
+        and (present := _held().get(sentence)) is not None
     ):
-        present(fields)
+        # Core selected this native operation or a retained lookup failure.
+        # Obtain its actual exception, never a replacement of the same class.
+        try:
+            present(fields)
+        except BaseException as native_error:
+            raise_native(native_error, internal_context=internal_context)
+        raise StructuredDataError(
+            'the selected native fault did not occur', code='INTERNAL_ERROR'
+        ) from None
     if sentence == 'direct_response_contract':
         from sdm_api.generated.tfm_api import ResponseContractError
 
@@ -739,8 +755,34 @@ def raise_from_core(
     internal_context: BaseException | None = None,
 ) -> NoReturn:
     r"""Raise the public exception, retaining only its selected explicit cause."""
-    error = error_from_core(control, attachments, driver_class=driver_class)
+    error = error_from_core(
+        control,
+        attachments,
+        driver_class=driver_class,
+        internal_context=internal_context,
+    )
     raise_error(error, internal_context=internal_context)
+
+
+def raise_native(
+    error: BaseException, *, internal_context: BaseException | None = None
+) -> NoReturn:
+    """Propagate the actual native exception without replacing its graph."""
+    original_context = error.__context__
+    try:
+        raise error
+    finally:
+        error.__context__ = original_context
+        nested: BaseException | None = error
+        seen: set[int] = set()
+        while nested is not None and id(nested) not in seen:
+            seen.add(id(nested))
+            if (
+                internal_context is not None
+                and nested.__context__ is internal_context
+            ):
+                nested.__context__ = internal_context.__context__
+            nested = nested.__context__
 
 
 def raise_error(
