@@ -1537,17 +1537,7 @@
             "related": {
               "type": "array",
               "items": {
-                "type": "array",
-                "prefixItems": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "$ref": "#/$defs/FrameForm"
-                  }
-                ],
-                "minItems": 2,
-                "maxItems": 2
+                "$ref": "#/$defs/FrameForm"
               }
             },
             "task": {
