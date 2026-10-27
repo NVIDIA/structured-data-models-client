@@ -7,7 +7,15 @@
 //! by another package. It adds no Run step or native semantic callback.
 //! Input-sized task data, node maps, sampled rows and links remain attachments.
 
+mod native;
+
+pub use native::{
+    ConvertedFrameText, FramePredictionValues, NativeConstructionDiagnostic,
+    NativeFrameConstruction, NativeFrameText, UncastableFrameInput,
+};
+
 use crate::data::{AttachmentId, Relation};
+use crate::data::strings::StringEncoding;
 use crate::ops::{ColumnRef, Materialized, QueryFacts, Seed, Stype};
 use crate::pql::ValidatedQuery;
 use crate::{ColumnType, Scalar};
@@ -64,6 +72,9 @@ pub enum FrameStringMissing {
 pub struct FrameNativeColumn {
     pub name: String,
     pub origin: FrameNativeOrigin,
+    /// Present only for logical string source data, explicitly binding an
+    /// exceptional Binary buffer to its native Unicode meaning.
+    pub strings: Option<StringEncoding>,
 }
 
 /// Native source and column iteration order is observable in graph failures.
@@ -227,6 +238,11 @@ pub struct SampledFrameContext {
     pub tables: Vec<SampledFrameTable>,
     pub links: Vec<SampledFrameLink>,
     pub anchors: AttachmentId,
+    /// Core-selected logical Text features in reached native conversion order.
+    /// Their missing-value input meaning is the empty string, before the
+    /// genuine builtin astype(str) conversion. Host code chooses neither it
+    /// nor the later character/word/casing policy.
+    pub text: Vec<ColumnRef>,
 }
 
 /// The effective native result dtype at the reached astype(str) position.
@@ -299,8 +315,8 @@ pub enum FramePreparation {
     },
     Task {
         labelled: LabelledFrameTask,
-        /// Actual reached native Series constructor result.
-        prediction: AttachmentId,
+        /// Actual reached native Series constructor result or failure.
+        prediction: FramePredictionValues,
         values: Option<AttachmentId>,
     },
     Plan {
@@ -321,7 +337,8 @@ pub enum FramePreparation {
     },
     Payload {
         context: SampledFrameContext,
-        text: Option<NativeTextFacts>,
+        /// Actual reached raw conversions, not just global dtype metadata.
+        text: NativeFrameText,
         /// Already complete valid encoded earlier calls, not a partial body.
         previous: Option<FrameRequestParts>,
         /// Native request flags at their reached construction position.
