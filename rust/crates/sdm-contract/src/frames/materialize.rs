@@ -401,6 +401,12 @@ pub struct MaterializedFrames {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "stage", rename_all = "snake_case", deny_unknown_fields)]
 pub enum FramePreparation {
+    SourceMeaning {
+        schema: AttachmentId,
+    },
+    TableMeaning {
+        input: FrameTableInputs,
+    },
     ColumnMeaning {
         input: FrameColumnInputs,
     },
@@ -512,6 +518,8 @@ pub enum FramePreparation {
     deny_unknown_fields
 )]
 pub enum PreparedFrameValue {
+    SourceMeaning(FrameSourceMeaning),
+    TableMeaning(FrameTableMeaning),
     ColumnMeaning(FrameColumnMeaning),
     IntegerColumn(FrameIntegerColumn),
     SourceColumn(TypedFrameSourceColumn),

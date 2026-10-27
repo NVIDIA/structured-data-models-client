@@ -6,7 +6,7 @@
 //! Native owners stay local; no future column declaration is captured here.
 
 use super::*;
-use crate::ops::HeldColumn;
+use crate::ops::{HeldColumn, HeldSchema, HeldTable};
 
 /// Actual native storage and inference observations, without schema policy.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -15,6 +15,7 @@ pub struct FrameColumnFacts {
     pub object: bool,
     pub string: bool,
     pub arrow_decimal: bool,
+    pub timestamp: bool,
     pub inferred: Option<String>,
 }
 
@@ -40,6 +41,7 @@ pub enum FrameColumnKind {
     TextTime,
     TextFeatureTime,
     NativeTime,
+    TypedTime,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -65,4 +67,33 @@ pub struct FrameIntegerColumn {
 pub struct TypedFrameSourceColumn {
     pub values: AttachmentId,
     pub strings: Option<StringEncoding>,
+}
+
+/// Physical native source types read after this table's native declared casts.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FrameTableColumnFacts {
+    pub name: String,
+    pub arrow_large_string: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FrameTableInputs {
+    pub table: HeldTable,
+    pub native: Vec<FrameTableColumnFacts>,
+}
+
+/// Actual immutable table declaration before any graph sanitization effects.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FrameTableMeaning {
+    pub table: HeldTable,
+}
+
+/// Complete frozen declarations and relationships before native sanitization.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FrameSourceMeaning {
+    pub schema: HeldSchema,
 }

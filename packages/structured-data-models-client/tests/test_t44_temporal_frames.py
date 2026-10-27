@@ -300,7 +300,7 @@ def test_temporal_walk_and_call_boundaries_keep_recorded_payloads(core, case):
 @pytest.mark.parametrize('unit', ['s', 'ms'])
 @pytest.mark.parametrize('year', ['1600', '2263'])
 @pytest.mark.parametrize('role', ['time', 'feature'])
-def test_wide_counts_stay_lossless_and_remain_an_unfinished_materializer_family(
+def test_wide_counts_stay_lossless_and_keep_frozen_native_range_refusal(
     core, unit, year, role
 ):
     _, frames = question(unit)
@@ -335,18 +335,9 @@ def test_wide_counts_stay_lossless_and_remain_an_unfinished_materializer_family(
     asked = PredictiveQuery('PREDICT users.age FOR EACH users.user_id', schema)
     with pytest.raises(StructuredDataError) as failed:
         materialize(asked, '2026-01-08')
-    if core:
-        # An unfinished seam path is not a new final range-refusal policy.
-        assert failed.value.code == 'UNSUPPORTED_REQUEST'
-        assert failed.value.details['rule'] == (
-            'frame_wide_timestamps'
-            if role == 'time'
-            else 'frame_untimed_timestamp_features'
-        )
-    else:
-        expected = REFERENCE['wide_cases'][f'{unit}-{year}-{role}']['error']
-        assert failed.value.code == expected['code']
-        assert str(failed.value) == expected['message']
+    expected = REFERENCE['wide_cases'][f'{unit}-{year}-{role}']['error']
+    assert failed.value.code == expected['code']
+    assert str(failed.value) == expected['message']
     assert frames['events']['at'].astype('int64').tolist() == raw
 
 

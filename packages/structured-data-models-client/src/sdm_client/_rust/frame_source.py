@@ -23,6 +23,8 @@ from sdm_client._rust.spec import held_column
 def meaning(
     table: Any, name: str, column: Any, values: pd.Series, state: dict[str, Any]
 ) -> dict[str, Any]:
+    import pyarrow as pa
+
     from sdm_client._rust.frame_facade import _Bindings, _adopt, _prepare
 
     dtype = values.dtype
@@ -39,16 +41,30 @@ def meaning(
             {
                 'stage': 'column_meaning',
                 'input': {
-                    'table': table.name,
-                    'source': codec.relation(
+                    'table': table['name']
+                    if type(table) is dict
+                    else table.name,
+                    'source': table['source']
+                    if type(table) is dict
+                    else codec.relation(
                         getattr(table, 'source_name', table.name)
                     ),
-                    'column': held_column(name, column),
-                    'designated_time': name == table.time_column,
+                    'column': column
+                    if type(column) is dict
+                    else held_column(name, column),
+                    'designated_time': name
+                    == (
+                        table['time_column']
+                        if type(table) is dict
+                        else table.time_column
+                    ),
                     'facts': {
                         'object': object_dtype,
                         'string': string_dtype,
                         'arrow_decimal': native_decimal_type(dtype) is not None,
+                        'timestamp': pd.api.types.is_datetime64_any_dtype(dtype)
+                        or type(dtype) is pd.ArrowDtype
+                        and pa.types.is_timestamp(dtype.pyarrow_dtype),
                         'inferred': inferred,
                     },
                 },
@@ -133,6 +149,56 @@ def _decimal(
     return whole.astype('Int64' if whole.isna().any() else 'int64')
 
 
+def source_meaning(
+    schema: dict[str, Any], state: dict[str, Any]
+) -> dict[str, Any]:
+    """Resolve the complete frozen source graph before native sanitization."""
+    from sdm_client._rust.frame_facade import _Bindings, _adopt, _prepare
+
+    bindings = _Bindings()
+    result = _adopt(
+        _prepare(
+            {'stage': 'source_meaning', 'schema': bindings.json(schema)},
+            bindings,
+            state,
+        ),
+        'source_meaning',
+    )
+    return result.data['schema']
+
+
+def table_meaning(
+    name: str, table: Any, frame: pd.DataFrame, state: dict[str, Any]
+) -> dict[str, Any]:
+    """Core-owned table meaning before later tables' native conversions."""
+    import pyarrow as pa
+
+    from sdm_client._rust.frame_facade import _Bindings, _adopt, _prepare
+    from sdm_client._rust.spec import held_table
+
+    bindings = _Bindings()
+    native = [
+        {
+            'name': column,
+            'arrow_large_string': type(dtype) is pd.ArrowDtype
+            and pa.types.is_large_string(dtype.pyarrow_dtype),
+        }
+        for column, dtype in frame.dtypes.items()
+    ]
+    result = _adopt(
+        _prepare(
+            {
+                'stage': 'table_meaning',
+                'input': {'table': held_table(name, table), 'native': native},
+            },
+            bindings,
+            state,
+        ),
+        'table_meaning',
+    )
+    return result.data['table']
+
+
 def typed_table(table: Any, state: dict[str, Any]) -> pd.DataFrame:
     """Native casts in the original schema-column iteration ownership."""
     frame = table.data
@@ -154,16 +220,39 @@ def typed_table(table: Any, state: dict[str, Any]) -> pd.DataFrame:
     return frame.assign(**cast) if cast else frame
 
 
+def _typed_timestamp(values: pd.Series) -> pd.Series:
+    """Actual whole native boxing, timezone and unit casts at sanitization.
+
+    The core selected this for an actual typed timestamp source. String
+    source formats use the fixed Reader at a different boundary.
+    """
+    if isinstance(values.dtype, pd.ArrowDtype):
+        values = pd.Series(
+            values.to_numpy(), index=values.index, name=values.name
+        )
+    if not pd.api.types.is_datetime64_any_dtype(values):
+        # A native typed timestamp can box to real datetime objects. This
+        # is their original native unit conversion, not string admission.
+        values = pd.to_datetime(values, unit='ns', errors='coerce')
+    if isinstance(values.dtype, pd.DatetimeTZDtype):
+        values = values.dt.tz_convert('UTC').dt.tz_localize(None)
+    if values.dtype != 'datetime64[ns]':
+        values = values.astype('datetime64[ns]')
+    return values
+
+
 def time_feature(
     table: Any, name: str, values: pd.Series, state: dict[str, Any]
 ) -> pd.Series:
     """Engine feature-time reading follows every earlier native source cast."""
-    column = table.columns.get(name)
+    column = next(
+        (column for column in table['columns'] if column['name'] == name), None
+    )
     if column is None:
         return values
     resolved = meaning(table, name, column, values, state)
-    return (
-        _time(values, resolved, state)
-        if resolved['kind'] == 'text_feature_time'
-        else values
-    )
+    if resolved['kind'] == 'text_feature_time':
+        return _time(values, resolved, state)
+    if resolved['kind'] == 'typed_time':
+        return _typed_timestamp(values)
+    return values

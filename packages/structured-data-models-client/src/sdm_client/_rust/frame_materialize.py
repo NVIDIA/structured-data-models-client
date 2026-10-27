@@ -33,9 +33,14 @@ def native_inputs(
     import pyarrow as pa
 
     from sdm_client._rust.frame_native import NativeColumn, NativeFrameColumns
+    from sdm_client._rust.frame_source import (
+        source_meaning,
+        table_meaning,
+        time_feature,
+        typed_table,
+    )
     from sdm_client._rust.frames import _check_header
-    from sdm_client._rust.spec import held_table, _links
-    from sdm_client._rust.frame_source import typed_table, time_feature
+    from sdm_client._rust.spec import _links
 
     checkpoint = state.get('held', {}).get('frame_checkpoint')
     if checkpoint is not None and 'owner' in checkpoint:
@@ -49,6 +54,7 @@ def native_inputs(
     native_tables = []
     native_types = {}
     held_tables = []
+    prepared_tables = []
     for name, table in schema.tables.items():
         frame = table.data
         if type(frame) is not pd.DataFrame:
@@ -57,12 +63,21 @@ def native_inputs(
             )
         frame = typed_table(table, state)
         _check_header(name, frame)
-        held_tables.append(held_table(name, table))
+        held = table_meaning(name, table, frame, state)
+        held_tables.append(held)
+        prepared_tables.append((name, frame, held))
+    graph_schema = source_meaning(
+        {'tables': held_tables, 'links': _links(schema)}, state
+    )
+    for name, frame, held in prepared_tables:
+        # This is the original native sanitization ownership boundary.
+        # All tables' declared casts and metadata precede these native casts.
+        frame = frame.copy(deep=False).reset_index(drop=True)
         arrays = []
         origins = []
         types = {}
         for ordinal, column in enumerate(frame.columns):
-            series = time_feature(table, column, frame.iloc[:, ordinal], state)
+            series = time_feature(held, column, frame.iloc[:, ordinal], state)
             dtype = series.dtype
             encoding = None
             object_text = pd.api.types.is_object_dtype(
@@ -99,6 +114,7 @@ def native_inputs(
                     name,
                     pd.DataFrame({column: series}),
                     check_header=False,
+                    constructor_objects=False,
                 )
                 array = values.column(0)
                 types.update(converted_types)
@@ -116,8 +132,8 @@ def native_inputs(
             origins.append(
                 {'name': column, 'origin': origin, 'strings': encoding}
             )
-        source_name = getattr(table, 'source_name', name)
-        source = codec.relation(source_name)
+        source = held['source']
+        source_name = codec.relation_name(source)
         exported.append(
             (source, pa.Table.from_arrays(arrays, names=list(frame.columns)))
         )
@@ -125,7 +141,7 @@ def native_inputs(
         native_types[source_name] = types
     return (
         exported,
-        {'tables': held_tables, 'links': _links(schema)},
+        graph_schema,
         NativeFrameColumns(native_types),
         native_tables,
     )
@@ -145,7 +161,9 @@ def inputs(schema: Any, state: dict[str, Any]) -> dict[int, Any]:
                 raise RouteError(
                     'the partial frame materializer requires built-in DataFrames'
                 )
-            rows, native_types = _convert(name, frame)
+            rows, native_types = _convert(
+                name, frame, constructor_objects=False
+            )
             # Constructor mantissas require logical Decimal consumption in
             # the materializer before this development seam can take them.
             # This whole native family was already outside this unfinished
