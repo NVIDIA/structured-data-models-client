@@ -291,11 +291,9 @@ pub(crate) async fn run(
         Preparation::CheckResponseRows {
             scope,
             rows,
-            decimal_limit,
         } => serde_json::to_value(sdm_request::tabular::response::check_rows(
             scope,
             rows,
-            decimal_limit,
             crate::pql::float_text,
         )?),
         Preparation::InterpretResponseJson { checked, json } => serde_json::to_value(

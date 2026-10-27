@@ -259,7 +259,6 @@ def _response(finished: Finished) -> Finished:
                 'stage': 'check_response_rows',
                 'scope': data['scope'],
                 'rows': rows[at:end],
-                'decimal_limit': getter() if getter else 0,
             }
         )
         accepted.extend(checked['rows'])
