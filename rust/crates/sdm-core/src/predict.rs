@@ -521,24 +521,6 @@ pub(crate) async fn call_response(
 /// Present the shared decoder's selected field/value fault, without parsing
 /// or validating the response a second time. Native display/cause stays host-side.
 fn direct_contract_error(_answer: &Value, error: sdm_wire::response::Refused) -> CoreError {
-    use sdm_pql::float_repr::Shown;
-    fn shown(value: &Value) -> Shown {
-        match value {
-            Value::Null => Shown::None,
-            Value::Bool(v) => Shown::Bool(*v),
-            Value::Text(v) => Shown::Text(v.clone()),
-            Value::Number(v) if json::is_integer_token(v) => {
-                Shown::Int(sdm_wire::response::integer_text(v).unwrap_or_else(|| v.clone()))
-            }
-            Value::Number(v) => Shown::Float(v.parse().unwrap_or(f64::NAN)),
-            Value::Array(v) => Shown::List(v.iter().map(shown).collect()),
-            Value::Object(v) => Shown::Dict(
-                v.iter()
-                    .map(|(k, v)| (Shown::Text(k.clone()), shown(v)))
-                    .collect(),
-            ),
-        }
-    }
     let owner = if matches!(error.field, "prediction.id" | "prediction.forecast_step") {
         "prediction"
     } else if error.field.starts_with("prediction.") || error.field == "prediction" {
@@ -636,8 +618,7 @@ fn direct_contract_error(_answer: &Value, error: sdm_wire::response::Refused) ->
             error
                 .value
                 .as_ref()
-                .map(shown)
-                .map(|v| v.repr())
+                .map(crate::pql::json_value_repr)
                 .unwrap_or_default()
         )
     });

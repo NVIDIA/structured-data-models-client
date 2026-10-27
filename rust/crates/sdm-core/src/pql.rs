@@ -1169,6 +1169,32 @@ pub(crate) fn value_text(
         .ok_or(TooLarge)
 }
 
+/// The shared JSON value's representation in a selected response diagnostic.
+/// Parser-specific representation types stay inside this adapter; native
+/// exception formatting and causes remain at the host presentation boundary.
+pub(crate) fn json_value_repr(value: &sdm_wire::json::Value) -> String {
+    use parser::float_repr::Shown;
+    use sdm_wire::json::{self, Value};
+    fn shown(value: &Value) -> Shown {
+        match value {
+            Value::Null => Shown::None,
+            Value::Bool(v) => Shown::Bool(*v),
+            Value::Text(v) => Shown::Text(v.clone()),
+            Value::Number(v) if json::is_integer_token(v) => {
+                Shown::Int(sdm_wire::response::integer_text(v).unwrap_or_else(|| v.clone()))
+            }
+            Value::Number(v) => Shown::Float(v.parse().unwrap_or(f64::NAN)),
+            Value::Array(v) => Shown::List(v.iter().map(shown).collect()),
+            Value::Object(v) => Shown::Dict(
+                v.iter()
+                    .map(|(k, v)| (Shown::Text(k.clone()), shown(v)))
+                    .collect(),
+            ),
+        }
+    }
+    shown(value).repr()
+}
+
 /// Python's `repr` of a text, as the old client quotes a piece of an
 /// expression or a name (T3.5).
 pub(crate) fn text_repr(text: &str) -> String {
