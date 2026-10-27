@@ -427,3 +427,24 @@ fn the_part_a_refusal_happened_in_is_a_sentence_of_the_core_s() {
     crossed.part = Some(Sentence::Internal);
     assert!(!crossed.holds_to_table());
 }
+
+#[test]
+fn frame_validity_requirements_keep_one_shared_sentence_and_static_words() {
+    let template = wording::template(Sentence::FrameNoValidRows).text;
+    assert_eq!(
+        template,
+        "Found no valid rows in table '{table}'. Please make sure that there exists valid non-N/A {requirements} in this table."
+    );
+    assert_eq!(
+        template
+            .replace("{table}", "events")
+            .replace("{requirements}", "primary keys"),
+        "Found no valid rows in table 'events'. Please make sure that there exists valid non-N/A primary keys in this table."
+    );
+    assert_eq!(
+        template
+            .replace("{table}", "events")
+            .replace("{requirements}", "primary key and time column pairs"),
+        "Found no valid rows in table 'events'. Please make sure that there exists valid non-N/A primary key and time column pairs in this table."
+    );
+}

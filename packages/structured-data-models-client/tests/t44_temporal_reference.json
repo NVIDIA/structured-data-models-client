@@ -1,0 +1,4093 @@
+{
+  "reference": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+  "versions": {
+    "numpy": "2.5.3",
+    "pandas": "3.0.6",
+    "pyarrow": "25.0.1"
+  },
+  "native_sha256": "09a18226974cafd7c3d572ff061ee29651c549fb26d30c7d71fa7d6d635c6c52",
+  "source_sha256": {
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py": "949cc50c1cc59d47e56505a9746848de7c07156308219de089481f7fc1fddc98",
+    "packages/structured-data-models-relational-engine/src/sdm_relational_engine/rfm/backend/local/graph_store.py": "145e45a09b62a85b9ba0eab7eb7da37fc0d705bf5f5cda959a3ff97ed5e1e908",
+    "packages/structured-data-models-relational-engine/src/sdm_relational_engine/rfm/backend/local/sampler.py": "60e1e386b1584df5a5910bc10621cd29cdfaec7e1ab46c944811132a889c36cb",
+    "packages/structured-data-models-relational-engine/src/sdm_relational_engine/rfm/base/sampler.py": "096a7e020d906a01344608a21c0ae8b78d3432cf8f492dec60128487f262c072",
+    "packages/structured-data-models-relational-engine/src/sdm_relational_engine/rfm/base/utils.py": "bf61d77a4811bd9c5e03c8cf7aff9a8454742e4947d2c7ca0d687a524ed1ca2f",
+    "packages/structured-data-models-relational-engine/src/sdm_relational_engine/csrc/neighbor_sampler.cpp": "65ce36bf62446e297aea6e722247adab07b3cb9579789a482b73edc8549161f2"
+  },
+  "probe_sha256": "4a279b2cc7527e99435eb7a94cd6eb65b201827326f4fb0c5203511a3d37e4fd",
+  "cases": {
+    "s-positive": {
+      "unit": "s",
+      "anchor": "1970-01-01T00:00:00.100000000",
+      "mutation": null,
+      "sent": [
+        {
+          "model": "kumo-relational",
+          "task": {
+            "kind": "regression",
+            "target": {
+              "column_name": "TARGET",
+              "dtype": "int64"
+            },
+            "entity_table_names": [
+              "users"
+            ],
+            "anchor_time_column": "__kumo_anchor_time"
+          },
+          "schema": {
+            "instance_table": {
+              "columns": {
+                "instance_id": {
+                  "dtype": "int64",
+                  "stype": "ID",
+                  "nullable": false
+                },
+                "__kumo_entity_ref_0": {
+                  "dtype": "int64",
+                  "stype": "ID"
+                },
+                "__kumo_anchor_time": {
+                  "dtype": "timestamp[us]",
+                  "stype": "timestamp",
+                  "nullable": false
+                },
+                "TARGET": {
+                  "dtype": "int64",
+                  "stype": "numerical"
+                }
+              },
+              "primary_key": "instance_id"
+            },
+            "related_tables": {
+              "users": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "nullable": false
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "user_id"
+                ]
+              },
+              "events": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "__node_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "marker": {
+                    "dtype": "int64",
+                    "stype": "numerical"
+                  },
+                  "amount": {
+                    "dtype": "float32",
+                    "stype": "numerical"
+                  },
+                  "at": {
+                    "dtype": "timestamp[us]",
+                    "stype": "timestamp"
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "stype": "ID"
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "__node_id"
+                ]
+              }
+            },
+            "relationships": [
+              {
+                "source_columns": [
+                  "__kumo_entity_ref_0"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              },
+              {
+                "source_table": "events",
+                "source_columns": [
+                  "user_id"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              }
+            ]
+          },
+          "context": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time",
+                "TARGET"
+              ],
+              "rows": [
+                [
+                  0,
+                  1,
+                  "1970-01-01T00:00:00.000000Z",
+                  21
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              },
+              "events": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "amount",
+                  "at",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    0,
+                    0,
+                    2,
+                    2.0,
+                    "1970-01-01T00:00:00.000000Z",
+                    1
+                  ],
+                  [
+                    0,
+                    1,
+                    6,
+                    6.0,
+                    "1970-01-01T00:00:00.000000Z",
+                    1
+                  ]
+                ]
+              }
+            }
+          },
+          "predict": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time"
+              ],
+              "rows": [
+                [
+                  3,
+                  7,
+                  "1970-01-01T00:00:00.000000Z"
+                ],
+                [
+                  4,
+                  8,
+                  "1970-01-01T00:00:00.000000Z"
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    3,
+                    7
+                  ],
+                  [
+                    4,
+                    8
+                  ]
+                ]
+              },
+              "events": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "amount",
+                  "at",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    3,
+                    6,
+                    50,
+                    50.0,
+                    "1970-01-01T00:00:00.000000Z",
+                    7
+                  ],
+                  [
+                    3,
+                    7,
+                    54,
+                    54.0,
+                    "1970-01-01T00:00:00.000000Z",
+                    7
+                  ],
+                  [
+                    4,
+                    8,
+                    58,
+                    58.0,
+                    "1970-01-01T00:00:00.000000Z",
+                    8
+                  ],
+                  [
+                    4,
+                    9,
+                    62,
+                    62.0,
+                    "1970-01-01T00:00:00.000000Z",
+                    8
+                  ]
+                ]
+              }
+            }
+          },
+          "output": {
+            "fields": [
+              "prediction"
+            ],
+            "prediction_statistic": "median"
+          },
+          "inference": {
+            "run_mode": "fast",
+            "use_prediction_time": false
+          },
+          "metadata": {
+            "source_query": "PREDICT users.age FOR EACH users.user_id",
+            "num_context_examples": 3,
+            "num_prediction_examples": 2,
+            "request_id": "sdm-c95511a70539"
+          }
+        }
+      ],
+      "warnings": [
+        "Received custom 'num_neighbors' option; ignoring custom 'num_hops=1' option",
+        "2 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it.",
+        "every context row has the same users.age, so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ."
+      ]
+    },
+    "s-negative": {
+      "unit": "s",
+      "anchor": "1969-12-31T23:59:59.200000000",
+      "mutation": null,
+      "sent": [
+        {
+          "model": "kumo-relational",
+          "task": {
+            "kind": "regression",
+            "target": {
+              "column_name": "TARGET",
+              "dtype": "int64"
+            },
+            "entity_table_names": [
+              "users"
+            ],
+            "anchor_time_column": "__kumo_anchor_time"
+          },
+          "schema": {
+            "instance_table": {
+              "columns": {
+                "instance_id": {
+                  "dtype": "int64",
+                  "stype": "ID",
+                  "nullable": false
+                },
+                "__kumo_entity_ref_0": {
+                  "dtype": "int64",
+                  "stype": "ID"
+                },
+                "__kumo_anchor_time": {
+                  "dtype": "timestamp[us]",
+                  "stype": "timestamp",
+                  "nullable": false
+                },
+                "TARGET": {
+                  "dtype": "int64",
+                  "stype": "numerical"
+                }
+              },
+              "primary_key": "instance_id"
+            },
+            "related_tables": {
+              "users": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "nullable": false
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "user_id"
+                ]
+              },
+              "events": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "__node_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "marker": {
+                    "dtype": "int64",
+                    "stype": "numerical"
+                  },
+                  "amount": {
+                    "dtype": "float32",
+                    "stype": "numerical"
+                  },
+                  "at": {
+                    "dtype": "timestamp[us]",
+                    "stype": "timestamp"
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "stype": "ID"
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "__node_id"
+                ]
+              }
+            },
+            "relationships": [
+              {
+                "source_columns": [
+                  "__kumo_entity_ref_0"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              },
+              {
+                "source_table": "events",
+                "source_columns": [
+                  "user_id"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              }
+            ]
+          },
+          "context": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time",
+                "TARGET"
+              ],
+              "rows": [
+                [
+                  0,
+                  1,
+                  "1969-12-31T23:59:59.000000Z",
+                  21
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              },
+              "events": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "amount",
+                  "at",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    0,
+                    0,
+                    3,
+                    3.0,
+                    "1969-12-31T23:59:59.000000Z",
+                    1
+                  ],
+                  [
+                    0,
+                    1,
+                    4,
+                    4.0,
+                    "1969-12-31T23:59:59.000000Z",
+                    1
+                  ]
+                ]
+              }
+            }
+          },
+          "predict": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time"
+              ],
+              "rows": [
+                [
+                  3,
+                  7,
+                  "1969-12-31T23:59:59.000000Z"
+                ],
+                [
+                  4,
+                  8,
+                  "1969-12-31T23:59:59.000000Z"
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    3,
+                    7
+                  ],
+                  [
+                    4,
+                    8
+                  ]
+                ]
+              },
+              "events": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "amount",
+                  "at",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    3,
+                    6,
+                    51,
+                    51.0,
+                    "1969-12-31T23:59:59.000000Z",
+                    7
+                  ],
+                  [
+                    3,
+                    7,
+                    52,
+                    52.0,
+                    "1969-12-31T23:59:59.000000Z",
+                    7
+                  ],
+                  [
+                    4,
+                    8,
+                    59,
+                    59.0,
+                    "1969-12-31T23:59:59.000000Z",
+                    8
+                  ],
+                  [
+                    4,
+                    9,
+                    60,
+                    60.0,
+                    "1969-12-31T23:59:59.000000Z",
+                    8
+                  ]
+                ]
+              }
+            }
+          },
+          "output": {
+            "fields": [
+              "prediction"
+            ],
+            "prediction_statistic": "median"
+          },
+          "inference": {
+            "run_mode": "fast",
+            "use_prediction_time": false
+          },
+          "metadata": {
+            "source_query": "PREDICT users.age FOR EACH users.user_id",
+            "num_context_examples": 3,
+            "num_prediction_examples": 2,
+            "request_id": "sdm-c999b83e0c46"
+          }
+        }
+      ],
+      "warnings": [
+        "Received custom 'num_neighbors' option; ignoring custom 'num_hops=1' option",
+        "2 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it.",
+        "every context row has the same users.age, so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ."
+      ]
+    },
+    "s-default": {
+      "unit": "s",
+      "anchor": "default",
+      "mutation": null,
+      "sent": [
+        {
+          "model": "kumo-relational",
+          "task": {
+            "kind": "regression",
+            "target": {
+              "column_name": "TARGET",
+              "dtype": "int64"
+            },
+            "entity_table_names": [
+              "users"
+            ],
+            "anchor_time_column": "__kumo_anchor_time"
+          },
+          "schema": {
+            "instance_table": {
+              "columns": {
+                "instance_id": {
+                  "dtype": "int64",
+                  "stype": "ID",
+                  "nullable": false
+                },
+                "__kumo_entity_ref_0": {
+                  "dtype": "int64",
+                  "stype": "ID"
+                },
+                "__kumo_anchor_time": {
+                  "dtype": "timestamp[us]",
+                  "stype": "timestamp",
+                  "nullable": false
+                },
+                "TARGET": {
+                  "dtype": "int64",
+                  "stype": "numerical"
+                }
+              },
+              "primary_key": "instance_id"
+            },
+            "related_tables": {
+              "users": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "nullable": false
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "user_id"
+                ]
+              },
+              "events": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "__node_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "marker": {
+                    "dtype": "int64",
+                    "stype": "numerical"
+                  },
+                  "amount": {
+                    "dtype": "float32",
+                    "stype": "numerical"
+                  },
+                  "at": {
+                    "dtype": "timestamp[us]",
+                    "stype": "timestamp"
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "stype": "ID"
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "__node_id"
+                ]
+              }
+            },
+            "relationships": [
+              {
+                "source_columns": [
+                  "__kumo_entity_ref_0"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              },
+              {
+                "source_table": "events",
+                "source_columns": [
+                  "user_id"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              }
+            ]
+          },
+          "context": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time",
+                "TARGET"
+              ],
+              "rows": [
+                [
+                  0,
+                  1,
+                  "1970-01-01T00:00:03.000000Z",
+                  21
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              },
+              "events": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "amount",
+                  "at",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    0,
+                    0,
+                    5,
+                    5.0,
+                    "1970-01-01T00:00:02.000000Z",
+                    1
+                  ],
+                  [
+                    0,
+                    1,
+                    7,
+                    7.0,
+                    "1970-01-01T00:00:03.000000Z",
+                    1
+                  ]
+                ]
+              }
+            }
+          },
+          "predict": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time"
+              ],
+              "rows": [
+                [
+                  3,
+                  7,
+                  "1970-01-01T00:00:03.000000Z"
+                ],
+                [
+                  4,
+                  8,
+                  "1970-01-01T00:00:03.000000Z"
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    3,
+                    7
+                  ],
+                  [
+                    4,
+                    8
+                  ]
+                ]
+              },
+              "events": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "amount",
+                  "at",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    3,
+                    6,
+                    53,
+                    53.0,
+                    "1970-01-01T00:00:02.000000Z",
+                    7
+                  ],
+                  [
+                    3,
+                    7,
+                    55,
+                    55.0,
+                    "1970-01-01T00:00:03.000000Z",
+                    7
+                  ],
+                  [
+                    4,
+                    8,
+                    61,
+                    61.0,
+                    "1970-01-01T00:00:02.000000Z",
+                    8
+                  ],
+                  [
+                    4,
+                    9,
+                    63,
+                    63.0,
+                    "1970-01-01T00:00:03.000000Z",
+                    8
+                  ]
+                ]
+              }
+            }
+          },
+          "output": {
+            "fields": [
+              "prediction"
+            ],
+            "prediction_statistic": "median"
+          },
+          "inference": {
+            "run_mode": "fast",
+            "use_prediction_time": false
+          },
+          "metadata": {
+            "source_query": "PREDICT users.age FOR EACH users.user_id",
+            "num_context_examples": 3,
+            "num_prediction_examples": 2,
+            "request_id": "sdm-c5521c3beb83"
+          }
+        }
+      ],
+      "warnings": [
+        "Received custom 'num_neighbors' option; ignoring custom 'num_hops=1' option",
+        "2 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it.",
+        "every context row has the same users.age, so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ."
+      ]
+    },
+    "ms-positive": {
+      "unit": "ms",
+      "anchor": "1970-01-01T00:00:00.100000000",
+      "mutation": null,
+      "sent": [
+        {
+          "model": "kumo-relational",
+          "task": {
+            "kind": "regression",
+            "target": {
+              "column_name": "TARGET",
+              "dtype": "int64"
+            },
+            "entity_table_names": [
+              "users"
+            ],
+            "anchor_time_column": "__kumo_anchor_time"
+          },
+          "schema": {
+            "instance_table": {
+              "columns": {
+                "instance_id": {
+                  "dtype": "int64",
+                  "stype": "ID",
+                  "nullable": false
+                },
+                "__kumo_entity_ref_0": {
+                  "dtype": "int64",
+                  "stype": "ID"
+                },
+                "__kumo_anchor_time": {
+                  "dtype": "timestamp[us]",
+                  "stype": "timestamp",
+                  "nullable": false
+                },
+                "TARGET": {
+                  "dtype": "int64",
+                  "stype": "numerical"
+                }
+              },
+              "primary_key": "instance_id"
+            },
+            "related_tables": {
+              "users": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "nullable": false
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "user_id"
+                ]
+              },
+              "events": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "__node_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "marker": {
+                    "dtype": "int64",
+                    "stype": "numerical"
+                  },
+                  "amount": {
+                    "dtype": "float32",
+                    "stype": "numerical"
+                  },
+                  "at": {
+                    "dtype": "timestamp[us]",
+                    "stype": "timestamp"
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "stype": "ID"
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "__node_id"
+                ]
+              }
+            },
+            "relationships": [
+              {
+                "source_columns": [
+                  "__kumo_entity_ref_0"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              },
+              {
+                "source_table": "events",
+                "source_columns": [
+                  "user_id"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              }
+            ]
+          },
+          "context": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time",
+                "TARGET"
+              ],
+              "rows": [
+                [
+                  0,
+                  1,
+                  "1970-01-01T00:00:00.000000Z",
+                  21
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              },
+              "events": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "amount",
+                  "at",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    0,
+                    0,
+                    2,
+                    2.0,
+                    "1970-01-01T00:00:00.500000Z",
+                    1
+                  ],
+                  [
+                    0,
+                    1,
+                    6,
+                    6.0,
+                    "1970-01-01T00:00:00.000000Z",
+                    1
+                  ]
+                ]
+              }
+            }
+          },
+          "predict": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time"
+              ],
+              "rows": [
+                [
+                  3,
+                  7,
+                  "1970-01-01T00:00:00.000000Z"
+                ],
+                [
+                  4,
+                  8,
+                  "1970-01-01T00:00:00.000000Z"
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    3,
+                    7
+                  ],
+                  [
+                    4,
+                    8
+                  ]
+                ]
+              },
+              "events": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "amount",
+                  "at",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    3,
+                    6,
+                    50,
+                    50.0,
+                    "1970-01-01T00:00:00.500000Z",
+                    7
+                  ],
+                  [
+                    3,
+                    7,
+                    54,
+                    54.0,
+                    "1970-01-01T00:00:00.000000Z",
+                    7
+                  ],
+                  [
+                    4,
+                    8,
+                    58,
+                    58.0,
+                    "1970-01-01T00:00:00.500000Z",
+                    8
+                  ],
+                  [
+                    4,
+                    9,
+                    62,
+                    62.0,
+                    "1970-01-01T00:00:00.000000Z",
+                    8
+                  ]
+                ]
+              }
+            }
+          },
+          "output": {
+            "fields": [
+              "prediction"
+            ],
+            "prediction_statistic": "median"
+          },
+          "inference": {
+            "run_mode": "fast",
+            "use_prediction_time": false
+          },
+          "metadata": {
+            "source_query": "PREDICT users.age FOR EACH users.user_id",
+            "num_context_examples": 3,
+            "num_prediction_examples": 2,
+            "request_id": "sdm-49df509009e1"
+          }
+        }
+      ],
+      "warnings": [
+        "Received custom 'num_neighbors' option; ignoring custom 'num_hops=1' option",
+        "2 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it.",
+        "every context row has the same users.age, so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ."
+      ]
+    },
+    "ms-negative": {
+      "unit": "ms",
+      "anchor": "1969-12-31T23:59:59.200000000",
+      "mutation": null,
+      "sent": [
+        {
+          "model": "kumo-relational",
+          "task": {
+            "kind": "regression",
+            "target": {
+              "column_name": "TARGET",
+              "dtype": "int64"
+            },
+            "entity_table_names": [
+              "users"
+            ],
+            "anchor_time_column": "__kumo_anchor_time"
+          },
+          "schema": {
+            "instance_table": {
+              "columns": {
+                "instance_id": {
+                  "dtype": "int64",
+                  "stype": "ID",
+                  "nullable": false
+                },
+                "__kumo_entity_ref_0": {
+                  "dtype": "int64",
+                  "stype": "ID"
+                },
+                "__kumo_anchor_time": {
+                  "dtype": "timestamp[us]",
+                  "stype": "timestamp",
+                  "nullable": false
+                },
+                "TARGET": {
+                  "dtype": "int64",
+                  "stype": "numerical"
+                }
+              },
+              "primary_key": "instance_id"
+            },
+            "related_tables": {
+              "users": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "nullable": false
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "user_id"
+                ]
+              },
+              "events": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "__node_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "marker": {
+                    "dtype": "int64",
+                    "stype": "numerical"
+                  },
+                  "amount": {
+                    "dtype": "float32",
+                    "stype": "numerical"
+                  },
+                  "at": {
+                    "dtype": "timestamp[us]",
+                    "stype": "timestamp"
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "stype": "ID"
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "__node_id"
+                ]
+              }
+            },
+            "relationships": [
+              {
+                "source_columns": [
+                  "__kumo_entity_ref_0"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              },
+              {
+                "source_table": "events",
+                "source_columns": [
+                  "user_id"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              }
+            ]
+          },
+          "context": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time",
+                "TARGET"
+              ],
+              "rows": [
+                [
+                  0,
+                  1,
+                  "1969-12-31T23:59:59.000000Z",
+                  21
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              },
+              "events": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "amount",
+                  "at",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    0,
+                    0,
+                    5,
+                    5.0,
+                    "1969-12-31T23:59:59.300000Z",
+                    1
+                  ],
+                  [
+                    0,
+                    1,
+                    7,
+                    7.0,
+                    "1969-12-31T23:59:59.500000Z",
+                    1
+                  ]
+                ]
+              }
+            }
+          },
+          "predict": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time"
+              ],
+              "rows": [
+                [
+                  3,
+                  7,
+                  "1969-12-31T23:59:59.000000Z"
+                ],
+                [
+                  4,
+                  8,
+                  "1969-12-31T23:59:59.000000Z"
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    3,
+                    7
+                  ],
+                  [
+                    4,
+                    8
+                  ]
+                ]
+              },
+              "events": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "amount",
+                  "at",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    3,
+                    6,
+                    53,
+                    53.0,
+                    "1969-12-31T23:59:59.300000Z",
+                    7
+                  ],
+                  [
+                    3,
+                    7,
+                    55,
+                    55.0,
+                    "1969-12-31T23:59:59.500000Z",
+                    7
+                  ],
+                  [
+                    4,
+                    8,
+                    61,
+                    61.0,
+                    "1969-12-31T23:59:59.300000Z",
+                    8
+                  ],
+                  [
+                    4,
+                    9,
+                    63,
+                    63.0,
+                    "1969-12-31T23:59:59.500000Z",
+                    8
+                  ]
+                ]
+              }
+            }
+          },
+          "output": {
+            "fields": [
+              "prediction"
+            ],
+            "prediction_statistic": "median"
+          },
+          "inference": {
+            "run_mode": "fast",
+            "use_prediction_time": false
+          },
+          "metadata": {
+            "source_query": "PREDICT users.age FOR EACH users.user_id",
+            "num_context_examples": 3,
+            "num_prediction_examples": 2,
+            "request_id": "sdm-7fb3f82c1a15"
+          }
+        }
+      ],
+      "warnings": [
+        "Received custom 'num_neighbors' option; ignoring custom 'num_hops=1' option",
+        "2 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it.",
+        "every context row has the same users.age, so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ."
+      ]
+    },
+    "ms-default": {
+      "unit": "ms",
+      "anchor": "default",
+      "mutation": null,
+      "sent": [
+        {
+          "model": "kumo-relational",
+          "task": {
+            "kind": "regression",
+            "target": {
+              "column_name": "TARGET",
+              "dtype": "int64"
+            },
+            "entity_table_names": [
+              "users"
+            ],
+            "anchor_time_column": "__kumo_anchor_time"
+          },
+          "schema": {
+            "instance_table": {
+              "columns": {
+                "instance_id": {
+                  "dtype": "int64",
+                  "stype": "ID",
+                  "nullable": false
+                },
+                "__kumo_entity_ref_0": {
+                  "dtype": "int64",
+                  "stype": "ID"
+                },
+                "__kumo_anchor_time": {
+                  "dtype": "timestamp[us]",
+                  "stype": "timestamp",
+                  "nullable": false
+                },
+                "TARGET": {
+                  "dtype": "int64",
+                  "stype": "numerical"
+                }
+              },
+              "primary_key": "instance_id"
+            },
+            "related_tables": {
+              "users": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "nullable": false
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "user_id"
+                ]
+              },
+              "events": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "__node_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "marker": {
+                    "dtype": "int64",
+                    "stype": "numerical"
+                  },
+                  "amount": {
+                    "dtype": "float32",
+                    "stype": "numerical"
+                  },
+                  "at": {
+                    "dtype": "timestamp[us]",
+                    "stype": "timestamp"
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "stype": "ID"
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "__node_id"
+                ]
+              }
+            },
+            "relationships": [
+              {
+                "source_columns": [
+                  "__kumo_entity_ref_0"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              },
+              {
+                "source_table": "events",
+                "source_columns": [
+                  "user_id"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              }
+            ]
+          },
+          "context": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time",
+                "TARGET"
+              ],
+              "rows": [
+                [
+                  0,
+                  1,
+                  "1970-01-01T00:00:01.000000Z",
+                  21
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              },
+              "events": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "amount",
+                  "at",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    0,
+                    0,
+                    6,
+                    6.0,
+                    "1970-01-01T00:00:00.000000Z",
+                    1
+                  ],
+                  [
+                    0,
+                    1,
+                    0,
+                    0.0,
+                    "1970-01-01T00:00:01.200000Z",
+                    1
+                  ]
+                ]
+              }
+            }
+          },
+          "predict": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time"
+              ],
+              "rows": [
+                [
+                  3,
+                  7,
+                  "1970-01-01T00:00:01.000000Z"
+                ],
+                [
+                  4,
+                  8,
+                  "1970-01-01T00:00:01.000000Z"
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    3,
+                    7
+                  ],
+                  [
+                    4,
+                    8
+                  ]
+                ]
+              },
+              "events": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "amount",
+                  "at",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    3,
+                    6,
+                    54,
+                    54.0,
+                    "1970-01-01T00:00:00.000000Z",
+                    7
+                  ],
+                  [
+                    3,
+                    7,
+                    48,
+                    48.0,
+                    "1970-01-01T00:00:01.200000Z",
+                    7
+                  ],
+                  [
+                    4,
+                    8,
+                    62,
+                    62.0,
+                    "1970-01-01T00:00:00.000000Z",
+                    8
+                  ],
+                  [
+                    4,
+                    9,
+                    56,
+                    56.0,
+                    "1970-01-01T00:00:01.200000Z",
+                    8
+                  ]
+                ]
+              }
+            }
+          },
+          "output": {
+            "fields": [
+              "prediction"
+            ],
+            "prediction_statistic": "median"
+          },
+          "inference": {
+            "run_mode": "fast",
+            "use_prediction_time": false
+          },
+          "metadata": {
+            "source_query": "PREDICT users.age FOR EACH users.user_id",
+            "num_context_examples": 3,
+            "num_prediction_examples": 2,
+            "request_id": "sdm-a5eddb4eb2d0"
+          }
+        }
+      ],
+      "warnings": [
+        "Received custom 'num_neighbors' option; ignoring custom 'num_hops=1' option",
+        "2 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it.",
+        "every context row has the same users.age, so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ."
+      ]
+    },
+    "us-positive": {
+      "unit": "us",
+      "anchor": "1970-01-01T00:00:00.100000000",
+      "mutation": null,
+      "sent": [
+        {
+          "model": "kumo-relational",
+          "task": {
+            "kind": "regression",
+            "target": {
+              "column_name": "TARGET",
+              "dtype": "int64"
+            },
+            "entity_table_names": [
+              "users"
+            ],
+            "anchor_time_column": "__kumo_anchor_time"
+          },
+          "schema": {
+            "instance_table": {
+              "columns": {
+                "instance_id": {
+                  "dtype": "int64",
+                  "stype": "ID",
+                  "nullable": false
+                },
+                "__kumo_entity_ref_0": {
+                  "dtype": "int64",
+                  "stype": "ID"
+                },
+                "__kumo_anchor_time": {
+                  "dtype": "timestamp[us]",
+                  "stype": "timestamp",
+                  "nullable": false
+                },
+                "TARGET": {
+                  "dtype": "int64",
+                  "stype": "numerical"
+                }
+              },
+              "primary_key": "instance_id"
+            },
+            "related_tables": {
+              "users": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "nullable": false
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "user_id"
+                ]
+              },
+              "events": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "__node_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "marker": {
+                    "dtype": "int64",
+                    "stype": "numerical"
+                  },
+                  "amount": {
+                    "dtype": "float32",
+                    "stype": "numerical"
+                  },
+                  "at": {
+                    "dtype": "timestamp[us]",
+                    "stype": "timestamp"
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "stype": "ID"
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "__node_id"
+                ]
+              }
+            },
+            "relationships": [
+              {
+                "source_columns": [
+                  "__kumo_entity_ref_0"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              },
+              {
+                "source_table": "events",
+                "source_columns": [
+                  "user_id"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              }
+            ]
+          },
+          "context": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time",
+                "TARGET"
+              ],
+              "rows": [
+                [
+                  0,
+                  1,
+                  "1970-01-01T00:00:00.000000Z",
+                  21
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              },
+              "events": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "amount",
+                  "at",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    0,
+                    0,
+                    2,
+                    2.0,
+                    "1970-01-01T00:00:00.500000Z",
+                    1
+                  ],
+                  [
+                    0,
+                    1,
+                    6,
+                    6.0,
+                    "1970-01-01T00:00:00.000000Z",
+                    1
+                  ]
+                ]
+              }
+            }
+          },
+          "predict": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time"
+              ],
+              "rows": [
+                [
+                  3,
+                  7,
+                  "1970-01-01T00:00:00.000000Z"
+                ],
+                [
+                  4,
+                  8,
+                  "1970-01-01T00:00:00.000000Z"
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    3,
+                    7
+                  ],
+                  [
+                    4,
+                    8
+                  ]
+                ]
+              },
+              "events": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "amount",
+                  "at",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    3,
+                    6,
+                    50,
+                    50.0,
+                    "1970-01-01T00:00:00.500000Z",
+                    7
+                  ],
+                  [
+                    3,
+                    7,
+                    54,
+                    54.0,
+                    "1970-01-01T00:00:00.000000Z",
+                    7
+                  ],
+                  [
+                    4,
+                    8,
+                    58,
+                    58.0,
+                    "1970-01-01T00:00:00.500000Z",
+                    8
+                  ],
+                  [
+                    4,
+                    9,
+                    62,
+                    62.0,
+                    "1970-01-01T00:00:00.000000Z",
+                    8
+                  ]
+                ]
+              }
+            }
+          },
+          "output": {
+            "fields": [
+              "prediction"
+            ],
+            "prediction_statistic": "median"
+          },
+          "inference": {
+            "run_mode": "fast",
+            "use_prediction_time": false
+          },
+          "metadata": {
+            "source_query": "PREDICT users.age FOR EACH users.user_id",
+            "num_context_examples": 3,
+            "num_prediction_examples": 2,
+            "request_id": "sdm-85b000344fd3"
+          }
+        }
+      ],
+      "warnings": [
+        "Received custom 'num_neighbors' option; ignoring custom 'num_hops=1' option",
+        "2 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it.",
+        "every context row has the same users.age, so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ."
+      ]
+    },
+    "us-negative": {
+      "unit": "us",
+      "anchor": "1969-12-31T23:59:59.200000000",
+      "mutation": null,
+      "sent": [
+        {
+          "model": "kumo-relational",
+          "task": {
+            "kind": "regression",
+            "target": {
+              "column_name": "TARGET",
+              "dtype": "int64"
+            },
+            "entity_table_names": [
+              "users"
+            ],
+            "anchor_time_column": "__kumo_anchor_time"
+          },
+          "schema": {
+            "instance_table": {
+              "columns": {
+                "instance_id": {
+                  "dtype": "int64",
+                  "stype": "ID",
+                  "nullable": false
+                },
+                "__kumo_entity_ref_0": {
+                  "dtype": "int64",
+                  "stype": "ID"
+                },
+                "__kumo_anchor_time": {
+                  "dtype": "timestamp[us]",
+                  "stype": "timestamp",
+                  "nullable": false
+                },
+                "TARGET": {
+                  "dtype": "int64",
+                  "stype": "numerical"
+                }
+              },
+              "primary_key": "instance_id"
+            },
+            "related_tables": {
+              "users": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "nullable": false
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "user_id"
+                ]
+              },
+              "events": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "__node_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "marker": {
+                    "dtype": "int64",
+                    "stype": "numerical"
+                  },
+                  "amount": {
+                    "dtype": "float32",
+                    "stype": "numerical"
+                  },
+                  "at": {
+                    "dtype": "timestamp[us]",
+                    "stype": "timestamp"
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "stype": "ID"
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "__node_id"
+                ]
+              }
+            },
+            "relationships": [
+              {
+                "source_columns": [
+                  "__kumo_entity_ref_0"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              },
+              {
+                "source_table": "events",
+                "source_columns": [
+                  "user_id"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              }
+            ]
+          },
+          "context": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time",
+                "TARGET"
+              ],
+              "rows": [
+                [
+                  0,
+                  1,
+                  "1969-12-31T23:59:59.000000Z",
+                  21
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              },
+              "events": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "amount",
+                  "at",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    0,
+                    0,
+                    5,
+                    5.0,
+                    "1969-12-31T23:59:59.300000Z",
+                    1
+                  ],
+                  [
+                    0,
+                    1,
+                    7,
+                    7.0,
+                    "1969-12-31T23:59:59.500000Z",
+                    1
+                  ]
+                ]
+              }
+            }
+          },
+          "predict": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time"
+              ],
+              "rows": [
+                [
+                  3,
+                  7,
+                  "1969-12-31T23:59:59.000000Z"
+                ],
+                [
+                  4,
+                  8,
+                  "1969-12-31T23:59:59.000000Z"
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    3,
+                    7
+                  ],
+                  [
+                    4,
+                    8
+                  ]
+                ]
+              },
+              "events": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "amount",
+                  "at",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    3,
+                    6,
+                    53,
+                    53.0,
+                    "1969-12-31T23:59:59.300000Z",
+                    7
+                  ],
+                  [
+                    3,
+                    7,
+                    55,
+                    55.0,
+                    "1969-12-31T23:59:59.500000Z",
+                    7
+                  ],
+                  [
+                    4,
+                    8,
+                    61,
+                    61.0,
+                    "1969-12-31T23:59:59.300000Z",
+                    8
+                  ],
+                  [
+                    4,
+                    9,
+                    63,
+                    63.0,
+                    "1969-12-31T23:59:59.500000Z",
+                    8
+                  ]
+                ]
+              }
+            }
+          },
+          "output": {
+            "fields": [
+              "prediction"
+            ],
+            "prediction_statistic": "median"
+          },
+          "inference": {
+            "run_mode": "fast",
+            "use_prediction_time": false
+          },
+          "metadata": {
+            "source_query": "PREDICT users.age FOR EACH users.user_id",
+            "num_context_examples": 3,
+            "num_prediction_examples": 2,
+            "request_id": "sdm-f8395a302925"
+          }
+        }
+      ],
+      "warnings": [
+        "Received custom 'num_neighbors' option; ignoring custom 'num_hops=1' option",
+        "2 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it.",
+        "every context row has the same users.age, so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ."
+      ]
+    },
+    "us-default": {
+      "unit": "us",
+      "anchor": "default",
+      "mutation": null,
+      "sent": [
+        {
+          "model": "kumo-relational",
+          "task": {
+            "kind": "regression",
+            "target": {
+              "column_name": "TARGET",
+              "dtype": "int64"
+            },
+            "entity_table_names": [
+              "users"
+            ],
+            "anchor_time_column": "__kumo_anchor_time"
+          },
+          "schema": {
+            "instance_table": {
+              "columns": {
+                "instance_id": {
+                  "dtype": "int64",
+                  "stype": "ID",
+                  "nullable": false
+                },
+                "__kumo_entity_ref_0": {
+                  "dtype": "int64",
+                  "stype": "ID"
+                },
+                "__kumo_anchor_time": {
+                  "dtype": "timestamp[us]",
+                  "stype": "timestamp",
+                  "nullable": false
+                },
+                "TARGET": {
+                  "dtype": "int64",
+                  "stype": "numerical"
+                }
+              },
+              "primary_key": "instance_id"
+            },
+            "related_tables": {
+              "users": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "nullable": false
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "user_id"
+                ]
+              },
+              "events": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "__node_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "marker": {
+                    "dtype": "int64",
+                    "stype": "numerical"
+                  },
+                  "amount": {
+                    "dtype": "float32",
+                    "stype": "numerical"
+                  },
+                  "at": {
+                    "dtype": "timestamp[us]",
+                    "stype": "timestamp"
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "stype": "ID"
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "__node_id"
+                ]
+              }
+            },
+            "relationships": [
+              {
+                "source_columns": [
+                  "__kumo_entity_ref_0"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              },
+              {
+                "source_table": "events",
+                "source_columns": [
+                  "user_id"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              }
+            ]
+          },
+          "context": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time",
+                "TARGET"
+              ],
+              "rows": [
+                [
+                  0,
+                  1,
+                  "1970-01-01T00:00:01.000000Z",
+                  21
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              },
+              "events": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "amount",
+                  "at",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    0,
+                    0,
+                    6,
+                    6.0,
+                    "1970-01-01T00:00:00.000000Z",
+                    1
+                  ],
+                  [
+                    0,
+                    1,
+                    0,
+                    0.0,
+                    "1970-01-01T00:00:01.200000Z",
+                    1
+                  ]
+                ]
+              }
+            }
+          },
+          "predict": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time"
+              ],
+              "rows": [
+                [
+                  3,
+                  7,
+                  "1970-01-01T00:00:01.000000Z"
+                ],
+                [
+                  4,
+                  8,
+                  "1970-01-01T00:00:01.000000Z"
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    3,
+                    7
+                  ],
+                  [
+                    4,
+                    8
+                  ]
+                ]
+              },
+              "events": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "amount",
+                  "at",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    3,
+                    6,
+                    54,
+                    54.0,
+                    "1970-01-01T00:00:00.000000Z",
+                    7
+                  ],
+                  [
+                    3,
+                    7,
+                    48,
+                    48.0,
+                    "1970-01-01T00:00:01.200000Z",
+                    7
+                  ],
+                  [
+                    4,
+                    8,
+                    62,
+                    62.0,
+                    "1970-01-01T00:00:00.000000Z",
+                    8
+                  ],
+                  [
+                    4,
+                    9,
+                    56,
+                    56.0,
+                    "1970-01-01T00:00:01.200000Z",
+                    8
+                  ]
+                ]
+              }
+            }
+          },
+          "output": {
+            "fields": [
+              "prediction"
+            ],
+            "prediction_statistic": "median"
+          },
+          "inference": {
+            "run_mode": "fast",
+            "use_prediction_time": false
+          },
+          "metadata": {
+            "source_query": "PREDICT users.age FOR EACH users.user_id",
+            "num_context_examples": 3,
+            "num_prediction_examples": 2,
+            "request_id": "sdm-70dcecc4fe3b"
+          }
+        }
+      ],
+      "warnings": [
+        "Received custom 'num_neighbors' option; ignoring custom 'num_hops=1' option",
+        "2 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it.",
+        "every context row has the same users.age, so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ."
+      ]
+    },
+    "ns-positive": {
+      "unit": "ns",
+      "anchor": "1970-01-01T00:00:00.100000000",
+      "mutation": null,
+      "sent": [
+        {
+          "model": "kumo-relational",
+          "task": {
+            "kind": "regression",
+            "target": {
+              "column_name": "TARGET",
+              "dtype": "int64"
+            },
+            "entity_table_names": [
+              "users"
+            ],
+            "anchor_time_column": "__kumo_anchor_time"
+          },
+          "schema": {
+            "instance_table": {
+              "columns": {
+                "instance_id": {
+                  "dtype": "int64",
+                  "stype": "ID",
+                  "nullable": false
+                },
+                "__kumo_entity_ref_0": {
+                  "dtype": "int64",
+                  "stype": "ID"
+                },
+                "__kumo_anchor_time": {
+                  "dtype": "timestamp[us]",
+                  "stype": "timestamp",
+                  "nullable": false
+                },
+                "TARGET": {
+                  "dtype": "int64",
+                  "stype": "numerical"
+                }
+              },
+              "primary_key": "instance_id"
+            },
+            "related_tables": {
+              "users": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "nullable": false
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "user_id"
+                ]
+              },
+              "events": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "__node_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "marker": {
+                    "dtype": "int64",
+                    "stype": "numerical"
+                  },
+                  "amount": {
+                    "dtype": "float32",
+                    "stype": "numerical"
+                  },
+                  "at": {
+                    "dtype": "timestamp[us]",
+                    "stype": "timestamp"
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "stype": "ID"
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "__node_id"
+                ]
+              }
+            },
+            "relationships": [
+              {
+                "source_columns": [
+                  "__kumo_entity_ref_0"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              },
+              {
+                "source_table": "events",
+                "source_columns": [
+                  "user_id"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              }
+            ]
+          },
+          "context": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time",
+                "TARGET"
+              ],
+              "rows": [
+                [
+                  0,
+                  1,
+                  "1970-01-01T00:00:00.000000Z",
+                  21
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              },
+              "events": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "amount",
+                  "at",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    0,
+                    0,
+                    2,
+                    2.0,
+                    "1970-01-01T00:00:00.500000Z",
+                    1
+                  ],
+                  [
+                    0,
+                    1,
+                    6,
+                    6.0,
+                    "1970-01-01T00:00:00.000000Z",
+                    1
+                  ]
+                ]
+              }
+            }
+          },
+          "predict": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time"
+              ],
+              "rows": [
+                [
+                  3,
+                  7,
+                  "1970-01-01T00:00:00.000000Z"
+                ],
+                [
+                  4,
+                  8,
+                  "1970-01-01T00:00:00.000000Z"
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    3,
+                    7
+                  ],
+                  [
+                    4,
+                    8
+                  ]
+                ]
+              },
+              "events": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "amount",
+                  "at",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    3,
+                    6,
+                    50,
+                    50.0,
+                    "1970-01-01T00:00:00.500000Z",
+                    7
+                  ],
+                  [
+                    3,
+                    7,
+                    54,
+                    54.0,
+                    "1970-01-01T00:00:00.000000Z",
+                    7
+                  ],
+                  [
+                    4,
+                    8,
+                    58,
+                    58.0,
+                    "1970-01-01T00:00:00.500000Z",
+                    8
+                  ],
+                  [
+                    4,
+                    9,
+                    62,
+                    62.0,
+                    "1970-01-01T00:00:00.000000Z",
+                    8
+                  ]
+                ]
+              }
+            }
+          },
+          "output": {
+            "fields": [
+              "prediction"
+            ],
+            "prediction_statistic": "median"
+          },
+          "inference": {
+            "run_mode": "fast",
+            "use_prediction_time": false
+          },
+          "metadata": {
+            "source_query": "PREDICT users.age FOR EACH users.user_id",
+            "num_context_examples": 3,
+            "num_prediction_examples": 2,
+            "request_id": "sdm-7f4d6f932128"
+          }
+        }
+      ],
+      "warnings": [
+        "Received custom 'num_neighbors' option; ignoring custom 'num_hops=1' option",
+        "2 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it.",
+        "every context row has the same users.age, so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ."
+      ]
+    },
+    "ns-negative": {
+      "unit": "ns",
+      "anchor": "1969-12-31T23:59:59.200000000",
+      "mutation": null,
+      "sent": [
+        {
+          "model": "kumo-relational",
+          "task": {
+            "kind": "regression",
+            "target": {
+              "column_name": "TARGET",
+              "dtype": "int64"
+            },
+            "entity_table_names": [
+              "users"
+            ],
+            "anchor_time_column": "__kumo_anchor_time"
+          },
+          "schema": {
+            "instance_table": {
+              "columns": {
+                "instance_id": {
+                  "dtype": "int64",
+                  "stype": "ID",
+                  "nullable": false
+                },
+                "__kumo_entity_ref_0": {
+                  "dtype": "int64",
+                  "stype": "ID"
+                },
+                "__kumo_anchor_time": {
+                  "dtype": "timestamp[us]",
+                  "stype": "timestamp",
+                  "nullable": false
+                },
+                "TARGET": {
+                  "dtype": "int64",
+                  "stype": "numerical"
+                }
+              },
+              "primary_key": "instance_id"
+            },
+            "related_tables": {
+              "users": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "nullable": false
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "user_id"
+                ]
+              },
+              "events": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "__node_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "marker": {
+                    "dtype": "int64",
+                    "stype": "numerical"
+                  },
+                  "amount": {
+                    "dtype": "float32",
+                    "stype": "numerical"
+                  },
+                  "at": {
+                    "dtype": "timestamp[us]",
+                    "stype": "timestamp"
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "stype": "ID"
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "__node_id"
+                ]
+              }
+            },
+            "relationships": [
+              {
+                "source_columns": [
+                  "__kumo_entity_ref_0"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              },
+              {
+                "source_table": "events",
+                "source_columns": [
+                  "user_id"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              }
+            ]
+          },
+          "context": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time",
+                "TARGET"
+              ],
+              "rows": [
+                [
+                  0,
+                  1,
+                  "1969-12-31T23:59:59.000000Z",
+                  21
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              },
+              "events": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "amount",
+                  "at",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    0,
+                    0,
+                    5,
+                    5.0,
+                    "1969-12-31T23:59:59.300000Z",
+                    1
+                  ],
+                  [
+                    0,
+                    1,
+                    7,
+                    7.0,
+                    "1969-12-31T23:59:59.500000Z",
+                    1
+                  ]
+                ]
+              }
+            }
+          },
+          "predict": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time"
+              ],
+              "rows": [
+                [
+                  3,
+                  7,
+                  "1969-12-31T23:59:59.000000Z"
+                ],
+                [
+                  4,
+                  8,
+                  "1969-12-31T23:59:59.000000Z"
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    3,
+                    7
+                  ],
+                  [
+                    4,
+                    8
+                  ]
+                ]
+              },
+              "events": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "amount",
+                  "at",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    3,
+                    6,
+                    53,
+                    53.0,
+                    "1969-12-31T23:59:59.300000Z",
+                    7
+                  ],
+                  [
+                    3,
+                    7,
+                    55,
+                    55.0,
+                    "1969-12-31T23:59:59.500000Z",
+                    7
+                  ],
+                  [
+                    4,
+                    8,
+                    61,
+                    61.0,
+                    "1969-12-31T23:59:59.300000Z",
+                    8
+                  ],
+                  [
+                    4,
+                    9,
+                    63,
+                    63.0,
+                    "1969-12-31T23:59:59.500000Z",
+                    8
+                  ]
+                ]
+              }
+            }
+          },
+          "output": {
+            "fields": [
+              "prediction"
+            ],
+            "prediction_statistic": "median"
+          },
+          "inference": {
+            "run_mode": "fast",
+            "use_prediction_time": false
+          },
+          "metadata": {
+            "source_query": "PREDICT users.age FOR EACH users.user_id",
+            "num_context_examples": 3,
+            "num_prediction_examples": 2,
+            "request_id": "sdm-dabba5da1a88"
+          }
+        }
+      ],
+      "warnings": [
+        "Received custom 'num_neighbors' option; ignoring custom 'num_hops=1' option",
+        "2 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it.",
+        "every context row has the same users.age, so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ."
+      ]
+    },
+    "ns-default": {
+      "unit": "ns",
+      "anchor": "default",
+      "mutation": null,
+      "sent": [
+        {
+          "model": "kumo-relational",
+          "task": {
+            "kind": "regression",
+            "target": {
+              "column_name": "TARGET",
+              "dtype": "int64"
+            },
+            "entity_table_names": [
+              "users"
+            ],
+            "anchor_time_column": "__kumo_anchor_time"
+          },
+          "schema": {
+            "instance_table": {
+              "columns": {
+                "instance_id": {
+                  "dtype": "int64",
+                  "stype": "ID",
+                  "nullable": false
+                },
+                "__kumo_entity_ref_0": {
+                  "dtype": "int64",
+                  "stype": "ID"
+                },
+                "__kumo_anchor_time": {
+                  "dtype": "timestamp[us]",
+                  "stype": "timestamp",
+                  "nullable": false
+                },
+                "TARGET": {
+                  "dtype": "int64",
+                  "stype": "numerical"
+                }
+              },
+              "primary_key": "instance_id"
+            },
+            "related_tables": {
+              "users": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "nullable": false
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "user_id"
+                ]
+              },
+              "events": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "__node_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "marker": {
+                    "dtype": "int64",
+                    "stype": "numerical"
+                  },
+                  "amount": {
+                    "dtype": "float32",
+                    "stype": "numerical"
+                  },
+                  "at": {
+                    "dtype": "timestamp[us]",
+                    "stype": "timestamp"
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "stype": "ID"
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "__node_id"
+                ]
+              }
+            },
+            "relationships": [
+              {
+                "source_columns": [
+                  "__kumo_entity_ref_0"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              },
+              {
+                "source_table": "events",
+                "source_columns": [
+                  "user_id"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              }
+            ]
+          },
+          "context": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time",
+                "TARGET"
+              ],
+              "rows": [
+                [
+                  0,
+                  1,
+                  "1970-01-01T00:00:01.000000Z",
+                  21
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              },
+              "events": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "amount",
+                  "at",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    0,
+                    0,
+                    6,
+                    6.0,
+                    "1970-01-01T00:00:00.000000Z",
+                    1
+                  ],
+                  [
+                    0,
+                    1,
+                    0,
+                    0.0,
+                    "1970-01-01T00:00:01.200000Z",
+                    1
+                  ]
+                ]
+              }
+            }
+          },
+          "predict": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time"
+              ],
+              "rows": [
+                [
+                  3,
+                  7,
+                  "1970-01-01T00:00:01.000000Z"
+                ],
+                [
+                  4,
+                  8,
+                  "1970-01-01T00:00:01.000000Z"
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    3,
+                    7
+                  ],
+                  [
+                    4,
+                    8
+                  ]
+                ]
+              },
+              "events": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "amount",
+                  "at",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    3,
+                    6,
+                    54,
+                    54.0,
+                    "1970-01-01T00:00:00.000000Z",
+                    7
+                  ],
+                  [
+                    3,
+                    7,
+                    48,
+                    48.0,
+                    "1970-01-01T00:00:01.200000Z",
+                    7
+                  ],
+                  [
+                    4,
+                    8,
+                    62,
+                    62.0,
+                    "1970-01-01T00:00:00.000000Z",
+                    8
+                  ],
+                  [
+                    4,
+                    9,
+                    56,
+                    56.0,
+                    "1970-01-01T00:00:01.200000Z",
+                    8
+                  ]
+                ]
+              }
+            }
+          },
+          "output": {
+            "fields": [
+              "prediction"
+            ],
+            "prediction_statistic": "median"
+          },
+          "inference": {
+            "run_mode": "fast",
+            "use_prediction_time": false
+          },
+          "metadata": {
+            "source_query": "PREDICT users.age FOR EACH users.user_id",
+            "num_context_examples": 3,
+            "num_prediction_examples": 2,
+            "request_id": "sdm-6a7416e5e7ba"
+          }
+        }
+      ],
+      "warnings": [
+        "Received custom 'num_neighbors' option; ignoring custom 'num_hops=1' option",
+        "2 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it.",
+        "every context row has the same users.age, so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ."
+      ]
+    },
+    "first_duplicate_missing_time": {
+      "unit": "ns",
+      "anchor": "1970-01-01T00:00:00.100000000",
+      "mutation": "first_duplicate_missing_time",
+      "sent": [
+        {
+          "model": "kumo-relational",
+          "task": {
+            "kind": "regression",
+            "target": {
+              "column_name": "TARGET",
+              "dtype": "int64"
+            },
+            "entity_table_names": [
+              "users"
+            ],
+            "anchor_time_column": "__kumo_anchor_time"
+          },
+          "schema": {
+            "instance_table": {
+              "columns": {
+                "instance_id": {
+                  "dtype": "int64",
+                  "stype": "ID",
+                  "nullable": false
+                },
+                "__kumo_entity_ref_0": {
+                  "dtype": "int64",
+                  "stype": "ID"
+                },
+                "__kumo_anchor_time": {
+                  "dtype": "timestamp[us]",
+                  "stype": "timestamp",
+                  "nullable": false
+                },
+                "TARGET": {
+                  "dtype": "int64",
+                  "stype": "numerical"
+                }
+              },
+              "primary_key": "instance_id"
+            },
+            "related_tables": {
+              "users": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "nullable": false
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "user_id"
+                ]
+              },
+              "events": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "__node_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "marker": {
+                    "dtype": "int64",
+                    "stype": "numerical"
+                  },
+                  "amount": {
+                    "dtype": "float32",
+                    "stype": "numerical"
+                  },
+                  "at": {
+                    "dtype": "timestamp[us]",
+                    "stype": "timestamp"
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "stype": "ID"
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "__node_id"
+                ]
+              }
+            },
+            "relationships": [
+              {
+                "source_columns": [
+                  "__kumo_entity_ref_0"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              },
+              {
+                "source_table": "events",
+                "source_columns": [
+                  "user_id"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              }
+            ]
+          },
+          "context": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time",
+                "TARGET"
+              ],
+              "rows": [
+                [
+                  0,
+                  1,
+                  "1970-01-01T00:00:00.000000Z",
+                  21
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              },
+              "events": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "amount",
+                  "at",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    0,
+                    0,
+                    7,
+                    7.0,
+                    "1969-12-31T23:59:59.500000Z",
+                    1
+                  ],
+                  [
+                    0,
+                    1,
+                    6,
+                    6.0,
+                    "1970-01-01T00:00:00.000000Z",
+                    1
+                  ]
+                ]
+              }
+            }
+          },
+          "predict": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time"
+              ],
+              "rows": [
+                [
+                  3,
+                  7,
+                  "1970-01-01T00:00:00.000000Z"
+                ],
+                [
+                  4,
+                  8,
+                  "1970-01-01T00:00:00.000000Z"
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    3,
+                    7
+                  ],
+                  [
+                    4,
+                    8
+                  ]
+                ]
+              },
+              "events": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "amount",
+                  "at",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    3,
+                    6,
+                    50,
+                    50.0,
+                    "1970-01-01T00:00:00.500000Z",
+                    7
+                  ],
+                  [
+                    3,
+                    7,
+                    54,
+                    54.0,
+                    "1970-01-01T00:00:00.000000Z",
+                    7
+                  ],
+                  [
+                    4,
+                    8,
+                    58,
+                    58.0,
+                    "1970-01-01T00:00:00.500000Z",
+                    8
+                  ],
+                  [
+                    4,
+                    9,
+                    62,
+                    62.0,
+                    "1970-01-01T00:00:00.000000Z",
+                    8
+                  ]
+                ]
+              }
+            }
+          },
+          "output": {
+            "fields": [
+              "prediction"
+            ],
+            "prediction_statistic": "median"
+          },
+          "inference": {
+            "run_mode": "fast",
+            "use_prediction_time": false
+          },
+          "metadata": {
+            "source_query": "PREDICT users.age FOR EACH users.user_id",
+            "num_context_examples": 3,
+            "num_prediction_examples": 2,
+            "request_id": "sdm-c4d2337ba303"
+          }
+        }
+      ],
+      "warnings": [
+        "the graph was built without some of the rows given to it [events: 3 of 64 rows dropped (1 with a repeated primary key, 2 with no time)]. Those rows are not in the context the model sees; fill the missing values or drop the rows yourself if that is not what you meant.",
+        "Received custom 'num_neighbors' option; ignoring custom 'num_hops=1' option",
+        "2 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it.",
+        "every context row has the same users.age, so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ."
+      ]
+    },
+    "second_duplicate_missing_time": {
+      "unit": "ns",
+      "anchor": "1970-01-01T00:00:00.100000000",
+      "mutation": "second_duplicate_missing_time",
+      "sent": [
+        {
+          "model": "kumo-relational",
+          "task": {
+            "kind": "regression",
+            "target": {
+              "column_name": "TARGET",
+              "dtype": "int64"
+            },
+            "entity_table_names": [
+              "users"
+            ],
+            "anchor_time_column": "__kumo_anchor_time"
+          },
+          "schema": {
+            "instance_table": {
+              "columns": {
+                "instance_id": {
+                  "dtype": "int64",
+                  "stype": "ID",
+                  "nullable": false
+                },
+                "__kumo_entity_ref_0": {
+                  "dtype": "int64",
+                  "stype": "ID"
+                },
+                "__kumo_anchor_time": {
+                  "dtype": "timestamp[us]",
+                  "stype": "timestamp",
+                  "nullable": false
+                },
+                "TARGET": {
+                  "dtype": "int64",
+                  "stype": "numerical"
+                }
+              },
+              "primary_key": "instance_id"
+            },
+            "related_tables": {
+              "users": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "nullable": false
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "user_id"
+                ]
+              },
+              "events": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "__node_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "marker": {
+                    "dtype": "int64",
+                    "stype": "numerical"
+                  },
+                  "amount": {
+                    "dtype": "float32",
+                    "stype": "numerical"
+                  },
+                  "at": {
+                    "dtype": "timestamp[us]",
+                    "stype": "timestamp"
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "stype": "ID"
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "__node_id"
+                ]
+              }
+            },
+            "relationships": [
+              {
+                "source_columns": [
+                  "__kumo_entity_ref_0"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              },
+              {
+                "source_table": "events",
+                "source_columns": [
+                  "user_id"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              }
+            ]
+          },
+          "context": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time",
+                "TARGET"
+              ],
+              "rows": [
+                [
+                  0,
+                  1,
+                  "1970-01-01T00:00:00.000000Z",
+                  21
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              },
+              "events": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "amount",
+                  "at",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    0,
+                    0,
+                    7,
+                    7.0,
+                    "1969-12-31T23:59:59.500000Z",
+                    1
+                  ],
+                  [
+                    0,
+                    1,
+                    6,
+                    6.0,
+                    "1970-01-01T00:00:00.000000Z",
+                    1
+                  ]
+                ]
+              }
+            }
+          },
+          "predict": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time"
+              ],
+              "rows": [
+                [
+                  3,
+                  7,
+                  "1970-01-01T00:00:00.000000Z"
+                ],
+                [
+                  4,
+                  8,
+                  "1970-01-01T00:00:00.000000Z"
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    3,
+                    7
+                  ],
+                  [
+                    4,
+                    8
+                  ]
+                ]
+              },
+              "events": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "amount",
+                  "at",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    3,
+                    6,
+                    50,
+                    50.0,
+                    "1970-01-01T00:00:00.500000Z",
+                    7
+                  ],
+                  [
+                    3,
+                    7,
+                    54,
+                    54.0,
+                    "1970-01-01T00:00:00.000000Z",
+                    7
+                  ],
+                  [
+                    4,
+                    8,
+                    58,
+                    58.0,
+                    "1970-01-01T00:00:00.500000Z",
+                    8
+                  ],
+                  [
+                    4,
+                    9,
+                    62,
+                    62.0,
+                    "1970-01-01T00:00:00.000000Z",
+                    8
+                  ]
+                ]
+              }
+            }
+          },
+          "output": {
+            "fields": [
+              "prediction"
+            ],
+            "prediction_statistic": "median"
+          },
+          "inference": {
+            "run_mode": "fast",
+            "use_prediction_time": false
+          },
+          "metadata": {
+            "source_query": "PREDICT users.age FOR EACH users.user_id",
+            "num_context_examples": 3,
+            "num_prediction_examples": 2,
+            "request_id": "sdm-959d96f32dc2"
+          }
+        }
+      ],
+      "warnings": [
+        "the graph was built without some of the rows given to it [events: 2 of 64 rows dropped (1 with a repeated primary key, 1 with no time)]. Those rows are not in the context the model sees; fill the missing values or drop the rows yourself if that is not what you meant.",
+        "Received custom 'num_neighbors' option; ignoring custom 'num_hops=1' option",
+        "2 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it.",
+        "every context row has the same users.age, so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ."
+      ]
+    },
+    "all_times_missing": {
+      "unit": "ns",
+      "anchor": "1970-01-01T00:00:00.100000000",
+      "mutation": "all_times_missing",
+      "error": {
+        "type": "StructuredDataError",
+        "code": "INVALID_REQUEST",
+        "message": "[INVALID_REQUEST] Found no valid rows in table 'events'. Please make sure that there exists valid non-N/A primary key and time column pairs in this table."
+      },
+      "warnings": []
+    }
+  }
+}

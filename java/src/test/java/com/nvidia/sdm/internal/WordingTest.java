@@ -25,6 +25,16 @@ import org.junit.jupiter.api.Test;
  */
 class WordingTest {
   @Test
+  void frameValidityRequirementsPreserveStaticAndTimedMessages() {
+    for (String requirements : List.of("primary keys", "primary key and time column pairs")) {
+      assertEquals(
+          "Found no valid rows in table 'events'. Please make sure that there exists valid non-N/A "
+              + requirements + " in this table.",
+          Wording.say("frame_no_valid_rows", Map.of("table", "events", "requirements", requirements)));
+    }
+  }
+
+  @Test
   void timestampUnitsUseTheirExactCountsIncludingNegativeFractions() {
     String[] units = {"s", "ms", "us", "ns"};
     int[] nanos = {0, 999_000_000, 999_999_000, 999_999_999};
