@@ -143,10 +143,76 @@ pub struct RelationalConstantTarget {
 }
 
 /// Model-specific preflight questions over actual native data observations.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum NativeOutputRole {
+    Explanation,
+    Candidate,
+    Item,
+    Other,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct NativeOutputMeaning {
+    pub explanation: bool,
+    pub item: Option<bool>,
+    pub role: NativeOutputRole,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct NativeOutputPresence {
+    pub meaning: NativeOutputMeaning,
+    pub nonempty: Option<bool>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct NativeOutputAbsence {
+    pub columns: Vec<NativeOutputPresence>,
+    pub absent: Vec<usize>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct NativeOutputVocabulary {
+    pub explanation: String,
+    pub item_fields: Vec<String>,
+    pub empty_values: Vec<NativeOutputEmpty>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum NativeOutputEmpty {
+    Null,
+    Mapping,
+    List,
+    Tuple,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "data", rename_all = "snake_case", deny_unknown_fields)]
 pub enum RelationalPreparation {
     TaskVocabulary,
+    OutputVocabulary,
+    OutputShapes {
+        call: CallPreparation,
+        parts: usize,
+        distinct_sources: Vec<usize>,
+    },
+    OutputMeaning {
+        explanation: bool,
+        item: Option<bool>,
+    },
+    OutputAbsence {
+        columns: Vec<NativeOutputPresence>,
+    },
+    OutputNotice {
+        call: CallPreparation,
+        population: NativeOutputAbsence,
+        display: Vec<u32>,
+    },
     Payloads {
         call: CallPreparation,
         present: bool,
@@ -219,6 +285,9 @@ pub enum RelationalPreparation {
 )]
 pub enum RelationalPrepared {
     Vocabulary(RelationalTaskVocabulary),
+    OutputVocabulary(NativeOutputVocabulary),
+    OutputMeaning(NativeOutputMeaning),
+    OutputAbsence(NativeOutputAbsence),
     Empty(bool),
     Fields(RelationalCallFields),
     Starts(Vec<usize>),

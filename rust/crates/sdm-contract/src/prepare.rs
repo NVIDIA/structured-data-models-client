@@ -8,10 +8,12 @@
 pub mod relational;
 
 pub use relational::{
-    NativeTargetEquality, RelationalCallFields, RelationalConstantTarget, RelationalContextFacts,
-    RelationalEncodedCall, RelationalPreparation, RelationalPrepared, RelationalStatistic,
-    RelationalTargetNaming, RelationalTargetPopulation, RelationalTargetRole, RelationalTargetUse,
-    RelationalTaskFacts, RelationalTaskMeaning, RelationalTaskUse, RelationalTaskVocabulary,
+    NativeOutputAbsence, NativeOutputEmpty, NativeOutputMeaning, NativeOutputPresence,
+    NativeOutputRole, NativeOutputVocabulary, NativeTargetEquality, RelationalCallFields,
+    RelationalConstantTarget, RelationalContextFacts, RelationalEncodedCall, RelationalPreparation,
+    RelationalPrepared, RelationalStatistic, RelationalTargetNaming, RelationalTargetPopulation,
+    RelationalTargetRole, RelationalTargetUse, RelationalTaskFacts, RelationalTaskMeaning,
+    RelationalTaskUse, RelationalTaskVocabulary,
 };
 
 use crate::data::AttachmentId;
@@ -175,6 +177,7 @@ pub struct CallVocabulary {
     pub link_prediction: String,
     pub forecasting: String,
     pub tasks: Vec<String>,
+    pub outputs: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -224,6 +227,17 @@ pub enum CallPreparation {
         kind: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         admitted: Option<bool>,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        native_outputs: bool,
+    },
+    TaskAdmitted {
+        version: u32,
+        model: String,
+        outputs: Vec<String>,
+        named: bool,
+        shape: CallShape,
+        kind: String,
+        admitted: bool,
     },
     Bound {
         version: u32,
@@ -234,6 +248,8 @@ pub enum CallPreparation {
         kind: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         admitted: Option<bool>,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        native_outputs: bool,
         context_rows: usize,
     },
 }
@@ -443,6 +459,10 @@ pub enum Preparation {
     Model {
         model: String,
     },
+    ModelCatalogue,
+    ModelLookup {
+        position: Option<usize>,
+    },
     CallVocabulary {
         call: CallPreparation,
     },
@@ -469,6 +489,12 @@ pub enum Preparation {
         kind: String,
         #[serde(default)]
         admitted: Option<bool>,
+        #[serde(default)]
+        defer_outputs: bool,
+    },
+    OutputAdmission {
+        call: CallPreparation,
+        unsupported: Vec<usize>,
     },
     Capacity {
         call: CallPreparation,

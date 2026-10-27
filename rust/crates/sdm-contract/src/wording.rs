@@ -685,6 +685,9 @@ pub fn template(sentence: Sentence) -> Template {
         S::DirectRelated => said(
             r#"related_tables {host.direct_related} makes this a relational request, and no model can be sent one built from frames: the relational model is sent tables gathered around each entity, and the tabular model reads a single table. Gather it with PredictiveQuery(...).materialize(indices=[...], model='kumo-relational'), whose schema holds the related tables and the relationships that reach them."#,
         ),
+        S::RelationalOutputShapes => said(
+            r#"these parts were asked for different outputs ({shapes!r}), so they are not slices of one request"#,
+        ),
         S::DirectUnknownModel => said(
             r#"Unknown model {model!r}; this client can send: {known_models!r}. The Universal TFM contract declares these as a closed set, so a new model id has to be added to the contract and the bindings regenerated before it can be sent."#,
         ),
@@ -792,15 +795,15 @@ pub fn template(sentence: Sentence) -> Template {
         S::RelationalRowMissing => said(
             r#"the response is missing a row_index, so its answer cannot be attributed to an entity"#,
         ),
-        S::RelationalRowBounds => said(
-            r#"the response names row_index {index}, and this batch asked about {rows} rows"#,
-        ),
+        S::RelationalRowBounds => {
+            said(r#"the response names row_index {index}, and this batch asked about {rows} rows"#)
+        }
         S::RelationalForecastStepMissing => said(
             r#"a forecast answer for row {index} names no step, so its place in the horizon is unknown"#,
         ),
-        S::RelationalForecastStepUnexpected => said(
-            r#"a {kind} answer carries a forecast step, which only a forecast has"#,
-        ),
+        S::RelationalForecastStepUnexpected => {
+            said(r#"a {kind} answer carries a forecast step, which only a forecast has"#)
+        }
         S::RelationalRowRepeated => said(r#"the response answers {where} more than once"#),
         S::RelationalIdMissing => said(
             r#"the answer for row {index} carries no id, and this batch asked under {expected}, so the two cannot be matched"#,

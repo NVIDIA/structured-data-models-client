@@ -128,6 +128,72 @@ pub(super) fn prepare(
     input: RelationalPreparation,
 ) -> Result<RelationalPrepared, CoreError> {
     Ok(match input {
+        RelationalPreparation::OutputShapes {
+            call,
+            parts,
+            distinct_sources,
+        } => {
+            checked_bound(&call)?;
+            if parts < 2
+                || distinct_sources.is_empty()
+                || distinct_sources.len() > parts
+                || distinct_sources.iter().any(|position| *position >= parts)
+            {
+                return Err(invalid(
+                    "native output shapes do not match their completed call population",
+                ));
+            }
+            if distinct_sources.len() > 1 {
+                let mut error = CoreError::new(
+                    Sentence::RelationalOutputShapes,
+                    "completed calls have different native output shapes",
+                );
+                error.public_details = Some(BTreeMap::new());
+                return Err(error);
+            }
+            RelationalPrepared::Call(call)
+        }
+        RelationalPreparation::OutputVocabulary => {
+            RelationalPrepared::OutputVocabulary(policy::native_output_vocabulary())
+        }
+        RelationalPreparation::OutputMeaning { explanation, item } => {
+            RelationalPrepared::OutputMeaning(policy::native_output_meaning(explanation, item)?)
+        }
+        RelationalPreparation::OutputAbsence { columns } => {
+            RelationalPrepared::OutputAbsence(policy::native_output_absence(columns)?)
+        }
+        RelationalPreparation::OutputNotice {
+            call,
+            population,
+            display,
+        } => {
+            let bound = checked_bound(&call)?;
+            let checked = policy::native_output_absence(population.columns.clone())?;
+            if checked != population || population.absent.is_empty() {
+                return Err(invalid(
+                    "native output warning has no matching absent population",
+                ));
+            }
+            UnicodeText::from_points(display.clone())
+                .map_err(|_| invalid("native output display contains invalid codepoints"))?;
+            asker.warn(
+                CoreWarning::new(
+                    Sentence::OutputsAbsent,
+                    "the answer left out requested outputs",
+                )
+                .with_field("model", Detail::text(bound.model))
+                .with_field(
+                    "native_absent_repr_points",
+                    Detail::List(
+                        display
+                            .into_iter()
+                            .map(|point| Scalar::UInt64(u64::from(point)))
+                            .collect(),
+                    ),
+                ),
+            );
+            RelationalPrepared::Call(call)
+        }
         RelationalPreparation::Payloads { call, present } => {
             let bound = checked_bound(&call)?;
             policy::validation::payloads(present, bound.model)?;

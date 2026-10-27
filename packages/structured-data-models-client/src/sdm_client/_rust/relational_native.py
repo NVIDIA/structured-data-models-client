@@ -16,6 +16,7 @@ import json
 import re
 import sys
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any
 
 from sdm_client._rust import errors
@@ -36,12 +37,44 @@ def _prepared(value: dict[str, Any]) -> dict[str, Any]:
     return _call({'stage': 'relational', 'input': value})
 
 
-def prepare(request: Any, model: Any, outputs: Any) -> dict[str, Any]:
-    """Read native public properties at the existing model-check boundaries."""
-    from sdm_client.models import spec_for
+@dataclass(frozen=True)
+class PreparedCall:
+    """Core call facts beside this call's actual selected native output owners."""
 
-    model_id = model if isinstance(model, str) else spec_for(model).model_id
-    call = _call({'stage': 'model', 'model': model_id})
+    bound: dict[str, Any]
+    outputs: tuple[Any, ...]
+
+
+def prepare(request: Any, model: Any, outputs: Any) -> PreparedCall:
+    """Read native public properties at the existing model-check boundaries."""
+    from sdm_client.client import _require_output_names
+    from sdm_client.models import MODELS, spec_for
+
+    # The public call and the old _prepare each reach this native Sequence
+    # observation before model lookup. Do not collapse those traversals.
+    _require_output_names(outputs)
+    catalogue = _call({'stage': 'model_catalogue'})
+    if isinstance(model, str):
+        selected_model = MODELS.get(model)
+        position = next(
+            (
+                at
+                for at, name in enumerate(catalogue)
+                if selected_model is not None
+                and selected_model is MODELS.get(sys.intern(name))
+            ),
+            None,
+        )
+
+        def refused_model(_fields: Any) -> tuple[str, Any]:
+            return repr(model), model
+
+        with errors.holding(relational_model=refused_model):
+            call = _call({'stage': 'model_lookup', 'position': position})
+    else:
+        # Existing native handle/spec object-identity and form observations.
+        # The canonical id is still admitted by the shared closed model policy.
+        call = _call({'stage': 'model', 'model': spec_for(model).model_id})
     words = _call({'stage': 'call_vocabulary', 'call': call})
     if outputs is None:
         # Only this reached dictionary lookup observes the actual public key.
@@ -58,9 +91,15 @@ def prepare(request: Any, model: Any, outputs: Any) -> dict[str, Any]:
                 'native_default': {'position': position},
             }
         )
+        selected_outputs = tuple(sys.intern(name) for name in call['outputs'])
     else:
+        selected_outputs = tuple(outputs)
         call = _call(
-            {'stage': 'outputs', 'call': call, 'outputs': list(tuple(outputs))}
+            {
+                'stage': 'outputs',
+                'call': call,
+                'outputs': list(selected_outputs),
+            }
         )
     kind = request.task.kind
     anchored = bool(request.task.options.get('anchor_time_column'))
@@ -100,15 +139,42 @@ def prepare(request: Any, model: Any, outputs: Any) -> dict[str, Any]:
 
     with errors.holding(relational_model_task=refused_task):
         call = _call(
-            {'stage': 'task', 'call': call, 'kind': kind, 'admitted': admitted}
+            {
+                'stage': 'task',
+                'call': call,
+                'kind': kind,
+                'admitted': admitted,
+                'defer_outputs': True,
+            }
         )
-    return _call(
+    supported_outputs = frozenset(sys.intern(name) for name in words['outputs'])
+    unsupported = [
+        at
+        for at, name in enumerate(selected_outputs)
+        if name not in supported_outputs
+    ]
+
+    def refused_outputs(_fields: Any) -> tuple[str, list[Any]]:
+        unknown = [selected_outputs[at] for at in unsupported]
+        shown = repr(sorted(unknown))
+        return shown, sorted(unknown)
+
+    with errors.holding(relational_model_outputs=refused_outputs):
+        call = _call(
+            {
+                'stage': 'output_admission',
+                'call': call,
+                'unsupported': unsupported,
+            }
+        )
+    bound = _call(
         {
             'stage': 'capacity',
             'call': call,
             'rows': request._context_rows_per_call(),
         }
     )
+    return PreparedCall(bound, selected_outputs)
 
 
 def row_count(payload: Any, half: str) -> int | None:
@@ -187,7 +253,10 @@ def _inference(
 
 
 def envelopes(
-    call: dict[str, Any], request: Any, payloads: Any
+    call: dict[str, Any],
+    request: Any,
+    payloads: Any,
+    outputs: tuple[Any, ...] | None = None,
 ) -> list[dict[str, Any]]:
     """Fixed native shallow copies of the core-selected envelope fields."""
     from sdm_client.adapters.relational import _request_id
@@ -210,7 +279,11 @@ def envelopes(
             }
         )['value']
         envelope['model'] = fields['model']
-        output = {'fields': fields['outputs']}
+        output = {
+            'fields': list(outputs)
+            if outputs is not None
+            else fields['outputs']
+        }
         statistic = fields['statistic']
         if statistic['source'] == 'retained':
             output['prediction_statistic'] = chosen
@@ -410,14 +483,19 @@ def constant(
 
 
 def preflight(
-    call: dict[str, Any], payloads: tuple[Any, ...], query: Any
+    call: dict[str, Any],
+    payloads: tuple[Any, ...],
+    query: Any,
+    outputs: tuple[Any, ...] | None = None,
 ) -> None:
     """Observe each useful native domain in the original adapter order."""
     for payload in payloads:
         context(call, payload)
     _class_limits(call, payloads)
     _variation(call, payloads, query)
-    if 'explanation' not in call['outputs']:
+    if 'explanation' not in (
+        outputs if outputs is not None else call['outputs']
+    ):
         return
     counts = [
         len(
@@ -472,3 +550,76 @@ def _variation(call: dict[str, Any], payloads: Any, query: Any) -> None:
         if population['classes'] == 1:
             constant(call, population, column, query, kind, words)
             return
+
+
+def absent(call: dict[str, Any], answer: Any, requested: Any) -> None:
+    """Observe the reached native output-name and result-attribute populations."""
+    if not requested or not answer.items:
+        return
+    words = _prepared({'data': 'output_vocabulary'})['value']
+    names = list(dict.fromkeys(requested))
+    item_fields = tuple(sys.intern(name) for name in words['item_fields'])
+    factories = {
+        'null': lambda: None,
+        'mapping': dict,
+        'list': list,
+        'tuple': tuple,
+    }
+    columns = []
+    for name in names:
+        meaning = _prepared(
+            {
+                'data': 'output_meaning',
+                'explanation': bool(name == sys.intern(words['explanation'])),
+                'item': None,
+            }
+        )['value']
+        if meaning['role'] == 'candidate':
+            meaning = _prepared(
+                {
+                    'data': 'output_meaning',
+                    'explanation': meaning['explanation'],
+                    'item': name in item_fields,
+                }
+            )['value']
+        if meaning['role'] == 'explanation':
+            nonempty = answer._explanation is not None
+        elif meaning['role'] == 'item':
+            nonempty = any(
+                getattr(item, name, None)
+                not in tuple(
+                    factories[kind]() for kind in words['empty_values']
+                )
+                for item in answer.items
+            )
+        else:
+            nonempty = None
+        columns.append({'meaning': meaning, 'nonempty': nonempty})
+    population = _prepared({'data': 'output_absence', 'columns': columns})[
+        'value'
+    ]
+    if population['absent']:
+        shown = repr([names[position] for position in population['absent']])
+        _prepared(
+            {
+                'data': 'output_notice',
+                'call': call,
+                'population': population,
+                'display': _points(shown),
+            }
+        )
+
+
+def output_shapes(
+    outputs: tuple[Any, ...], count: int
+) -> tuple[set[Any], dict[str, Any]]:
+    """One actual native set insertion per completed call, without replay."""
+    shapes = set()
+    origins = {}
+    for position in range(count):
+        origins.setdefault(id(outputs), position)
+        shapes.add(outputs)
+    return shapes, {
+        'parts': count,
+        'distinct_sources': [origins[id(shape)] for shape in shapes],
+    }

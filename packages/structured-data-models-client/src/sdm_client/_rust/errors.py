@@ -500,6 +500,10 @@ class _ObservedRepr:
 
 def _fields(given: Mapping[str, Any]) -> dict[str, Any]:
     fields = {name: _detail(value) for name, value in given.items()}
+    if 'native_absent_repr_points' in fields:
+        fields['absent'] = _ObservedRepr(
+            ''.join(map(chr, fields['native_absent_repr_points']))
+        )
     if fields.get('native_relational_constant'):
         if 'target_points' in fields:
             fields['target'] = ''.join(map(chr, fields['target_points']))
@@ -685,6 +689,27 @@ def error_from_core(
     if (code, details.get('rule')) in AS_THE_BASE_CLASS:
         cls = StructuredDataError
     sentence = error['sentence']
+    if (
+        sentence == 'relational_output_shapes'
+        and (present := _held().get('relational_output_shapes')) is not None
+    ):
+        fields['shapes'] = _ObservedRepr(present(fields))
+    if (
+        sentence == 'direct_unknown_model'
+        and fields.get('native_model')
+        and (present := _held().get('relational_model')) is not None
+    ):
+        shown, actual = present(fields)
+        fields['model'] = _ObservedRepr(shown)
+        details['model'] = actual
+    if (
+        sentence == 'model_lacks_outputs'
+        and fields.get('native_model_outputs')
+        and (present := _held().get('relational_model_outputs')) is not None
+    ):
+        shown, actual = present(fields)
+        fields['unsupported_outputs'] = _ObservedRepr(shown)
+        details['unsupported_outputs'] = actual
     if (
         sentence == 'model_lacks_task'
         and fields.get('native_model_task')

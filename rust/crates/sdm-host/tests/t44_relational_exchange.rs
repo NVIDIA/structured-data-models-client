@@ -108,6 +108,7 @@ fn bound(kind: &str) -> CallPreparation {
             call: shape,
             kind: kind.into(),
             admitted: None,
+            defer_outputs: false,
         },
         Attachments::new(),
     );
