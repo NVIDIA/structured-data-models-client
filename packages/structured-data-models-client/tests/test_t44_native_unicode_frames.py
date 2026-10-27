@@ -275,3 +275,102 @@ def test_native_unicode_keeps_full_inspection_wire_and_result_meaning(
                 [0x1F63A],
                 [0x1F63A],
             ]
+
+
+@pytest.mark.parametrize('case', ['front', 'beyond-cap'])
+def test_native_text_conversion_precedes_character_cap_after_sampling(core, case):
+    recorded = json.loads(
+        Path(__file__)
+        .with_name('t44_native_text_conversion_failures_reference.json')
+        .read_text()
+    )['records'][case]
+    invalid = '\ud800' if case == 'front' else 'A' * 300 + '\ud800'
+    frames = shop('python')
+    frames['orders']['ordered_at'] = pd.date_range(
+        '2024-01-01', periods=64
+    ).as_unit('ns')
+    values = ['valid'] * 48 + [invalid] * 16
+    frames['orders']['note'] = text(values, 'python')
+    options = dict(
+        indices=[7, 8], num_context_samples=3, num_neighbors=[3],
+        num_hops=1, random_seed=7,
+    )
+    notices = recorded['warnings']
+    if core:
+        notices = p3e2_warning_codes(notices)
+    switched = []
+    original_show = warnings.showwarning
+
+    def switch_at_hops(message, category, filename, lineno, file=None, line=None):
+        if str(message) == notices[0]['message']:
+            assert pd.options.future.infer_string is False
+            assert pd.options.mode.string_storage == 'python'
+            pd.options.future.infer_string = True
+            pd.options.mode.string_storage = 'pyarrow'
+            switched.append(str(message))
+        original_show(message, category, filename, lineno, file=file, line=line)
+
+    def question():
+        schema = Schema.from_data(
+            frames,
+            primary_keys={'users': 'user_id', 'orders': 'order_id'},
+            time_columns={'orders': 'ordered_at'},
+        )
+        schema['orders']['note'].stype = 'text'
+        return PredictiveQuery(
+            'PREDICT users.age FOR EACH users.user_id', schema
+        )
+
+    with (
+        pd.option_context(
+            'future.infer_string', False, 'mode.string_storage', 'python'
+        ),
+        warnings.catch_warnings(record=True) as caught,
+    ):
+        warnings.simplefilter('always')
+        query = question()
+        with patch.object(warnings, 'showwarning', switch_at_hops):
+            with pytest.raises(StructuredDataError) as failure:
+                query.materialize(**options)
+    assert {
+        'stage': 'materialize',
+        'type': type(failure.value).__name__,
+        'code': failure.value.code,
+        'message': str(failure.value),
+    } == recorded['error']
+    assert switched == [notices[0]['message']]
+    assert [
+        {'type': type(item.message).__name__, 'message': str(item.message)}
+        for item in caught
+    ] == notices
+    assert not recorded['sent']
+    assert [event['event'] for event in recorded['trace']] == [
+        'schema-ready', 'query-ready', 'warning', 'hops-option-switch',
+        'sample-enter', 'sample-exit', 'normalize-enter', 'astype-str-enter',
+        'normalize-error',
+    ]
+    if core:
+        # A successful full-root conversion over the same immutable data has
+        # exactly the same graph walk. This compares real continuing state,
+        # independently of the producer's unrelated NumPy global state.
+        failed = query._relational_materializer._core_sampler_state['held'][
+            'frame_checkpoint'
+        ]
+        after_failure = json.loads(failed['metadata'])['neighbors']
+        with (
+            pd.option_context(
+                'future.infer_string', False, 'mode.string_storage', 'python'
+            ),
+            warnings.catch_warnings(),
+        ):
+            warnings.simplefilter('ignore')
+            control = question()
+            control.materialize(**options)
+        checkpoint = control._relational_materializer._core_sampler_state[
+            'held'
+        ]['frame_checkpoint']
+        assert after_failure == json.loads(checkpoint['metadata'])['neighbors']
+        initial = np.random.RandomState(123).get_state()
+        assert after_failure != {
+            'words': initial[1].tolist(), 'position': int(initial[2]),
+        }
