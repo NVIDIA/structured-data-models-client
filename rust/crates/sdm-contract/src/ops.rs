@@ -1577,6 +1577,52 @@ pub struct Attachments {
     pub prepare_frames_input: crate::frames::materialize::FramePreparation,
     #[schemars(rename = "PreparedFrames.value")]
     pub prepared_frames_value: crate::frames::materialize::PreparedFrameValue,
+    #[schemars(rename = "FramePreparation/source_meaning.schema")]
+    pub frame_source_meaning_schema: HeldSchema,
+    #[schemars(rename = "FramePreparation/question.schema")]
+    pub frame_question_schema: HeldSchema,
+    #[schemars(rename = "FramePreparation/question.query")]
+    pub frame_question_query: String,
+    #[schemars(rename = "FramePreparation/graph.schema")]
+    pub frame_graph_schema: HeldSchema,
+    #[schemars(rename = "FramePreparation/graph.frames")]
+    pub frame_graph_frames: crate::frames::MaterializeFrames,
+    #[schemars(rename = "FramePreparation/graph.values")]
+    pub frame_graph_values: CallValues,
+    #[schemars(rename = "FramePreparation/population.query")]
+    pub frame_population_query: String,
+    #[schemars(rename = "FramePreparation/population.values")]
+    pub frame_population_values: CallValues,
+    #[schemars(rename = "FramePreparation/task.values")]
+    pub frame_task_values: CallValues,
+    #[schemars(rename = "FramePreparation/plan.values")]
+    pub frame_plan_values: CallValues,
+    #[schemars(rename = "FramePreparation/payload.values")]
+    pub frame_payload_values: CallValues,
+    #[schemars(rename = "FrameQuestionInputs.candidates")]
+    pub frame_question_candidates: Vec<GivenCandidate>,
+    #[schemars(rename = "FrameQuestionInputs.values")]
+    pub frame_question_values: CallValues,
+    #[schemars(rename = "PreparedFrameQuestions.call_values")]
+    pub frame_checked_call_values: CallValues,
+    #[schemars(rename = "FrameRequestPlan.sampling_values")]
+    pub frame_sampling_values: CallValues,
+    #[schemars(rename = "NativePayload.wire")]
+    pub native_payload_wire: StatePayload,
+    #[schemars(rename = "RelationalResponseData.rows")]
+    pub relational_decoded_rows: Vec<crate::prepare::DecodedRelationalRow>,
+    #[schemars(rename = "RelationalResponsePart.rows")]
+    pub relational_attributed_rows: Vec<crate::prepare::AttributedRelationalRow>,
+    #[schemars(rename = "RelationalResponsePart.target_rows")]
+    pub relational_target_rows: Vec<crate::prepare::RelationalTargetRow>,
+    #[schemars(rename = "CheckRelationalCoverage.rows")]
+    pub relational_coverage_rows: Vec<crate::prepare::AttributedRelationalRow>,
+    #[schemars(rename = "RelationalAggregation/ranking.groups")]
+    pub relational_ranking_groups: crate::prepare::RelationalRankGroups,
+    // Predicted is also a standalone value in RelationalResultData, besides
+    // OperationResult's flattened predict variant, so both fields are locked.
+    #[schemars(rename = "RelationalResultData.predicted.metadata")]
+    pub relational_predicted_metadata: EndpointMetadata,
     #[schemars(rename = "ValidateQuery.query")]
     pub validate_query_query: String,
     #[schemars(rename = "ValidateQuery.schema")]

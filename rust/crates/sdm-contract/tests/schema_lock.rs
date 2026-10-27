@@ -507,7 +507,7 @@ fn unaccounted(schema: &Value) -> Result<(), String> {
 
 /// The fields whose attachment is JSON of the contract's, with the entry of
 /// `$defs/Attachments` that locks it.
-const JSON: [(&str, &str); 39] = [
+const JSON: [(&str, &str); 63] = [
     ("FrameManifest.inference", "FrameManifest.inference"),
     (
         "OperationResult/inferred_frames.value",
@@ -569,10 +569,91 @@ const JSON: [(&str, &str); 39] = [
     ),
     ("OperationResult/predict.metadata", "Predicted.metadata"),
     ("SamplerState.memo", "SamplerState.memo"),
+    ("Operation/prepare_frames.input", "PrepareFrames.input"),
+    (
+        "OperationResult/prepare_frames.value",
+        "PreparedFrames.value",
+    ),
+    (
+        "FramePreparation/source_meaning.schema",
+        "FramePreparation/source_meaning.schema",
+    ),
+    (
+        "FramePreparation/question.schema",
+        "FramePreparation/question.schema",
+    ),
+    (
+        "FramePreparation/question.query",
+        "FramePreparation/question.query",
+    ),
+    (
+        "FramePreparation/graph.schema",
+        "FramePreparation/graph.schema",
+    ),
+    (
+        "FramePreparation/graph.frames",
+        "FramePreparation/graph.frames",
+    ),
+    (
+        "FramePreparation/graph.values",
+        "FramePreparation/graph.values",
+    ),
+    (
+        "FramePreparation/population.query",
+        "FramePreparation/population.query",
+    ),
+    (
+        "FramePreparation/population.values",
+        "FramePreparation/population.values",
+    ),
+    (
+        "FramePreparation/task.values",
+        "FramePreparation/task.values",
+    ),
+    (
+        "FramePreparation/plan.values",
+        "FramePreparation/plan.values",
+    ),
+    (
+        "FramePreparation/payload.values",
+        "FramePreparation/payload.values",
+    ),
+    (
+        "FrameQuestionInputs.candidates",
+        "FrameQuestionInputs.candidates",
+    ),
+    ("FrameQuestionInputs.values", "FrameQuestionInputs.values"),
+    (
+        "PreparedFrameQuestions.call_values",
+        "PreparedFrameQuestions.call_values",
+    ),
+    (
+        "FrameRequestPlan.sampling_values",
+        "FrameRequestPlan.sampling_values",
+    ),
+    ("NativePayload.wire", "NativePayload.wire"),
+    ("RelationalResponseData.rows", "RelationalResponseData.rows"),
+    ("RelationalResponsePart.rows", "RelationalResponsePart.rows"),
+    (
+        "RelationalResponsePart.target_rows",
+        "RelationalResponsePart.target_rows",
+    ),
+    (
+        "Preparation/check_relational_coverage.rows",
+        "CheckRelationalCoverage.rows",
+    ),
+    (
+        "RelationalAggregation/ranking.groups",
+        "RelationalAggregation/ranking.groups",
+    ),
+    (
+        "Predicted.metadata",
+        "RelationalResultData.predicted.metadata",
+    ),
 ];
 
 /// The other fields naming an attachment, and why the lock needs no entry.
-const OTHER: [(&str, &str); 27] = [
+const OTHER: [(&str, &str); 50] = [
     (
         "Preparation/context.context",
         "Arrow, with positional header facts",
@@ -645,6 +726,98 @@ const OTHER: [(&str, &str); 27] = [
     ("KeySet.attachment", "Arrow, with its schema"),
     ("OperationResult/predict.result", "Arrow, with its schema"),
     ("AnsweredParts.result", "Arrow, with its schema"),
+    (
+        "StringData.values",
+        "Arrow string column, interpreted only by its explicit StringEncoding",
+    ),
+    (
+        "TypedFrameSourceColumn.values",
+        "Arrow complete typed source column",
+    ),
+    (
+        "PreparedFrameGraph.owner",
+        "Core-created immutable FrameGraph resource",
+    ),
+    (
+        "PreparedFramePopulation.owner",
+        "Core-created immutable FramePopulation resource",
+    ),
+    (
+        "PreparedFrameLabelBatch.owner",
+        "Core-created immutable FrameLabelBatch resource",
+    ),
+    (
+        "LabelledFrameTask.context",
+        "Arrow labelled entity, anchor and target rows",
+    ),
+    (
+        "CompletedFrameTask.prediction",
+        "Arrow complete narrowed prediction values",
+    ),
+    (
+        "CompletedFrameTask.owner",
+        "Core-created immutable FrameTask resource",
+    ),
+    (
+        "ResolvedFrameReferences.owner",
+        "Core-created immutable FrameReferences resource",
+    ),
+    (
+        "SampledFrameTable.rows",
+        "Arrow sampled feature rows and example ordinals",
+    ),
+    (
+        "SampledFrameTable.source_rows",
+        "Arrow original source-row ordinals",
+    ),
+    (
+        "SampledFrameLink.pairs",
+        "Arrow UInt64 sampled row-pair links",
+    ),
+    (
+        "SampledFrameContext.anchors",
+        "Arrow selected context anchors",
+    ),
+    (
+        "EncodedFramePart.payload",
+        "Core-created immutable FramePayload resource, not JSON bytes",
+    ),
+    (
+        "FramePreparation/graph.retained",
+        "Core-created immutable FrameGraph resource",
+    ),
+    (
+        "FramePredictionValues/core_keys.values",
+        "Arrow raw prediction keys",
+    ),
+    (
+        "FrameReferenceValues/core_keys.values",
+        "Arrow optional raw reference keys",
+    ),
+    (
+        "PreparedFrameQuestion.owner",
+        "Core-created immutable FrameQuestion resource",
+    ),
+    (
+        "FrameCheckpointManifest.retained",
+        "Core-created immutable FrameGraph resource",
+    ),
+    (
+        "NativePayload.value",
+        "Core-created immutable FramePayload resource for native inspection",
+    ),
+    (
+        "RelationalEncodedCall.body",
+        "Complete native-encoded model wire envelope",
+    ),
+    (
+        "RelationalResponseData.response",
+        "The already decoded external model wire response",
+    ),
+    (
+        "Predicted.result",
+        "Arrow laid-out relational result, with its schema",
+    ),
 ];
 
 fn generated() -> Value {
