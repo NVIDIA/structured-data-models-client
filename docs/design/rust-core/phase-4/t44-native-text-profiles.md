@@ -27,6 +27,12 @@ The sampling-error control reaches the native sampler and never reaches Text nor
 Two batches have separate sample-then-normalize sequences.
 These observations require useful graph, task, sampled-context and payload boundaries rather than an early cached profile or a language-behavior callback.
 
+The additional numeric Text receipts test physical NumPy and Arrow integers, floats and booleans after declaring logical dtype='string' and stype='text'.
+Both actual cells reject those columns while building the native graph, before fillna or astype normalization is reached.
+Direct incompatible stype assignment fails earlier at the public schema check.
+The frame consumer reuses the existing incompatible-semantic-type policy and diagnostic for this physical primitive check.
+These observed native failures require neither a new numeric formatting algorithm nor a new unsupported-family refusal.
+
 ## Versioned Rust kernel
 
 words::normalize retains the accepted provider behavior.
@@ -70,10 +76,15 @@ An unknown-signature public policy is not established here, and no new refusal o
 
 ## Useful stages and retained state
 
-The proposed graph operation constructs or rebinds the actual immutable frame snapshot and emits graph-drop notices before the caller's indices are converted for its task.
-The task operation produces complete task rows, labels, anchors, narrowing and batch meaning before pre-sampling option notices.
-The sampled-context operation consumes the late native neighbor/config observations, performs existing lookup and graph walks, and returns actual selected typed tables, links and row maps.
-The payload operation consumes those useful context values plus the normalization-time native kernel facts, performs Rust normalization and reuses the existing request encoder.
+The actual identifying-key proof refines the initial nonkey-Text cut into six useful artifacts:
+
+1. Graph snapshot preparation constructs or rebinds the immutable graph and emits graph-drop notices.
+2. Labeled task preparation produces actual typed entity/anchor/target context rows before the reached native prediction-entity Series constructor.
+3. Completed task preparation consumes that genuine native constructor's values and produces task rows, narrowing and batch meaning before HOPS notices.
+4. Resolved sampling/request preparation consumes the late config/neighbor observations and applies the existing request-option policy before the reached native reference cast.
+5. Sampled-context preparation consumes the actual native reference values, validates references before neighbor conversion/draws, and returns selected raw typed tables, links and row maps.
+6. Payload preparation consumes the useful context and reached Text kernel facts, performs Rust normalization and reuses the existing request encoder.
+
 Each is a fixed operation that returns a useful domain artifact through Done.
 There is no new Step, provider Fetch for native behavior, opaque suspended program or normalized host column.
 
@@ -81,6 +92,7 @@ Input-sized rows, labels, anchors, selections and links remain typed attachments
 Core-owned metadata and attachment manifests are bound to the graph's logical fingerprint, independent of call-local attachment ids.
 The cached graph retains its original source rows and schema meanings while the existing neighbor stream remains authoritative across success, error and cancellation.
 A task or sampled context cannot silently rebind to another logical graph.
+The final serialized context must also bind the task meaning and actual batch range; the current internal graph-source check is a foundation for that validation.
 The native kernel is observed per reached payload boundary and is not permanent checkpoint semantics.
 The staged protocol and facade wiring remain pending the serialized internal contract update.
 
@@ -89,6 +101,13 @@ Graph-drop notices are outside the original engine-error guard and propagate the
 HOPS_IGNORED is inside that guard, so warning-as-error becomes the exact INTERNAL_ERROR wrapper and consumes no sampler draws.
 The staged consumer must preserve that explicit presentation context while retaining the registered P3E-2 code prefix and provider behavior.
 The frozen retry proves the successfully built graph survives that failure and later caller frame mutations do not replace its retained rows.
+
+The key receipts prove that a shared provider string cast is insufficient for native identifying keys.
+StringDtype storage Python and PyArrow preserve supplied floats as '7.0' and booleans as 'True', while exact Arrow UTF8 produces '7' and 'true'.
+The native Series owner must survive until its actual later conversion, rather than be reconstructed from Arrow and silently erase surviving object identity.
+The later reference cast is after HOPS and inference-config construction.
+Pandas2 resolves supplied None against a literal '<NA>' graph key and produces a full successful prediction; pandas3 preserves missingness and reports an unresolved reference.
+The consumer must retain that genuine native conversion between useful domain artifacts instead of inferring a blanket null policy.
 
 Text identifying keys, exact native Arrow LargeUTF8 behavior, and the other unfinished frame families remain required Phase 4 work.
 Their native conversion and failure-order obligations are not inferred from the casing kernel or these nonkey Text receipts.
