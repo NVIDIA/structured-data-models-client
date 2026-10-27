@@ -3,7 +3,10 @@
 This is source preparation for RS-5, not a finished implementation or a contract freeze.
 The root executed the bounded frozen-reference public matrix after inspecting its immutable READY packet.
 The observations below are reference input/output evidence, not a candidate test result, platform equivalence or RS-5 completion.
-The only source helper prepared in this worktree is `sdm-engine/src/index_codes.rs`, which is not yet included in the crate's module tree.
+The preserved `fce7fd257` checkpoint contains the initially unlinked `sdm-engine/src/index_codes.rs` helper.
+The current source range connects that admission helper to `sdm-engine::index_context::OriginalIndexFacts`, which consumes original typed Arrow values and the core's selected original row ordinals through the existing scalar/SIMD kernels.
+Actual public selected/expected ordinals and unchanged Arrow attachments enter integration tests through the root-run canonical fixture writer.
+This first consumer covers primitive/masked numeric and Boolean values, category code widths/dictionaries, range labels and temporal scalar backing; it is not a public route activation.
 Shared contract, core, schema, frame admission, value and Python bridge files remain with the Direct workstream until root serializes composition.
 
 ## Source rule
@@ -116,7 +119,9 @@ This was source/artifact inspection only, without runtime package imports or beh
 The exact 2.2.6 source bundles Intel x86-simd-sort 5.0.x, while the inspected 2.5.3 source bundles 7.0.x.
 The 2.2.6 build selects AVX2 and AVX512_SKX argsort targets, and its installed symbols confirm those six numeric wrapper families.
 The inspected ELF compiler note identifies GCC 10.2.1, so the existing GCC 14 producer fallback proof cannot be reused without source/runtime equivalence evidence.
-The bundled argsort and key/value network files differ substantially; in particular, the 2.2.6 entry lacks the 2.5.3 `std::is_sorted` early return.
+The bundled argsort and key/value network files differ substantially; the subsequent operation-by-operation source investigation found equivalent ascending nonmissing network, partition and recursion operations, with the old entry lacking the 2.5.3 `std::is_sorted` early return.
+The inspected official GNU10/GNU14 sort/heap bodies normalize identically, so the source findings warrant a shared implementation with an explicit old-entry policy rather than an independent port.
+Binding that shared fallback to the actual old Red Hat producer remains unproved.
 Pandas partitions missing labels after its selected-index monotonic check, so an index containing missing labels can still send an already sorted nonmissing backing array to the kernel.
 That creates a concrete necessary public control for the distinct producer profiles rather than an assumption that all duplicate permutations match.
 
@@ -147,7 +152,9 @@ It retains the physical width and dictionary length, accepts only -1 or an in-bo
 It preserves attachment ownership without copying, leaves repeated selected rows intact and checks original row bounds.
 It does not enforce a pandas dtype system, choose an ordering algorithm, normalize dictionary values, infer category order, sample rows or create a new ordinary-input refusal.
 Its local validation errors describe malformed host fact attachments and still require the existing shared protocol error mapping during composition.
-The unit-test source covers unused category thresholds, all-missing/empty dictionaries, invalid unselected codes, row/snapshot mismatches and selected row identity.
+The integration-test source covers unused category thresholds, all-missing/empty dictionaries, invalid unselected codes, row/snapshot mismatches and selected row identity.
+The connected public-recording tests consume actual core-selected ordinals, original Arrow physical widths/validity and actual Request/wire expected order, with category dictionary identity and temporal-versus-numeric dispatch kept explicit.
+Validity-masked present NaNs retain a distinct unfinished native-fallback obligation; this initial source does not silently classify them as missing or activate a public refusal route.
 It has not been executed, and these helper tests cannot replace a public Python/pure-Rust HostRun twin.
 
 ## Explicit unresolved boundaries
