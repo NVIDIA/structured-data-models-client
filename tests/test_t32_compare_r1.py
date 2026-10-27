@@ -93,7 +93,7 @@ def test_a_core_host_s_changed_payload_fails(who: str) -> None:
 
 
 def test_java_agrees_with_python_core_on_the_core_fields() -> None:
-    core: dict[str, Any] = {
+    core = {
         'inputs': [],
         'fetches': [],
         'described': None,
@@ -117,10 +117,16 @@ def test_java_agrees_with_python_core_on_the_core_fields() -> None:
 
 
 def _numeric_core_agreement(
-    field: str, mine: Any, theirs: Any, *, shared: bool = False
+    field: str,
+    mine: Any,
+    theirs: Any,
+    *,
+    shared: bool = False,
+    state_part: str | None = None,
+    held: bool = False,
 ) -> Any:
     """Compare captured numeric tokens without parsing them through floats."""
-    core = {
+    core: dict[str, Any] = {
         'inputs': [{'op': 'predict', 'state': {'payload': mine}}],
         'fetches': [],
         'described': None,
@@ -129,7 +135,18 @@ def _numeric_core_agreement(
         'accepted': None,
         'error': None,
     }
-    if field != 'inputs':
+    state_key = 'held' if held else 'state'
+    if field == 'inputs':
+        state = core['inputs'][0].pop('state')
+        if state_part == 'ranking':
+            state = {'payload': None, 'ranking': {'parts': [state]}}
+        elif state_part is not None:
+            state = {'payload': None, state_part: [state]}
+        core['inputs'][0][state_key] = state
+    elif field == 'materialized':
+        core['inputs'] = []
+        core['materialized'] = {'payload': mine}
+    else:
         core['inputs'] = []
         core['predicted'] = {'body': {'value': mine}}
         if field == 'calls':
@@ -141,7 +158,14 @@ def _numeric_core_agreement(
     }
     rust = copy.deepcopy(python)
     if field == 'inputs':
-        rust['core']['inputs'][0]['state']['payload'] = theirs
+        state = rust['core']['inputs'][0][state_key]
+        if state_part == 'ranking':
+            state = state['ranking']['parts'][0]
+        elif state_part is not None:
+            state = state[state_part][0]
+        state['payload'] = theirs
+    elif field == 'materialized':
+        rust['core']['materialized']['payload'] = theirs
     elif field == 'calls':
         rust['core']['predicted']['calls'][0]['value'] = theirs
     else:
@@ -160,7 +184,7 @@ def _numeric_core_agreement(
     return report
 
 
-@pytest.mark.parametrize('field', ['inputs', 'predicted', 'calls'])
+@pytest.mark.parametrize('field', ['inputs', 'materialized', 'predicted', 'calls'])
 @pytest.mark.parametrize(
     ('mine', 'theirs'),
     [('-3e-06', '-3e-6'), ('1.000e-5', '0.00001'), ('-0.00', '-0e1')],
@@ -174,7 +198,7 @@ def test_core_fields_agree_on_exact_float_values_with_different_spelling(
     assert report.failures == [], report.texts
 
 
-@pytest.mark.parametrize('field', ['inputs', 'predicted', 'calls'])
+@pytest.mark.parametrize('field', ['inputs', 'materialized', 'predicted', 'calls'])
 @pytest.mark.parametrize(
     ('mine', 'theirs'),
     [
@@ -203,6 +227,22 @@ def test_shared_core_inputs_use_the_same_lossless_numeric_rule(
         'inputs', {'number': mine}, {'number': theirs}, shared=True
     )
     assert (report.failures == []) is agrees, report.texts
+
+
+@pytest.mark.parametrize('held', [False, True])
+@pytest.mark.parametrize('part', [None, 'forecast', 'batches', 'ranking'])
+def test_later_and_held_request_payloads_keep_exact_numeric_agreement(
+    part: str | None, held: bool
+) -> None:
+    for theirs, agrees in [('3e-6', True), ('3.000000000000001e-6', False)]:
+        report = _numeric_core_agreement(
+            'inputs',
+            {'number': '3e-06'},
+            {'number': theirs},
+            state_part=part,
+            held=held,
+        )
+        assert (report.failures == []) is agrees, report.texts
 
 
 @pytest.mark.parametrize('field', ['source', 'state', 'metadata'])

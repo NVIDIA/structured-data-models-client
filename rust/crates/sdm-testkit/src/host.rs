@@ -19,6 +19,10 @@
 //! answered, with the case's edits made ([`crate::edits`]): the case names
 //! no schema for it, and its loader refuses one (decision E50).
 
+#[cfg(test)]
+#[path = "host_replay_validation_tests.rs"]
+mod replay_validation_tests;
+
 use std::collections::BTreeMap;
 use std::collections::btree_map::Entry;
 use std::time::{SystemTime, UNIX_EPOCH};
