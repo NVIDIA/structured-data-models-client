@@ -1543,6 +1543,7 @@ struct Bounds {
 struct Memo<'a> {
     asker: &'a Asker,
     memo: SamplerMemo,
+    frames: Option<crate::frame_materialize::Context>,
 }
 
 impl Memo<'_> {
@@ -1592,7 +1593,16 @@ async fn time_bounds(
         }
     }
     if !unknown.is_empty() {
-        let read = read_bounds(memo.asker, times, &unknown).await?;
+        let read = match &memo.frames {
+            Some(frames) => {
+                let frames = crate::frame_materialize::lock(frames);
+                unknown
+                    .iter()
+                    .map(|(table, _)| frames.time_bounds(table))
+                    .collect::<Result<Vec<_>, _>>()?
+            }
+            None => read_bounds(memo.asker, times, &unknown).await?,
+        };
         for ((table, column), (min, max)) in unknown.into_iter().zip(read) {
             memo.memo.bounds.push(MemoBounds {
                 table: table.name.clone(),
@@ -2863,6 +2873,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // (decision E52), left as it is by a run refused before it reads.
     let mut memo = Memo {
         asker,
+        frames: frames.clone(),
         memo: inputs.memo.clone().unwrap_or_else(|| SamplerMemo {
             source: inputs.source.clone(),
             ..SamplerMemo::default()
@@ -3155,6 +3166,18 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         Err(err) => return Err(err),
     };
     let asked = asked(&validated)?;
+    // These remain unfinished development-seam paths. The first temporal
+    // consumer is a scalar target on a static entity, with timed history.
+    if frames.is_some() && asked.range.is_some() {
+        return Err(not_yet("frame_temporal_aggregation"));
+    }
+    if frames.is_some()
+        && graph
+            .table(&asked.entity_table)
+            .is_some_and(|table| table.time_column.is_some())
+    {
+        return Err(not_yet("frame_temporal_entity"));
+    }
     let link_target = if let Shape::Aggregated(windowed) = &asked.target
         && windowed.aggregation == labels::Aggregation::ListDistinct
     {
@@ -3251,7 +3274,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // context anchored the same way; no time bounds are read or checked
     // for it (`_get_task_table`). Otherwise the anchor and the context's
     // anchor, checked against the data's times.
-    let anchor_time = if frames.is_some() && anchor_time.is_none() {
+    let anchor_time = if frames.is_some() && bounded.is_empty() && anchor_time.is_none() {
         Some(Scalar::Timestamp {
             value: TIME_MAX,
             unit: TimestampUnit::Ns,
@@ -3921,6 +3944,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
                 &graph,
                 entity,
                 &all_keys,
+                &anchors,
                 &walk_hops,
                 deferred.neighbors.as_deref(),
                 &excluded,
@@ -3995,10 +4019,22 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         // as the request is built.
         let (use_prediction_time, return_embeddings) = options::request_flags(&deferred)?;
 
+        // The local graph sampler returns its temporal instance anchors
+        // after a floor-second round trip, independently of the original
+        // nanosecond feature values and the bounds used for validation.
+        // No-time handling retains its existing separate DT-3 boundary.
+        let payload_anchors = if frames.is_some() && !bounded.is_empty() {
+            anchors
+                .iter()
+                .map(|anchor| anchor.div_euclid(1_000_000_000).wrapping_mul(1_000_000_000))
+                .collect()
+        } else {
+            anchors.clone()
+        };
         let built = payload::build(&Sampled {
             num_train,
             num_test,
-            anchors: anchors.clone(),
+            anchors: payload_anchors,
             kind: asked.task,
             labels: labels.clone(),
             windowed: asked.range.is_some(),
