@@ -859,17 +859,16 @@ fn first_of_each_key(
 }
 
 /// A text feature's values as the reference's words.
-fn words(array: &ArrayRef) -> Result<Vec<Vec<String>>, CoreError> {
-    use arrow_array::Array;
+pub(crate) fn words(array: &ArrayRef) -> Result<Vec<Vec<String>>, CoreError> {
     use arrow_array::cast::AsArray;
-    if array.data_type() != &arrow_schema::DataType::Utf8 {
+    use arrow_schema::DataType;
+    let normalize = sdm_engine::words::normalize;
+    match array.data_type() {
+        DataType::Utf8 => Ok(array.as_string::<i32>().iter().map(normalize).collect()),
+        DataType::LargeUtf8 => Ok(array.as_string::<i64>().iter().map(normalize).collect()),
         // The schema's consistency check holds a text feature to text.
-        return Err(internal("a text feature's values are not text"));
+        _ => Err(internal("a text feature's values are not text")),
     }
-    let text = array.as_string::<i32>();
-    Ok((0..text.len())
-        .map(|i| sdm_engine::words::normalize((!text.is_null(i)).then(|| text.value(i))))
-        .collect())
 }
 
 #[cfg(test)]
