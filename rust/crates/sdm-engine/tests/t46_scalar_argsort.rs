@@ -138,7 +138,7 @@ fn all_native_scalar_threshold_sentinel_and_width_controls_match_exactly() {
         let expected: Vec<usize> = serde_json::from_value(record["order"].clone()).unwrap();
         macro_rules! check {
             ($dtype:ty, $width:literal) => {{
-                assert_eq!(bytes.len() % $width, 0, "{name}");
+                assert!(bytes.len().is_multiple_of($width), "{name}");
                 let values: Vec<$dtype> = bytes
                     .chunks_exact($width)
                     .map(|word| <$dtype>::from_le_bytes(word.try_into().unwrap()))
