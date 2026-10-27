@@ -13,8 +13,8 @@ use arrow_array::{Array, UInt64Array};
 use sdm_contract::data::strings::StringData;
 use sdm_contract::data::{AttachmentId, BATCH_COLUMN};
 use sdm_contract::frames::materialize::{
-    FRAME_MATERIALIZATION_VERSION, FrameNativeTable, PreparedFrameGraph, SampledFrameContext,
-    SampledFrameLink, SampledFrameTable,
+    FRAME_MATERIALIZATION_VERSION, FrameNativeColumnRef, FrameNativeTable, FrameTextColumn,
+    PreparedFrameGraph, SampledFrameContext, SampledFrameLink, SampledFrameTable,
 };
 use sdm_engine::strings::StringColumn;
 
@@ -269,21 +269,24 @@ impl BoundGraph {
         &self,
         column: &sdm_contract::ops::ColumnRef,
     ) -> Result<&sdm_contract::frames::materialize::FrameNativeColumn, CoreError> {
-        let table = self
-            .prepared
-            .graph
-            .table(&column.table)
-            .ok_or_else(|| invalid("native column names an absent graph table"))?;
+        let binding = self.native_binding(column)?;
         self.native
             .iter()
-            .find(|native| native.source == table.source)
+            .find(|native| native.source == binding.source)
             .and_then(|native| {
                 native
                     .columns
                     .iter()
-                    .find(|native| native.name == column.column)
+                    .find(|native| native.name == binding.column)
             })
             .ok_or_else(|| invalid("native column lacks its original source dtype"))
+    }
+
+    pub fn native_binding(
+        &self,
+        column: &sdm_contract::ops::ColumnRef,
+    ) -> Result<FrameNativeColumnRef, CoreError> {
+        self.owner.native_binding(column)
     }
 
     pub fn selected_rows(
@@ -353,6 +356,13 @@ impl SampledContext {
             text: Vec::new(),
         };
         for table in self.sampled.tables {
+            let source = graph
+                .prepared
+                .graph
+                .table(&table.name)
+                .ok_or_else(|| internal("sampled frame table lost its graph source binding"))?
+                .source
+                .clone();
             let source_rows = self
                 .native_rows
                 .get(&table.name)
@@ -370,7 +380,7 @@ impl SampledContext {
             columns.push((BATCH_COLUMN.to_owned(), positional(&table.batch)?));
             let rows = RecordBatch::try_from_iter(columns)
                 .map_err(|_| internal("sampled frame columns do not align"))?;
-            identity.value(&(&table.name, &table.primary_key, &table.stypes))?;
+            identity.value(&(&table.name, &source, &table.primary_key, &table.stypes))?;
             identity.arrow(&ArrowData::new(rows.schema(), vec![rows.clone()]))?;
             let source_data =
                 RecordBatch::try_from_iter([("source_row", positional(source_rows)?)])
@@ -383,14 +393,19 @@ impl SampledContext {
             let source_rows = attach_batch(asker, source_data)?;
             for (column, stype) in &table.stypes {
                 if *stype == Stype::Text {
-                    value.text.push(sdm_contract::ops::ColumnRef {
+                    let logical = sdm_contract::ops::ColumnRef {
                         table: table.name.clone(),
                         column: column.clone(),
+                    };
+                    value.text.push(FrameTextColumn {
+                        native: graph.native_binding(&logical)?,
+                        column: logical,
                     });
                 }
             }
             value.tables.push(SampledFrameTable {
                 name: table.name,
+                source,
                 primary_key: table.primary_key,
                 rows,
                 source_rows,
