@@ -6,6 +6,50 @@
 //! Builtin conversion has already completed over the whole selected value.
 //! Clipping, casing and word policy remain owned by the engine.
 
+use sdm_contract::scalar::unicode::{UnicodeSlice, UnicodeText};
+
+use super::{CasingProfile, MAX_CHARS, casing, normalize_with_profile, split};
+
+/// Normalize an already converted raw native value. No cast failure is
+/// hidden by clipping here, and no host-lowered or tokenized data is used.
+pub(super) fn normalize(value: Option<UnicodeSlice<'_>>, profile: CasingProfile) -> Vec<UnicodeText> {
+    let Some(value) = value else {
+        return Vec::new();
+    };
+    if let Some(ordinary) = value.utf8() {
+        return normalize_with_profile(Some(ordinary), profile)
+            .into_iter()
+            .map(UnicodeText::from)
+            .collect();
+    }
+    let clipped: Vec<_> = value.points().take(MAX_CHARS).collect();
+    let mut lower = Vec::with_capacity(clipped.len());
+    let mut run = Vec::new();
+    for point in clipped {
+        if let Some(character) = char::from_u32(point) {
+            run.push(character);
+        } else {
+            extend(&mut lower, &mut run, profile);
+            // A surrogate is neither Cased nor Case_Ignorable. Ending the
+            // scalar run preserves exactly its original sigma boundary.
+            lower.push(point);
+        }
+    }
+    extend(&mut lower, &mut run, profile);
+    split::ranges(&lower, char::from_u32, casing::space)
+        .into_iter()
+        .map(|range| UnicodeText::from_points(lower[range].iter().copied())
+            .expect("lowercase retains valid native codepoints"))
+        .collect()
+}
+
+fn extend(output: &mut Vec<u32>, run: &mut Vec<char>, profile: CasingProfile) {
+    if !run.is_empty() {
+        output.extend(casing::lower(run, profile).into_iter().map(u32::from));
+        run.clear();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
@@ -62,6 +106,7 @@ mod tests {
             let at = items(member(users, "columns")).iter()
                 .position(|value| points(value) == [110, 111, 116, 101]).unwrap();
             let rows = items(member(users, "rows"));
+            assert_eq!(rows.len(), input.len());
             for (row, input) in rows.iter().zip(input) {
                 let expected: Vec<_> = items(&items(row)[at]).iter()
                     .map(|value| points(value).to_vec()).collect();
