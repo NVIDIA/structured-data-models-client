@@ -21,7 +21,8 @@ Accepted capability facts remain in the bound call, including the independently 
 A fixed Overlap stage verifies the pre-warning task, actual row count and schema shape against that bound call, with header/Arrow coherence and the shared model policy.
 It computes one-shot overlap advice before the adapter captures its frame/schema references.
 An Envelope stage then captures those current references, checks schema consistency, resolves wire columns and delivers text-as-categorical advice before row/inference encoding.
-The returned versioned TabularEnvelope contains the actual core-resolved columns, wire widths, primary key and target, with no native handle.
+The returned versioned TabularEnvelope contains the actual core-resolved columns, wire widths and target, with no native handle.
+The primary key is a later observation from the same captured native table, after text advice; an in-place edit changes that call without replacing its earlier column plan.
 `Predict.direct` consumes that plan and explicitly later body observations over those same captured native frames.
 In-place warning-side edits are visible, replacement Request frame/schema references are not recaptured after text advice, and the later task kind/inference reads remain fresh.
 The frozen source permits context growth and task replacement during text advice, so earlier model policy is not rerun against those later effects.
@@ -56,3 +57,26 @@ Canonical schema generation is authoring, not validation credit.
 The first two source reviews requested changes, and their candidate/evidence remain preserved.
 Supplemental frozen public cases establish cast storage distinctions, exact ID refusals, warning/error order and the two different warning-side reference boundaries.
 Candidate execution requires two renewed independent reviews of the exact final source; this document makes no passing-check claim.
+
+
+The overlap stage widens only declared key columns, keeping their original scoring ordinals and native storage facts.
+A nullable cast failure in an unrelated feature therefore follows overlap advice instead of suppressing it.
+Encoded numeric key components use the existing canonical decimal identity for comparison, including signed zero, while encoded text keeps its spelling.
+The body consumes each complete column across all Arrow batches before the next column, retaining native competing-error order before scoring and inference.
+Shared answer coercion and table layout select attribution explicitly: gathered envelopes use entity-reference columns, and direct envelopes start with response IDs as written before applying their declared primary key.
+Ordinary feature names cannot activate gathered attribution.
+
+
+A direct response ID is read as JSON first, including the default JSON reader's nonfinite numbers, then as a bounded literal data notation under the reference's 1024-character limit.
+The reader distinguishes primitive scalar names, validated values that cannot equal this numeric/Boolean key family, and invalid syntax that remains an opaque service token.
+It supports grouping, trailing commas, exact integer bases and digits, float spellings, quoted and escaped text, and literal collections without evaluating expressions.
+A validated nonprimitive value gives the normal wrong-key response refusal; it is not silently treated as an opaque token.
+Each reached answer's literal notices are presented through the existing warning boundary before that answer's key comparison, and before later answers are visited.
+The Python presenter obtains the selected parser warning's category and wording from its native runtime without selecting the warning or deciding attribution.
+
+The later body observation includes the actual builtin Unicode database version, rather than a guess from the Python major version.
+Supported native databases are Unicode 13, 14, 15, 15.1 and 16.
+A maintained Unicode16 name dictionary and maintained age property implement canonical names, filtered by that runtime profile, with exact version-specific alias membership generated from pinned official Unicode inputs.
+Algorithmic CJK/Hangul syntax retains the native decoder's case-sensitive branches; ordinary hashed names and aliases retain its case-insensitive lookup.
+Named sequences remain invalid in string-literal escapes, as the reference's literal decoder requires.
+The canonical alias generator records all input URLs/hashes, its own hash and output hashes; generated data carries the Unicode-3.0 terms through the existing Rust notices generator.

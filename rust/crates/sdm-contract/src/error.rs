@@ -920,6 +920,7 @@ sentences! {
     DirectPredictDtype = "direct_predict_dtype", E::InvalidRequest;
     DirectNullableCast = "direct_nullable_cast", E::InvalidRequest;
     DirectAnswersShown = "direct_answers_shown", W::FrameSchema;
+    DirectLiteralEscape = "direct_literal_escape", W::FrameSchema;
     DirectLookup = "direct_lookup", E::InvalidRequest;
     DirectAmbiguous = "direct_ambiguous", E::InvalidRequest;
     DirectEmpty = "direct_empty", E::InvalidRequest;

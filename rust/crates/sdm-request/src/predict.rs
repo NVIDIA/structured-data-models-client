@@ -1384,7 +1384,13 @@ pub fn layout(
     response: &PredictionResponse,
     float_text: fn(f64) -> String,
 ) -> Result<Part, CoreError> {
-    layout_as(payload, response, float_text, answer_type(payload)?)
+    layout_as(
+        payload,
+        response,
+        float_text,
+        answer_type(payload)?,
+        Attribution::GatheredReference,
+    )
 }
 
 /// Direct tabular answers follow the later wire task, without rerunning
@@ -1399,7 +1405,16 @@ pub(crate) fn layout_tabular(
         response,
         float_text,
         declared_answers(payload, kind_of(payload)?),
+        Attribution::AsWritten,
     )
+}
+
+/// Attribution is chosen by the owning adapter, independently of answer coercion.
+/// Ordinary direct feature names do not acquire gathered entity-reference semantics.
+#[derive(Clone, Copy)]
+enum Attribution {
+    GatheredReference,
+    AsWritten,
 }
 
 fn layout_as(
@@ -1407,9 +1422,14 @@ fn layout_as(
     response: &PredictionResponse,
     float_text: fn(f64) -> String,
     answers: AnswerType,
+    attribution: Attribution,
 ) -> Result<Part, CoreError> {
     let (names, rows) = instance_table(payload, "predict").ok_or_else(|| bad_payload("predict"))?;
-    let (placed, text_ids) = match names.iter().position(|n| n.starts_with(ENTITY_REF)) {
+    let reference = match attribution {
+        Attribution::GatheredReference => names.iter().position(|n| n.starts_with(ENTITY_REF)),
+        Attribution::AsWritten => None,
+    };
+    let (placed, text_ids) = match reference {
         Some(reference) => {
             let dtype = key_dtype(payload, names[reference]);
             let text_ids = dtype.as_deref() == Some("string");

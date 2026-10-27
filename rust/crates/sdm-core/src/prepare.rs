@@ -811,7 +811,7 @@ pub(crate) async fn predict(
     let named = bound.named;
     let model = bound.model.to_owned();
     let kind = bound.kind.to_owned();
-    let (envelope, context, scoring, task, inference) = match input {
+    let (envelope, context, scoring, task, primary_key, unicode_version, inference) = match input {
         DirectPredict::Empty {
             schema,
             entity_table,
@@ -853,6 +853,8 @@ pub(crate) async fn predict(
             context_header,
             predict_header,
             task,
+            primary_key,
+            unicode_version,
             inference,
         } => {
             let context = take_rows(&mut attached, context)?;
@@ -864,6 +866,8 @@ pub(crate) async fn predict(
                 renamed(&context_header, &context)?,
                 renamed(&predict_header, &scoring)?,
                 task,
+                primary_key,
+                unicode_version,
                 inference,
             )
         }
@@ -874,6 +878,7 @@ pub(crate) async fn predict(
         &envelope.columns,
         &context.batches,
         &scoring.batches,
+        &primary_key,
         &task,
         &outputs,
         &request.request_id,
@@ -886,7 +891,7 @@ pub(crate) async fn predict(
         &payload,
         bytes,
         request.model_endpoint.as_ref(),
-        true,
+        Some(&unicode_version),
     )
     .await?;
     if named {

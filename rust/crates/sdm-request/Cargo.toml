@@ -15,6 +15,8 @@ publish.workspace = true
 [dependencies]
 arrow-array.workspace = true
 arrow-schema.workspace = true
+regex.workspace = true
+unicode_names2.workspace = true
 sdm-contract = { path = "../sdm-contract" }
 sdm-engine = { path = "../sdm-engine" }
 sdm-wire = { path = "../sdm-wire" }
