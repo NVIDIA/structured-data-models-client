@@ -4,7 +4,7 @@
 
 //! Fixed shared frame values cross actual public HostRun ownership boundaries.
 
-use arrow_array::{ArrayRef, Int64Array, RecordBatch};
+use arrow_array::{ArrayRef, Int64Array, RecordBatch, StringArray};
 use sdm_contract::data::AttachmentId;
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::ops::{Operation, OperationResult};
@@ -118,4 +118,39 @@ fn fresh_adoption_and_later_time_share_the_fixed_nominated_meaning() {
     assert!(notices.is_empty());
     assert_eq!(completed["value"][0]["table"]["duplicate_keys"], duplicates);
     assert_eq!(completed["value"][0]["table"]["columns"][0]["stype"], "ID");
+}
+
+#[test]
+fn assembled_sample_columns_keep_metadata_and_accept_later_value_or_presence_changes() {
+    let original = RecordBatch::try_from_iter([(
+        "label",
+        Arc::new(StringArray::from_iter_values(
+            (0..40).map(|n| format!("label-{n}")),
+        )) as ArrayRef,
+    )])
+    .unwrap();
+    let (nomination, _) = phase("nominate", original.clone(), None);
+    let (adoption, _) = phase("adopt", original.clone(), Some(nomination));
+    let (complete, _) = phase("time", original.clone(), Some(adoption));
+    let (schema, notices) = phase("assemble", original.clone(), Some(complete));
+    assert!(notices.is_empty());
+    assert_eq!(schema["value"]["samples"].as_array().unwrap().len(), 1);
+    let column = schema["value"]["samples"][0].clone();
+    let input = json!({"kind":"sample_column", "value":column});
+    let (stats, notices) = phase("sample", original.clone(), Some(input.clone()));
+    assert_eq!(stats["value"]["distinct"], 40);
+    assert_eq!(stats["value"]["present"], 40);
+    assert_eq!(notices, vec![Sentence::FrameCategoricalSample]);
+    let constant = RecordBatch::try_from_iter([(
+        "label",
+        Arc::new(StringArray::from(vec!["constant"; 40])) as ArrayRef,
+    )])
+    .unwrap();
+    let (stats, notices) = phase("sample", constant, Some(input.clone()));
+    assert_eq!(stats["value"]["distinct"], 1);
+    assert!(notices.is_empty());
+    let (stats, notices) = phase("sample", original.project(&[]).unwrap(), Some(input));
+    assert_eq!(stats["value"]["exists"], false);
+    assert_eq!(stats["value"]["present"], 0);
+    assert!(notices.is_empty());
 }

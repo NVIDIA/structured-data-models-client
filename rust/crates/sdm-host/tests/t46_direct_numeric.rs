@@ -211,6 +211,43 @@ fn early_arguments_need_no_headers_or_values_and_reject_unknown_task() {
 }
 
 #[test]
+fn current_schema_key_metadata_is_published_before_the_later_consistency_fault() {
+    let inferred = prepare(json!({"stage":"schema","headers":headers(),"context":2,"predict":3,"entity_table":"instance"}), halves()).unwrap();
+    let mut held = inferred["schema"].clone();
+    held["tables"][0]["primary_key"] = json!(["feature"]);
+    held["tables"][0]["columns"][0]["stype"] = json!("numerical");
+    held["tables"][0]["columns"][1]["stype"] = json!("text");
+    let adopted = prepare(
+        json!({"stage":"adopt_schema","schema":held}),
+        Attachments::new(),
+    )
+    .unwrap();
+    assert_eq!(adopted["tables"][0]["columns"][0]["stype"], "ID");
+    assert_eq!(
+        adopted["tables"][0]["columns"][0]["stype_before_key"],
+        "numerical"
+    );
+    let error = prepare(
+        json!({"stage":"consistent_schema","schema":adopted}),
+        Attachments::new(),
+    )
+    .unwrap_err();
+    assert_eq!(error.sentence, sdm_contract::Sentence::MeaningNotCarried);
+    let mut releasable = inferred["schema"].clone();
+    releasable["tables"][0]["columns"][0]["stype"] = json!("ID");
+    releasable["tables"][0]["columns"][0]["stype_before_key"] = json!("numerical");
+    releasable["tables"][0]["columns"][1]["stype"] = json!("ID");
+    let released = prepare(
+        json!({"stage":"adopt_schema","schema":releasable}),
+        Attachments::new(),
+    )
+    .unwrap();
+    assert_eq!(released["tables"][0]["columns"][0]["stype"], "numerical");
+    assert!(released["tables"][0]["columns"][0]["stype_before_key"].is_null());
+    assert_eq!(released["tables"][0]["columns"][1]["stype"], "ID");
+}
+
+#[test]
 fn constructor_header_and_arrow_coherence_checks_each_axis() {
     for axis in [
         "row_count",
@@ -556,7 +593,7 @@ fn nullable_cast_fault_is_core_selected_from_native_storage_and_values() {
                     continue;
                 }
                 let envelope = planned.unwrap();
-                let mut attached = data();
+                let attached = data();
                 let error = encoded_prediction(
                     json!({"envelope":envelope,"context":2,"predict":3,"context_header":context_header,"predict_header":predict_header,"task":"regression","primary_key":[],"inference":{}}),
                     attached,
