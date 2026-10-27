@@ -634,6 +634,14 @@ def error_from_core(
     if (code, details.get('rule')) in AS_THE_BASE_CLASS:
         cls = StructuredDataError
     sentence = error['sentence']
+    if (
+        sentence == 'tabular_row_bounds'
+        and (present := _held().get('direct_row_index')) is not None
+    ):
+        # Bounds are already selected by the core. Native integer display can
+        # itself raise under active runtime limits, as at the reference f-string.
+        # Keep it outside _said's formatting-defect catch.
+        fields['index'] = present(fields)
     said = _said(sentence, fields)
     part = error.get('part')
     if part is not None:

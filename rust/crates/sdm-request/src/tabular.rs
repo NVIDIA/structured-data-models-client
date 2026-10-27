@@ -11,7 +11,8 @@ use arrow_array::{ArrayRef, RecordBatch};
 use arrow_schema::DataType;
 use sdm_contract::ops::{DescribedTable, Dtype, HeldSchema, HeldTable, SourceDescription, Stype};
 use sdm_contract::prepare::{
-    DirectInference, FloatStorage, PrimitiveOption, TabularColumn, TabularColumns,
+    DirectInference, EncodedDirectBody, EncodedTableShape, FloatStorage, PrimitiveOption,
+    TabularColumn, TabularColumns,
 };
 use sdm_contract::{CoreError, CoreWarning, Detail, Scalar, Sentence};
 use sdm_wire::json::Value;
@@ -38,6 +39,7 @@ fn widened(a: Dtype, b: Dtype) -> Dtype {
         return a;
     }
     let rank = |d| match d {
+        Dtype::Bool => Some(0),
         Dtype::Int32 => Some(1),
         Dtype::Int64 => Some(2),
         Dtype::Float32 => Some(3),
@@ -394,24 +396,7 @@ pub fn envelope(
     ))
 }
 
-/// Encode current values with the schema already resolved before text advice.
-#[allow(clippy::too_many_arguments)]
-pub fn body(
-    plan: &TabularColumns,
-    context: &[RecordBatch],
-    scoring: &[RecordBatch],
-    primary_key: &[String],
-    kind: &str,
-    outputs: &[String],
-    request_id: &str,
-    inference: DirectInference,
-    float_text: fn(f64) -> String,
-) -> Result<Value, CoreError> {
-    let dtypes: BTreeMap<&str, Dtype> = plan
-        .dtypes
-        .iter()
-        .map(|(name, dtype)| (name.as_str(), *dtype))
-        .collect();
+fn instance_schema(plan: &TabularColumns, primary_key: &[String]) -> Value {
     let columns = plan
         .columns
         .iter()
@@ -440,6 +425,25 @@ pub fn body(
             Value::Array(primary_key.iter().map(text).collect()),
         );
     }
+    instance
+}
+
+/// Encode current values with the schema already resolved before text advice.
+pub fn body(
+    plan: &TabularColumns,
+    context: &[RecordBatch],
+    scoring: &[RecordBatch],
+    primary_key: &[String],
+    kind: &str,
+    outputs: &[String],
+    float_text: fn(f64) -> String,
+) -> Result<Value, CoreError> {
+    let dtypes: BTreeMap<&str, Dtype> = plan
+        .dtypes
+        .iter()
+        .map(|(name, dtype)| (name.as_str(), *dtype))
+        .collect();
+    let instance = instance_schema(plan, primary_key);
     let encode = |batches: &[RecordBatch]| -> Result<Value, CoreError> {
         let names: Vec<String> = batches
             .first()
@@ -482,7 +486,7 @@ pub fn body(
     let target_dtype = dtypes.get(plan.target.as_str()).ok_or_else(|| {
         invalid(Sentence::DirectSchemaMissing).with_field("name", Detail::text(&plan.target))
     })?;
-    let mut result = object([
+    let result = object([
         ("model", text(predict::TABULAR)),
         (
             "task",
@@ -504,13 +508,127 @@ pub fn body(
             "output",
             object([("fields", Value::Array(outputs.iter().map(text).collect()))]),
         ),
-        ("metadata", object([("request_id", text(request_id))])),
     ]);
+    Ok(result)
+}
+
+/// Add only the observations reached after all row encoding has succeeded.
+pub fn complete_body(
+    mut payload: Value,
+    request_id: &str,
+    inference: DirectInference,
+) -> Result<Value, CoreError> {
+    payload.set("metadata", object([("request_id", text(request_id))]));
     let inference = primitive_inference(inference)?;
     if !matches!(&inference,Value::Object(fields) if fields.is_empty()) {
-        result.set("inference", inference);
+        payload.set("inference", inference);
     }
-    Ok(result)
+    Ok(payload)
+}
+
+/// The owned envelope must agree with its useful typed wire facts.
+/// This validates serialized coherence, without re-encoding native rows or
+/// rerunning pre-advice model, capacity or constructor policy.
+pub fn check_body(
+    payload: &Value,
+    body: &EncodedDirectBody,
+    outputs: &[String],
+) -> Result<(), CoreError> {
+    let protocol = || {
+        CoreError::protocol(
+            Sentence::InvalidMessage,
+            "encoded tabular body disagrees with its typed facts",
+        )
+    };
+    let dtypes: BTreeMap<&str, Dtype> = body
+        .columns
+        .dtypes
+        .iter()
+        .map(|(name, dtype)| (name.as_str(), *dtype))
+        .collect();
+    let target = dtypes
+        .get(body.columns.target.as_str())
+        .ok_or_else(protocol)?;
+    let task = object([
+        ("kind", text(&body.kind)),
+        (
+            "target",
+            object([
+                ("column_name", text(&body.columns.target)),
+                ("dtype", text(target.wire_name())),
+            ]),
+        ),
+    ]);
+    if !matches!(payload,Value::Object(fields) if fields.len()==6)
+        || payload.get("model") != Some(&text(predict::TABULAR))
+        || payload.get("task") != Some(&task)
+        || payload.get("schema")
+            != Some(&object([(
+                "instance_table",
+                instance_schema(&body.columns, &body.primary_key),
+            )]))
+        || payload.get("output")
+            != Some(&object([(
+                "fields",
+                Value::Array(outputs.iter().map(text).collect()),
+            )]))
+        || payload.get("metadata").is_some()
+        || payload.get("inference").is_some()
+        || body
+            .columns
+            .columns
+            .iter()
+            .any(|column| dtypes.get(column.name.as_str()) != Some(&column.dtype))
+    {
+        return Err(protocol());
+    }
+    let table = |half: &str, shape: &EncodedTableShape| -> Result<(), CoreError> {
+        let table = payload
+            .get(half)
+            .and_then(|v| v.get("instance_table"))
+            .ok_or_else(protocol)?;
+        if !matches!(payload.get(half),Some(Value::Object(fields)) if fields.len()==1)
+            || !matches!(table,Value::Object(fields) if fields.len()==3)
+            || table.get("format") != Some(&text("arrays"))
+            || table.get("columns") != Some(&Value::Array(shape.columns.iter().map(text).collect()))
+        {
+            return Err(protocol());
+        }
+        let Some(Value::Array(rows)) = table.get("rows") else {
+            return Err(protocol());
+        };
+        if rows.len() != shape.rows {
+            return Err(protocol());
+        }
+        for row in rows {
+            let Value::Array(cells) = row else {
+                return Err(protocol());
+            };
+            if cells.len() != shape.columns.len() {
+                return Err(protocol());
+            }
+            for (name, cell) in shape.columns.iter().zip(cells) {
+                let dtype = dtypes.get(name.as_str()).ok_or_else(protocol)?;
+                let valid = matches!(cell, Value::Null)
+                    || match (dtype, cell) {
+                        (Dtype::Bool, Value::Bool(_)) | (Dtype::String, Value::Text(_)) => true,
+                        (Dtype::Int32 | Dtype::Int64, Value::Number(token)) => {
+                            sdm_wire::json::is_integer_token(token) && token.parse::<i64>().is_ok()
+                        }
+                        (Dtype::Float32 | Dtype::Float64, Value::Number(token)) => {
+                            token.parse::<f64>().is_ok_and(f64::is_finite)
+                        }
+                        _ => false,
+                    };
+                if !valid {
+                    return Err(protocol());
+                }
+            }
+        }
+        Ok(())
+    };
+    table("context", &body.context_shape)?;
+    table("predict", &body.predict_shape)
 }
 
 fn entity_text(value: &Entity, float_text: fn(f64) -> String) -> String {

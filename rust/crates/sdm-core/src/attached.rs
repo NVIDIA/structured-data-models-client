@@ -45,6 +45,9 @@ pub fn resolved_attachments(
                     );
                 }
                 let rows = match input {
+                    sdm_contract::prepare::Preparation::EncodeBody { input } => {
+                        Some((input.context, input.predict))
+                    }
                     sdm_contract::prepare::Preparation::Schema {
                         context, predict, ..
                     } => Some((context, predict)),
@@ -70,14 +73,8 @@ pub fn resolved_attachments(
             if let Some(Attachment::Bytes(bytes)) = attachments.get(&id) {
                 let input: sdm_contract::prepare::DirectPredict = serde_json::from_slice(bytes)
                     .map_err(|_| invalid("unreadable direct predict input", id))?;
-                if let sdm_contract::prepare::DirectPredict::Body {
-                    context, predict, ..
-                } = input
-                {
-                    named.extend([
-                        (context, AttachmentKind::Arrow),
-                        (predict, AttachmentKind::Arrow),
-                    ]);
+                if let sdm_contract::prepare::DirectPredict::Encoded { body, .. } = input {
+                    named.push((body.payload, AttachmentKind::Bytes));
                 }
             }
             return Ok(named);

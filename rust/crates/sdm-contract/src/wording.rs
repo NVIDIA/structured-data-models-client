@@ -737,9 +737,9 @@ pub fn template(sentence: Sentence) -> Template {
         S::DirectTextCategorical => said(
             r#"kumo-tabular cannot read a text column, so {columns!c} travel(s) as categorical instead. "#,
         ),
-        S::TabularRowMissing => said(
-            r#"the response is missing a row_index, so its answer cannot be attributed to a row"#,
-        ),
+        S::DirectResponseContract => {
+            said(r#"{model} returned a response that does not match the contract: {diagnostic}"#)
+        }
         S::TabularRowBounds => {
             said(r#"the response names row_index {index}, and this batch asked about {rows} rows"#)
         }

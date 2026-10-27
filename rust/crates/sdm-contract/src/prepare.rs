@@ -215,6 +215,9 @@ pub struct TabularEnvelope {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "stage", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Preparation {
+    EncodeBody {
+        input: DirectBody,
+    },
     CheckResponseRows {
         scope: ResponseScope,
         rows: Vec<DecodedDirectRow>,
@@ -298,18 +301,46 @@ pub enum DirectPredict {
         entity_table: String,
         predict_header: FrameHeader,
     },
-    Body {
-        envelope: TabularEnvelope,
-        context: AttachmentId,
-        predict: AttachmentId,
-        context_header: FrameHeader,
-        predict_header: FrameHeader,
-        task: String,
-        /// Read from the same captured native table after text advice.
-        primary_key: Vec<String>,
+    Encoded {
+        body: EncodedDirectBody,
         #[serde(default)]
         inference: DirectInference,
     },
+}
+
+/// Later observations of the same captured frames, before native inference.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct DirectBody {
+    pub envelope: TabularEnvelope,
+    pub context: AttachmentId,
+    pub predict: AttachmentId,
+    pub context_header: FrameHeader,
+    pub predict_header: FrameHeader,
+    pub task: String,
+    pub primary_key: Vec<String>,
+}
+
+pub const ENCODED_DIRECT_BODY_VERSION: u32 = 1;
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct EncodedTableShape {
+    pub columns: Vec<String>,
+    pub rows: usize,
+}
+/// A complete valid tabular envelope before optional metadata/inference.
+/// It is independently inspectable wire data, without deferred commands.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct EncodedDirectBody {
+    pub version: u32,
+    pub bound: CallPreparation,
+    pub columns: TabularColumns,
+    pub kind: String,
+    pub primary_key: Vec<String>,
+    pub context_shape: EncodedTableShape,
+    pub predict_shape: EncodedTableShape,
+    pub payload: AttachmentId,
 }
 
 /// The closed data value answered by one fixed preparation stage.
@@ -322,6 +353,7 @@ pub enum PreparedValue {
     Call(CallPreparation),
     Overlap(DirectOverlap),
     Envelope(TabularEnvelope),
+    Body(EncodedDirectBody),
     Response(DirectResponseData),
     Rows(CheckedDirectRows),
     Member(SelectedDirectMember),

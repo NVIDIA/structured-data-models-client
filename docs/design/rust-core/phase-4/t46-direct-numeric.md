@@ -23,7 +23,12 @@ It computes one-shot overlap advice before the adapter captures its frame/schema
 An Envelope stage then captures those current references, checks schema consistency, resolves wire columns and delivers text-as-categorical advice before row/inference encoding.
 The returned versioned TabularEnvelope contains the actual core-resolved columns, wire widths and target, with no native handle.
 The primary key is a later observation from the same captured native table, after text advice; an in-place edit changes that call without replacing its earlier column plan.
-`Predict.direct` consumes that plan and explicitly later body observations over those same captured native frames.
+A fixed EncodeBody preparation consumes that plan and the explicitly later observations over those same captured native frames.
+It returns an independently useful complete tabular envelope, with optional metadata and inference absent, plus bound-call, schema, table-shape and owned-payload facts.
+Only after both row encoders succeed does Python draw the native request identifier and reach the inference truthiness/read/conversion.
+Native decimal-integer display failures therefore follow earlier row failures and retain their original exception.
+Final `Predict.direct` verifies that the actual encoded payload agrees with its typed schema, shapes, kind, model and outputs, then adds metadata/inference in Rust and sends the same encoded rows.
+No row re-encoding, earlier-policy replay, partial JSON fragment, native callback or opaque resume state is introduced.
 In-place warning-side edits are visible, replacement Request frame/schema references are not recaptured after text advice, and the later task kind/inference reads remain fresh.
 The frozen source permits context growth and task replacement during text advice, so earlier model policy is not rerun against those later effects.
 Empty scoring retains its separate input with no later context or inference observations.
@@ -40,6 +45,7 @@ No second held-schema representation or dtype policy table is introduced.
 Flat finite primitive inference values travel in an input-sized attachment.
 Integer digits remain exact until Rust applies the final float64 JSON precision rule, after row encoding.
 The body retains supplied row order, large integer text, valid masked NaNs/nulls, declared dtype widening, current task/schema/options and one-shot leakage advice.
+Boolean participates at the bottom of the native numeric widening order, preserving categorical numeric values across Boolean, signed/unsigned integer and floating halves.
 Calls reread the public state, including after mutation or an earlier failure.
 Capacity is checked before the empty-scoring shortcut.
 Native floating storage states whether missingness comes from NaN or a validity mask; Rust decides the conditional nullable-integer cast failure from those facts and values.
@@ -89,3 +95,10 @@ After a native conversion boundary, fixed-size row slices bound repeated seriali
 Owned shared buffers and compact observations retain expected O(N) work and memory across the fixed data pipeline.
 The same builtin/failure facts are useful inputs to a pure Rust HostRun host.
 No language step, warning acknowledgment protocol, generic workflow interpreter, literal evaluator in Rust, Unicode-name data dependency or new workspace crate is added.
+
+Direct model-contract errors retain the generated decoder's selected item ordinal and reached row-index diagnostic.
+The same shared decoder keeps gathered width admission unchanged, while its explicit direct mode preserves exact canonical row-integer digits through bounds checking before result-table narrowing.
+Finite whole floats use standard native-compatible conversion, including negative-zero normalization; arbitrary integer tokens acquire no fixed i64 or i128 bound before direct attribution.
+Global decoding still precedes all native row-literal effects, and later bounds remain deferred until their own row.
+An error-only native presenter renders the core-selected bounds integer using maintained exact conversion at that reached presentation boundary, preserving an active decimal digit-limit failure after earlier warning effects.
+The existing common value formatter supplies quoted values for selected generated-contract diagnostics; it does not validate or reinterpret model rows.
