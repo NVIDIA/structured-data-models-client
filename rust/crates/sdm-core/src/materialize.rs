@@ -3941,10 +3941,12 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
                 entity,
                 &all_keys,
                 &anchors,
-                &walk_hops,
-                deferred.neighbors.as_deref(),
-                &excluded,
-                (!unseeded).then(|| seed.to_u128()).flatten(),
+                crate::frame_materialize::FrameWalkOptions {
+                    hops: &walk_hops,
+                    neighbor_values: deferred.neighbors.as_deref(),
+                    excluded: &excluded,
+                    seed: (!unseeded).then(|| seed.to_u128()).flatten(),
+                },
             )?
         } else {
             crate::subgraph::Walk {

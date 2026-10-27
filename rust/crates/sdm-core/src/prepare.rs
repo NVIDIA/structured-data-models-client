@@ -50,22 +50,16 @@ fn version(actual: u32, expected: u32) -> Result<(), CoreError> {
     Ok(())
 }
 fn frame(form: FrameForm, name: &str) -> Result<(), CoreError> {
-    let (kind, hint) = match form {
+    let (kind, form) = match form {
         FrameForm::Frame => return Ok(()),
-        FrameForm::Dict => (
-            "dict".to_owned(),
-            "; wrap a single row with pd.DataFrame([row])",
-        ),
-        FrameForm::Series => (
-            "Series".to_owned(),
-            "; wrap a single row with pd.DataFrame([row])",
-        ),
-        FrameForm::Other { native_type } => (native_type, "; build one with pd.DataFrame(...)"),
+        FrameForm::Dict => ("dict".to_owned(), "dict"),
+        FrameForm::Series => ("Series".to_owned(), "series"),
+        FrameForm::Other { native_type } => (native_type, "other"),
     };
     Err(error(Sentence::DirectFrame)
         .with_field("name", Detail::text(name))
         .with_field("native_type", Detail::text(kind))
-        .with_field("hint", Detail::text(hint)))
+        .with_field("form", Detail::text(form)))
 }
 fn lookup_bounds(read: &NativeLookup, count: usize) -> Result<(), CoreError> {
     if read.positions.iter().any(|&n| n >= count)
@@ -223,12 +217,11 @@ fn read_schema(schema: sdm_contract::ops::HeldSchema) -> Result<sdm_schema::held
             continue;
         };
         for column in &mut table.columns {
-            if let Some(native) = native.columns.iter().find(|c| c.name == column.name) {
-                if let Ok(dtype) =
+            if let Some(native) = native.columns.iter().find(|c| c.name == column.name)
+                && let Ok(dtype) =
                     serde_json::from_value(serde_json::Value::String(native.dtype.clone()))
-                {
-                    column.dtype = dtype;
-                }
+            {
+                column.dtype = dtype;
             }
         }
     }

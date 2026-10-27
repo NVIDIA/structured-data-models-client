@@ -25,7 +25,6 @@ from sdm_client._rust import (
     errors,
     frames,
     results,
-    schema as schemas,
     spec,
 )
 from sdm_client._rust.run import Finished, run
@@ -422,6 +421,19 @@ def construct(
         else:
             bool(values.dropna().nunique() >= 2)
 
+    def frame_fault(fields: Any) -> str:
+        name = (
+            fields['name']
+            if 'related_ordinal' not in fields
+            else f'related_tables[{list(related)[fields["related_ordinal"]]!r}]'
+        )
+        hint = (
+            '; wrap a single row with pd.DataFrame([row])'
+            if fields['form'] in ('dict', 'series')
+            else '; build one with pd.DataFrame(...)'
+        )
+        return f'{name} must be a pandas DataFrame, got {fields["native_type"]}{hint}'
+
     with ExitStack() as holding:
         holding.enter_context(
             errors.holding(
@@ -432,11 +444,7 @@ def construct(
                 ),
                 direct_schema_missing=lambda fields: context[fields['name']],
                 direct_task=lambda fields: task,
-                direct_frame_name=lambda fields: (
-                    fields['name']
-                    if 'related_ordinal' not in fields
-                    else f'related_tables[{list(related)[fields["related_ordinal"]]!r}]'
-                ),
+                direct_frame=frame_fault,
                 direct_target=lambda fields: target,
                 direct_context_labels=lambda fields: sorted(
                     map(str, context.columns)
@@ -636,7 +644,8 @@ def _json(value: Any) -> Any:
         raise RouteError(
             'the partial direct request requires a flat primitive inference mapping'
         )
-    entries = []
+    entries: list[tuple[str, dict[str, Any]]] = []
+    encoded: dict[str, Any]
     for key, item in value.items():
         if type(item) is int:
             encoded = {'integer': str(item)}
@@ -712,6 +721,7 @@ def predict(
     )
     empty = request.nothing_to_score
     attached: dict[int, Any] = {}
+    value: dict[str, Any]
     if empty:
         # The reference's empty result reads no context values or inference.
         scored = request.predict.instance_table

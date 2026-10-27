@@ -675,9 +675,7 @@ pub fn template(sentence: Sentence) -> Template {
         S::ProbabilitiesNone => said(
             r#"the endpoint answered the question about candidate {host.candidate!r} without saying how sure it was, and a ranking is only the order of those. It gave back no probabilities, and this client knows a positive class spelled "true", "True", "TRUE" or "1"."#,
         ),
-        S::DirectFrame => {
-            said(r#"{host.direct_frame_name} must be a pandas DataFrame, got {native_type}{hint}"#)
-        }
+        S::DirectFrame => said(r#"{host.direct_frame}"#),
         S::DirectRelated => said(
             r#"related_tables {host.direct_related} makes this a relational request, and no model can be sent one built from frames: the relational model is sent tables gathered around each entity, and the tabular model reads a single table. Gather it with PredictiveQuery(...).materialize(indices=[...], model='kumo-relational'), whose schema holds the related tables and the relationships that reach them."#,
         ),

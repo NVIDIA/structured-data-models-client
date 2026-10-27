@@ -51,6 +51,14 @@ pub(crate) struct FrameRun {
     pub entropy: Option<u64>,
 }
 
+/// Per-walk sampling options, borrowed from this materialization call.
+pub(crate) struct FrameWalkOptions<'a> {
+    pub hops: &'a [Hop],
+    pub neighbor_values: Option<&'a [Value]>,
+    pub excluded: &'a [(String, String)],
+    pub seed: Option<u128>,
+}
+
 fn bound_tables(
     bindings: Vec<sdm_contract::frames::FrameInput>,
     attachments: &mut Attachments,
@@ -371,11 +379,14 @@ impl FrameRun {
         entity: &Table,
         keys: &ArrayRef,
         anchors: &[i64],
-        hops: &[Hop],
-        neighbor_values: Option<&[Value]>,
-        excluded: &[(String, String)],
-        seed: Option<u128>,
+        options: FrameWalkOptions<'_>,
     ) -> Result<crate::subgraph::Walked, CoreError> {
+        let FrameWalkOptions {
+            hops,
+            neighbor_values,
+            excluded,
+            seed,
+        } = options;
         if let Some(seed) = seed {
             let seed = u32::try_from(seed)
                 .ok()

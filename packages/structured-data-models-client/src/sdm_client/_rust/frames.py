@@ -244,8 +244,11 @@ def _convert(
 
     arrays = []
     native_types = {}
-    for column in frame.columns:
-        series = frame[column]
+    for ordinal, column in enumerate(frame.columns):
+        # A prior warning can introduce a duplicate label after metadata was
+        # fixed. Convert each physical column without replaying name lookup
+        # or duplicate-name policy before the core's remaining native guards.
+        series = frame.iloc[:, ordinal]
         dtype = series.dtype
         numeric = _numeric_physical(dtype) is not None
         temporal = (
