@@ -376,6 +376,13 @@ pub struct MaterializedFrames {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "stage", rename_all = "snake_case", deny_unknown_fields)]
 pub enum FramePreparation {
+    Question {
+        schema: AttachmentId,
+        query: AttachmentId,
+        candidates_given: bool,
+        statistic_given: bool,
+        top_k_given: bool,
+    },
     Questions {
         input: FrameQuestionInputs,
     },
@@ -460,6 +467,7 @@ pub enum FramePreparation {
     deny_unknown_fields
 )]
 pub enum PreparedFrameValue {
+    Question(PreparedFrameQuestion),
     Questions(PreparedFrameQuestions),
     FailureAssessment(FrameFailureAssessment),
     Graph(PreparedFrameGraph),

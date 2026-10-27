@@ -60,6 +60,7 @@ pub enum AttachmentKind {
     Arrow,
     /// A core-created immutable frame graph and its continuing native stream.
     FrameGraph,
+    FrameQuestion,
     FrameTask,
     FrameReferences,
     FramePayload,

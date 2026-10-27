@@ -12,6 +12,7 @@ mod native_guard;
 mod owners;
 pub(crate) mod questions;
 pub use owners::{RetainedFramePayload, RetainedFrameReferences, RetainedFrameTask};
+pub use questions::RetainedFrameQuestion;
 #[cfg(test)]
 mod native_guard_tests;
 
@@ -178,12 +179,26 @@ pub(crate) async fn run(
     part_scope: Option<FrameQuestionScope>,
 ) -> Result<OperationResult, CoreError> {
     let value = match input {
-        FramePreparation::Questions { input } => PreparedFrameValue::Questions(questions::prepare(
-            input,
+        FramePreparation::Question {
+            schema,
+            query,
+            candidates_given,
+            statistic_given,
+            top_k_given,
+        } => PreparedFrameValue::Question(questions::resolve(
+            &asker,
+            schema,
+            query,
+            candidates_given,
+            statistic_given,
+            top_k_given,
             &facts,
             &*zones,
             &mut attachments,
         )?),
+        FramePreparation::Questions { input } => {
+            PreparedFrameValue::Questions(questions::prepare(&asker, input, &mut attachments)?)
+        }
         input @ FramePreparation::Graph { .. } => {
             PreparedFrameValue::Graph(graph(&asker, input, &mut attachments)?)
         }

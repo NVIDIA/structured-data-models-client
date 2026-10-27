@@ -2787,6 +2787,17 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
 
 /// Validate a forecast's complete question population before any source
 /// read. Frame preparation and provider materialization share these guards.
+pub(crate) fn forecast_admission(top_k_given: bool) -> Result<(), CoreError> {
+    if top_k_given {
+        return Err(CoreError::new(
+            Sentence::ForecastTopK,
+            "top_k is a ranking's, and a forecast ranks nothing",
+        )
+        .with_field("field", Detail::text("top_k")));
+    }
+    Ok(())
+}
+
 pub(crate) fn forecast_questions(
     steps: &crate::pql::ForecastPlan,
     values: Option<&sdm_wire::json::Value>,
@@ -2797,13 +2808,7 @@ pub(crate) fn forecast_questions(
     // The client's refusals of a forecast before it gathers anything
     // (`parts_of`): `top_k`, which ranks, then more steps than the host's
     // limit, 200 by default (`_refuse_too_many`).
-    if values.is_some_and(|values| values.get("top_k").is_some()) {
-        return Err(CoreError::new(
-            Sentence::ForecastTopK,
-            "top_k is a ranking's, and a forecast ranks nothing",
-        )
-        .with_field("field", Detail::text("top_k")));
-    }
+    forecast_admission(values.is_some_and(|values| values.get("top_k").is_some()))?;
     // The host's limit is checked against the plan's count before any step
     // is written, so nothing grows with a count past it (T1.36 fix 23).
     let most = most_parts.unwrap_or(MOST_PARTS);

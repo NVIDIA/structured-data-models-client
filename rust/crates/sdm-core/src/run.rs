@@ -45,6 +45,7 @@ pub enum Attachment {
     Bytes(Vec<u8>),
     Arrow(ArrowData),
     FrameGraph(crate::RetainedFrameGraph),
+    FrameQuestion(crate::RetainedFrameQuestion),
     FrameTask(crate::RetainedFrameTask),
     FrameReferences(crate::RetainedFrameReferences),
     FramePayload(crate::RetainedFramePayload),
@@ -1609,7 +1610,11 @@ impl Run {
                     let mut tables = Vec::new();
                     for (source, data) in checkpoint.tables {
                         let rows = attach(&mut shared, Attachment::Arrow(data))?;
-                        tables.push(sdm_contract::frames::FrameInput { source, rows, decimals: vec![] });
+                        tables.push(sdm_contract::frames::FrameInput {
+                            source,
+                            rows,
+                            decimals: vec![],
+                        });
                     }
                     let manifest = sdm_contract::frames::FrameCheckpointManifest {
                         metadata,

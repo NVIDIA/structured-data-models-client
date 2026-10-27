@@ -67,21 +67,11 @@ pub(crate) struct RankedQuestions {
     pub parts: Vec<(u32, String, String)>,
 }
 
-pub(crate) fn questions(
-    description: &sdm_contract::ops::SourceDescription,
-    candidates: Option<&[sdm_contract::ops::GivenCandidate]>,
-    values: Option<&Value>,
-    plan: RankingPlan,
-    entities: u64,
-    most_parts: Option<u32>,
-    most_entities: Option<u64>,
-) -> Result<RankedQuestions, CoreError> {
+/// Admission before any native candidate or option value is observed.
+pub(crate) fn admit_question(plan: &RankingPlan, statistic_given: bool) -> Result<(), CoreError> {
     // `parts_of`: a statistic is a regression's, and each part is a
     // classification.
-    if values
-        .and_then(|value| value.get("prediction_statistic"))
-        .is_some()
-    {
+    if statistic_given {
         return Err(refused(
             Sentence::RankingStatistic,
             "prediction_statistic applies only to a regression, and a ranking is ordered by how \
@@ -90,7 +80,7 @@ pub(crate) fn questions(
         ));
     }
     // `_per_candidate`, in its order.
-    let Some(ranked) = plan.ranked else {
+    let Some(ranked) = plan.ranked.as_ref() else {
         return Err(refused(
             Sentence::RankingColumn,
             "a ranking is asked one candidate at a time, about what an entity reaches in a \
@@ -106,6 +96,27 @@ pub(crate) fn questions(
             "query",
         ));
     }
+    Ok(())
+}
+
+pub(crate) fn questions(
+    description: &sdm_contract::ops::SourceDescription,
+    candidates: Option<&[sdm_contract::ops::GivenCandidate]>,
+    values: Option<&Value>,
+    plan: RankingPlan,
+    entities: u64,
+    most_parts: Option<u32>,
+    most_entities: Option<u64>,
+) -> Result<RankedQuestions, CoreError> {
+    admit_question(
+        &plan,
+        values
+            .and_then(|value| value.get("prediction_statistic"))
+            .is_some(),
+    )?;
+    let ranked = plan
+        .ranked
+        .ok_or_else(|| crate::run::internal("an admitted ranking lost its ranked column"))?;
     let Some(given_candidates) = candidates else {
         return Err(refused(
             Sentence::CandidatesMissing,
