@@ -76,6 +76,7 @@ def p3e2_warning_codes(notices):
     # These exact three notices are core-owned in the observed journeys.
     codes = {
         "Received custom 'num_neighbors' option; ignoring custom 'num_hops=1' option": 'HOPS_IGNORED',
+        '1 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it.': 'CONTEXT_ANSWERS',
         '2 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it.': 'CONTEXT_ANSWERS',
         'every context row has the same users.age, so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ.': 'CONTEXT_CONSTANT',
     }
