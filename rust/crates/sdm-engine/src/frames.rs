@@ -175,6 +175,9 @@ pub struct WalkedTable {
     pub name: String,
     pub rows: RecordBatch,
     pub batch: Vec<usize>,
+    /// Original snapshot positions, in the exact selected feature-row order.
+    /// These retain native ownership meaning independently of task batches.
+    pub source_rows: Vec<usize>,
 }
 
 pub struct WalkedLink {
@@ -658,6 +661,7 @@ impl Snapshot {
                 name: table.name.clone(),
                 rows: take(&self.tables[&table.name].rows, &rows, &columns)?,
                 batch: nodes.iter().map(|&(batch, _)| batch).collect(),
+                source_rows: rows,
             });
         }
         let links = self

@@ -58,6 +58,7 @@ pub(crate) struct PreparedGraph {
 pub(crate) struct SampledContext {
     source: String,
     sampled: crate::subgraph::Walked,
+    native_rows: BTreeMap<String, Vec<usize>>,
 }
 
 impl SampledContext {
@@ -549,10 +550,12 @@ impl FrameRun {
         // A later cap, encoding error or cancellation must not replay draws.
         self.keep(asker);
         let sampled = sampled?;
+        let mut native_rows = BTreeMap::new();
         let tables = sampled
             .tables
             .into_iter()
             .map(|table| {
+                native_rows.insert(table.name.clone(), table.source_rows);
                 let described = graph
                     .table(&table.name)
                     .ok_or_else(|| internal("sampled unknown frame"))?;
@@ -597,6 +600,7 @@ impl FrameRun {
         Ok(SampledContext {
             source: self.source(),
             sampled: crate::subgraph::Walked { tables, links },
+            native_rows,
         })
     }
 }
