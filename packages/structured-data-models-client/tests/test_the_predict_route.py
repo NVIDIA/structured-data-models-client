@@ -1031,3 +1031,118 @@ def test_embeddings_are_the_old_route_s_on_the_core(
         core, old = _both(monkeypatch, request, url, outputs=outputs)
     assert (type(core), core.code) == (type(old), old.code)
     assert core.code == 'INVALID_RESPONSE'
+
+
+@pytest.mark.parametrize(
+    'dtype,prediction,key,expected',
+    [
+        ('int64', '10', '10', 10),
+        ('int64', '1_0', '1_0', '1_0'),
+        ('int64', '١٠', '١٠', '١٠'),
+        ('int64', 9.19e18, '1', 9190000000000000000),
+        ('int64', 9.21e18, '1', 9.21e18),
+        ('int64', -9.21e18, '1', -9.21e18),
+        ('float64', '10.5', '10.5', 10.5),
+        ('float64', '1_0.5', '1_0.5', '1_0.5'),
+        ('float64', '١٠.5', '١٠.5', '١٠.5'),
+    ],
+)
+def test_gathered_class_restoration_keeps_approved_core_grammar(
+    monkeypatch, dtype, prediction, key, expected
+):
+    # Approved2b1 public results are deliberately distinct from the frozen
+    # native grammar; this bounded direct change retains gathered policy.
+    monkeypatch.setenv(_routing.ENVIRONMENT, ','.join(_routing.PREDICT_DUCKDB))
+    connection = duckdb.connect()
+    try:
+        schema = Schema({}, source=DuckDBSource(connection))
+        payload = {
+            'model': 'kumo-relational',
+            'task': {
+                'kind': 'multiclass_classification',
+                'target': {
+                    'column_name': 'TARGET',
+                    'dtype': dtype,
+                    'classes': ['0', '1'],
+                },
+                'entity_table_names': ['users'],
+            },
+            'schema': {
+                'instance_table': {
+                    'columns': {
+                        'instance_id': {'dtype': 'int64'},
+                        '__kumo_entity_ref_0': {'dtype': 'int64'},
+                    }
+                },
+                'related_tables': {
+                    'users': {'columns': {'user_id': {'dtype': 'int64'}}}
+                },
+                'relationships': [
+                    {
+                        'source_columns': ['__kumo_entity_ref_0'],
+                        'target_columns': ['user_id'],
+                        'target_table': 'users',
+                    }
+                ],
+            },
+            'context': {
+                'instance_table': {
+                    'format': 'arrays',
+                    'columns': ['instance_id', 'TARGET'],
+                    'rows': [[0, 0], [1, 1]],
+                }
+            },
+            'predict': {
+                'instance_table': {
+                    'format': 'arrays',
+                    'columns': ['instance_id', '__kumo_entity_ref_0'],
+                    'rows': [[2, 7], [3, 8]],
+                }
+            },
+            'output': {'fields': ['prediction', 'probabilities']},
+        }
+        request = Request.materialized(
+            payloads=(payload,),
+            schema=schema,
+            query=QUERY,
+            indices=[7, 8],
+            entity_table='users',
+        )
+        response = {
+            'id': 'server',
+            'model': 'kumo-relational',
+            'metadata': {},
+            'predictions': [
+                {
+                    'row_index': at,
+                    'id': str(2 + at),
+                    'prediction': prediction,
+                    'probabilities': {key: 0.75},
+                }
+                for at in range(2)
+            ],
+        }
+
+        class Scripted:
+            calls = 0
+
+            def close(self):
+                pass
+
+            def predict_body(self, body):
+                self.calls += 1
+                return json.dumps(response).encode()
+
+        transport = Scripted()
+        with SDMClient('http://localhost:1', max_retries=0) as client:
+            client._transport.close()
+            client._transport = transport
+            result = client.predict(request, model=KumoRelational())
+        assert transport.calls == 1
+        assert [item.id for item in result.items] == [7, 8]
+        for item in result.items:
+            assert type(item.prediction) is type(expected)
+            assert item.prediction == expected
+            assert item.probabilities == {key: 0.75}
+    finally:
+        connection.close()

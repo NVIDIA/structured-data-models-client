@@ -1416,3 +1416,46 @@ def test_fresh_time_candidates_preserve_physical_float_width(
     assert observed[1] == observed[0]
     assert observed[1][0] == 'event_a'
     assert len(observed[1][2]) == 1
+
+
+@pytest.mark.parametrize(
+    'dtype,prediction,key,expected,expected_key',
+    [
+        ('int64', '10', '10', 10, '10'),
+        ('int64', '1_0', '1_0', 10, '10'),
+        ('int64', '١٠', '١٠', 10, '10'),
+        ('int64', 9.19e18, '1', 9190000000000000000, '1'),
+        ('int64', 9.21e18, '1', 9210000000000000000, '1'),
+        ('int64', -9.21e18, '1', -9210000000000000000, '1'),
+        ('float64', '10.5', '10.5', 10.5, '10.5'),
+        ('float64', '1_0.5', '1_0.5', 10.5, '10.5'),
+        ('float64', '١٠.5', '١٠.5', 10.5, '10.5'),
+    ],
+)
+def test_direct_classes_retain_native_numeric_grammar_separately_from_gathered(
+    monkeypatch, dtype, prediction, key, expected, expected_key
+):
+    observed = []
+    for core in (False, True):
+        monkeypatch.setenv('SDM_CORE_ROUTES', CORE if core else '')
+        context = pd.DataFrame(
+            {'user_id': [1, 2, 3], 'target': pd.Series([2, 4, 6], dtype=dtype)}
+        )
+        scoring = pd.DataFrame({'user_id': [4, 5]})
+        request = Request(
+            context, scoring, target='target', task='classification'
+        )
+        transport = Scripted(
+            item({'prediction': prediction, 'probabilities': {key: 0.75}})
+        )
+        with SDMClient('http://localhost:1', max_retries=0) as client:
+            client._transport.close()
+            client._transport = transport
+            result = client.predict(request, model=KumoTabular())
+        assert len(transport.calls) == 1
+        first = result.items[0]
+        assert type(first.prediction) is type(expected)
+        assert first.prediction == expected
+        assert first.probabilities == {expected_key: 0.75}
+        observed.append((typed_value(first.prediction), first.probabilities))
+    assert observed[1] == observed[0]
