@@ -292,6 +292,18 @@ fn default_anchor_uses_valid_snapshot_bounds_and_retains_no_draws_on_timed_hops(
         json!(["1970-01-01T00:00:01.000000Z", "1970-01-01T00:00:01.000000Z"])
     );
     let (state, owned) = checkpoint(&run);
+    let memo_id = AttachmentId(state["memo"].as_u64().unwrap() as u32);
+    let Attachment::Bytes(raw) = &owned[&memo_id] else {
+        panic!("memo")
+    };
+    let memo: Value = serde_json::from_slice(raw).unwrap();
+    // A frame has no provider indexes to inspect, but its completed
+    // check must precede the bounds this public memo carries on resume.
+    assert_eq!(memo["indexes_checked"], true);
+    assert_eq!(
+        memo["bounds"],
+        json!([{"table":"events","column":"at","min":-1800000000_i64,"max":1200000000_i64}])
+    );
     let manifest = manifest(&state, &owned);
     let id = AttachmentId(manifest["metadata"].as_u64().unwrap() as u32);
     let Attachment::Bytes(raw) = &owned[&id] else {
