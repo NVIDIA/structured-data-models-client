@@ -818,3 +818,22 @@ def test_direct_leakage_advice_precedes_envelope_reference_capture(
     else:
         assert body['task']['kind'] == 'forecasting'
         assert new[1][2] == 'INVALID_RESPONSE'
+
+
+@pytest.mark.parametrize('dtype', ['float64', 'Float64'])
+def test_direct_nullable_large_finite_cast_widens_without_a_native_warning(
+    monkeypatch, dtype
+):
+    context, _ = fixture('int64')
+    predict = pd.DataFrame(
+        {'feature': pd.Series([1.0, float(2**64), None], dtype=dtype)}
+    )
+    old = outcome(monkeypatch, (context, predict), core=False)
+    new = outcome(monkeypatch, (context, predict), core=True)
+    assert new == old
+    assert new[1][0] == 'ok'
+    assert not new[2]
+    assert (
+        new[3][0]['schema']['instance_table']['columns']['feature']['dtype']
+        == 'float64'
+    )
