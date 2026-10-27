@@ -2894,6 +2894,368 @@ fn resolved(
     }
 }
 
+/// Typed rows obtained by the existing entity draw, before labels or any
+/// caller-supplied prediction entity is converted.
+struct EntitySample {
+    sampled: RecordBatch,
+    entity_key: ArrayRef,
+    entity_time: Option<Vec<Option<i64>>>,
+    kept: Vec<usize>,
+}
+
+struct EntityDraw<'a> {
+    entity: &'a Table,
+    key: &'a str,
+    asked: &'a Asked,
+    read_times: &'a Times,
+    memo: &'a SamplerMemo,
+    frames: Option<&'a crate::frame_materialize::Context>,
+    trials: usize,
+    seed: &'a Seed,
+    seed_value: Scalar,
+    unseeded: bool,
+}
+
+async fn entity_sample(asker: &Asker, draw: EntityDraw<'_>) -> Result<EntitySample, CoreError> {
+    let EntityDraw {
+        entity,
+        key,
+        asked,
+        read_times,
+        memo,
+        frames,
+        trials,
+        seed,
+        seed_value,
+        unseeded,
+    } = draw;
+    let mut entity_columns = BTreeSet::from([key.to_owned()]);
+    if let Some(time) = &entity.time_column {
+        entity_columns.insert(time.clone());
+    }
+    asked.target.entity_columns(&mut entity_columns);
+    for shape in &asked.choosing {
+        shape.entity_columns(&mut entity_columns);
+    }
+    let mut filters = Vec::new();
+    if entity.column(key).is_none_or(|c| c.nullable) {
+        filters.push(Filter::NotNull {
+            column: key.to_owned(),
+        });
+    }
+    if let Some(time) = &entity.time_column
+        && entity.column(time).is_none_or(|c| c.nullable)
+    {
+        filters.push(Filter::NotNull {
+            column: time.clone(),
+        });
+    }
+    // Seeds are optional. An unseeded provider documents its limitation
+    // without issuing a routine warning for the default seed (P3D-13).
+    let sampled = if let Some(frames) = frames {
+        let entity_seed = seed.to_u128().unwrap_or(0);
+        // The OS fact also seeds RS-1, whose entropy domain is wider.
+        // RS-4's legacy MT seed uses its own 32-bit domain; caller-given
+        // seeds retain the native range check when a draw is required.
+        let entity_seed = if unseeded {
+            entity_seed & u128::from(u32::MAX)
+        } else {
+            entity_seed
+        };
+        crate::frame_materialize::lock(frames).entities(
+            entity,
+            &entity.ordered(&entity_columns),
+            trials,
+            entity_seed,
+        )?
+    } else {
+        read_times.read(
+            asker,
+            entity,
+            one_batch(
+                &ask(
+                    asker,
+                    DataRequest::SampleEntities {
+                        table: entity.source.clone(),
+                        key: vec![key.to_owned()],
+                        n: trials as u64,
+                        seed: seed_value,
+                        columns: entity.ordered(&entity_columns),
+                        filters,
+                        // The schema's type of the key, for a provider that
+                        // orders the draw by it (SQLite's, which reads the
+                        // type the key's declaration fixes first).
+                        key_dtype: asker
+                            .samples_by_key_dtype()
+                            .then(|| entity.column(key).map(|c| c.dtype))
+                            .flatten(),
+                        // The table's rows, for a provider sizing its draw by
+                        // them (the reference's sampled percentage).
+                        rows: if asker.capabilities()?.sample_rows {
+                            rows_of(memo, &entity.name)
+                        } else {
+                            None
+                        },
+                    },
+                )
+                .await?,
+            )?,
+        )?
+    };
+    if sampled.num_rows() == 0 {
+        return Err(invalid(
+            Sentence::EntityTableEmpty,
+            "the entity table holds no row to sample",
+            "query",
+        )
+        .with_field("table", Detail::text(&entity.name)));
+    }
+    // One entity per key value: `1.0` and `1.00` of a column of numbers
+    // handed over as their text are one key (`subgraph::key_values`).
+    let sampled_keys = crate::subgraph::key_values(entity, key, named(&sampled, key)?)?;
+    let mut seen = BTreeSet::new();
+    let kept: Vec<usize> = (0..sampled_keys.len())
+        .filter(|&row| seen.insert(sampled_keys[row].clone()))
+        .collect();
+    let entity_key = take(named(&sampled, key)?, &kept)?;
+    let entity_time = match &entity.time_column {
+        Some(time) => {
+            let column = named(&sampled, time)?;
+            // A time of day holds no instant: the reference's engine reads
+            // each as none (`to_datetime`, see `times_of_day_unread`), so no
+            // entity is valid at any anchor and a temporal query collects no
+            // context example, the caller's error below (T1.36 fix 9). A
+            // static query never gets here with one: its time bounds read
+            // every time column first and fail on it (register DT-12).
+            let all = if matches!(
+                column.data_type(),
+                DataType::Time32(_) | DataType::Time64(_)
+            ) {
+                vec![None; column.len()]
+            } else {
+                times_ns(column, time)?
+            };
+            Some(kept.iter().map(|&r| all[r]).collect::<Vec<_>>())
+        }
+        None => None,
+    };
+    Ok(EntitySample {
+        sampled,
+        entity_key,
+        entity_time,
+        kept,
+    })
+}
+
+/// Complete labeled context before the native prediction-entity constructor
+/// and later client narrowing. It contains real task data, not a continuation.
+struct LabelledContext {
+    keys: ArrayRef,
+    anchors: Vec<i64>,
+    labels: labels::Labels,
+}
+
+struct LabelDraw<'a> {
+    entity: &'a Table,
+    key: &'a str,
+    asked: &'a Asked,
+    read_times: &'a Times,
+    labelled_fetches: &'a [Fetch<'a>],
+    fetches: &'a [Fetch<'a>],
+    windows: &'a [&'a Windowed],
+    entropy: &'a Entropy,
+    context_anchor: i64,
+    anchor_entity: bool,
+    span: Option<(Offset, Offset)>,
+    earliest: Option<i64>,
+    context_examples: usize,
+    trials: usize,
+    entity_filter: Option<&'a str>,
+}
+
+async fn label_context(
+    asker: &Asker,
+    memo: &mut Memo<'_>,
+    draw: LabelDraw<'_>,
+    sampled: EntitySample,
+) -> Result<LabelledContext, CoreError> {
+    let LabelDraw {
+        entity,
+        key,
+        asked,
+        read_times,
+        labelled_fetches,
+        fetches,
+        windows,
+        entropy,
+        context_anchor,
+        anchor_entity,
+        span,
+        earliest,
+        context_examples,
+        trials,
+        entity_filter,
+    } = draw;
+    let EntitySample {
+        sampled,
+        entity_key,
+        entity_time,
+        kept,
+    } = sampled;
+    let mut rng = default_rng(entropy);
+    let examples = match &span {
+        Some((start, end)) => sample::temporal_examples(
+            &mut rng,
+            kept.len(),
+            entity_time.as_deref(),
+            context_anchor,
+            timeframe(*start, *end, "anchor_time")?,
+            earliest.unwrap_or(TIME_MAX),
+            trials,
+        )?,
+        None if anchor_entity => sample::entity_examples(
+            &mut rng,
+            kept.len(),
+            entity_time.as_deref().unwrap_or_default(),
+            sample::MISSING_ANCHOR,
+        ),
+        None => {
+            sample::static_examples(&mut rng, kept.len(), entity_time.as_deref(), context_anchor)
+        }
+    };
+
+    // A NaN key a source hands over, which the reference reads as missing
+    // where it reads floats into NumPy-backed pandas (Postgres's rows), is
+    // a missing key its sampler cannot coerce (`_coerce_id`'s `int` or
+    // `float` of `NA`) where an example's key seeds the read of a windowed
+    // target's rows (`_by_time`): refused as the caller's error before that
+    // read. A static target reads no rows by the key, and such an example
+    // is left out once labelled, below (T2.12).
+    let nan_key = nan_rows(&entity_key);
+    if asker.reads_nan_as_missing()
+        && !labelled_fetches.is_empty()
+        && examples.index.iter().any(|i| nan_key.contains(i))
+    {
+        return Err(invalid(
+            Sentence::EntityKeyMissing,
+            "an entity sampled has no value for its table's primary key",
+            "query",
+        )
+        .with_field("table", Detail::text(&entity.name))
+        .with_field("column", Detail::text(key)));
+    }
+    // Their labels, as the reference's executor computes them over the
+    // rows read for them (decision E19).
+    let entity_rows: Vec<usize> = examples.index.iter().map(|&i| kept[i]).collect();
+    let labelling = Labelling {
+        asker,
+        times: read_times,
+        sampled: &sampled,
+        entity_rows: &entity_rows,
+        entity_key: &entity_key,
+        examples: &examples,
+    };
+    let fetched = labelling.read(labelled_fetches).await?;
+    let target = labelling.build(&asked.target, &fetched, true)?;
+    // The examples the entity filter and the assumption choose: each
+    // condition's truth over the examples, and-ed (`execute`'s `mask`).
+    let mut chosen: Option<Vec<bool>> = None;
+    for shape in &asked.choosing {
+        let holds = labels::truth(&labelling.build(shape, &fetched, false)?)?.values;
+        chosen = Some(match chosen {
+            None => holds,
+            Some(before) => before.iter().zip(&holds).map(|(&a, &b)| a && b).collect(),
+        });
+    }
+    drop(fetched);
+    // A classification keeps a decimal column's distinct values apart as
+    // classes; any other task reads them as numbers (T2.0c, round 1).
+    let mut labelled = if matches!(asked.task, Task::Multiclass) {
+        labels::label_classes(&target)?
+    } else {
+        labels::label(&target)?
+    };
+    null_compared(&asked.target, &labelled.mask)?;
+    // The examples the entity filter or the assumption leaves out keep no
+    // label (`out[mask[_mask]]`, `mask & _mask`).
+    if let Some(chosen) = &chosen {
+        let keep: Vec<bool> = (0..labelled.mask.len())
+            .filter(|&row| labelled.mask[row])
+            .map(|row| chosen[row])
+            .collect();
+        for (row, holds) in chosen.iter().enumerate() {
+            labelled.mask[row] &= *holds;
+        }
+        labelled.labels = labelled.labels.kept(&keep);
+    }
+    // An example of an entity whose key is NaN is left out of the context
+    // once labelled, as the reference leaves it out (T2.12).
+    if !nan_key.is_empty() {
+        let keep: Vec<bool> = (0..labelled.mask.len())
+            .filter(|&row| labelled.mask[row])
+            .map(|row| !nan_key.contains(&examples.index[row]))
+            .collect();
+        for row in 0..labelled.mask.len() {
+            labelled.mask[row] &= !nan_key.contains(&examples.index[row]);
+        }
+        labelled.labels = labelled.labels.kept(&keep);
+    }
+    // The examples with a label, in order, the first a context holds.
+    let labelled_rows: Vec<usize> = (0..labelled.mask.len())
+        .filter(|&row| labelled.mask[row])
+        .collect();
+    let gathered = labelled_rows.len().min(context_examples);
+    if gathered == 0 {
+        let ends: Vec<Offset> = windows.iter().map(|w| w.end).collect();
+        let mut aggregated: Vec<&Table> = Vec::new();
+        for fetch in fetches {
+            if !aggregated.iter().any(|t| t.name == fetch.table.name) {
+                aggregated.push(fetch.table);
+            }
+        }
+        aggregated.sort_by(|a, b| a.name.cmp(&b.name));
+        return Err(empty_sample(
+            memo,
+            read_times,
+            entity,
+            &aggregated,
+            &ends,
+            (!anchor_entity).then_some(context_anchor),
+            entity_filter,
+        )
+        .await);
+    }
+    if kept.len() >= trials && gathered < context_examples / 2 {
+        // The reference warns of it once in a process: given on every run
+        // that meets it, and once in a process by the host
+        // ([`ONCE_PER_PROCESS`], decision E52).
+        asker.warn(CoreWarning {
+            fields: [
+                ("examples".to_owned(), count(context_examples)),
+                ("candidates".to_owned(), count(trials)),
+            ]
+            .into(),
+            ..CoreWarning::new(
+                Sentence::ContextCoverage,
+                "fewer than half the context examples asked for were collected",
+            )
+        });
+    }
+    let rows: Vec<usize> = labelled_rows[..gathered]
+        .iter()
+        .map(|&row| examples.index[row])
+        .collect();
+    let anchors = labelled_rows[..gathered]
+        .iter()
+        .map(|&row| examples.anchors[row])
+        .collect();
+    Ok(LabelledContext {
+        keys: take(&entity_key, &rows)?,
+        anchors,
+        labels: labelled.labels.truncated(gathered),
+    })
+}
+
 /// One question gathered: the body of `materialize` before T1.36 fix 21.
 pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreError> {
     let frames = inputs.frames.clone();
@@ -3335,260 +3697,51 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
                 "max_pq_iterations",
             )
         })?;
-    let mut entity_columns = BTreeSet::from([key.clone()]);
-    if let Some(time) = &entity.time_column {
-        entity_columns.insert(time.clone());
-    }
-    asked.target.entity_columns(&mut entity_columns);
-    for shape in &asked.choosing {
-        shape.entity_columns(&mut entity_columns);
-    }
-    let mut filters = Vec::new();
-    if entity.column(&key).is_none_or(|c| c.nullable) {
-        filters.push(Filter::NotNull {
-            column: key.clone(),
-        });
-    }
-    if let Some(time) = &entity.time_column
-        && entity.column(time).is_none_or(|c| c.nullable)
-    {
-        filters.push(Filter::NotNull {
-            column: time.clone(),
-        });
-    }
-    // Seeds are optional. An unseeded provider documents its limitation
-    // without issuing a routine warning for the default seed (P3D-13).
-    let sampled = if let Some(frames) = &frames {
-        let entity_seed = seed.to_u128().unwrap_or(0);
-        // The OS fact also seeds RS-1, whose entropy domain is wider.
-        // RS-4's legacy MT seed uses its own 32-bit domain; caller-given
-        // seeds retain the native range check when a draw is required.
-        let entity_seed = if unseeded {
-            entity_seed & u128::from(u32::MAX)
-        } else {
-            entity_seed
-        };
-        crate::frame_materialize::lock(frames).entities(
+    let sampled = entity_sample(
+        asker,
+        EntityDraw {
             entity,
-            &entity.ordered(&entity_columns),
+            key: &key,
+            asked: &asked,
+            read_times: &read_times,
+            memo: &memo.memo,
+            frames: frames.as_ref(),
             trials,
-            entity_seed,
-        )?
-    } else {
-        read_times.read(
-            asker,
-            entity,
-            one_batch(
-                &ask(
-                    asker,
-                    DataRequest::SampleEntities {
-                        table: entity.source.clone(),
-                        key: vec![key.clone()],
-                        n: trials as u64,
-                        seed: seed_value,
-                        columns: entity.ordered(&entity_columns),
-                        filters,
-                        // The schema's type of the key, for a provider that
-                        // orders the draw by it (SQLite's, which reads the
-                        // type the key's declaration fixes first).
-                        key_dtype: asker
-                            .samples_by_key_dtype()
-                            .then(|| entity.column(&key).map(|c| c.dtype))
-                            .flatten(),
-                        // The table's rows, for a provider sizing its draw by
-                        // them (the reference's sampled percentage).
-                        rows: if asker.capabilities()?.sample_rows {
-                            rows_of(&memo.memo, &entity.name)
-                        } else {
-                            None
-                        },
-                    },
-                )
-                .await?,
-            )?,
-        )?
-    };
-    if sampled.num_rows() == 0 {
-        return Err(invalid(
-            Sentence::EntityTableEmpty,
-            "the entity table holds no row to sample",
-            "query",
-        )
-        .with_field("table", Detail::text(&entity.name)));
-    }
-    // One entity per key value: `1.0` and `1.00` of a column of numbers
-    // handed over as their text are one key (`subgraph::key_values`).
-    let sampled_keys = crate::subgraph::key_values(entity, &key, named(&sampled, &key)?)?;
-    let mut seen = BTreeSet::new();
-    let kept: Vec<usize> = (0..sampled_keys.len())
-        .filter(|&row| seen.insert(sampled_keys[row].clone()))
-        .collect();
-    let entity_key = take(named(&sampled, &key)?, &kept)?;
-    let entity_time = match &entity.time_column {
-        Some(time) => {
-            let column = named(&sampled, time)?;
-            // A time of day holds no instant: the reference's engine reads
-            // each as none (`to_datetime`, see `times_of_day_unread`), so no
-            // entity is valid at any anchor and a temporal query collects no
-            // context example, the caller's error below (T1.36 fix 9). A
-            // static query never gets here with one: its time bounds read
-            // every time column first and fail on it (register DT-12).
-            let all = if matches!(
-                column.data_type(),
-                DataType::Time32(_) | DataType::Time64(_)
-            ) {
-                vec![None; column.len()]
-            } else {
-                times_ns(column, time)?
-            };
-            Some(kept.iter().map(|&r| all[r]).collect::<Vec<_>>())
-        }
-        None => None,
-    };
+            seed: &seed,
+            seed_value,
+            unseeded,
+        },
+    )
+    .await?;
     // The entities, cast to the sampled key's type under the core's rule
     // table (T1.32a), where the reference casts them, after its sample
     // (`pd.Series(indices, dtype=train_pkey.dtype)`): an entity that does
     // not cast is the caller's error, never the core's (E41(l)).
-    let indices = keys::cast(&indices, entity_key.data_type())?;
-    let mut rng = default_rng(&entropy);
-    let examples = match &span {
-        Some((start, end)) => sample::temporal_examples(
-            &mut rng,
-            kept.len(),
-            entity_time.as_deref(),
-            context_anchor,
-            timeframe(*start, *end, "anchor_time")?,
-            earliest.unwrap_or(TIME_MAX),
-            trials,
-        )?,
-        None if anchor_entity => sample::entity_examples(
-            &mut rng,
-            kept.len(),
-            entity_time.as_deref().unwrap_or_default(),
-            sample::MISSING_ANCHOR,
-        ),
-        None => {
-            sample::static_examples(&mut rng, kept.len(), entity_time.as_deref(), context_anchor)
-        }
-    };
-
-    // A NaN key a source hands over, which the reference reads as missing
-    // where it reads floats into NumPy-backed pandas (Postgres's rows), is
-    // a missing key its sampler cannot coerce (`_coerce_id`'s `int` or
-    // `float` of `NA`) where an example's key seeds the read of a windowed
-    // target's rows (`_by_time`): refused as the caller's error before that
-    // read. A static target reads no rows by the key, and such an example
-    // is left out once labelled, below (T2.12).
-    let nan_key = nan_rows(&entity_key);
-    if asker.reads_nan_as_missing()
-        && !labelled_fetches.is_empty()
-        && examples.index.iter().any(|i| nan_key.contains(i))
-    {
-        return Err(invalid(
-            Sentence::EntityKeyMissing,
-            "an entity sampled has no value for its table's primary key",
-            "query",
-        )
-        .with_field("table", Detail::text(&entity.name))
-        .with_field("column", Detail::text(&key)));
-    }
-    // Their labels, as the reference's executor computes them over the
-    // rows read for them (decision E19).
-    let entity_rows: Vec<usize> = examples.index.iter().map(|&i| kept[i]).collect();
-    let labelling = Labelling {
+    let indices = keys::cast(&indices, sampled.entity_key.data_type())?;
+    let labelled = label_context(
         asker,
-        times: &read_times,
-        sampled: &sampled,
-        entity_rows: &entity_rows,
-        entity_key: &entity_key,
-        examples: &examples,
-    };
-    let fetched = labelling.read(&labelled_fetches).await?;
-    let target = labelling.build(&asked.target, &fetched, true)?;
-    // The examples the entity filter and the assumption choose: each
-    // condition's truth over the examples, and-ed (`execute`'s `mask`).
-    let mut chosen: Option<Vec<bool>> = None;
-    for shape in &asked.choosing {
-        let holds = labels::truth(&labelling.build(shape, &fetched, false)?)?.values;
-        chosen = Some(match chosen {
-            None => holds,
-            Some(before) => before.iter().zip(&holds).map(|(&a, &b)| a && b).collect(),
-        });
-    }
-    drop(fetched);
-    // A classification keeps a decimal column's distinct values apart as
-    // classes; any other task reads them as numbers (T2.0c, round 1).
-    let mut labelled = if matches!(asked.task, Task::Multiclass) {
-        labels::label_classes(&target)?
-    } else {
-        labels::label(&target)?
-    };
-    null_compared(&asked.target, &labelled.mask)?;
-    // The examples the entity filter or the assumption leaves out keep no
-    // label (`out[mask[_mask]]`, `mask & _mask`).
-    if let Some(chosen) = &chosen {
-        let keep: Vec<bool> = (0..labelled.mask.len())
-            .filter(|&row| labelled.mask[row])
-            .map(|row| chosen[row])
-            .collect();
-        for (row, holds) in chosen.iter().enumerate() {
-            labelled.mask[row] &= *holds;
-        }
-        labelled.labels = labelled.labels.kept(&keep);
-    }
-    // An example of an entity whose key is NaN is left out of the context
-    // once labelled, as the reference leaves it out (T2.12).
-    if !nan_key.is_empty() {
-        let keep: Vec<bool> = (0..labelled.mask.len())
-            .filter(|&row| labelled.mask[row])
-            .map(|row| !nan_key.contains(&examples.index[row]))
-            .collect();
-        for row in 0..labelled.mask.len() {
-            labelled.mask[row] &= !nan_key.contains(&examples.index[row]);
-        }
-        labelled.labels = labelled.labels.kept(&keep);
-    }
-    // The examples with a label, in order, the first a context holds.
-    let labelled_rows: Vec<usize> = (0..labelled.mask.len())
-        .filter(|&row| labelled.mask[row])
-        .collect();
-    let gathered = labelled_rows.len().min(context_examples);
-    if gathered == 0 {
-        let ends: Vec<Offset> = windows.iter().map(|w| w.end).collect();
-        let mut aggregated: Vec<&Table> = Vec::new();
-        for fetch in &fetches {
-            if !aggregated.iter().any(|t| t.name == fetch.table.name) {
-                aggregated.push(fetch.table);
-            }
-        }
-        aggregated.sort_by(|a, b| a.name.cmp(&b.name));
-        return Err(empty_sample(
-            &mut memo,
-            &read_times,
+        &mut memo,
+        LabelDraw {
             entity,
-            &aggregated,
-            &ends,
-            (!anchor_entity).then_some(context_anchor),
-            entity_filter.as_deref(),
-        )
-        .await);
-    }
-    if kept.len() >= trials && gathered < context_examples / 2 {
-        // The reference warns of it once in a process: given on every run
-        // that meets it, and once in a process by the host
-        // ([`ONCE_PER_PROCESS`], decision E52).
-        asker.warn(CoreWarning {
-            fields: [
-                ("examples".to_owned(), count(context_examples)),
-                ("candidates".to_owned(), count(trials)),
-            ]
-            .into(),
-            ..CoreWarning::new(
-                Sentence::ContextCoverage,
-                "fewer than half the context examples asked for were collected",
-            )
-        });
-    }
+            key: &key,
+            asked: &asked,
+            read_times: &read_times,
+            labelled_fetches: &labelled_fetches,
+            fetches: &fetches,
+            windows: &windows,
+            entropy: &entropy,
+            context_anchor,
+            anchor_entity,
+            span,
+            earliest,
+            context_examples,
+            trials,
+            entity_filter: entity_filter.as_deref(),
+        },
+        sampled,
+    )
+    .await?;
+    let gathered = labelled.keys.len();
     // The target's own past as features (`lag_timesteps`, T2.9), where the
     // reference's engine adds them: its value refused, as the engine
     // refuses it, once the context is labelled; for a temporal query, each
@@ -3607,19 +3760,9 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
             // Each step moves by the target's window's end
             // (`target_timeframe.end_date_offset`).
             let (_, end) = span.ok_or_else(|| internal("a lag without its target's window"))?;
-            let context: Vec<usize> = labelled_rows[..gathered]
-                .iter()
-                .map(|&row| examples.index[row])
-                .collect();
-            let keys = arrow_select::concat::concat(&[
-                take(&entity_key, &context)?.as_ref(),
-                indices.as_ref(),
-            ])
-            .map_err(|_| internal("the examples' keys do not concatenate"))?;
-            let mut lag_anchors: Vec<i64> = labelled_rows[..gathered]
-                .iter()
-                .map(|&row| examples.anchors[row])
-                .collect();
+            let keys = arrow_select::concat::concat(&[labelled.keys.as_ref(), indices.as_ref()])
+                .map_err(|_| internal("the examples' keys do not concatenate"))?;
+            let mut lag_anchors = labelled.anchors.clone();
             lag_anchors.extend(std::iter::repeat_n(anchor, indices.len()));
             let back = crate::lag::shifted(steps, end, &lag_anchors)?;
             // Each table read once from the moved anchors, over its pooled
@@ -3668,15 +3811,8 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     }
     // Then narrowed to the size asked for (`_narrow_context`).
     let num_train = asked_examples.map_or(gathered, |n| gathered.min(n));
-    let train_rows: Vec<usize> = labelled_rows[..num_train]
-        .iter()
-        .map(|&row| examples.index[row])
-        .collect();
-    let train_keys = take(&entity_key, &train_rows)?;
-    let mut anchors: Vec<i64> = labelled_rows[..num_train]
-        .iter()
-        .map(|&row| examples.anchors[row])
-        .collect();
+    let train_keys = labelled.keys.slice(0, num_train);
+    let mut anchors = labelled.anchors[..num_train].to_vec();
     let labels = labelled.labels.truncated(num_train);
     #[cfg(feature = "test-ops")]
     if labels_only {
