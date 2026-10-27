@@ -135,3 +135,159 @@ pub(super) fn lower(text: &[char], profile: CasingProfile) -> Vec<char> {
     }
     result
 }
+
+#[cfg(test)]
+mod native_profiles {
+    use serde_json::Value;
+
+    use super::{CasingProfile, UnicodeDataVersion, lower, space};
+
+    struct ObservedRanges {
+        values: Vec<(u32, u32)>,
+        at: usize,
+    }
+
+    impl ObservedRanges {
+        fn new(value: &Value) -> Self {
+            Self {
+                values: value
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|range| {
+                        (
+                            range[0].as_u64().unwrap() as u32,
+                            range[1].as_u64().unwrap() as u32,
+                        )
+                    })
+                    .collect(),
+                at: 0,
+            }
+        }
+
+        // The native producer compressed actual per-scalar outcomes into
+        // sorted ranges. This only decodes them as the scalar scan advances.
+        fn contains(&mut self, point: u32) -> bool {
+            while self
+                .values
+                .get(self.at)
+                .is_some_and(|&(_, end)| end < point)
+            {
+                self.at += 1;
+            }
+            self.values
+                .get(self.at)
+                .is_some_and(|&(first, end)| first <= point && point <= end)
+        }
+    }
+
+    #[test]
+    fn historical_profiles_match_every_scalar_and_effective_native_sigma_context() {
+        for (source, version, database) in [
+            (
+                include_str!("../../tests/t44_builtin_unicode_13_reference.json"),
+                UnicodeDataVersion::V13_0,
+                "13.0.0",
+            ),
+            (
+                include_str!("../../tests/t44_builtin_unicode_14_reference.json"),
+                UnicodeDataVersion::V14_0,
+                "14.0.0",
+            ),
+            (
+                include_str!("../../tests/t44_builtin_unicode_15_reference.json"),
+                UnicodeDataVersion::V15_0,
+                "15.0.0",
+            ),
+            (
+                include_str!("../../tests/t44_builtin_unicode_15_1_reference.json"),
+                UnicodeDataVersion::V15_1,
+                "15.1.0",
+            ),
+            (
+                include_str!("../../tests/t44_builtin_unicode_16_reference.json"),
+                UnicodeDataVersion::V16_0,
+                "16.0.0",
+            ),
+        ] {
+            let observed: Value = serde_json::from_str(source).unwrap();
+            assert_eq!(observed["unicode_database"], database);
+            assert_eq!(observed["scalar_count"], 1_112_064);
+            let profile = CasingProfile::FullRoot(version);
+            let mut differences = observed["full_lower_differences"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .peekable();
+            let mut after_scalar =
+                ObservedRanges::new(&observed["sigma_after_scalar_final_ranges"]);
+            let mut after_a_scalar =
+                ObservedRanges::new(&observed["sigma_after_a_scalar_final_ranges"]);
+            let mut whitespace = ObservedRanges::new(&observed["whitespace_ranges"]);
+            for point in 0..=0x10ffff {
+                let Some(character) = char::from_u32(point) else {
+                    continue;
+                };
+                let expected: Vec<_> = if differences
+                    .peek()
+                    .is_some_and(|entry| entry[0].as_u64() == Some(u64::from(point)))
+                {
+                    differences.next().unwrap()[1]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .map(|value| char::from_u32(value.as_u64().unwrap() as u32).unwrap())
+                        .collect()
+                } else {
+                    vec![character]
+                };
+                assert_eq!(
+                    lower(&[character], profile),
+                    expected,
+                    "{database} U+{point:04X}"
+                );
+                let mut context = expected.clone();
+                context.push(if after_scalar.contains(point) {
+                    'ς'
+                } else {
+                    'σ'
+                });
+                assert_eq!(
+                    lower(&[character, 'Σ'], profile),
+                    context,
+                    "{database} scalar+Sigma U+{point:04X}"
+                );
+                let mut context = vec!['a'];
+                context.extend(&expected);
+                context.push(if after_a_scalar.contains(point) {
+                    'ς'
+                } else {
+                    'σ'
+                });
+                assert_eq!(
+                    lower(&['A', character, 'Σ'], profile),
+                    context,
+                    "{database} A+scalar+Sigma U+{point:04X}"
+                );
+                assert_eq!(
+                    space(character),
+                    whitespace.contains(point),
+                    "{database} whitespace U+{point:04X}"
+                );
+            }
+            assert!(differences.next().is_none());
+            for example in observed["examples"].as_array().unwrap() {
+                let text: Vec<_> = example["input"]
+                    .as_str()
+                    .unwrap()
+                    .chars()
+                    .take(crate::words::MAX_CHARS)
+                    .collect();
+                assert_eq!(
+                    lower(&text, profile).iter().collect::<String>(),
+                    example["first_300_lower"].as_str().unwrap()
+                );
+            }
+        }
+    }
+}
