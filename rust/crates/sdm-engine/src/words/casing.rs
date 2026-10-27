@@ -138,9 +138,59 @@ pub(super) fn lower(text: &[char], profile: CasingProfile) -> Vec<char> {
 
 #[cfg(test)]
 mod native_profiles {
+    use std::collections::BTreeMap;
+
     use serde_json::Value;
 
     use super::{CasingProfile, UnicodeDataVersion, lower, space};
+
+    #[test]
+    fn simple_17_reuses_the_original_protected_arrow_scalar_and_word_receipt() {
+        // Keep this producer identity distinct from the new metadata proof.
+        // The original receipt is never regenerated to fit this kernel.
+        let observed: Value = serde_json::from_str(include_str!("../../tests/words.json")).unwrap();
+        assert_eq!(observed["environment"]["python"], "3.12.13");
+        assert_eq!(observed["environment"]["pandas"], "3.0.6");
+        assert_eq!(observed["environment"]["pyarrow"], "25.0.1");
+        let mut changed = BTreeMap::new();
+        for (point, values) in observed["lower"].as_object().unwrap() {
+            let point = point.parse::<u32>().unwrap();
+            let values: Vec<_> = values
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|value| char::from_u32(value.as_u64().unwrap() as u32).unwrap())
+                .collect();
+            changed.insert(point, values);
+        }
+        assert_eq!(changed.len(), 1488);
+        let profile = CasingProfile::Simple(UnicodeDataVersion::V17_0);
+        for point in 0..=0x10ffff {
+            let Some(character) = char::from_u32(point) else {
+                continue;
+            };
+            let expected = changed
+                .get(&point)
+                .cloned()
+                .unwrap_or_else(|| vec![character]);
+            assert_eq!(
+                lower(&[character], profile),
+                expected,
+                "original Arrow scalar U+{point:04X}"
+            );
+        }
+        let words = observed["values"].as_array().unwrap();
+        assert_eq!(words.len(), 772);
+        for value in words {
+            assert_eq!(
+                serde_json::json!(crate::words::normalize_with_profile(
+                    value[0].as_str(),
+                    profile
+                )),
+                value[1]
+            );
+        }
+    }
 
     struct ObservedRanges {
         values: Vec<(u32, u32)>,
