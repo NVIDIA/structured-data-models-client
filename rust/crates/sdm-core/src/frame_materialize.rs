@@ -815,6 +815,7 @@ mod parent_hop_tests {
                 snapshot: None,
                 neighbors: Mt19937::seeded(123),
                 entropy: None,
+                retained_owner: false,
             },
             description,
             graph,
@@ -838,6 +839,54 @@ mod parent_hop_tests {
                     .to_vec()
             })
             .unwrap_or_default()
+    }
+
+    #[test]
+    fn missing_batch_references_fail_before_a_requested_neighbor_reset() {
+        let mut run = crate::Run::new(|asker| async move {
+            let (mut frame, description, graph) = fixture();
+            frame.initialize(&asker, &description, &graph)?;
+            let keys: ArrayRef = Arc::new(Int64Array::from(vec![1]));
+            frame.walk(
+                &asker,
+                &graph,
+                &graph.tables[0],
+                &keys,
+                &[0],
+                FrameWalkOptions {
+                    hops: &[Hop::Keep(3)],
+                    neighbor_values: None,
+                    excluded: &[],
+                    seed: Some(99),
+                },
+            )?;
+            let before = frame.neighbors.checkpoint();
+            let missing: ArrayRef = Arc::new(Int64Array::from(vec![999]));
+            assert!(
+                frame
+                    .walk(
+                        &asker,
+                        &graph,
+                        &graph.tables[0],
+                        &missing,
+                        &[0],
+                        FrameWalkOptions {
+                            hops: &[Hop::Keep(3)],
+                            neighbor_values: None,
+                            excluded: &[],
+                            seed: Some(7),
+                        }
+                    )
+                    .is_err()
+            );
+            assert_eq!(frame.neighbors.checkpoint(), before);
+            assert_eq!(frame.metadata.as_ref().unwrap().neighbors, before);
+            let value = asker.attach(Attachment::Bytes(Vec::new()))?;
+            Ok(sdm_contract::ops::OperationResult::Prepared(
+                PreparedRequest { value },
+            ))
+        });
+        assert!(matches!(run.next().unwrap(), Step::Done { .. }));
     }
 
     #[test]

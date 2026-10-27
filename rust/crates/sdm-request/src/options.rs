@@ -1017,32 +1017,19 @@ pub fn statistic_for(kind: Kind, statistic: Option<&String>) -> Result<(), CoreE
     Ok(())
 }
 
-/// The inference options, read as the engine's config classes read them.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Options {
-    pub num_estimators: u64,
-    pub column_shuffle: bool,
-    pub category_shuffle: bool,
-    pub hop_shuffle: bool,
-    /// A classification's.
-    pub class_shuffle: bool,
-    /// A regression's; a null one is none.
-    pub target_transforms: Vec<Option<String>>,
-    /// A regression's.
-    pub output_type: String,
-}
+/// Shared data only. Request defaults, validation and rendering stay here.
+pub use sdm_contract::frames::materialize::RelationalOptions as Options;
 
-impl Default for Options {
-    fn default() -> Self {
-        Options {
-            num_estimators: 1,
-            column_shuffle: false,
-            category_shuffle: false,
-            hop_shuffle: false,
-            class_shuffle: false,
-            target_transforms: vec![Some("quantile".to_owned())],
-            output_type: "median".to_owned(),
-        }
+/// The inference config classes' existing defaults, owned by request policy.
+pub fn default_options() -> Options {
+    Options {
+        num_estimators: 1,
+        column_shuffle: false,
+        category_shuffle: false,
+        hop_shuffle: false,
+        class_shuffle: false,
+        target_transforms: vec![Some("quantile".to_owned())],
+        output_type: "median".to_owned(),
     }
 }
 
@@ -1220,7 +1207,7 @@ fn estimators(key: &str, value: &Value) -> Result<u64, CoreError> {
 /// rest the class's defaults; a key the class does not hold, or a value it
 /// refuses, is `INVALID_REQUEST`. `None` is the defaults.
 pub fn options(kind: Kind, given: Option<&Value>) -> Result<Options, CoreError> {
-    let mut options = Options::default();
+    let mut options = default_options();
     let Some(given) = given else {
         return Ok(options);
     };
@@ -1287,42 +1274,41 @@ pub fn options(kind: Kind, given: Option<&Value>) -> Result<Options, CoreError> 
     Ok(options)
 }
 
-impl Options {
-    /// A link task's shared inference options, with no classification or
-    /// regression-only members.
-    pub fn base(&self) -> BaseConfig {
-        BaseConfig {
-            kind: "base".to_owned(),
-            num_estimators: self.num_estimators,
-            column_shuffle: self.column_shuffle,
-            category_shuffle: self.category_shuffle,
-            hop_shuffle: self.hop_shuffle,
-        }
+/// A link task's shared inference options, with no classification or
+/// regression-only members.
+pub fn base(options: &Options) -> BaseConfig {
+    BaseConfig {
+        kind: "base".to_owned(),
+        num_estimators: options.num_estimators,
+        column_shuffle: options.column_shuffle,
+        category_shuffle: options.category_shuffle,
+        hop_shuffle: options.hop_shuffle,
     }
-    /// A regression's options as the engine writes them.
-    pub fn regression(&self) -> InferenceConfig {
-        InferenceConfig {
-            kind: "regression".to_owned(),
-            num_estimators: self.num_estimators,
-            column_shuffle: self.column_shuffle,
-            category_shuffle: self.category_shuffle,
-            hop_shuffle: self.hop_shuffle,
-            class_shuffle: None,
-            target_transforms: self.target_transforms.clone(),
-            output_type: self.output_type.clone(),
-        }
-    }
+}
 
-    /// A classification's options as the engine writes them.
-    pub fn classification(&self) -> ClassificationConfig {
-        ClassificationConfig {
-            kind: "classification".to_owned(),
-            num_estimators: self.num_estimators,
-            column_shuffle: self.column_shuffle,
-            category_shuffle: self.category_shuffle,
-            hop_shuffle: self.hop_shuffle,
-            class_shuffle: Some(self.class_shuffle),
-        }
+/// A regression's options as the engine writes them.
+pub fn regression(options: &Options) -> InferenceConfig {
+    InferenceConfig {
+        kind: "regression".to_owned(),
+        num_estimators: options.num_estimators,
+        column_shuffle: options.column_shuffle,
+        category_shuffle: options.category_shuffle,
+        hop_shuffle: options.hop_shuffle,
+        class_shuffle: None,
+        target_transforms: options.target_transforms.clone(),
+        output_type: options.output_type.clone(),
+    }
+}
+
+/// A classification's options as the engine writes them.
+pub fn classification(options: &Options) -> ClassificationConfig {
+    ClassificationConfig {
+        kind: "classification".to_owned(),
+        num_estimators: options.num_estimators,
+        column_shuffle: options.column_shuffle,
+        category_shuffle: options.category_shuffle,
+        hop_shuffle: options.hop_shuffle,
+        class_shuffle: Some(options.class_shuffle),
     }
 }
 

@@ -256,6 +256,19 @@ impl FrameReferences {
     }
 }
 
+/// Immutable complete payload data, without previous batches or a program.
+#[pyclass(frozen, module = "sdm_client._native")]
+struct FramePayload {
+    owner: sdm_host::RetainedFramePayload,
+}
+
+#[pymethods]
+impl FramePayload {
+    fn wire(&self, py: Python<'_>) -> Py<PyBytes> {
+        PyBytes::new(py, self.owner.wire()).unbind()
+    }
+}
+
 #[pymethods]
 impl ArrowStream {
     /// The PyCapsule stream protocol. A requested schema is not supported:
@@ -309,6 +322,7 @@ fn to_python(py: Python<'_>, attachment: Attachment, retained: bool) -> PyResult
         Attachment::FrameGraph(owner) => Py::new(py, FrameGraph { owner })?.into_any(),
         Attachment::FrameTask(owner) => Py::new(py, FrameTask { owner })?.into_any(),
         Attachment::FrameReferences(owner) => Py::new(py, FrameReferences { owner })?.into_any(),
+        Attachment::FramePayload(owner) => Py::new(py, FramePayload { owner })?.into_any(),
     })
 }
 
@@ -576,6 +590,8 @@ fn attachments_from_python(
             Attachment::FrameReferences(
                 value.extract::<PyRef<'_, FrameReferences>>()?.owner.clone(),
             )
+        } else if value.is_exact_instance_of::<FramePayload>() {
+            Attachment::FramePayload(value.extract::<PyRef<'_, FramePayload>>()?.owner.clone())
         } else if value.is_exact_instance_of::<ArrowStream>() {
             let owned = value.extract::<PyRef<'_, ArrowStream>>()?;
             if owned.retained {
@@ -781,6 +797,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<FrameGraph>()?;
     module.add_class::<FrameTask>()?;
     module.add_class::<FrameReferences>()?;
+    module.add_class::<FramePayload>()?;
     module.add_class::<Run>()?;
     module.add_function(wrap_pyfunction!(reset_log_cache, module)?)?;
     module.add_function(wrap_pyfunction!(templates, module)?)?;

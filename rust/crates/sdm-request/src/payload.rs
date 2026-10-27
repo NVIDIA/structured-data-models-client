@@ -1243,7 +1243,7 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
             context: half(true),
             predict: half(false),
             output,
-            inference: inference!(sampled.options.base()),
+            inference: inference!(crate::options::base(&sampled.options)),
             metadata,
         }
         .to_bytes()
@@ -1260,7 +1260,7 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
             context: half(true),
             predict: half(false),
             output,
-            inference: inference!(sampled.options.classification()),
+            inference: inference!(crate::options::classification(&sampled.options)),
             metadata,
         }
         .to_bytes()
@@ -1275,7 +1275,7 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
             context: half(true),
             predict: half(false),
             output,
-            inference: inference!(sampled.options.regression()),
+            inference: inference!(crate::options::regression(&sampled.options)),
             metadata,
         }
         .to_bytes()

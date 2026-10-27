@@ -9,7 +9,7 @@
 
 mod native_guard;
 mod owners;
-pub use owners::{RetainedFrameReferences, RetainedFrameTask};
+pub use owners::{RetainedFramePayload, RetainedFrameReferences, RetainedFrameTask};
 #[cfg(test)]
 mod native_guard_tests;
 
@@ -151,12 +151,14 @@ pub(crate) async fn run(
         FramePreparation::Payload {
             context,
             text,
-            previous,
             values,
         } => {
             let next = payload_part(&asker, context, text, values, Vec::new(), &mut attachments)
                 .map_err(FrameStageError::into_core)?;
-            finish_parts(&asker, next, previous, &mut attachments)?
+            PreparedFrameValue::Part(publish_part(&asker, next)?)
+        }
+        FramePreparation::Request { plan, parts } => {
+            finish_parts(&asker, plan, parts, &mut attachments)?
         }
         FramePreparation::AssessFailure {
             origin,
@@ -1545,8 +1547,7 @@ pub(crate) fn references(
     Ok(ResolvedFrameReferences {
         identity,
         plan: bound.publish(asker)?,
-        nodes: None,
-        owner: Some(asker.attach(Attachment::FrameReferences(owner))?),
+        owner: asker.attach(Attachment::FrameReferences(owner))?,
     })
 }
 
@@ -1563,6 +1564,20 @@ fn check_range(range: FrameBatchRange, rows: u64, per_call: u64) -> Result<(), C
     Ok(())
 }
 
+fn complete_reference_rows(
+    plan: &BoundPlan,
+    identity: &str,
+    owner: AttachmentId,
+    attachments: &mut Attachments,
+) -> Result<usize, CoreError> {
+    let Some(Attachment::FrameReferences(owner)) = attachments.remove(&owner) else {
+        return Err(protocol(
+            "complete frame references lack their immutable core owner",
+        ));
+    };
+    owner.validate(plan, identity)
+}
+
 pub(crate) fn context(
     asker: &Asker,
     references: ResolvedFrameReferences,
@@ -1571,32 +1586,8 @@ pub(crate) fn context(
     attachments: &mut Attachments,
 ) -> Result<SampledFrameContext, FrameStageError> {
     let bound = bind_plan(asker, references.plan, attachments)?;
-    let node_count = if let Some(id) = references.owner {
-        if references.nodes.is_some() {
-            return Err(
-                protocol("retained references cannot also declare raw replacement nodes").into(),
-            );
-        }
-        let Some(Attachment::FrameReferences(owner)) = attachments.remove(&id) else {
-            return Err(
-                protocol("complete frame references lack their immutable core owner").into(),
-            );
-        };
-        owner.validate(&bound, &references.identity)?
-    } else {
-        let nodes = take_array(
-            attachments,
-            references
-                .nodes
-                .ok_or_else(|| protocol("raw complete frame references lack their node column"))?,
-        )?;
-        if reference_identity(&bound.value, &nodes)? != references.identity {
-            return Err(
-                protocol("whole-task node references no longer match their request plan").into(),
-            );
-        }
-        positions(&nodes)?.len()
-    };
+    let node_count =
+        complete_reference_rows(&bound, &references.identity, references.owner, attachments)?;
     let train = bound.task.labels.labelled.keys.len();
     if node_count != train + bound.task.value.prediction_rows as usize {
         return Err(protocol("whole-task node references do not cover every task row").into());
@@ -1618,6 +1609,10 @@ pub(crate) fn context(
         &batch.keys,
     )?;
     let entity = bound.task.entity()?;
+    // Match LocalSampler::_sample_subgraph: actual batch get_node_id,
+    // then anchor lookup/cast, then seed, then count admission and draws.
+    // Neither the earlier complete references nor task construction resets
+    // the continuing neighbor owner on behalf of this later native call.
     let resolved = crate::frame_materialize::lock(&bound.task.labels.graph.frames)
         .resolve_encoded_references(entity, &[(&converted.0, converted.1)])?;
     let mut anchors = batch.anchors;
@@ -2027,17 +2022,6 @@ fn normalize_text(
     Ok(())
 }
 
-fn part_identity(plan: &str, part: &EncodedFramePart, bytes: &[u8]) -> Result<String, CoreError> {
-    encoded_identity(
-        plan,
-        &part.context_identity,
-        part.range,
-        part.answering,
-        &part.tables,
-        bytes,
-    )
-}
-
 fn encoded_identity(
     plan: &str,
     context: &str,
@@ -2185,104 +2169,74 @@ pub(crate) fn payload_part(
     })
 }
 
-/// Complete ordered already-encoded calls without sending a model request.
-/// The native logical-value ownership companion is composed at the same
-/// encoder boundary before this ordinary RequestState can be enabled.
-pub(crate) fn finish_parts(
-    asker: &Asker,
-    next: EncodedCall,
-    previous: Option<FrameRequestParts>,
-    attachments: &mut Attachments,
-) -> Result<PreparedFrameValue, CoreError> {
-    let bound = next.plan;
-    let previous = match previous {
-        None => Vec::new(),
-        Some(previous) => {
-            if previous.version != FRAME_MATERIALIZATION_VERSION
-                || previous.plan_identity != bound.value.identity
-                || previous.task_identity != bound.task.value.identity
-            {
-                return Err(protocol(
-                    "earlier encoded frame calls belong to another complete task or request plan",
-                ));
-            }
-            previous.parts
-        }
-    };
-    let covered = ordered_coverage(
-        &previous.iter().map(|part| part.range).collect::<Vec<_>>(),
-        bound.task.value.prediction_rows,
-        bound.task.value.rows_per_call,
-        true,
-    )?;
-    if next.range.start != covered {
-        return Err(protocol(
-            "encoded frame context is not the next ordered request part",
-        ));
-    }
-    let mut ranges = previous.iter().map(|part| part.range).collect::<Vec<_>>();
-    ranges.push(next.range);
-    let stop = ordered_coverage(
-        &ranges,
-        bound.task.value.prediction_rows,
-        bound.task.value.rows_per_call,
-        true,
-    )?;
-    let mut parts = Vec::with_capacity(previous.len() + 1);
-    let mut sent = BTreeSet::new();
-    let mut answering = 0_u64;
-    for mut part in previous {
-        let Some(Attachment::Bytes(bytes)) = attachments.remove(&part.payload) else {
-            return Err(protocol(
-                "encoded frame part lacks its complete payload bytes",
-            ));
-        };
-        if part_identity(&bound.value.identity, &part, &bytes)? != part.identity {
-            return Err(protocol(
-                "encoded frame part no longer matches its context, range or complete payload",
-            ));
-        }
-        answering = answering
-            .checked_add(part.answering)
-            .ok_or_else(|| protocol("frame request answering count exceeds UInt64"))?;
-        sent.extend(part.tables.iter().cloned());
-        part.payload = asker.attach(Attachment::Bytes(bytes))?;
-        parts.push(part);
-    }
+/// Publish one complete immutable call, without previous or future bodies.
+/// The host retains these independent outputs in its ordinary batch loop.
+fn publish_part(asker: &Asker, next: EncodedCall) -> Result<EncodedFramePart, CoreError> {
     let identity = encoded_identity(
-        &bound.value.identity,
+        &next.plan.value.identity,
         &next.context_identity,
         next.range,
         next.answering,
         &next.tables,
         &next.bytes,
     )?;
-    answering = answering
-        .checked_add(next.answering)
-        .ok_or_else(|| protocol("frame request answering count exceeds UInt64"))?;
-    sent.extend(next.tables.iter().cloned());
-    parts.push(EncodedFramePart {
+    let mut part = EncodedFramePart {
         identity,
         context_identity: next.context_identity,
         range: next.range,
-        payload: asker.attach(Attachment::Bytes(next.bytes))?,
+        payload: AttachmentId(0),
         answering: next.answering,
         tables: next.tables,
-    });
-    if stop < bound.task.value.prediction_rows {
-        return Ok(PreparedFrameValue::Parts(FrameRequestParts {
-            version: FRAME_MATERIALIZATION_VERSION,
-            plan_identity: bound.value.identity.clone(),
-            task_identity: bound.task.value.identity.clone(),
-            parts,
-        }));
+    };
+    let owner = RetainedFramePayload::new(&next.plan, &part, next.bytes);
+    part.payload = asker.attach(Attachment::FramePayload(owner))?;
+    Ok(part)
+}
+
+/// Assemble complete independent calls exactly once after the batch loop.
+/// Ordered ranges and whole-request policy remain core decisions. Native
+/// conversion, graph sampling and encoding have already reached their own
+/// original positions; no earlier body is replayed through later batches.
+pub(crate) fn finish_parts(
+    asker: &Asker,
+    plan: FrameRequestPlan,
+    parts: FrameRequestParts,
+    attachments: &mut Attachments,
+) -> Result<PreparedFrameValue, CoreError> {
+    let bound = bind_plan(asker, plan, attachments)?;
+    if parts.version != FRAME_MATERIALIZATION_VERSION
+        || parts.plan_identity != bound.value.identity
+        || parts.task_identity != bound.task.value.identity
+    {
+        return Err(protocol(
+            "encoded calls belong to another complete task or request plan",
+        ));
     }
+    let mut parts = parts.parts;
     ordered_coverage(
         &parts.iter().map(|part| part.range).collect::<Vec<_>>(),
         bound.task.value.prediction_rows,
         bound.task.value.rows_per_call,
         false,
     )?;
+    let mut sent = BTreeSet::new();
+    let mut answering = 0_u64;
+    for part in &mut parts {
+        let Some(Attachment::FramePayload(owner)) = attachments.remove(&part.payload) else {
+            return Err(protocol(
+                "encoded frame part lacks its core-created complete payload owner",
+            ));
+        };
+        owner.validate(&bound, part)?;
+        answering = answering
+            .checked_add(part.answering)
+            .ok_or_else(|| protocol("frame request answering count exceeds UInt64"))?;
+        sent.extend(part.tables.iter().cloned());
+        // One final ordinary RequestState byte attachment per body. The
+        // native logical-value companion must be emitted from this same
+        // immutable payload owner when its composition is complete.
+        part.payload = asker.attach(Attachment::Bytes(owner.wire().to_vec()))?;
+    }
     let excluded = selected_exclusions(&bound.task, &bound.deferred, true)?
         .into_iter()
         .map(|column| (column.table, column.column))

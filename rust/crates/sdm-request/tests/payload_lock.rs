@@ -25,7 +25,7 @@ use arrow_array::{
 use sdm_contract::ops::Stype;
 use sdm_contract::schema_check::check;
 use sdm_engine::labels::Labels;
-use sdm_request::options::{Kind, Options, RunMode};
+use sdm_request::options::{Kind, RunMode};
 use sdm_request::payload::{Sampled, SampledColumn, SampledLink, SampledTable, build};
 use sdm_request::predict::INFERENCE_OPTIONS;
 use serde_json::{Value, json};
@@ -53,7 +53,7 @@ fn shop() -> Sampled {
         run_mode: RunMode::Fast,
         use_prediction_time: false,
         return_embeddings: false,
-        options: Options::default(),
+        options: sdm_request::options::default_options(),
         statistic: Some("mean".into()),
         top_k: None,
         rows_per_call: 1,
@@ -138,7 +138,7 @@ fn family() -> Sampled {
         run_mode: RunMode::Best,
         use_prediction_time: false,
         return_embeddings: false,
-        options: Options::default(),
+        options: sdm_request::options::default_options(),
         statistic: None,
         top_k: None,
         rows_per_call: 1,

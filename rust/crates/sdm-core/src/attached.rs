@@ -266,7 +266,8 @@ pub fn check_attachments(
             | (Some(Attachment::Arrow(_)), AttachmentKind::Arrow)
             | (Some(Attachment::FrameGraph(_)), AttachmentKind::FrameGraph) => {}
             (Some(Attachment::FrameTask(_)), AttachmentKind::FrameTask)
-            | (Some(Attachment::FrameReferences(_)), AttachmentKind::FrameReferences) => {}
+            | (Some(Attachment::FrameReferences(_)), AttachmentKind::FrameReferences)
+            | (Some(Attachment::FramePayload(_)), AttachmentKind::FramePayload) => {}
             _ => {
                 return Err(invalid(
                     "the attachment does not have its declared kind",

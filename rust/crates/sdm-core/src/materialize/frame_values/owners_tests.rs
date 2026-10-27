@@ -253,3 +253,65 @@ fn complete_reference_owner_keeps_task_rows_alive_without_holding_a_graph_lease(
     assert!(weak_nodes.upgrade().is_none());
     assert!(graph.lease().is_ok());
 }
+
+#[test]
+fn encoded_part_bodies_remain_independent_until_one_final_assembly() {
+    let graph = crate::frame_materialize::retained_tests::owner();
+    let plan = plan(task(graph, 64));
+    let mut owners = Vec::new();
+    for start in 0..64 {
+        let part = EncodedFramePart {
+            identity: format!("part-{start}"),
+            context_identity: format!("context-{start}"),
+            range: FrameBatchRange {
+                start,
+                stop: start + 1,
+            },
+            payload: AttachmentId(start + 1),
+            answering: 0,
+            tables: vec!["users".into()],
+        };
+        let bytes = vec![b'x'; 16_384];
+        let allocation = bytes.as_ptr();
+        let owner = RetainedFramePayload::new(&plan, &part, bytes);
+        assert_eq!(owner.wire().as_ptr(), allocation);
+        owners.push((part, owner));
+    }
+    // An earlier body is never an input of a later encoding. Final assembly
+    // validates small part metadata and traverses each body exactly once.
+    for (part, owner) in &owners {
+        assert!(owner.validate(&plan, part).is_ok());
+        let clone = owner.clone();
+        assert_eq!(clone.wire().as_ptr(), owner.wire().as_ptr());
+        let mut rebound = part.clone();
+        rebound.payload = AttachmentId(10_000 + part.range.start);
+        assert!(clone.validate(&plan, &rebound).is_ok());
+        rebound.range.stop += 1;
+        assert!(clone.validate(&plan, &rebound).is_err());
+    }
+    let weak = Arc::downgrade(&owners[0].1.data);
+    drop(owners);
+    assert!(weak.upgrade().is_none());
+}
+
+#[test]
+fn hashed_node_rows_cannot_bypass_the_complete_reference_constructor() {
+    let graph = crate::frame_materialize::retained_tests::owner();
+    let plan = plan(task(graph.clone(), 2));
+    let before = crate::frame_materialize::lock(&graph.frames())
+        .neighbors
+        .checkpoint();
+    // Matching row count and a genuine coherence hash still do not establish
+    // that complete native conversion and source reference resolution ran.
+    let nodes: ArrayRef = Arc::new(UInt64Array::from(vec![0, 1, 2]));
+    let identity = reference_identity(&plan.value, &nodes).unwrap();
+    let forged = data(RecordBatch::try_from_iter([("node", nodes)]).unwrap());
+    let mut attachments = BTreeMap::from([(AttachmentId(66), Attachment::Arrow(forged))]);
+    assert!(complete_reference_rows(&plan, &identity, AttachmentId(66), &mut attachments).is_err());
+    assert_eq!(
+        crate::frame_materialize::lock(&graph.frames())
+            .neighbors
+            .checkpoint(),
+        before
+    );
+}

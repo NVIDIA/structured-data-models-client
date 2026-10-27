@@ -2,9 +2,9 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! Draft fixed frame materialization values, pending serialized contract35.
-//! This module is deliberately unlinked while the preceding contract is owned
-//! by another package. It adds no Run step or native semantic callback.
+//! Fixed frame values under source-only coordinated composition.
+//! Canonical contract publication remains serialized by the root.
+//! This adds no Run step or native semantic callback.
 //! Input-sized task data, node maps, sampled rows and links remain attachments.
 
 mod attachments;
@@ -47,8 +47,8 @@ pub struct PreparedFrames {
     pub value: AttachmentId,
 }
 
-/// Data only: the existing request-owned Options type will re-export this
-/// definition. Defaults, validation and model config presentation stay there.
+/// Data only: request-owned Options re-exports this definition.
+/// Defaults, validation and model config presentation stay in request policy.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct RelationalOptions {
@@ -254,8 +254,9 @@ pub struct FrameRequestPlan {
 pub struct ResolvedFrameReferences {
     pub identity: String,
     pub plan: FrameRequestPlan,
-    pub nodes: Option<AttachmentId>,
-    pub owner: Option<AttachmentId>,
+    /// Genuine whole-task resolution, shared by Python and Rust hosts.
+    /// A naked node array cannot prove reached conversion and resolution.
+    pub owner: AttachmentId,
 }
 
 /// Selected raw feature columns plus the existing batch ordinal column.
@@ -328,13 +329,14 @@ pub struct EncodedFramePart {
     pub identity: String,
     pub context_identity: String,
     pub range: FrameBatchRange,
+    /// Core-created immutable complete payload ownership, not copied bytes.
     pub payload: AttachmentId,
     pub answering: u64,
     pub tables: Vec<String>,
 }
 
-/// Ordered complete request parts, independently inspectable between batches.
-/// Core validates ordered coverage before issuing whole-request notices and
+/// Ordered complete request parts, assembled once after the native batch loop.
+/// Core validates complete ordered coverage before whole-request notices and
 /// returning the existing Materialized/RequestState result to prediction.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -413,10 +415,14 @@ pub enum FramePreparation {
         context: SampledFrameContext,
         /// Actual reached raw conversions, not just global dtype metadata.
         text: NativeFrameText,
-        /// Already complete valid encoded earlier calls, not a partial body.
-        previous: Option<FrameRequestParts>,
         /// Native request flags at their reached construction position.
         values: Option<AttachmentId>,
+    },
+    Request {
+        plan: FrameRequestPlan,
+        /// Complete independently encoded calls. No earlier payload is
+        /// passed through a later native conversion or payload operation.
+        parts: FrameRequestParts,
     },
 }
 
@@ -435,6 +441,6 @@ pub enum PreparedFrameValue {
     Plan(FrameRequestPlan),
     References(ResolvedFrameReferences),
     Context(SampledFrameContext),
-    Parts(FrameRequestParts),
+    Part(EncodedFramePart),
     Request(Materialized),
 }

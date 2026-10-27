@@ -40,7 +40,9 @@ pub use compose::{CompositionRoot, DataAccess};
 pub use dispatch::start;
 pub use edit::{dtype_names, meanings, wire_names};
 pub use frame_materialize::RetainedFrameGraph;
-pub use materialize::frame_values::{RetainedFrameReferences, RetainedFrameTask};
+pub use materialize::frame_values::{
+    RetainedFramePayload, RetainedFrameReferences, RetainedFrameTask,
+};
 /// The text a float is spelled in, as the reference's language writes it
 /// (Python's `repr`): for a host that hands the data layer a value to
 /// write as the reference does (T3.12 fix 1).
