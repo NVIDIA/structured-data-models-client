@@ -147,7 +147,7 @@ pub(super) fn prepare(
         } => {
             policy::resolve_model(&model)?;
             if steps.len() != explained.len()
-                || steps.iter().any(|step| *step == 0)
+                || steps.contains(&0)
                 || steps.iter().collect::<BTreeSet<_>>().len() != steps.len()
             {
                 return Err(invalid(
@@ -325,15 +325,15 @@ pub(super) fn prepare(
                 ));
             }
             let classes = observed.as_ref().map(equality).transpose()?;
-            if purpose == RelationalTargetUse::ClassLimit {
-                if let Some(classes) = classes {
-                    policy::validation::class_count(
-                        usize::try_from(classes)
-                            .map_err(|_| invalid("native class count exceeds this host width"))?,
-                        bound.model,
-                    )
-                    .map_err(|error| public_fields(error, &["model", "classes", "limit"]))?;
-                }
+            if purpose == RelationalTargetUse::ClassLimit
+                && let Some(classes) = classes
+            {
+                policy::validation::class_count(
+                    usize::try_from(classes)
+                        .map_err(|_| invalid("native class count exceeds this host width"))?,
+                    bound.model,
+                )
+                .map_err(|error| public_fields(error, &["model", "classes", "limit"]))?;
             }
             RelationalPrepared::Targets(RelationalTargetPopulation {
                 meaning,

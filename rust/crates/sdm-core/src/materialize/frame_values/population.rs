@@ -249,12 +249,14 @@ fn converted(
                 converted: NativeFrameStrings::Failed { failure },
             },
         ) => {
-            return Err(FrameStageError::Native {
-                site: NativeSite::LabelReferences,
-                failure,
-                diagnostic: None,
-                dropped_summary: None,
-            });
+            return Err(FrameStageError::Native(Box::new(
+                FrameNativeFailureContext {
+                    site: NativeSite::LabelReferences,
+                    failure,
+                    diagnostic: None,
+                    dropped_summary: None,
+                },
+            )));
         }
         (
             FramePredictionType::NativeString { .. },
@@ -267,15 +269,17 @@ fn converted(
                     },
             },
         ) => {
-            return Err(FrameStageError::Native {
-                site: NativeSite::LabelReferenceCast {
-                    expected_dtype,
-                    input_repr,
+            return Err(FrameStageError::Native(Box::new(
+                FrameNativeFailureContext {
+                    site: NativeSite::LabelReferenceCast {
+                        expected_dtype,
+                        input_repr,
+                    },
+                    failure,
+                    diagnostic: None,
+                    dropped_summary: None,
                 },
-                failure,
-                diagnostic: None,
-                dropped_summary: None,
-            });
+            )));
         }
         _ => {
             return Err(protocol(

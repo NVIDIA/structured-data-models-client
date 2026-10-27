@@ -30,17 +30,28 @@ impl std::fmt::Debug for RetainedFrameQuestion {
     }
 }
 
+pub(super) struct QuestionMetadata {
+    pub(super) schema_id: AttachmentId,
+    pub(super) query_id: AttachmentId,
+    pub(super) candidates_given: bool,
+    pub(super) statistic_given: bool,
+    pub(super) top_k_given: bool,
+}
+
 pub(super) fn resolve(
     asker: &Asker,
-    schema_id: AttachmentId,
-    query_id: AttachmentId,
-    candidates_given: bool,
-    statistic_given: bool,
-    top_k_given: bool,
+    input: QuestionMetadata,
     facts: &HostFacts,
     zones: &dyn sdm_engine::time::Zones,
     attachments: &mut Attachments,
 ) -> Result<PreparedFrameQuestion, CoreError> {
+    let QuestionMetadata {
+        schema_id,
+        query_id,
+        candidates_given,
+        statistic_given,
+        top_k_given,
+    } = input;
     let held = take_json(attachments, schema_id)?;
     let read = sdm_schema::held::read(held, &BTreeMap::new(), true)?;
     let mut description = read.description;

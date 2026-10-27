@@ -396,7 +396,7 @@ pub(crate) fn finish(
         RelationalAggregation::Steps { children, steps } => {
             if children.is_empty()
                 || children.len() != steps.len()
-                || steps.iter().any(|step| *step == 0)
+                || steps.contains(&0)
                 || steps.iter().collect::<BTreeSet<_>>().len() != steps.len()
             {
                 return Err(invalid("forecast steps do not name its child results once"));

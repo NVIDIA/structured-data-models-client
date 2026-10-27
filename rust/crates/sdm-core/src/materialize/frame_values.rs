@@ -35,13 +35,16 @@ use crate::run::Attachments;
 /// The final frame guard consumes this inside the core error boundary; this
 /// is never a request for a host action or a host-selected error policy.
 pub(crate) enum FrameStageError {
-    Core(CoreError),
-    Native {
-        site: NativeSite,
-        failure: FrameNativeFailure,
-        diagnostic: Option<NativeConstructionDiagnostic>,
-        dropped_summary: Option<String>,
-    },
+    Core(Box<CoreError>),
+    Native(Box<FrameNativeFailureContext>),
+}
+
+/// The reached native failure and its already observed diagnostic context.
+pub(crate) struct FrameNativeFailureContext {
+    site: NativeSite,
+    failure: FrameNativeFailure,
+    diagnostic: Option<NativeConstructionDiagnostic>,
+    dropped_summary: Option<String>,
 }
 
 pub(crate) enum NativeSite {
@@ -64,20 +67,21 @@ pub(crate) enum NativeSite {
 
 impl From<CoreError> for FrameStageError {
     fn from(error: CoreError) -> Self {
-        Self::Core(error)
+        Self::Core(Box::new(error))
     }
 }
 
 impl FrameStageError {
     fn into_core(self) -> CoreError {
         match self {
-            Self::Core(error) => error,
-            Self::Native {
-                site,
-                failure,
-                diagnostic,
-                dropped_summary,
-            } => {
+            Self::Core(error) => *error,
+            Self::Native(context) => {
+                let FrameNativeFailureContext {
+                    site,
+                    failure,
+                    diagnostic,
+                    dropped_summary,
+                } = *context;
                 if matches!(site, NativeSite::Prediction { .. }) {
                     let eligible = failure.builtin.ancestry.iter().any(|kind| {
                         matches!(
@@ -209,10 +213,10 @@ impl FrameStageError {
 /// Preserve an already constructed graph even when a HostRun is cancelled
 /// before its first poll. This captures a resource, not a program position.
 pub(crate) fn carry(asker: &Asker, input: &FramePreparation, attachments: &Attachments) {
-    if let Some(owner) = input.retained_owner().and_then(|id| attachments.get(&id)) {
-        if let Attachment::FrameGraph(owner) = owner {
-            asker.keep_retained_frame(owner.clone());
-        }
+    if let Some(Attachment::FrameGraph(owner)) =
+        input.retained_owner().and_then(|id| attachments.get(&id))
+    {
+        asker.keep_retained_frame(owner.clone());
     }
 }
 
@@ -252,11 +256,13 @@ pub(crate) async fn run(
             top_k_given,
         } => PreparedFrameValue::Question(questions::resolve(
             &asker,
-            schema,
-            query,
-            candidates_given,
-            statistic_given,
-            top_k_given,
+            questions::QuestionMetadata {
+                schema_id: schema,
+                query_id: query,
+                candidates_given,
+                statistic_given,
+                top_k_given,
+            },
             &facts,
             &*zones,
             &mut attachments,
@@ -1236,14 +1242,16 @@ fn prediction_values(
                         diagnostic,
                     },
             },
-        ) => Err(FrameStageError::Native {
-            site: NativeSite::Prediction {
-                table: column.table.clone(),
+        ) => Err(FrameStageError::Native(Box::new(
+            FrameNativeFailureContext {
+                site: NativeSite::Prediction {
+                    table: column.table.clone(),
+                },
+                failure,
+                diagnostic: Some(diagnostic),
+                dropped_summary: graph.dropped_summary(),
             },
-            failure,
-            diagnostic: Some(diagnostic),
-            dropped_summary: graph.dropped_summary(),
-        }),
+        ))),
         _ => Err(
             protocol("frame prediction data does not match its resolved constructor type").into(),
         ),
@@ -1638,12 +1646,11 @@ fn selected_exclusions(
         // resolution. The raw late values retain every malformed slot too.
         for (table, columns) in caller {
             for column in columns {
-                if let Value::Text(column) = column {
-                    if let Ok(column) = column.into_utf8() {
-                        if !excluded.contains(&(table.clone(), column.clone())) {
-                            excluded.push((table.clone(), column));
-                        }
-                    }
+                if let Value::Text(column) = column
+                    && let Ok(column) = column.into_utf8()
+                    && !excluded.contains(&(table.clone(), column.clone()))
+                {
+                    excluded.push((table.clone(), column));
                 }
             }
         }
@@ -1786,12 +1793,14 @@ fn converted_references(
                 converted: NativeFrameStrings::Failed { failure },
             },
         ) => {
-            return Err(FrameStageError::Native {
-                site,
-                failure,
-                diagnostic: None,
-                dropped_summary: task.labels.graph.dropped_summary(),
-            });
+            return Err(FrameStageError::Native(Box::new(
+                FrameNativeFailureContext {
+                    site,
+                    failure,
+                    diagnostic: None,
+                    dropped_summary: task.labels.graph.dropped_summary(),
+                },
+            )));
         }
         (
             FramePredictionType::NativeString { .. },
@@ -1810,15 +1819,17 @@ fn converted_references(
                 )
                 .into());
             }
-            return Err(FrameStageError::Native {
-                site: NativeSite::BatchReferenceCast {
-                    expected_dtype,
-                    input_repr,
+            return Err(FrameStageError::Native(Box::new(
+                FrameNativeFailureContext {
+                    site: NativeSite::BatchReferenceCast {
+                        expected_dtype,
+                        input_repr,
+                    },
+                    failure,
+                    diagnostic: None,
+                    dropped_summary: task.labels.graph.dropped_summary(),
                 },
-                failure,
-                diagnostic: None,
-                dropped_summary: task.labels.graph.dropped_summary(),
-            });
+            )));
         }
         _ => {
             return Err(protocol(
@@ -1890,7 +1901,7 @@ pub(crate) fn references(
 fn check_range(range: FrameBatchRange, rows: u64, per_call: u64) -> Result<(), CoreError> {
     if per_call == 0
         || range.start >= rows
-        || range.start % per_call != 0
+        || !range.start.is_multiple_of(per_call)
         || range.stop != range.start + per_call.min(rows - range.start)
     {
         return Err(protocol(
@@ -1957,12 +1968,11 @@ pub(crate) fn context(
             .time_column
             .as_ref()
             .ok_or_else(|| protocol("entity-anchored frame task lost its time column"))?;
-        let looked_up =
-            bound
-                .task
-                .labels
-                .graph
-                .selected_rows(&entity.name, &resolved, &[time.clone()])?;
+        let looked_up = bound.task.labels.graph.selected_rows(
+            &entity.name,
+            &resolved,
+            std::slice::from_ref(time),
+        )?;
         let times = times_ns(named(&looked_up, time)?, time)?;
         for (row, time) in times.into_iter().enumerate() {
             anchors[row] = time.unwrap_or(sample::MISSING_ANCHOR);
@@ -2333,12 +2343,14 @@ fn normalize_text(
         admitted.push((converted, array));
     }
     if let Some((column, failure)) = failed {
-        return Err(FrameStageError::Native {
-            site: NativeSite::Text(column),
-            failure,
-            diagnostic: None,
-            dropped_summary: context.plan.task.labels.graph.dropped_summary(),
-        });
+        return Err(FrameStageError::Native(Box::new(
+            FrameNativeFailureContext {
+                site: NativeSite::Text(column),
+                failure,
+                diagnostic: None,
+                dropped_summary: context.plan.task.labels.graph.dropped_summary(),
+            },
+        )));
     }
     for (converted, array) in admitted {
         let values =
@@ -2453,19 +2465,18 @@ pub(crate) fn payload_part(
     } else {
         None
     };
-    if let Some(target) = &link_target {
-        if !context
+    if let Some(target) = &link_target
+        && !context
             .walked
             .tables
             .iter()
             .any(|table| &table.name == target)
-        {
-            return Err(CoreError::new(
-                Sentence::LinkHistoryMissing,
-                "the sampled subgraph has no historical target entities",
-            )
-            .into());
-        }
+    {
+        return Err(CoreError::new(
+            Sentence::LinkHistoryMissing,
+            "the sampled subgraph has no historical target entities",
+        )
+        .into());
     }
     let lags = context
         .plan

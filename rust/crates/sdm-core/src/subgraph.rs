@@ -930,6 +930,7 @@ fn words(
 
 /// A native frame's selected strings, using its reached lowercase profile.
 /// Offset widths remain physical facts; neither path narrows or casts arrays.
+#[cfg(test)]
 pub(crate) fn frame_words(
     array: &ArrayRef,
     profile: sdm_engine::words::CasingProfile,

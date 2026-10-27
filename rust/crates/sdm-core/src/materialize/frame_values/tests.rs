@@ -8,6 +8,12 @@ use super::*;
 use sdm_engine::words::{CasingProfile, UnicodeDataVersion};
 
 #[test]
+fn reached_frame_failures_keep_result_storage_small() {
+    let error = FrameStageError::from(protocol("frame failure"));
+    assert!(std::mem::size_of_val(&error) <= 32);
+}
+
+#[test]
 fn local_label_calendar_bounds_widen_both_ends_before_exact_filtering() {
     use sdm_contract::pql::TimeUnit;
     let windows = label_windows(
@@ -247,7 +253,7 @@ fn native_constructor_refusal_uses_the_reached_first_bad_element_and_dtype() {
         deepest_module: Some("pandas.core".into()),
         python_unicode_database: "14.0.0".into(),
     };
-    let error = FrameStageError::Native {
+    let error = FrameStageError::Native(Box::new(FrameNativeFailureContext {
         site: NativeSite::Prediction {
             table: "users".into(),
         },
@@ -260,7 +266,7 @@ fn native_constructor_refusal_uses_the_reached_first_bad_element_and_dtype() {
             dtype_display: "string".into(),
         }),
         dropped_summary: None,
-    }
+    }))
     .into_core();
     assert_eq!(
         error.fields["native_constructor_kind"],

@@ -87,33 +87,6 @@ impl SampledContext {
         self.check_source(source)?;
         Ok(self.sampled)
     }
-
-    /// Only selected Text columns are transformed, after native input
-    /// conversion has supplied actual strings and the reached kernel fact.
-    /// Request schema, task and encoding policy remain the payload builder's.
-    pub fn into_words(
-        mut self,
-        source: &str,
-        profile: sdm_engine::words::CasingProfile,
-    ) -> Result<crate::subgraph::Walked, CoreError> {
-        self.check_source(source)?;
-        for table in &mut self.sampled.tables {
-            for (name, column) in &mut table.columns {
-                if !table
-                    .stypes
-                    .iter()
-                    .any(|(feature, stype)| feature == name && *stype == Stype::Text)
-                {
-                    continue;
-                }
-                let SampledColumn::Arrow(array) = column else {
-                    return Err(internal("a raw frame context already contains words"));
-                };
-                *column = SampledColumn::Words(crate::subgraph::frame_words(array, profile)?);
-            }
-        }
-        Ok(self.sampled)
-    }
 }
 
 pub(crate) struct FrameRun {

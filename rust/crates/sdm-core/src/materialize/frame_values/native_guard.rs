@@ -212,10 +212,10 @@ pub(super) fn report(input: FrameNativeReport) -> Result<CoreError, CoreError> {
                 arrow_simple_identity: None,
             })?;
             let lowered = sdm_engine::words::lower_native(refusal.as_slice(), profile);
-            if assessment.category == C::CallerData {
-                if let Some(summary) = &input.dropped_summary {
-                    detail = format!(" {summary}");
-                }
+            if assessment.category == C::CallerData
+                && let Some(summary) = &input.dropped_summary
+            {
+                detail = format!(" {summary}");
             }
             if [
                 "aggregation time range",
