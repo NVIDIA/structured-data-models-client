@@ -448,3 +448,24 @@ fn frame_validity_requirements_keep_one_shared_sentence_and_static_words() {
         "Found no valid rows in table 'events'. Please make sure that there exists valid non-N/A primary key and time column pairs in this table."
     );
 }
+
+#[test]
+fn frame_task_reference_error_keeps_optional_shared_sanitization_detail() {
+    let template = wording::template(Sentence::FrameTaskReferences).text;
+    assert_eq!(
+        template,
+        "Task references {rows} unresolved row(s) in table '{table}' after graph sanitization{detail}"
+    );
+    let base = template.replace("{rows}", "1").replace("{table}", "users");
+    assert_eq!(
+        base.replace("{detail}", ""),
+        "Task references 1 unresolved row(s) in table 'users' after graph sanitization"
+    );
+    assert_eq!(
+        base.replace(
+            "{detail}",
+            " [orders: 1 of 64 rows dropped (1 with a repeated primary key)]"
+        ),
+        "Task references 1 unresolved row(s) in table 'users' after graph sanitization [orders: 1 of 64 rows dropped (1 with a repeated primary key)]"
+    );
+}
