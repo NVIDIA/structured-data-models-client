@@ -1243,7 +1243,7 @@ fn as_bool(value: &Value) -> Option<bool> {
 /// of an integer (trimmed), an integer, or a float that is whole.
 fn as_int(value: &Value) -> Option<i64> {
     match value {
-        Value::Text(text) => text.trim().parse::<i64>().ok(),
+        Value::Text(text) => integer_text(text)?.parse::<i64>().ok(),
         Value::Number(token) if is_integer_token(token) => token.parse::<i64>().ok(),
         Value::Number(token) => {
             let float: f64 = token.parse().ok()?;
@@ -1259,7 +1259,7 @@ fn as_int(value: &Value) -> Option<i64> {
 /// an integer past a double's range not one.
 fn as_float(value: &Value) -> Option<f64> {
     match value {
-        Value::Text(text) => text.trim().parse::<f64>().ok(),
+        Value::Text(text) => numeric_text(text),
         Value::Number(token) => token
             .parse::<f64>()
             .ok()

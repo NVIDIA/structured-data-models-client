@@ -244,7 +244,8 @@ pub enum Preparation {
     Arguments {
         context: FrameForm,
         predict: FrameForm,
-        related: Vec<(String, FrameForm)>,
+        // Keys are unused by validation and remain native until diagnostic display.
+        related: Vec<FrameForm>,
         task: Given<String>,
     },
     Headers {

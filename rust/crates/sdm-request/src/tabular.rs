@@ -612,8 +612,17 @@ pub fn check_body(
                 let valid = matches!(cell, Value::Null)
                     || match (dtype, cell) {
                         (Dtype::Bool, Value::Bool(_)) | (Dtype::String, Value::Text(_)) => true,
-                        (Dtype::Int32 | Dtype::Int64, Value::Number(token)) => {
-                            sdm_wire::json::is_integer_token(token) && token.parse::<i64>().is_ok()
+                        (
+                            Dtype::Int32 | Dtype::Int64,
+                            Value::Number(token) | Value::Text(token),
+                        ) => {
+                            sdm_wire::json::is_integer_token(token)
+                                && token.parse::<i64>().is_ok_and(|value| {
+                                    // Coherence uses the same canonical codec as EncodeBody:
+                                    // a wide int64 is lossless text, not a string column.
+                                    crate::payload::int_cell(i128::from(value), name)
+                                        .is_ok_and(|encoded| encoded == *cell)
+                                })
                         }
                         (Dtype::Float32 | Dtype::Float64, Value::Number(token)) => {
                             token.parse::<f64>().is_ok_and(f64::is_finite)

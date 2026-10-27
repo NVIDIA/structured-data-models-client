@@ -635,6 +635,15 @@ def error_from_core(
         cls = StructuredDataError
     sentence = error['sentence']
     if (
+        sentence == 'direct_related'
+        and (present := _held().get('direct_related_names')) is not None
+    ):
+        # The core has selected the related-table refusal. Native key sorting
+        # belongs to its reached diagnostic and can itself raise TypeError.
+        # Names need no eager UTF-8 conversion or generic formatting wrapper.
+        fields['related_tables'] = present(fields)
+        details['related_tables'] = fields['related_tables']
+    if (
         sentence == 'tabular_row_bounds'
         and (present := _held().get('direct_row_index')) is not None
     ):
