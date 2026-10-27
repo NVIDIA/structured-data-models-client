@@ -5,6 +5,7 @@
 //! Exact arbitrary-precision native Decimal comparison facts.
 
 use sdm_contract::frames::{FrameDecimalExponent, FrameScalar};
+use sdm_contract::scalar::unicode::UnicodeText;
 use sdm_contract::{CoreError, Sentence};
 
 fn invalid(message: &str) -> CoreError {
@@ -31,7 +32,7 @@ pub(crate) enum Key {
     Native {
         row: usize,
     },
-    Text(sdm_contract::scalar::unicode::UnicodeText),
+    Text(UnicodeText),
     Float(u64),
 }
 

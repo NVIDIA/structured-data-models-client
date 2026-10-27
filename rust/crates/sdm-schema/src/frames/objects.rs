@@ -7,6 +7,7 @@
 use super::object_decimal::{Key, key};
 use sdm_contract::frames::{FrameDecimalExponent, FrameScalar, NativeObjectMeaning};
 use sdm_contract::ops::Dtype;
+use sdm_contract::scalar::unicode::UnicodeText;
 use sdm_contract::{CoreError, Sentence};
 
 pub(crate) struct Column {
@@ -117,7 +118,7 @@ pub(crate) fn scalar(
             }
             6 => {
                 required(&[8])?;
-                let value = sdm_contract::scalar::unicode::UnicodeText::from_utf8_surrogatepass(
+                let value = UnicodeText::from_utf8_surrogatepass(
                     fields.column(8).as_binary::<i32>().value(row).to_vec(),
                 )
                 .map_err(|_| invalid("native text is not valid Unicode scalar storage"))?;
