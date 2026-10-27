@@ -82,6 +82,23 @@ def test_native_display_failure_remains_the_actual_failure_at_that_boundary():
     with pytest.raises(RuntimeError) as caught:
         held.read_message()
     assert caught.value is failure
+    assert caught.value.__context__ is held.error
+    assert held.error.__traceback__ is held.traceback
+
+
+def test_native_message_observations_preserve_native_chain_mutations():
+    changed = KeyError('changed by native display')
+
+    class Mutating(ValueError):
+        def __str__(self):
+            self.__context__ = changed
+            return 'native message'
+
+    held = NativeFrameFailure.capture(Mutating())
+    assert held.read_message() == 'native message'
+    assert held.error.__context__ is changed
+    assert held.read_message() == 'native message'
+    assert held.error.__context__ is changed
 
 
 def test_source_binding_uses_the_original_dtype_and_does_not_infer_aliases():
@@ -123,6 +140,20 @@ def test_a_dotted_source_remains_one_relation_part():
         columns.dtype(
             {'source': {'source': ['users', 'snapshot']}, 'column': 'id'}
         )
+
+
+def test_actual_native_strings_export_losslessly_without_coercion_or_pair_merge():
+    values = pd.Series(['ordinary', '\ud83d\ude3a', '😺', None], dtype=object)
+    native = NativeColumn(values)
+    rows, encoding = native.arrow()
+    assert encoding == 'utf8_surrogatepass'
+    assert rows.column(0).to_pylist() == [
+        b'ordinary',
+        b'\xed\xa0\xbd\xed\xb8\xba',
+        '😺'.encode(),
+        None,
+    ]
+    assert native.values is values
 
 
 def test_prediction_retains_the_actual_whole_constructor_exception():

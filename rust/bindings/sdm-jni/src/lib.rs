@@ -304,6 +304,13 @@ fn attachment_object<'local>(
 ) -> Result<JObject<'local>, jni::errors::Error> {
     Ok(match attachment {
         Attachment::Bytes(bytes) => env.byte_array_from_slice(&bytes)?.into(),
+        Attachment::FrameGraph(_) | Attachment::FrameTask(_) | Attachment::FrameReferences(_) => {
+            env.throw_new(
+                "java/lang/IllegalArgumentException",
+                "native frame data ownership is not a Java operation",
+            )?;
+            return Err(jni::errors::Error::JavaException);
+        }
         Attachment::Arrow(data) => {
             let classes = CLASSES
                 .get()

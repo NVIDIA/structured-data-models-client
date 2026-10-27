@@ -27,7 +27,9 @@ use arrow_array::types::{
 };
 use arrow_array::{Array, ArrayRef};
 use arrow_schema::DataType;
+use sdm_contract::data::strings::StringEncoding;
 use sdm_contract::data::{WrittenNumber, written_number};
+use sdm_contract::scalar::unicode::UnicodeText;
 use sdm_contract::types::ColumnType;
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 
@@ -39,7 +41,7 @@ use crate::not_yet;
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Key {
     Int(i128),
-    Text(String),
+    Text(UnicodeText),
     /// A value with a fraction: `value` ten-to-the-`scale`ths, `scale` from
     /// 1 to 38, `value` no multiple of ten.
     Decimal {
@@ -112,7 +114,7 @@ pub fn read(array: &ArrayRef) -> Result<Vec<Option<Key>>, CoreError> {
         ($offset:ty) => {{
             let values = array.as_string::<$offset>();
             (0..values.len())
-                .map(|i| (!values.is_null(i)).then(|| Key::Text(values.value(i).to_owned())))
+                .map(|i| (!values.is_null(i)).then(|| Key::Text(values.value(i).into())))
                 .collect()
         }};
     }
@@ -177,7 +179,7 @@ impl Key {
     /// that writes no number (a `NaN`, an `Infinity`) is its own text.
     pub fn number_text(text: &str) -> Key {
         let Ok(written) = written(text) else {
-            return Key::Text(text.to_owned());
+            return Key::Text(text.into());
         };
         if written.digits.is_empty() {
             return Key::Int(0);
@@ -196,11 +198,41 @@ impl Key {
                 };
             }
         }
-        Key::Text(sdm_contract::data::exact_number_text(text))
+        Key::Text(sdm_contract::data::exact_number_text(text).into())
     }
 }
 
 // --- The entities' cast to the key's type (T1.32a) ---------------------------
+
+/// Read strings only under their explicit logical encoding. Binary is
+/// never interpreted by the general key reader. Both offset widths share
+/// the same validated borrowed view and the same owned text-key meaning.
+pub fn read_strings(
+    array: &ArrayRef,
+    encoding: StringEncoding,
+) -> Result<Vec<Option<Key>>, CoreError> {
+    let invalid = || {
+        CoreError::protocol(
+            Sentence::InvalidMessage,
+            "text key encoding does not match its Arrow values",
+        )
+    };
+    let strings =
+        crate::strings::StringColumn::new(array.as_ref(), encoding).map_err(|_| invalid())?;
+    (0..strings.len())
+        .map(|row| {
+            strings
+                .get(row)
+                .map_err(|_| invalid())?
+                .map(|text| {
+                    UnicodeText::from_utf8_surrogatepass(text.as_bytes().to_vec())
+                        .map(Key::Text)
+                        .map_err(|_| invalid())
+                })
+                .transpose()
+        })
+        .collect()
+}
 
 /// Why an entity does not cast to the key's type: the `reason` field of the
 /// refusal, one of the rule table's outcomes.
@@ -848,7 +880,7 @@ mod tests {
         ];
         let expected = values[1..values.len() - 1]
             .iter()
-            .map(|value| value.map(|text| Key::Text(text.to_owned())))
+            .map(|value| value.map(|text| Key::Text(text.into())))
             .collect::<Vec<_>>();
         let narrow: ArrayRef = Arc::new(StringArray::from(values.to_vec()));
         let large: ArrayRef = Arc::new(LargeStringArray::from(values.to_vec()));
@@ -889,10 +921,7 @@ mod tests {
         assert_eq!(refused.code, ErrorCode::UnsupportedRequest);
         assert_eq!(
             read(&entities).unwrap(),
-            vec![
-                Some(Key::Text("7".to_owned())),
-                Some(Key::Text("007".to_owned())),
-            ]
+            vec![Some(Key::Text("7".into())), Some(Key::Text("007".into())),]
         );
     }
 

@@ -11,6 +11,9 @@
 //! `-inf`), and temporal values as counts in their unit. Rows never travel
 //! this way; anything row-shaped is Arrow.
 
+pub mod native_value;
+pub mod unicode;
+
 use std::borrow::Cow;
 use std::fmt;
 

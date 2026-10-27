@@ -656,6 +656,8 @@ def error_from_core(
         'kind': error['kind'],
         'retryable': bool(error.get('retryable', False)),
     }
+    if error.get('public_details') is not None:
+        details = _fields(error['public_details'])
     response_cause: Exception | None = None
     if code == 'PROVIDER_ERROR' and driver_class is not None:
         details['driver_class'] = driver_class

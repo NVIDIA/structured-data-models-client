@@ -23,9 +23,16 @@
 //! lowering of every code point and the words of 772 values (T1.26b).
 
 mod casing;
+mod native;
 mod split;
 
 pub use casing::{CasingProfile, UnicodeDataVersion, simple_identity_input};
+pub use native::{lower_native, normalize_native};
+
+/// Native str whitespace, shared by tokenization and diagnostic trimming.
+pub fn native_space(point: u32) -> bool {
+    char::from_u32(point).is_some_and(casing::space)
+}
 
 /// The most words a value keeps (`max_words`).
 pub const MAX_WORDS: usize = 50;

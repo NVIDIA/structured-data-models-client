@@ -1,8 +1,13 @@
 # Text frame domain consumer source checkpoint
 
-This is unapproved source authoring on preserved Text tip `371cf6044d9467c411339d5341fa71a90dc9f47b`, whose integration base is `ab82735df3b1f324dc64470122679698fb428552`.
-It is not rebased onto the current integration branch and has no candidate execution or validation evidence.
-The new core modules remain unlinked until the complete coordinated composition.
+This is unapproved source authoring reconciled onto reviewed Direct source `a48b629dc7dc4b9327d34cdc93ddfc324db417eb`, tree `aeb9cdedd11f824dc72cae930d73e85df6a807de`, with actual Phase 3 base `38071e0fb3e5f89c9ca5b74c72bec55ba32c6190`.
+It has no candidate execution or validation evidence, and the root still owns canonical shared contract publication after Direct validation.
+The full original Text range from old base `ab82735df3b1f324dc64470122679698fb428552` through source checkpoint `be635aa293a7b1637345a519e778a00f18fb7bc9` remains preserved independently.
+Reconciliation retained Direct's borrowed FrameWalkOptions, Text's SampledContext and concrete-reference-before-reset semantics, and Phase 3's literal-warning boundary while extracting ResolvedTarget.
+No current Direct review source was modified.
+The current isolated range stages handwritten operation, attachment and binding wiring for the complete coordinated composition.
+It is an intermediate architecture checkpoint rather than a complete landing candidate.
+No canonical generation or version allocation has occurred.
 The scope remains all 119 in-scope Phase 4 public paths, including all native families, Text, ranking, forecasting, LINK, default routing and memory/performance acceptance.
 
 ## Concrete source
@@ -13,8 +18,9 @@ Labels use the existing `ResolvedTarget`, `entity_sample`, `LabelledContext` and
 Completed tasks apply context narrowing and the existing `BatchLayout` only after actual constructor success.
 Plans use the existing request options policy, preserving the later caller-exclusion validity check after whole-task reference resolution.
 Whole references finish before a batch can reset or draw the neighbor stream.
-Contexts use `TaskRows` and `TaskBatch`, validate each actual per-batch native cast, and reuse `FrameRun::walk` and the shared `walk_resolved` sampler.
-Native constructor, reference and Text failures retain their actual stage, ancestry, message, constructor diagnostic and graph-drop summary without a per-element core action loop.
+Contexts use `TaskRows` and `TaskBatch`, resolve each actual live per-batch native cast before resetting or drawing, and reuse the shared resolved sampler.
+The complete-reference value proves prior whole-task resolution; it does not replace a live batch native conversion or require it to equal an earlier cast.
+Native constructor, reference and Text failures retain their actual stage, ancestry, diagnostic facts and graph-drop summary without observing their message early or introducing a per-element core action loop.
 The payload consumer calls the existing request encoder, retains its complete owned result until attachment publication, accumulates ordered encoded parts, emits whole-request notices and constructs the existing Materialized/RequestState value.
 It accepts actual core-computed lag columns as domain input; retaining and supplying those columns through the fixed operation remains composition work.
 Typed list labels preserve the existing Int, Float, Bool, Text and Decimal link-value families, including list order and decimal scale.
@@ -68,17 +74,17 @@ After one existing graph preparation, repeated graph binding is schema-sized, wh
 Context and request construction retain their actual output-sized work and payload memory.
 The existing initial multi-chunk `one_batch` concatenation remains a one-time source-sized memory cost; this source inspection is not a measured zero-copy or performance claim.
 
-Final shared composition must add the typed attachment alternative to the existing core/host attachment enum and kind, and export/import it through an exact frozen native class with no arbitrary Python constructor or coercion.
+The isolated source adds typed alternatives to the existing core/host attachment enum and kind, and exports/imports them through exact frozen native classes with no arbitrary Python constructor or coercion.
 Only actual core Graph construction may produce that class.
-The host must recognize this core-owned alternative before foreign Arrow admission, which remains confined to fresh raw graph inputs.
+The binding recognizes these core-owned alternatives before foreign Arrow admission, which remains confined to fresh raw graph inputs and ordinary provider-backed Arrow outputs.
 Pure HostRun uses the same Rust owner directly, without a registry or a second representation of keys/CSC indexes.
 Existing Java scope receives only shared compatibility handling.
 
 FrameRun now distinguishes its ordinary raw checkpoint capture from core-created retained ownership.
 On the retained path, `keep` updates actual neighbor metadata without capturing or re-exporting the source tables.
-The unlinked consumer calls a typed `Asker::keep_retained_frame` handoff that final shared composition must implement.
-That handoff must clear an earlier raw checkpoint and retain/export the same live native owner alongside the small sampler memo, including on downstream failure and cancellation.
-It must never overwrite reached neighbor state with a stale snapshot from an earlier stage or batch.
+The consumer calls a typed `Asker::keep_retained_frame` handoff that clears an earlier raw checkpoint and retains/exports the same live native owner alongside small sampler metadata.
+The handoff is staged in this isolated source, including carry-before-poll for cancellation.
+It reads current reached neighbor state rather than replaying an earlier checkpoint.
 Ordinary raw/provider capture remains unchanged.
 
 The root executed an immutable frozen-reference ownership witness against original public source `43e55f4f58924384c3cb52f67c8ed2e73ba45fa1` on CPython 3.10 and 3.12.
@@ -115,14 +121,14 @@ This source therefore reuses existing `offset_seconds` for both broad ends and e
 Within a coarse second it preserves the same original source order as the existing snapshot adjacency; it does not resort by nanosecond time before order-sensitive reductions.
 Repeated examples retain separate node ownership, and a self-edge retains the native mapper's initial entity seeds before newly reached nodes.
 The method binary-searches existing groups and takes selected columns, without scanning the source or borrowing the continuing RNG.
-This is source-only kernel and hook authoring on the old base; the current independent review candidate is unchanged.
+This is source-only kernel and hook authoring reconciled onto a48; the preceding Direct review candidate is unchanged.
 Holding a graph gate across a foreign suspension remains invalid, so the label consumer still releases its access lease before shared awaits.
 Static labels, frame time bounds and entity selection already use local frame branches.
 The final composed path must also establish poison and cancellation behavior at each actual mutable FrameRun access; these source-owner tests alone do not establish HostRun behavior.
 
 ## Isolated native ownership source
 
-The new, unconnected `_rust/frame_native.py` module holds the fresh converter's original native dtype owners in an immutable source/column mapping.
+The new `_rust/frame_native.py` module holds the fresh converter's original native dtype owners in an immutable source/column mapping.
 It resolves only explicit core-provided source Relations and columns, preserves dotted source names, and neither infers logical aliases nor reads a caller Schema on reuse.
 The actual whole prediction constructor uses that retained dtype, while the actual selected Text conversion uses whole-column `fillna('').astype(str)` before Rust-owned normalization.
 Successful results retain their actual native Series; failed conversions retain the exact exception without manufacturing Arrow values or starting diagnostic work early.
@@ -134,8 +140,11 @@ Capture does not observe native error text or select an SDK code, wrapper, phras
 Explicit native message/name reads are uncached and leave failures at those observation points untouched.
 Raw qualified class lineage is descriptive metadata, not canonical class identity authority.
 The final guard must establish any exact relational-error ancestry fact without importing or invoking the old engine on the new default path.
-The source module does not yet choose the final core-selected text-observation interface, bind failure DTOs or perform warning presentation.
-It is not a completed facade.
+The module consumes closed native failure facts and diagnostic classifications through the staged fixed operation, preserving distinct signature/refusal/said native observations.
+Rust owns classification, phrase policy, graph-drop detail, SDK codes and wording inputs, while Python preserves native object/message observation and existing SDK presentation.
+StructuredDataError passthrough observes no text, and the deepest-module short circuit precedes TypeError signature text.
+Stateful or failing str remains observable at its actual reached point, with the original native exception active as context.
+Canonical relational-class snapshot sourcing, warning guard origin and the complete consuming native frame facade are still unfinished.
 
 ## Source tests and execution status
 
@@ -153,23 +162,25 @@ No candidate import, test, lint, type check, build, generator, native probe or l
 
 The handwritten unlinked DTO now carries a completed-task identity, its actual prediction string encoding, a complete-reference identity and a fresh OS entropy fact at the label stage.
 The graph's continuing neighbor checkpoint is not a source of fresh per-call entropy.
-No shared operation, decoder, state version, generated schema, contract lock or routing file changes here.
+The current source stages one closed PrepareFrames operation, both core/host ownership alternatives, Python fixed-result decoding and Java ownership compatibility handling.
+No state-version allocation, canonical generated schema or contract lock publication occurs here.
 
 The existing encoder returns only wire bytes, so the complete logical NativePayload attachment and RequestState coherence still require the same logical Value to be exposed before encoding.
 Reparsing model JSON would lose the distinction between adjacent surrogate points and a supplementary scalar and is not a valid implementation of this requirement.
 Earlier encoded calls currently bind their complete wire bytes, context identity, ordered range and summary to the plan; their native logical-value companion and its complete validity checks must be composed before this path is enabled.
 
-The written native word consumer targets the single UnicodeText propagation through the existing `SampledColumn::Words` and wire `Value::Text` consumers.
-Its `normalize_native` import requires linking and exposing the preserved native engine kernel.
-Those APIs and the contract-native failure type are not available on this old base, and the modules cannot be enabled as they stand.
-The new `Attachment::FrameGraph` alternative, `Asker::keep_retained_frame` implementation, sampler-state owner export and host/binding ownership wiring are also deliberately absent on this base.
+The written native word consumer still requires full single UnicodeText propagation through `SampledColumn::Words`, wire `Value::Text`, labels, schema and display.
+The native engine kernel and contract-native failure types are linked in this isolated source.
+Key::Text now has one UnicodeText meaning, with explicit native Utf8 or surrogatepass Binary facts and the ordinary UTF-8 borrowed view.
+Generic binary keys without explicit native string facts remain refused.
+The retained graph/host/binding wiring is staged, but the complete native facade and full request logical-value ownership remain unfinished.
 The data-only RelationalOptions definition still requires the request-owned re-export described in the preserved facade composition delta.
 The source now aligns mixed native string offset/byte representations after the actual constructor, retaining the ordinary matching-buffer fast path and preserving distinct surrogate points.
-The existing key consumers still need their shared single UnicodeText logical meaning at final composition.
+Their wire/request/schema/display consumers must preserve that same logical meaning at final composition.
 
 Retained lag columns, ranking/forecast decomposition, complete HostRun journey twins and the native retained-owner facade remain required before the complete Text package can be claimed.
 Whole-task/per-batch native reference fallback, stopped constructor diagnostics, lossless StringData export and native kernel facts still require their concrete fixed facade composition.
-The isolated `task.rs` local-read hook must be reconciled against the exact approved shared task kernel and linked together with the frame domain module; it must not be copied into an immutable review candidate during review.
+The `task.rs` local-read hook is now reconciled against the exact a48 shared task kernel in this isolated tree; no immutable Direct review source was modified.
 HostRun no-rebuild, release, cancellation and concurrent-owner twins require the final fixed operation/typed attachment wiring and have not been executed or claimed by the core owner unit sources.
 The final frame native error guard must preserve guarded versus unguarded warning contexts, actual native ancestry and the existing graph-drop summary.
 Direct NativeFailure alone lacks the frame guard's KeyError/StructuredDataError/relational-error and native-class facts.
@@ -177,5 +188,47 @@ Native error text also needs its actual observation boundary: the original guard
 An early unconditional `str(error)` or a copied Python error-policy table is not a valid native facade implementation.
 The existing unfinished-family guards and refusal census must be reconciled with actual admission at composition.
 
-Rebase, serialized shared ownership, canonical generation, two independent exact-source approvals and candidate checks follow the actual approved preceding landing.
+The temporary fixed Payload caller still passes empty lag data and must be replaced before the complete candidate can be frozen.
+RelationalOptions and request-owned Options also still require coherent data-only reuse rather than duplicated policy.
+The inactive Decimal/first-scalar source package remains unapproved and must be reconciled explicitly.
+Generic composite graph support does not establish every LIST_DISTINCT relationship/entity form as reference-supported; exact frozen public LINK cases must determine those shapes and preserve genuine refusals.
+
+## Retained task/reference and early architecture interfaces
+
+RetainedFrameTask owns actual context/prediction Arrow arrays, LabelledContext, Asked and TaskRows after one successful task construction.
+RetainedFrameReferences owns the complete resolved node column and the actual immutable task owner after successful whole-task resolution.
+Both private core factories consume actual bound domain values.
+They contain no active graph lease, Python object, callback, registry or suspended program.
+Their lifetime is one materialize journey, and live native batch casts are never cached inside them.
+Owned forms cannot also declare replacement raw context, prediction or node rows.
+Raw forms remain independently validated useful data.
+Rebinding validates immutable metadata and actual graph ownership without rebuilding or hashing full task/node rows.
+Two independent mutable graph owners with equal source identities cannot be substituted.
+Task construction is O(context plus predictions), and complete references resolve every task row once.
+Later TaskRows::batch work is sized by actual context plus selected predictions.
+Source tests pin repeated reuse of the same task/Arrow allocations with 100,000 total predictions, selected-row batch work, metadata tampering, independent graph rejection and final-reference release.
+Those tests have not run.
+
+Closed frame-operation Arrow outputs retain their existing core buffers on reattachment through exact ArrowStream recognition.
+Ordinary provider-backed ArrowStream outputs still undergo existing foreign admission/detachment.
+The binding-local call state is separate from the materializer cache and retains exact native source/dtype companions.
+Cache publication compares actual graph-owner identity so later stages from an older cold initializer cannot overwrite a different graph published by a later initializer.
+The complete consuming facade is still required to establish this public lifecycle end to end.
+
+The cohesive early advisory interface is the contract's `frames/materialize.rs` plus `materialize/{attachments,guard,native}.rs`, core `frame_materialize/{retained,values}.rs`, core `materialize/frame_values.rs` plus `frame_values/{owners,native_guard}.rs`, and core `attached.rs`, `dispatch.rs`, `run.rs`.
+Host ownership is in `sdm-host/src/runs.rs`, exact native owners are in `bindings/sdm-py/src/lib.rs`, and native observations/cache publication are in `_rust/{frame_native,frame_materialize,run}.py`.
+This is one architecture checkpoint within the full range, not a request for a separate landing or validation cycle.
+
+## Ranking and forecasting ownership
+
+Frozen `query.py::_in_parts` constructs a new PredictiveQuery for every rewritten part on every parent materialize call.
+PredictiveQuery construction eagerly creates a separate RelationalMaterializer.
+The parent materializer therefore does not own those child graphs or continuing streams.
+The static regression witness above does not establish decomposition ownership.
+The complete frame decomposition must reuse existing Phase 3 policy while preserving fresh per-part construction, source observations, warnings, mutation boundaries and lifetime.
+Immutable storage reuse must not merge those mutable owners or skip native observations.
+No ranking/forecast runtime ownership evidence is claimed here.
+
+The finite remaining implementation groups are the consuming native facade/guard; complete single-UnicodeText logical payload propagation; retained lag and request-options coherence; static/temporal/LINK composition with actual scalar dependencies; fresh-owner ranking/forecast composition and full HostRun/public twins; then final Direct repair reconciliation and whole-package review.
+Serialized shared publication, canonical generation, two independent exact-source approvals and candidate checks follow the actual approved preceding landing.
 Exceptional native payload memory and performance measurements remain Phase 4 completion requirements.

@@ -42,6 +42,7 @@ pub enum Operation {
     Materialize(Materialize),
     Predict(Predict),
     PrepareRequest(crate::prepare::PrepareRequest),
+    PrepareFrames(crate::frames::materialize::PrepareFrames),
     /// Operations only tests reach, built only with the `test-ops` feature,
     /// which a shipped build leaves off; not part of the contract's schema.
     #[cfg(feature = "test-ops")]
@@ -57,6 +58,10 @@ pub enum AttachmentKind {
     Bytes,
     /// Arrow data.
     Arrow,
+    /// A core-created immutable frame graph and its continuing native stream.
+    FrameGraph,
+    FrameTask,
+    FrameReferences,
 }
 
 impl Operation {
@@ -69,6 +74,7 @@ impl Operation {
             Operation::Materialize(_) => "materialize",
             Operation::Predict(_) => "predict",
             Operation::PrepareRequest(_) => "prepare_request",
+            Operation::PrepareFrames(_) => "prepare_frames",
             #[cfg(feature = "test-ops")]
             Operation::Test(_) => "test",
         }
@@ -79,6 +85,7 @@ impl Operation {
     pub fn attachments(&self) -> Vec<(AttachmentId, AttachmentKind)> {
         use AttachmentKind::{Arrow, Bytes};
         match self {
+            Operation::PrepareFrames(request) => vec![(request.input, Bytes)],
             Operation::ValidateQuery(v) => vec![(v.query, Bytes), (v.schema, Bytes)],
             Operation::DescribeSource(d) => {
                 let mut named = vec![(d.source, Bytes)];
@@ -158,6 +165,7 @@ pub enum OperationResult {
     Materialize(Materialized),
     Predict(Predicted),
     PrepareRequest(crate::prepare::PreparedRequest),
+    PrepareFrames(crate::frames::materialize::PreparedFrames),
     DecodedDirectResponse(crate::prepare::DecodedDirectResponse),
     #[cfg(feature = "test-ops")]
     #[schemars(skip)]
@@ -1554,6 +1562,10 @@ pub struct Attachments {
     pub frame_checkpoint_manifest: crate::frames::FrameCheckpointManifest,
     #[schemars(rename = "FrameCheckpointManifest.metadata")]
     pub frame_checkpoint_metadata: crate::frames::FrameCheckpointMetadata,
+    #[schemars(rename = "PrepareFrames.input")]
+    pub prepare_frames_input: crate::frames::materialize::FramePreparation,
+    #[schemars(rename = "PreparedFrames.value")]
+    pub prepared_frames_value: crate::frames::materialize::PreparedFrameValue,
     #[schemars(rename = "ValidateQuery.query")]
     pub validate_query_query: String,
     #[schemars(rename = "ValidateQuery.schema")]

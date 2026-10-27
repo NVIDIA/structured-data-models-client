@@ -19,6 +19,7 @@ use arrow_array::{
     UInt64Array,
 };
 use arrow_schema::{DataType, Field, Schema, TimeUnit};
+use sdm_contract::data::strings::StringEncoding;
 use sdm_contract::data::{BATCH_COLUMN, MATCHES_COLUMN};
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 
@@ -65,6 +66,16 @@ fn read_keys(array: &ArrayRef) -> Result<Vec<Option<Key>>, CoreError> {
     Ok(values)
 }
 
+fn encoded_keys(
+    array: &ArrayRef,
+    encoding: Option<StringEncoding>,
+) -> Result<Vec<Option<Key>>, CoreError> {
+    match encoding {
+        Some(encoding) => keys::read_strings(array, encoding),
+        None => read_keys(array),
+    }
+}
+
 fn take(batch: &RecordBatch, rows: &[usize], columns: &[String]) -> Result<RecordBatch, CoreError> {
     let indices = UInt64Array::from(rows.iter().map(|&row| row as u64).collect::<Vec<_>>());
     let arrays = columns
@@ -88,6 +99,9 @@ struct Table {
     index: BTreeMap<Key, usize>,
     /// Original instants in nanoseconds; cuts use their floor seconds.
     time: Option<Vec<Option<i64>>>,
+    bounds: Option<(Option<i64>, Option<i64>)>,
+    key_encoding: Option<StringEncoding>,
+    strings: BTreeMap<String, StringEncoding>,
 }
 
 struct Adjacency {
@@ -200,25 +214,77 @@ pub struct TemporalWindow {
 }
 
 impl Snapshot {
-    pub fn new(graph: &Graph, mut input: BTreeMap<String, RecordBatch>) -> Result<Self, CoreError> {
+    pub fn new(graph: &Graph, input: BTreeMap<String, RecordBatch>) -> Result<Self, CoreError> {
+        Self::prepare(graph, input, None)
+    }
+
+    /// Explicit native logical text bindings are validated once with the
+    /// same admitted immutable source. Ordinary/provider construction keeps
+    /// its existing boundary; arbitrary Binary does not become text.
+    pub fn new_native(
+        graph: &Graph,
+        input: BTreeMap<String, RecordBatch>,
+        strings: BTreeMap<String, BTreeMap<String, StringEncoding>>,
+    ) -> Result<Self, CoreError> {
+        Self::prepare(graph, input, Some(strings))
+    }
+
+    fn prepare(
+        graph: &Graph,
+        mut input: BTreeMap<String, RecordBatch>,
+        mut strings: Option<BTreeMap<String, BTreeMap<String, StringEncoding>>>,
+    ) -> Result<Self, CoreError> {
         let mut tables = BTreeMap::new();
         let mut dropped = Vec::new();
+        let native = strings.is_some();
         let timed = graph.tables.iter().any(|table| table.time_column.is_some());
         for table in &graph.tables {
             // The frozen native text normalizer selects different Unicode
             // lowercase semantics across supported runtimes. Categorical
             // strings need no normalization; the whole Text semantic family
             // remains unfinished until its native execution profile is held.
-            if table
-                .columns
-                .iter()
-                .any(|column| column.stype == sdm_contract::ops::Stype::Text)
+            if !native
+                && table
+                    .columns
+                    .iter()
+                    .any(|column| column.stype == sdm_contract::ops::Stype::Text)
             {
                 return Err(crate::not_yet("frame_text_features"));
             }
             let rows = input
                 .remove(&table.name)
                 .ok_or_else(|| invalid("a frame source lacks one table"))?;
+            let encodings = strings
+                .as_mut()
+                .and_then(|strings| strings.remove(&table.name))
+                .unwrap_or_default();
+            if native
+                && rows.schema().fields().iter().any(|field| {
+                    matches!(
+                        field.data_type(),
+                        DataType::Utf8
+                            | DataType::LargeUtf8
+                            | DataType::Binary
+                            | DataType::LargeBinary
+                    ) && !encodings.contains_key(field.name())
+                })
+            {
+                return Err(invalid(
+                    "native string source lacks its explicit logical encoding",
+                ));
+            }
+            for (name, encoding) in &encodings {
+                let values =
+                    crate::strings::StringColumn::new(named(&rows, name)?.as_ref(), *encoding)
+                        .map_err(|_| {
+                            invalid("native frame text encoding does not match its source column")
+                        })?;
+                for row in 0..values.len() {
+                    values.get(row).map_err(|_| {
+                        invalid("native frame source contains invalid text encoding")
+                    })?;
+                }
+            }
             // Timestamp features on an otherwise untimed graph retain the
             // separate no-time/DT-3 acceptance obligation of the full phase.
             if !timed
@@ -231,23 +297,24 @@ impl Snapshot {
                 return Err(crate::not_yet("frame_untimed_timestamp_features"));
             }
             if rows.schema().fields().iter().any(|f| {
-                !matches!(
-                    f.data_type(),
-                    DataType::Boolean
-                        | DataType::Int8
-                        | DataType::Int16
-                        | DataType::Int32
-                        | DataType::Int64
-                        | DataType::UInt8
-                        | DataType::UInt16
-                        | DataType::UInt32
-                        | DataType::UInt64
-                        | DataType::Float32
-                        | DataType::Float64
-                        | DataType::Timestamp(_, _)
-                        | DataType::Utf8
-                        | DataType::LargeUtf8
-                )
+                !encodings.contains_key(f.name())
+                    && !matches!(
+                        f.data_type(),
+                        DataType::Boolean
+                            | DataType::Int8
+                            | DataType::Int16
+                            | DataType::Int32
+                            | DataType::Int64
+                            | DataType::UInt8
+                            | DataType::UInt16
+                            | DataType::UInt32
+                            | DataType::UInt64
+                            | DataType::Float32
+                            | DataType::Float64
+                            | DataType::Timestamp(_, _)
+                            | DataType::Utf8
+                            | DataType::LargeUtf8
+                    )
             }) {
                 return Err(invalid(
                     "the frame consumer received an unsupported native family",
@@ -286,7 +353,7 @@ impl Snapshot {
             };
             let valid: Vec<usize> = match &table.primary_key {
                 None => (0..rows.num_rows()).filter(|&row| has_time(row)).collect(),
-                Some(key) => read_keys(named(&rows, key)?)?
+                Some(key) => encoded_keys(named(&rows, key)?, encodings.get(key).copied())?
                     .into_iter()
                     .enumerate()
                     .filter_map(|(row, key)| {
@@ -332,6 +399,10 @@ impl Snapshot {
                     null_times,
                 });
             }
+            let bounds = time.as_ref().map(|time| {
+                let values = valid.iter().filter_map(|&row| time[row]);
+                (values.clone().min(), values.max())
+            });
             tables.insert(
                 table.name.clone(),
                 Table {
@@ -339,8 +410,18 @@ impl Snapshot {
                     valid,
                     index,
                     time,
+                    bounds,
+                    key_encoding: table
+                        .primary_key
+                        .as_ref()
+                        .and_then(|key| encodings.get(key))
+                        .copied(),
+                    strings: encodings,
                 },
             );
+        }
+        if strings.is_some_and(|strings| !strings.is_empty()) {
+            return Err(invalid("native text bindings name an absent frame table"));
         }
         if !input.is_empty() {
             return Err(invalid("a snapshot binds an undescribed frame"));
@@ -349,7 +430,10 @@ impl Snapshot {
         for edge in &graph.edges {
             let src = &tables[&edge.src];
             let dst = &tables[&edge.dst];
-            let keys = read_keys(named(&src.rows, &edge.fkey)?)?;
+            let keys = encoded_keys(
+                named(&src.rows, &edge.fkey)?,
+                src.strings.get(&edge.fkey).copied(),
+            )?;
             let mut forward = vec![Vec::new(); dst.rows.num_rows()];
             let mut reverse = vec![Vec::new(); src.rows.num_rows()];
             // DF-1: stable grouping by destination, preserving source row
@@ -430,12 +514,9 @@ impl Snapshot {
             .tables
             .get(table)
             .ok_or_else(|| invalid("unknown timed frame"))?;
-        let time = table
-            .time
-            .as_ref()
-            .ok_or_else(|| invalid("an untimed frame was bounded in time"))?;
-        let values = table.valid.iter().filter_map(|&row| time[row]);
-        Ok((values.clone().min(), values.max()))
+        table
+            .bounds
+            .ok_or_else(|| invalid("an untimed frame was bounded in time"))
     }
 
     /// Entity sampling uses the sanitized primary-key map, before RS-1.
@@ -542,7 +623,10 @@ impl Snapshot {
             ));
         }
         let selected = take(&source.rows, source_rows, &[edge.fkey.clone()])?;
-        let keys = read_keys(named(&selected, &edge.fkey)?)?;
+        let keys = encoded_keys(
+            named(&selected, &edge.fkey)?,
+            source.strings.get(&edge.fkey).copied(),
+        )?;
         Ok(source_rows
             .iter()
             .zip(source_batch)
@@ -562,6 +646,21 @@ impl Snapshot {
         self.entity_rows_many(table, &[keys])
     }
 
+    /// Keys selected from this snapshot retain the source column's explicit
+    /// native encoding. This is distinct from later native cast outcomes.
+    pub fn source_keys(
+        &self,
+        table: &str,
+        column: &str,
+        values: &ArrayRef,
+    ) -> Result<Vec<Option<Key>>, CoreError> {
+        let table = self
+            .tables
+            .get(table)
+            .ok_or_else(|| invalid("unknown frame source column"))?;
+        encoded_keys(values, table.strings.get(column).copied())
+    }
+
     /// Resolve a complete task's ordered key columns without concatenating
     /// or copying their Arrow buffers. Validation is independent of neighbor
     /// seed/reset/draw state and reports every unresolved task reference.
@@ -570,13 +669,32 @@ impl Snapshot {
         table: &str,
         columns: &[&ArrayRef],
     ) -> Result<Vec<usize>, CoreError> {
+        let columns = columns
+            .iter()
+            .map(|column| (*column, None))
+            .collect::<Vec<_>>();
+        self.entity_rows_encoded(table, &columns)
+    }
+
+    /// Actual native reference encodings remain explicit at complete-task
+    /// and later per-batch positions, independently of the source encoding.
+    pub fn entity_rows_encoded(
+        &self,
+        table: &str,
+        columns: &[(&ArrayRef, Option<StringEncoding>)],
+    ) -> Result<Vec<usize>, CoreError> {
         let named_table = self
             .tables
             .get(table)
             .ok_or_else(|| invalid("unknown entity table"))?;
         let mut found = Vec::new();
-        for column in columns {
-            let wanted = read_keys(column)?;
+        for (column, encoding) in columns {
+            let encoding = encoding.or_else(|| {
+                (named_table.key_encoding.is_some()
+                    && matches!(column.data_type(), DataType::Utf8 | DataType::LargeUtf8))
+                .then_some(StringEncoding::Utf8)
+            });
+            let wanted = encoded_keys(column, encoding)?;
             found.extend(wanted.iter().map(|key| {
                 key.as_ref()
                     .and_then(|key| named_table.index.get(key))
@@ -653,7 +771,11 @@ impl Snapshot {
             .time
             .as_ref()
             .ok_or_else(|| invalid("frame label read requires a temporal source"))?;
-        let entities = self.entity_rows(&edge.dst, keys)?;
+        let entity = self
+            .tables
+            .get(&edge.dst)
+            .ok_or_else(|| invalid("frame label entity is absent"))?;
+        let entities = self.entity_rows_encoded(&edge.dst, &[(keys, entity.key_encoding)])?;
         let mut selected = Vec::new();
         let mut seen = BTreeSet::new();
         if edge.src == edge.dst {

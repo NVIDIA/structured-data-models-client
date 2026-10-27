@@ -215,6 +215,7 @@ def run(
     owned_frame = (
         operation.get('provider', {}).get('provider') == 'frames'
         or operation['op'] == 'prepare_request'
+        or operation['op'] == 'prepare_frames'
         or operation.get('direct') is not None
     )
     warning_presentation: errors.WarningPresentation = 'coded'
@@ -228,7 +229,7 @@ def run(
     elif owned_frame and operation['op'] == 'materialize':
         warning_presentation = 'frame_graph'
     held = None if state is None else state.get('held')
-    if held is not None:
+    if held is not None and operation['op'] != 'prepare_frames':
         memo = max(attachments, default=0) + 1
         operation = {
             **operation,
@@ -276,6 +277,7 @@ def run(
             kept,
             owned_frame,
             warning_presentation,
+            state if operation['op'] == 'prepare_frames' else None,
         )
     except BaseException:
         if owned_frame:
@@ -314,6 +316,7 @@ def _keep(core: Any, handle: Any, state: dict[str, Any]) -> None:
             return
         message = codec.read(*taken)
         left = message['state']
+        previous = state.get('held')
         state['held'] = {
             'version': left['version'],
             'memo': handle.take_attachment(left['memo']),
@@ -324,6 +327,7 @@ def _keep(core: Any, handle: Any, state: dict[str, Any]) -> None:
             state['held']['frame_checkpoint'] = frame_materialize.take(
                 handle, left['frame_checkpoint']
             )
+            frame_materialize.publish(state, previous)
     except (core.CoreError, codec.CodecError):
         return
 
@@ -338,6 +342,7 @@ def _steps(
     kept: list[dict[str, Any]] | None = None,
     owned_frame: bool = False,
     warning_presentation: errors.WarningPresentation = 'coded',
+    state: dict[str, Any] | None = None,
 ) -> Finished:
     r"""The run's steps, each answered, to its result."""
     try:
@@ -350,6 +355,8 @@ def _steps(
                 control, sent = handle.next()
             except core.CoreError as failed:
                 internal_context = failed
+                if state is not None:
+                    _keep(core, handle, state)
                 _warn(handle, quiet, given, kept, warning_presentation)
                 error = errors.error_from_core(
                     failed.control,
@@ -368,6 +375,11 @@ def _steps(
                     _of_the_part(error, refused.raised)
                     raise refused.raised
                 errors.raise_error(error, internal_context=internal_context)
+            if state is not None:
+                # Publish reached ownership before native warning handlers
+                # can reenter this same materializer. Retained graph exports
+                # carry the same live owner, never a replayable raw snapshot.
+                _keep(core, handle, state)
             _warn(handle, quiet, given, kept, warning_presentation)
             step = codec.read(control, sent)
             if step['message'] != 'step':

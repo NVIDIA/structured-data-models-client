@@ -32,7 +32,7 @@
 //! in; data admission refuses ends the run with that refusal.
 
 use std::cell::{Cell, RefCell};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::{Arc, Mutex, MutexGuard, Once, PoisonError, TryLockError};
 
@@ -247,8 +247,23 @@ impl HostRun {
     pub fn start_reading(
         root: &CompositionRoot,
         message: &[u8],
+        attachments: Attachments,
+        unreadable: &Unreadables,
+    ) -> Result<HostRun, Outgoing> {
+        Self::start_retaining(root, message, attachments, unreadable, &BTreeSet::new())
+    }
+
+    /// Start with independently retained immutable core Arrow products.
+    /// Bindings may declare these ids only after recognizing their exact
+    /// core-created owner class, before attempting a foreign Arrow protocol.
+    /// Pure Rust hosts retain their actual Arrow owners directly.
+    /// This is buffer ownership metadata, never source identity or policy.
+    pub fn start_retaining(
+        root: &CompositionRoot,
+        message: &[u8],
         mut attachments: Attachments,
         unreadable: &Unreadables,
+        retained: &BTreeSet<AttachmentId>,
     ) -> Result<HostRun, Outgoing> {
         contain(|| {
             let ControlMessage::Start(start) = decode(message)? else {
@@ -277,6 +292,7 @@ impl HostRun {
             // detach foreign buffers before a later next() can read them.
             let frames = match &start.operation {
                 sdm_contract::ops::Operation::PrepareRequest(_) => true,
+                sdm_contract::ops::Operation::PrepareFrames(_) => true,
                 sdm_contract::ops::Operation::Predict(request) => request.direct.is_some(),
                 sdm_contract::ops::Operation::DescribeSource(request) => matches!(
                     request.provider,
@@ -291,8 +307,22 @@ impl HostRun {
             if frames {
                 let named = resolved_attachments(&start.operation, &attachments)?;
                 check_attachments(&named, &attachments)?;
+                if retained
+                    .iter()
+                    .any(|id| !named.contains(&(*id, AttachmentKind::Arrow)))
+                {
+                    return Err(invalid(
+                        "retained Arrow ownership names an undeclared Arrow attachment",
+                    ));
+                }
                 for (id, kind) in named {
                     if kind == AttachmentKind::Arrow {
+                        if retained.contains(&id) {
+                            // The core already admitted and owns these exact
+                            // buffers. Rebinding an output does not copy the
+                            // complete task again for every selected batch.
+                            continue;
+                        }
                         let Some(Attachment::Arrow(data)) = attachments.remove(&id) else {
                             return Err(invalid("a frame rows attachment is not Arrow"));
                         };

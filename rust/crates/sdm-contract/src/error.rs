@@ -313,6 +313,11 @@ pub struct CoreError {
     /// What callers branch on, by name.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub fields: BTreeMap<String, Detail>,
+    /// When native compatibility requires its exact public details, keep
+    /// presentation-only fields separate from what callers branch on.
+    /// Absence preserves the existing shared error details convention.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub public_details: Option<BTreeMap<String, Detail>>,
     /// The error this one was raised from.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cause: Option<Box<CoreError>>,
@@ -366,6 +371,7 @@ impl CoreError {
             part: None,
             message: message.into(),
             fields: BTreeMap::new(),
+            public_details: None,
             cause: None,
             retryable: false,
             drop_held: Vec::new(),
@@ -925,6 +931,12 @@ sentences! {
     DirectPredictDtype = "direct_predict_dtype", E::InvalidRequest;
     DirectNullableCast = "direct_nullable_cast", E::InvalidRequest;
     DirectNativeFailure = "direct_native_failure", E::InvalidRequest;
+    FrameNativeFailure = "frame_native_failure", E::InvalidRequest;
+    FrameNativeInternal = "frame_native_internal", E::InternalError;
+    FrameNativeSignature = "frame_native_signature", E::InternalError;
+    FrameNativeCaller = "frame_native_caller", E::InvalidRequest;
+    FrameNativeBatchSmaller = "frame_native_batch_smaller", E::InvalidRequest;
+    FrameNativeBatchSingle = "frame_native_batch_single", E::InvalidRequest;
     DirectAnswersShown = "direct_answers_shown", W::FrameSchema;
     DirectLookup = "direct_lookup", E::InvalidRequest;
     DirectAmbiguous = "direct_ambiguous", E::InvalidRequest;

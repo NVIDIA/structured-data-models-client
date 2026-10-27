@@ -11,9 +11,8 @@ use serde::{Deserialize, Serialize};
 use crate::data::AttachmentId;
 use crate::data::strings::StringData;
 use crate::ops::ColumnRef;
-use crate::prepare::NativeFailure;
 
-use super::NativeTextFacts;
+use super::{FrameNativeFailure, NativeTextFacts};
 
 /// Prediction data after the closed type chosen by the labeled task.
 /// Existing numeric casts remain core-owned; only the new native string
@@ -36,8 +35,7 @@ pub enum NativeFrameConstruction {
         values: StringData,
     },
     Failed {
-        failure: NativeFailure,
-        message: String,
+        failure: FrameNativeFailure,
         diagnostic: NativeConstructionDiagnostic,
     },
 }
@@ -48,20 +46,21 @@ pub enum NativeFrameConstruction {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum FrameReferenceValues {
-    CoreKeys { values: AttachmentId },
-    NativeString { converted: NativeFrameStrings },
+    /// No native key conversion is reached for the established core family.
+    /// An explicit raw alternative remains independently validated.
+    CoreKeys {
+        values: Option<AttachmentId>,
+    },
+    NativeString {
+        converted: NativeFrameStrings,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "outcome", rename_all = "snake_case", deny_unknown_fields)]
 pub enum NativeFrameStrings {
-    Value {
-        values: StringData,
-    },
-    Failed {
-        failure: NativeFailure,
-        message: String,
-    },
+    Value { values: StringData },
+    Failed { failure: FrameNativeFailure },
 }
 
 /// The first native element that failed the reached diagnostic constructor.
@@ -85,8 +84,7 @@ pub enum NativeConstructionDiagnostic {
         dtype_display: String,
     },
     Failed {
-        failure: NativeFailure,
-        message: String,
+        failure: FrameNativeFailure,
     },
 }
 
@@ -113,7 +111,6 @@ pub enum NativeFrameText {
     Failed {
         completed: Vec<ConvertedFrameText>,
         column: ColumnRef,
-        failure: NativeFailure,
-        message: String,
+        failure: FrameNativeFailure,
     },
 }

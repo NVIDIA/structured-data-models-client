@@ -4,6 +4,8 @@
 
 //! Call-local frame bindings, never persistent table identity or policies.
 
+pub mod materialize;
+
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -99,6 +101,10 @@ pub struct FrameCheckpoint {
 pub struct FrameCheckpointManifest {
     pub metadata: AttachmentId,
     pub tables: Vec<FrameInput>,
+    /// The same live core-created graph owner, without exporting source rows.
+    /// Raw legacy checkpoints have no retained alternative.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retained: Option<AttachmentId>,
 }
 
 /// The exact continuing state of the legacy MT19937 primitive.

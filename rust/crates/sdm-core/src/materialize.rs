@@ -57,6 +57,7 @@
 //! P1B-3), and the requests and policies it needs of its provider before
 //! anything is fetched.
 
+pub(crate) mod frame_values;
 mod task;
 
 use task::{BatchLayout, EntityDraw, LabelDraw, TaskRows, entity_sample, label_context};
@@ -474,6 +475,7 @@ impl Shape {
 }
 
 /// The parts of a validated query this build materializes.
+#[derive(Clone)]
 struct Asked {
     entity_table: String,
     entity_column: String,
@@ -3200,18 +3202,9 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         Err(err) => return Err(err),
     };
     let asked = asked(&validated)?;
-    // These remain unfinished development-seam paths. The first temporal
-    // consumer is a scalar target on a static entity, with timed history.
-    if frames.is_some() && asked.range.is_some() {
-        return Err(not_yet("frame_temporal_aggregation"));
-    }
-    if frames.is_some()
-        && graph
-            .table(&asked.entity_table)
-            .is_some_and(|table| table.time_column.is_some())
-    {
-        return Err(not_yet("frame_temporal_entity"));
-    }
+    // Frame temporal and LIST_DISTINCT labels read the same sanitized
+    // snapshot through label_context's local adapter, before link-target
+    // resolution and existing task/payload policy below.
     let link_target = if let Shape::Aggregated(windowed) = &asked.target
         && windowed.aggregation == labels::Aggregation::ListDistinct
     {
@@ -3734,19 +3727,20 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
 
         // The neighbors of each example's entity, hop by hop.
         let walked = if let Some(frames) = &frames {
-            crate::frame_materialize::lock(frames).walk(
-                asker,
-                &graph,
-                entity,
-                &all_keys,
-                &anchors,
-                crate::frame_materialize::FrameWalkOptions {
-                    hops: &walk_hops,
-                    neighbor_values: deferred.neighbors.as_deref(),
-                    excluded: &excluded,
-                    seed: (!unseeded).then(|| seed.to_u128()).flatten(),
-                },
-            )?
+            crate::frame_materialize::lock(frames)
+                .walk(
+                    asker,
+                    &graph,
+                    entity,
+                    &all_keys,
+                    &anchors,
+                    crate::frame_materialize::FrameWalkOptions {
+                        hops: &walk_hops,
+                        neighbor_values: deferred.neighbors.as_deref(),
+                        excluded: &excluded,
+                        seed: (!unseeded).then(|| seed.to_u128()).flatten(),
+                    },
+                )?
                 .into_walked(&memo.memo.source)?
         } else {
             crate::subgraph::Walk {

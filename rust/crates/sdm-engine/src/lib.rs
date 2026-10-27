@@ -28,6 +28,7 @@ pub mod keys;
 pub mod labels;
 pub mod random;
 pub mod sample;
+pub mod strings;
 pub mod time;
 pub mod words;
 

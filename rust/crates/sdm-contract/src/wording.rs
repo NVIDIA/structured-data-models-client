@@ -702,6 +702,20 @@ pub fn template(sentence: Sentence) -> Template {
         ),
         S::DirectNullableCast => said(r#"{host.direct_nullable_cast}"#),
         S::DirectNativeFailure => said(r#"native {stage} conversion failed"#),
+        S::FrameNativeFailure => said(r#"native frame {stage} conversion failed"#),
+        S::FrameNativeInternal => said(
+            r#"the relational engine failed while building this request: {native_type}: {host.frame_native_message}"#,
+        ),
+        S::FrameNativeSignature => said(
+            r#"the relational engine was called incorrectly by this client: {native_type}: {host.frame_native_message}"#,
+        ),
+        S::FrameNativeCaller => said(r#"{host.frame_native_message}{detail}"#),
+        S::FrameNativeBatchSmaller => said(
+            r#"{host.frame_native_message} What comes down is one of three. For an ordinary question it is the call: {advice:smaller_calls()} below the {holds} this one holds asks for the same entities in more and smaller calls. Where the context is itself over the limit, no call is small enough, and it is num_context_samples, num_neighbors or the columns the graph carries. For a ranking or a forecast, which is one call per candidate or step and is never batched, it is the entities.{detail}"#,
+        ),
+        S::FrameNativeBatchSingle => said(
+            r#"{host.frame_native_message} A call already scores one row, so there is no smaller one to ask for: what comes down is num_context_samples, num_neighbors or the columns the graph carries.{detail}"#,
+        ),
         S::DirectPredictDtype => said(r#"'DataFrame' object has no attribute 'dtype'"#),
         S::DirectAnswersShown => said(
             r#"{shown} of the {rows} rows being scored are also in context, carrying the {target!r} being asked for, so the model is being shown the answers to rows it is being asked about. Drop them from context, or gather the request with materialize(), which leaves the rows it scores out of the context it sends."#,
