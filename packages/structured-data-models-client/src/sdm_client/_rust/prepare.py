@@ -6,10 +6,11 @@
 
 from __future__ import annotations
 
+import ast
 import json
 import math
-import unicodedata
-import warnings
+import struct
+import sys
 from collections.abc import Sequence
 from contextlib import ExitStack
 from typing import TYPE_CHECKING, Any
@@ -26,7 +27,7 @@ from sdm_client._rust import (
     schema as schemas,
     spec,
 )
-from sdm_client._rust.run import run
+from sdm_client._rust.run import Finished, run
 from sdm_client.errors import StructuredDataError
 from sdm_client.schema import _as_key_tuple
 
@@ -56,6 +57,14 @@ def _form(value: Any) -> dict[str, Any]:
 def _call(
     value: dict[str, Any], attached: dict[int, Any] | None = None
 ) -> dict[str, Any]:
+    finished = _prepared_run(value, attached)
+    answer = results.expect(finished.result, results.Prepared)
+    return json.loads(finished.take(answer.value))
+
+
+def _prepared_run(
+    value: dict[str, Any], attached: dict[int, Any] | None = None
+) -> Finished:
     try:
         finished = run(
             {'op': 'prepare_request', 'input': 1},
@@ -75,8 +84,162 @@ def _call(
         if kind is not None:
             raise kind(error.message) from None
         raise
-    answer = results.expect(finished.result, results.Prepared)
-    return json.loads(finished.take(answer.value))
+    return finished
+
+
+def _builtin(value: Any) -> dict[str, Any]:
+    """Convert literal-built native values without invoking their display."""
+    if value is None:
+        return {'kind': 'null'}
+    if type(value) is bool:
+        return {'kind': 'boolean', 'value': value}
+    if type(value) is int:
+        return {'kind': 'integer', 'digits': hex(value), 'radix': 'hexadecimal'}
+    if type(value) is float:
+        return {'kind': 'float', 'bits': list(struct.pack('>d', value))}
+    if type(value) is str:
+        return {'kind': 'unicode', 'points': [ord(c) for c in value]}
+    if value is Ellipsis:
+        return {'kind': 'ellipsis'}
+    return {
+        'kind': {
+            bytes: 'bytes',
+            complex: 'complex',
+            list: 'list',
+            tuple: 'tuple',
+            dict: 'dictionary',
+            set: 'set',
+        }[type(value)]
+    }
+
+
+def _failure(error: Exception) -> dict[str, Any]:
+    return {
+        'ancestry': [
+            name
+            for kind, name in (
+                (SyntaxError, 'syntax_error'),
+                (ValueError, 'value_error'),
+                (TypeError, 'type_error'),
+                (MemoryError, 'memory_error'),
+                (RecursionError, 'recursion_error'),
+            )
+            if isinstance(error, kind)
+        ]
+    }
+
+
+def _native_value_call(
+    value: dict[str, Any], native_error: Exception | None
+) -> dict[str, Any]:
+    selected = None
+    try:
+        return _call(value)
+    except StructuredDataError as error:
+        if error._sentence != 'direct_native_failure' or native_error is None:
+            raise
+        selected = native_error
+    # The original native exception survives the plain-data decision.
+    assert selected is not None  # Core selected the preserved native failure.
+    raise selected from None
+
+
+def _attribute_native(checked: dict[str, Any]) -> dict[str, Any]:
+    text = checked['id']['value']
+    literal = {
+        'scope': checked['scope'],
+        'ordinal': checked['row']['ordinal'],
+        'text': text,
+    }
+    native = None
+    native_error = None
+    try:
+        native = ast.literal_eval(text)
+    except Exception as error:
+        native_error = error
+        literal['value'] = {'outcome': 'failed', 'failure': _failure(error)}
+    else:
+        literal['value'] = {
+            'outcome': 'value',
+            'value': _builtin(native),
+            'members': [_builtin(v) for v in native]
+            if type(native) is list
+            else None,
+        }
+    selected = _native_value_call(
+        {
+            'stage': 'select_response_member',
+            'checked': checked,
+            'literal': literal,
+        },
+        native_error,
+    )
+    string = None
+    native_error = None
+    if selected['member'] is not None:
+        string = {
+            'scope': checked['scope'],
+            'ordinal': checked['row']['ordinal'],
+        }
+        try:
+            displayed = str(native[0])
+        except Exception as error:
+            native_error = error
+            string['value'] = {'outcome': 'failed', 'failure': _failure(error)}
+        else:
+            string['value'] = {
+                'outcome': 'value',
+                'points': [ord(c) for c in displayed],
+            }
+    return _native_value_call(
+        {
+            'stage': 'attribute_response_row',
+            'selected': selected,
+            'string': string,
+        },
+        native_error,
+    )
+
+
+def _response(finished: Finished) -> Finished:
+    """Use immutable owned buffers once and bounded slices after native effects."""
+    answer = results.expect(finished.result, results.DecodedDirectResponse)
+    data = json.loads(finished.take(answer.value))
+    buffers = {
+        name: finished.take(data[name])
+        for name in ('payload', 'response', 'rows')
+    }
+    rows = json.loads(buffers['rows'])
+    accepted = []
+    at = 0
+    end = len(rows)
+    getter = getattr(sys, 'get_int_max_str_digits', None)
+    while at < len(rows):
+        checked = _call(
+            {
+                'stage': 'check_response_rows',
+                'scope': data['scope'],
+                'rows': rows[at:end],
+                'decimal_limit': getter() if getter else 0,
+            }
+        )
+        accepted.extend(checked['rows'])
+        at += len(checked['rows'])
+        if checked['row'] is not None:
+            accepted.append(_attribute_native(checked['row']))
+            at += 1
+        # The first pure path is one linear call. Subsequent slices are bounded
+        # so a fallback on every row never resends a growing response or key set.
+        end = min(len(rows), at + 256)
+    attached = {
+        n: buffers[name]
+        for n, name in enumerate(('payload', 'response', 'rows'), 2)
+    }
+    data.update(payload=2, response=3, rows=4)
+    attached[5] = codec.attachment(accepted)
+    return _prepared_run(
+        {'stage': 'layout_response', 'data': data, 'attributed': 5}, attached
+    )
 
 
 def _lookup(index: pd.Index, value: Any) -> dict[str, Any]:
@@ -494,7 +657,6 @@ def predict(
             'predict_header': predict_header,
             'task': task,
             'primary_key': primary_key,
-            'unicode_version': unicodedata.unidata_version,
             'inference': _json(request.inference),
         }
         attached = {
@@ -512,12 +674,13 @@ def predict(
     endpoint = getattr(client._transport, 'model_endpoint', None)
     if endpoint is not None:
         operation['model_endpoint'] = endpoint
-    with errors.holding(direct_literal_notice=_literal_notice):
-        finished = run(
-            operation,
-            {1: codec.attachment(value), **attached},
-            model=lambda body: prediction._send(client, call['model'], body),
-        )
+    finished = run(
+        operation,
+        {1: codec.attachment(value), **attached},
+        model=lambda body: prediction._send(client, call['model'], body),
+    )
+    if not empty:
+        finished = _response(finished)
     answered = results.expect(finished.result, results.Predicted)
     table = prediction._table(finished.take(answered.result))
     result = prediction._result(
@@ -532,23 +695,3 @@ def predict(
     if names is not None:
         result._names_its_rows = names == b'true'
     return result
-
-
-def _literal_notice(fields: dict[str, Any]) -> tuple[str, type[Warning]]:
-    """Present the reached parser warning in this native runtime's own words."""
-    import ast
-
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter('always')
-        try:
-            ast.parse(fields['literal'].lstrip(' \t'), mode='eval')
-        except (
-            SyntaxError,
-            ValueError,
-            TypeError,
-            MemoryError,
-            RecursionError,
-        ):
-            pass
-    selected = caught[fields['ordinal']]
-    return str(selected.message), selected.category

@@ -383,7 +383,7 @@ pub(crate) async fn one(
         let starts = call_starts(&payloads)?;
         let mut parts = Vec::with_capacity(payloads.len());
         for ((payload, bytes), start) in payloads.iter().zip(bodies).zip(starts) {
-            let answered = match call(asker, payload, bytes, inputs.endpoint.as_ref(), None).await {
+            let answered = match call(asker, payload, bytes, inputs.endpoint.as_ref()).await {
                 Ok(part) => numbered_from(part, start),
                 Err(error) => Err(error),
             };
@@ -410,8 +410,17 @@ pub(crate) async fn call(
     payload: &Value,
     bytes: Vec<u8>,
     endpoint: Option<&ModelEndpoint>,
-    unicode_version: Option<&str>,
 ) -> Result<Part, CoreError> {
+    let (_, response) = call_response(asker, bytes, endpoint, false).await?;
+    layout(payload, &response, crate::pql::float_text)
+}
+
+pub(crate) async fn call_response(
+    asker: &Asker,
+    bytes: Vec<u8>,
+    endpoint: Option<&ModelEndpoint>,
+    direct: bool,
+) -> Result<(Value, PredictionResponse), CoreError> {
     let serving = endpoint.map(
         |ModelEndpoint::ServingEndpoint {
              name,
@@ -495,10 +504,7 @@ pub(crate) async fn call(
         (Reply::Failed(error), _) => return Err(error),
     };
     let response = PredictionResponse::read(&answer).map_err(|error| {
-        if unicode_version.is_some()
-            && error.field == "prediction.row_index"
-            && error.reason == "missing"
-        {
+        if direct && error.field == "prediction.row_index" && error.reason == "missing" {
             CoreError::new(
                 Sentence::TabularRowMissing,
                 "a tabular response lacks row attribution",
@@ -507,24 +513,5 @@ pub(crate) async fn call(
             refused(error)
         }
     })?;
-    if let Some(unicode_version) = unicode_version {
-        let mut layout = sdm_request::tabular::ResponseLayout::new(
-            payload,
-            &response,
-            unicode_version,
-            crate::pql::float_text,
-        )?;
-        while let Some(check) = layout.next_row()? {
-            if !check.notices.is_empty() {
-                for notice in &check.notices {
-                    asker.warn(notice.clone());
-                }
-                asker.flush_warnings().await;
-            }
-            layout.accept(check)?;
-        }
-        layout.finish()
-    } else {
-        layout(payload, &response, crate::pql::float_text)
-    }
+    Ok((answer, response))
 }

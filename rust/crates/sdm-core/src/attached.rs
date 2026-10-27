@@ -35,6 +35,15 @@ pub fn resolved_attachments(
             if let Some(Attachment::Bytes(bytes)) = attachments.get(&request.input) {
                 let input: sdm_contract::prepare::Preparation = serde_json::from_slice(bytes)
                     .map_err(|_| invalid("unreadable direct preparation input", request.input))?;
+                if let sdm_contract::prepare::Preparation::LayoutResponse { data, attributed } =
+                    &input
+                {
+                    named.extend(
+                        [data.payload, data.response, data.rows, *attributed]
+                            .into_iter()
+                            .map(|id| (id, AttachmentKind::Bytes)),
+                    );
+                }
                 let rows = match input {
                     sdm_contract::prepare::Preparation::Schema {
                         context, predict, ..

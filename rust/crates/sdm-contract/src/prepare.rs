@@ -215,6 +215,23 @@ pub struct TabularEnvelope {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "stage", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Preparation {
+    CheckResponseRows {
+        scope: ResponseScope,
+        rows: Vec<DecodedDirectRow>,
+        decimal_limit: u32,
+    },
+    SelectResponseMember {
+        checked: CheckedDirectRow,
+        literal: LiteralObservation,
+    },
+    AttributeResponseRow {
+        selected: SelectedDirectMember,
+        string: Option<StringObservation>,
+    },
+    LayoutResponse {
+        data: DirectResponseData,
+        attributed: AttachmentId,
+    },
     Overlap {
         input: DirectPrelude,
     },
@@ -290,8 +307,6 @@ pub enum DirectPredict {
         task: String,
         /// Read from the same captured native table after text advice.
         primary_key: Vec<String>,
-        /// Actual builtin native Unicode database version used by literal decoding.
-        unicode_version: String,
         #[serde(default)]
         inference: DirectInference,
     },
@@ -307,6 +322,10 @@ pub enum PreparedValue {
     Call(CallPreparation),
     Overlap(DirectOverlap),
     Envelope(TabularEnvelope),
+    Response(DirectResponseData),
+    Rows(CheckedDirectRows),
+    Member(SelectedDirectMember),
+    Attributed(AttributedDirectRow),
 }
 
 /// Ordered flat primitive inference values; exact integer digits do not
@@ -322,4 +341,160 @@ pub struct DirectInference {
 pub enum PrimitiveOption {
     Integer(String),
     Value(Scalar),
+}
+
+pub const DIRECT_RESPONSE_VERSION: u32 = 1;
+
+/// Owned model response data. The attachments are data, never resume handles.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct DecodedDirectResponse {
+    pub value: AttachmentId,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ResponseScope {
+    pub version: u32,
+    pub model: String,
+    pub request_id: String,
+    pub call_request_id: String,
+    pub response_rows: usize,
+    pub scoring_rows: usize,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct DirectResponseData {
+    pub scope: ResponseScope,
+    pub outputs: Vec<String>,
+    pub named: bool,
+    pub payload: AttachmentId,
+    pub response: AttachmentId,
+    pub rows: AttachmentId,
+}
+/// One actual decoded item with pure key/occurrence facts derived once.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct DecodedDirectRow {
+    pub ordinal: usize,
+    pub row_index: String,
+    pub id: Option<String>,
+    pub key: Option<Scalar>,
+    pub raw_in_batch: bool,
+    pub prior_ordinal: Option<usize>,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CheckedDirectRow {
+    pub scope: ResponseScope,
+    pub row: DecodedDirectRow,
+    pub decimal_limit: u32,
+    pub id: DirectRowId,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "representation", rename_all = "snake_case", deny_unknown_fields)]
+pub enum DirectRowId {
+    Unkeyed,
+    Absent,
+    LengthLimitedText,
+    JsonValue {
+        value: BuiltinValue,
+        members: Option<Vec<BuiltinValue>>,
+    },
+    NativeLiteralText {
+        value: String,
+    },
+}
+/// Literal-built builtin facts. Nonprimitive members do not acquire display text.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum BuiltinValue {
+    Null,
+    Boolean { value: bool },
+    Integer { digits: String, radix: IntegerRadix },
+    Float { bits: [u8; 8] },
+    Unicode { points: Vec<u32> },
+    Bytes,
+    Complex,
+    List,
+    Tuple,
+    Dictionary,
+    Set,
+    Ellipsis,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum IntegerRadix {
+    Decimal,
+    Hexadecimal,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum BuiltinFailureClass {
+    SyntaxError,
+    ValueError,
+    TypeError,
+    MemoryError,
+    RecursionError,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct NativeFailure {
+    pub ancestry: Vec<BuiltinFailureClass>,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "outcome", rename_all = "snake_case", deny_unknown_fields)]
+pub enum NativeLiteralValue {
+    Value {
+        value: BuiltinValue,
+        members: Option<Vec<BuiltinValue>>,
+    },
+    Failed {
+        failure: NativeFailure,
+    },
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct LiteralObservation {
+    pub scope: ResponseScope,
+    pub ordinal: usize,
+    pub text: String,
+    pub value: NativeLiteralValue,
+}
+/// A selected member of a checked row, independently useful builtin data.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SelectedDirectMember {
+    pub checked: CheckedDirectRow,
+    pub literal: LiteralObservation,
+    pub member: Option<BuiltinValue>,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "outcome", rename_all = "snake_case", deny_unknown_fields)]
+pub enum NativeStringValue {
+    Value { points: Vec<u32> },
+    Failed { failure: NativeFailure },
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct StringObservation {
+    pub scope: ResponseScope,
+    pub ordinal: usize,
+    pub value: NativeStringValue,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AttributedDirectRow {
+    pub decimal_limit: u32,
+    pub row: DecodedDirectRow,
+    pub literal: Option<LiteralObservation>,
+    pub string: Option<StringObservation>,
+    pub id: Scalar,
+}
+/// Consecutive pure rows plus at most one reached native representation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CheckedDirectRows {
+    pub scope: ResponseScope,
+    pub rows: Vec<AttributedDirectRow>,
+    pub row: Option<CheckedDirectRow>,
 }

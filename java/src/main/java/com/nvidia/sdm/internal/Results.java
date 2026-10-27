@@ -56,6 +56,9 @@ public final class Results {
   /** One internal direct preparation value, without a Java feature surface. */
   public record Prepared(int value) {}
 
+  /** Owned response data for the internal native builtin conversion boundary. */
+  public record DecodedDirectResponse(int value) {}
+
   /** {@code predict}'s result. */
   public record Predicted(
       int result,
@@ -78,6 +81,7 @@ public final class Results {
         case "materialize" -> new Gathered(state(map(result.get("state"))), facts(result.get("query")));
         case "predict" -> predicted(result);
         case "prepare_request" -> new Prepared(count(result, "value"));
+        case "decoded_direct_response" -> new DecodedDirectResponse(count(result, "value"));
         default -> throw new IllegalArgumentException("an operation this host does not know");
       };
     } catch (IllegalArgumentException | ClassCastException | NullPointerException e) {

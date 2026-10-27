@@ -58,7 +58,6 @@ The first two source reviews requested changes, and their candidate/evidence rem
 Supplemental frozen public cases establish cast storage distinctions, exact ID refusals, warning/error order and the two different warning-side reference boundaries.
 Candidate execution requires two renewed independent reviews of the exact final source; this document makes no passing-check claim.
 
-
 The overlap stage widens only declared key columns, keeping their original scoring ordinals and native storage facts.
 A nullable cast failure in an unrelated feature therefore follows overlap advice instead of suppressing it.
 Encoded numeric key components use the existing canonical decimal identity for comparison, including signed zero, while encoded text keeps its spelling.
@@ -66,17 +65,27 @@ The body consumes each complete column across all Arrow batches before the next 
 Shared answer coercion and table layout select attribution explicitly: gathered envelopes use entity-reference columns, and direct envelopes start with response IDs as written before applying their declared primary key.
 Ordinary feature names cannot activate gathered attribution.
 
+A fixed decoded-response boundary owns the encoded request payload, normalized model response and typed decoded row buffers.
+The shared model wire decoder runs once before attribution, while shared declared-target coercion remains after every response row is attributed and completeness is checked.
+The actual server response identifier and the request payload's metadata identifier remain distinct facts; the server is not required to echo the request identifier.
+Rust derives expected keys, raw-ID membership and prior response-row occurrences once, and observes their bounds, duplicate and completeness failures at the source guard.
+An explicit versioned scope and source ordinals bind compact row values and native observations to the decoded buffers.
+Final layout independently derives the rows again from those shared buffers and verifies every attributed row and observation before returning the result.
 
-A direct response ID is read as JSON first, including the default JSON reader's nonfinite numbers, then as a bounded literal data notation under the reference's 1024-character limit.
-The reader distinguishes primitive scalar names, validated values that cannot equal this numeric/Boolean key family, and invalid syntax that remains an opaque service token.
-It supports grouping, trailing commas, exact integer bases and digits, float spellings, quoted and escaped text, and literal collections without evaluating expressions.
-A validated nonprimitive value gives the normal wrong-key response refusal; it is not silently treated as an opaque token.
-Each reached answer's literal notices are presented through the existing warning boundary before that answer's key comparison, and before later answers are visited.
-The Python presenter obtains the selected parser warning's category and wording from its native runtime without selecting the warning or deciding attribution.
+A direct response ID is read as string JSON first, including the default JSON reader's nonfinite numbers, under the reference's 1024-character limit.
+This inner reader retains JSON root/member kinds, exact integer digits and Unicode code points, and does not inherit the outer model-byte decoder's encoding, depth or finite-number restrictions.
+A JSON success, including a non-list value, never invokes native literal conversion.
+Only a reached `NativeLiteralText` is passed to Python's actual `ast.literal_eval`, exactly once under active warning filters and handlers.
+Python reports literal-built builtin values or native exception ancestry, without deciding singleton selection, whether a conversion failure is caught, ID membership or attribution.
+Integer facts use hexadecimal digits, floats use bits and Unicode text uses code points, so ignored values acquire no eager decimal display or UTF-8 refusal.
+Rust selects the singleton member before the bridge calls native `str` on that original local member.
+Native objects and exceptions remain local to the bridge; no native handle or callback crosses the contract.
+A selected uncaught failure rethrows the original native exception.
+The core then chooses raw-ID fallback, key comparison and restoration before another row can reach native conversion.
+This naturally preserves syntax warnings, promotion to a caught SyntaxError and caller warning-handler effects without implementing a Python compiler or a second warning policy.
 
-The later body observation includes the actual builtin Unicode database version, rather than a guess from the Python major version.
-Supported native databases are Unicode 13, 14, 15, 15.1 and 16.
-A maintained Unicode16 name dictionary and maintained age property implement canonical names, filtered by that runtime profile, with exact version-specific alias membership generated from pinned official Unicode inputs.
-Algorithmic CJK/Hangul syntax retains the native decoder's case-sensitive branches; ordinary hashed names and aliases retain its case-insensitive lookup.
-Named sequences remain invalid in string-literal escapes, as the reference's literal decoder requires.
-The canonical alias generator records all input URLs/hashes, its own hash and output hashes; generated data carries the Unicode-3.0 terms through the existing Rust notices generator.
+Consecutive ordinary JSON rows use a fused pure core path.
+After a native conversion boundary, fixed-size row slices bound repeated serialization, with no whole-response replay or growing seen-set copy per row.
+Owned shared buffers and compact observations retain expected O(N) work and memory across the fixed data pipeline.
+The same builtin/failure facts are useful inputs to a pure Rust HostRun host.
+No language step, warning acknowledgment protocol, generic workflow interpreter, literal evaluator in Rust, Unicode-name data dependency or new workspace crate is added.
