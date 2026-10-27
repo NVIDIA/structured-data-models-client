@@ -85,6 +85,10 @@ fn resolved_rows_keep_repeated_entities_and_order_without_rewriting_keys() {
     );
     assert_eq!(walked.tables[0].batch, [0, 1, 2]);
     assert_eq!(walked.tables[1].batch, [0, 0, 0, 1, 1, 1, 2, 2, 2]);
+    // Native conversion consumes these core-selected original positions
+    // from immutable owners. Sanitized row 1 is never revived or renumbered.
+    assert_eq!(walked.tables[0].source_rows, [2, 0, 2]);
+    assert_eq!(walked.tables[1].source_rows, [6, 7, 8, 0, 1, 2, 6, 7, 8]);
     assert_eq!(walked.links.len(), 1);
     assert_eq!(
         walked.links[0].pairs,
@@ -142,6 +146,11 @@ fn concrete_node_walk_shares_the_existing_sample_and_continuing_stream() {
             .unwrap();
         for table in ["users", "orders"] {
             assert_eq!(ids(&ordinary, table), ids(&resolved, table));
+        }
+        for (ordinary, resolved) in ordinary.tables.iter().zip(&resolved.tables) {
+            assert_eq!(ordinary.source_rows, resolved.source_rows);
+            assert_eq!(ordinary.batch, resolved.batch);
+            assert_eq!(ordinary.source_rows.len(), ordinary.rows.num_rows());
         }
         assert_eq!(ordinary.links[0].pairs, resolved.links[0].pairs);
         assert_eq!(by_keys.checkpoint(), by_rows.checkpoint());
