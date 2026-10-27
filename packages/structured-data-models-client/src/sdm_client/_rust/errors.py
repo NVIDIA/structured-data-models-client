@@ -760,17 +760,18 @@ def raise_error(
         if selected is not cause:
             raise
         if (
+            previous_context is not None
+            and previous_context is not internal_context
+        ):
+            # Raising an existing wrapper inside an active caller handler can
+            # overwrite its nested conversion context. Retain that native
+            # chain before removing only our exact internal core exception.
+            cause.__context__ = previous_context
+        elif (
             internal_context is not None
             and cause.__context__ is internal_context
         ):
-            # Remove only our caught core exception, retaining any original
-            # caller exception behind it and its native suppression flags.
-            cause.__context__ = (
-                previous_context
-                if previous_context is not internal_context
-                and previous_context is not None
-                else internal_context.__context__
-            )
+            cause.__context__ = internal_context.__context__
         # A generated wrapper may already hold a native conversion failure.
         # Remove only our exact internal exception from that retained chain.
         nested: BaseException | None = cause
