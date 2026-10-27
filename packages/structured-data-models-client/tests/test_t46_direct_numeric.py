@@ -1371,3 +1371,165 @@ def test_direct_native_literal_conversion_is_reached_once(
         == native_calls
         == ([] if identifier == '[4]' else [identifier])
     )
+
+
+@pytest.mark.parametrize('earlier', ['nonfinite', 'precision', 'none'])
+def test_direct_encodes_rows_before_reached_inference_integer_display(
+    monkeypatch, earlier
+):
+    import sys
+
+    def inputs():
+        feature = (
+            pd.Series([2**53 + 1, 2, 3], dtype='int64')
+            if earlier == 'precision'
+            else pd.Series(
+                [1.0, np.inf if earlier == 'nonfinite' else 2.0, 3.0]
+            )
+        )
+        return (
+            pd.DataFrame({'feature': feature, 'target': [2, 4, 6]}),
+            pd.DataFrame({'feature': [4.0, 5.0]}),
+        )
+
+    def edit(request):
+        request.inference = {'seed': 10**650}
+        sys.set_int_max_str_digits(640)
+
+    limit = sys.get_int_max_str_digits()
+    try:
+        old = outcome(monkeypatch, inputs(), core=False, edit=edit)
+        new = outcome(monkeypatch, inputs(), core=True, edit=edit)
+        assert new == old
+        assert not new[3]
+        assert not new[2]
+        if earlier == 'none':
+            assert new[1][1] is ValueError
+            assert '640 digits' in new[1][-1]
+        else:
+            assert new[1][2] == 'INVALID_REQUEST'
+            assert (
+                'not JSON-representable'
+                if earlier == 'nonfinite'
+                else 'without losing precision'
+            ) in new[1][-1]
+    finally:
+        sys.set_int_max_str_digits(limit)
+
+
+@pytest.mark.parametrize(
+    ('context_dtype', 'scoring_dtype', 'values', 'wire'),
+    [
+        ('bool', 'int64', [0, 1], 'int64'),
+        ('bool', 'uint64', [0, 1], 'int64'),
+        ('bool', 'float32', [0.5, 1.5], 'float32'),
+        ('boolean', 'Int64', [0, 1], 'int64'),
+    ],
+)
+def test_direct_boolean_features_widen_with_numeric_scoring(
+    monkeypatch, context_dtype, scoring_dtype, values, wire
+):
+    def inputs():
+        return (
+            pd.DataFrame(
+                {
+                    'feature': pd.Series(
+                        [
+                            True,
+                            False,
+                            None if context_dtype == 'boolean' else True,
+                        ],
+                        dtype=context_dtype,
+                    ),
+                    'target': [2, 4, 6],
+                }
+            ),
+            pd.DataFrame({'feature': pd.Series(values, dtype=scoring_dtype)}),
+        )
+
+    old = outcome(monkeypatch, inputs(), core=False)
+    new = outcome(monkeypatch, inputs(), core=True)
+    assert new == old
+    assert new[1][0] == 'ok'
+    body = new[3][0]
+    assert body['schema']['instance_table']['columns']['feature'] == {
+        'dtype': wire,
+        'stype': 'categorical',
+    }
+    encoded = [row[0] for row in body['context']['instance_table']['rows']]
+    assert encoded == [1, 0, None if context_dtype == 'boolean' else 1]
+    assert all(
+        value is None or type(value) in (int, float) for value in encoded
+    )
+
+
+@pytest.mark.parametrize(
+    'kind',
+    [
+        'missing',
+        'null',
+        'string',
+        'bool',
+        'fraction',
+        'positive',
+        'negative',
+        'missing-later',
+        'oversized-later',
+        'warning-bounds',
+        'decode-before-warning',
+    ],
+)
+def test_direct_row_index_decoder_and_attribution_precedence(monkeypatch, kind):
+    class Indexed(Scripted):
+        def predict(self, payload):
+            answer = super().predict(payload)
+            first, second = answer['predictions']
+            if kind.startswith('missing'):
+                first.pop('row_index')
+            elif kind == 'null':
+                first['row_index'] = None
+            elif kind in ('string', 'bool', 'fraction'):
+                first['row_index'] = {
+                    'string': '0',
+                    'bool': False,
+                    'fraction': 0.5,
+                }[kind]
+            elif kind in ('positive', 'oversized-later'):
+                first['row_index'] = 2**63
+            elif kind == 'negative':
+                first['row_index'] = -(2**63) - 1
+            if kind.endswith('-later'):
+                second['probabilities'] = []
+            if kind in ('warning-bounds', 'decode-before-warning'):
+                first['id'] = r"[4+1, '\q']"
+                second['row_index'] = 2**63 if kind == 'warning-bounds' else '1'
+            return answer
+
+    def inputs():
+        return pd.DataFrame(
+            {'user_id': [1, 2, 3], 'target': [2, 4, 6]}
+        ), pd.DataFrame({'user_id': [4, 5]})
+
+    old = outcome(monkeypatch, inputs(), core=False, transport=Indexed())
+    new = outcome(monkeypatch, inputs(), core=True, transport=Indexed())
+    assert new == old
+    assert new[1][2] == 'INVALID_RESPONSE'
+    assert len(new[3]) == 1
+    assert len(new[2]) == (1 if kind == 'warning-bounds' else 0)
+    if kind in (
+        'missing',
+        'missing-later',
+        'null',
+        'string',
+        'bool',
+        'fraction',
+        'decode-before-warning',
+    ):
+        assert 'PredictionItem response' in new[1][-1]
+    elif kind == 'oversized-later':
+        assert (
+            'response carries [] where the contract requires an object'
+            in new[1][-1]
+        )
+    else:
+        assert 'this batch asked about 2 rows' in new[1][-1]
