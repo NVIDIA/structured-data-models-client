@@ -533,11 +533,13 @@ fn text_checkpoints_keep_values_across_fresh_ids_and_chunk_boundaries() {
         let failed = HostRun::start(&sdm_host::default_root(), &message, attached)
             .err()
             .expect("mutated text snapshot");
-        assert_eq!(decoded(&failed)["error"]["code"], "INVALID_REQUEST");
-        assert_eq!(
-            decoded(&failed)["error"]["drop_held"],
-            json!(["sampler_state"])
-        );
+        let error = decoded(&failed);
+        // A changed opaque checkpoint is a protocol violation, not a new
+        // public request with different source rows. Its held state is lost.
+        assert_eq!(error["error"]["kind"], "protocol");
+        assert_eq!(error["error"]["code"], "INVALID_MESSAGE");
+        assert_eq!(error["error"]["sentence"], "invalid_message");
+        assert_eq!(error["error"]["drop_held"], json!(["sampler_state"]));
     }
 }
 
@@ -769,7 +771,14 @@ fn dt3_no_time_marker_and_all_ordinary_frame_anchors_keep_their_separate_rules()
             .unwrap();
             let materialized =
                 terminal(&run).unwrap_or_else(|error| panic!("{:?}", decoded(&error)));
-            let observed = oracle["records"][format!("{timed}-{name}")].clone();
+            // The immutable producer is Python: its bool spellings are
+            // capitalized. Reject an absent case instead of comparing Null.
+            let case = format!("{}-{name}", if timed { "True" } else { "False" });
+            let observed = oracle["records"]
+                .get(case.as_str())
+                .unwrap_or_else(|| panic!("frozen anchor case {case} is missing"))
+                .clone();
+            assert!(observed["payloads"].is_array(), "{case} has no payloads");
             let no_time = !timed && matches!(name, "default" | "min");
             let expected = if no_time {
                 dt3_no_time_record(observed)
