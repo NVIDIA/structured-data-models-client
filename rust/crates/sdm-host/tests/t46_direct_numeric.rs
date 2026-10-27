@@ -1690,6 +1690,61 @@ fn inferred_constructor_schema_precedes_fresh_remaining_guard_observations() {
 }
 
 #[test]
+fn constructor_task_metadata_observes_only_fresh_lookup_after_constant_advice() {
+    let inferred=prepare(json!({"stage":"schema","headers":headers(),"context":2,"predict":3,"entity_table":"instance"}),halves()).unwrap();
+    for restored in [false, true] {
+        let mut supplied = inferred.clone();
+        if restored {
+            supplied["description"]["tables"][0]["columns"]
+                .as_array_mut()
+                .unwrap()
+                .remove(1);
+            supplied["schema"]["tables"][0]["columns"]
+                .as_array_mut()
+                .unwrap()
+                .remove(1);
+        }
+        let mut attached = halves();
+        attached.insert(
+            AttachmentId(2),
+            rows(&[("0", vec![1., 2., 3.]), ("1", vec![2., 2., 2.])]),
+        );
+        let (prepared, notices) = prepare_trace(
+            json!({"stage":"finish_constructor","schema":supplied,"context":2,"predict":3,"context_header":header(&["feature","target"],3),"predict_header":header(&["feature"],2),"target_context":{"positions":[1]},"context_predict":[{"positions":[0]},{"positions":[]}]}),
+            attached,
+        );
+        assert_eq!(
+            notices,
+            vec![sdm_contract::Sentence::DirectConstantRegression]
+        );
+        let prepared = prepared.unwrap();
+        let columns = if restored {
+            vec![
+                json!({"kind":"text","value":"feature"}),
+                json!({"kind":"text","value":"target"}),
+            ]
+        } else {
+            vec![json!({"kind":"text","value":"feature"})]
+        };
+        let result = prepare(
+            json!({"stage":"constructor_task","prepared":prepared,"entity_table":"instance","tables":[{"kind":"text","value":"instance"}],"table":{"columns":columns,"target_dtype":if restored {Some("float64")} else {None}}}),
+            Attachments::new(),
+        );
+        if restored {
+            assert_eq!(
+                result.unwrap(),
+                json!({"kind":"regression","target":"target","table":"instance","dtype":"float64"})
+            );
+        } else {
+            assert_eq!(
+                result.unwrap_err().sentence,
+                sdm_contract::Sentence::NoColumn
+            );
+        }
+    }
+}
+
+#[test]
 fn boolean_and_numeric_halves_share_numeric_wire_categories() {
     let context = [RecordBatch::try_from_iter([
         (
