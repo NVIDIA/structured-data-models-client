@@ -103,7 +103,7 @@ impl FramePreparation {
         use AttachmentKind::{Arrow, Bytes, FrameGraph};
         let mut out = Vec::new();
         match self {
-            Self::SourceMeaning { schema } => out.push((*schema, Bytes)),
+            Self::SourceMeaning { schema, .. } => out.push((*schema, Bytes)),
             Self::TableMeaning { .. } | Self::ColumnMeaning { .. } | Self::IntegerColumn { .. } => {
             }
             Self::TimeColumn { values, .. } => out.push((values.values, Arrow)),

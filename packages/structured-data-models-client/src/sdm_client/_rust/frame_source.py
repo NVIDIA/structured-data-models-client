@@ -150,15 +150,21 @@ def _decimal(
 
 
 def source_meaning(
-    schema: dict[str, Any], state: dict[str, Any]
+    schema: dict[str, Any],
+    typed_tables: list[dict[str, Any]],
+    state: dict[str, Any],
 ) -> dict[str, Any]:
-    """Resolve the complete frozen source graph before native sanitization."""
+    """Bind final graph metadata to the tables' frozen dtype facts."""
     from sdm_client._rust.frame_facade import _Bindings, _adopt, _prepare
 
     bindings = _Bindings()
     result = _adopt(
         _prepare(
-            {'stage': 'source_meaning', 'schema': bindings.json(schema)},
+            {
+                'stage': 'source_meaning',
+                'schema': bindings.json(schema),
+                'typed_tables': [{'table': table} for table in typed_tables],
+            },
             bindings,
             state,
         ),
@@ -168,13 +174,12 @@ def source_meaning(
 
 
 def table_meaning(
-    name: str, table: Any, frame: pd.DataFrame, state: dict[str, Any]
+    table: dict[str, Any], frame: pd.DataFrame, state: dict[str, Any]
 ) -> dict[str, Any]:
-    """Core-owned table meaning before later tables' native conversions."""
+    """Admit physical table types after all declared native casts."""
     import pyarrow as pa
 
     from sdm_client._rust.frame_facade import _Bindings, _adopt, _prepare
-    from sdm_client._rust.spec import held_table
 
     bindings = _Bindings()
     native = [
@@ -189,7 +194,7 @@ def table_meaning(
         _prepare(
             {
                 'stage': 'table_meaning',
-                'input': {'table': held_table(name, table), 'native': native},
+                'input': {'table': table, 'native': native},
             },
             bindings,
             state,

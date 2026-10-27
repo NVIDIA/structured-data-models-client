@@ -11,8 +11,36 @@ use sdm_contract::data::strings::StringData;
 use sdm_contract::ops::{HeldSchema, HeldTable};
 
 pub(super) fn source(
-    schema: sdm_contract::ops::HeldSchema,
+    mut schema: sdm_contract::ops::HeldSchema,
+    typed_tables: Vec<FrameTableMeaning>,
 ) -> Result<FrameSourceMeaning, CoreError> {
+    if schema.tables.len() != typed_tables.len() {
+        return Err(protocol(
+            "post-cast source declarations lack their typed tables",
+        ));
+    }
+    for (live, typed) in schema.tables.iter_mut().zip(typed_tables) {
+        let typed = typed.table;
+        if live.name != typed.name
+            || live.source != typed.source
+            || live.columns.len() != typed.columns.len()
+        {
+            return Err(protocol(
+                "post-cast source declaration differs from its typed table",
+            ));
+        }
+        for (column, frozen) in live.columns.iter_mut().zip(typed.columns) {
+            if column.name != frozen.name {
+                return Err(protocol(
+                    "post-cast source declaration differs from its typed column",
+                ));
+            }
+            // Native casts have already consumed the earlier declaration.
+            // Key/time/stype remain the live graph facts observed only after
+            // all casts, while a later dtype edit cannot recast typed rows.
+            column.dtype = frozen.dtype;
+        }
+    }
     let read = sdm_schema::held::read(schema.clone(), &BTreeMap::new(), true)?;
     let mut description = read.description;
     consistent(&mut description, &read.types)?;
@@ -218,6 +246,46 @@ mod tests {
                 inferred: Some("decimal".to_owned()),
             },
         }
+    }
+
+    #[test]
+    fn graph_meaning_uses_post_cast_logical_metadata_and_cast_time_dtypes() {
+        let mut key = declared("int64").column;
+        key.name = "id".into();
+        let mut feature = declared("int64").column;
+        feature.name = "feature".into();
+        feature.stype = Stype::Numerical;
+        let mut time = declared("timestamp[ns]").column;
+        time.name = "when".into();
+        time.stype = Stype::Timestamp;
+        let table = HeldTable {
+            name: "items".into(),
+            source: sdm_contract::data::Relation::named("items"),
+            columns: vec![key, feature, time],
+            primary_key: vec!["id".into()],
+            frame_key_form: None,
+            time_column: None,
+            duplicate_keys: None,
+        };
+        let typed = FrameTableMeaning {
+            table: table.clone(),
+        };
+        let mut live = table;
+        live.columns[1].stype = Stype::Categorical;
+        live.columns[1].dtype = "string".into();
+        live.time_column = Some("when".into());
+        let resolved = source(
+            HeldSchema {
+                tables: vec![live],
+                links: vec![],
+            },
+            vec![typed],
+        )
+        .unwrap()
+        .schema;
+        assert_eq!(resolved.tables[0].columns[1].dtype, "int64");
+        assert_eq!(resolved.tables[0].columns[1].stype, Stype::Categorical);
+        assert_eq!(resolved.tables[0].time_column.as_deref(), Some("when"));
     }
 
     #[test]
