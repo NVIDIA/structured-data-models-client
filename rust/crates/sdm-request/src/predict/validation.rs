@@ -24,10 +24,10 @@ pub fn payloads(present: bool, model: &str) -> Result<(), CoreError> {
             Sentence::RelationalNotGathered,
             "a relational request has not been gathered",
         );
-        error.public_details = Some(std::collections::BTreeMap::from([(
+        error.public_details = Some(Box::new(std::collections::BTreeMap::from([(
             "model".to_owned(),
             Detail::text(model),
-        )]));
+        )])));
         return Err(error);
     }
     Ok(())
@@ -109,10 +109,10 @@ pub fn native_inference(
         "native_relational_inference",
         Detail::Scalar(Scalar::Bool(true)),
     );
-    error.public_details = Some(std::collections::BTreeMap::from([
+    error.public_details = Some(Box::new(std::collections::BTreeMap::from([
         ("model".to_owned(), Detail::text(model)),
         ("unsupported".to_owned(), unsupported),
-    ]));
+    ])));
     Err(error)
 }
 

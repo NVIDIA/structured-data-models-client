@@ -257,6 +257,6 @@ pub(super) fn report(input: FrameNativeReport) -> Result<CoreError, CoreError> {
     if let Some(name) = input.native_type {
         error = error.with_field("native_type", Detail::text(name));
     }
-    error.public_details = Some(details);
+    error.public_details = Some(Box::new(details));
     Ok(error)
 }

@@ -317,7 +317,7 @@ pub struct CoreError {
     /// presentation-only fields separate from what callers branch on.
     /// Absence preserves the existing shared error details convention.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub public_details: Option<BTreeMap<String, Detail>>,
+    pub public_details: Option<Box<BTreeMap<String, Detail>>>,
     /// The error this one was raised from.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cause: Option<Box<CoreError>>,

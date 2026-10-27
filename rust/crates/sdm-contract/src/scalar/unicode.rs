@@ -274,7 +274,7 @@ mod tests {
                 value
             );
         }
-        assert_eq!(UnicodeText::from("").as_bytes(), []);
+        assert!(UnicodeText::from("").as_bytes().is_empty());
         assert_eq!(
             UnicodeText::from("a\0b").points().collect::<Vec<_>>(),
             [97, 0, 98]

@@ -539,7 +539,7 @@ async fn call_response_with_contract(
                     "native_relational_contract",
                     Detail::Scalar(Scalar::Bool(true)),
                 );
-            selected.public_details = Some(std::collections::BTreeMap::new());
+            selected.public_details = Some(Box::default());
             selected
         } else if direct {
             direct_contract_error(&answer, error)

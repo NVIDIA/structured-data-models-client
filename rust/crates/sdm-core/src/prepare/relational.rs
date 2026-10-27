@@ -12,7 +12,7 @@ fn task(kind: Vec<u32>, facts: RelationalTaskFacts) -> Result<RelationalTaskMean
 }
 
 fn public_fields(mut error: CoreError, names: &[&str]) -> CoreError {
-    error.public_details = Some(
+    error.public_details = Some(Box::new(
         names
             .iter()
             .filter_map(|name| {
@@ -23,7 +23,7 @@ fn public_fields(mut error: CoreError, names: &[&str]) -> CoreError {
                     .map(|value| ((*name).to_owned(), value))
             })
             .collect(),
-    );
+    ));
     error
 }
 
@@ -190,7 +190,7 @@ pub(super) fn prepare(
                     Sentence::RelationalOutputShapes,
                     "completed calls have different native output shapes",
                 );
-                error.public_details = Some(BTreeMap::new());
+                error.public_details = Some(Box::default());
                 return Err(error);
             }
             RelationalPrepared::Call(call)
@@ -277,7 +277,7 @@ pub(super) fn prepare(
                     Sentence::RelationalRowsUncounted,
                     "a later native call cannot be numbered from unknown prior row counts",
                 );
-                error.public_details = Some(BTreeMap::new());
+                error.public_details = Some(Box::default());
                 error
             })?)
         }
@@ -390,14 +390,14 @@ pub(super) fn prepare(
                 if error.fields.get("native_relational_constant")
                     == Some(&Detail::Scalar(Scalar::Bool(true)))
                 {
-                    error.public_details = Some(BTreeMap::from([
+                    error.public_details = Some(Box::new(BTreeMap::from([
                         ("model".to_owned(), Detail::text(bound.model)),
                         ("target".to_owned(), Detail::text("")),
                         (
                             "classes_in_context".to_owned(),
                             Detail::Scalar(Scalar::UInt64(1)),
                         ),
-                    ]));
+                    ])));
                 }
                 error
             })?;

@@ -600,7 +600,7 @@ pub fn validate_native_outputs(
         )
         .with_field("unsupported_outputs", texts(unknown))
         .with_field("supported_outputs", texts(sorted(spec.outputs)));
-        error.public_details = Some(error.fields.clone());
+        error.public_details = Some(Box::new(error.fields.clone()));
         return Err(error.with_field("native_model_outputs", Detail::Scalar(Scalar::Bool(true))));
     }
     Ok(())
@@ -728,7 +728,7 @@ pub fn validate_native_task_outputs(
         .with_field("task", Detail::text(kind))
         .with_field("supported", texts(sorted(spec.tasks)));
         if admitted.is_some() {
-            error.public_details = Some(error.fields.clone());
+            error.public_details = Some(Box::new(error.fields.clone()));
             error = error.with_field("native_model_task", Detail::Scalar(Scalar::Bool(true)));
         }
         return Err(error);

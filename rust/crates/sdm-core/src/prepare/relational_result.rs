@@ -196,7 +196,7 @@ pub(crate) fn confidence(item: RelationalRankItem) -> Result<RelationalRankConfi
     let probabilities = probabilities(&item.probabilities)?;
     let score =
         ranking::confidence(probabilities.as_ref(), item.candidate).map_err(|mut error| {
-            error.public_details = Some(BTreeMap::new());
+            error.public_details = Some(Box::default());
             error
         })?;
     Ok(RelationalRankConfidence {

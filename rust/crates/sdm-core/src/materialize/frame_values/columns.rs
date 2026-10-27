@@ -142,7 +142,7 @@ pub(super) fn integer(input: FrameIntegerColumn) -> Result<FrameIntegerColumn, C
         )
         .with_field("dtype", Detail::text(meaning.input.column.dtype))
         .with_field("example", Detail::text(example));
-        error.public_details = Some(BTreeMap::new());
+        error.public_details = Some(Box::default());
         return Err(error);
     }
     Ok(input)
@@ -324,7 +324,7 @@ mod tests {
         };
         let error = integer(input).unwrap_err();
         assert_eq!(error.sentence, Sentence::FrameDecimalFraction);
-        assert_eq!(error.public_details, Some(BTreeMap::new()));
+        assert_eq!(error.public_details.as_deref(), Some(&BTreeMap::new()));
         let good = FrameIntegerColumn {
             meaning: meaning(declared("int64")),
             fractional: false,

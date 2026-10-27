@@ -27,7 +27,7 @@ fn protocol(message: &str) -> CoreError {
 
 fn refusal(sentence: Sentence) -> CoreError {
     let mut error = CoreError::new(sentence, "the gathered answer cannot be attributed");
-    error.public_details = Some(BTreeMap::new());
+    error.public_details = Some(Box::default());
     error
 }
 
@@ -798,7 +798,7 @@ mod tests {
         assert_eq!(first.source_row, Some(0));
         let error = check_rows(attribution, vec![rows[1].clone()]).unwrap_err();
         assert_eq!(error.sentence, Sentence::RelationalRowBounds);
-        assert_eq!(error.public_details, Some(BTreeMap::new()));
+        assert_eq!(error.public_details.as_deref(), Some(&BTreeMap::new()));
     }
 
     #[test]
@@ -821,7 +821,7 @@ mod tests {
             error.fields.get("native_field"),
             Some(&Detail::text("expected"))
         );
-        assert_eq!(error.public_details, Some(BTreeMap::new()));
+        assert_eq!(error.public_details.as_deref(), Some(&BTreeMap::new()));
     }
 
     #[test]

@@ -653,7 +653,7 @@ pub(crate) async fn run(
                     let mut error = error(Sentence::DirectUnknownModel)
                         .with_field("model", Detail::text(""))
                         .with_field("known_models", text_list(names));
-                    error.public_details = Some(error.fields.clone());
+                    error.public_details = Some(Box::new(error.fields.clone()));
                     return Err(error.with_field("native_model", Detail::Scalar(Scalar::Bool(true))));
                 }
             };
@@ -670,7 +670,7 @@ pub(crate) async fn run(
                     let mut refused = error(Sentence::DirectUnknownModel)
                         .with_field("model", Detail::text(&model))
                         .with_field("known_models", text_list(names));
-                    refused.public_details = Some(refused.fields.clone());
+                    refused.public_details = Some(Box::new(refused.fields.clone()));
                     refused
                 })?
                 .to_owned();
