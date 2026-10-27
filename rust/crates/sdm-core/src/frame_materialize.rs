@@ -497,6 +497,10 @@ impl FrameRun {
         excluded: &[(String, String)],
         seed: Option<u128>,
     ) -> Result<SampledContext, CoreError> {
+        // Per-batch native key conversion precedes this operation. Resolve
+        // its actual values before resetting the continuing neighbor stream,
+        // independently of the earlier whole-task reference validation.
+        let entity_rows = self.resolve_references(entity, &[keys])?;
         if let Some(seed) = seed {
             let seed = u32::try_from(seed)
                 .ok()
@@ -534,10 +538,10 @@ impl FrameRun {
             .snapshot
             .as_ref()
             .ok_or_else(|| internal("frame graph not initialized"))?
-            .walk(
+            .walk_resolved(
                 graph,
                 &entity.name,
-                keys,
+                &entity_rows,
                 anchors,
                 &hops,
                 &mut self.neighbors,
