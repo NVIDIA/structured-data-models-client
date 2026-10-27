@@ -154,23 +154,6 @@ fn row_index(scope: &ResponseScope, row: &DecodedDirectRow) -> Result<usize, Cor
     }
     Ok(at)
 }
-fn builtin(member: sdm_wire::id_json::Member) -> BuiltinValue {
-    use sdm_wire::id_json::Member as M;
-    match member {
-        M::Null => BuiltinValue::Null,
-        M::Boolean(value) => BuiltinValue::Boolean { value },
-        M::Integer(digits) => BuiltinValue::Integer {
-            digits,
-            radix: IntegerRadix::Decimal,
-        },
-        M::Float(v) => BuiltinValue::Float {
-            bits: v.to_be_bytes(),
-        },
-        M::Unicode(points) => BuiltinValue::Unicode { points },
-        M::Array => BuiltinValue::List,
-        M::Object => BuiltinValue::Dictionary,
-    }
-}
 fn representation(row: &DecodedDirectRow, limit: u32) -> Result<DirectRowId, CoreError> {
     if limit != 0 && limit < 640 {
         return Err(protocol("native decimal limit is incoherent"));
@@ -184,38 +167,17 @@ fn representation(row: &DecodedDirectRow, limit: u32) -> Result<DirectRowId, Cor
     if text.chars().count() > 1024 {
         return Ok(DirectRowId::LengthLimitedText);
     }
-    Ok(match sdm_wire::id_json::read(text, limit) {
-        Some(value) => DirectRowId::JsonValue {
-            value: builtin(value.value),
-            members: value.members.map(|v| v.into_iter().map(builtin).collect()),
-        },
-        None => DirectRowId::NativeLiteralText {
-            value: text.clone(),
-        },
+    Ok(DirectRowId::NativeJsonText {
+        value: text.clone(),
     })
 }
 enum Name {
     Text(Vec<u32>),
-    Other,
-}
-fn json_name(value: &BuiltinValue, float_text: fn(f64) -> String) -> Result<Name, CoreError> {
-    let text = match value {
-        BuiltinValue::Null => "None".into(),
-        BuiltinValue::Boolean { value } => if *value { "True" } else { "False" }.into(),
-        BuiltinValue::Integer {
-            digits,
-            radix: IntegerRadix::Decimal,
-        } => digits.clone(),
-        BuiltinValue::Float { bits } => float_text(f64::from_be_bytes(*bits)),
-        BuiltinValue::Unicode { points } => return Ok(Name::Text(points.clone())),
-        BuiltinValue::List | BuiltinValue::Dictionary => return Ok(Name::Other),
-        _ => return Err(protocol("JSON row contains a non-JSON builtin")),
-    };
-    Ok(Name::Text(text.chars().map(u32::from).collect()))
 }
 fn attribution(
     checked: &CheckedDirectRow,
     name: Option<Name>,
+    json: Option<JsonObservation>,
     literal: Option<LiteralObservation>,
     string: Option<StringObservation>,
     float_text: fn(f64) -> String,
@@ -237,7 +199,6 @@ fn attribution(
             })
         });
         let wrong = match name {
-            Some(Name::Other) => true,
             Some(Name::Text(text)) => text != named_scalar(key, float_text)?,
             None => false,
         };
@@ -254,6 +215,7 @@ fn attribution(
     Ok(AttributedDirectRow {
         decimal_limit: checked.decimal_limit,
         row: row.clone(),
+        json,
         literal,
         string,
         id,
@@ -281,21 +243,14 @@ pub fn check_rows(
             decimal_limit: limit,
             id,
         };
-        if matches!(&checked.id, DirectRowId::NativeLiteralText { .. }) {
+        if matches!(&checked.id, DirectRowId::NativeJsonText { .. }) {
             return Ok(CheckedDirectRows {
                 scope,
                 rows: accepted,
                 row: Some(checked),
             });
         }
-        let name = match &checked.id {
-            DirectRowId::JsonValue {
-                value: BuiltinValue::List,
-                members: Some(members),
-            } if members.len() == 1 => Some(json_name(&members[0], float_text)?),
-            _ => None,
-        };
-        accepted.push(attribution(&checked, name, None, None, float_text)?);
+        accepted.push(attribution(&checked, None, None, None, None, float_text)?);
     }
     Ok(CheckedDirectRows {
         scope,
@@ -341,55 +296,132 @@ fn value(value: &BuiltinValue) -> Result<(), CoreError> {
 fn native_failure(stage: &str) -> CoreError {
     invalid(Sentence::DirectNativeFailure).with_field("stage", Detail::text(stage))
 }
-pub fn select_member(
-    checked: CheckedDirectRow,
-    literal: LiteralObservation,
-) -> Result<SelectedDirectMember, CoreError> {
+fn parsed_member(
+    root: &BuiltinValue,
+    members: &Option<Vec<BuiltinValue>>,
+    json: bool,
+) -> Result<Option<BuiltinValue>, CoreError> {
+    let allowed = |item: &BuiltinValue| -> Result<(), CoreError> {
+        value(item)?;
+        if json
+            && !matches!(
+                item,
+                BuiltinValue::Null
+                    | BuiltinValue::Boolean { .. }
+                    | BuiltinValue::Integer { .. }
+                    | BuiltinValue::Float { .. }
+                    | BuiltinValue::Unicode { .. }
+                    | BuiltinValue::List
+                    | BuiltinValue::Dictionary
+            )
+        {
+            return Err(protocol("JSON conversion contains a non-JSON builtin"));
+        }
+        Ok(())
+    };
+    allowed(root)?;
+    if matches!(root, BuiltinValue::List) != members.is_some() {
+        return Err(protocol("builtin list members disagree with root kind"));
+    }
+    if let Some(members) = members {
+        for member in members {
+            allowed(member)?;
+        }
+        if members.len() == 1 {
+            return Ok(Some(members[0].clone()));
+        }
+    }
+    Ok(None)
+}
+pub fn interpret_json(
+    mut checked: CheckedDirectRow,
+    json: JsonObservation,
+) -> Result<InterpretedDirectRow, CoreError> {
     self::checked(&checked)?;
-    let DirectRowId::NativeLiteralText { value: text } = &checked.id else {
+    let DirectRowId::NativeJsonText { value: text } = &checked.id else {
         return Err(protocol(
-            "literal value belongs to another ID representation",
+            "JSON observation belongs to another ID representation",
         ));
     };
-    if literal.scope != checked.scope
-        || literal.ordinal != checked.row.ordinal
-        || literal.text != *text
-    {
+    if json.scope != checked.scope || json.ordinal != checked.row.ordinal || json.text != *text {
         return Err(protocol(
-            "native literal observation belongs to another decoded row",
+            "native JSON observation belongs to another decoded row",
         ));
     }
-    let member = match &literal.value {
-        NativeLiteralValue::Failed { failure } => {
-            if failure.ancestry.is_empty() {
-                return Err(native_failure("literal"));
+    checked.id = match &json.value {
+        NativeParsedValue::Failed { failure } => {
+            if !failure.ancestry.iter().any(|kind| {
+                matches!(
+                    kind,
+                    BuiltinFailureClass::ValueError
+                        | BuiltinFailureClass::TypeError
+                        | BuiltinFailureClass::RecursionError
+                )
+            }) {
+                return Err(native_failure("json"));
             }
-            None
+            DirectRowId::NativeLiteralText {
+                value: text.clone(),
+            }
         }
-        NativeLiteralValue::Value {
-            value: root,
-            members,
-        } => {
-            value(root)?;
-            if matches!(root, BuiltinValue::List) != members.is_some() {
-                return Err(protocol("builtin list members disagree with root kind"));
+        NativeParsedValue::Value { value, members } => {
+            parsed_member(value, members, true)?;
+            DirectRowId::JsonValue {
+                value: value.clone(),
+                members: members.clone(),
             }
-            if let Some(members) = members {
-                for member in members {
-                    value(member)?;
-                }
-                if members.len() == 1 {
-                    Some(members[0].clone())
-                } else {
+        }
+    };
+    Ok(InterpretedDirectRow { checked, json })
+}
+fn interpreted(row: &InterpretedDirectRow) -> Result<(), CoreError> {
+    let mut original = row.checked.clone();
+    original.id = representation(&original.row, original.decimal_limit)?;
+    if interpret_json(original, row.json.clone())? != *row {
+        return Err(protocol(
+            "interpreted JSON differs from its source observations",
+        ));
+    }
+    Ok(())
+}
+pub fn select_member(
+    interpreted: InterpretedDirectRow,
+    literal: Option<LiteralObservation>,
+) -> Result<SelectedDirectMember, CoreError> {
+    self::interpreted(&interpreted)?;
+    let checked = interpreted.checked;
+    let member = match (&checked.id, &literal) {
+        (DirectRowId::JsonValue { value, members }, None) => parsed_member(value, members, true)?,
+        (DirectRowId::NativeLiteralText { value: text }, Some(observed)) => {
+            if observed.scope != checked.scope
+                || observed.ordinal != checked.row.ordinal
+                || observed.text != *text
+            {
+                return Err(protocol(
+                    "native literal observation belongs to another decoded row",
+                ));
+            }
+            match &observed.value {
+                NativeParsedValue::Failed { failure } => {
+                    if failure.ancestry.is_empty() {
+                        return Err(native_failure("literal"));
+                    }
                     None
                 }
-            } else {
-                None
+                NativeParsedValue::Value { value, members } => {
+                    parsed_member(value, members, false)?
+                }
             }
+        }
+        _ => {
+            return Err(protocol(
+                "literal observation disagrees with JSON interpretation",
+            ));
         }
     };
     Ok(SelectedDirectMember {
         checked,
+        json: interpreted.json,
         literal,
         member,
     })
@@ -399,7 +431,14 @@ pub fn attribute(
     string: Option<StringObservation>,
     float_text: fn(f64) -> String,
 ) -> Result<AttributedDirectRow, CoreError> {
-    if select_member(selected.checked.clone(), selected.literal.clone())? != selected {
+    if select_member(
+        InterpretedDirectRow {
+            checked: selected.checked.clone(),
+            json: selected.json.clone(),
+        },
+        selected.literal.clone(),
+    )? != selected
+    {
         return Err(protocol(
             "selected builtin member differs from literal value",
         ));
@@ -431,7 +470,8 @@ pub fn attribute(
     attribution(
         &selected.checked,
         name,
-        Some(selected.literal.clone()),
+        Some(selected.json.clone()),
+        selected.literal.clone(),
         string,
         float_text,
     )
@@ -455,21 +495,25 @@ pub fn layout(
         if *row != accepted.row {
             return Err(protocol("attribution source differs from decoded response"));
         }
-        let replay = if let Some(literal) = &accepted.literal {
+        let replay = if let Some(json) = &accepted.json {
             let checked = CheckedDirectRow {
                 scope: scope.clone(),
                 row: row.clone(),
                 decimal_limit: accepted.decimal_limit,
-                id: DirectRowId::NativeLiteralText {
-                    value: literal.text.clone(),
-                },
+                id: representation(row, accepted.decimal_limit)?,
             };
             attribute(
-                select_member(checked, literal.clone())?,
+                select_member(
+                    interpret_json(checked, json.clone())?,
+                    accepted.literal.clone(),
+                )?,
                 accepted.string.clone(),
                 float_text,
             )?
         } else {
+            if accepted.literal.is_some() || accepted.string.is_some() {
+                return Err(protocol("native member data has no JSON observation"));
+            }
             let mut checked = check_rows(
                 scope.clone(),
                 vec![row.clone()],
@@ -477,7 +521,7 @@ pub fn layout(
                 float_text,
             )?;
             if checked.row.is_some() {
-                return Err(protocol("a native row has no literal observation"));
+                return Err(protocol("a reached ID has no JSON observation"));
             }
             checked
                 .rows

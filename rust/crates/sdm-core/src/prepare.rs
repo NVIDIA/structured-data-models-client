@@ -298,8 +298,11 @@ pub(crate) async fn run(
             decimal_limit,
             crate::pql::float_text,
         )?),
-        Preparation::SelectResponseMember { checked, literal } => serde_json::to_value(
-            sdm_request::tabular::response::select_member(checked, literal)?,
+        Preparation::InterpretResponseJson { checked, json } => serde_json::to_value(
+            sdm_request::tabular::response::interpret_json(checked, json)?,
+        ),
+        Preparation::SelectResponseMember { interpreted, literal } => serde_json::to_value(
+            sdm_request::tabular::response::select_member(interpreted, literal)?,
         ),
         Preparation::AttributeResponseRow { selected, string } => serde_json::to_value(
             sdm_request::tabular::response::attribute(selected, string, crate::pql::float_text)?,

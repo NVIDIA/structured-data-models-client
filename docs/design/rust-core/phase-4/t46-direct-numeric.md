@@ -107,10 +107,13 @@ An explicit versioned scope and source ordinals bind compact row values and nati
 Final layout independently derives the rows again from those shared buffers and verifies every attributed row and observation before returning the result.
 
 A direct response ID is read as string JSON first, including the default JSON reader's nonfinite numbers, under the reference's 1024-character limit.
-This inner reader retains JSON root/member kinds, exact integer digits and Unicode code points, and does not inherit the outer model-byte decoder's encoding, depth or finite-number restrictions.
+After core checks bounds, duplicate occurrence, key presence and the 1024-character limit, the host observes actual native JSON conversion for that reached ID.
+Its useful typed artifact retains JSON root/member builtin kinds or native failure ancestry, bound to the source scope, ordinal and text.
+Core interprets success or the native ValueError/TypeError/RecursionError fallback policy and owns singleton selection and attribution.
+The native conversion observes the current runtime's real resource behavior, rather than an iterative parser or a fixed recursion-depth approximation.
 A JSON success, including a non-list value, never invokes native literal conversion.
 Only a reached `NativeLiteralText` is passed to Python's actual `ast.literal_eval`, exactly once under active warning filters and handlers.
-Python reports literal-built builtin values or native exception ancestry, without deciding singleton selection, whether a conversion failure is caught, ID membership or attribution.
+Python reports actual JSON/literal-built builtin values or native exception ancestry, without deciding singleton selection, whether a conversion failure is caught, ID membership or attribution.
 Integer facts use hexadecimal digits, floats use bits and Unicode text uses code points, so ignored values acquire no eager decimal display or UTF-8 refusal.
 Rust selects the singleton member before the bridge calls native `str` on that original local member.
 Native objects and exceptions remain local to the bridge; no native handle or callback crosses the contract.
@@ -118,8 +121,8 @@ A selected uncaught failure rethrows the original native exception.
 The core then chooses raw-ID fallback, key comparison and restoration before another row can reach native conversion.
 This naturally preserves syntax warnings, promotion to a caught SyntaxError and caller warning-handler effects without implementing a Python compiler or a second warning policy.
 
-Consecutive ordinary JSON rows use a fused pure core path.
-After a native conversion boundary, fixed-size row slices bound repeated serialization, with no whole-response replay or growing seen-set copy per row.
+Unkeyed and length-limited IDs retain a fused pure core path, while each eligible keyed ID observes native JSON only when its row is reached.
+Fixed-size row slices bound repeated serialization, with no whole-response replay or growing seen-set copy per row.
 Owned shared buffers and compact observations retain expected O(N) work and memory across the fixed data pipeline.
 The same builtin/failure facts are useful inputs to a pure Rust HostRun host.
 No language step, warning acknowledgment protocol, generic workflow interpreter, literal evaluator in Rust, Unicode-name data dependency or new workspace crate is added.
@@ -162,7 +165,8 @@ Frozen native behavior alone does not authorize changing established gathered be
 
 ## Selected failed-JSON native context
 
-After core selects NativeLiteralText, the host obtains the actual stdlib JSON failure and evaluates the Python literal inside that exception handler.
+Core interprets the reached native JSON observation before selecting NativeLiteralText, then the host re-enters the same actual JSON exception for literal conversion.
+The exception's original context and native traceback are restored before AST warnings can observe it.
 This preserves the native exception visible to warning handlers, including the JSON decoder's scanner context and any original caller exception.
 The native JSON result is not used to choose fallback or attribution policy, which remain in core.
 An uncaught native exception retains its original object, explicit cause, context and suppression when core selects propagation.
@@ -172,3 +176,14 @@ Core generated finite-number diagnostics retain before/value/after wording along
 The selected Float presenter formats the offending value inside the actual failed-float handler, so a native integer-display refusal retains that conversion as its context.
 Its SDK wrapper retains the actual native display exception where the generated decoder's own formatting fails.
 This does not broaden the separate shared transport conversion of decoded DICT replies to JSON bytes or claim equivalence to raw HTTP decoder admission.
+
+
+## Native constructor and empty-call effects
+
+Core-selected lookup, ambiguous truth, scored dtype, nullable cast and missing-frame faults retain actual native exceptions through the existing host error presentation mechanism.
+Lookup failures stay local to the bridge and are identified by meaningful core-selected source fields and ordinals, without a native handle in the contract.
+Selected native operations preserve their true exception object, explicit cause, suppression and original caller context; only an introduced CoreError is removed from the native chain.
+This includes pandas outer and inner KeyErrors rather than reconstructing one KeyError from message text.
+Empty predictions return an empty request ID without drawing a native UUID; nonempty calls draw it only after complete body encoding.
+Response scope version2 includes the reached JSON observation and optional literal/string facts, which final layout validates against the same owned buffers.
+The obsolete private iterative ID JSON reader is removed; outer model response JSON decoding remains in Rust.
