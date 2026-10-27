@@ -16,7 +16,9 @@ import pytest
 @pytest.fixture
 def command(monkeypatch):
     path = Path(__file__).resolve().parents[1] / 'scripts/rust_core/selftest.py'
-    spec = importlib.util.spec_from_file_location('selftest_lexical_cache', path)
+    spec = importlib.util.spec_from_file_location(
+        'selftest_lexical_cache', path
+    )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     monkeypatch.setitem(sys.modules, spec.name, module)
