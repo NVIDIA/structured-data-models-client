@@ -7,6 +7,7 @@
 
 pub(crate) mod decimal;
 mod decimal_storage;
+pub mod object_decimal;
 
 use std::collections::{BTreeMap, BTreeSet};
 
