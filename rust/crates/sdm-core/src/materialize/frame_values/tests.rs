@@ -8,6 +8,23 @@ use super::*;
 use sdm_engine::words::{CasingProfile, UnicodeDataVersion};
 
 #[test]
+fn local_label_calendar_bounds_widen_both_ends_before_exact_filtering() {
+    use sdm_contract::pql::TimeUnit;
+    let windows = label_windows(
+        &[-1, 900_000_000],
+        Offset::of(-1, TimeUnit::Months),
+        Offset::of(1, TimeUnit::Months),
+    );
+    // Negative anchors floor toward minus infinity, as native // seconds.
+    // A negative month's earliest bound spans 31 days; a positive month's
+    // latest bound also spans 31 days, independent of the actual calendar.
+    assert_eq!(windows[0].lower, Some(-1 - 31 * 86_400));
+    assert_eq!(windows[0].upper, -1 + 31 * 86_400);
+    assert_eq!(windows[1].lower, Some(-31 * 86_400));
+    assert_eq!(windows[1].upper, 31 * 86_400);
+}
+
+#[test]
 fn labelled_link_rows_preserve_typed_order_duplicates_and_decimal_scale() {
     use arrow_array::{ArrayRef, Int64Array};
     use sdm_engine::labels::{Labels, LinkValue};

@@ -411,7 +411,10 @@ pub(super) async fn label_context(
         entity_key: &entity_key,
         examples: &examples,
     };
-    let fetched = labelling.read(labelled_fetches).await?;
+    let fetched = match &memo.frames {
+        Some(frames) => super::frame_values::label_rows(&labelling, frames, labelled_fetches)?,
+        None => labelling.read(labelled_fetches).await?,
+    };
     let target = labelling.build(&asked.target, &fetched, true)?;
     // The examples the entity filter and the assumption choose: each
     // condition's truth over the examples, and-ed (`execute`'s `mask`).
