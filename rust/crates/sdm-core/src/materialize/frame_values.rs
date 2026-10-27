@@ -29,6 +29,7 @@ pub(crate) enum FrameStageError {
         failure: NativeFailure,
         message: String,
         diagnostic: Option<NativeConstructionDiagnostic>,
+        dropped_summary: Option<String>,
     },
 }
 
@@ -75,6 +76,161 @@ fn data(batch: RecordBatch) -> ArrowData {
     ArrowData::new(batch.schema(), vec![batch])
 }
 
+fn labelled_rows(
+    keys: &ArrayRef,
+    anchors: &[i64],
+    labels: &labels::Labels,
+) -> Result<RecordBatch, CoreError> {
+    use arrow_array::{
+        BooleanArray, Decimal128Array, Float32Array, Int64Array, ListArray, StringArray,
+    };
+    use sdm_engine::labels::LinkValue;
+    let labels::Labels::Lists(lists) = labels else {
+        return task::labelled_rows(keys, anchors, labels);
+    };
+    let mut offsets = vec![0_i32];
+    let mut flat = Vec::new();
+    for list in lists {
+        flat.extend(list.iter());
+        offsets.push(i32::try_from(flat.len()).map_err(|_| {
+            internal("link label offsets exceed the declared Arrow representation")
+        })?);
+    }
+    let mixed = || protocol("typed link labels mix incompatible native value families");
+    let values: ArrayRef = match flat.first() {
+        None | Some(LinkValue::Int(_)) => Arc::new(Int64Array::from(
+            flat.iter()
+                .map(|value| match value {
+                    LinkValue::Int(value) => Ok(*value),
+                    _ => Err(mixed()),
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+        )),
+        Some(LinkValue::Float(_)) => Arc::new(Float32Array::from(
+            flat.iter()
+                .map(|value| match value {
+                    LinkValue::Float(value) => Ok(*value),
+                    _ => Err(mixed()),
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+        )),
+        Some(LinkValue::Bool(_)) => Arc::new(BooleanArray::from(
+            flat.iter()
+                .map(|value| match value {
+                    LinkValue::Bool(value) => Ok(*value),
+                    _ => Err(mixed()),
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+        )),
+        Some(LinkValue::Text(_)) => Arc::new(StringArray::from(
+            flat.iter()
+                .map(|value| match value {
+                    LinkValue::Text(value) => Ok(value.as_str()),
+                    _ => Err(mixed()),
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+        )),
+        Some(LinkValue::Decimal(_, scale)) => {
+            let scale = *scale;
+            let values = flat
+                .iter()
+                .map(|value| match value {
+                    LinkValue::Decimal(value, observed) if *observed == scale => Ok(*value),
+                    _ => Err(mixed()),
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            Arc::new(
+                Decimal128Array::from(values)
+                    .with_precision_and_scale(38, scale)
+                    .map_err(|_| mixed())?,
+            )
+        }
+    };
+    let target: ArrayRef = Arc::new(
+        ListArray::try_new(
+            Arc::new(arrow_schema::Field::new(
+                "item",
+                values.data_type().clone(),
+                false,
+            )),
+            arrow_buffer::OffsetBuffer::new(offsets.into()),
+            values,
+            None,
+        )
+        .map_err(|_| mixed())?,
+    );
+    RecordBatch::try_from_iter([
+        ("entity", Arc::clone(keys)),
+        (
+            "anchor",
+            Arc::new(TimestampNanosecondArray::from(anchors.to_vec())) as ArrayRef,
+        ),
+        ("target", target),
+    ])
+    .map_err(|_| protocol("typed link labels do not align with their entity and anchor rows"))
+}
+
+fn read_link_labels(target: &ArrayRef) -> Result<labels::Labels, CoreError> {
+    use sdm_engine::labels::LinkValue;
+    let target = target
+        .as_list_opt::<i32>()
+        .ok_or_else(|| protocol("typed frame link labels are not a declared Arrow list"))?;
+    let lists = (0..target.len())
+        .map(|row| {
+            let values = target.value(row);
+            if values.null_count() != 0 {
+                return Err(protocol(
+                    "typed frame link labels contain missing child values",
+                ));
+            }
+            Ok(match values.data_type() {
+                DataType::Int64 => values
+                    .as_primitive::<Int64Type>()
+                    .values()
+                    .iter()
+                    .copied()
+                    .map(LinkValue::Int)
+                    .collect(),
+                DataType::Float32 => values
+                    .as_primitive::<Float32Type>()
+                    .values()
+                    .iter()
+                    .copied()
+                    .map(LinkValue::Float)
+                    .collect(),
+                DataType::Boolean => values
+                    .as_boolean()
+                    .values()
+                    .iter()
+                    .map(LinkValue::Bool)
+                    .collect(),
+                DataType::Utf8 => values
+                    .as_string::<i32>()
+                    .iter()
+                    .map(|value| LinkValue::Text(value.unwrap().to_owned()))
+                    .collect(),
+                DataType::LargeUtf8 => values
+                    .as_string::<i64>()
+                    .iter()
+                    .map(|value| LinkValue::Text(value.unwrap().to_owned()))
+                    .collect(),
+                DataType::Decimal128(_, scale) => values
+                    .as_primitive::<Decimal128Type>()
+                    .values()
+                    .iter()
+                    .map(|&value| LinkValue::Decimal(value, *scale))
+                    .collect(),
+                _ => {
+                    return Err(protocol(
+                        "typed frame link labels contain an incompatible value family",
+                    ));
+                }
+            })
+        })
+        .collect::<Result<Vec<_>, CoreError>>()?;
+    Ok(labels::Labels::Lists(lists))
+}
+
 /// The initial graph call owns the actual early checks and immutable snapshot.
 /// Its caller presents the separate drop warning after this value is retained.
 pub(crate) fn graph(
@@ -82,6 +238,7 @@ pub(crate) fn graph(
     schema: AttachmentId,
     frames: AttachmentId,
     checkpoint: Option<sdm_contract::frames::FrameCheckpoint>,
+    retained: Option<AttachmentId>,
     native: Vec<FrameNativeTable>,
     values: Option<AttachmentId>,
     option_names: &[String],
@@ -114,6 +271,38 @@ pub(crate) fn graph(
     refuse_entities(prediction_rows, 1, limits.entities)?;
     options::statistic(asked.prediction_statistic.as_deref())?;
     let held: sdm_contract::ops::HeldSchema = take_json(attachments, schema)?;
+    if let Some(owner) = retained {
+        if checkpoint.is_some() {
+            return Err(protocol(
+                "a retained frame graph cannot also reread a raw checkpoint",
+            ));
+        }
+        let manifest: sdm_contract::frames::MaterializeFrames = take_json(attachments, frames)?;
+        if !manifest.tables.is_empty() {
+            return Err(protocol(
+                "a retained frame graph cannot reread caller frames",
+            ));
+        }
+        let graph = BoundGraph::take_retained(attachments, owner)?;
+        if graph.native.as_ref() != &native {
+            return Err(protocol(
+                "retained frame graph no longer matches its native source facts",
+            ));
+        }
+        let read = sdm_schema::held::read(held, &BTreeMap::new(), true)?;
+        let mut description = graph.prepared.description.clone();
+        consistent(&mut description, &read.types)?;
+        reserved(&description)?;
+        kept_checks(&description)?;
+        if description != graph.prepared.description {
+            return Err(protocol(
+                "retained frame graph no longer matches its immutable schema meaning",
+            ));
+        }
+        let value = graph.publish(asker)?;
+        crate::frame_materialize::lock(&graph.frames).warn_dropped(asker);
+        return Ok(value);
+    }
     let frames = crate::frame_materialize::take(frames, checkpoint, attachments)?;
     let (mut description, types) = crate::frame_materialize::description(&frames, held)?;
     consistent(&mut description, &types)?;
@@ -388,7 +577,7 @@ pub(crate) async fn labels(
     )
     .await?;
     keep_stored_times(&mut memo, &times);
-    let rows = data(task::labelled_rows(
+    let rows = data(labelled_rows(
         &labelled.keys,
         &labelled.anchors,
         &labelled.labels,
@@ -474,6 +663,7 @@ fn read_labels(rows: &RecordBatch) -> Result<task::LabelledContext, CoreError> {
                 .map(|value| value.unwrap().to_owned())
                 .collect(),
         ),
+        DataType::List(_) => read_link_labels(target)?,
         _ => {
             return Err(protocol(
                 "frame labeled targets do not have a supported task representation",
@@ -530,6 +720,7 @@ fn prediction_values(
     values: FramePredictionValues,
     attachments: &mut Attachments,
     target: &ArrayRef,
+    graph: &BoundGraph,
 ) -> Result<
     (
         ArrayRef,
@@ -563,6 +754,7 @@ fn prediction_values(
             failure,
             message,
             diagnostic: Some(diagnostic),
+            dropped_summary: graph.dropped_summary(),
         }),
         _ => Err(
             protocol("frame prediction data does not match its resolved constructor type").into(),
@@ -585,6 +777,7 @@ pub(crate) fn task(
         prediction,
         attachments,
         &bound.labelled.keys,
+        &bound.graph,
     )?;
     if keys::missing(&predicted) {
         return Err(invalid(
@@ -647,7 +840,7 @@ pub(crate) fn task(
     let calls = u32::try_from(layout.calls)
         .map_err(|_| protocol("frame task call count exceeds UInt32"))?;
     let mut labelled = bound.value;
-    let rows = data(task::labelled_rows(
+    let rows = data(labelled_rows(
         &narrowed.keys,
         &narrowed.anchors,
         &narrowed.labels,
@@ -697,6 +890,42 @@ fn completed_identity(
     ))?;
     identity.arrow(predicted)?;
     Ok(identity.finish())
+}
+
+fn align_task_keys(
+    context: ArrayRef,
+    context_encoding: sdm_contract::data::strings::StringEncoding,
+    prediction: ArrayRef,
+    prediction_encoding: sdm_contract::data::strings::StringEncoding,
+) -> Result<(ArrayRef, ArrayRef), CoreError> {
+    use sdm_contract::data::strings::StringEncoding;
+    for (values, encoding) in [
+        (&context, context_encoding),
+        (&prediction, prediction_encoding),
+    ] {
+        sdm_engine::strings::StringColumn::new(values.as_ref(), encoding).map_err(|_| {
+            protocol("native task keys do not match their explicit string encoding")
+        })?;
+    }
+    if context.data_type() == prediction.data_type() {
+        return Ok((context, prediction));
+    }
+    // This aligns physical Arrow offsets/byte views after the real native
+    // constructor. It performs no language cast or logical key conversion.
+    let physical = if context_encoding == StringEncoding::Utf8
+        && prediction_encoding == StringEncoding::Utf8
+    {
+        DataType::LargeUtf8
+    } else {
+        DataType::LargeBinary
+    };
+    let context = arrow_cast::cast(&context, &physical).map_err(|_| {
+        protocol("native context key byte buffers cannot share a physical Arrow representation")
+    })?;
+    let prediction = arrow_cast::cast(&prediction, &physical).map_err(|_| {
+        protocol("native prediction key byte buffers cannot share a physical Arrow representation")
+    })?;
+    Ok((context, prediction))
 }
 
 struct BoundTask {
@@ -774,8 +1003,25 @@ fn bind_task(
             "completed frame task no longer matches its core-selected batch layout",
         ));
     }
+    let (context_keys, predicted_keys) = if let Some(prediction_encoding) =
+        value.prediction_encoding
+    {
+        let context_encoding = labels
+            .graph
+            .native_column(&value.labelled.meaning.entity)?
+            .strings
+            .ok_or_else(|| protocol("native task source key lost its explicit string encoding"))?;
+        align_task_keys(
+            Arc::clone(&labels.labelled.keys),
+            context_encoding,
+            predicted_keys,
+            prediction_encoding,
+        )?
+    } else {
+        (Arc::clone(&labels.labelled.keys), predicted_keys)
+    };
     let rows = TaskRows::new(
-        Arc::clone(&labels.labelled.keys),
+        context_keys,
         labels.labelled.anchors.clone(),
         predicted_keys,
         value.labelled.meaning.prediction_anchor,
@@ -966,6 +1212,7 @@ fn converted_references(
                 failure,
                 message,
                 diagnostic: None,
+                dropped_summary: task.labels.graph.dropped_summary(),
             });
         }
         _ => {
@@ -1450,6 +1697,7 @@ fn normalize_text(
             failure,
             message,
             diagnostic: None,
+            dropped_summary: context.plan.task.labels.graph.dropped_summary(),
         });
     }
     for (converted, array) in admitted {
@@ -1483,6 +1731,305 @@ fn normalize_text(
         column.1 = payload::SampledColumn::Words(words);
     }
     Ok(())
+}
+
+fn part_identity(plan: &str, part: &EncodedFramePart, bytes: &[u8]) -> Result<String, CoreError> {
+    encoded_identity(
+        plan,
+        &part.context_identity,
+        part.range,
+        part.answering,
+        &part.tables,
+        bytes,
+    )
+}
+
+fn encoded_identity(
+    plan: &str,
+    context: &str,
+    range: FrameBatchRange,
+    answering: u64,
+    tables: &[String],
+    bytes: &[u8],
+) -> Result<String, CoreError> {
+    let mut identity = Identity::new("encoded-request-part");
+    identity.value(&(plan, context, range, answering, tables))?;
+    identity.bytes(bytes);
+    Ok(identity.finish())
+}
+
+/// The owned result of the existing encoder before its call-local ids exist.
+pub(crate) struct EncodedCall {
+    plan: BoundPlan,
+    context_identity: String,
+    range: FrameBatchRange,
+    bytes: Vec<u8>,
+    answering: u64,
+    tables: Vec<String>,
+}
+
+/// Complete one selected context through the existing model request encoder.
+/// Lag columns are actual core-computed columns from the existing lag kernel,
+/// never native instructions, host-selected rows or a second payload schema.
+pub(crate) fn payload_part(
+    asker: &Asker,
+    value: SampledFrameContext,
+    text: NativeFrameText,
+    values: Option<AttachmentId>,
+    lags: Vec<payload::LagColumn>,
+    attachments: &mut Attachments,
+) -> Result<EncodedCall, FrameStageError> {
+    let mut context = bind_context(asker, value, attachments)?;
+    normalize_text(&mut context, text, attachments)?;
+    if context.walked.tables.len() > SUBGRAPH_TABLES {
+        return Err(invalid(
+            Sentence::SubgraphPastTables,
+            "the request's subgraph carries more tables than the endpoint reads",
+            "tables",
+        )
+        .with_field("tables", count(context.walked.tables.len()))
+        .with_field("limit", count(SUBGRAPH_TABLES))
+        .into());
+    }
+    let asked = &context.plan.task.labels.asked;
+    let graph = &context.plan.task.labels.graph.prepared.graph;
+    let link_target = if let Shape::Aggregated(windowed) = &asked.target {
+        if windowed.aggregation == labels::Aggregation::ListDistinct {
+            let column = windowed
+                .column
+                .as_deref()
+                .ok_or_else(|| unvalidated("a list target with no column"))?;
+            let edges = graph
+                .edges
+                .iter()
+                .filter(|edge| edge.src == windowed.table && edge.fkey == column)
+                .collect::<Vec<_>>();
+            match edges.as_slice() {
+                [edge] => Some(edge.dst.clone()),
+                _ => {
+                    return Err(CoreError::new(
+                        Sentence::LinkTargetNotForeignKey,
+                        "the list target is not one foreign key",
+                    )
+                    .with_field(
+                        "column",
+                        Detail::text(format!("{}.{}", windowed.table, column)),
+                    )
+                    .into());
+                }
+            }
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+    if let Some(target) = &link_target {
+        if !context
+            .walked
+            .tables
+            .iter()
+            .any(|table| &table.name == target)
+        {
+            return Err(CoreError::new(
+                Sentence::LinkHistoryMissing,
+                "the sampled subgraph has no historical target entities",
+            )
+            .into());
+        }
+    }
+    let values: Option<Value> = take_json_if(attachments, values)?;
+    let flags = options::values(values.as_ref())?;
+    let (use_prediction_time, return_embeddings) = options::request_flags(&flags)?;
+    let meaning = &context.plan.task.value.labelled.meaning;
+    let anchors = context
+        .anchors
+        .iter()
+        .map(|&anchor| {
+            if meaning.no_time_marker && anchor == TIME_MIN {
+                TIME_MIN
+            } else {
+                anchor.div_euclid(1_000_000_000).wrapping_mul(1_000_000_000)
+            }
+        })
+        .collect();
+    let tables = context
+        .walked
+        .tables
+        .iter()
+        .map(|table| table.name.clone())
+        .collect::<Vec<_>>();
+    let built = payload::build(&Sampled {
+        num_train: context.plan.task.labels.labelled.keys.len(),
+        num_test: (context.value.range.stop - context.value.range.start) as usize,
+        anchors,
+        kind: asked.task,
+        labels: context.plan.task.labels.labelled.labels.clone(),
+        windowed: asked.range.is_some(),
+        tables: context.walked.tables,
+        links: context.walked.links,
+        entity_table: meaning.entity.table.clone(),
+        link_target,
+        source_query: meaning.source_query.clone(),
+        run_mode: mode(meaning.mode),
+        use_prediction_time,
+        return_embeddings,
+        options: context.plan.value.inference.clone(),
+        statistic: meaning.statistic.clone(),
+        top_k: context.plan.value.top_k,
+        rows_per_call: context.plan.task.value.rows_per_call as usize,
+        lags,
+        float_text: crate::pql::float_text,
+    })?;
+    Ok(EncodedCall {
+        plan: context.plan,
+        context_identity: context.value.identity,
+        range: context.value.range,
+        bytes: built.bytes,
+        answering: built.answering as u64,
+        tables,
+    })
+}
+
+/// Complete ordered already-encoded calls without sending a model request.
+/// The native logical-value ownership companion is composed at the same
+/// encoder boundary before this ordinary RequestState can be enabled.
+pub(crate) fn finish_parts(
+    asker: &Asker,
+    next: EncodedCall,
+    previous: Option<FrameRequestParts>,
+    attachments: &mut Attachments,
+) -> Result<PreparedFrameValue, CoreError> {
+    let bound = next.plan;
+    let previous = match previous {
+        None => Vec::new(),
+        Some(previous) => {
+            if previous.version != FRAME_MATERIALIZATION_VERSION
+                || previous.plan.identity != bound.value.identity
+                || previous.plan.task.identity != bound.task.value.identity
+                || previous.plan.task.labelled.meaning != bound.task.value.labelled.meaning
+            {
+                return Err(protocol(
+                    "earlier encoded frame calls belong to another complete task or request plan",
+                ));
+            }
+            previous.parts
+        }
+    };
+    let covered = ordered_coverage(
+        &previous.iter().map(|part| part.range).collect::<Vec<_>>(),
+        bound.task.value.prediction_rows,
+        bound.task.value.rows_per_call,
+        true,
+    )?;
+    if next.range.start != covered {
+        return Err(protocol(
+            "encoded frame context is not the next ordered request part",
+        ));
+    }
+    let mut ranges = previous.iter().map(|part| part.range).collect::<Vec<_>>();
+    ranges.push(next.range);
+    let stop = ordered_coverage(
+        &ranges,
+        bound.task.value.prediction_rows,
+        bound.task.value.rows_per_call,
+        true,
+    )?;
+    let mut parts = Vec::with_capacity(previous.len() + 1);
+    let mut sent = BTreeSet::new();
+    let mut answering = 0_u64;
+    for mut part in previous {
+        let Some(Attachment::Bytes(bytes)) = attachments.remove(&part.payload) else {
+            return Err(protocol(
+                "encoded frame part lacks its complete payload bytes",
+            ));
+        };
+        if part_identity(&bound.value.identity, &part, &bytes)? != part.identity {
+            return Err(protocol(
+                "encoded frame part no longer matches its context, range or complete payload",
+            ));
+        }
+        answering = answering
+            .checked_add(part.answering)
+            .ok_or_else(|| protocol("frame request answering count exceeds UInt64"))?;
+        sent.extend(part.tables.iter().cloned());
+        part.payload = asker.attach(Attachment::Bytes(bytes))?;
+        parts.push(part);
+    }
+    let identity = encoded_identity(
+        &bound.value.identity,
+        &next.context_identity,
+        next.range,
+        next.answering,
+        &next.tables,
+        &next.bytes,
+    )?;
+    answering = answering
+        .checked_add(next.answering)
+        .ok_or_else(|| protocol("frame request answering count exceeds UInt64"))?;
+    sent.extend(next.tables.iter().cloned());
+    parts.push(EncodedFramePart {
+        identity,
+        context_identity: next.context_identity,
+        range: next.range,
+        payload: asker.attach(Attachment::Bytes(next.bytes))?,
+        answering: next.answering,
+        tables: next.tables,
+    });
+    if stop < bound.task.value.prediction_rows {
+        return Ok(PreparedFrameValue::Parts(FrameRequestParts {
+            version: FRAME_MATERIALIZATION_VERSION,
+            plan: bound.publish(asker)?,
+            parts,
+        }));
+    }
+    ordered_coverage(
+        &parts.iter().map(|part| part.range).collect::<Vec<_>>(),
+        bound.task.value.prediction_rows,
+        bound.task.value.rows_per_call,
+        false,
+    )?;
+    let excluded = selected_exclusions(&bound.task, &bound.deferred, true)?
+        .into_iter()
+        .map(|column| (column.table, column.column))
+        .collect::<Vec<_>>();
+    notices(
+        asker,
+        &bound.task.labels.graph.prepared.description,
+        &bound.task.labels.asked,
+        &sent,
+        &excluded,
+        usize::try_from(answering)
+            .map_err(|_| protocol("frame answering count exceeds this host's address space"))?,
+        bound.task.labels.asked.range.is_some(),
+    );
+    let query = attach_json(asker, &bound.task.value.labelled.meaning.source_query)?;
+    let first = parts.remove(0);
+    let batches = if parts.is_empty() {
+        None
+    } else {
+        Some(
+            parts
+                .into_iter()
+                .map(|part| RequestBatch {
+                    payload: part.payload,
+                    rows: part.range.stop - part.range.start,
+                    request_id: None,
+                })
+                .collect(),
+        )
+    };
+    Ok(PreparedFrameValue::Request(Materialized {
+        state: RequestState {
+            version: REQUEST_STATE_VERSION,
+            payload: first.payload,
+            query,
+            forecast: None,
+            batches,
+            ranking: None,
+        },
+        query: Some(bound.task.value.labelled.meaning.facts.clone()),
+    }))
 }
 
 #[cfg(test)]
