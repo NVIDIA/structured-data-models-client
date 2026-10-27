@@ -11,6 +11,7 @@ import json
 import math
 import sys
 import warnings
+import uuid
 
 import numpy as np
 import pandas as pd
@@ -1701,3 +1702,291 @@ def test_selected_finite_value_display_retains_the_actual_float_failure_context(
         assert observed[1] == observed[0]
     finally:
         sys.set_int_max_str_digits(saved)
+
+
+@pytest.mark.parametrize(
+    'kind',
+    [
+        'unhashable-target',
+        'ambiguous-target',
+        'duplicate-scored-dtype',
+        'nullable-cast',
+        'missing-target-after-advice',
+        'ambiguous-target-after-advice',
+        'missing-time-after-advice',
+    ],
+)
+@pytest.mark.parametrize('active', [False, True])
+def test_constructor_native_fault_families_keep_actual_graphs(
+    monkeypatch, kind, active
+):
+    observed = []
+    for core in (False, True):
+        monkeypatch.setenv(
+            'SDM_CORE_ROUTES', CORE + ',' + FRAMES if core else ''
+        )
+        n = 100 if 'after-advice' in kind else 3
+        context = pd.DataFrame(
+            {
+                'user_id': range(1, n + 1),
+                'feature': range(n),
+                'target': range(n, 2 * n),
+            }
+        )
+        scoring = pd.DataFrame(
+            {'user_id': [n + 1, n + 2], 'feature': [n, n + 1]}
+        )
+        target = [] if kind == 'unhashable-target' else 'target'
+        if kind == 'ambiguous-target':
+            context = pd.DataFrame(
+                [[1, 2, 3], [2, 4, 5], [3, 6, 7]],
+                columns=['user_id', 'target', 'target'],
+            )
+            scoring = pd.DataFrame({'user_id': [4, 5]})
+        if kind == 'duplicate-scored-dtype':
+            scoring = pd.DataFrame(
+                [[4, 10, 11], [5, 20, 21]],
+                columns=['user_id', 'feature', 'feature'],
+            )
+        if kind == 'nullable-cast':
+            scoring = pd.DataFrame(
+                {'user_id': [4, 5, 6], 'feature': [1.0, np.inf, np.nan]}
+            )
+        if 'after-advice' in kind:
+            context['user_id'] = pd.Series([None, *range(1, n)], dtype='Int64')
+        if kind == 'missing-time-after-advice':
+            context['created_at'] = pd.date_range('2024-01-01', periods=n)
+        events = []
+
+        def show(message, category, filename, lineno, file=None, line=None):
+            events.append((str(message), category))
+            if len(events) == 1:
+                if kind == 'missing-target-after-advice':
+                    context.drop(columns=['target'], inplace=True)
+                elif kind == 'ambiguous-target-after-advice':
+                    context.insert(
+                        len(context.columns),
+                        'target',
+                        range(200, 200 + n),
+                        allow_duplicates=True,
+                    )
+                elif kind == 'missing-time-after-advice':
+                    context.drop(columns=['created_at'], inplace=True)
+
+        transport = Scripted()
+        failure = None
+        caller = None
+
+        def call():
+            nonlocal failure
+            try:
+                if kind == 'missing-time-after-advice':
+                    Schema.from_data({'instance': context}, relationships=())
+                else:
+                    request = Request(
+                        context, scoring, target=target, task='regression'
+                    )
+                    if kind == 'nullable-cast':
+                        with SDMClient(
+                            'http://localhost:1', max_retries=0
+                        ) as client:
+                            client._transport.close()
+                            client._transport = transport
+                            client.predict(request, model=KumoTabular())
+            except Exception as error:
+                failure = error
+
+        with warnings.catch_warnings():
+            warnings.simplefilter('always')
+            warnings.showwarning = show
+            if active:
+                try:
+                    raise LookupError('outer-active-caller')
+                except LookupError as outer:
+                    caller = outer
+                    call()
+            else:
+                call()
+        assert failure is not None
+        assert not transport.calls
+        if kind.startswith('missing-'):
+            assert type(failure) is KeyError
+            assert failure.__suppress_context__
+            inner = failure.__cause__
+            assert type(inner) is KeyError
+            assert failure.__context__ is inner
+            assert not inner.__suppress_context__
+            assert inner.__cause__ is None
+            assert inner.__context__ is caller
+        else:
+            assert failure.__cause__ is None
+            assert not failure.__suppress_context__
+            assert failure.__context__ is caller
+        observed.append((native_exception_graph(failure), events))
+    assert observed[1] == observed[0]
+
+
+def test_unhashable_target_propagates_the_original_index_exception(monkeypatch):
+    monkeypatch.setenv('SDM_CORE_ROUTES', CORE)
+    context = pd.DataFrame({'user_id': [1, 2, 3], 'target': [2, 4, 6]})
+    scoring = pd.DataFrame({'user_id': [4, 5]})
+    target = []
+    original = pd.Index.__contains__
+    captured = []
+
+    def contains(index, value):
+        try:
+            return original(index, value)
+        except TypeError as error:
+            if index is context.columns and value is target:
+                captured.append(error)
+            raise
+
+    # Observe the actual built-in Index operation without replacing its result.
+    monkeypatch.setattr(pd.Index, '__contains__', contains)
+    with pytest.raises(TypeError) as caught:
+        Request(context, scoring, target=target, task='regression')
+    assert captured
+    assert caught.value is captured[0]
+
+
+@pytest.mark.parametrize(
+    'kind,reduced',
+    [
+        ('nested', False),
+        ('nested', True),
+        ('ordinary', False),
+        ('ordinary', True),
+        ('warning-between-rows', False),
+    ],
+)
+def test_id_json_conversion_observes_native_recursion_at_each_reached_row(
+    monkeypatch, kind, reduced
+):
+    deep = '[' * 300 + '0' + ']' * 300
+    saved = sys.getrecursionlimit()
+    observed = []
+    try:
+        for core in (False, True):
+            sys.setrecursionlimit(saved)
+            monkeypatch.setenv('SDM_CORE_ROUTES', CORE if core else '')
+            context = pd.DataFrame({'user_id': [1, 2, 3], 'target': [2, 4, 6]})
+            scoring = pd.DataFrame({'user_id': [4, 5]})
+            request = Request(
+                context, scoring, target='target', task='regression'
+            )
+            ids = [deep, '[5]'] if kind == 'nested' else ['[4]', '[5]']
+            if kind == 'warning-between-rows':
+                ids = [r"[4+1, '\q']", deep]
+
+            def edit(answer):
+                for at, item in enumerate(answer['predictions']):
+                    item['id'] = ids[at]
+                return answer
+
+            transport = Scripted(edit)
+            events = []
+
+            def show(message, category, filename, lineno, file=None, line=None):
+                events.append((str(message), category))
+                if kind == 'warning-between-rows':
+                    sys.setrecursionlimit(200)
+
+            result = None
+            failure = None
+            try:
+                if reduced:
+                    sys.setrecursionlimit(200)
+                with warnings.catch_warnings():
+                    warnings.simplefilter('always')
+                    warnings.showwarning = show
+                    try:
+                        with SDMClient(
+                            'http://localhost:1', max_retries=0
+                        ) as client:
+                            client._transport.close()
+                            client._transport = transport
+                            result = client.predict(
+                                request, model=KumoTabular()
+                            )
+                    except Exception as exception:
+                        failure = exception
+            finally:
+                sys.setrecursionlimit(saved)
+            assert len(transport.calls) == 1
+            record = {'ok': failure is None, 'events': events}
+            if failure is not None:
+                record['error'] = error(failure)
+            else:
+                record['ids'] = [item.id for item in result.items]
+            observed.append(record)
+        assert observed[1] == observed[0]
+        if kind == 'ordinary':
+            assert observed[0]['ok']
+        if kind == 'nested' and not reduced:
+            assert not observed[0]['ok']
+        if sys.version_info[:2] == (3, 10) and (
+            reduced or kind == 'warning-between-rows'
+        ):
+            assert observed[0]['ok']
+        if sys.version_info[:2] == (3, 12) and kind != 'ordinary':
+            assert not observed[0]['ok']
+    finally:
+        sys.setrecursionlimit(saved)
+
+
+@pytest.mark.parametrize(
+    'empty,fail_draw',
+    [(True, True), (True, False), (False, False), (False, True)],
+)
+def test_empty_prediction_has_no_native_uuid_effect(
+    monkeypatch, empty, fail_draw
+):
+    observed = []
+    for core in (False, True):
+        monkeypatch.setenv('SDM_CORE_ROUTES', CORE if core else '')
+        context = pd.DataFrame({'user_id': [1, 2, 3], 'target': [2, 4, 6]})
+        scoring = (
+            pd.DataFrame({'user_id': pd.Series([], dtype='int64')})
+            if empty
+            else pd.DataFrame({'user_id': [4, 5]})
+        )
+        request = Request(context, scoring, target='target', task='regression')
+        transport = Scripted()
+        draws = []
+        sentinel = RuntimeError('unexpected-native-UUID-draw')
+
+        def draw():
+            draws.append(True)
+            if fail_draw:
+                raise sentinel
+            return uuid.UUID('01234567-89ab-cdef-0123-456789abcdef')
+
+        result = None
+        failure = None
+        with SDMClient('http://localhost:1', max_retries=0) as client:
+            client._transport.close()
+            client._transport = transport
+            with monkeypatch.context() as patch:
+                patch.setattr(uuid, 'uuid4', draw)
+                try:
+                    result = client.predict(request, model=KumoTabular())
+                except Exception as exception:
+                    failure = exception
+        assert len(draws) == (0 if empty else 1)
+        if empty:
+            assert failure is None
+            assert result.request_id == ''
+            assert result.items == [] or result.items == ()
+            assert not transport.calls
+        elif fail_draw:
+            assert failure is sentinel
+            assert not failure.__suppress_context__
+            assert not transport.calls
+        else:
+            assert failure is None
+            assert len(transport.calls) == 1
+        observed.append(
+            (len(draws), len(transport.calls), native_exception_graph(failure))
+        )
+    assert observed[1] == observed[0]
