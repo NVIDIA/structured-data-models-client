@@ -269,11 +269,11 @@ impl PredictionItem {
         let row_index = match value.get("row_index") {
             None => return Err(refused("prediction.row_index", "missing")),
             Some(Value::Null) => return Err(refused("prediction.row_index", "null")),
-            Some(number) => whole_index(number)?,
+            Some(number) if keep_wide_index => whole_index(number)?,
+            // Gathered integer and floating tokens retain their original
+            // distinct admission before any later field is consumed.
+            Some(number) => RowIndex(whole_of(number, "prediction.row_index")?.to_string()),
         };
-        if !keep_wide_index && row_index.as_i128().is_none() {
-            return Err(refused("prediction.row_index", "out_of_range"));
-        }
         let (forecast_step, forecast_step_written) = match value.get("forecast_step") {
             None | Some(Value::Null) => (None, None),
             Some(number) if keep_wide_index => {

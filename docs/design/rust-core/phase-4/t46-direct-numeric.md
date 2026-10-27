@@ -133,6 +133,7 @@ Optional item id and forecast_step diagnostics retain the generated helper owner
 Accepted direct whole forecast steps retain exact digits through a native-item carrier when they exceed the Arrow int64 width.
 That native reconstruction uses maintained exact conversion without imposing a new late integer-display limit.
 The same shared decoder keeps gathered width admission unchanged, while its explicit direct mode preserves exact canonical row-integer digits through bounds checking before result-table narrowing.
+Gathered row indices use the existing whole-number kernel before later fields, preserving the distinct integer i128MIN acceptance and floating absolute-2**127 rejection rather than narrowing direct canonical digits afterward.
 Finite whole floats use standard native-compatible conversion, including negative-zero normalization; arbitrary integer tokens acquire no fixed i64 or i128 bound before direct attribution.
 Global decoding still precedes all native row-literal effects, and later bounds remain deferred until their own row.
 An error-only native presenter renders the core-selected bounds integer using maintained exact conversion at that reached presentation boundary, preserving an active decimal digit-limit failure after earlier warning effects.
