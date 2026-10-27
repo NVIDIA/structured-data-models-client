@@ -17,7 +17,7 @@ from sdm_client._rust.frame_decimals import native_decimal_column
 
 
 def arrays(bits, precision, scale):
-    make = pa.decimal128 if bits == 128 else pa.decimal256
+    make = getattr(pa, f'decimal{bits}')
     dtype = make(precision, scale)
     raw = b''.join(
         value.to_bytes(bits // 8, byteorder='little', signed=True)
@@ -29,7 +29,9 @@ def arrays(bits, precision, scale):
     return dtype, [base.slice(1, 3), base.slice(0, 1), base.slice(0, 0)]
 
 
-@pytest.mark.parametrize('bits', [128, 256])
+@pytest.mark.parametrize(
+    'bits', [bits for bits in (32, 64, 128, 256) if hasattr(pa, f'decimal{bits}')]
+)
 @pytest.mark.parametrize('scale', [-129, -128, -1, 0, 1, 2, 129])
 def test_lossless_native_decimal_mantissa_view(bits, scale):
     dtype, chunks = arrays(bits, 1, scale)
@@ -41,7 +43,7 @@ def test_lossless_native_decimal_mantissa_view(bits, scale):
         'precision': 1,
         'scale': scale,
     }
-    make = pa.decimal128 if bits == 128 else pa.decimal256
+    make = getattr(pa, f'decimal{bits}')
     assert storage.type == make(1, 0)
     assert storage.num_chunks == len(chunks)
     for source, view in zip(chunks, storage.chunks, strict=True):
