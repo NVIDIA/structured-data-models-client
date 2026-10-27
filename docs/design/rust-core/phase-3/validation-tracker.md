@@ -1,6 +1,6 @@
 # Phase 3 validation tracker
 
-Updated 2026-10-27, 09:22 UTC.
+Updated 2026-10-27, 13:03 UTC.
 Phase 3 / T3.10 is unfinished.
 The owner assigned existing Phase4work to a separate new agent; this coordinator continues Phase3.
 The coordinator alone edits this tracker; agents report results and next actions.
@@ -72,7 +72,7 @@ Counts describe existing cases only.
 | R7 | **DONE: Databricks generated-source and provider checks** | Both finite opinions accept all 20 classified generated journeys; after both CODE approvals, corrected directCountRows oracle rechecked all 99 complete saved live answers: normal 33/33, truncate detected, silent-capability detected | Receipt `712a0c21`; all 99 original judgments reproduced first, only direct count-header judgment changed per pass; original failures preserved, no new queries |
 | R8 | **DONE: finite warehouse comparison evidence and affected Lakebase original** | Both final DK302/SF304 opinions accept bounded evidence; final15e Lakebase negative-neighbor original now actually returns PostgreSQL PROVIDER_ERROR/2201W under P2I-4, with one observed case and no operator failure | Full original AW173106 typed rows, ordered columns/types and PK/FK restored exactly; SDK0 between case and restoration, lease released; receipt `4ff68507` retained for final pack sign-off |
 | R9 | **DONE: selected affected comparison acceptance** | All36warehouse and18Java plus paired18Python observations complete; both quality reviews and both finite data/runtime reviews accepted their bounded scopes. Owner accepted the exact five diamond request-order differences | All66successful bodies have valid FK targets; every raw strict failure and existing metadata/warning/error limit remains visible |
-| R10 | Finish full CI on current sourceff86 | [CI40473118676](https://github.com/NVIDIA/structured-data-models-client/actions/runs/40473118676) running; at09:22,77successful jobs,2intentional skips,2running tooling jobs and1failure. Failed Java21 ARM SQLite job122088454545 hit artifact-list ECONNRESET before setup/test | Root waits for parentterminal, retries only that job and observes the dependent report. No source fix or full-matrix restart indicated. Earlier234CI40430848336 remains genuinely green historical evidence |
+| R10 | Finish full CI on current sourceff86 | [CI40473118676](https://github.com/NVIDIA/structured-data-models-client/actions/runs/40473118676) attempt1 finished with80successful jobs,2intentional skips and only the Java21 ARM SQLite artifact-list ECONNRESET before setup/test. Selected retry submitted at13:02:58; attempt2 is actually queued on exactff86 | Root consumes the selected retry and dependent report next. Original80successful jobs are retained; no source fix or full-matrix restart indicated. Earlier234CI40430848336 remains genuinely green historical evidence |
 | R11 | **DONE: Snowflake identical-input comparison** | Full 10101-row source and original 10000-row draw verified; both complete current requests match the originals; all 10001 actual model26 predictions exactly equal old, RMSE ratio 1.0 on both batches and aggregate; SDK0 cleanup | Coordinator consumed receipt `8f48d1c7`; sampling unchanged; historical independent-draw 26.51% loss and failed recorder-mode attempt preserved |
 | R12 | **DONE: ordinary acceptance under approved frozen-reference policy** | All nine non-main gate steps PASS, including fullRustL1,364seeded tests,452self-checks and inventory388; seven clean234 runner/cell files each hold315records. Dependency/size checks and generated evidence passed, with zero regressions in the41-case legacy inventory report | Original machine gate stays FAILmain/check7/check12; owner exception and both independent alignment reviews retained separately, with no fabricated wrapper/stamp PASS |
 | R13 | Final evidence, owner choices and integration | COMPLETE captures: both reference169 passes/determinism, Python-core169, Rust169, Java20 and oldDuckDB25. Exact40-ID/169-key coverage and all preservation checks passed. Raw H11 NO-GO33IDs/82legs, zero panic/new refusal/missing; all114 reference successes retained | Both finite reviews conditional on two final post-run owner choices: one unapproved native-validation trace remains, <=4. Reviewed HOLD packet a4f4e82a is published separately, with both exact CODE approvals and a passing175-second normal docs handoff. Await actual owner answers and R10 green, complete final evidence opinions, then signed no-ff core merge/push. No new draw or warehouse/model rerun |
@@ -107,7 +107,7 @@ The deadline does not lower correctness requirements.
 
 All original captures, comparisons and preservation checks are complete.
 Do not redraw, reset the marker, rerun completed campaigns or add another comparator/framework.
-Finish the one current CI run and its targeted artifact-download retry, obtain the two outstanding owner dispositions, and complete final evidence opinions.
+Finish the submitted selected Java artifact-download retry and dependent CI report, obtain the two outstanding owner dispositions, and complete final evidence opinions.
 The separate HOLD evidence packet is already reviewed, checked and published at a4f4e82a; it does not change the tested sourceff86 tree.
 Retain raw33/82 NO-GO and old failed attempts; any owner acceptance is an explicit post-run exception, never approval before testing.
 Once the remaining conditions are satisfied, obtain the short final evidence opinions and integrate normally.
@@ -116,7 +116,11 @@ Automatic core-push CI still runs; verify merge parents/tree, epic ratchet/prove
 ## Current execution and integration
 
 - Phase3 head is `ff86cd1c9e5ca53d0f5e9bc28399916294631549`, tree `ff4402e3c5864985d33767801bf23b36d7300b7d`; candidate931 passed both reviews and normal package checks before landing.
-- Current full CI40473118676 is running onff86, with one artifact-list ECONNRESET before Java setup/test; only that failed job needs retry after parentterminal.
+- Current CI40473118676 attempt1 is terminal:80successful jobs,2intentional skips and one artifact-list ECONNRESET before Java setup/test.
+  Root submitted only job122088454545 for retry; GitHub accepted and reports attempt2 queued onff86 at13:03.
+  Both tooling suites passed; original root log confirms978tests.
+  The owner reported a Codex model-capacity interruption; on resumption root collected the terminal state and dispatched the selected retry immediately.
+  Retry intent SHA9af1d828 and original83-job snapshot remain in the existing finalff86 CI receipt directory.
 - Source234 ordinary-gate, native/JAR, data/model, timing, memory, notebook and provider results retain their genuine identities under both source-impact opinions.
   Original234CI40430848336 passed81 jobs with two skips; it is not relabeled as ff86 CI.
 - Complete follow-up directory is `heldout-same-input-followup-ff86cd1c-20261027`; all40 original IDs/169 supported keys and Java20/old25 are present.
