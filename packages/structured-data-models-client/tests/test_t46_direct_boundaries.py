@@ -687,7 +687,15 @@ def test_direct_prediction_value_family_keeps_task_cast_and_catch_policy(
                 warnings.simplefilter('always')
 
                 def show(
-                    message, category, filename, lineno, file=None, line=None, *, events=events):
+                    message,
+                    category,
+                    filename,
+                    lineno,
+                    file=None,
+                    line=None,
+                    *,
+                    events=events,
+                ):
                     events.append(
                         (str(message), category, sys.get_int_max_str_digits())
                     )
@@ -884,7 +892,15 @@ def test_direct_decoded_result_carriers_survive_later_native_digit_limit(
                 warnings.simplefilter('always')
 
                 def show(
-                    message, category, filename, lineno, file=None, line=None, *, record=record):
+                    message,
+                    category,
+                    filename,
+                    lineno,
+                    file=None,
+                    line=None,
+                    *,
+                    record=record,
+                ):
                     record['events'].append(
                         (str(message), category, sys.get_int_max_str_digits())
                     )
@@ -1179,7 +1195,7 @@ def test_public_predict_run_loop_keeps_selected_causes(
         request = Request(context, scoring, target='target', task='regression')
         transport = Scripted(item({field: value}))
 
-        def call(, *, request=request, transport=transport):
+        def call(*, request=request, transport=transport):
             with SDMClient('http://localhost:1', max_retries=0) as client:
                 client._transport.close()
                 client._transport = transport
@@ -1334,7 +1350,7 @@ def test_public_finite_response_keeps_actual_nested_conversion_context(
         )
         transport = Scripted(item({field: member}))
 
-        def call(, *, request=request, transport=transport):
+        def call(*, request=request, transport=transport):
             with SDMClient('http://localhost:1', max_retries=0) as client:
                 client._transport.close()
                 client._transport = transport
@@ -1397,7 +1413,17 @@ def test_fresh_time_candidates_preserve_physical_float_width(
             frame['event_b'] = pd.date_range('2025-01-01', periods=100)
         events = []
 
-        def show(message, category, filename, lineno, file=None, line=None, *, events=events, frame=frame):
+        def show(
+            message,
+            category,
+            filename,
+            lineno,
+            file=None,
+            line=None,
+            *,
+            events=events,
+            frame=frame,
+        ):
             events.append((str(message), category))
             if len(events) == 1:
                 offsets = np.arange(100, dtype='float64') * 86400e9
@@ -1577,7 +1603,19 @@ def test_native_id_conversion_preserves_observed_exception_objects_and_graph(
             explicit_causes = []
             events = []
 
-            def show(message, category, filename, lineno, file=None, line=None, *, events=events, explicit_causes=explicit_causes, selected=selected, warning_contexts=warning_contexts):
+            def show(
+                message,
+                category,
+                filename,
+                lineno,
+                file=None,
+                line=None,
+                *,
+                events=events,
+                explicit_causes=explicit_causes,
+                selected=selected,
+                warning_contexts=warning_contexts,
+            ):
                 native_context = sys.exc_info()[1]
                 warning_contexts.append(native_context)
                 events.append(
@@ -1603,7 +1641,7 @@ def test_native_id_conversion_preserves_observed_exception_objects_and_graph(
             result = None
             caller = None
 
-            def call(, *, request=request, transport=transport):
+            def call(*, request=request, transport=transport):
                 nonlocal failure, result
                 try:
                     with SDMClient(
@@ -1724,7 +1762,7 @@ def test_selected_finite_value_display_retains_the_actual_float_failure_context(
             transport = ScriptedFinite()
             caller = None
 
-            def call(, *, request=request, transport=transport):
+            def call(*, request=request, transport=transport):
                 with SDMClient('http://localhost:1', max_retries=0) as client:
                     client._transport.close()
                     client._transport = transport
@@ -1819,7 +1857,18 @@ def test_constructor_native_fault_families_keep_actual_graphs(
             context['created_at'] = pd.date_range('2024-01-01', periods=n)
         events = []
 
-        def show(message, category, filename, lineno, file=None, line=None, *, context=context, events=events, n=n):
+        def show(
+            message,
+            category,
+            filename,
+            lineno,
+            file=None,
+            line=None,
+            *,
+            context=context,
+            events=events,
+            n=n,
+        ):
             events.append((str(message), category))
             if len(events) == 1:
                 if kind == 'missing-target-after-advice':
@@ -1838,7 +1887,13 @@ def test_constructor_native_fault_families_keep_actual_graphs(
         failure = None
         caller = None
 
-        def call(, *, context=context, scoring=scoring, target=target, transport=transport):
+        def call(
+            *,
+            context=context,
+            scoring=scoring,
+            target=target,
+            transport=transport,
+        ):
             nonlocal failure
             try:
                 if kind == 'missing-time-after-advice':
@@ -1948,7 +2003,16 @@ def test_id_json_conversion_observes_native_recursion_at_each_reached_row(
             transport = Scripted(edit)
             events = []
 
-            def show(message, category, filename, lineno, file=None, line=None, *, events=events):
+            def show(
+                message,
+                category,
+                filename,
+                lineno,
+                file=None,
+                line=None,
+                *,
+                events=events,
+            ):
                 events.append((str(message), category))
                 if kind == 'warning-between-rows':
                     sys.setrecursionlimit(200)
@@ -2017,7 +2081,7 @@ def test_empty_prediction_has_no_native_uuid_effect(
         draws = []
         sentinel = RuntimeError('unexpected-native-UUID-draw')
 
-        def draw(, *, draws=draws, sentinel=sentinel):
+        def draw(*, draws=draws, sentinel=sentinel):
             draws.append(True)
             if fail_draw:
                 raise sentinel
