@@ -1,5 +1,9 @@
 # Phase 3 acceptance evidence
 
+This page is the reviewed HOLD snapshot published at `a4f4e82a`, before the final owner answers and CI result.
+The later decisions and final acceptance are recorded in [final-disposition.md](final-disposition.md).
+Statements below about pending work describe that snapshot.
+
 This is a draft HOLD packet, not a GO decision.
 The current Phase3 source is ff86cd1c9, which contains the reviewed replay and numeric-comparison repairs.
 Every required observation is present: both reference passes169, Python-core169, Rust169, Java20 and the old-client DuckDB25 smoke run.
