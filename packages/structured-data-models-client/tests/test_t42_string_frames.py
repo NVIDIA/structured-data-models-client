@@ -296,7 +296,7 @@ def test_string_date_advice_warning_as_error_stops_later_advice(
     for core in (False, True):
         touched = []
 
-        def observe(table):
+        def observe(table, touched=touched):
             touched.append(table.name)
             return original(table)
 
@@ -390,7 +390,7 @@ def test_string_advice_keeps_link_validation_and_grouped_time_notice_order(
     for core in (False, True):
         touched = []
 
-        def observe(table):
+        def observe(table, touched=touched):
             touched.append(table.name)
             return original(table)
 
