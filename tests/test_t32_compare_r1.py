@@ -93,7 +93,7 @@ def test_a_core_host_s_changed_payload_fails(who: str) -> None:
 
 
 def test_java_agrees_with_python_core_on_the_core_fields() -> None:
-    core = {
+    core: dict[str, Any] = {
         'inputs': [],
         'fetches': [],
         'described': None,
@@ -114,6 +114,128 @@ def test_java_agrees_with_python_core_on_the_core_fields() -> None:
     assert 'python-core against java' in report.failures[0][1]
     # compare() pairs Java's observation with python-core's.
     assert "observed.get('java'" in inspect.getsource(COMPARE.compare)
+
+
+def _numeric_core_agreement(
+    field: str, mine: Any, theirs: Any, *, shared: bool = False
+) -> Any:
+    """Compare captured numeric tokens without parsing them through floats."""
+    core = {
+        'inputs': [{'op': 'predict', 'state': {'payload': mine}}],
+        'fetches': [],
+        'described': None,
+        'materialized': None,
+        'predicted': None,
+        'accepted': None,
+        'error': None,
+    }
+    if field != 'inputs':
+        core['inputs'] = []
+        core['predicted'] = {'body': {'value': mine}}
+        if field == 'calls':
+            core['predicted']['body'] = {'value': None}
+            core['predicted']['calls'] = [{'value': mine}]
+    python = {
+        'identity': {'operations': ['predict'], 'contract': 30},
+        'core': core,
+    }
+    rust = copy.deepcopy(python)
+    if field == 'inputs':
+        rust['core']['inputs'][0]['state']['payload'] = theirs
+    elif field == 'calls':
+        rust['core']['predicted']['calls'][0]['value'] = theirs
+    else:
+        rust['core']['predicted']['body']['value'] = theirs
+    if shared:
+        rust['identity']['operations'].append('predict')
+        rust['core']['inputs'].append({'op': 'predict', 'state': {}})
+    report = COMPARE.Report()
+    COMPARE._core_agree(
+        report,
+        {'id': 'numeric-core'},
+        python,
+        rust,
+        stop='predict' if shared else None,
+    )
+    return report
+
+
+@pytest.mark.parametrize('field', ['inputs', 'predicted', 'calls'])
+@pytest.mark.parametrize(
+    ('mine', 'theirs'),
+    [('-3e-06', '-3e-6'), ('1.000e-5', '0.00001'), ('-0.00', '-0e1')],
+)
+def test_core_fields_agree_on_exact_float_values_with_different_spelling(
+    field: str, mine: str, theirs: str
+) -> None:
+    report = _numeric_core_agreement(
+        field, {'number': mine}, {'number': theirs}
+    )
+    assert report.failures == [], report.texts
+
+
+@pytest.mark.parametrize('field', ['inputs', 'predicted', 'calls'])
+@pytest.mark.parametrize(
+    ('mine', 'theirs'),
+    [
+        ({'number': '1'}, {'number': '1.0'}),
+        ({'number': '-0.0'}, {'number': '0e0'}),
+        ({'number': '1e-6'}, {'number': '1.0000000000000001e-6'}),
+        ({'number': '9007199254740992.0'}, {'number': '9007199254740993.0'}),
+        ('1e-06', '1e-6'),
+    ],
+)
+def test_core_numeric_agreement_keeps_kind_sign_exact_value_and_strings(
+    field: str, mine: Any, theirs: Any
+) -> None:
+    report = _numeric_core_agreement(field, mine, theirs)
+    assert [rule for rule, _ in report.failures] == ['core'], report.texts
+
+
+@pytest.mark.parametrize(
+    ('mine', 'theirs', 'agrees'),
+    [('3e-06', '3e-6', True), ('1', '1.0', False)],
+)
+def test_shared_core_inputs_use_the_same_lossless_numeric_rule(
+    mine: str, theirs: str, agrees: bool
+) -> None:
+    report = _numeric_core_agreement(
+        'inputs', {'number': mine}, {'number': theirs}, shared=True
+    )
+    assert (report.failures == []) is agrees, report.texts
+
+
+@pytest.mark.parametrize('field', ['source', 'state', 'metadata'])
+def test_numeric_payload_rule_does_not_rewrite_other_core_maps(
+    field: str,
+) -> None:
+    python = {
+        'identity': {'operations': ['predict'], 'contract': 30},
+        'core': {
+            'inputs': [],
+            'fetches': [],
+            'described': None,
+            'materialized': None,
+            'predicted': None,
+            'accepted': None,
+            'error': None,
+        },
+    }
+    before, after = {'number': '1e-06'}, {'number': '1e-6'}
+    if field == 'metadata':
+        python['core']['predicted'] = {'metadata': before}
+    else:
+        python['core']['inputs'] = [
+            {'op': 'predict', field: {'primary_keys': before}}
+        ]
+    rust = copy.deepcopy(python)
+    if field == 'metadata':
+        rust['core']['predicted']['metadata'] = after
+    else:
+        rust['core']['inputs'][0][field]['primary_keys'] = after
+    report = COMPARE.Report()
+    COMPARE._core_agree(report, {'id': 'numeric-map'}, python, rust)
+    assert [rule for rule, _ in report.failures] == ['core'], report.texts
 
 
 # --- 6: the warehouse drivers' reads -------------------------------------------------
