@@ -918,6 +918,7 @@ sentences! {
     DirectFloatPrecision = "direct_float_precision", E::InvalidRequest;
     DirectOptionInteger = "direct_option_integer", E::InvalidRequest;
     DirectPredictDtype = "direct_predict_dtype", E::InvalidRequest;
+    DirectNullableCast = "direct_nullable_cast", E::InvalidRequest;
     DirectAnswersShown = "direct_answers_shown", W::FrameSchema;
     DirectLookup = "direct_lookup", E::InvalidRequest;
     DirectAmbiguous = "direct_ambiguous", E::InvalidRequest;

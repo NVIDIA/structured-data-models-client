@@ -328,7 +328,6 @@ class Request:
     # the core did not materialize, which predict on the core predicts from
     # what it holds, as the old client does (T3.26).
     _core: CoreRequest | None = None
-    _direct: Any = None
 
     def __init__(
         self,

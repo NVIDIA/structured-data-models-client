@@ -7,10 +7,12 @@
 use crate::predict::{self, Entity, Part};
 use arrow_array::cast::AsArray;
 use arrow_array::types::*;
-use arrow_array::{Array, ArrayRef, RecordBatch};
+use arrow_array::{ArrayRef, RecordBatch};
 use arrow_schema::DataType;
 use sdm_contract::ops::{DescribedTable, Dtype, HeldSchema, HeldTable, SourceDescription, Stype};
-use sdm_contract::prepare::{DirectInference, PrimitiveOption};
+use sdm_contract::prepare::{
+    DirectInference, FloatStorage, PrimitiveOption, TabularColumn, TabularColumns,
+};
 use sdm_contract::{CoreError, CoreWarning, Detail, Scalar, Sentence};
 use sdm_wire::json::Value;
 use sdm_wire::response::PredictionResponse;
@@ -167,18 +169,39 @@ fn cell(
     crate::payload::int_cell(number, column)
 }
 
-fn nullable_whole(batches: &[RecordBatch], at: usize) -> bool {
-    let missing = batches.iter().any(|b| b.column(at).null_count() > 0);
-    missing
-        && batches.iter().all(|batch| {
-            (0..batch.num_rows()).all(|row| match raw(batch.column(at), row) {
-                Ok(Scalar::Null) => true,
-                Ok(Scalar::Float64(v)) => {
-                    v.is_finite() && v.fract() == 0. && v >= i64::MIN as f64 && v < i64::MAX as f64
-                }
-                _ => false,
-            })
-        })
+fn nullable_whole(
+    batches: &[RecordBatch],
+    at: usize,
+    storage: Option<FloatStorage>,
+) -> Result<bool, CoreError> {
+    if !batches.iter().any(|b| b.column(at).null_count() > 0) {
+        return Ok(false);
+    }
+    let storage = storage.ok_or_else(|| {
+        CoreError::protocol(
+            Sentence::InvalidMessage,
+            "nullable floating storage has no native missingness fact",
+        )
+    })?;
+    let present = batches
+        .iter()
+        .flat_map(|batch| (0..batch.num_rows()).map(move |row| raw(batch.column(at), row)))
+        .collect::<Result<Vec<_>, _>>()?;
+    if storage == FloatStorage::NanMissing
+        && present
+            .iter()
+            .any(|v| matches!(v,Scalar::Float64(v) if !v.is_finite()))
+    {
+        return Err(invalid(Sentence::DirectNullableCast)
+            .with_field("ordinal", Detail::Scalar(Scalar::UInt64(at as u64))));
+    }
+    Ok(present.into_iter().all(|value| match value {
+        Scalar::Null => true,
+        Scalar::Float64(v) => {
+            v.is_finite() && v.fract() == 0. && v >= i64::MIN as f64 && v < i64::MAX as f64
+        }
+        _ => false,
+    }))
 }
 
 fn widths(
@@ -186,7 +209,8 @@ fn widths(
     native: Option<&HeldTable>,
     scoring: &[RecordBatch],
     arriving: &[(String, Dtype)],
-) -> BTreeMap<String, Dtype> {
+    storage: &[Option<FloatStorage>],
+) -> Result<BTreeMap<String, Dtype>, CoreError> {
     let mut dtypes: BTreeMap<String, Dtype> = table
         .columns
         .iter()
@@ -200,14 +224,18 @@ fn widths(
     for (name, arrived) in arriving {
         if let Some(before) = dtypes.get(name).copied() {
             let at = scoring.first().and_then(|b| b.schema().index_of(name).ok());
-            let arrived = if matches!(before, Dtype::Int32 | Dtype::Int64)
+            let retain = if matches!(before, Dtype::Int32 | Dtype::Int64)
                 && matches!(arrived, Dtype::Float32 | Dtype::Float64)
-                && at.is_some_and(|at| nullable_whole(scoring, at))
             {
-                before
+                if let Some(at) = at {
+                    nullable_whole(scoring, at, storage.get(at).copied().flatten())?
+                } else {
+                    false
+                }
             } else {
-                *arrived
+                false
             };
+            let arrived = if retain { before } else { *arrived };
             dtypes.insert(name.clone(), widened(before, arrived));
         } else if table.columns.iter().any(|c| &c.name == name) {
             dtypes.insert(name.clone(), *arrived);
@@ -216,7 +244,7 @@ fn widths(
     for column in &table.columns {
         dtypes.entry(column.name.clone()).or_insert(Dtype::String);
     }
-    dtypes
+    Ok(dtypes)
 }
 
 fn primitive_inference(inference: DirectInference) -> Result<Value, CoreError> {
@@ -270,23 +298,20 @@ fn primitive_inference(inference: DirectInference) -> Result<Value, CoreError> {
     Ok(Value::Object(fields))
 }
 
-/// Build the actual tabular wire body once from fresh halves and held meaning.
+/// Resolve adapter schema columns before its warning and fallible body work.
 #[allow(clippy::too_many_arguments)]
-pub fn body(
+pub fn envelope(
     description: &SourceDescription,
     native_schema: &HeldSchema,
     entity: &str,
-    context: &[RecordBatch],
+    context_names: &[String],
     scoring: &[RecordBatch],
     arriving: &[(String, Dtype)],
+    storage: &[Option<FloatStorage>],
     target: &str,
     kind: &str,
-    outputs: &[String],
-    request_id: &str,
-    inference: DirectInference,
     supports: fn(Stype, Dtype) -> bool,
-    float_text: fn(f64) -> String,
-) -> Result<(Value, Vec<CoreWarning>), CoreError> {
+) -> Result<(TabularColumns, Vec<CoreWarning>), CoreError> {
     let table = description
         .tables
         .iter()
@@ -295,17 +320,7 @@ pub fn body(
             invalid(Sentence::DirectSchemaMissing).with_field("name", Detail::text(entity))
         })?;
     let native = native_schema.tables.iter().find(|t| t.name == entity);
-    let dtypes = widths(table, native, scoring, arriving);
-    let context_names: Vec<String> = context
-        .first()
-        .map(|b| {
-            b.schema()
-                .fields()
-                .iter()
-                .map(|f| f.name().clone())
-                .collect()
-        })
-        .unwrap_or_default();
+    let dtypes = widths(table, native, scoring, arriving, storage)?;
     let missing: Vec<String> = context_names
         .iter()
         .filter(|n| !dtypes.contains_key(*n))
@@ -316,7 +331,7 @@ pub fn body(
     }
     let mut columns = Vec::new();
     let mut text_columns = Vec::new();
-    for name in &context_names {
+    for name in context_names {
         let column = table
             .columns
             .iter()
@@ -351,27 +366,77 @@ pub fn body(
                 Stype::Categorical
             };
         }
-        columns.push((
-            name.clone(),
-            object([
-                ("dtype", text(dtype.wire_name())),
-                (
-                    "stype",
-                    text(match stype {
-                        Stype::Id => "ID",
-                        Stype::Numerical => "numerical",
-                        Stype::Text => "text",
-                        _ => "categorical",
-                    }),
-                ),
-            ]),
-        ));
+        columns.push(TabularColumn {
+            name: name.clone(),
+            dtype,
+            stype,
+        });
     }
+    let notices = if text_columns.is_empty() {
+        vec![]
+    } else {
+        vec![
+            CoreWarning::new(
+                Sentence::DirectTextCategorical,
+                "tabular text is categorical",
+            )
+            .with_field("columns", texts(text_columns)),
+        ]
+    };
+    Ok((
+        TabularColumns {
+            dtypes: dtypes.into_iter().collect(),
+            columns,
+            primary_key: table.primary_key.clone(),
+            target: target.to_owned(),
+        },
+        notices,
+    ))
+}
+
+/// Encode current values with the schema already resolved before text advice.
+#[allow(clippy::too_many_arguments)]
+pub fn body(
+    plan: &TabularColumns,
+    context: &[RecordBatch],
+    scoring: &[RecordBatch],
+    kind: &str,
+    outputs: &[String],
+    request_id: &str,
+    inference: DirectInference,
+    float_text: fn(f64) -> String,
+) -> Result<Value, CoreError> {
+    let dtypes: BTreeMap<&str, Dtype> = plan
+        .dtypes
+        .iter()
+        .map(|(name, dtype)| (name.as_str(), *dtype))
+        .collect();
+    let columns = plan
+        .columns
+        .iter()
+        .map(|column| {
+            (
+                column.name.clone(),
+                object([
+                    ("dtype", text(column.dtype.wire_name())),
+                    (
+                        "stype",
+                        text(match column.stype {
+                            Stype::Id => "ID",
+                            Stype::Numerical => "numerical",
+                            Stype::Text => "text",
+                            _ => "categorical",
+                        }),
+                    ),
+                ]),
+            )
+        })
+        .collect();
     let mut instance = object([("columns", Value::Object(columns))]);
-    if !table.primary_key.is_empty() {
+    if !plan.primary_key.is_empty() {
         instance.set(
             "primary_key",
-            Value::Array(table.primary_key.iter().map(text).collect()),
+            Value::Array(plan.primary_key.iter().map(text).collect()),
         );
     }
     let encode = |batches: &[RecordBatch]| -> Result<Value, CoreError> {
@@ -393,7 +458,7 @@ pub fn body(
                         .iter()
                         .enumerate()
                         .map(|(at, name)| {
-                            let dtype = dtypes.get(name).copied().ok_or_else(|| {
+                            let dtype = dtypes.get(name.as_str()).copied().ok_or_else(|| {
                                 invalid(Sentence::DirectSchemaMissing)
                                     .with_field("name", Detail::text(name))
                             })?;
@@ -409,8 +474,8 @@ pub fn body(
             ("rows", Value::Array(rows)),
         ]))
     };
-    let target_dtype = dtypes.get(target).copied().ok_or_else(|| {
-        invalid(Sentence::DirectSchemaMissing).with_field("name", Detail::text(target))
+    let target_dtype = dtypes.get(plan.target.as_str()).ok_or_else(|| {
+        invalid(Sentence::DirectSchemaMissing).with_field("name", Detail::text(&plan.target))
     })?;
     let mut result = object([
         ("model", text(predict::TABULAR)),
@@ -421,7 +486,7 @@ pub fn body(
                 (
                     "target",
                     object([
-                        ("column_name", text(target)),
+                        ("column_name", text(&plan.target)),
                         ("dtype", text(target_dtype.wire_name())),
                     ]),
                 ),
@@ -440,18 +505,7 @@ pub fn body(
     if !matches!(&inference,Value::Object(fields) if fields.is_empty()) {
         result.set("inference", inference);
     }
-    let notices = if text_columns.is_empty() {
-        vec![]
-    } else {
-        vec![
-            CoreWarning::new(
-                Sentence::DirectTextCategorical,
-                "tabular text is categorical",
-            )
-            .with_field("columns", texts(text_columns)),
-        ]
-    };
-    Ok((result, notices))
+    Ok(result)
 }
 
 /// Shared response decoding plus direct batch attribution/key restoration.
@@ -460,7 +514,7 @@ pub fn layout(
     response: &PredictionResponse,
     float_text: fn(f64) -> String,
 ) -> Result<Part, CoreError> {
-    let mut part = predict::layout(payload, response, float_text)?;
+    let mut part = predict::layout_tabular(payload, response, float_text)?;
     let rows = match payload
         .get("predict")
         .and_then(|p| p.get("instance_table"))
@@ -595,11 +649,18 @@ fn key_named(value: &str, float_text: fn(f64) -> String) -> Option<String> {
             return Some(entity_text(&predict::entity(part, None), float_text));
         }
     }
-    // The only Python-list literal needed by this numeric family is the
-    // quoted decimal digits of an integer that travels under string.
-    let digits = value.strip_prefix("['")?.strip_suffix("']")?;
-    (!digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit() || b == b'-'))
-        .then(|| digits.to_owned())
+    let part = value.trim().strip_prefix('[')?.strip_suffix(']')?.trim();
+    if matches!(part, "True" | "False" | "None") {
+        return Some(part.to_owned());
+    }
+    let quote = part.chars().next()?;
+    if !matches!(quote, '\'' | '"') {
+        return None;
+    }
+    let content = part.strip_prefix(quote)?.strip_suffix(quote)?;
+    // Numeric/Boolean keys sent as strings contain no Python escapes.
+    // Plain quoted strings are read as text; no expression or nested value is evaluated.
+    (!content.contains(['\'', '"', '\\'])).then(|| content.to_owned())
 }
 
 /// Direct one-shot leakage advice, before schema consistency/body encoding.
@@ -612,22 +673,23 @@ pub fn leakage(
     context: &[RecordBatch],
     scoring: &[RecordBatch],
     arriving: &[(String, Dtype)],
+    storage: &[Option<FloatStorage>],
     target: &str,
     float_text: fn(f64) -> String,
-) -> Result<Option<CoreWarning>, CoreError> {
+) -> Result<(usize, Option<CoreWarning>), CoreError> {
     let Some(table) = description.tables.iter().find(|t| t.name == entity) else {
-        return Ok(None);
+        return Ok((0, None));
     };
     if table.primary_key.is_empty() {
-        return Ok(None);
+        return Ok((0, None));
     }
     let context_schema = context.first().map(RecordBatch::schema);
     let scoring_schema = scoring.first().map(RecordBatch::schema);
     let (Some(context_schema), Some(scoring_schema)) = (context_schema, scoring_schema) else {
-        return Ok(None);
+        return Ok((0, None));
     };
     let Ok(target_at) = context_schema.index_of(target) else {
-        return Ok(None);
+        return Ok((0, None));
     };
     let positions = |schema: &arrow_schema::Schema| {
         table
@@ -639,10 +701,12 @@ pub fn leakage(
     let (Some(context_at), Some(scoring_at)) =
         (positions(&context_schema), positions(&scoring_schema))
     else {
-        return Ok(None);
+        return Ok((0, None));
     };
     let native = native_schema.tables.iter().find(|t| t.name == entity);
-    let dtypes = widths(table, native, scoring, arriving);
+    let Ok(dtypes) = widths(table, native, scoring, arriving, storage) else {
+        return Ok((0, None));
+    };
     let key =
         |batch: &RecordBatch, row: usize, at: &[usize]| -> Result<Option<Vec<u8>>, CoreError> {
             let values = table
@@ -663,7 +727,10 @@ pub fn leakage(
     for batch in context {
         for row in 0..batch.num_rows() {
             if !batch.column(target_at).is_null(row) {
-                if let Some(key) = key(batch, row, &context_at)? {
+                let Ok(key) = key(batch, row, &context_at) else {
+                    return Ok((0, None));
+                };
+                if let Some(key) = key {
                     answered.insert(key);
                 }
             }
@@ -674,18 +741,24 @@ pub fn leakage(
     for batch in scoring {
         rows += batch.num_rows();
         for row in 0..batch.num_rows() {
-            if key(batch, row, &scoring_at)?.is_some_and(|k| answered.contains(&k)) {
+            let Ok(key) = key(batch, row, &scoring_at) else {
+                return Ok((0, None));
+            };
+            if key.is_some_and(|k| answered.contains(&k)) {
                 shown += 1;
             }
         }
     }
-    Ok((shown > 0).then(|| {
-        CoreWarning::new(
-            Sentence::DirectAnswersShown,
-            "scoring rows carry answers in context",
-        )
-        .with_field("shown", Detail::Scalar(Scalar::UInt64(shown)))
-        .with_field("rows", Detail::Scalar(Scalar::UInt64(rows as u64)))
-        .with_field("target", Detail::text(target))
-    }))
+    Ok((
+        shown as usize,
+        (shown > 0).then(|| {
+            CoreWarning::new(
+                Sentence::DirectAnswersShown,
+                "scoring rows carry answers in context",
+            )
+            .with_field("shown", Detail::Scalar(Scalar::UInt64(shown)))
+            .with_field("rows", Detail::Scalar(Scalar::UInt64(rows as u64)))
+            .with_field("target", Detail::text(target))
+        }),
+    ))
 }

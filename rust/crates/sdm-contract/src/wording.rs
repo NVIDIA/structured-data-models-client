@@ -688,6 +688,7 @@ pub fn template(sentence: Sentence) -> Template {
         S::DirectOptionInteger => said(
             r#"value {digits} cannot be sent as a JSON number without losing precision, since a float64 does not hold it exactly; pass it as a string if the model accepts one"#,
         ),
+        S::DirectNullableCast => said(r#"{host.direct_nullable_cast}"#),
         S::DirectPredictDtype => said(r#"'DataFrame' object has no attribute 'dtype'"#),
         S::DirectAnswersShown => said(
             r#"{shown} of the {rows} rows being scored are also in context, carrying the {target!r} being asked for, so the model is being shown the answers to rows it is being asked about. Drop them from context, or gather the request with materialize(), which leaves the rows it scores out of the context it sends."#,
