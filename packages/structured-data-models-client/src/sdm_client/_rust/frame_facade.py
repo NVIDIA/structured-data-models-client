@@ -506,7 +506,16 @@ def _single(
         label_batches = []
         population_type = population.data['prediction_type']
         try:
-            for candidate_range in population.data['batches']:
+            for start in range(
+                0, population.data['rows'], population.data['batch_rows']
+            ):
+                candidate_range = {
+                    'start': start,
+                    'stop': min(
+                        population.data['rows'],
+                        start + population.data['batch_rows'],
+                    ),
+                }
                 bindings = _Bindings()
                 native_failure = None
                 if population_type['kind'] == 'core_key':
@@ -542,10 +551,9 @@ def _single(
                                 'stage': 'label_batch',
                                 'population': _bind(population, bindings),
                                 'range': candidate_range,
-                                'previous': [
-                                    _bind(batch, bindings)
-                                    for batch in label_batches
-                                ],
+                                'previous': _bind(label_batches[-1], bindings)
+                                if label_batches
+                                else None,
                                 'converted': converted,
                             },
                             bindings,

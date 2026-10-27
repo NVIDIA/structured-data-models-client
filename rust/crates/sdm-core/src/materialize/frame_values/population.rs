@@ -7,10 +7,11 @@
 //! never a callback, mutable generator, pending action or program position.
 
 use super::*;
+use std::sync::Weak;
 
 // LocalSampler._sample_target_set reads this many candidate rows before
 // deciding whether the context quota has already been filled.
-const LABEL_BATCH_ROWS: usize = 10_000;
+pub(super) const LABEL_BATCH_ROWS: usize = 10_000;
 
 pub(super) struct PopulationData {
     pub graph: crate::RetainedFrameGraph,
@@ -48,14 +49,15 @@ impl std::fmt::Debug for RetainedFramePopulation {
     }
 }
 
-pub(super) fn ranges(rows: usize) -> Vec<FrameBatchRange> {
-    (0..rows)
-        .step_by(LABEL_BATCH_ROWS)
-        .map(|start| FrameBatchRange {
-            start: start as u64,
-            stop: rows.min(start + LABEL_BATCH_ROWS) as u64,
-        })
-        .collect()
+fn candidate_range(start: u64, rows: usize) -> Option<FrameBatchRange> {
+    let start_ = usize::try_from(start).ok()?;
+    if start_ >= rows || start_ % LABEL_BATCH_ROWS != 0 {
+        return None;
+    }
+    Some(FrameBatchRange {
+        start,
+        stop: rows.min(start_.saturating_add(LABEL_BATCH_ROWS)) as u64,
+    })
 }
 
 impl RetainedFramePopulation {
@@ -80,18 +82,42 @@ impl RetainedFramePopulation {
 }
 
 struct LabelBatchData {
-    population: RetainedFramePopulation,
     range: FrameBatchRange,
+    /// Domain lineage to the actual preceding evaluated rows. A weak link
+    /// keeps no earlier row buffer or suspended computation alive.
+    previous: Option<Weak<LabelBatchData>>,
+    /// Accepted labels in this exact immutable prefix, including these rows.
+    accepted_rows: usize,
     complete: bool,
     labelled: task::LabelledContext,
     native_target: Option<FrameNativeColumnRef>,
     native_labels: Option<task::LabelledContext>,
+    target_encoding: Option<sdm_contract::data::strings::StringEncoding>,
 }
 
 /// Actual evaluated rows for one candidate range, including their original IDs.
 #[derive(Clone)]
 pub struct RetainedFrameLabelBatch {
+    population: RetainedFramePopulation,
     data: Arc<LabelBatchData>,
+}
+
+impl LabelBatchData {
+    /// Validate genuine ordered label data and cumulative accepted-row facts.
+    /// Independent evaluations of the same range are distinct predecessors.
+    fn follows(&self, previous: Option<&Arc<Self>>) -> bool {
+        let same = match (&self.previous, previous) {
+            (None, None) => true,
+            (Some(found), Some(expected)) => found.ptr_eq(&Arc::downgrade(expected)),
+            _ => false,
+        };
+        same && self.range.start == previous.map_or(0, |batch| batch.range.stop)
+            && !previous.is_some_and(|batch| batch.complete)
+            && previous
+                .map_or(0, |batch| batch.accepted_rows)
+                .checked_add(self.labelled.keys.len())
+                == Some(self.accepted_rows)
+    }
 }
 
 impl RetainedFrameLabelBatch {
@@ -136,7 +162,8 @@ fn bind_population(
     if source.meaning != value.meaning
         || source.prediction_type != value.prediction_type
         || !source.graph.same_owner(&graph.retained())
-        || value.batches != ranges(source.population.examples.index.len())
+        || value.rows != source.population.examples.index.len() as u64
+        || value.batch_rows != LABEL_BATCH_ROWS as u32
     {
         return Err(protocol(
             "candidate population meaning or graph no longer matches its actual immutable owner",
@@ -144,6 +171,29 @@ fn bind_population(
         .into());
     }
     Ok((graph, owner))
+}
+
+fn bind_batch(
+    owner: &RetainedFramePopulation,
+    value: PreparedFrameLabelBatch,
+    attachments: &mut Attachments,
+) -> Result<RetainedFrameLabelBatch, FrameStageError> {
+    let Some(Attachment::FrameLabelBatch(batch)) = attachments.remove(&value.owner) else {
+        return Err(protocol("frame labels lack their actual evaluated candidate batch").into());
+    };
+    if !batch.population.same_owner(owner)
+        || value.population != owner.data.data.meaning.identity
+        || value.range != batch.data.range
+        || value.complete != batch.data.complete
+        || value.native_target != batch.data.native_target
+        || value.target_encoding != batch.data.target_encoding
+    {
+        return Err(protocol(
+            "native label evidence does not match its actual population and evaluated rows",
+        )
+        .into());
+    }
+    Ok(batch)
 }
 
 fn batches(
@@ -154,32 +204,18 @@ fn batches(
     let mut found = Vec::with_capacity(values.len());
     let mut end = 0;
     for value in values {
-        let Some(Attachment::FrameLabelBatch(batch)) = attachments.remove(&value.owner) else {
-            return Err(
-                protocol("frame labels lack their actual evaluated candidate batch").into(),
-            );
-        };
-        if !batch.data.population.same_owner(owner)
-            || value.population != owner.data.data.meaning.identity
-            || value.range != batch.data.range
-            || value.complete != batch.data.complete
-            || value.native_target != batch.data.native_target
-            || value.target_encoding
-                != label_encoding(
-                    batch
-                        .data
-                        .native_labels
-                        .as_ref()
-                        .map_or(&batch.data.labelled.labels, |labels| &labels.labels),
-                )
-            || value.range.start != end
-            || found
-                .last()
-                .is_some_and(|previous: &RetainedFrameLabelBatch| previous.data.complete)
+        let batch = bind_batch(owner, value, attachments)?;
+        if candidate_range(end, owner.data.data.population.examples.index.len())
+            != Some(batch.data.range)
+            || !batch.data.follows(
+                found
+                    .last()
+                    .map(|previous: &RetainedFrameLabelBatch| &previous.data),
+            )
         {
-            return Err(protocol("native label evidence does not cover an ordered reached prefix of its actual population").into());
+            return Err(protocol("native label evidence does not cover a genuine ordered reached prefix of its actual population").into());
         }
-        end = value.range.stop;
+        end = batch.data.range.stop;
         found.push(batch);
     }
     Ok(found)
@@ -340,17 +376,19 @@ pub(super) async fn label_batch(
     asker: &Asker,
     value: PreparedFramePopulation,
     range: FrameBatchRange,
-    previous: Vec<PreparedFrameLabelBatch>,
+    previous: Option<PreparedFrameLabelBatch>,
     converted_: FrameReferenceValues,
     attachments: &mut Attachments,
 ) -> Result<PreparedFrameLabelBatch, FrameStageError> {
     let (graph, owner) = bind_population(asker, value, attachments)?;
-    let previous = batches(&owner, previous, attachments)?;
+    let previous = previous
+        .map(|value| bind_batch(&owner, value, attachments))
+        .transpose()?;
     let source = &owner.data.data;
-    let expected_start = previous.last().map_or(0, |batch| batch.data.range.stop);
+    let expected_start = previous.as_ref().map_or(0, |batch| batch.data.range.stop);
     if range.start != expected_start
-        || !ranges(source.population.examples.index.len()).contains(&range)
-        || previous.last().is_some_and(|batch| batch.data.complete)
+        || candidate_range(range.start, source.population.examples.index.len()) != Some(range)
+        || previous.as_ref().is_some_and(|batch| batch.data.complete)
     {
         return Err(
             protocol("native candidate range does not follow its actual evaluated prefix").into(),
@@ -359,16 +397,14 @@ pub(super) async fn label_batch(
     let start = range.start as usize;
     let stop = range.stop as usize;
     let native = converted(source, converted_, attachments, stop - start)?;
-    let mut population = source.population.clone();
-    population.examples.index = population.examples.index[start..stop].to_vec();
-    population.examples.anchors = population.examples.anchors[start..stop].to_vec();
+    let population = source.population.slice(start..stop)?;
     let evaluated = evaluate(asker, &graph, source, population, native).await?;
     let labelled = evaluated.context;
     let gathered = previous
-        .iter()
-        .map(|batch| batch.data.labelled.keys.len())
-        .sum::<usize>()
-        .saturating_add(labelled.keys.len());
+        .as_ref()
+        .map_or(0, |batch| batch.data.accepted_rows)
+        .checked_add(labelled.keys.len())
+        .ok_or_else(|| protocol("evaluated candidate prefix exceeds this host's row capacity"))?;
     let complete = gathered >= source.context_examples;
     let identity = source.meaning.identity.clone();
     let native_target = match &source.asked.target {
@@ -393,13 +429,16 @@ pub(super) async fn label_batch(
             .map_or(&labelled.labels, |labels| &labels.labels),
     );
     let batch = RetainedFrameLabelBatch {
+        population: owner,
         data: Arc::new(LabelBatchData {
-            population: owner,
             range,
+            previous: previous.as_ref().map(|batch| Arc::downgrade(&batch.data)),
+            accepted_rows: gathered,
             complete,
             labelled,
             native_target: native_target.clone(),
             native_labels: evaluated.native_labels,
+            target_encoding,
         }),
     };
     Ok(PreparedFrameLabelBatch {
@@ -449,7 +488,7 @@ pub(super) async fn labels(
             labels,
         }
     } else {
-        evaluate(asker, &graph, source, source.population.clone(), None)
+        evaluate(asker, &graph, source, source.population.slice(0..0)?, None)
             .await?
             .context
     };
@@ -518,33 +557,88 @@ pub(super) async fn labels(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use arrow_array::Int64Array;
 
     #[test]
     fn candidate_ranges_preserve_native_chunk_boundary_and_exhaustion() {
+        for (start, stop) in [(0, 10000), (10000, 20000), (20000, 25000)] {
+            assert_eq!(
+                candidate_range(start, 25000),
+                Some(FrameBatchRange { start, stop })
+            );
+        }
         assert_eq!(
-            ranges(25000),
-            vec![
-                FrameBatchRange {
-                    start: 0,
-                    stop: 10000
-                },
-                FrameBatchRange {
-                    start: 10000,
-                    stop: 20000
-                },
-                FrameBatchRange {
-                    start: 20000,
-                    stop: 25000
-                }
-            ]
-        );
-        assert_eq!(
-            ranges(10000),
-            vec![FrameBatchRange {
+            candidate_range(0, 10000),
+            Some(FrameBatchRange {
                 start: 0,
                 stop: 10000
-            }]
+            })
         );
-        assert!(ranges(0).is_empty());
+        for start in [1, 9999, 10001, 25000, 30000, u64::MAX] {
+            assert!(candidate_range(start, 25000).is_none());
+        }
+        assert!(candidate_range(0, 0).is_none());
+    }
+
+    fn evaluated(
+        previous: Option<&Arc<LabelBatchData>>,
+        start: u64,
+        rows: Vec<i64>,
+    ) -> Arc<LabelBatchData> {
+        let accepted_rows = previous.map_or(0, |batch| batch.accepted_rows) + rows.len();
+        let anchors = vec![0; rows.len()];
+        Arc::new(LabelBatchData {
+            range: FrameBatchRange {
+                start,
+                stop: start + 10000,
+            },
+            previous: previous.map(Arc::downgrade),
+            accepted_rows,
+            complete: false,
+            labelled: task::LabelledContext {
+                keys: Arc::new(Int64Array::from(rows.clone())),
+                anchors,
+                labels: labels::Labels::Int(rows),
+            },
+            native_target: None,
+            native_labels: None,
+            target_encoding: None,
+        })
+    }
+
+    #[test]
+    fn final_prefix_uses_genuine_owners_and_checks_cumulative_accepted_rows() {
+        let first = evaluated(None, 0, vec![1]);
+        let second = evaluated(Some(&first), 10000, vec![2, 3]);
+        let third = evaluated(Some(&second), 20000, vec![4]);
+        assert!(first.follows(None));
+        assert!(second.follows(Some(&first)));
+        assert!(third.follows(Some(&second)));
+        assert_eq!(third.accepted_rows, 4);
+        let same_owner = Arc::clone(&first);
+        assert!(second.follows(Some(&same_owner)));
+        let independent_first = evaluated(None, 0, vec![1]);
+        assert!(!second.follows(Some(&independent_first)));
+        assert!(!third.follows(Some(&first)));
+        assert!(!second.follows(None));
+        assert!(!first.follows(Some(&second)));
+        let mut incorrect_count = evaluated(Some(&second), 20000, vec![4]);
+        Arc::get_mut(&mut incorrect_count).unwrap().accepted_rows = 1;
+        assert!(!incorrect_count.follows(Some(&second)));
+        let mut completed = evaluated(None, 0, vec![1]);
+        Arc::get_mut(&mut completed).unwrap().complete = true;
+        assert!(!evaluated(Some(&completed), 10000, vec![2]).follows(Some(&completed)));
+    }
+
+    #[test]
+    fn domain_lineage_keeps_no_earlier_label_buffer_alive() {
+        let first = evaluated(None, 0, vec![1]);
+        let keys = Arc::downgrade(&first.labelled.keys);
+        let second = evaluated(Some(&first), 10000, vec![2]);
+        drop(first);
+        assert!(keys.upgrade().is_none());
+        assert!(second.previous.as_ref().unwrap().upgrade().is_none());
+        assert_eq!(second.accepted_rows, 2);
+        assert_eq!(second.labelled.labels.len(), 1);
     }
 }

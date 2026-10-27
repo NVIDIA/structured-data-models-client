@@ -209,7 +209,10 @@ pub struct PreparedFramePopulation {
     pub meaning: FrameTaskMeaning,
     pub prediction_type: FramePredictionType,
     pub owner: AttachmentId,
-    pub batches: Vec<FrameBatchRange>,
+    /// Complete candidate row count, independent of the number of reached batches.
+    pub rows: u64,
+    /// Fixed core-selected native lookup width, with a possibly shorter last range.
+    pub batch_rows: u32,
 }
 
 /// Actual evaluated label rows for one candidate range. Completeness is
@@ -472,7 +475,8 @@ pub enum FramePreparation {
     LabelBatch {
         population: PreparedFramePopulation,
         range: FrameBatchRange,
-        previous: Vec<PreparedFrameLabelBatch>,
+        /// The last actual evaluated batch and its immutable accepted-prefix facts.
+        previous: Option<PreparedFrameLabelBatch>,
         converted: FrameReferenceValues,
     },
     Labels {

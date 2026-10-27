@@ -206,6 +206,31 @@ def test_native_label_ranges_stop_at_actual_context_completeness(
         for payload in expected['outcome'].get('payloads', []):
             dt3_no_time_body(payload)
         expected['warnings'] = p3e2_warning_codes(expected['warnings'])
+    label_resources = []
+    final_batches = []
+    if core:
+        from sdm_client._rust import frame_facade
+
+        prepare = frame_facade._prepare
+
+        def observe_resources(value, bindings, state):
+            if value['stage'] == 'label_batch':
+                previous = value['previous']
+                assert previous is None or type(previous) is dict
+                assert (previous is None) == (value['range']['start'] == 0)
+                if previous is not None:
+                    assert previous['range']['stop'] == value['range']['start']
+                # A reached batch binds graph, population, optional converted
+                # keys and at most one previous real labelled-row resource.
+                label_resources.append(len(bindings.attachments))
+                assert len(bindings.attachments) <= 4
+                assert 'batches' not in value['population']
+                assert value['population']['rows'] == count
+            elif value['stage'] == 'labels':
+                final_batches.append(len(value['batches']))
+            return prepare(value, bindings, state)
+
+        monkeypatch.setattr(frame_facade, '_prepare', observe_resources)
     original = pd.Series.astype
     observed = []
     faults = []
@@ -253,6 +278,13 @@ def test_native_label_ranges_stop_at_actual_context_completeness(
             assert request.predict_rows == expected['outcome']['predict_rows']
     assert observed == expected['label_cast_rows']
     assert len(faults) == expected['native_faults']
+    if core:
+        assert len(label_resources) == len(expected['label_cast_rows'])
+        if expected['outcome']['kind'] == 'error':
+            assert final_batches == []
+        else:
+            # The complete actual prefix is bound exactly once, at assembly.
+            assert final_batches == [len(label_resources)]
     assert [
         {'type': type(item.message).__name__, 'message': str(item.message)}
         for item in caught
