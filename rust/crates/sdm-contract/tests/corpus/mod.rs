@@ -458,6 +458,13 @@ pub fn messages() -> Vec<ControlMessage> {
             }),
         }),
         ControlMessage::Step(Step::Done {
+            result: OperationResult::DecodedDirectResponse(
+                sdm_contract::prepare::DecodedDirectResponse {
+                    value: AttachmentId(1),
+                },
+            ),
+        }),
+        ControlMessage::Step(Step::Done {
             result: OperationResult::Predict(Predicted {
                 result: AttachmentId(10),
                 model: "kumo-relational".into(),
