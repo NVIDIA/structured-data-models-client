@@ -641,6 +641,23 @@ pub(crate) async fn run(
             };
             serde_json::to_value(PreparedDirectTask {kind:prepared.task,target:prepared.target,table:entity_table,dtype})
         }
+        Preparation::ModelCatalogue => serde_json::to_value(policy::model_catalogue()),
+        Preparation::ModelLookup { position } => {
+            let catalogue = policy::model_catalogue();
+            let model = match position {
+                Some(position) => catalogue.get(position).ok_or_else(|| invalid("native model position is invalid"))?,
+                None => {
+                    let mut names = catalogue.map(str::to_owned).to_vec();
+                    names.sort();
+                    let mut error = error(Sentence::DirectUnknownModel)
+                        .with_field("model", Detail::text(""))
+                        .with_field("known_models", text_list(names));
+                    error.public_details = Some(error.fields.clone());
+                    return Err(error.with_field("native_model", Detail::Scalar(Scalar::Bool(true))));
+                }
+            };
+            serde_json::to_value(CallPreparation::ModelResolved { version: CALL_PREPARATION_VERSION, model: (*model).to_owned() })
+        }
         Preparation::Model { model } => {
             let model = policy::resolve_model(&model)
                 .map_err(|_| {
@@ -726,7 +743,7 @@ pub(crate) async fn run(
                 },
             })
         }
-        Preparation::Task { call, kind, admitted } => {
+        Preparation::Task { call, kind, admitted, defer_outputs } => {
             let CallPreparation::ShapeAccepted {
                 version: v,
                 model,
@@ -738,7 +755,11 @@ pub(crate) async fn run(
                 return Err(invalid("task validation requires a shape-accepted call"));
             };
             version(v, CALL_PREPARATION_VERSION)?;
-            policy::validate_native_task_outputs(&model, &kind, &outputs, admitted)?;
+            policy::validate_native_task_outputs(&model, &kind, if defer_outputs { &[] } else { &outputs }, admitted)?;
+            if defer_outputs {
+                let admitted = admitted.ok_or_else(|| invalid("deferred output admission requires actual native task membership"))?;
+                serde_json::to_value(CallPreparation::TaskAdmitted { version: v, model, outputs, named, shape, kind, admitted })
+            } else {
             serde_json::to_value(CallPreparation::TaskAccepted {
                 version: v,
                 model,
@@ -747,7 +768,18 @@ pub(crate) async fn run(
                 shape,
                 kind,
                 admitted,
+                native_outputs: false,
             })
+            }
+        }
+        Preparation::OutputAdmission { call, unsupported } => {
+            let CallPreparation::TaskAdmitted { version: v, model, outputs, named, shape, kind, admitted } = call else {
+                return Err(invalid("native output admission requires a task-admitted call"));
+            };
+            version(v, CALL_PREPARATION_VERSION)?;
+            policy::validate_native_task_outputs(&model, &kind, &[], Some(admitted))?;
+            policy::validate_native_outputs(&model, &outputs, &unsupported)?;
+            serde_json::to_value(CallPreparation::TaskAccepted { version:v, model, outputs, named, shape, kind, admitted:Some(admitted), native_outputs:true })
         }
         Preparation::Capacity { call, rows } => {
             let CallPreparation::TaskAccepted {
@@ -758,6 +790,7 @@ pub(crate) async fn run(
                 shape,
                 kind,
                 admitted,
+                native_outputs,
             } = call
             else {
                 return Err(invalid("capacity requires a task-accepted call"));
@@ -772,6 +805,7 @@ pub(crate) async fn run(
                 shape,
                 kind,
                 admitted,
+                native_outputs,
                 context_rows: rows,
             })
         }
@@ -807,6 +841,7 @@ fn checked_bound(call: &CallPreparation) -> Result<Bound<'_>, CoreError> {
         named,
         kind,
         admitted,
+        native_outputs,
         shape,
         context_rows,
     } = call
@@ -823,7 +858,12 @@ fn checked_bound(call: &CallPreparation) -> Result<Bound<'_>, CoreError> {
         shape.tables,
         shape.native.as_ref(),
     )?;
-    policy::validate_native_task_outputs(model, kind, outputs, *admitted)?;
+    policy::validate_native_task_outputs(
+        model,
+        kind,
+        if *native_outputs { &[] } else { outputs },
+        *admitted,
+    )?;
     policy::validate_capacity(model, *context_rows)?;
     Ok(Bound {
         model,

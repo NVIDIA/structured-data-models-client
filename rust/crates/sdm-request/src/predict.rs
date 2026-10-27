@@ -52,7 +52,10 @@ use arrow_array::{
     Array, ArrayRef, BooleanArray, Float64Array, Int64Array, RecordBatch, StringArray,
 };
 use arrow_schema::{DataType, Field, Schema};
-use sdm_contract::prepare::{CallVocabulary, NativeCallCapabilities};
+use sdm_contract::prepare::{
+    CallVocabulary, NativeCallCapabilities, NativeOutputAbsence, NativeOutputEmpty,
+    NativeOutputMeaning, NativeOutputPresence, NativeOutputRole, NativeOutputVocabulary,
+};
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 use sdm_wire::json::{Value, is_integer_token};
 use sdm_wire::response::{
@@ -556,7 +559,51 @@ pub fn call_vocabulary(model: &str) -> Result<CallVocabulary, CoreError> {
         link_prediction: LINK_PREDICTION.to_owned(),
         forecasting: FORECASTING.to_owned(),
         tasks: spec.tasks.iter().map(|kind| (*kind).to_owned()).collect(),
+        outputs: spec.outputs.iter().map(|name| (*name).to_owned()).collect(),
     })
+}
+
+/// Closed model ids, in the native public catalogue's declaration order.
+pub fn model_catalogue() -> [&'static str; 2] {
+    [TABULAR, RELATIONAL]
+}
+
+/// The outcome of one actual native supported-output membership population.
+pub fn validate_native_outputs(
+    model: &str,
+    outputs: &[String],
+    unsupported_positions: &[usize],
+) -> Result<(), CoreError> {
+    let spec = model_spec(model)?;
+    if unsupported_positions
+        .windows(2)
+        .any(|pair| pair[0] >= pair[1])
+        || unsupported_positions
+            .iter()
+            .any(|position| *position >= outputs.len())
+    {
+        return Err(CoreError::protocol(
+            Sentence::InvalidMessage,
+            "native output positions are invalid",
+        ));
+    }
+    if !unsupported_positions.is_empty() {
+        let mut unknown: Vec<&str> = unsupported_positions
+            .iter()
+            .map(|position| outputs[*position].as_str())
+            .collect();
+        unknown.sort_unstable();
+        let mut error = unsupported(
+            Sentence::ModelLacksOutputs,
+            spec.id,
+            "the model does not produce an output asked for",
+        )
+        .with_field("unsupported_outputs", texts(unknown))
+        .with_field("supported_outputs", texts(sorted(spec.outputs)));
+        error.public_details = Some(error.fields.clone());
+        return Err(error.with_field("native_model_outputs", Detail::Scalar(Scalar::Bool(true))));
+    }
+    Ok(())
 }
 
 /// Resolve one actual native dictionary lookup without re-comparing its key.
@@ -1941,6 +1988,73 @@ pub const LOOKED_FOR: [&str; 7] = [
 /// fix 1).
 pub fn left_out(part: &Part) -> Vec<String> {
     absent(part, &LOOKED_FOR.map(String::from))
+}
+
+/// Native result-column vocabulary, with membership and presence owned by the host.
+pub fn native_output_vocabulary() -> NativeOutputVocabulary {
+    NativeOutputVocabulary {
+        explanation: "explanation".into(),
+        item_fields: [
+            "prediction",
+            "probabilities",
+            "quantiles",
+            "scores",
+            "rankings",
+            "embeddings",
+        ]
+        .map(str::to_owned)
+        .to_vec(),
+        empty_values: vec![
+            NativeOutputEmpty::Null,
+            NativeOutputEmpty::Mapping,
+            NativeOutputEmpty::List,
+            NativeOutputEmpty::Tuple,
+        ],
+    }
+}
+
+pub fn native_output_meaning(
+    explanation: bool,
+    item: Option<bool>,
+) -> Result<NativeOutputMeaning, CoreError> {
+    let role = match (explanation, item) {
+        (true, None) => NativeOutputRole::Explanation,
+        (false, None) => NativeOutputRole::Candidate,
+        (false, Some(true)) => NativeOutputRole::Item,
+        (false, Some(false)) => NativeOutputRole::Other,
+        (true, Some(_)) => {
+            return Err(CoreError::protocol(
+                Sentence::InvalidMessage,
+                "an explanation output has unexpected item membership",
+            ));
+        }
+    };
+    Ok(NativeOutputMeaning {
+        explanation,
+        item,
+        role,
+    })
+}
+
+pub fn native_output_absence(
+    columns: Vec<NativeOutputPresence>,
+) -> Result<NativeOutputAbsence, CoreError> {
+    let mut absent = vec![];
+    for (position, column) in columns.iter().enumerate() {
+        if native_output_meaning(column.meaning.explanation, column.meaning.item)? != column.meaning
+            || column.meaning.role == NativeOutputRole::Candidate
+            || (column.meaning.role == NativeOutputRole::Other) != column.nonempty.is_none()
+        {
+            return Err(CoreError::protocol(
+                Sentence::InvalidMessage,
+                "native output presence does not match its name meaning",
+            ));
+        }
+        if column.nonempty == Some(false) {
+            absent.push(position);
+        }
+    }
+    Ok(NativeOutputAbsence { columns, absent })
 }
 
 /// The notice of the outputs [`absent`] found, naming the model asked.

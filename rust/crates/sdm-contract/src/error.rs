@@ -924,6 +924,7 @@ sentences! {
     DirectFrame = "direct_frame", E::InvalidRequest;
     DirectRelated = "direct_related", E::UnsupportedRequest;
     DirectUnknownModel = "direct_unknown_model", E::UnknownModel;
+    RelationalOutputShapes = "relational_output_shapes", E::InternalError;
     DirectTask = "direct_task", E::InvalidRequest;
     DirectWireNonFinite = "direct_wire_non_finite", E::InvalidRequest;
     DirectWireFraction = "direct_wire_fraction", E::InvalidRequest;

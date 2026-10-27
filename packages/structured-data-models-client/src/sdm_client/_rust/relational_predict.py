@@ -15,7 +15,8 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
-from sdm_client._rust import codec, errors, relational_native as native, results
+from sdm_client._rust import codec, errors, results
+from sdm_client._rust import relational_native as native
 from sdm_client._rust.prepare import _call
 from sdm_client._rust.relational_response import CompletedResponse, present
 from sdm_client._rust.run import Finished, run
@@ -31,6 +32,8 @@ class CallResult:
     parts: list[CompletedResponse]
     counted: list[int | None]
     known_empty: bool = False
+    native_outputs: tuple[Any, ...] | None = None
+    requested_outputs: Any = None
 
     def attached(self, first: int) -> tuple[dict[str, Any], dict[int, Any]]:
         parts = []
@@ -138,13 +141,34 @@ def _finish_calls(
 ) -> tuple[Any, dict[str, int]]:
     value, attached = child.attached(2)
     value.pop('bound')
-    return _finish(
+    answer, details = _finish(
         child.bound,
         {'kind': 'calls', **value},
         attached,
         _owners([child]),
-        report_absent=report_absent,
+        report_absent=report_absent and child.native_outputs is None,
     )
+    if child.native_outputs is not None:
+        if len(child.parts) > 1:
+            # Native merge reaches this set only after model/metadata layout,
+            # before final absence. Repeated equal tuples must still hash.
+            shapes, shape_facts = native.output_shapes(
+                child.native_outputs, len(child.parts)
+            )
+            with errors.holding(
+                relational_output_shapes=lambda fields: repr(sorted(shapes))
+            ):
+                native._prepared(
+                    {
+                        'data': 'output_shapes',
+                        'call': child.bound,
+                        **shape_facts,
+                    }
+                )
+        answer.outputs = child.native_outputs
+        if report_absent:
+            native.absent(child.bound, answer, child.requested_outputs)
+    return answer, details
 
 
 def _carry(error: Exception, result: Any, details: dict[str, int]) -> None:
@@ -159,15 +183,23 @@ def _carry(error: Exception, result: Any, details: dict[str, int]) -> None:
 def _one(client: Any, request: Any, model: Any, outputs: Any) -> CallResult:
     from sdm_client._rust.predict import _send
 
-    bound = native.prepare(request, model, outputs)
+    prepared = native.prepare(request, model, outputs)
+    bound = prepared.bound
     if native.nothing_to_score(request.payloads):
-        return CallResult(bound, [], [], known_empty=True)
+        return CallResult(
+            bound,
+            [],
+            [],
+            known_empty=True,
+            native_outputs=prepared.outputs,
+            requested_outputs=outputs,
+        )
     payloads = request.payloads
     native._prepared(
         {'data': 'payloads', 'call': bound, 'present': bool(payloads)}
     )
-    native.preflight(bound, payloads, request.query)
-    planned = native.envelopes(bound, request, payloads)
+    native.preflight(bound, payloads, request.query, prepared.outputs)
+    planned = native.envelopes(bound, request, payloads, prepared.outputs)
     counted = native.count_calls(planned)
     completed = []
     for envelope in planned:
@@ -200,12 +232,23 @@ def _one(client: Any, request: Any, model: Any, outputs: Any) -> CallResult:
         except Exception as error:
             if completed:
                 result, details = _finish_calls(
-                    CallResult(bound, completed, counted[: len(completed)]),
+                    CallResult(
+                        bound,
+                        completed,
+                        counted[: len(completed)],
+                        native_outputs=prepared.outputs,
+                    ),
                     report_absent=False,
                 )
                 _carry(error, result, details)
             raise
-    return CallResult(bound, completed, counted)
+    return CallResult(
+        bound,
+        completed,
+        counted,
+        native_outputs=prepared.outputs,
+        requested_outputs=outputs,
+    )
 
 
 def _tag(
@@ -321,9 +364,12 @@ def _parts(
             positions_, request.parts, rewritten.parts, strict=True
         ):
             try:
-                bound = native.prepare(part, model, wanted)
-                native.preflight(bound, part.payloads, part.query)
-                native.envelopes(bound, part, part.payloads)
+                prepared = native.prepare(part, model, wanted)
+                bound = prepared.bound
+                native.preflight(
+                    bound, part.payloads, part.query, prepared.outputs
+                )
+                native.envelopes(bound, part, part.payloads, prepared.outputs)
             except StructuredDataError as error:
                 if error.details.get('classes_in_context') != 1:
                     raise _tag(error, scope(position, about), about) from error

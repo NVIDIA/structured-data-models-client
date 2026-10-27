@@ -49,6 +49,20 @@ NATIVE_KIND_REFERENCE = json.loads(
 ]
 
 
+@pytest.fixture(autouse=True)
+def _core_preparation_owner_guard(monkeypatch, request):
+    if getattr(
+        request.node, 'callspec', None
+    ) is not None and request.node.callspec.params.get('core'):
+
+        def legacy(*args, **kwargs):
+            raise AssertionError(
+                'the core prediction route called legacy SDMClient._prepare'
+            )
+
+        monkeypatch.setattr(SDMClient, '_prepare', legacy)
+
+
 def _request(*, batched=False):
     data = {
         'users': pd.DataFrame(
@@ -679,3 +693,285 @@ def test_native_task_refusal_retains_repr_and_fresh_details(
         ]
     observed['events'] = events
     assert observed == expected
+
+
+MODEL_OUTPUT_REFERENCE = json.loads(
+    Path(__file__)
+    .with_name('t44_mutable_prediction_reference.json')
+    .read_text()
+)['model_output_cases'][
+    '310' if int(pd.__version__.split('.')[0]) == 2 else '312'
+]
+
+
+@pytest.mark.parametrize('core', [False, True], ids=['original', 'core'])
+@pytest.mark.parametrize('case', list(MODEL_OUTPUT_REFERENCE))
+def test_native_model_and_output_owners_keep_complete_public_journeys(
+    monkeypatch, core, case
+):
+    from sdm_client.models import Model
+
+    monkeypatch.setenv(
+        'SDM_CORE_ROUTES', 'client.predict/regression/frames' if core else ''
+    )
+    expected = copy.deepcopy(MODEL_OUTPUT_REFERENCE[case])
+    events = []
+    retained = RuntimeError('retained native model/output failure')
+    record = {'case': case}
+    request = None
+
+    class Name(str):
+        def __new__(cls, value, owner):
+            instance = str.__new__(cls, value)
+            instance.owner = owner
+            return instance
+
+        def __hash__(self):
+            events.append(self.owner + '.hash')
+            if (
+                case in ('model-hash-raises', 'handle-model-hash-raises')
+                and self.owner == 'model'
+            ) or (case == 'output-hash-raises' and self.owner == 'output'):
+                raise retained
+            if case == 'model-hash-mutates' and self.owner == 'model':
+                request.task = dataclasses.replace(
+                    request.task, kind='regression'
+                )
+                events.append('task-replaced.regression')
+            if case == 'output-hash-mutates' and self.owner == 'output':
+                request.payloads[0]['metadata']['native_output'] = 'membership'
+                events.append('payload-mutated')
+            return str.__hash__(self)
+
+        def __eq__(self, other):
+            events.append(self.owner + '.eq.' + str(other))
+            if case == 'model-equality-refuses' and self.owner == 'model':
+                return False
+            if case == 'output-equality-mutates' and self.owner == 'output':
+                request.task = dataclasses.replace(
+                    request.task, kind='regression'
+                )
+                events.append('task-replaced.regression')
+            return str.__eq__(self, other)
+
+        def __lt__(self, other):
+            events.append(self.owner + '.lt.' + str(other))
+            return str.__lt__(self, other)
+
+        def __repr__(self):
+            events.append(self.owner + '.repr.' + str.__str__(self))
+            if case in (
+                'unknown-model-repr-raises',
+                'output-refusal-repr-raises',
+            ):
+                raise retained
+            return '<native ' + self.owner + ' ' + str.__str__(self) + '>'
+
+    class Kind(str):
+        hashes = 0
+
+        def __hash__(self):
+            self.hashes += 1
+            events.append('task.hash.' + str(self.hashes))
+            if case == 'task-admission-before-output' and self.hashes == 2:
+                raise retained
+            return str.__hash__(self)
+
+        def __eq__(self, other):
+            events.append('task.eq.' + str(other))
+            return str.__eq__(self, other)
+
+    class Names(list):
+        def __iter__(self):
+            events.append('outputs.iter')
+            return list.__iter__(self)
+
+    def post(url, *, data, **kwargs):
+        events.append('http-post')
+        record['wire'] = json.loads(data)
+        table = record['wire']['predict']['instance_table']
+        at = table['columns'].index('instance_id')
+        response = requests.Response()
+        response.status_code = 200
+        response._content = json.dumps(
+            {
+                'id': 'model-output-reference',
+                'model': 'kumo-relational',
+                'metadata': {},
+                'predictions': [
+                    {'row_index': i, 'id': str(row[at]), 'prediction': 'a'}
+                    for i, row in enumerate(table['rows'])
+                ],
+            }
+        ).encode()
+        response._content_consumed = True
+        return response
+
+    if 'wire' in expected:
+        monkeypatch.setattr(
+            'sdm_client.adapters.relational._request_id',
+            lambda: expected['wire']['metadata']['request_id'],
+        )
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        try:
+            request = _request()
+            request.task = dataclasses.replace(
+                request.task, kind=Kind(request.task.kind)
+            )
+            model = Name('kumo-relational', 'model')
+            if case == 'unknown-model-repr-raises':
+                model = Name('unknown-model', 'model')
+            if case == 'handle-model-hash-raises':
+                model = Model()
+                model._spec = dataclasses.replace(
+                    KumoRelational()._spec,
+                    model_id=Name('kumo-relational', 'model'),
+                )
+            outputs = (Name('prediction', 'output'),)
+            if case.startswith('output-refusal'):
+                outputs = (Name('zzz', 'output'), Name('yyy', 'output'))
+            if case == 'output-sequence-order':
+                outputs = Names(outputs)
+            with SDMClient('http://localhost:1', max_retries=0) as client:
+                client._transport._session.post = post
+                answer = client.predict(request, model=model, outputs=outputs)
+                record['result'] = json.loads(
+                    answer.to_pandas().to_json(orient='split')
+                )
+            record['outcome'] = 'success'
+        except Exception as error:
+            details = getattr(error, 'details', None)
+            unsupported = (
+                details.get('unsupported_outputs')
+                if isinstance(details, dict)
+                else None
+            )
+            record.update(
+                outcome='error',
+                error={
+                    'type': type(error).__name__,
+                    'message': str(error),
+                    'code': getattr(error, 'code', None),
+                    'retained_identity': error is retained,
+                    'details': None
+                    if details is None
+                    else json.loads(json.dumps(details)),
+                    'unknown_model_identity': getattr(error, 'model', None)
+                    is model,
+                    'unsupported_output_identities': None
+                    if unsupported is None
+                    else [
+                        any(value is original for original in outputs)
+                        for value in unsupported
+                    ],
+                },
+            )
+        record['warnings'] = [
+            {'type': type(item.message).__name__, 'message': str(item.message)}
+            for item in caught
+        ]
+    record['events'] = events
+    assert record == expected
+
+
+MODEL_OUTPUT_SHAPE_REFERENCE = json.loads(
+    Path(__file__)
+    .with_name('t44_mutable_prediction_reference.json')
+    .read_text()
+)['model_output_shape_cases'][
+    '310' if int(pd.__version__.split('.')[0]) == 2 else '312'
+]
+
+
+@pytest.mark.parametrize('core', [False, True], ids=['original', 'core'])
+@pytest.mark.parametrize('case', list(MODEL_OUTPUT_SHAPE_REFERENCE))
+def test_native_two_paid_call_output_shape_hash_boundary(
+    monkeypatch, core, case
+):
+    monkeypatch.setenv(
+        'SDM_CORE_ROUTES', 'client.predict/regression/frames' if core else ''
+    )
+    expected = copy.deepcopy(MODEL_OUTPUT_SHAPE_REFERENCE[case])
+    events = []
+    sent = []
+    retained = RuntimeError('retained native output-shape hash failure')
+    record = {'case': case}
+    hashes = 0
+
+    class Output(str):
+        def __hash__(self):
+            nonlocal hashes
+            hashes += 1
+            events.append('output.hash.' + str(hashes))
+            if hashes == 2 and case == 'shape-hash-raises':
+                raise retained
+            return str.__hash__(self)
+
+        def __eq__(self, other):
+            events.append('output.eq.' + str(other))
+            return str.__eq__(self, other)
+
+    def post(url, *, data, **kwargs):
+        events.append('http-post.' + str(len(sent) + 1))
+        body = json.loads(data)
+        sent.append(body)
+        table = body['predict']['instance_table']
+        at = table['columns'].index('instance_id')
+        response = requests.Response()
+        response.status_code = 200
+        response._content = json.dumps(
+            {
+                'id': 'shape-reference-' + str(len(sent)),
+                'model': 'kumo-relational',
+                'metadata': {},
+                'predictions': [
+                    {'row_index': i, 'id': str(row[at]), 'prediction': 'a'}
+                    for i, row in enumerate(table['rows'])
+                ],
+            }
+        ).encode()
+        response._content_consumed = True
+        return response
+
+    identifiers = iter(
+        body['metadata']['request_id'] for body in expected['sent']
+    )
+    monkeypatch.setattr(
+        'sdm_client.adapters.relational._request_id', lambda: next(identifiers)
+    )
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        try:
+            first = _request()
+            request = PredictiveQuery(first.query, first.schema).materialize(
+                indices=[0, 1], random_seed=7, rows_per_call=1
+            )
+            with SDMClient('http://localhost:1', max_retries=0) as client:
+                client._transport._session.post = post
+                answer = client.predict(
+                    request,
+                    model=KumoRelational(),
+                    outputs=(Output('prediction'),),
+                )
+                record['result'] = json.loads(
+                    answer.to_pandas().to_json(orient='split')
+                )
+            record['outcome'] = 'success'
+        except Exception as error:
+            record.update(
+                outcome='error',
+                error={
+                    'type': type(error).__name__,
+                    'message': str(error),
+                    'code': getattr(error, 'code', None),
+                    'retained_identity': error is retained,
+                    'details': getattr(error, 'details', None),
+                },
+            )
+        record['warnings'] = [
+            {'type': type(item.message).__name__, 'message': str(item.message)}
+            for item in caught
+        ]
+    record.update(events=events, sent=sent, paid_calls=len(sent))
+    assert record == expected
