@@ -547,6 +547,48 @@ fn direct_generated_optional_owners_and_native_mapping_faults_remain_selected_da
     }
 }
 
+#[test]
+fn explicit_text_target_returns_before_the_regression_meaning_override() {
+    let context = [RecordBatch::try_from_iter([
+        (
+            "0",
+            Arc::new(arrow_array::Int64Array::from(vec![1, 2, 3])) as ArrayRef,
+        ),
+        (
+            "1",
+            Arc::new(arrow_array::Int64Array::from(vec![2, 4, 6])) as ArrayRef,
+        ),
+    ])
+    .unwrap()];
+    let scoring = [RecordBatch::try_from_iter([(
+        "0",
+        Arc::new(arrow_array::Int64Array::from(vec![4, 5])) as ArrayRef,
+    )])
+    .unwrap()];
+    let mut input = prelude(
+        &["feature", "target"],
+        &["feature"],
+        &context,
+        &scoring,
+        &[],
+    );
+    let target = &mut input["schema"]["tables"][0]["columns"][1];
+    target["dtype"] = json!("string");
+    target["stype"] = json!("text");
+    target["stype_declared"] = json!(true);
+    let envelope = plan(input.clone(), &context, &scoring);
+    let (_, payload) = encoded_body(json!({"envelope":envelope,"context":2,"predict":3,"context_header":input["context_header"],"predict_header":input["predict_header"],"task":"regression","primary_key":[]}), attached_batches(&context, &scoring)).unwrap();
+    let payload: Value = serde_json::from_slice(&payload).unwrap();
+    assert_eq!(
+        payload["schema"]["instance_table"]["columns"]["target"],
+        json!({"dtype":"string","stype":"categorical"})
+    );
+    assert_eq!(
+        payload["context"]["instance_table"]["rows"],
+        json!([[1, "2"], [2, "4"], [3, "6"]])
+    );
+}
+
 fn bound_as(context_rows: usize, kind: &str) -> Value {
     let mut call = prepare(
         json!({"stage":"model","model":"kumo-tabular"}),
