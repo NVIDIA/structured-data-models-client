@@ -332,21 +332,59 @@ def _capture_check() -> ModuleType:
 
 def _predicted(core: dict[str, Any], paths: tuple[Any, ...]) -> Any:
     r"""``core.predicted``, its call's request id compared by presence and
-    type only (decision E35, approved by the owner on 2026-10-10)."""
+    type only (decision E35), and payload numbers by exact kind and value."""
     predicted = core.get('predicted')
     if not isinstance(predicted, dict) or 'body' not in predicted:
         return predicted
     masked = {
         **predicted,
-        'body': _capture_check().masked(predicted['body'], paths),
+        'body': _payload(predicted['body'], paths),
     }
     if isinstance(predicted.get('calls'), list):
         # Every call's body where there were several (T2.1g), each masked
         # as the last's is.
-        masked['calls'] = [
-            _capture_check().masked(body, paths) for body in predicted['calls']
-        ]
+        masked['calls'] = [_payload(body, paths) for body in predicted['calls']]
     return masked
+
+
+def _state_payloads(state: Any) -> Any:
+    """Apply numeric agreement only to a request state's JSON payloads.
+
+    Queries, scalar encodings, ranking values and other state fields stay
+    literal; their strings are not captured JSON numeric tokens.
+    """
+    if not isinstance(state, dict):
+        return state
+    held = dict(state)
+    if 'payload' in state:
+        held['payload'] = _lossless(state['payload'])
+    for field in ('forecast', 'batches', 'parts'):
+        if isinstance(state.get(field), list):
+            held[field] = [_state_payloads(part) for part in state[field]]
+    if isinstance(state.get('ranking'), dict):
+        held['ranking'] = _state_payloads(state['ranking'])
+    return held
+
+
+def _core_field(field: str, value: Any) -> Any:
+    """The core rule's payload boundaries, with all other fields literal."""
+    if field == 'materialized':
+        return _state_payloads(value)
+    if field != 'inputs' or not isinstance(value, list):
+        return value
+    return [
+        {
+            **item,
+            **{
+                key: _state_payloads(item[key])
+                for key in ('state', 'held')
+                if key in item
+            },
+        }
+        if isinstance(item, dict) and item.get('op') == 'predict'
+        else item
+        for item in value
+    ]
 
 
 class Report:
@@ -1015,7 +1053,7 @@ def _core_agree(
     if mine is None or theirs is None:
         return
     for field in ('inputs', 'fetches', 'described', 'materialized'):
-        if mine[field] != theirs[field]:
+        if _core_field(field, mine[field]) != _core_field(field, theirs[field]):
             _differ(
                 report,
                 where,
@@ -1088,7 +1126,7 @@ def _core_agree_shared(
         if op in shared:
             held[field] = (mine[field], theirs[field])
     for field, (a, b) in held.items():
-        if a != b:
+        if _core_field(field, a) != _core_field(field, b):
             _differ(
                 report,
                 where,

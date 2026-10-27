@@ -184,7 +184,9 @@ def _numeric_core_agreement(
     return report
 
 
-@pytest.mark.parametrize('field', ['inputs', 'materialized', 'predicted', 'calls'])
+@pytest.mark.parametrize(
+    'field', ['inputs', 'materialized', 'predicted', 'calls']
+)
 @pytest.mark.parametrize(
     ('mine', 'theirs'),
     [('-3e-06', '-3e-6'), ('1.000e-5', '0.00001'), ('-0.00', '-0e1')],
@@ -198,7 +200,9 @@ def test_core_fields_agree_on_exact_float_values_with_different_spelling(
     assert report.failures == [], report.texts
 
 
-@pytest.mark.parametrize('field', ['inputs', 'materialized', 'predicted', 'calls'])
+@pytest.mark.parametrize(
+    'field', ['inputs', 'materialized', 'predicted', 'calls']
+)
 @pytest.mark.parametrize(
     ('mine', 'theirs'),
     [

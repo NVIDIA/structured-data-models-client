@@ -127,8 +127,19 @@ fn description_recording(case: &Case, extra_fetch: bool) -> Recording {
     ));
     std::fs::create_dir(&directory).unwrap();
     let path = directory.join("recording.jsonl");
+    let mut core = json!({"describe_source": {
+        "provider": spec.provider,
+        "source": spec.source,
+        "check_keys": spec.check_keys,
+    }});
+    if let Some(validation) = case.core.as_ref().unwrap().validate_query.as_ref() {
+        core["validate_query"] = json!({
+            "profile": validation.profile,
+            "schema": validation.schema,
+        });
+    }
     let line = json!({"format": "sdm-replay/1", "case": KEY,
-                      "core": case.core, "fetches": fetches});
+                      "core": core, "fetches": fetches});
     std::fs::write(&path, format!("{line}\n")).unwrap();
     let recording = Recording::load(&path).unwrap();
     std::fs::remove_dir_all(directory).unwrap();
@@ -266,7 +277,7 @@ fn an_explicit_recorded_validator_profile_is_preserved() {
     .remove(0)
     .case;
     let mut validation = original.core.unwrap().validate_query.unwrap();
-    validation.profile["model"] = json!("recorded-model");
+    validation.profile["model"] = json!(MODEL);
     let expected = validation.profile.clone();
     case.core.as_mut().unwrap().validate_query = Some(validation);
     let (observed, complete) = replayed(&case, &[], false);

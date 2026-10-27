@@ -808,12 +808,28 @@ pub fn run_replayed_on(case: &Case, recording: &Recording, leg: &str) -> Result<
         &mut log,
         &edits,
     )?;
+    require_replayed_completion(case, &observed, &key, recorded_core.is_some(), &replay)?;
+    // Its query log is the statements the recording names, in the order
+    // run, as the Postgres driver's own log gave them to python-core.
+    observed.driver = Some(log.record(&replay.ran()));
+    Ok(observed)
+}
+
+/// A successful earlier call cannot stand in for the requested operation,
+/// and a genuine refusal does not excuse unconsumed recorded fetches.
+fn require_replayed_completion(
+    case: &Case,
+    observed: &Observed,
+    key: &str,
+    recorded: bool,
+    replay: &Replay<'_>,
+) -> Result<()> {
     let until = match case.until {
         Until::FromSource => "describe_source",
         Until::Materialize => "materialize",
         Until::Predict => "predict",
     };
-    if recorded_core.is_some()
+    if recorded
         && !observed.operations.iter().any(|op| op == until)
         && observed.answer.outcome().0 != "refusal"
     {
@@ -822,10 +838,7 @@ pub fn run_replayed_on(case: &Case, recording: &Recording, leg: &str) -> Result<
     if !replay.finished() {
         bail!("{key}: the core asked fewer fetches than were recorded: record the case again");
     }
-    // Its query log is the statements the recording names, in the order
-    // run, as the Postgres driver's own log gave them to python-core.
-    observed.driver = Some(log.record(&replay.ran()));
-    Ok(observed)
+    Ok(())
 }
 
 /// Runs `case` as [`run`] runs it on DuckDB, over its DuckDB base copied
@@ -1167,7 +1180,30 @@ fn describe_on(
     // and the query is validated on the schema this host described, as
     // the Python host builds its query schema from the source's.
     let materializing = case.core.as_ref().and_then(|c| c.materialize.as_ref());
-    if let Some(validating) = case.core.as_ref().and_then(|c| c.validate_query.as_ref()) {
+    let validating = case.core.as_ref().and_then(|c| c.validate_query.as_ref());
+    // A host may validate and refuse before starting native materialize,
+    // leaving only describe in its recording. Validate this host's own
+    // edited schema, after all earlier native calls have succeeded.
+    // Acceptance still needs the later start: the replay completion guard
+    // refuses an otherwise successful partial journey.
+    let replay_validation = if matches!(
+        source,
+        Source::Replay {
+            preserve_provider: true,
+            ..
+        }
+    ) && case.until != Until::FromSource
+        && materializing.is_none()
+        && validating.is_none()
+    {
+        Some(ValidateQueryInput {
+            profile: json!({"name": "RELATIONAL", "model": null}),
+            schema: serde_json::to_value(query_schema(&schema))?,
+        })
+    } else {
+        None
+    };
+    if let Some(validating) = validating.or(replay_validation.as_ref()) {
         let described;
         let given = if off_duckdb {
             described = ValidateQueryInput {
