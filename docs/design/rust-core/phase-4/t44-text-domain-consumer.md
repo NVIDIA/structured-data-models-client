@@ -21,7 +21,9 @@ Whole references finish before a batch can reset or draw the neighbor stream.
 Contexts use `TaskRows` and `TaskBatch`, resolve each actual live per-batch native cast before resetting or drawing, and reuse the shared resolved sampler.
 The complete-reference value proves prior whole-task resolution; it does not replace a live batch native conversion or require it to equal an earlier cast.
 Native constructor, reference and Text failures retain their actual stage, ancestry, diagnostic facts and graph-drop summary without observing their message early or introducing a per-element core action loop.
-The payload consumer calls the existing request encoder, retains its complete owned result until attachment publication, accumulates ordered encoded parts, emits whole-request notices and constructs the existing Materialized/RequestState value.
+The payload consumer calls the existing request encoder and publishes one immutable complete encoded-part owner for that batch.
+Earlier bodies are not inputs to a later batch's encoding operation.
+The ordinary host batch loop accumulates independent outputs, then one final useful request assembly validates complete ordered coverage, emits whole-request notices and constructs Materialized/RequestState.
 It accepts actual core-computed lag columns as domain input; retaining and supplying those columns through the fixed operation remains composition work.
 Typed list labels preserve the existing Int, Float, Bool, Text and Decimal link-value families, including list order and decimal scale.
 
@@ -167,7 +169,11 @@ No state-version allocation, canonical generated schema or contract lock publica
 
 The existing encoder returns only wire bytes, so the complete logical NativePayload attachment and RequestState coherence still require the same logical Value to be exposed before encoding.
 Reparsing model JSON would lose the distinction between adjacent surrogate points and a supplementary scalar and is not a valid implementation of this requirement.
-Earlier encoded calls currently bind their complete wire bytes, context identity, ordered range and summary to the plan; their native logical-value companion and its complete validity checks must be composed before this path is enabled.
+Each encoded call binds its complete wire bytes, context identity, ordered range and summary to its plan and task through a private immutable RetainedFramePayload factory.
+Native exact FramePayload objects retain those bodies without PyBytes export/import at every subsequent batch.
+Final assembly validates small immutable metadata and copies each body only once to the existing ordinary RequestState bytes attachment.
+The earlier ever-growing previous-parts argument, repeated body hashing and repeated export/import were source-proven quadratic and are removed.
+The same-logical-value native payload companion and complete validity checks remain required before this path can be enabled.
 
 The written native word consumer still requires full single UnicodeText propagation through `SampledColumn::Words`, wire `Value::Text`, labels, schema and display.
 The native engine kernel and contract-native failure types are linked in this isolated source.
@@ -189,7 +195,7 @@ An early unconditional `str(error)` or a copied Python error-policy table is not
 The existing unfinished-family guards and refusal census must be reconciled with actual admission at composition.
 
 The temporary fixed Payload caller still passes empty lag data and must be replaced before the complete candidate can be frozen.
-RelationalOptions and request-owned Options also still require coherent data-only reuse rather than duplicated policy.
+Request-owned Options now re-exports the data-only RelationalOptions definition, with request-owned default_options(), validation and config rendering functions retaining existing policy.
 The inactive Decimal/first-scalar source package remains unapproved and must be reconciled explicitly.
 Generic composite graph support does not establish every LIST_DISTINCT relationship/entity form as reference-supported; exact frozen public LINK cases must determine those shapes and preserve genuine refusals.
 
@@ -200,8 +206,10 @@ RetainedFrameReferences owns the complete resolved node column and the actual im
 Both private core factories consume actual bound domain values.
 They contain no active graph lease, Python object, callback, registry or suspended program.
 Their lifetime is one materialize journey, and live native batch casts are never cached inside them.
-Owned forms cannot also declare replacement raw context, prediction or node rows.
-Raw forms remain independently validated useful data.
+Owned tasks cannot also declare replacement raw context or prediction rows, and the raw task form retains its actual validation path.
+Complete references require the genuine core-created immutable reference owner for both Python and Rust hosts.
+The earlier nodes-only fallback could validate a host hash and count without actual whole-task conversion/resolution and has been removed from the unlinked interface.
+A naked UInt64 array and its coherence hash cannot substitute for the reached full reference constructor.
 Rebinding validates immutable metadata and actual graph ownership without rebuilding or hashing full task/node rows.
 Two independent mutable graph owners with equal source identities cannot be substituted.
 Task construction is O(context plus predictions), and complete references resolve every task row once.
@@ -229,6 +237,6 @@ The complete frame decomposition must reuse existing Phase 3 policy while preser
 Immutable storage reuse must not merge those mutable owners or skip native observations.
 No ranking/forecast runtime ownership evidence is claimed here.
 
-The finite remaining implementation groups are the consuming native facade/guard; complete single-UnicodeText logical payload propagation; retained lag and request-options coherence; static/temporal/LINK composition with actual scalar dependencies; fresh-owner ranking/forecast composition and full HostRun/public twins; then final Direct repair reconciliation and whole-package review.
+The finite remaining implementation groups are the consuming native facade/guard; complete single-UnicodeText logical payload propagation; retained lag; static/temporal/LINK composition with actual scalar dependencies; fresh-owner ranking/forecast composition and full HostRun/public twins; then final Direct repair reconciliation and whole-package review.
 Serialized shared publication, canonical generation, two independent exact-source approvals and candidate checks follow the actual approved preceding landing.
 Exceptional native payload memory and performance measurements remain Phase 4 completion requirements.

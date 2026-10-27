@@ -38,13 +38,7 @@ fn plan(value: &FrameRequestPlan, out: &mut Named) {
 }
 fn references(value: &ResolvedFrameReferences, out: &mut Named) {
     plan(&value.plan, out);
-    out.extend(value.nodes.iter().map(|id| (*id, AttachmentKind::Arrow)));
-    out.extend(
-        value
-            .owner
-            .iter()
-            .map(|id| (*id, AttachmentKind::FrameReferences)),
-    );
+    out.push((value.owner, AttachmentKind::FrameReferences));
 }
 fn converted(value: &FrameReferenceValues, out: &mut Named) {
     match value {
@@ -88,6 +82,7 @@ impl FramePreparation {
             Self::References { plan, .. } => Some(plan.task.labelled.graph.owner),
             Self::Context { references, .. } => Some(references.plan.task.labelled.graph.owner),
             Self::Payload { context, .. } => Some(context.plan.task.labelled.graph.owner),
+            Self::Request { plan, .. } => Some(plan.task.labelled.graph.owner),
             Self::AssessFailure { .. } | Self::ReportFailure { .. } => None,
         }
     }
@@ -166,7 +161,6 @@ impl FramePreparation {
             Self::Payload {
                 context: value,
                 text,
-                previous,
                 values,
             } => {
                 context(value, &mut out);
@@ -175,10 +169,16 @@ impl FramePreparation {
                     NativeFrameText::Failed { completed, .. } => completed,
                 };
                 out.extend(text.iter().map(|column| (column.values.values, Arrow)));
-                if let Some(previous) = previous {
-                    out.extend(previous.parts.iter().map(|part| (part.payload, Bytes)));
-                }
                 out.extend(values.iter().map(|values| (*values, Bytes)));
+            }
+            Self::Request { plan: value, parts } => {
+                plan(value, &mut out);
+                out.extend(
+                    parts
+                        .parts
+                        .iter()
+                        .map(|part| (part.payload, AttachmentKind::FramePayload)),
+                );
             }
             Self::AssessFailure { .. } | Self::ReportFailure { .. } => {}
         }

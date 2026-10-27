@@ -62,6 +62,7 @@ pub enum AttachmentKind {
     FrameGraph,
     FrameTask,
     FrameReferences,
+    FramePayload,
 }
 
 impl Operation {

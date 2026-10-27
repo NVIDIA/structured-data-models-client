@@ -47,6 +47,7 @@ pub enum Attachment {
     FrameGraph(crate::RetainedFrameGraph),
     FrameTask(crate::RetainedFrameTask),
     FrameReferences(crate::RetainedFrameReferences),
+    FramePayload(crate::RetainedFramePayload),
 }
 
 /// The attachments one message carries, by the ids it names them with.

@@ -16,7 +16,7 @@ use arrow_array::{ArrayRef, Int64Array, StringArray};
 use sdm_contract::ErrorCode;
 use sdm_contract::ops::Stype;
 use sdm_engine::labels::Labels;
-use sdm_request::options::{Kind, Options, RunMode};
+use sdm_request::options::{Kind, RunMode};
 use sdm_request::payload::{PAYLOAD_BYTES, Sampled, SampledColumn, SampledTable, build};
 
 const ANCHOR: i64 = 1_709_251_200_000_000_000;
@@ -55,7 +55,7 @@ fn sampled(note: &str) -> Sampled {
         run_mode: RunMode::Fast,
         use_prediction_time: false,
         return_embeddings: false,
-        options: Options::default(),
+        options: sdm_request::options::default_options(),
         statistic: None,
         top_k: None,
         rows_per_call: 1,

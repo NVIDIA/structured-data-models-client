@@ -180,3 +180,81 @@ impl RetainedFrameReferences {
         Ok(self.data.nodes.len())
     }
 }
+
+#[derive(PartialEq, Eq)]
+struct PayloadDefinition {
+    identity: String,
+    context: String,
+    range: FrameBatchRange,
+    answering: u64,
+    tables: Vec<String>,
+}
+
+impl PayloadDefinition {
+    fn of(part: &EncodedFramePart) -> Self {
+        Self {
+            identity: part.identity.clone(),
+            context: part.context_identity.clone(),
+            range: part.range,
+            answering: part.answering,
+            tables: part.tables.clone(),
+        }
+    }
+}
+
+struct PayloadData {
+    plan: String,
+    task: String,
+    definition: PayloadDefinition,
+    bytes: Vec<u8>,
+}
+
+/// One immutable complete encoded payload, independently inspectable.
+/// It owns no graph lease, earlier parts or accumulated workflow state.
+/// Later batches never re-import, hash or copy this body.
+#[derive(Clone)]
+pub struct RetainedFramePayload {
+    data: Arc<PayloadData>,
+}
+
+impl std::fmt::Debug for RetainedFramePayload {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("RetainedFramePayload")
+            .field("identity", &self.data.definition.identity)
+            .finish_non_exhaustive()
+    }
+}
+
+impl RetainedFramePayload {
+    pub(super) fn new(plan: &BoundPlan, part: &EncodedFramePart, bytes: Vec<u8>) -> Self {
+        Self {
+            data: Arc::new(PayloadData {
+                plan: plan.value.identity.clone(),
+                task: plan.task.value.identity.clone(),
+                definition: PayloadDefinition::of(part),
+                bytes,
+            }),
+        }
+    }
+
+    pub fn wire(&self) -> &[u8] {
+        &self.data.bytes
+    }
+
+    pub(super) fn validate(
+        &self,
+        plan: &BoundPlan,
+        part: &EncodedFramePart,
+    ) -> Result<(), CoreError> {
+        if self.data.plan != plan.value.identity
+            || self.data.task != plan.task.value.identity
+            || self.data.definition != PayloadDefinition::of(part)
+        {
+            return Err(protocol(
+                "encoded frame payload no longer matches its immutable task, plan or part meaning",
+            ));
+        }
+        Ok(())
+    }
+}
