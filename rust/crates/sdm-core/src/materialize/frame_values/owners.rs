@@ -206,7 +206,7 @@ struct PayloadData {
     plan: String,
     task: String,
     definition: PayloadDefinition,
-    bytes: Vec<u8>,
+    built: payload::Built,
 }
 
 /// One immutable complete encoded payload, independently inspectable.
@@ -227,19 +227,23 @@ impl std::fmt::Debug for RetainedFramePayload {
 }
 
 impl RetainedFramePayload {
-    pub(super) fn new(plan: &BoundPlan, part: &EncodedFramePart, bytes: Vec<u8>) -> Self {
+    pub(super) fn new(plan: &BoundPlan, part: &EncodedFramePart, built: payload::Built) -> Self {
         Self {
             data: Arc::new(PayloadData {
                 plan: plan.value.identity.clone(),
                 task: plan.task.value.identity.clone(),
                 definition: PayloadDefinition::of(part),
-                bytes,
+                built,
             }),
         }
     }
 
     pub fn wire(&self) -> &[u8] {
-        &self.data.bytes
+        &self.data.built.bytes
+    }
+
+    pub fn logical(&self) -> &Value {
+        &self.data.built.logical
     }
 
     pub(super) fn validate(

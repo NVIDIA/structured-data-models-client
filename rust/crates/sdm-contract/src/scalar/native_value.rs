@@ -48,6 +48,8 @@ pub struct NativeMember {
 pub struct NativePayload {
     pub version: u32,
     pub identity: String,
+    /// Exact core-created immutable complete logical payload ownership.
+    /// This typed data is distinct from a host-supplied JSON value tree.
     pub value: AttachmentId,
     pub wire: AttachmentId,
 }

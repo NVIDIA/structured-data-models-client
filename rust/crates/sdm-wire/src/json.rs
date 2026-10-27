@@ -19,6 +19,15 @@ use std::collections::BTreeMap;
 use serde::de::{Deserializer, MapAccess, Visitor};
 use serde_json::value::RawValue;
 
+mod logical;
+pub use logical::Error as LogicalError;
+
+/// Capture existing typed data before encoding, preserving its field order
+/// and exact numeric tokens without parsing an encoded JSON body.
+pub fn from_serializable<T: serde::Serialize + ?Sized>(value: &T) -> Result<Value, LogicalError> {
+    logical::capture(value)
+}
+
 /// A JSON value.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Value {
@@ -643,6 +652,9 @@ impl serde::Serialize for Value {
         match self {
             Value::Null => serializer.serialize_unit(),
             Value::Bool(value) => serializer.serialize_bool(*value),
+            Value::Number(token) if !serializer.is_human_readable() => {
+                serializer.serialize_newtype_struct(logical::NUMBER, token)
+            }
             Value::Number(token) => RawValue::from_string(token.clone())
                 .map_err(|_| S::Error::custom("a number token that is not JSON"))?
                 .serialize(serializer),

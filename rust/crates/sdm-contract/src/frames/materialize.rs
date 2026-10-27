@@ -349,6 +349,16 @@ pub struct FrameRequestParts {
     pub parts: Vec<EncodedFramePart>,
 }
 
+/// The existing request state and complete native logical companions, in
+/// the same core-selected order. Each companion names both its actual
+/// immutable logical owner and that owner's encoded RequestState body.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct MaterializedFrames {
+    pub request: Materialized,
+    pub payloads: Vec<crate::scalar::native_value::NativePayload>,
+}
+
 /// Fixed operations over useful values, never host instructions or a program.
 /// Each invocation ends normally through the existing Done boundary.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -442,5 +452,5 @@ pub enum PreparedFrameValue {
     References(ResolvedFrameReferences),
     Context(SampledFrameContext),
     Part(EncodedFramePart),
-    Request(Materialized),
+    Request(MaterializedFrames),
 }

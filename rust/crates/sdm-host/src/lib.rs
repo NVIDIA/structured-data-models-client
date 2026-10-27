@@ -29,8 +29,9 @@ pub use runs::{Failure, HostRun, Unreadable, Unreadables, contain, is_posix_zone
 /// (`CompositionRoot::new`) where it does not take [`default_root`]'s, as
 /// the dev-only test host swaps one in (T2.7).
 pub use sdm_core::{
-    ArrowData, Attachment, Attachments, CompositionRoot, RetainedFrameGraph, RetainedFramePayload,
-    RetainedFrameReferences, RetainedFrameTask, dtype_names, meanings, wire_names,
+    ArrowData, Attachment, Attachments, CompositionRoot, LogicalValue, RetainedFrameGraph,
+    RetainedFramePayload, RetainedFrameReferences, RetainedFrameTask, dtype_names, meanings,
+    wire_names,
 };
 pub use zones::{ZoneError, ZoneResolver, ZoneRoot, ZoneSource, session_zone_offset};
 

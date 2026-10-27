@@ -500,6 +500,12 @@ pub enum AnyConfig {
 }
 
 impl<K: Serialize, C: Serialize> StatePayload<K, C> {
+    /// The same typed model schema as owned logical values, before encoding
+    /// or native presentation. No model body is parsed to recover this data.
+    pub fn logical(&self) -> Result<crate::json::Value, crate::json::LogicalError> {
+        crate::json::from_serializable(self)
+    }
+
     /// The payload's UTF-8 JSON text: compact, members in the order the
     /// types declare them, open maps in the order written, each cell's
     /// number its token.
