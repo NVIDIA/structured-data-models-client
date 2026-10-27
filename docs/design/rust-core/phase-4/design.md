@@ -225,6 +225,10 @@ No frame materialization, sampling, index-order, session or full T4.2 completion
 
 ### T4.4 – Frame materialize and predict, including ranking and forecasting
 
+The bounded [typed temporal scalar consumer](t44-temporal-scalar-consumer.md) extends the numeric first consumer through static-entity queries with timestamped history.
+It retains the existing checkpoint and contract shapes and remains behind the development routing seam.
+It does not settle temporal aggregation, timed entities, text-time rules, ranking, forecasting or full T4.4 acceptance.
+
 - Deliver the frame journey end to end through `sdm-core::{frames,materialize,subgraph,predict}`, `sdm-engine::frames`, and the existing request, ranking, forecast and result modules.
 - Port the actual rules from `rfm/backend/local/{graph_store,sampler}.py`, `csrc/neighbor_sampler.cpp` and `rfm/base/sampler.py`: sanitization, relationship-wide key representation, entity mapping, temporal/static hops, query-data traversal, row order and feature/label construction.
 - Reuse existing Arrow filtering/take/grouping and time kernels; implement frame-specific selection policies once rather than duplicating the whole SQL sampler or copying the test-only memory provider.

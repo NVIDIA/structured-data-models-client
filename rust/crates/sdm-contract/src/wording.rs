@@ -930,7 +930,7 @@ pub fn template(sentence: Sentence) -> Template {
             r#"Task references {rows} unresolved row(s) in table '{table}' after graph sanitization"#,
         ),
         S::FrameNoValidRows => said(
-            r#"Found no valid rows in table '{table}'. Please make sure that there exists valid non-N/A primary keys in this table."#,
+            r#"Found no valid rows in table '{table}'. Please make sure that there exists valid non-N/A {requirements} in this table."#,
         ),
         S::FrameNeighborDtype => said(
             r#"the relational engine failed while building this request: RuntimeError: Type '{edge}' in num_neighbors must have dtype int64."#,

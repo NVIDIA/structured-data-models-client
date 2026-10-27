@@ -336,10 +336,13 @@ impl FrameRun {
                         row.duplicate_keys
                     ));
                 }
+                if row.null_times > 0 {
+                    causes.push(format!("{} with no time", row.null_times));
+                }
                 format!(
                     "{}: {} of {} rows dropped ({})",
                     row.table,
-                    row.null_keys + row.duplicate_keys,
+                    row.null_keys + row.duplicate_keys + row.null_times,
                     row.input,
                     causes.join(", ")
                 )
@@ -369,6 +372,13 @@ impl FrameRun {
             .entities(&table.name, columns, limit, seed)
     }
 
+    pub fn time_bounds(&self, table: &Table) -> Result<(Option<i64>, Option<i64>), CoreError> {
+        self.snapshot
+            .as_ref()
+            .ok_or_else(|| internal("frame graph not initialized"))?
+            .time_bounds(&table.name)
+    }
+
     pub fn lookup(
         &self,
         table: &Table,
@@ -387,6 +397,7 @@ impl FrameRun {
         graph: &Graph,
         entity: &Table,
         keys: &ArrayRef,
+        anchors: &[i64],
         hops: &[Hop],
         neighbor_values: Option<&[Value]>,
         excluded: &[(String, String)],
@@ -429,7 +440,14 @@ impl FrameRun {
             .snapshot
             .as_ref()
             .ok_or_else(|| internal("frame graph not initialized"))?
-            .walk(graph, &entity.name, keys, &hops, &mut self.neighbors);
+            .walk(
+                graph,
+                &entity.name,
+                keys,
+                anchors,
+                &hops,
+                &mut self.neighbors,
+            );
         // A later cap, encoding error or cancellation must not replay draws.
         self.keep(asker);
         let sampled = sampled?;
