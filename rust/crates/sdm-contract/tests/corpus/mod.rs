@@ -117,6 +117,11 @@ pub fn messages() -> Vec<ControlMessage> {
         ranking: None,
     };
     vec![
+        start(Operation::PrepareRequest(
+            sdm_contract::prepare::PrepareRequest {
+                input: AttachmentId(1),
+            },
+        )),
         start(Operation::ValidateQuery(validate)),
         start(Operation::DescribeSource(DescribeSource {
             provider: sdm_contract::data::ProviderChoice::Sql {
@@ -159,6 +164,7 @@ pub fn messages() -> Vec<ControlMessage> {
             }),
         })),
         start(Operation::Predict(Predict {
+            direct: None,
             state: Some(state.clone()),
             held: None,
             model: "kumo-relational".into(),
@@ -169,6 +175,7 @@ pub fn messages() -> Vec<ControlMessage> {
             model_endpoint: None,
         })),
         start(Operation::Predict(Predict {
+            direct: None,
             state: Some(state.clone()),
             held: None,
             model: "kumo-relational".into(),
@@ -444,6 +451,11 @@ pub fn messages() -> Vec<ControlMessage> {
         }),
         ControlMessage::Step(Step::Done {
             result: OperationResult::Materialize(Materialized { state, query: None }),
+        }),
+        ControlMessage::Step(Step::Done {
+            result: OperationResult::PrepareRequest(sdm_contract::prepare::PreparedRequest {
+                value: AttachmentId(1),
+            }),
         }),
         ControlMessage::Step(Step::Done {
             result: OperationResult::Predict(Predicted {
