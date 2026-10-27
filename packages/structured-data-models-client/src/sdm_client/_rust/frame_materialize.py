@@ -18,6 +18,98 @@ from sdm_client._rust import codec
 from sdm_client._rust.frames import _convert
 
 
+def native_inputs(
+    schema: Any, state: dict[str, Any]
+) -> tuple[
+    list[tuple[dict[str, Any], Any]], dict[str, Any], Any, list[dict[str, Any]]
+]:
+    """Export one fresh native source or reuse its actual retained owners.
+
+    String arrays use their explicit lossless native representation. Other
+    families retain the constructor converter's existing closed admission.
+    No cached graph observes caller values or dtype metadata again.
+    """
+    import pyarrow as pa
+
+    from sdm_client._rust.frame_native import NativeColumn, NativeFrameColumns
+    from sdm_client._rust.frames import _check_header
+    from sdm_client._rust.spec import held_schema
+
+    checkpoint = state.get('held', {}).get('frame_checkpoint')
+    if checkpoint is not None and 'owner' in checkpoint:
+        return (
+            [],
+            state['frame_schema'],
+            state['frame_columns'],
+            state['frame_native_tables'],
+        )
+    exported = []
+    native_tables = []
+    native_types = {}
+    for name, table in schema.tables.items():
+        frame = table.data
+        if type(frame) is not pd.DataFrame:
+            raise RouteError(
+                'frame materialization requires built-in DataFrames'
+            )
+        _check_header(name, frame)
+        arrays = []
+        origins = []
+        types = {}
+        for ordinal, column in enumerate(frame.columns):
+            series = frame.iloc[:, ordinal]
+            dtype = series.dtype
+            encoding = None
+            if type(dtype) is pd.StringDtype and dtype.storage in (
+                'python',
+                'pyarrow',
+            ):
+                values, encoding = NativeColumn(series).arrow()
+                array = values.column(0)
+                origin: Any = {
+                    'pandas_string': {
+                        'storage': dtype.storage,
+                        'missing': 'pandas_na'
+                        if dtype.na_value is pd.NA
+                        else 'floating_nan',
+                    }
+                }
+            else:
+                values, converted_types = _convert(
+                    name,
+                    frame.iloc[:, ordinal : ordinal + 1],
+                    check_header=False,
+                )
+                array = values.column(0)
+                types.update(converted_types)
+                origin = (
+                    'arrow_dtype'
+                    if type(dtype) is pd.ArrowDtype
+                    else 'builtin_primitive'
+                )
+                if pa.types.is_string(array.type) or pa.types.is_large_string(
+                    array.type
+                ):
+                    encoding = 'utf8'
+            arrays.append(array)
+            types[column] = dtype
+            origins.append(
+                {'name': column, 'origin': origin, 'strings': encoding}
+            )
+        source = codec.relation(name)
+        exported.append(
+            (source, pa.Table.from_arrays(arrays, names=list(frame.columns)))
+        )
+        native_tables.append({'source': source, 'columns': origins})
+        native_types[name] = types
+    return (
+        exported,
+        held_schema(schema),
+        NativeFrameColumns(native_types),
+        native_tables,
+    )
+
+
 def inputs(schema: Any, state: dict[str, Any]) -> dict[int, Any]:
     """Convert live inputs once; resume from opaque checkpoint owners."""
     import pyarrow as pa

@@ -4,7 +4,7 @@
 
 """Local native column/error owners for fixed frame domain values.
 
-This module is not connected to dispatch. Core-selected source bindings name
+Core-selected source bindings name
 native dtype owners retained at fresh conversion; caller Schema metadata is
 never reread here. Graph policy, sampling, normalization and error policy
 remain in Rust. No exception is displayed while capturing native facts.
@@ -16,7 +16,7 @@ from collections.abc import Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from types import MappingProxyType, TracebackType
-from typing import Any, Iterator, NoReturn
+from typing import Any, Iterator, NoReturn, cast
 import unicodedata
 
 import pandas as pd
@@ -258,6 +258,43 @@ class NativeFrameColumns:
         except Exception as error:
             return NativeFrameFailure.capture(error)
 
+    def prediction_diagnostic(
+        self,
+        binding: Mapping[str, Any],
+        indices: list[Any],
+        failure: NativeFrameFailure,
+    ) -> tuple[dict[str, Any], NativeFrameFailure]:
+        """Observe the actual failed constructor's stop-at-first diagnostic.
+
+        The native constructor catches TypeError/ValueError before this
+        diagnostic. Neither other failures nor an unvisited suffix are
+        converted. Rust selects the resulting public wrapper and wording.
+        """
+        if not isinstance(failure.error, (TypeError, ValueError)):
+            return {'outcome': 'not_reached'}, failure
+        dtype = self.dtype(binding)
+        with failure.active():
+            try:
+                first: dict[str, Any] | None = None
+                for ordinal, value in enumerate(indices):
+                    try:
+                        pd.Series([value], dtype=dtype)
+                    except (TypeError, ValueError):
+                        first = {'ordinal': ordinal, 'native_repr': repr(value)}
+                        break
+                diagnostic = {
+                    'outcome': 'completed',
+                    'first': first,
+                    'dtype_display': str(dtype),
+                }
+            except Exception as error:
+                reached = NativeFrameFailure.capture(error)
+                return {
+                    'outcome': 'failed',
+                    'failure': reached.facts.as_wire(),
+                }, reached
+        return diagnostic, failure
+
 
 def convert_text(selected: pd.Series) -> NativeColumn | NativeFrameFailure:
     """Convert one actual selected native column before Rust normalization.
@@ -272,22 +309,30 @@ def convert_text(selected: pd.Series) -> NativeColumn | NativeFrameFailure:
         return NativeFrameFailure.capture(error)
 
 
-def _diagnostic(value: dict[str, Any]) -> dict[str, Any]:
+def _diagnostic(
+    value: dict[str, Any], *, part: dict[str, Any] | None = None
+) -> dict[str, Any]:
     """One fixed frame diagnostic value, decoded through the ordinary host."""
     import json
 
     from sdm_client._rust import codec, results
     from sdm_client._rust.run import run
 
-    finished = run(
-        {'op': 'prepare_frames', 'input': 1}, {1: codec.attachment(value)}
-    )
+    operation: dict[str, Any] = {'op': 'prepare_frames', 'input': 1}
+    if part is not None:
+        operation['part'] = part
+    finished = run(operation, {1: codec.attachment(value)})
     answer = results.expect(finished.result, results.FramePrepared)
     return json.loads(finished.take(answer.value))
 
 
 def _assessment(
-    native: NativeFrameFailure, origin: str, signature: list[int] | None
+    native: NativeFrameFailure,
+    origin: str,
+    signature: list[int] | None,
+    *,
+    part: dict[str, Any] | None = None,
+    window_outran: bool | None = None,
 ) -> dict[str, Any]:
     from sdm_client._rust.codec import CodecError
 
@@ -297,7 +342,9 @@ def _assessment(
             'origin': origin,
             'failure': native.facts.as_wire(),
             'signature': signature,
-        }
+            'window_outran': window_outran,
+        },
+        part=part,
     )
     if value.get('value') != 'failure_assessment':
         raise CodecError(
@@ -312,6 +359,7 @@ def guard_failure(
     origin: str,
     dropped_summary: str | None = None,
     rows_per_call: int | None = None,
+    part: dict[str, Any] | None = None,
 ) -> NoReturn:
     """Present the closed diagnostic classification selected by the core.
 
@@ -323,13 +371,56 @@ def guard_failure(
     from sdm_client._rust import errors
     from sdm_client._rust.codec import CodecError
 
-    assessment = _assessment(native, origin, None)
+    assessment = _assessment(native, origin, None, part=part)
     category = assessment['category']
     if category == 'pass_through':
+        if (
+            part is not None
+            and 'structured_data_error' in native.facts.ancestry
+        ):
+            if assessment['part'] is None:
+                # The first classification establishes that the original
+                # structured exception reaches its forecast wrapper. Ranking
+                # already has a complete core-selected sentence and never
+                # observes this native detail or its truth conversion.
+                with native.active():
+                    window_outran = bool(
+                        (getattr(native.error, 'details', None) or {}).get(
+                            'window_outran_the_data'
+                        )
+                    )
+                assessment = _assessment(
+                    native,
+                    origin,
+                    None,
+                    part=part,
+                    window_outran=window_outran,
+                )
+            selected_part = assessment['part']
+            if selected_part is None:
+                raise CodecError(
+                    'native part classification lacks its presentation'
+                )
+            with native.active():
+                first = native.error.args[0].rstrip()
+                if first and first[-1] not in '.!?':
+                    first += '.'
+                suffix = errors._said(
+                    selected_part['sentence'],
+                    errors.decoded(selected_part['fields']),
+                )
+                said = f'{first} {suffix}'
+                structured = cast(StructuredDataError, native.error)
+                carried = structured.__class__.__new__(structured.__class__)
+                carried.__dict__.update(native.error.__dict__)
+                carried.args = (said, *native.error.args[1:])
+                carried.message = said
+                carried.__cause__ = native.error
+            errors.raise_error(carried)
         errors.raise_native(native.error)
     if category == 'type_error':
         signature = [ord(point) for point in native.read_message()]
-        assessment = _assessment(native, origin, signature)
+        assessment = _assessment(native, origin, signature, part=part)
         category = assessment['category']
     name = None
     refusal = None
@@ -360,7 +451,8 @@ def guard_failure(
                         'dropped_summary': dropped_summary,
                         'rows_per_call': rows_per_call,
                     },
-                }
+                },
+                part=part,
             )
         except StructuredDataError as error:
             selected = error
