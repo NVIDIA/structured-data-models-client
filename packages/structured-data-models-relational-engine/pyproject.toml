@@ -118,15 +118,18 @@ editable.verbose=false
 # workflow all drive cibuildwheel from here, so the wheel set CI proves is the
 # one a tag uploads.
 [tool.cibuildwheel]
-# The default `build` frontend, not `build[uv]`: the smoke test below installs
-# this wheel against sibling wheels that exist only on disk, found through
-# PIP_FIND_LINKS. uv reads no PIP_* variable, and the uv the manylinux images
-# shipped had no environment form of --find-links at all, so under `build[uv]`
-# the smoke test could never resolve structured-data-models-api.
+# The default `build` frontend, not `build[uv]`: `before-test` installs with
+# the test environment's own pip, and an environment uv creates has none.
 build = "cp310-* cp311-* cp312-* cp313-* cp314-*"
 # musllinux is not a libc this project has ever built or tested against, and
 # leaving it on would silently double the Linux wheel count.
 skip = "*-musllinux_*"
+# The engine pins its siblings by exact version, and before a release they
+# exist only as wheels on disk. Every workflow puts them in `_sibling_wheels/`
+# at the root cibuildwheel runs from, and they are installed by file first, so
+# the engine's pins are met by them and never by a published release of the
+# same version.
+before-test = "python -c \"import glob, subprocess, sys; subprocess.check_call([sys.executable, '-m', 'pip', 'install', *glob.glob(sys.argv[1] + '/*.whl')])\" \"{project}/_sibling_wheels\""
 # Proof per wheel, on the machine that built it: the compiled sampler loads and
 # the public graph surface imports.
 test-command = "python -c \"from sdm_relational_engine.rfm import Graph, KumoRelational; import sdm_relational_engine.relationallib as relationallib; assert hasattr(relationallib.NeighborSampler, 'seed')\""
@@ -138,14 +141,6 @@ test-command = "python -c \"from sdm_relational_engine.rfm import Graph, KumoRel
 archs = ["x86_64", "aarch64"]
 manylinux-x86_64-image = "manylinux_2_28"
 manylinux-aarch64-image = "manylinux_2_28"
-# The engine pins its siblings by exact version, and before a release they exist
-# only as wheels on disk. cibuildwheel copies the directory it is run from into
-# the container as /project, and every workflow runs it from the repository
-# root, so this is `_sibling_wheels/` at that root.
-# Only Linux builds in a container, so only Linux has a path that is the same
-# on every machine; macOS and Windows are given the checkout's absolute path by
-# their workflows instead.
-environment = { PIP_FIND_LINKS = "/project/_sibling_wheels" }
 
 [tool.cibuildwheel.macos]
 # The workflows narrow this to one arch per runner, so every wheel is built and

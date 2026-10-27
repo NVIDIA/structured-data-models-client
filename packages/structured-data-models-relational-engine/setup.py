@@ -39,9 +39,7 @@ if sys.platform == 'win32':
 setup(
     install_requires=[
         'numpy',
-        # 3.1 raises taking a `DateOffset` from `Timestamp.min`, which is the
-        # anchor time of every graph without a time column.
-        'pandas<3.1',
+        'pandas',
         # The warehouse backends read results as `pd.ArrowDtype`, which pandas
         # refuses below pyarrow 10.0.1. Databricks Runtime 14.3 LTS and
         # serverless environment 1 ship pyarrow 8, and failed there on import.

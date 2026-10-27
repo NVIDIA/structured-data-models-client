@@ -49,7 +49,11 @@ from sdm_relational_engine.exceptions import (
 )
 from sdm_relational_engine.rfm import Graph, TaskTable
 from sdm_relational_engine.rfm.base import DataBackend, Sampler, composite_key
-from sdm_relational_engine.rfm.base.utils import Timestamp, to_naive_utc
+from sdm_relational_engine.rfm.base.utils import (
+    Timestamp,
+    shift_time,
+    to_naive_utc,
+)
 from sdm_relational_engine.rfm.diagnostics import GraphSanitizationReport
 from sdm_relational_engine.rfm.explain.result import (
     ExplainConfig,
@@ -2129,7 +2133,7 @@ class KumoRelational:
         elif (
             query.query_type == QueryType.TEMPORAL
             and context_anchor_time is not None
-            and context_anchor_time + end_offset > anchor_time
+            and shift_time(context_anchor_time, end_offset) > anchor_time
         ):
             warnings.warn(
                 f'Aggregation for context examples at timestamp '
@@ -2141,10 +2145,14 @@ class KumoRelational:
 
         elif (
             context_anchor_time is not None
-            and context_anchor_time - end_offset * query.num_forecasts
+            and shift_time(
+                context_anchor_time, -end_offset * query.num_forecasts
+            )
             < min_time
         ):
-            _time = context_anchor_time - end_offset * query.num_forecasts
+            _time = shift_time(
+                context_anchor_time, -end_offset * query.num_forecasts
+            )
             warnings.warn(
                 f'Context anchor timestamp is too early or '
                 f'aggregation time range is too large. To form '
@@ -2160,13 +2168,12 @@ class KumoRelational:
                 f'make sure this is intended.'
             )
 
-        if (
-            evaluate
-            and anchor_time > max_time - end_offset * query.num_forecasts
+        if evaluate and anchor_time > shift_time(
+            max_time, -end_offset * query.num_forecasts
         ):
             raise ValueError(
                 f'Anchor timestamp for evaluation is after the latest '
-                f"supported timestamp '{max_time - end_offset}'."
+                f"supported timestamp '{shift_time(max_time, -end_offset)}'."
             )
 
     def _get_task_table(
@@ -2233,7 +2240,9 @@ class KumoRelational:
         if anchor_time is None:
             anchor_time = self._get_default_anchor_time(query)
             if num_test_examples > 0:
-                anchor_time = anchor_time - step_offset * query.num_forecasts
+                anchor_time = shift_time(
+                    anchor_time, -step_offset * query.num_forecasts
+                )
 
             if logger is not None:
                 assert isinstance(anchor_time, pd.Timestamp)
@@ -2256,7 +2265,7 @@ class KumoRelational:
                     'for context and prediction examples'
                 )
             if context_anchor_time is None:
-                context_anchor_time = anchor_time - step_offset
+                context_anchor_time = shift_time(anchor_time, -step_offset)
             self._validate_time(
                 query,
                 anchor_time,

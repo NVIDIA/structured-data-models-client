@@ -1003,6 +1003,26 @@ def test_forecasting_single_entity_validation(
         )
 
 
+@pytest.mark.parametrize('indices', [[0], None])
+def test_a_graph_without_a_time_column_is_anchored_at_the_earliest_time(
+    indices: list[int] | None,
+) -> None:
+    """A static query steps by an empty offset, and pandas 3.1 refused to
+    take one from `Timestamp.min`.
+    """
+    df = pd.DataFrame({'USER_ID': [0, 1, 2, 3], 'AGE': [20, 30, 40, 50]})
+    model = KumoRelational(Graph.from_data({'USERS': df}, verbose=False))
+    query = ValidatedPredictiveQuery(
+        target_ast=Column(fqn='USERS.AGE', stype_maybe=Stype.numerical),
+        entity_ast=Column(fqn='USERS.USER_ID'),
+    )
+
+    task_table = model._get_task_table(query, indices=indices)
+
+    anchors = task_table._context_df['ANCHOR_TIMESTAMP']
+    assert (anchors == pd.Timestamp.min).all()
+
+
 def test_end_time_column() -> None:
     df = pd.DataFrame(
         {
