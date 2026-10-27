@@ -16,6 +16,8 @@ use arrow_schema::{DataType, Field, Schema};
 use sdm_contract::frames::{NativeDecimal, NativeDecimalColumn};
 use sdm_contract::ops::Dtype;
 
+type I256 = <arrow_array::types::Decimal256Type as arrow_array::ArrowPrimitiveType>::Native;
+
 fn declared(decimal: NativeDecimal) -> NativeDecimalColumn {
     NativeDecimalColumn {
         column: 0,
@@ -31,11 +33,18 @@ fn full_scale_domain_keeps_typed_mantissas_and_distinctness() {
             let (array, native): (ArrayRef, NativeDecimal) = if wide {
                 (
                     Arc::new(
-                        Decimal256Array::from(vec![Some(0.into()), Some(1.into()), None])
-                            .with_precision_and_scale(1, 0)
-                            .unwrap(),
+                        Decimal256Array::from(vec![
+                            Some(I256::from_i128(0)),
+                            Some(I256::from_i128(1)),
+                            None,
+                        ])
+                        .with_precision_and_scale(1, 0)
+                        .unwrap(),
                     ),
-                    NativeDecimal::Decimal256 { precision: 1, scale },
+                    NativeDecimal::Decimal256 {
+                        precision: 1,
+                        scale,
+                    },
                 )
             } else {
                 (
@@ -44,7 +53,10 @@ fn full_scale_domain_keeps_typed_mantissas_and_distinctness() {
                             .with_precision_and_scale(1, 0)
                             .unwrap(),
                     ),
-                    NativeDecimal::Decimal128 { precision: 1, scale },
+                    NativeDecimal::Decimal128 {
+                        precision: 1,
+                        scale,
+                    },
                 )
             };
             let batch = RecordBatch::try_from_iter([("value_id", array)]).unwrap();
@@ -54,7 +66,11 @@ fn full_scale_domain_keeps_typed_mantissas_and_distinctness() {
             let read = decimal_storage::read(&[batch], 0, &native).unwrap();
             assert_eq!(
                 read.dtype,
-                if scale > 0 { Dtype::Float64 } else { Dtype::Int64 }
+                if scale > 0 {
+                    Dtype::Float64
+                } else {
+                    Dtype::Int64
+                }
             );
             assert_ne!(read.values[0], read.values[1]);
             assert!(read.values[2].is_none());
@@ -72,7 +88,8 @@ fn negative_scale_bounds_are_checked_only_after_native_precision_fast_path() {
         let array = Decimal128Array::from(vec![value])
             .with_precision_and_scale(precision, 0)
             .unwrap();
-        let batch = RecordBatch::try_from_iter([("value_id", Arc::new(array) as ArrayRef)]).unwrap();
+        let batch =
+            RecordBatch::try_from_iter([("value_id", Arc::new(array) as ArrayRef)]).unwrap();
         let native = NativeDecimal::Decimal128 {
             precision,
             scale: -1,
@@ -101,7 +118,7 @@ fn unmarked_binary_and_mismatched_typed_storage_are_rejected() {
 }
 
 #[test]
-fn_bindings_cannot_name_a_different_field_or_repeat_an_ordinal() {
+fn bindings_cannot_name_a_different_field_or_repeat_an_ordinal() {
     let schema = Schema::new(vec![Field::new(
         "value_id",
         DataType::Decimal128(1, 0),
@@ -115,7 +132,11 @@ fn_bindings_cannot_name_a_different_field_or_repeat_an_ordinal() {
     wrong_name.name = "other".into();
     let mut wrong_index = column.clone();
     wrong_index.column = 1;
-    for columns in [vec![wrong_name], vec![wrong_index], vec![column.clone(), column]] {
+    for columns in [
+        vec![wrong_name],
+        vec![wrong_index],
+        vec![column.clone(), column],
+    ] {
         assert!(decimal_storage::bindings(&schema, &columns).is_err());
     }
 }
