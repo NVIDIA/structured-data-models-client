@@ -391,23 +391,36 @@ impl FrameRun {
                 })?;
             self.neighbors = Mt19937::seeded(seed);
         }
-        let hops = match neighbor_values {
-            Some(values) => match native_hops(graph, values) {
-                Ok(hops) => hops,
-                Err(error) => {
-                    // The actual local sampler resets before validating
-                    // its count array, without consuming a neighbor draw.
-                    self.keep(asker);
-                    return Err(error);
-                }
-            },
-            None => hops
-                .iter()
-                .map(|hop| match hop {
-                    Hop::Keep(count) => i64::try_from(*count).unwrap_or(i64::MAX),
-                    Hop::Stop => 0,
-                })
-                .collect::<Vec<_>>(),
+        // SQL hop bounds retain their own signed/expression meaning. When
+        // no original native array was supplied, project those same values
+        // through the existing frame count-array admission instead of
+        // flattening a negative bound or expression into a positive count.
+        let projected;
+        let values = match neighbor_values {
+            Some(values) => values,
+            None => {
+                projected = hops
+                    .iter()
+                    .map(|hop| match hop {
+                        Hop::Keep(count) => {
+                            Value::Number(i64::try_from(*count).unwrap_or(i64::MAX).to_string())
+                        }
+                        Hop::Stop => Value::Number("0".into()),
+                        Hop::Negative(value) => Value::Number(value.as_str().into()),
+                        Hop::Expression(text) => Value::Text(text.clone()),
+                    })
+                    .collect::<Vec<_>>();
+                projected.as_slice()
+            }
+        };
+        let hops = match native_hops(graph, values) {
+            Ok(hops) => hops,
+            Err(error) => {
+                // The actual local sampler resets before validating
+                // its count array, without consuming a neighbor draw.
+                self.keep(asker);
+                return Err(error);
+            }
         };
         let sampled = self
             .snapshot
