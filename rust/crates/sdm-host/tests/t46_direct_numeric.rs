@@ -15,7 +15,7 @@ use sdm_host::{ArrowData, Attachment, Attachments, HostRun};
 use serde_json::{Value, json};
 use std::sync::Arc;
 
-fn start(operation: Value, attached: Attachments) -> HostRun {
+fn try_start(operation: Value, attached: Attachments) -> Result<HostRun, sdm_contract::CoreError> {
     let message = sdm_host::encode(&ControlMessage::Start(Box::new(StartRun {
         contract: CONTRACT_VERSION,
         facts: HostFacts {
@@ -35,8 +35,27 @@ fn start(operation: Value, attached: Attachments) -> HostRun {
         operation: serde_json::from_value::<Operation>(operation).unwrap(),
     })))
     .unwrap();
-    HostRun::start(&sdm_host::default_root(), &message, attached)
-        .unwrap_or_else(|error| panic!("start: {:?}", sdm_host::read(&error)))
+    HostRun::start(&sdm_host::default_root(), &message, attached).map_err(|out| {
+        let ControlMessage::Error { error } = sdm_host::read(&out).unwrap() else {
+            panic!("start failure must carry its actual core error");
+        };
+        error
+    })
+}
+fn start(operation: Value, attached: Attachments) -> HostRun {
+    try_start(operation, attached).unwrap_or_else(|error| panic!("start: {error:?}"))
+}
+fn buffered_notices(run: &HostRun) -> Vec<sdm_contract::Sentence> {
+    let Some(out) = run.take_warnings().unwrap() else {
+        return Vec::new();
+    };
+    let ControlMessage::Warnings { warnings } = sdm_host::read(&out).unwrap() else {
+        panic!("warning buffer must carry actual notices");
+    };
+    warnings
+        .into_iter()
+        .map(|warning| warning.sentence)
+        .collect()
 }
 fn bytes(value: Value) -> Attachment {
     Attachment::Bytes(serde_json::to_vec(&value).unwrap())
@@ -62,19 +81,21 @@ fn prepare_trace(
     let mut warnings = Vec::new();
     let mut attached = more;
     attached.insert(AttachmentId(1), bytes(value));
-    let run = start(json!({"op":"prepare_request","input":1}), attached);
+    let run = match try_start(json!({"op":"prepare_request","input":1}), attached) {
+        Ok(run) => run,
+        Err(error) => return (Err(error), warnings),
+    };
     loop {
-        match next(&run) {
+        let event = next(&run);
+        let notices = buffered_notices(&run);
+        let has_notices = !notices.is_empty();
+        warnings.extend(notices);
+        match event {
             ControlMessage::Warnings { warnings: given } => {
                 warnings.extend(given.into_iter().map(|w| w.sentence));
             }
             ControlMessage::Step(Step::Warnings) => {
-                let out = run.take_warnings().unwrap().expect("pending warnings");
-                let ControlMessage::Warnings { warnings: given } = sdm_host::read(&out).unwrap()
-                else {
-                    panic!("warning packet")
-                };
-                warnings.extend(given.into_iter().map(|w| w.sentence));
+                assert!(has_notices, "a warning boundary had no notices");
             }
             ControlMessage::Error { error } => return (Err(error), warnings),
             ControlMessage::Step(Step::Done {
@@ -2164,10 +2185,21 @@ fn inferred_constructor_schema_precedes_fresh_remaining_guard_observations() {
     );
     attached.insert(AttachmentId(1),bytes(json!({"stage":"schema","headers":headers,"context":2,"predict":3,"entity_table":"instance"})));
     let run = start(json!({"op":"prepare_request","input":1}), attached);
-    assert!(matches!(
-        next(&run),
-        ControlMessage::Warnings { .. } | ControlMessage::Step(Step::Warnings)
-    ));
+    let ControlMessage::Step(Step::Done {
+        result: OperationResult::PrepareRequest(result),
+    }) = next(&run)
+    else {
+        panic!("the fixed schema phase must return useful metadata without later guards");
+    };
+    assert_eq!(
+        buffered_notices(&run),
+        vec![sdm_contract::Sentence::KeyNoValueColumn]
+    );
+    let schema: Value = serde_json::from_slice(&response_bytes(&run, result.value)).unwrap();
+    assert_eq!(
+        schema["description"]["tables"][0]["primary_key"],
+        json!(["user_id"])
+    );
 }
 
 #[test]
@@ -2446,12 +2478,14 @@ fn actual_json_resource_outcome_precedes_fallback_and_is_bound_to_the_source_row
             sdm_contract::Sentence::InvalidMessage
         );
     }
-    assert!(
+    assert_eq!(
         prepare(
             json!({"stage":"interpret_response_json","checked":checked}),
             Attachments::new()
         )
-        .is_err()
+        .unwrap_err()
+        .sentence,
+        sdm_contract::Sentence::InvalidMessage
     );
     assert_eq!(
         prepare(
