@@ -73,13 +73,15 @@ def assert_no_time_body(body):
 
 
 def p3e2_warning_codes(notices):
-    # These exact three notices are core-owned in the observed journeys.
+    # These exact captured notices are core-owned in the observed journeys.
     codes = {
         "Received custom 'num_neighbors' option; ignoring custom 'num_hops=1' option": 'HOPS_IGNORED',
         '1 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it.': 'CONTEXT_ANSWERS',
         "the entity filter 'users.user_id = 1' selects the labelled examples the model learns from, and does not narrow the 2 rows named for scoring. Those are scored as given, whether or not they satisfy it. Pass only indices that satisfy the condition if that is what you meant.": 'FILTER_CHOSE_EXAMPLES',
         '2 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it.': 'CONTEXT_ANSWERS',
         'every context row has the same users.age, so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ.': 'CONTEXT_CONSTANT',
+        'users.note is typed text, which this model does not read, so the request is answered without it and it contributes nothing to the prediction. Type a column categorical if its values are labels rather than prose, or leave it out to say so.': 'COLUMNS_UNREAD',
+        'orders.note, users.note are typed text, which this model does not read, so the request is answered without them and they contribute nothing to the prediction. Type a column categorical if its values are labels rather than prose, or leave it out to say so.': 'COLUMNS_UNREAD',
     }
     return [
         {
