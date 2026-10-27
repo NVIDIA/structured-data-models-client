@@ -200,6 +200,9 @@ pub struct SampledFrameTable {
     pub name: String,
     pub primary_key: Option<String>,
     pub rows: AttachmentId,
+    /// UInt64 original source positions for immutable native dtype conversion.
+    /// Distinct from the example-ownership batch column in rows.
+    pub source_rows: AttachmentId,
     pub stypes: Vec<(String, Stype)>,
 }
 
