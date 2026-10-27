@@ -560,7 +560,11 @@ const JSON: [(&str, &str); 36] = [
 ];
 
 /// The other fields naming an attachment, and why the lock needs no entry.
-const OTHER: [(&str, &str); 22] = [
+const OTHER: [(&str, &str); 23] = [
+    (
+        "EncodedDirectBody.payload",
+        "Complete already encoded tabular wire envelope",
+    ),
     (
         "DirectPrelude.context",
         "Arrow, with positional header facts",
@@ -585,14 +589,8 @@ const OTHER: [(&str, &str); 22] = [
         "Preparation/schema.predict",
         "Arrow, with positional header facts",
     ),
-    (
-        "DirectPredict/body.context",
-        "Arrow, with positional header facts",
-    ),
-    (
-        "DirectPredict/body.predict",
-        "Arrow, with positional header facts",
-    ),
+    ("DirectBody.context", "Arrow, with positional header facts"),
+    ("DirectBody.predict", "Arrow, with positional header facts"),
     (
         "DirectResponseData.payload",
         "The already encoded model wire payload",
