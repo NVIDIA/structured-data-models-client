@@ -121,6 +121,14 @@ pub fn start(
             let input: Preparation = take_json(&mut attachments, request.input)?;
             Run::new(move |asker| crate::prepare::run(asker, input, attachments))
         }
+        Operation::PrepareFrames(request) => {
+            let input: sdm_contract::frames::materialize::FramePreparation =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| {
+                crate::materialize::frame_values::carry(&asker, &input, &attachments);
+                crate::materialize::frame_values::run(asker, input, attachments, facts, zones)
+            })
+        }
         Operation::Predict(request) => {
             let direct: Option<DirectPredict> = take_json_if(&mut attachments, request.direct)?;
             if let Some(input) = direct {

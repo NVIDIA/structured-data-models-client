@@ -190,6 +190,54 @@ fn unbounded_and_empty_windows_do_not_revive_sanitized_rows() {
 }
 
 #[test]
+fn temporal_link_labels_use_the_same_rows_exact_window_and_first_seen_order() {
+    let (edge, snapshot) = snapshot();
+    let selected = snapshot
+        .temporal_rows(
+            &edge,
+            &integers(vec![1, 2, 3]),
+            &[TemporalWindow {
+                lower: Some(0),
+                upper: 1,
+            }; 3],
+            &["id".into(), "time".into()],
+        )
+        .unwrap();
+    let ids = selected
+        .rows
+        .column(0)
+        .as_primitive::<Int64Type>()
+        .iter()
+        .collect();
+    let times = selected
+        .rows
+        .column(1)
+        .as_primitive::<TimestampNanosecondType>()
+        .iter()
+        .collect::<Vec<_>>();
+    let labelled = labels::distinct(
+        3,
+        &selected.batch,
+        &labels::Column::Int(ids),
+        &times,
+        Bounds {
+            starts: Some(&[1_000_000_000; 3]),
+            ends: &[1_800_000_000; 3],
+        },
+        None,
+    )
+    .unwrap();
+    assert_eq!(labelled.mask, [true, true, false]);
+    assert_eq!(
+        labelled.labels,
+        labels::Labels::Lists(vec![
+            vec![labels::LinkValue::Int(12), labels::LinkValue::Int(13)],
+            vec![labels::LinkValue::Int(16)],
+        ])
+    );
+}
+
+#[test]
 fn a_temporal_self_edge_keeps_initial_seeds_then_new_nodes_per_example() {
     let edge = Edge {
         src: "nodes".into(),

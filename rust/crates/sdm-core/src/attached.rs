@@ -31,6 +31,44 @@ pub fn resolved_attachments(
 ) -> Result<Vec<(AttachmentId, AttachmentKind)>, CoreError> {
     let mut named = operation.attachments();
     match operation {
+        Operation::PrepareFrames(request) => {
+            if let Some(Attachment::Bytes(bytes)) = attachments.get(&request.input) {
+                use sdm_contract::frames::materialize::FramePreparation;
+                let input: FramePreparation = serde_json::from_slice(bytes)
+                    .map_err(|_| invalid("unreadable frame preparation input", request.input))?;
+                named.extend(input.attachments());
+                if let FramePreparation::Graph {
+                    frames, checkpoint, ..
+                } = input
+                {
+                    let read = |id| match attachments.get(&id) {
+                        Some(Attachment::Bytes(bytes)) => Ok(bytes.as_slice()),
+                        _ => Err(invalid("a frame graph manifest lacks bytes", id)),
+                    };
+                    let manifest: MaterializeFrames = serde_json::from_slice(read(frames)?)
+                        .map_err(|_| invalid("unreadable frame graph source manifest", frames))?;
+                    declare_frame_rows(manifest.tables, &mut named)?;
+                    if let Some(checkpoint) = checkpoint {
+                        let manifest: FrameCheckpointManifest =
+                            serde_json::from_slice(read(checkpoint.manifest)?).map_err(|_| {
+                                invalid(
+                                    "unreadable frame graph checkpoint manifest",
+                                    checkpoint.manifest,
+                                )
+                            })?;
+                        if manifest.retained.is_some() {
+                            return Err(invalid(
+                                "raw frame fallback cannot also declare a retained graph owner",
+                                checkpoint.manifest,
+                            ));
+                        }
+                        named.push((manifest.metadata, AttachmentKind::Bytes));
+                        declare_frame_rows(manifest.tables, &mut named)?;
+                    }
+                }
+            }
+            return Ok(named);
+        }
         Operation::PrepareRequest(request) => {
             if let Some(Attachment::Bytes(bytes)) = attachments.get(&request.input) {
                 let input: sdm_contract::prepare::Preparation = serde_json::from_slice(bytes)
@@ -166,8 +204,16 @@ pub fn resolved_attachments(
         }
         _ => unreachable!(),
     };
+    declare_frame_rows(std::mem::take(&mut tables), &mut named)?;
+    Ok(named)
+}
+
+fn declare_frame_rows(
+    tables: Vec<sdm_contract::frames::FrameInput>,
+    named: &mut Vec<(AttachmentId, AttachmentKind)>,
+) -> Result<(), CoreError> {
     let mut relations = BTreeSet::new();
-    for table in tables.drain(..) {
+    for table in tables {
         if table.source.source.len() != 1
             || table.source.source[0].is_empty()
             || !table.source.columns.is_empty()
@@ -182,7 +228,7 @@ pub fn resolved_attachments(
         }
         named.push((table.rows, AttachmentKind::Arrow));
     }
-    Ok(named)
+    Ok(())
 }
 
 /// Checks that `attachments` holds exactly the ids `named`, each once and
@@ -216,7 +262,17 @@ pub fn check_attachments(
                     *id,
                 ));
             }
-            _ => {}
+            (Some(Attachment::Bytes(_)), AttachmentKind::Bytes)
+            | (Some(Attachment::Arrow(_)), AttachmentKind::Arrow)
+            | (Some(Attachment::FrameGraph(_)), AttachmentKind::FrameGraph) => {}
+            (Some(Attachment::FrameTask(_)), AttachmentKind::FrameTask)
+            | (Some(Attachment::FrameReferences(_)), AttachmentKind::FrameReferences) => {}
+            _ => {
+                return Err(invalid(
+                    "the attachment does not have its declared kind",
+                    *id,
+                ));
+            }
         }
     }
     if let Some(id) = attachments.keys().find(|id| !seen.contains(id)) {

@@ -5,12 +5,25 @@
 //! Materialize's fixed frame consumer and its owned checkpoint.
 //! Metadata is JSON, rows are Arrow, and every exported id is call-local.
 
+pub(crate) mod identity;
+mod retained;
+pub(crate) mod values;
+
+pub use retained::RetainedFrameGraph;
+
+#[cfg(test)]
+mod identity_tests;
+#[cfg(test)]
+pub(crate) mod retained_tests;
+
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use arrow_array::{ArrayRef, RecordBatch};
 use arrow_schema::DataType;
+use sdm_contract::data::strings::StringEncoding;
 use sdm_contract::data::{AttachmentId, Relation};
+use sdm_contract::frames::materialize::FrameNativeTable;
 use sdm_contract::frames::{
     FRAME_CHECKPOINT_VERSION, FrameCheckpoint, FrameCheckpointManifest, FrameCheckpointMetadata,
     MaterializeFrames,
@@ -169,6 +182,11 @@ pub(crate) fn take(
                 return Err(invalid("a resumed frame run must not reread caller frames"));
             }
             let manifest: FrameCheckpointManifest = take_json(attachments, checkpoint.manifest)?;
+            if manifest.retained.is_some() {
+                return Err(invalid(
+                    "a retained graph must be rebound through its fixed frame value",
+                ));
+            }
             let metadata: FrameCheckpointMetadata = take_json(attachments, manifest.metadata)?;
             let neighbors = Mt19937::from_checkpoint(&metadata.neighbors).ok_or_else(|| {
                 invalid("invalid frame neighbor checkpoint").dropping(HeldState::SamplerState)
@@ -369,6 +387,45 @@ impl FrameRun {
         })
     }
 
+    /// Core-validated native origins supply explicit logical text encodings
+    /// exactly once while building the same immutable graph/index owners.
+    pub fn prepare_native_graph(
+        &mut self,
+        asker: &Asker,
+        description: SourceDescription,
+        native: &[FrameNativeTable],
+    ) -> Result<PreparedGraph, CoreError> {
+        let graph = Graph::new(&description)?;
+        let strings = description
+            .tables
+            .iter()
+            .map(|table| {
+                let native = native
+                    .iter()
+                    .find(|native| native.source == table.source)
+                    .ok_or_else(|| invalid("native frame graph lacks its source facts"))?;
+                Ok((
+                    table.name.clone(),
+                    native
+                        .columns
+                        .iter()
+                        .filter_map(|column| {
+                            column
+                                .strings
+                                .map(|encoding| (column.name.clone(), encoding))
+                        })
+                        .collect(),
+                ))
+            })
+            .collect::<Result<BTreeMap<_, _>, CoreError>>()?;
+        self.initialize_strings(asker, &description, &graph, Some(strings))?;
+        Ok(PreparedGraph {
+            source: self.source(),
+            description,
+            graph,
+        })
+    }
+
     /// Publish an already validated retained owner at Run construction,
     /// before its body can fail or be cancelled without ever being polled.
     pub fn carry(&mut self, asker: &Asker, memo: Option<&SamplerMemo>) {
@@ -394,6 +451,16 @@ impl FrameRun {
         description: &SourceDescription,
         graph: &Graph,
     ) -> Result<(), CoreError> {
+        self.initialize_strings(asker, description, graph, None)
+    }
+
+    fn initialize_strings(
+        &mut self,
+        asker: &Asker,
+        description: &SourceDescription,
+        graph: &Graph,
+        strings: Option<BTreeMap<String, BTreeMap<String, StringEncoding>>>,
+    ) -> Result<(), CoreError> {
         if self.snapshot.is_some() {
             return Ok(());
         }
@@ -418,7 +485,10 @@ impl FrameRun {
                 Ok((table.name.clone(), crate::materialize::one_batch(rows)?))
             })
             .collect::<Result<BTreeMap<_, _>, CoreError>>()?;
-        self.snapshot = Some(Snapshot::new(graph, rows)?);
+        self.snapshot = Some(match strings {
+            Some(strings) => Snapshot::new_native(graph, rows, strings)?,
+            None => Snapshot::new(graph, rows)?,
+        });
         self.metadata = Some(FrameCheckpointMetadata {
             source,
             description: description.clone(),
@@ -472,6 +542,18 @@ impl FrameRun {
             .entities(&table.name, columns, limit, seed)
     }
 
+    pub fn source_keys(
+        &self,
+        table: &Table,
+        column: &str,
+        values: &ArrayRef,
+    ) -> Result<Vec<Option<sdm_engine::keys::Key>>, CoreError> {
+        self.snapshot
+            .as_ref()
+            .ok_or_else(|| internal("frame graph not initialized"))?
+            .source_keys(&table.name, column, values)
+    }
+
     pub fn time_bounds(&self, table: &Table) -> Result<(Option<i64>, Option<i64>), CoreError> {
         self.snapshot
             .as_ref()
@@ -504,6 +586,17 @@ impl FrameRun {
             .entity_rows_many(&table.name, columns)
     }
 
+    pub fn resolve_encoded_references(
+        &self,
+        table: &Table,
+        columns: &[(&ArrayRef, Option<StringEncoding>)],
+    ) -> Result<Vec<usize>, CoreError> {
+        self.snapshot
+            .as_ref()
+            .ok_or_else(|| internal("frame graph not initialized"))?
+            .entity_rows_encoded(&table.name, columns)
+    }
+
     /// Existing immutable frame adjacency supplies temporal label rows.
     /// This operation does not borrow or advance the neighbor generator.
     pub fn temporal_rows(
@@ -528,16 +621,29 @@ impl FrameRun {
         anchors: &[i64],
         options: FrameWalkOptions<'_>,
     ) -> Result<SampledContext, CoreError> {
+        // Native key conversion must finish before a seed reset or draw.
+        let entity_rows = self.resolve_references(entity, &[keys])?;
+        self.walk_rows(asker, graph, entity, &entity_rows, anchors, options)
+    }
+
+    pub fn walk_rows(
+        &mut self,
+        asker: &Asker,
+        graph: &Graph,
+        entity: &Table,
+        entity_rows: &[usize],
+        anchors: &[i64],
+        options: FrameWalkOptions<'_>,
+    ) -> Result<SampledContext, CoreError> {
         let FrameWalkOptions {
             hops,
             neighbor_values,
             excluded,
             seed,
         } = options;
-        // Per-batch native key conversion precedes this operation. Resolve
-        // its actual values before resetting the continuing neighbor stream,
-        // independently of the earlier whole-task reference validation.
-        let entity_rows = self.resolve_references(entity, &[keys])?;
+        // The caller has resolved this batch's actual converted values
+        // before resetting the continuing neighbor stream, independently
+        // of the earlier whole-task reference validation.
         if let Some(seed) = seed {
             let seed = u32::try_from(seed)
                 .ok()
@@ -591,7 +697,7 @@ impl FrameRun {
             .walk_resolved(
                 graph,
                 &entity.name,
-                &entity_rows,
+                entity_rows,
                 anchors,
                 &hops,
                 &mut self.neighbors,

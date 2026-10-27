@@ -44,6 +44,9 @@ use crate::compose::{DataAccess, Route};
 pub enum Attachment {
     Bytes(Vec<u8>),
     Arrow(ArrowData),
+    FrameGraph(crate::RetainedFrameGraph),
+    FrameTask(crate::RetainedFrameTask),
+    FrameReferences(crate::RetainedFrameReferences),
 }
 
 /// The attachments one message carries, by the ids it names them with.
@@ -164,6 +167,7 @@ struct Shared {
     memo: Option<SamplerMemo>,
     /// Separately owned frame tables and opaque metadata, never buffers in JSON.
     frame_checkpoint: Option<crate::frame_materialize::OwnedCheckpoint>,
+    frame_graph: Option<crate::RetainedFrameGraph>,
     /// Answered, not yet taken by the body.
     replies: BTreeMap<ReplyId, Reply>,
     /// The fetches whose answers are kept as the provider handed them over,
@@ -671,7 +675,22 @@ impl Asker {
     }
 
     pub(crate) fn keep_frame(&self, checkpoint: crate::frame_materialize::OwnedCheckpoint) {
-        lock(&self.shared).frame_checkpoint = Some(checkpoint);
+        let mut shared = lock(&self.shared);
+        if shared.frame_graph.is_none() {
+            shared.frame_checkpoint = Some(checkpoint);
+        }
+    }
+
+    pub(crate) fn keep_retained_frame(&self, owner: crate::RetainedFrameGraph) {
+        let mut shared = lock(&self.shared);
+        shared.frame_checkpoint = None;
+        if shared.memo.is_none() {
+            shared.memo = Some(SamplerMemo {
+                source: owner.prepared().source.clone(),
+                ..SamplerMemo::default()
+            });
+        }
+        shared.frame_graph = Some(owner);
     }
 }
 
@@ -1548,33 +1567,65 @@ impl Run {
         let bytes =
             serde_json::to_vec(&memo).map_err(|_| internal("a sampler memo does not serialize"))?;
         let id = attach(&mut shared, Attachment::Bytes(bytes))?;
-        let frame_checkpoint = match shared.frame_checkpoint.take() {
-            None => None,
-            Some(checkpoint) => {
-                let metadata = attach(
-                    &mut shared,
-                    Attachment::Bytes(
-                        serde_json::to_vec(&checkpoint.metadata)
-                            .map_err(|_| internal("frame metadata does not serialize"))?,
-                    ),
-                )?;
-                let mut tables = Vec::new();
-                for (source, data) in checkpoint.tables {
-                    let rows = attach(&mut shared, Attachment::Arrow(data))?;
-                    tables.push(sdm_contract::frames::FrameInput { source, rows });
+        let retained = shared.frame_graph.clone();
+        let frame_checkpoint = if let Some(owner) = retained {
+            let metadata = owner.checkpoint_metadata()?;
+            let metadata = attach(
+                &mut shared,
+                Attachment::Bytes(
+                    serde_json::to_vec(&metadata)
+                        .map_err(|_| internal("retained frame metadata does not serialize"))?,
+                ),
+            )?;
+            let retained = attach(&mut shared, Attachment::FrameGraph(owner))?;
+            let manifest = sdm_contract::frames::FrameCheckpointManifest {
+                metadata,
+                tables: Vec::new(),
+                retained: Some(retained),
+            };
+            let manifest = attach(
+                &mut shared,
+                Attachment::Bytes(
+                    serde_json::to_vec(&manifest)
+                        .map_err(|_| internal("retained frame manifest does not serialize"))?,
+                ),
+            )?;
+            Some(sdm_contract::frames::FrameCheckpoint {
+                version: sdm_contract::frames::FRAME_CHECKPOINT_VERSION,
+                manifest,
+            })
+        } else {
+            match shared.frame_checkpoint.take() {
+                None => None,
+                Some(checkpoint) => {
+                    let metadata = attach(
+                        &mut shared,
+                        Attachment::Bytes(
+                            serde_json::to_vec(&checkpoint.metadata)
+                                .map_err(|_| internal("frame metadata does not serialize"))?,
+                        ),
+                    )?;
+                    let mut tables = Vec::new();
+                    for (source, data) in checkpoint.tables {
+                        let rows = attach(&mut shared, Attachment::Arrow(data))?;
+                        tables.push(sdm_contract::frames::FrameInput { source, rows });
+                    }
+                    let manifest = sdm_contract::frames::FrameCheckpointManifest {
+                        metadata,
+                        tables,
+                        retained: None,
+                    };
+                    let manifest = attach(
+                        &mut shared,
+                        Attachment::Bytes(serde_json::to_vec(&manifest).map_err(|_| {
+                            internal("frame ownership manifest does not serialize")
+                        })?),
+                    )?;
+                    Some(sdm_contract::frames::FrameCheckpoint {
+                        version: sdm_contract::frames::FRAME_CHECKPOINT_VERSION,
+                        manifest,
+                    })
                 }
-                let manifest = sdm_contract::frames::FrameCheckpointManifest { metadata, tables };
-                let manifest = attach(
-                    &mut shared,
-                    Attachment::Bytes(
-                        serde_json::to_vec(&manifest)
-                            .map_err(|_| internal("frame ownership manifest does not serialize"))?,
-                    ),
-                )?;
-                Some(sdm_contract::frames::FrameCheckpoint {
-                    version: sdm_contract::frames::FRAME_CHECKPOINT_VERSION,
-                    manifest,
-                })
             }
         };
         Ok(Some(SamplerState {

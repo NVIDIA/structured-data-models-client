@@ -187,6 +187,9 @@ fn validate_native(
 }
 
 impl BoundGraph {
+    pub(crate) fn retained(&self) -> RetainedFrameGraph {
+        self.owner.clone()
+    }
     pub fn prepare(
         asker: &Asker,
         frames: Context,
@@ -197,7 +200,7 @@ impl BoundGraph {
             let mut frame = lock(&frames);
             validate_native(&frame, &description, &native)?;
             frame.validate_text_types(&description)?;
-            frame.prepare_graph(asker, description)?
+            frame.prepare_native_graph(asker, description, &native)?
         };
         let source = native_identity(&prepared.source, &native)?;
         Self::from_owner(RetainedFrameGraph::new(prepared, frames, native, source))

@@ -152,7 +152,14 @@ pub(super) async fn entity_sample(
     }
     // One entity per key value: `1.0` and `1.00` of a column of numbers
     // handed over as their text are one key (`subgraph::key_values`).
-    let sampled_keys = crate::subgraph::key_values(entity, key, named(&sampled, key)?)?;
+    let sampled_keys = match frames {
+        Some(frames) => crate::frame_materialize::lock(frames).source_keys(
+            entity,
+            key,
+            named(&sampled, key)?,
+        )?,
+        None => crate::subgraph::key_values(entity, key, named(&sampled, key)?)?,
+    };
     let mut seen = BTreeSet::new();
     let kept: Vec<usize> = (0..sampled_keys.len())
         .filter(|&row| seen.insert(sampled_keys[row].clone()))
@@ -189,6 +196,7 @@ pub(super) async fn entity_sample(
 
 /// Complete labeled context before the native prediction-entity constructor
 /// and later client narrowing. It contains real task data, not a continuation.
+#[derive(Clone)]
 pub(super) struct LabelledContext {
     pub(super) keys: ArrayRef,
     pub(super) anchors: Vec<i64>,

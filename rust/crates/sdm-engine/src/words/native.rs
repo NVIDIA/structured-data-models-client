@@ -12,7 +12,7 @@ use super::{CasingProfile, MAX_CHARS, casing, normalize_with_profile, split};
 
 /// Normalize an already converted raw native value. No cast failure is
 /// hidden by clipping here, and no host-lowered or tokenized data is used.
-pub(super) fn normalize(
+pub fn normalize_native(
     value: Option<UnicodeSlice<'_>>,
     profile: CasingProfile,
 ) -> Vec<UnicodeText> {
@@ -36,6 +36,14 @@ pub(super) fn normalize(
         .collect()
 }
 
+/// Unbounded native lowercasing for diagnostic text. This shares the actual
+/// versioned casing kernel but has no feature clipping or token policy.
+pub fn lower_native(value: UnicodeSlice<'_>, profile: CasingProfile) -> UnicodeText {
+    let points = value.points().collect::<Vec<_>>();
+    UnicodeText::from_points(casing::lower_points(&points, char::from_u32, profile))
+        .expect("lowercasing preserves valid native Unicode points")
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
@@ -44,7 +52,7 @@ mod tests {
     use sdm_contract::scalar::unicode::UnicodeText;
     use serde::Deserialize;
 
-    use super::normalize;
+    use super::normalize_native as normalize;
     use crate::words::{CasingProfile, UnicodeDataVersion};
 
     #[derive(Deserialize)]

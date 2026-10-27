@@ -68,6 +68,26 @@ impl RetainedFrameGraph {
         &self.owner.source
     }
 
+    pub fn same_owner(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.owner, &other.owner)
+    }
+
+    pub(crate) fn checkpoint_metadata(
+        &self,
+    ) -> Result<sdm_contract::frames::FrameCheckpointMetadata, CoreError> {
+        let frames = self.owner.frames.lock().map_err(|_| {
+            CoreError::protocol(Sentence::RunPoisoned, "retained frame state is poisoned")
+        })?;
+        let mut metadata = frames.metadata.clone().ok_or_else(|| {
+            CoreError::protocol(
+                Sentence::InvalidMessage,
+                "retained frame state lacks its immutable source",
+            )
+        })?;
+        metadata.neighbors = frames.neighbors.checkpoint();
+        Ok(metadata)
+    }
+
     pub(crate) fn prepared(&self) -> Arc<PreparedGraph> {
         Arc::clone(&self.owner.prepared)
     }

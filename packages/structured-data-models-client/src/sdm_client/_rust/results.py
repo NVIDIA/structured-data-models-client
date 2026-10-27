@@ -43,6 +43,7 @@ __all__ = [
     'Part',
     'Predicted',
     'Prepared',
+    'FramePrepared',
     'QueryFacts',
     'Ranking',
     'SourceFacts',
@@ -523,6 +524,13 @@ class Prepared:
 
 
 @dataclasses.dataclass(frozen=True)
+class FramePrepared:
+    """The complete useful value of one fixed frame domain operation."""
+
+    value: int
+
+
+@dataclasses.dataclass(frozen=True)
 class DecodedDirectResponse:
     """Owned decoded response buffers for native builtin conversion."""
 
@@ -560,6 +568,11 @@ _RESULTS: dict[str, tuple[tuple[str, ...], tuple[str, ...], Any]] = {
         (),
         lambda read: Prepared(_int(read['value'], 'value')),
     ),
+    'prepare_frames': (
+        ('value',),
+        (),
+        lambda read: FramePrepared(_int(read['value'], 'value')),
+    ),
     'predict': (
         ('result', 'model', 'request_id', 'metadata', 'outputs'),
         ('unscored_candidates',),
@@ -578,6 +591,7 @@ def decode(
     | Gathered
     | Predicted
     | Prepared
+    | FramePrepared
     | DecodedDirectResponse
 ):
     r"""The result a ``done`` step carries, decoded once.
@@ -606,6 +620,7 @@ def decode(
         | Gathered
         | Predicted
         | Prepared
+        | FramePrepared
         | DecodedDirectResponse
     ) = build(read)
     return built
@@ -620,6 +635,7 @@ _T = TypeVar(
     Gathered,
     Predicted,
     Prepared,
+    FramePrepared,
     DecodedDirectResponse,
 )
 

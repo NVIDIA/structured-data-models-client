@@ -79,10 +79,17 @@ def take(handle: Any, checkpoint: dict[str, Any]) -> dict[str, Any]:
     """Take every exported owner before dropping the completed native run."""
     import json
 
-    import pyarrow as pa
-
     manifest = json.loads(handle.take_attachment(checkpoint['manifest']))
     metadata = handle.take_attachment(manifest['metadata'])
+    if manifest.get('retained') is not None:
+        return {
+            'version': checkpoint['version'],
+            'metadata': metadata,
+            'owner': handle.take_attachment(manifest['retained']),
+            'tables': [],
+        }
+    import pyarrow as pa
+
     tables = []
     for table in manifest['tables']:
         owner = handle.take_attachment(table['rows'])
@@ -92,3 +99,30 @@ def take(handle: Any, checkpoint: dict[str, Any]) -> dict[str, Any]:
         'metadata': metadata,
         'tables': tables,
     }
+
+
+def publish(state: dict[str, Any], previous: dict[str, Any] | None) -> None:
+    """Publish model ownership without replacing a later cold construction.
+
+    A frame facade keeps a call-local ownership dictionary and a separate
+    materializer cache. Only the first capture of a freshly constructed
+    graph publishes a different owner. Later captures update that cache
+    only while it still names the same actual core resource; concurrent
+    calls keep their own local graph/task data irrespective of the cache.
+    """
+    cache = state.get('frame_cache')
+    if cache is None:
+        return
+    checkpoint = state.get('held', {}).get('frame_checkpoint')
+    if checkpoint is None or 'owner' not in checkpoint:
+        return
+    owner = checkpoint['owner']
+    cached = cache.get('held', {}).get('frame_checkpoint', {}).get('owner')
+    prior = (previous or {}).get('frame_checkpoint', {}).get('owner')
+    if cached is None or cached.same_owner(owner) or prior is None:
+        cache['held'] = state['held']
+        # These are native ownership companions from the same graph
+        # construction, not caller Schema reads or source-hash interning.
+        for field in ('frame_columns', 'frame_schema', 'frame_native_tables'):
+            if field in state:
+                cache[field] = state[field]

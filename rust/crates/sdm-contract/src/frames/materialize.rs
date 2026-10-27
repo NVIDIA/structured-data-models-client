@@ -7,7 +7,14 @@
 //! by another package. It adds no Run step or native semantic callback.
 //! Input-sized task data, node maps, sampled rows and links remain attachments.
 
+mod attachments;
+mod guard;
 mod native;
+
+pub use guard::{
+    FrameErrorOrigin, FrameFailureAssessment, FrameNativeCategory, FrameNativeFailure,
+    FrameNativeReport,
+};
 
 pub use native::{
     ConvertedFrameText, FramePredictionValues, FrameReferenceValues, NativeConstructionDiagnostic,
@@ -25,6 +32,20 @@ use serde::{Deserialize, Serialize};
 use super::FrameCheckpoint;
 
 pub const FRAME_MATERIALIZATION_VERSION: u32 = 1;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct PrepareFrames {
+    /// FramePreparation as input-sized JSON with explicitly declared owners.
+    pub input: AttachmentId,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct PreparedFrames {
+    /// The complete useful PreparedFrameValue as input-sized JSON.
+    pub value: AttachmentId,
+}
 
 /// Data only: the existing request-owned Options type will re-export this
 /// definition. Defaults, validation and model config presentation stay there.
@@ -178,7 +199,9 @@ pub struct FrameTextColumn {
 pub struct LabelledFrameTask {
     pub graph: PreparedFrameGraph,
     pub meaning: FrameTaskMeaning,
-    pub context: AttachmentId,
+    /// Present for the standalone labelled value; completed tasks retain
+    /// these same actual rows through their immutable typed task owner.
+    pub context: Option<AttachmentId>,
     pub prediction_type: FramePredictionType,
 }
 
@@ -190,7 +213,10 @@ pub struct CompletedFrameTask {
     /// Binds the narrowed rows, actual prediction values and selected layout.
     pub identity: String,
     pub labelled: LabelledFrameTask,
-    pub prediction: AttachmentId,
+    pub prediction: Option<AttachmentId>,
+    /// A typed immutable task owner replaces redundant raw rows on reuse.
+    /// The raw alternative remains a fully validated useful value.
+    pub owner: Option<AttachmentId>,
     /// Present exactly for the native string prediction family.
     pub prediction_encoding: Option<StringEncoding>,
     pub prediction_rows: u64,
@@ -228,7 +254,8 @@ pub struct FrameRequestPlan {
 pub struct ResolvedFrameReferences {
     pub identity: String,
     pub plan: FrameRequestPlan,
-    pub nodes: AttachmentId,
+    pub nodes: Option<AttachmentId>,
+    pub owner: Option<AttachmentId>,
 }
 
 /// Selected raw feature columns plus the existing batch ordinal column.
@@ -313,7 +340,10 @@ pub struct EncodedFramePart {
 #[serde(deny_unknown_fields)]
 pub struct FrameRequestParts {
     pub version: u32,
-    pub plan: FrameRequestPlan,
+    /// Bind complete encoded parts to the already resolved immutable plan,
+    /// without redundant graph/task attachment declarations in every part.
+    pub plan_identity: String,
+    pub task_identity: String,
     pub parts: Vec<EncodedFramePart>,
 }
 
@@ -322,6 +352,14 @@ pub struct FrameRequestParts {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "stage", rename_all = "snake_case", deny_unknown_fields)]
 pub enum FramePreparation {
+    AssessFailure {
+        origin: FrameErrorOrigin,
+        failure: FrameNativeFailure,
+        signature: Option<Vec<u32>>,
+    },
+    ReportFailure {
+        report: FrameNativeReport,
+    },
     Graph {
         schema: AttachmentId,
         frames: AttachmentId,
@@ -390,6 +428,7 @@ pub enum FramePreparation {
     deny_unknown_fields
 )]
 pub enum PreparedFrameValue {
+    FailureAssessment(FrameFailureAssessment),
     Graph(PreparedFrameGraph),
     Labels(LabelledFrameTask),
     Task(CompletedFrameTask),

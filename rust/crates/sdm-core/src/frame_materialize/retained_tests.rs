@@ -10,7 +10,7 @@ use arrow_array::Int64Array;
 use sdm_contract::frames::materialize::{FrameNativeColumn, FrameNativeOrigin, FrameNativeTable};
 use sdm_contract::ops::{ColumnRef, DescribedColumn, DescribedTable};
 
-fn owner() -> RetainedFrameGraph {
+pub(crate) fn owner() -> RetainedFrameGraph {
     let description = SourceDescription {
         tables: vec![DescribedTable {
             name: "users".into(),

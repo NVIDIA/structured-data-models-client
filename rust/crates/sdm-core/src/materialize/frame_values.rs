@@ -3,12 +3,18 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! Domain consumers of fixed, independently useful frame materialization values.
-//! This module is unlinked until the complete coordinated frame composition.
+//! Shared source wiring is staged here for the complete frame composition.
+//! This source candidate has no execution or validation evidence.
 //! Graph/task/request policy stays here; native owners and I/O stay in the host.
+
+mod native_guard;
+mod owners;
+pub use owners::{RetainedFrameReferences, RetainedFrameTask};
+#[cfg(test)]
+mod native_guard_tests;
 
 use arrow_array::UInt64Array;
 use sdm_contract::frames::materialize::*;
-use sdm_contract::prepare::NativeFailure;
 
 use super::*;
 use crate::attached::{take_json, take_json_if};
@@ -26,8 +32,7 @@ pub(crate) enum FrameStageError {
     Core(CoreError),
     Native {
         site: NativeSite,
-        failure: NativeFailure,
-        message: String,
+        failure: FrameNativeFailure,
         diagnostic: Option<NativeConstructionDiagnostic>,
         dropped_summary: Option<String>,
     },
@@ -44,6 +49,127 @@ impl From<CoreError> for FrameStageError {
     fn from(error: CoreError) -> Self {
         Self::Core(error)
     }
+}
+
+impl FrameStageError {
+    fn into_core(self) -> CoreError {
+        match self {
+            Self::Core(error) => error,
+            Self::Native {
+                site,
+                failure,
+                diagnostic,
+                dropped_summary,
+            } => {
+                let (stage, column) = match site {
+                    NativeSite::Prediction => ("prediction", None),
+                    NativeSite::WholeReferences => ("whole_references", None),
+                    NativeSite::BatchReferences => ("batch_references", None),
+                    NativeSite::Text(column) => ("text", Some(column)),
+                };
+                let mut error = CoreError::new(
+                    Sentence::FrameNativeFailure,
+                    "reached native frame conversion failed",
+                )
+                .with_field("stage", Detail::text(stage))
+                .with_field(
+                    "failure",
+                    Detail::text(
+                        serde_json::to_string(&failure).expect("native failure facts serialize"),
+                    ),
+                );
+                if let Some(diagnostic) = diagnostic {
+                    error = error.with_field(
+                        "diagnostic",
+                        Detail::text(
+                            serde_json::to_string(&diagnostic)
+                                .expect("native diagnostic facts serialize"),
+                        ),
+                    );
+                }
+                if let Some(summary) = dropped_summary {
+                    error = error.with_field("dropped_summary", Detail::text(summary));
+                }
+                if let Some(column) = column {
+                    error = error
+                        .with_field("table", Detail::text(column.table))
+                        .with_field("column", Detail::text(column.column));
+                }
+                error
+            }
+        }
+    }
+}
+
+/// Preserve an already constructed graph even when a HostRun is cancelled
+/// before its first poll. This captures a resource, not a program position.
+pub(crate) fn carry(asker: &Asker, input: &FramePreparation, attachments: &Attachments) {
+    if let Some(owner) = input.retained_owner().and_then(|id| attachments.get(&id)) {
+        if let Attachment::FrameGraph(owner) = owner {
+            asker.keep_retained_frame(owner.clone());
+        }
+    }
+}
+
+pub(crate) async fn run(
+    asker: Asker,
+    input: FramePreparation,
+    mut attachments: Attachments,
+    facts: HostFacts,
+    zones: Arc<dyn sdm_engine::time::Zones>,
+) -> Result<OperationResult, CoreError> {
+    let value = match input {
+        input @ FramePreparation::Graph { .. } => {
+            PreparedFrameValue::Graph(graph(&asker, input, &mut attachments)?)
+        }
+        input @ FramePreparation::Labels { .. } => PreparedFrameValue::Labels(
+            labels(&asker, input, &facts, &*zones, &mut attachments).await?,
+        ),
+        FramePreparation::Task {
+            labelled,
+            prediction,
+            values,
+        } => PreparedFrameValue::Task(
+            task(&asker, labelled, prediction, values, &mut attachments)
+                .map_err(FrameStageError::into_core)?,
+        ),
+        FramePreparation::Plan { task, values } => {
+            PreparedFrameValue::Plan(plan(&asker, task, values, &mut attachments)?)
+        }
+        FramePreparation::References { plan, converted } => PreparedFrameValue::References(
+            references(&asker, plan, converted, &mut attachments)
+                .map_err(FrameStageError::into_core)?,
+        ),
+        FramePreparation::Context {
+            references,
+            range,
+            converted,
+        } => PreparedFrameValue::Context(
+            context(&asker, references, range, converted, &mut attachments)
+                .map_err(FrameStageError::into_core)?,
+        ),
+        FramePreparation::Payload {
+            context,
+            text,
+            previous,
+            values,
+        } => {
+            let next = payload_part(&asker, context, text, values, Vec::new(), &mut attachments)
+                .map_err(FrameStageError::into_core)?;
+            finish_parts(&asker, next, previous, &mut attachments)?
+        }
+        FramePreparation::AssessFailure {
+            origin,
+            failure,
+            signature,
+        } => {
+            PreparedFrameValue::FailureAssessment(native_guard::assess(origin, failure, signature)?)
+        }
+        FramePreparation::ReportFailure { report } => return Err(native_guard::report(report)?),
+    };
+    Ok(OperationResult::PrepareFrames(PreparedFrames {
+        value: attach_json(&asker, &value)?,
+    }))
 }
 
 fn protocol(message: &str) -> CoreError {
@@ -291,17 +417,23 @@ fn read_link_labels(target: &ArrayRef) -> Result<labels::Labels, CoreError> {
 /// Its caller presents the separate drop warning after this value is retained.
 pub(crate) fn graph(
     asker: &Asker,
-    schema: AttachmentId,
-    frames: AttachmentId,
-    checkpoint: Option<sdm_contract::frames::FrameCheckpoint>,
-    retained: Option<AttachmentId>,
-    native: Vec<FrameNativeTable>,
-    values: Option<AttachmentId>,
-    option_names: &[String],
-    prediction_rows: u64,
-    limits: &FrameLimits,
+    input: FramePreparation,
     attachments: &mut Attachments,
 ) -> Result<PreparedFrameGraph, CoreError> {
+    let FramePreparation::Graph {
+        schema,
+        frames,
+        checkpoint,
+        retained,
+        native_tables: native,
+        values,
+        options: option_names,
+        prediction_rows,
+        limits,
+    } = input
+    else {
+        return Err(protocol("graph preparation requires graph source values"));
+    };
     let values: Option<Value> = take_json_if(attachments, values)?;
     let asked = options::values(values.as_ref())?;
     options::run_mode(
@@ -406,19 +538,25 @@ fn task_identity(
 /// No prediction value constructor runs before this function finishes.
 pub(crate) async fn labels(
     asker: &Asker,
-    graph_value: PreparedFrameGraph,
-    query: AttachmentId,
-    values: Option<AttachmentId>,
-    seed: Option<Seed>,
-    entropy: Option<u64>,
-    anchor_time: Option<Scalar>,
-    anchor_entity: bool,
-    num_context_samples: Option<u64>,
-    limits: FrameLimits,
+    input: FramePreparation,
     facts: &HostFacts,
     zones: &dyn sdm_engine::time::Zones,
     attachments: &mut Attachments,
 ) -> Result<LabelledFrameTask, CoreError> {
+    let FramePreparation::Labels {
+        graph: graph_value,
+        query,
+        values,
+        seed,
+        entropy,
+        anchor_time,
+        anchor_entity,
+        num_context_samples,
+        limits,
+    } = input
+    else {
+        return Err(protocol("label preparation requires labelled task inputs"));
+    };
     let mut graph = BoundGraph::bind(asker, graph_value, attachments)?;
     // Snapshot/index ownership is immutable. Labels use call-local entity
     // entropy, not the shared neighbor stream, and shared temporal kernels
@@ -666,7 +804,7 @@ pub(crate) async fn labels(
     Ok(LabelledFrameTask {
         graph: graph.publish(asker)?,
         meaning,
-        context,
+        context: Some(context),
         prediction_type,
     })
 }
@@ -674,8 +812,8 @@ pub(crate) async fn labels(
 struct BoundLabels {
     graph: BoundGraph,
     value: LabelledFrameTask,
-    labelled: task::LabelledContext,
-    asked: Asked,
+    labelled: Arc<task::LabelledContext>,
+    asked: Arc<Asked>,
     rows: ArrowData,
 }
 
@@ -744,7 +882,12 @@ fn bind_labels(
     attachments: &mut Attachments,
 ) -> Result<BoundLabels, CoreError> {
     let graph = BoundGraph::bind(asker, value.graph.clone(), attachments)?;
-    let rows = take_arrow(attachments, value.context)?;
+    let rows = take_arrow(
+        attachments,
+        value
+            .context
+            .ok_or_else(|| protocol("standalone labelled frame data lacks its actual rows"))?,
+    )?;
     if value.meaning.version != FRAME_MATERIALIZATION_VERSION
         || value.meaning.source != graph.source
         || task_identity(&value.meaning, &value.prediction_type, &rows)? != value.meaning.identity
@@ -770,8 +913,8 @@ fn bind_labels(
     Ok(BoundLabels {
         graph,
         value,
-        labelled,
-        asked,
+        labelled: Arc::new(labelled),
+        asked: Arc::new(asked),
         rows,
     })
 }
@@ -806,14 +949,12 @@ fn prediction_values(
                 constructed:
                     NativeFrameConstruction::Failed {
                         failure,
-                        message,
                         diagnostic,
                     },
             },
         ) => Err(FrameStageError::Native {
             site: NativeSite::Prediction,
             failure,
-            message,
             diagnostic: Some(diagnostic),
             dropped_summary: graph.dropped_summary(),
         }),
@@ -884,7 +1025,7 @@ pub(crate) fn task(
             )
         });
     }
-    let narrowed = bound.labelled.narrow(
+    let narrowed = bound.labelled.as_ref().clone().narrow(
         bound
             .value
             .meaning
@@ -907,14 +1048,12 @@ pub(crate) fn task(
         &narrowed.labels,
     )?);
     labelled.meaning.identity = task_identity(&labelled.meaning, &labelled.prediction_type, &rows)?;
-    labelled.context = asker.attach(Attachment::Arrow(rows))?;
-    labelled.graph = bound.graph.publish(asker)?;
+    labelled.context = None;
     let prediction_rows = predicted.len() as u64;
     let predicted_data = data(
         RecordBatch::try_from_iter([("entity", Arc::clone(&predicted))])
             .map_err(|_| internal("frame prediction values do not form one column"))?,
     );
-    let prediction = attach_array(asker, "entity", predicted)?;
     if let Some(hops) = options::hops_ignored(&deferred) {
         asker.warn(CoreWarning {
             fields: [("num_hops".to_owned(), Detail::text(hops))].into(),
@@ -927,14 +1066,35 @@ pub(crate) fn task(
     let mut completed = CompletedFrameTask {
         identity: String::new(),
         labelled,
-        prediction,
+        prediction: None,
+        owner: None,
         prediction_encoding,
         prediction_rows,
         rows_per_call,
         calls,
     };
     completed.identity = completed_identity(&completed, &predicted_data)?;
-    Ok(completed)
+    let labels = BoundLabels {
+        graph: bound.graph,
+        value: completed.labelled.clone(),
+        rows,
+        labelled: Arc::new(narrowed),
+        asked: bound.asked,
+    };
+    let rows = Arc::new(task_rows(
+        &labels,
+        &completed,
+        one_column(&predicted_data)?,
+    )?);
+    BoundTask {
+        labels,
+        value: completed,
+        predicted: predicted_data,
+        rows,
+        owner: None,
+    }
+    .publish(asker)
+    .map_err(FrameStageError::from)
 }
 
 fn completed_identity(
@@ -993,15 +1153,22 @@ struct BoundTask {
     labels: BoundLabels,
     value: CompletedFrameTask,
     predicted: ArrowData,
-    rows: TaskRows,
+    rows: Arc<TaskRows>,
+    owner: Option<RetainedFrameTask>,
 }
 
 impl BoundTask {
+    fn retained(&self) -> RetainedFrameTask {
+        self.owner
+            .clone()
+            .unwrap_or_else(|| RetainedFrameTask::new(self))
+    }
     fn publish(&self, asker: &Asker) -> Result<CompletedFrameTask, CoreError> {
         let mut value = self.value.clone();
         value.labelled.graph = self.labels.graph.publish(asker)?;
-        value.labelled.context = asker.attach(Attachment::Arrow(self.labels.rows.clone()))?;
-        value.prediction = asker.attach(Attachment::Arrow(self.predicted.clone()))?;
+        value.labelled.context = None;
+        value.prediction = None;
+        value.owner = Some(asker.attach(Attachment::FrameTask(self.retained()))?);
         Ok(value)
     }
 
@@ -1020,8 +1187,27 @@ fn bind_task(
     value: CompletedFrameTask,
     attachments: &mut Attachments,
 ) -> Result<BoundTask, CoreError> {
+    if let Some(id) = value.owner {
+        if value.prediction.is_some() || value.labelled.context.is_some() {
+            return Err(protocol(
+                "retained frame task cannot also declare raw replacement rows",
+            ));
+        }
+        let Some(Attachment::FrameTask(owner)) = attachments.remove(&id) else {
+            return Err(protocol(
+                "frame task lacks its core-created immutable owner",
+            ));
+        };
+        let graph = BoundGraph::bind(asker, value.labelled.graph.clone(), attachments)?;
+        return owner.bind(graph, value);
+    }
     let labels = bind_labels(asker, value.labelled.clone(), attachments)?;
-    let predicted = take_arrow(attachments, value.prediction)?;
+    let predicted = take_arrow(
+        attachments,
+        value
+            .prediction
+            .ok_or_else(|| protocol("raw frame task lacks its prediction rows"))?,
+    )?;
     let predicted_keys = one_column(&predicted)?;
     if predicted_keys.is_empty() || value.rows_per_call == 0 {
         return Err(protocol(
@@ -1064,6 +1250,21 @@ fn bind_task(
             "completed frame task no longer matches its core-selected batch layout",
         ));
     }
+    let rows = Arc::new(task_rows(&labels, &value, predicted_keys)?);
+    Ok(BoundTask {
+        labels,
+        value,
+        predicted,
+        rows,
+        owner: None,
+    })
+}
+
+fn task_rows(
+    labels: &BoundLabels,
+    value: &CompletedFrameTask,
+    predicted_keys: ArrayRef,
+) -> Result<TaskRows, CoreError> {
     let (context_keys, predicted_keys) = if let Some(prediction_encoding) =
         value.prediction_encoding
     {
@@ -1081,18 +1282,12 @@ fn bind_task(
     } else {
         (Arc::clone(&labels.labelled.keys), predicted_keys)
     };
-    let rows = TaskRows::new(
+    TaskRows::new(
         context_keys,
         labels.labelled.anchors.clone(),
         predicted_keys,
         value.labelled.meaning.prediction_anchor,
-    )?;
-    Ok(BoundTask {
-        labels,
-        value,
-        predicted,
-        rows,
-    })
+    )
 }
 
 fn static_exclusions(task: &BoundTask) -> Result<Vec<(String, String)>, CoreError> {
@@ -1244,34 +1439,45 @@ fn converted_references(
     site: NativeSite,
     attachments: &mut Attachments,
     expected: &ArrayRef,
-) -> Result<ArrayRef, FrameStageError> {
-    let converted = match (&task.value.labelled.prediction_type, values) {
+) -> Result<
+    (
+        ArrayRef,
+        Option<sdm_contract::data::strings::StringEncoding>,
+    ),
+    FrameStageError,
+> {
+    let (converted, encoding) = match (&task.value.labelled.prediction_type, values) {
         (FramePredictionType::CoreKey { .. }, FrameReferenceValues::CoreKeys { values }) => {
-            let array = keys::cast(&take_array(attachments, values)?, expected.data_type())?;
-            if array.to_data() != expected.to_data() {
-                return Err(protocol(
-                    "core frame reference values changed their ordered task keys",
-                )
-                .into());
-            }
-            array
+            let array = match values {
+                None => Arc::clone(expected),
+                Some(id) => {
+                    let array = keys::cast(&take_array(attachments, id)?, expected.data_type())?;
+                    if array.to_data() != expected.to_data() {
+                        return Err(protocol(
+                            "core frame reference values changed their ordered task keys",
+                        )
+                        .into());
+                    }
+                    array
+                }
+            };
+            (array, None)
         }
         (
             FramePredictionType::NativeString { .. },
             FrameReferenceValues::NativeString {
                 converted: NativeFrameStrings::Value { values },
             },
-        ) => take_strings(attachments, &values)?,
+        ) => (take_strings(attachments, &values)?, Some(values.encoding)),
         (
             FramePredictionType::NativeString { .. },
             FrameReferenceValues::NativeString {
-                converted: NativeFrameStrings::Failed { failure, message },
+                converted: NativeFrameStrings::Failed { failure },
             },
         ) => {
             return Err(FrameStageError::Native {
                 site,
                 failure,
-                message,
                 diagnostic: None,
                 dropped_summary: task.labels.graph.dropped_summary(),
             });
@@ -1289,7 +1495,7 @@ fn converted_references(
         )
         .into());
     }
-    Ok(converted)
+    Ok((converted, encoding))
 }
 
 fn reference_identity(plan: &FrameRequestPlan, nodes: &ArrayRef) -> Result<String, CoreError> {
@@ -1321,7 +1527,7 @@ pub(crate) fn references(
         &batch.keys,
     )?;
     let nodes = crate::frame_materialize::lock(&bound.task.labels.graph.frames)
-        .resolve_references(bound.task.entity()?, &[&converted])?;
+        .resolve_encoded_references(bound.task.entity()?, &[(&converted.0, converted.1)])?;
     selected_exclusions(&bound.task, &bound.deferred, true)?;
     if bound.task.labels.labelled.keys.len() > TABLE_ROWS {
         return Err(invalid(
@@ -1335,10 +1541,12 @@ pub(crate) fn references(
         nodes.into_iter().map(|row| row as u64).collect::<Vec<_>>(),
     ));
     let identity = reference_identity(&bound.value, &nodes)?;
+    let owner = RetainedFrameReferences::new(&bound, nodes, identity.clone());
     Ok(ResolvedFrameReferences {
         identity,
         plan: bound.publish(asker)?,
-        nodes: attach_array(asker, "node", nodes)?,
+        nodes: None,
+        owner: Some(asker.attach(Attachment::FrameReferences(owner))?),
     })
 }
 
@@ -1363,15 +1571,34 @@ pub(crate) fn context(
     attachments: &mut Attachments,
 ) -> Result<SampledFrameContext, FrameStageError> {
     let bound = bind_plan(asker, references.plan, attachments)?;
-    let nodes = take_array(attachments, references.nodes)?;
-    if reference_identity(&bound.value, &nodes)? != references.identity {
-        return Err(
-            protocol("whole-task node references no longer match their request plan").into(),
-        );
-    }
-    let nodes = positions(&nodes)?;
+    let node_count = if let Some(id) = references.owner {
+        if references.nodes.is_some() {
+            return Err(
+                protocol("retained references cannot also declare raw replacement nodes").into(),
+            );
+        }
+        let Some(Attachment::FrameReferences(owner)) = attachments.remove(&id) else {
+            return Err(
+                protocol("complete frame references lack their immutable core owner").into(),
+            );
+        };
+        owner.validate(&bound, &references.identity)?
+    } else {
+        let nodes = take_array(
+            attachments,
+            references
+                .nodes
+                .ok_or_else(|| protocol("raw complete frame references lack their node column"))?,
+        )?;
+        if reference_identity(&bound.value, &nodes)? != references.identity {
+            return Err(
+                protocol("whole-task node references no longer match their request plan").into(),
+            );
+        }
+        positions(&nodes)?.len()
+    };
     let train = bound.task.labels.labelled.keys.len();
-    if nodes.len() != train + bound.task.value.prediction_rows as usize {
+    if node_count != train + bound.task.value.prediction_rows as usize {
         return Err(protocol("whole-task node references do not cover every task row").into());
     }
     check_range(
@@ -1392,32 +1619,21 @@ pub(crate) fn context(
     )?;
     let entity = bound.task.entity()?;
     let resolved = crate::frame_materialize::lock(&bound.task.labels.graph.frames)
-        .resolve_references(entity, &[&converted])?;
-    let expected = nodes[..train]
-        .iter()
-        .chain(&nodes[train + range.start as usize..train + range.stop as usize])
-        .copied()
-        .collect::<Vec<_>>();
-    if resolved != expected {
-        return Err(protocol(
-            "batch node references changed their complete-task order or identity",
-        )
-        .into());
-    }
+        .resolve_encoded_references(entity, &[(&converted.0, converted.1)])?;
     let mut anchors = batch.anchors;
     if bound.task.value.labelled.meaning.entity_anchor {
         let time = entity
             .time_column
             .as_ref()
             .ok_or_else(|| protocol("entity-anchored frame task lost its time column"))?;
-        let looked_up = crate::frame_materialize::lock(&bound.task.labels.graph.frames).lookup(
-            entity,
-            &batch.keys,
-            &[time.clone()],
-        )?;
-        let positions = batches(&looked_up, anchors.len())?;
+        let looked_up =
+            bound
+                .task
+                .labels
+                .graph
+                .selected_rows(&entity.name, &resolved, &[time.clone()])?;
         let times = times_ns(named(&looked_up, time)?, time)?;
-        for (row, time) in positions.into_iter().zip(times) {
+        for (row, time) in times.into_iter().enumerate() {
             anchors[row] = time.unwrap_or(sample::MISSING_ANCHOR);
         }
     }
@@ -1433,19 +1649,24 @@ pub(crate) fn context(
             mode(bound.task.value.labelled.meaning.mode),
         )?
     };
-    let sampled = crate::frame_materialize::lock(&bound.task.labels.graph.frames).walk(
-        asker,
-        &bound.task.labels.graph.prepared.graph,
-        entity,
-        &converted,
-        &anchors,
-        &hops,
-        bound.deferred.neighbors.as_deref(),
-        &excluded,
-        (!bound.task.value.labelled.meaning.unseeded)
-            .then(|| bound.task.value.labelled.meaning.seed.to_u128())
-            .flatten(),
-    )?;
+    let sampled = {
+        let mut frames = crate::frame_materialize::lock(&bound.task.labels.graph.frames);
+        frames.walk_rows(
+            asker,
+            &bound.task.labels.graph.prepared.graph,
+            entity,
+            &resolved,
+            &anchors,
+            crate::frame_materialize::FrameWalkOptions {
+                hops: &hops,
+                neighbor_values: bound.deferred.neighbors.as_deref(),
+                excluded: &excluded,
+                seed: (!bound.task.value.labelled.meaning.unseeded)
+                    .then(|| bound.task.value.labelled.meaning.seed.to_u128())
+                    .flatten(),
+            },
+        )?
+    };
     let plan = bound.publish(asker)?;
     let anchors: ArrayRef = Arc::new(TimestampNanosecondArray::from(anchors));
     Ok(sampled.publish(asker, &bound.task.labels.graph, plan, range, anchors)?)
@@ -1733,8 +1954,7 @@ fn normalize_text(
             completed,
             column,
             failure,
-            message,
-        } => (completed, Some((column, failure, message))),
+        } => (completed, Some((column, failure))),
     };
     check_text_order(
         &context
@@ -1766,11 +1986,10 @@ fn normalize_text(
         }
         admitted.push((converted, array));
     }
-    if let Some((column, failure, message)) = failed {
+    if let Some((column, failure)) = failed {
         return Err(FrameStageError::Native {
             site: NativeSite::Text(column),
             failure,
-            message,
             diagnostic: None,
             dropped_summary: context.plan.task.labels.graph.dropped_summary(),
         });
@@ -1980,9 +2199,8 @@ pub(crate) fn finish_parts(
         None => Vec::new(),
         Some(previous) => {
             if previous.version != FRAME_MATERIALIZATION_VERSION
-                || previous.plan.identity != bound.value.identity
-                || previous.plan.task.identity != bound.task.value.identity
-                || previous.plan.task.labelled.meaning != bound.task.value.labelled.meaning
+                || previous.plan_identity != bound.value.identity
+                || previous.task_identity != bound.task.value.identity
             {
                 return Err(protocol(
                     "earlier encoded frame calls belong to another complete task or request plan",
@@ -2054,7 +2272,8 @@ pub(crate) fn finish_parts(
     if stop < bound.task.value.prediction_rows {
         return Ok(PreparedFrameValue::Parts(FrameRequestParts {
             version: FRAME_MATERIALIZATION_VERSION,
-            plan: bound.publish(asker)?,
+            plan_identity: bound.value.identity.clone(),
+            task_identity: bound.task.value.identity.clone(),
             parts,
         }));
     }

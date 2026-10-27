@@ -18,6 +18,8 @@
 //! ([`crate::catalog`], decision E54). The core holds one data layer, in
 //! its composition root, and names no dialect; `sdm-data` implements it.
 
+pub mod strings;
+
 use std::collections::{BTreeMap, BTreeSet};
 
 use arrow_array::RecordBatch;
