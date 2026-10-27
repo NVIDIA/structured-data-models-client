@@ -261,7 +261,7 @@
       "gone": "T3.17: the choice of template by field, rule and fields is the core's choice of sentence"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::error_from_core": {
-      "moved": "T4.4: present explicit shared public_details and selected native frame/relational diagnostics; execute reached host-held formatting outside the formatter-defect catch, preserve native response causes and core-selected internal cause. Native model-task refusal uses the existing shared sentence, actual reached repr and a fresh native task owner for public details; no host task admission or diagnostic policy."
+      "moved": "T4.4: present shared public_details and selected native frame/relational diagnostics; run reached native formatting outside the formatter-defect catch, preserve exact causes and actual model/task/output detail owners. Model, task, output and shape refusal rules stay in Rust; observed repr and fresh native owners only fill the core-selected sentences."
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::raise_from_core": {
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added; T4.6: use the shared public raise boundary so core-selected explicit native/generated causes survive while only the introduced internal CoreError context is removed"
@@ -459,7 +459,7 @@
       "refactor": "T3.16 fix 1 (rule 11): the profile's model words from base.PROFILE_MODELS, not the old PQL package's object"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_fields": {
-      "refactor": "T4.4: restore observed target/question Unicode codepoints and the already-observed question repr for native presentation, without selecting a sentence or reexecuting caller repr."
+      "refactor": "T4.4: restore observed target/question Unicode and already reached native repr values for constant and absent-output presentation, without selecting policy or reexecuting caller repr."
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_Held.__getattr__": {
       "moved": "T3.17: the values only the host holds, {host.<name>}"
