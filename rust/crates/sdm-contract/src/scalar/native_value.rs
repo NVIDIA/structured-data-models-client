@@ -6,6 +6,52 @@
 //! This is a value encoding, not a model schema, validation policy or workflow.
 //! Input-sized trees travel as owned attachments, never inline control data.
 
+use crate::data::AttachmentId;
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+
+pub const NATIVE_VALUE_VERSION: u32 = 1;
+
+/// One complete logical JSON-like value before native presentation or model
+/// JSON escaping. Numeric bits and Unicode points preserve native values;
+/// no model field, default, task choice or normalization rule is encoded here.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum NativeValue {
+    Null,
+    Boolean { value: bool },
+    Integer { digits: String },
+    Float { bits: [u8; 8] },
+    Unicode { points: Vec<u32> },
+    Array { items: Vec<NativeValue> },
+    Object { members: Vec<NativeMember> },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum NativeObjectKey {
+    Unicode { points: Vec<u32> },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct NativeMember {
+    pub key: NativeObjectKey,
+    pub value: NativeValue,
+}
+
+/// Independently owned complete logical value and its complete encoded body.
+/// Core validates their identity and derives the model bytes and inspection
+/// from the same logical value before using either attachment.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct NativePayload {
+    pub version: u32,
+    pub identity: String,
+    pub value: AttachmentId,
+    pub wire: AttachmentId,
+}
+
 #[cfg(test)]
 mod tests {
     use super::{NativeObjectKey, NativeValue};
