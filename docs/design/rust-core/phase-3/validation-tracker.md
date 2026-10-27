@@ -1,7 +1,8 @@
 # Phase 3 validation tracker
 
-Updated 2026-10-27, 13:28 UTC.
-Phase 3 / T3.10 source acceptance is complete; final documentation verification and integration remain unfinished.
+Updated 2026-10-27, 13:38 UTC.
+Phase 3 / T3.10 is accepted, merged and pushed to `rust-core` at `38071e0fb3e5f89c9ca5b74c72bec55ba32c6190`.
+Final pre-merge CI is green; root continues observing automatic post-merge CI40512864743 as requested.
 The owner assigned existing Phase4work to a separate new agent; this coordinator continues Phase3.
 The coordinator alone edits this tracker; agents report results and next actions.
 
@@ -42,7 +43,8 @@ Completed results below retain their actual producing sources; bounded source ap
 The complete-link repair is landed at `cc51e6b6eb`; all selected affected warehouse and Java executions have both independent finite result reviews.
 Test-only follow-up `23e668b0` has both exact CODE approvals and passed all93 control/refusal-map tests.
 The parity repair passed its normal392-second package check and landed atAEA.
-An append-only acknowledgment fixes my omitted protected filenames without changing any tracked file; current final source `234c3adff5` is pushed/verified and the actual stock ratchet passes against the originalcc51base.
+The retained product/native source234 acknowledgment fixes the omitted protected filenames without changing any tracked file; its original stock ratchet passes against the cc51base.
+The later reviewed testkit/judging repair landed atff86 and is included in the accepted core merge38071e0f.
 Full CI40430848336 is green on exact234 after the targeted Java retry; the local234wheel is genuinely built, and all retained live producers keep their original IDs.
 All retained artifacts keep their actual producing source IDs.
 
@@ -55,15 +57,16 @@ All retained artifacts keep their actual producing source IDs.
 | Databricks metric views | Existing SQL/Spark coverage executed; exact original SQL smoke retained | Original three SQL model questions have exact predictions or matching refusals | Complete; affected Spark/SQL results accepted, preserve originals in the final pack |
 | Snowflake semantic views | Original cases complete; original wide-decimal and semantic-twin boundaries repaired | Five original model pairs exact; source applicability retained under both input proofs | Complete; retain accepted original producers in the final pack |
 
-## Exact remaining T3.10 checklist
+## T3.10 closure checklist
 
-Each unfinished row is required before closing T3.10; completed rows remain explicitly marked DONE.
+All rows below record completed Phase3 validation and acceptance.
+Automatic post-merge CI observation is tracked separately below.
 Counts describe existing cases only.
 
-| ID | Pending item | Current state | Owner / next action |
+| ID | Item | Current state | Owner / disposition |
 |---|---|---|---|
 | R1 | **DONE: Databricks foreign-key metadata fix landed** | Pushed and independently verified `dd5b3f37ef`; both exact carry approvals and normal 188-second package handoff passed | Coordinator consumed handoff; original native producer IDs retained |
-| R2 | **DONE: execute all nine affected originals** | Genuine d90: 9/9 observed, zero operator failures, SDK0 cleanup; corrected key32 and odd-name cases succeed, metric warning restored, negative-neighbor has zero strict differences; 186 raw differences remain for finite attribution | Coordinator consumes actual results and exact owner-approved key32 support; final comparison acceptance remains R8 |
+| R2 | **DONE: execute all nine affected originals** | Genuine d90: 9/9 observed, zero operator failures, SDK0 cleanup; corrected key32 and odd-name cases succeed, metric warning restored, negative-neighbor has zero strict differences; 186 raw differences remain for finite attribution | Coordinator consumed actual results and exact owner-approved key32 support; final comparison acceptance completed in R8 |
 | R3 | **DONE: Spark comparison assembly and finite review** | All 300 original executions assembled; both independent opinions support observed product semantics and aggregate quality, retaining raw read-attribution limits and final single-row diagnostic regression | Original producer IDs and all 4780 raw differences retained; no strict comparator PASS claimed |
 | R4 | **DONE: corrective Java graph acceptance** | All18Java and18pairedPython observations complete; clusters terminal and owned cleanup verified. Both finite reviews plus exact owner-order addenda are complete | Original producer IDs, raw strict failures and historical Avito error-text limit retained; no new Java campaign needed |
 | R5 | **DONE: original Lakebase notebook** | Parent `1028333862593563` passed all 32 original commands on genuine 7e41; full 173106-row data and PK/FK post-check exact; read lease released | Coordinator consumed authentic success/export/fixture receipt; both source-impact approvals retain original IDs |
@@ -74,7 +77,7 @@ Counts describe existing cases only.
 | R10 | **DONE: final-source full CI green** | [CI40473118676](https://github.com/NVIDIA/structured-data-models-client/actions/runs/40473118676) attempt2 SUCCESS on exactff86:81successful jobs,2intentional skips. Selected Java ARM SQLite retry passed145seconds and timing guard passed; all978root/202contract tooling tests passed | Final receipt SHA2553d3ac pins all83jobs. Original79successful jobs retain actual times, two skip API timestamp anomalies remain explicit, original download failure preserved; no full-matrix restart |
 | R11 | **DONE: Snowflake identical-input comparison** | Full 10101-row source and original 10000-row draw verified; both complete current requests match the originals; all 10001 actual model26 predictions exactly equal old, RMSE ratio 1.0 on both batches and aggregate; SDK0 cleanup | Coordinator consumed receipt `8f48d1c7`; sampling unchanged; historical independent-draw 26.51% loss and failed recorder-mode attempt preserved |
 | R12 | **DONE: ordinary acceptance under approved frozen-reference policy** | All nine non-main gate steps PASS, including fullRustL1,364seeded tests,452self-checks and inventory388; seven clean234 runner/cell files each hold315records. Dependency/size checks and generated evidence passed, with zero regressions in the41-case legacy inventory report | Original machine gate stays FAILmain/check7/check12; owner exception and both independent alignment reviews retained separately, with no fabricated wrapper/stamp PASS |
-| R13 | Final documentation verification and integration | All captures/comparisons complete; both actual owner approvals received and condition verified; final-source CI green. Both independent whole-phase FINAL GO opinions are complete: general SHAd303aed8 and focused SHA1e4808d2 map all14locked exits | Root finishes normal docs handoff40417 on separately published68cc3f03, already approved by both CODE reviewers; then signed no-ff merge/push, epic/provenance and remote identity checks, automatic core CI inspection. No new draw, model campaign or full-matrix rerun |
+| R13 | **DONE: final acceptance and signed integration** | Both whole-phase FINAL GO opinions, actual owner approvals and green final CI complete. Final docs68cc3f03 passed both CODE reviews and normal201-second handoff. Signed core merge38071e0f is pushed; entire tree equals testedff4402 | Epic/checkpoint/provenance checks pass; GitHub API confirms both expected parents/tree; local core clean. Root observes automatic post-merge CI40512864743, initially6success/6running/1skip and no failure, separately from completed source CI |
 | R14 | **DONE: existing Spark and Lakebase live provider kits** | Spark saved-answer correction has both CODE approvals, five controls and actual 99-answer readjudication PASS; Lakebase actually completed all 99 normal/fault cases on final15e, normal33 clean and both faults detected | Spark receipt `08a8d2c7`, Lakebase `d3f3825e`; original failures, all driver captures and source IDs preserved; cleanup verified and lease released |
 | R15 | **DONE: approved shared graph correction landed** | Owner-approved valid-link correction landed/frozen as cc51 with genuine official artifacts; local N3 quality is 2.4701% worse, current original DK/SF quality refreshes are 2.4323%/1.9583% worse, all within 5% | No sampling change; finite quality reviews and subsequent test-only source attribution remain separate acceptance steps |
 | R16 | **DONE: batch replay and numeric judging repairs** | Candidate931306ef6 has both exact CODE approvals and normal196-second package handoff; normally landed/pushedff86cd1c9 with all4 protected filenames acknowledged. Real Rust validation preserves own schema/strict guards; numeric equality stays confined to exact JSON payload values | Missing RustSpark24 now genuinely executed underff86 from saved fetches and published once with authentic Spark configuration. All other source234 producers remain unchanged. New final-source full CI is R10; no client/API/dependency changes |
@@ -92,52 +95,58 @@ The original raw count differences, incomplete timing pairs and PostgreSQL Rust 
 Both reviewers also closed the original C1 warehouse census-outcome mapping: 3 successful original cases per warehouse leg, 12 total, on the captured 1000-row C1 tables.
 The full-local AW/H&M census and actual local real-source controls retain their separate scope; owner-approved B-lite removed dedicated warehouse stand-in census runs.
 No new warehouse census execution or fault injection is claimed or required.
-Both independent full exit-checklist prereads found no additional requirement gap; final GO still awaits the named pending validation, sealed and evidence steps.
+Both final whole-phase reviewers mapped all14locked exits to actual evidence and gave FINAL GO on exactff86/treeff4402 after verifying the actual owner answers, accuracy condition and green final CI.
 The exact-final CI contract-tooling job passed all202tests and root-tooling passed all978tests.
 The existing02:17automatic fresh-dependency nightly run blocked the selected retry through the same branch concurrency group; its records were preserved and only that duplicate run40437532268 was cancelled.
 The nightly schedule and Phase4 were unchanged, and no fresh-dependency success is claimed for the cancelled run.
 
 The owner requested a two-hour completion focus, targeting approximately 22:15 UTC.
 That target was missed after the Java tail exposed a real shared Rust graph defect.
-The graph correction and affected-result acceptance are complete; the critical path is final-source ordinary validation, CI, sealed readiness and the final draw.
+The graph correction, affected comparisons, ordinary acceptance, final CI and same-draw continuation are now complete; the missed deadline and original failures remain recorded.
 The deadline does not lower correctness requirements.
 
-## Lean remaining validation
+## Closure and continuing CI observation
 
-All original captures, comparisons and preservation checks are complete.
-Do not redraw, reset the marker, rerun completed campaigns or add another comparator/framework.
-Final-source CI, actual scoped owner dispositions and both whole-phase FINAL GO opinions are complete.
-Finish the normal verification of final documentation68cc3f03, then the authorized signed no-ff integration and post-push inspection.
-The final packet stays separate from the unchanged tested sourceff86 tree; the earlier reviewed/stamped a4 HOLD snapshot remains historical evidence.
-Retain raw33/82 NO-GO and old failed attempts; any owner acceptance is an explicit post-run exception, never approval before testing.
-Once the remaining conditions are satisfied, obtain the short final evidence opinions and integrate normally.
-Automatic core-push CI still runs; verify merge parents/tree, epic ratchet/provenance and remote identity without inventing another identical-tree matrix as a new closure condition.
+All original data/model comparisons, runtime checks, accepted performance/memory evidence, ordinary acceptance, same-draw evidence and final reviews are complete.
+The final source CI passed before the signed integration, and the complete merge tree is identical to that tested source.
+Original raw H11 NO-GO33/82, raw main/check7/check12 failures and numerical target failures remain preserved under the exact owner-approved dispositions.
+The final documentation is published separately, with both CODE approvals and its normal package check complete.
+
+Root continues watching [automatic core-push CI40512864743](https://github.com/NVIDIA/structured-data-models-client/actions/runs/40512864743) under the owner's “keep watching CI” instruction.
+At13:37UTC it is running on actual merge38071e0f, with6successful jobs,6running jobs,1intentional skip and no reported failure.
+This run started automatically from the authorized push; no additional manual matrix or live campaign was launched.
+No owner decision remains unanswered.
 
 ## Current execution and integration
 
-- Phase3 head is `ff86cd1c9e5ca53d0f5e9bc28399916294631549`, tree `ff4402e3c5864985d33767801bf23b36d7300b7d`; candidate931 passed both reviews and normal package checks before landing.
-- Final CI40473118676 attempt2 is genuinely GREEN onff86:81successful jobs and2intentional skips, receipt SHA2553d3ac.
-  Actual selected Java retry and timing guard passed; only those two successful jobs executed anew, with79successful jobs retaining original execution times.
-  Original failed download, source identities and anomalous skip API timestamps remain preserved.
-  The owner-reported Codex capacity interruption delayed collection until13:02; the queued retry then completed at13:07.
-  Root consumed all actual terminal logs and parent/raw83-job/carry-map receipts.
-- Source234 ordinary-gate, native/JAR, data/model, timing, memory, notebook and provider results retain their genuine identities under both source-impact opinions.
-  Original234CI40430848336 passed81 jobs with two skips; it is not relabeled as ff86 CI.
-- Complete follow-up directory is `heldout-same-input-followup-ff86cd1c-20261027`; all40 original IDs/169 supported keys and Java20/old25 are present.
-  Full comparison/counts/preservation terminal SHA3dc6b52b; raw33/82 NO-GO and zero missing/panic/new supported-input refusal remain explicit.
-- Actual owner-answer primary `owner-answer-20261027-final-SQL-metadata-decimals.primary.json`, SHAeeb6784d, approves both complete question scopes subject to close results.
-  Both final reviewers verified that condition and all14exits, giving FINAL GO on exactff86/treeff4402; source-acceptance receipt SHAc0c1507e binds both opinions, the actual owner reply and green CI.
-- Four stock reports are generated and copied byte-exact; the separate six-file HOLD packet is published at `a4f4e82abbc48474d28186ee00d6d26050c0ed0c` on `rust-core-phase-3-topic-T3.10-final-evidence`.
-  Both exact CODE approvals are complete; the normal docs handoff passed175seconds with no changed test files.
-  Terminal receipt SHA187b26d6, stamp SHAf3a73bab and log SHAabba7ddd preserve actual execution; original3f findings and corrected a4 reviews remain recorded.
-  Root consumed both reports and terminal55084; that earlier HOLD publication did not imply Phase3 GO.
-  The final two-file delta68cc3f03 records actual owner/CI/GO facts and explicitly dates the HOLD snapshot; both CODE approvals21902e42/7f03cd5f precede its running normal documentation handoff40417.
-- Root owns the sole active Phase3 local job: normal docs handoff40417 for68cc3f03, after both exact CODE approvals.
-  Both final source reviewers and both final docs reviewers have returned, and root consumed all handoffs.
-  The remote validation CI run is terminal; root owns documentation completion, signed integration, remote readback and automatic core CI inspection.
-  The separately owned Phase4 may use the other heavy slot.
-- Core is still3ae4d1af; after actual acceptance the no-ff merge must have current core first parent, ff86 second parent and treeff4402 unchanged.
-  Notify the owner of its actual merge SHA for the separate Phase4 agent; do not move Phase4 refs here.
+- Published core merge: `38071e0fb3e5f89c9ca5b74c72bec55ba32c6190`.
+  First parent is original core `3ae4d1afc9d11b8e2781d6f76072f2f34281e7a0`; second parent is exact reviewed Phase3 landing `ff86cd1c9e5ca53d0f5e9bc28399916294631549`.
+  Complete tree is `ff4402e3c5864985d33767801bf23b36d7300b7d`, identical to the green tested source.
+  Normal non-force push passed the unchanged owner guard; GitHub commit API/readback verified parents/tree and the local core checkout is clean at the same merge.
+  Existing epic base/checkpoint and provenance ratchet passed before push; receipt SHAc82b2b5f and remote readback SHA9e53533a preserve the actual checks.
+- Final pre-merge CI40473118676 attempt2 is GREEN onff86:81successful jobs and2intentional skips, receipt SHA2553d3ac.
+  Only the selected Java ARM SQLite retry and timing guard executed anew;79successful jobs retain their original execution times.
+  The original artifact-list connection reset and skipped-job API timestamp anomalies remain preserved.
+  Actual root/contract tooling suites passed978/202tests.
+- Actual owner answer SHAeeb6784d approves the exact verified internal SQL/metadata scope and the two accurate decimal cases on DatabricksSQL/Spark, conditional on close final results.
+  Both independent final reviews verified the existing aggregate<=5% accuracy condition and all14locked exits.
+  Their FINAL GO report hashes are general `d303aed8038ffb184219abd6400b778b57e36b96dc60c5766449ed8a6e3bc6b3` and focused `1e4808d227875894bac7c845ccffd18380e67c9a2f3e183b7761be285e6c7778`.
+  Source-acceptance receipt SHAc0c1507e binds both opinions, actual owner reply and green CI.
+- All40 original cases/169 supported pairings, both reference passes, Python-core169, Rust169, Java20 and oldDuckDB25 remain complete.
+  All114 reference successes are retained, with zero panic, missing observation or new refusal of accepted input.
+  Raw H11 remains33IDs/82legs NO-GO; actual bounded post-run dispositions leave one unapproved native-validation trace outsideSQL within unchanged threshold4.
+  Original/derived case bytes, marker, register snapshot, failed attempts and all actual producer identities remain preserved.
+- Final evidence packet is published at `68cc3f035e7906b7a498b7ee4355f36af191be7d` on `rust-core-phase-3-topic-T3.10-final-evidence`.
+  Its [final disposition](https://github.com/NVIDIA/structured-data-models-client/blob/68cc3f035e7906b7a498b7ee4355f36af191be7d/docs/design/rust-core/phase-3/evidence/final-disposition.md) explicitly supersedes the pending-state assessment of the earlier a4 HOLD snapshot.
+  Both exact CODE approvals precede the passing normal201-second docs handoff40417; terminal SHAfc2f7ee5 and stamp SHAd1027fc9 preserve execution.
+  Four generated stock reports remain byte-exact and the documentation does not change the tested source tree.
+- Source234 and earlier ordinary-gate/native/JAR/live/model/notebook/provider/performance/memory results retain their authentic identities under both source-impact opinions.
+  The genuine main/check7/check12 failure remains beside the owner's frozen-reference exception; no successful raw wrapper, counter or numerical performance result is fabricated.
+- All Phase3 authors/reviewers and local heavy jobs are terminal, with all handoffs consumed.
+  Root owns only automatic post-merge CI40512864743 observation and will collect its actual result and act on any failure.
+  The coordination reminder remains disabled, with no matching active cron entry; no monitoring machinery was added.
+- Phase4 remains owned by the separate coordinator.
+  Its rebase target is actual published core merge `38071e0fb3e5f89c9ca5b74c72bec55ba32c6190`; this coordinator has not moved any Phase4 ref.
 
 ### Historical completed fixes
 
