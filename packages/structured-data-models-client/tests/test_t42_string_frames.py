@@ -279,6 +279,7 @@ def test_string_native_unicode_keeps_exact_constructor_outcome(
     frame = pd.DataFrame(
         {'value': pd.Series(values, dtype=pd.StringDtype(storage='python'))}
     )
+    original = frame['value'].copy(deep=True)
     outcomes = []
     for core in (False, True):
         monkeypatch.setenv('SDM_CORE_ROUTES', PATHS if core else '')
@@ -292,10 +293,8 @@ def test_string_native_unicode_keeps_exact_constructor_outcome(
                 snapshot = schema.snapshot()
                 assert schema['rows'].data is frame
                 assert snapshot['rows'].data is frame
-                pd.testing.assert_series_equal(
-                    schema['rows'].data['value'], frame['value']
-                )
                 outcome = ('schema', projection(schema), projection(snapshot))
+        pd.testing.assert_series_equal(frame['value'], original)
         outcomes.append(
             (outcome, [(str(n.message), n.category) for n in caught])
         )
