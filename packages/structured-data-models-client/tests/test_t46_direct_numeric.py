@@ -70,10 +70,18 @@ def fixture(dtype='float64'):
 
 
 def outcome(
-    monkeypatch, frames, *, core, options=None, send=True, outputs=None
+    monkeypatch,
+    frames,
+    *,
+    core,
+    options=None,
+    send=True,
+    outputs=None,
+    model='kumo-tabular',
+    transport=None,
 ):
     monkeypatch.setenv('SDM_CORE_ROUTES', CORE if core else '')
-    scripted = Scripted()
+    scripted = Scripted() if transport is None else transport
     inspected = None
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter('always')
@@ -99,7 +107,7 @@ def outcome(
                     client._transport.close()
                     client._transport = scripted
                     result = client.predict(
-                        request, model=KumoTabular(), outputs=outputs
+                        request, model=model, outputs=outputs
                     )
                     result = (
                         result.to_pandas().to_dict(orient='list'),
@@ -375,3 +383,131 @@ def test_direct_core_path_never_invokes_python_semantic_builders(monkeypatch):
         client._transport.close()
         client._transport = scripted
         assert len(client.predict(request, model=KumoTabular()).items) == 2
+
+
+@pytest.mark.parametrize('seed', [2**53, 2**53 + 1, 2**80, 10**400])
+def test_direct_flat_inference_precision_is_checked_at_final_body(
+    monkeypatch, seed
+):
+    frames = fixture('int64')
+    options = {'inference': {'seed': seed}}
+    old = outcome(monkeypatch, frames, core=False, options=options)
+    new = outcome(monkeypatch, frames, core=True, options=options)
+    assert new == old
+    if seed in (2**53, 2**80):
+        assert new[3][0]['inference'] == {'seed': seed}
+    else:
+        assert not new[3]
+        assert (
+            'cannot be sent as a JSON number without losing precision'
+            in new[1][-1]
+        )
+
+
+@pytest.mark.parametrize('odd', [False, True])
+def test_direct_integer_to_float_widening_never_rounds_large_integers(
+    monkeypatch, odd
+):
+    context, predict = fixture('int64')
+    first = 2**53 + int(odd)
+    context['feature'] = [first, first + 2, first + 4]
+    predict['feature'] = [4.0, 5.0]
+    old = outcome(monkeypatch, (context, predict), core=False)
+    assert outcome(monkeypatch, (context, predict), core=True) == old
+    if odd:
+        assert not old[3]
+        assert (
+            'cannot be sent as float64 without losing precision' in old[1][-1]
+        )
+
+
+@pytest.mark.parametrize('null', [False, True])
+def test_direct_valid_masked_nan_and_null_wire_cells(monkeypatch, null):
+    context, _ = fixture('int64')
+    values = np.array([1.0, np.nan, 3.0])
+    mask = np.array([False, False, null])
+    predict = pd.DataFrame(
+        {'feature': pd.Series(pd.arrays.FloatingArray(values, mask))}
+    )
+    old = outcome(monkeypatch, (context, predict), core=False)
+    new = outcome(monkeypatch, (context, predict), core=True)
+    assert new == old
+    assert (
+        new[3][0]['schema']['instance_table']['columns']['feature']['dtype']
+        == 'float64'
+    )
+    assert new[3][0]['predict']['instance_table']['rows'][1] == [None]
+
+
+@pytest.mark.parametrize('wrong', [False, True])
+def test_direct_keyed_leak_warning_and_response_attribution(monkeypatch, wrong):
+    class Keyed(Scripted):
+        def predict(self, payload):
+            result = super().predict(payload)
+            rows = payload['predict']['instance_table']['rows']
+            for item, row in zip(result['predictions'], rows, strict=True):
+                item['id'] = str(
+                    [4 if wrong and item['row_index'] == 0 else row[0]]
+                )
+            return result
+
+    frames = (
+        pd.DataFrame({'user_id': [1, 2, 3], 'target': [2, 4, 6]}),
+        pd.DataFrame({'user_id': [1, 4]}),
+    )
+    old = outcome(monkeypatch, frames, core=False, transport=Keyed())
+    new = outcome(monkeypatch, frames, core=True, transport=Keyed())
+    assert new == old
+    assert '1 of the 2 rows being scored are also in context' in new[2][0][0]
+    if wrong:
+        assert new[1][2] == 'INVALID_RESPONSE'
+        assert 'pairs row_index 0' in new[1][-1]
+    else:
+        assert new[1][1][0]['id'] == [1, 4]
+
+
+@pytest.mark.parametrize(
+    'model,outputs', [('unknown-model', []), ('kumo-tabular', [])]
+)
+def test_direct_model_lookup_precedes_empty_outputs(
+    monkeypatch, model, outputs
+):
+    frames = fixture()
+    old = outcome(monkeypatch, frames, core=False, model=model, outputs=outputs)
+    assert (
+        outcome(monkeypatch, frames, core=True, model=model, outputs=outputs)
+        == old
+    )
+    assert old[1][2] == (
+        'UNKNOWN_MODEL' if model == 'unknown-model' else 'INVALID_REQUEST'
+    )
+
+
+def test_direct_boolean_storage_and_supplied_schema_refusal(monkeypatch):
+    from sdm_client import Schema
+
+    context, predict = fixture()
+    context['flag'] = [True, False, True]
+    predict['flag'] = pd.Series([False, None], dtype='boolean')
+    old = outcome(monkeypatch, (context, predict), core=False)
+    assert outcome(monkeypatch, (context, predict), core=True) == old
+    schema = Schema.from_data({'instance': context}, relationships=[])
+    predict['feature'] = [True, False]
+    old = outcome(
+        monkeypatch,
+        (context, predict),
+        core=False,
+        options={'schema': schema},
+        send=False,
+    )
+    assert (
+        outcome(
+            monkeypatch,
+            (context, predict),
+            core=True,
+            options={'schema': schema},
+            send=False,
+        )
+        == old
+    )
+    assert "which 'bool' cannot mean" in old[1][-1]
