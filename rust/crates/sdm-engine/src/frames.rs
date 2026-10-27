@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The typed numeric/time/text frame consumer: detached rows, sanitized key maps
+//! The typed numeric/time/categorical frame consumer: detached rows and key maps
 //! and DF-1 adjacency, with RS-3 draws owned by its caller's checkpoint.
 //! No provider, SQL renderer or host callback participates in this walk.
 
@@ -193,6 +193,17 @@ impl Snapshot {
         let mut dropped = Vec::new();
         let timed = graph.tables.iter().any(|table| table.time_column.is_some());
         for table in &graph.tables {
+            // The frozen native text normalizer selects different Unicode
+            // lowercase semantics across supported runtimes. Categorical
+            // strings need no normalization; the whole Text semantic family
+            // remains unfinished until its native execution profile is held.
+            if table
+                .columns
+                .iter()
+                .any(|column| column.stype == Some(sdm_contract::ops::Stype::Text))
+            {
+                return Err(crate::not_yet("frame_text_features"));
+            }
             let rows = input
                 .remove(&table.name)
                 .ok_or_else(|| invalid("a frame source lacks one table"))?;

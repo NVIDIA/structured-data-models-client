@@ -142,7 +142,7 @@ pub(crate) fn description(
         .map(|state| state.description.clone())
         .unwrap_or_else(|| read.description.clone());
     // This first opt-in consumer accepts numeric scalar identifiers.
-    // Boolean and text feature columns do not imply identifying-key support.
+    // Boolean feature columns and all constructor admission stay unchanged.
     if description.tables.iter().any(|table| {
         table.primary_key.iter().any(|key| {
             table
@@ -152,16 +152,6 @@ pub(crate) fn description(
         })
     }) {
         return Err(sdm_engine::not_yet("frame_boolean_key"));
-    }
-    if description.tables.iter().any(|table| {
-        table.primary_key.iter().any(|key| {
-            table
-                .columns
-                .iter()
-                .any(|column| column.name == *key && column.dtype == Dtype::String)
-        })
-    }) {
-        return Err(sdm_engine::not_yet("frame_text_key"));
     }
     Ok((description, read.types))
 }
@@ -481,17 +471,12 @@ impl FrameRun {
                             || (is_entity && described.primary_key.as_ref() == Some(field.name()))
                     })
                     .map(|(field, array)| {
-                        let text = features.iter().any(|(name, stype)| {
-                            name == field.name() && *stype == sdm_contract::ops::Stype::Text
-                        });
-                        let column = if text {
-                            SampledColumn::Words(crate::subgraph::words(array)?)
-                        } else {
-                            SampledColumn::Arrow(Arc::clone(array))
-                        };
-                        Ok((field.name().clone(), column))
+                        (
+                            field.name().clone(),
+                            SampledColumn::Arrow(Arc::clone(array)),
+                        )
                     })
-                    .collect::<Result<_, CoreError>>()?;
+                    .collect();
                 Ok(SampledTable {
                     name: table.name,
                     primary_key: is_entity.then(|| described.primary_key.clone()).flatten(),
