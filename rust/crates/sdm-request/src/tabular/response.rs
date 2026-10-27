@@ -84,14 +84,10 @@ pub fn decode(
         .enumerate()
         .map(|(ordinal, item)| {
             let prior_ordinal = first.get(&item.row_index).copied();
-            first.entry(item.row_index).or_insert(ordinal);
+            first.entry(item.row_index.clone()).or_insert(ordinal);
             let key = keys
                 .as_ref()
-                .and_then(|keys| {
-                    usize::try_from(item.row_index)
-                        .ok()
-                        .and_then(|at| keys.get(at))
-                })
+                .and_then(|keys| item.row_index.as_usize().and_then(|at| keys.get(at)))
                 .map(entity_scalar);
             DecodedDirectRow {
                 ordinal,
@@ -133,20 +129,17 @@ fn row_index(scope: &ResponseScope, row: &DecodedDirectRow) -> Result<usize, Cor
     {
         return Err(protocol("decoded row ordinal is incoherent"));
     }
-    let index = row
+    if sdm_wire::response::integer_text(&row.row_index).as_deref() != Some(row.row_index.as_str()) {
+        return Err(protocol("decoded row index is not canonical"));
+    }
+    let at = row
         .row_index
-        .parse::<i128>()
-        .ok()
-        .filter(|v| v.to_string() == row.row_index)
-        .ok_or_else(|| protocol("decoded row index is not canonical"))?;
-    let index = i64::try_from(index)
-        .map_err(|_| predict::bad_response("prediction.row_index", "out_of_range"))?;
-    let at = usize::try_from(index)
+        .parse::<usize>()
         .ok()
         .filter(|at| *at < scope.scoring_rows)
         .ok_or_else(|| {
             invalid(Sentence::TabularRowBounds)
-                .with_field("index", Detail::Scalar(Scalar::Int64(index)))
+                .with_field("index", Detail::text(&row.row_index))
                 .with_field(
                     "rows",
                     Detail::Scalar(Scalar::UInt64(scope.scoring_rows as u64)),

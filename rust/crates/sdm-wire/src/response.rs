@@ -52,21 +52,73 @@ pub struct Refused {
     /// `missing`, `null`, `not_text`, `not_whole`, `out_of_range`,
     /// `not_an_object` or `not_a_sequence`.
     pub reason: &'static str,
+    /// The selected prediction item, when the fault arose inside that item.
+    pub item: Option<usize>,
 }
 
 fn refused(field: &'static str, reason: &'static str) -> Refused {
-    Refused { field, reason }
+    Refused {
+        field,
+        reason,
+        item: None,
+    }
 }
 
 /// The fields of an item this build does not read, in the bindings' order.
 pub const UNREAD_ITEM_FIELDS: [&str; 0] = [];
+
+/// An exact decoded row integer, before any result-table width constraint.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct RowIndex(String);
+impl RowIndex {
+    pub fn digits(&self) -> &str {
+        &self.0
+    }
+    pub fn as_i128(&self) -> Option<i128> {
+        self.0.parse().ok()
+    }
+    pub fn as_i64(&self) -> Option<i64> {
+        self.0.parse().ok()
+    }
+    pub fn as_usize(&self) -> Option<usize> {
+        self.0.parse().ok()
+    }
+}
+impl std::fmt::Display for RowIndex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+fn row_index(value: &Value) -> Result<RowIndex, Refused> {
+    let Value::Number(token) = value else {
+        return Err(refused("prediction.row_index", "not_whole"));
+    };
+    let digits = if is_integer_token(token) {
+        integer_text(token)
+    } else {
+        token
+            .parse::<f64>()
+            .ok()
+            .filter(|value| value.is_finite() && value.fract() == 0.0)
+            .map(|value| {
+                if value == 0.0 {
+                    "0".to_owned()
+                } else {
+                    format!("{value:.0}")
+                }
+            })
+    };
+    digits
+        .map(RowIndex)
+        .ok_or_else(|| refused("prediction.row_index", "not_whole"))
+}
 
 /// One answer.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PredictionItem {
     /// Which row of the request this answers; a whole number, of any size
     /// a response may write.
-    pub row_index: i128,
+    pub row_index: RowIndex,
     pub id: Option<String>,
     pub forecast_step: Option<i128>,
     /// The answer as the response wrote it; absent and `null` alike are
@@ -111,6 +163,13 @@ pub struct PredictionResponse {
 impl PredictionResponse {
     /// Reads `value` as the bindings read a response.
     pub fn read(value: &Value) -> Result<PredictionResponse, Refused> {
+        Self::read_inner(value, false)
+    }
+    /// The direct adapter applies row bounds before result width constraints.
+    pub fn read_direct(value: &Value) -> Result<PredictionResponse, Refused> {
+        Self::read_inner(value, true)
+    }
+    fn read_inner(value: &Value, keep_wide_index: bool) -> Result<PredictionResponse, Refused> {
         let Value::Object(_) = value else {
             return Err(refused("response", "not_an_object"));
         };
@@ -120,7 +179,13 @@ impl PredictionResponse {
             None => return Err(refused("predictions", "missing")),
             Some(Value::Array(items)) => items
                 .iter()
-                .map(PredictionItem::read)
+                .enumerate()
+                .map(|(ordinal, item)| {
+                    PredictionItem::read(item, keep_wide_index).map_err(|mut error| {
+                        error.item = Some(ordinal);
+                        error
+                    })
+                })
                 .collect::<Result<_, _>>()?,
             // An object iterates over its names, each of which is text and
             // so not an item; with none, there are no items.
@@ -143,7 +208,7 @@ impl PredictionResponse {
 }
 
 impl PredictionItem {
-    fn read(value: &Value) -> Result<PredictionItem, Refused> {
+    fn read(value: &Value, keep_wide_index: bool) -> Result<PredictionItem, Refused> {
         let Value::Object(_) = value else {
             return Err(refused("prediction", "not_an_object"));
         };
@@ -155,8 +220,11 @@ impl PredictionItem {
         let row_index = match value.get("row_index") {
             None => return Err(refused("prediction.row_index", "missing")),
             Some(Value::Null) => return Err(refused("prediction.row_index", "null")),
-            Some(number) => whole_of(number, "prediction.row_index")?,
+            Some(number) => row_index(number)?,
         };
+        if !keep_wide_index && row_index.as_i128().is_none() {
+            return Err(refused("prediction.row_index", "out_of_range"));
+        }
         let forecast_step = match value.get("forecast_step") {
             None | Some(Value::Null) => None,
             Some(number) => Some(whole_of(number, "prediction.forecast_step")?),

@@ -1521,8 +1521,9 @@ fn named(
     let mut answered = vec![false; entities.len()];
     let mut named = Vec::with_capacity(response.predictions.len());
     for item in &response.predictions {
-        let index = usize::try_from(item.row_index)
-            .ok()
+        let index = item
+            .row_index
+            .as_usize()
             .filter(|i| *i < entities.len())
             .ok_or_else(|| bad_response("prediction.row_index", "out_of_range"))?;
         if item.forecast_step.is_some() {
@@ -1561,8 +1562,10 @@ fn as_written(response: &PredictionResponse) -> Result<Vec<(i64, Entity, Option<
         .predictions
         .iter()
         .map(|item| {
-            let row_index = i64::try_from(item.row_index)
-                .map_err(|_| bad_response("prediction.row_index", "out_of_range"))?;
+            let row_index = item
+                .row_index
+                .as_i64()
+                .ok_or_else(|| bad_response("prediction.row_index", "out_of_range"))?;
             let forecast_step = item
                 .forecast_step
                 .map(i64::try_from)
