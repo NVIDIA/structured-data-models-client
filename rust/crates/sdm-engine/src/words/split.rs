@@ -5,6 +5,69 @@
 //! Shared sampler word boundaries over ordinary or native codepoints.
 //! Punctuation becomes whitespace before the HTML line-break substitution.
 
+use std::ops::Range;
+
+/// The first bounded words as exact ranges of already lowercased input.
+/// A non-scalar native surrogate is an ordinary non-whitespace character.
+/// No Unicode replacement or pair merging occurs during boundary selection.
+pub(super) fn ranges<T: Copy>(
+    text: &[T],
+    scalar: impl Fn(T) -> Option<char>,
+    space: fn(char) -> bool,
+) -> Vec<Range<usize>> {
+    let mut words = Vec::new();
+    let mut start = None;
+    let mut at = 0;
+    while at < text.len() {
+        let boundary = scalar(text[at]).is_some_and(|point| space(point) || super::punctuation(point));
+        let next = if boundary {
+            Some(at + 1)
+        } else {
+            line_break(text, at, &scalar, space)
+        };
+        if let Some(next) = next {
+            if let Some(start) = start.take() {
+                words.push(start..at);
+                if words.len() == super::MAX_WORDS {
+                    return words;
+                }
+            }
+            at = next;
+        } else {
+            start.get_or_insert(at);
+            at += 1;
+        }
+    }
+    if let Some(start) = start {
+        words.push(start..at);
+    }
+    words
+}
+
+fn line_break<T: Copy>(
+    text: &[T],
+    at: usize,
+    scalar: &impl Fn(T) -> Option<char>,
+    space: fn(char) -> bool,
+) -> Option<usize> {
+    let prefix = text.get(at..at + 3)?;
+    if !prefix.iter().copied().map(scalar).eq(['<', 'b', 'r'].map(Some)) {
+        return None;
+    }
+    let mut end = at + 3;
+    // PUNCTUATION is replaced before the reference's HTML regex. Treat it
+    // as whitespace here too, without rewriting or copying the input.
+    while text.get(end).copied().and_then(scalar)
+        .is_some_and(|point| space(point) || super::punctuation(point))
+    {
+        end += 1;
+    }
+    if text.get(end).copied().and_then(scalar) == Some('/') {
+        end += 1;
+    }
+    (text.get(end).copied().and_then(scalar) == Some('>')).then_some(end + 1)
+}
+
 #[cfg(test)]
 mod tests {
     use super::ranges;
