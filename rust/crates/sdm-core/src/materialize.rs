@@ -4799,7 +4799,7 @@ fn labels_result(
 }
 
 /// A text time reading's refusal, by its rule's name.
-fn text_unread(unread: Unread) -> CoreError {
+pub(crate) fn text_unread(unread: Unread) -> CoreError {
     match unread {
         Unread::Outside => not_yet("text_time"),
         Unread::Order => not_yet("text_time_order"),

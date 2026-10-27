@@ -285,9 +285,11 @@ impl Snapshot {
                     })?;
                 }
             }
-            // Timestamp features on an otherwise untimed graph retain the
-            // separate no-time/DT-3 acceptance obligation of the full phase.
-            if !timed
+            // The complete native source consumer has already resolved text
+            // timestamps before sanitization. Older raw-only consumers retain
+            // their separate no-time admission boundary.
+            if !native
+                && !timed
                 && rows
                     .schema()
                     .fields()

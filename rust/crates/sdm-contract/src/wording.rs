@@ -702,6 +702,9 @@ pub fn template(sentence: Sentence) -> Template {
         ),
         S::DirectNullableCast => said(r#"{host.direct_nullable_cast}"#),
         S::DirectNativeFailure => said(r#"native {stage} conversion failed"#),
+        S::FrameDecimalFraction => said(
+            r#"column {where} is declared {dtype!r} and holds {example}, which is not a whole number. Sending it would round the value without saying so; declare the column float64, or round it yourself if that is what you meant"#,
+        ),
         S::FrameNativeFailure => said(r#"native frame {stage} conversion failed"#),
         S::FrameNativeInternal => said(
             r#"the relational engine failed while building this request: {native_type}: {host.frame_native_message}"#,

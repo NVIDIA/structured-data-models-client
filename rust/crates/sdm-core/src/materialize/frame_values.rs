@@ -7,6 +7,7 @@
 //! This source candidate has no execution or validation evidence.
 //! Graph/task/request policy stays here; native owners and I/O stay in the host.
 
+mod columns;
 mod lags;
 mod native_guard;
 mod owners;
@@ -179,6 +180,15 @@ pub(crate) async fn run(
     part_scope: Option<FrameQuestionScope>,
 ) -> Result<OperationResult, CoreError> {
     let value = match input {
+        FramePreparation::ColumnMeaning { input } => {
+            PreparedFrameValue::ColumnMeaning(columns::meaning(input))
+        }
+        FramePreparation::IntegerColumn { input } => {
+            PreparedFrameValue::IntegerColumn(columns::integer(input)?)
+        }
+        FramePreparation::TimeColumn { meaning, values } => PreparedFrameValue::SourceColumn(
+            columns::time(&asker, meaning, values, &facts, &mut attachments)?,
+        ),
         FramePreparation::Question {
             schema,
             query,
