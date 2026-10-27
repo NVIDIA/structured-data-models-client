@@ -322,3 +322,35 @@ def test_exact_largeutf8_native_materialization_keeps_its_frozen_failure_boundar
             'code': failed.value.code,
             'message': str(failed.value),
         } == expected['error']
+
+
+@pytest.mark.parametrize('invalid', ['duplicate', 'nonstring', 'object'])
+def test_exact_largeutf8_guard_follows_existing_fresh_conversion_errors(
+    monkeypatch, invalid
+):
+    monkeypatch.setenv('SDM_CORE_ROUTES', ROUTES)
+    frames = shop('largeutf8')
+    asked = question(frames)
+    if invalid == 'duplicate':
+        frames['users'].columns = ['user_id', 'age', 'category', 'category']
+        with pytest.raises(StructuredDataError, match='duplicate column name'):
+            materialize(asked)
+    elif invalid == 'nonstring':
+        frames['users'].columns = ['user_id', 'age', 'category', 7]
+        with pytest.raises(
+            StructuredDataError, match='column names must be strings'
+        ):
+            materialize(asked)
+    else:
+        frames['users']['note'] = pd.Series(['object'] * 8, dtype=object)
+        with pytest.raises(RouteError, match='supports only NumPy'):
+            materialize(asked)
+
+
+def test_cached_text_snapshot_does_not_read_new_unsupported_native_values(core):
+    frames = shop()
+    asked = question(frames)
+    initial = inspection(materialize(asked))
+    frames['users']['note'] = text(['changed'] * 8, 'largeutf8')
+    frames['orders']['note'] = text(['changed'] * 64, 'largeutf8')
+    assert inspection(materialize(asked)) == initial
