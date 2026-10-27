@@ -64,16 +64,7 @@ def authority():
             )
             if not admitted:
                 continue
-            columns = {
-                (parts[5], parts[7])
-                for field in fields
-                if len(parts := field.split('/')) == 9
-                and parts[:5]
-                == ['public.payloads', '*', '2', 'schema', 'related_tables']
-                and parts[6] == 'columns'
-                and parts[8] == 'dtype'
-            }
-            found[item['case'], runner] = (admitted, columns)
+            found[item['case'], runner] = admitted
     return found
 
 
@@ -97,7 +88,44 @@ def number(value):
     return value
 
 
-def _links(old, new, columns):
+def row_columns(body, fields, root):
+    """Resolve only admitted scalar row paths through this actual table layout."""
+    prefix = (
+        ['public.payloads', '*', '2']
+        if root == 'public.payloads'
+        else ['core.predicted.body', '*']
+    )
+    columns = set()
+    for field in fields:
+        parts = field.removeprefix(comparison()._NULL_SIDE).split('/')
+        if parts[: len(prefix)] != prefix:
+            continue
+        tail = parts[len(prefix) :]
+        if not (
+            len(tail) == 6
+            and tail[0] in ('context', 'predict')
+            and tail[1] == 'related_tables'
+            and tail[3:5] == ['rows', '*']
+            and tail[5].isdigit()
+        ):
+            continue
+        table = body[tail[0]]['related_tables'].get(tail[2])
+        if table is None:
+            continue
+        position = int(tail[5])
+        if position >= len(table['columns']):
+            return (
+                'approved FK position is outside the actual row columns',
+                set(),
+            )
+        columns.add((tail[2], table['columns'][position]))
+    return None, columns
+
+
+def _links(old, new, fields, root):
+    problem, columns = row_columns(new, fields, root)
+    if problem is not None:
+        return problem, 0
     filled = 0
     for table, column in columns:
         relations = [
@@ -167,14 +195,14 @@ def _links(old, new, columns):
 
 def payload_problem(want: dict[str, Any], got: dict[str, Any], case_key: str):
     """Compare every request field; only actual approved FK improvements differ."""
-    fields, columns = authority().get((case_key, 'python-core'), ((), set()))
+    fields = authority().get((case_key, 'python-core'), ())
     old, new = payloads(want), payloads(got)
     difference = comparison()._path_of(new, old, 'public.payloads', fields)
     if difference is not None or not fields:
         return difference
     filled = 0
     for before, after in zip(old, new, strict=True):
-        problem, count = _links(before[2], after[2], columns)
+        problem, count = _links(before[2], after[2], fields, 'public.payloads')
         if problem is not None:
             return problem
         filled += count
@@ -190,7 +218,7 @@ def rust_problems(document):
         admitted = authority().get((case, 'rust-host'))
         if admitted is None or case not in document['reference']:
             continue
-        fields, columns = admitted
+        fields = admitted
         old = [p[2] for p in payloads(document['reference'][case])]
         body = line['core']['predicted'].get('body')
         new = [] if body is None else [copy.deepcopy(body)]
@@ -201,7 +229,9 @@ def rust_problems(document):
         filled = 0
         if problem is None:
             for before, after in zip(old, new, strict=True):
-                problem, count = _links(before, after, columns)
+                problem, count = _links(
+                    before, after, fields, 'core.predicted.body'
+                )
                 if problem is not None:
                     break
                 filled += count
