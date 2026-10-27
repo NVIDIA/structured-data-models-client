@@ -77,8 +77,9 @@ impl Key {
     }
 }
 
-/// Whether a key of `data_type` is sampled: the integers, text and, from
-/// T1.32a, the floats and a `decimal128` of no negative scale.
+/// Whether a key of `data_type` is read: the integers, either text offset
+/// width and, from T1.32a, the floats and a `decimal128` of no negative scale.
+/// The separate provider cast rule determines which target types it builds.
 pub fn supported(data_type: &DataType) -> bool {
     matches!(
         data_type,
@@ -91,6 +92,7 @@ pub fn supported(data_type: &DataType) -> bool {
             | DataType::UInt32
             | DataType::UInt64
             | DataType::Utf8
+            | DataType::LargeUtf8
             | DataType::Float32
             | DataType::Float64
     ) || matches!(data_type, DataType::Decimal128(_, scale) if *scale >= 0)
@@ -106,6 +108,14 @@ pub fn read(array: &ArrayRef) -> Result<Vec<Option<Key>>, CoreError> {
                 .collect()
         }};
     }
+    macro_rules! text {
+        ($offset:ty) => {{
+            let values = array.as_string::<$offset>();
+            (0..values.len())
+                .map(|i| (!values.is_null(i)).then(|| Key::Text(values.value(i).to_owned())))
+                .collect()
+        }};
+    }
     Ok(match array.data_type() {
         DataType::Int8 => ints!(Int8Type),
         DataType::Int16 => ints!(Int16Type),
@@ -115,12 +125,8 @@ pub fn read(array: &ArrayRef) -> Result<Vec<Option<Key>>, CoreError> {
         DataType::UInt16 => ints!(UInt16Type),
         DataType::UInt32 => ints!(UInt32Type),
         DataType::UInt64 => ints!(UInt64Type),
-        DataType::Utf8 => {
-            let values = array.as_string::<i32>();
-            (0..values.len())
-                .map(|i| (!values.is_null(i)).then(|| Key::Text(values.value(i).to_owned())))
-                .collect()
-        }
+        DataType::Utf8 => text!(i32),
+        DataType::LargeUtf8 => text!(i64),
         DataType::Decimal128(_, scale) if *scale >= 0 => {
             let values = array.as_primitive::<Decimal128Type>();
             (0..values.len())
