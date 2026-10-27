@@ -88,6 +88,59 @@ fn public_selected_ordinals_reach_exact_original_context_order() {
 }
 
 #[test]
+fn actual_old_and_new_entry_profiles_preserve_their_public_context_orders() {
+    let recorded: Value =
+        serde_json::from_str(include_str!("index_context/profile_cases.json")).unwrap();
+    let cases = recorded["cases"].as_array().unwrap();
+    assert_eq!(cases.len(), 4);
+    for case in cases {
+        assert_eq!(case["source_rows"], 400);
+        assert_eq!(case["candidate_count"], 399);
+        assert_eq!(case["missing_count"], 6);
+        assert_eq!(case["nonmissing_count"], 294);
+        let producer = match case["source_profile"].as_str().unwrap() {
+            "numpy_226_avx2_intel5_entry_shared_gnu" => NumpyProducer::Intel5Avx2SharedGnu,
+            "numpy_253_x86_v3_gnu14" => NumpyProducer::Intel7Avx2Gnu14,
+            other => panic!("unexpected source-proven profile {other}"),
+        };
+        let facts = if case["layout"] == "categorical" {
+            let facts = OriginalIndexFacts::categorical(
+                attachment(case, "values"),
+                attachment(case, "dictionary"),
+                case["ordered"].as_bool().unwrap(),
+                400,
+                producer,
+            )
+            .unwrap();
+            assert_eq!(
+                facts.code_width(),
+                Some(sdm_engine::index_codes::CodeWidth::I32)
+            );
+            assert_eq!(facts.dictionary().unwrap().len(), 32767);
+            facts
+        } else {
+            OriginalIndexFacts::numpy(
+                attachment(case, "values"),
+                400,
+                MissingValues::NanOrValidity,
+                producer,
+            )
+            .unwrap()
+        };
+        let selected = rows(&case["selected_original_rows"]);
+        let expected = rows(&case["expected_context_original_rows"]);
+        assert_eq!(selected.len(), 300);
+        assert_eq!(expected.len(), 300);
+        assert_eq!(
+            facts.order_selected(&selected).unwrap(),
+            expected,
+            "{}",
+            case["name"]
+        );
+    }
+}
+
+#[test]
 fn original_row_bounds_and_snapshot_lengths_are_checked() {
     assert!(matches!(
         OriginalIndexFacts::numpy(
