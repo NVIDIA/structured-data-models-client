@@ -3045,15 +3045,15 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         refuse_composite_keys(&description)?;
     }
 
-    let graph = Graph::new(&description)?;
-    let dropped_notice = if let Some(frames) = &frames {
+    let (graph, dropped_notice) = if let Some(frames) = &frames {
         let mut frames = crate::frame_materialize::lock(frames);
-        frames.initialize(asker, &description, &graph)?;
-        memo.memo.source = frames.source();
+        let prepared = frames.prepare_graph(asker, description)?;
+        memo.memo.source = prepared.source;
         memo.keep();
-        frames.warn_dropped(asker)
+        description = prepared.description;
+        (prepared.graph, frames.warn_dropped(asker))
     } else {
-        false
+        (Graph::new(&description)?, false)
     };
     if dropped_notice {
         asker.flush_warnings().await;

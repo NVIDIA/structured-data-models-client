@@ -43,6 +43,14 @@ pub(crate) struct OwnedCheckpoint {
     pub tables: Vec<(Relation, ArrowData)>,
 }
 
+/// A fully constructed immutable graph, independently of any task or walk.
+/// The source binds its meanings and retained Arrow rows, never attachment ids.
+pub(crate) struct PreparedGraph {
+    pub source: String,
+    pub description: SourceDescription,
+    pub graph: Graph,
+}
+
 pub(crate) struct FrameRun {
     tables: Vec<(Relation, ArrowData)>,
     metadata: Option<FrameCheckpointMetadata>,
@@ -245,6 +253,23 @@ fn native_hops(graph: &Graph, values: &[Value]) -> Result<Vec<i64>, CoreError> {
 }
 
 impl FrameRun {
+    /// Prepare a useful graph artifact before task-native input conversion.
+    /// Construction retains the snapshot before its separate drop notice is
+    /// presented, so warning-as-error does not reread mutated caller frames.
+    pub fn prepare_graph(
+        &mut self,
+        asker: &Asker,
+        description: SourceDescription,
+    ) -> Result<PreparedGraph, CoreError> {
+        let graph = Graph::new(&description)?;
+        self.initialize(asker, &description, &graph)?;
+        Ok(PreparedGraph {
+            source: self.source(),
+            description,
+            graph,
+        })
+    }
+
     /// Publish an already validated retained owner at Run construction,
     /// before its body can fail or be cancelled without ever being polled.
     pub fn carry(&mut self, asker: &Asker, memo: Option<&SamplerMemo>) {
