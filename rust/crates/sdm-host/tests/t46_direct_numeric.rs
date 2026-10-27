@@ -589,6 +589,132 @@ fn explicit_text_target_returns_before_the_regression_meaning_override() {
     );
 }
 
+#[test]
+fn direct_regression_keeps_the_complete_generated_prediction_value_family() {
+    use arrow_array::Array;
+    use arrow_array::cast::AsArray;
+    use arrow_array::types::{Float64Type, Int64Type};
+    let context = [RecordBatch::try_from_iter([
+        (
+            "0",
+            Arc::new(Float64Array::from(vec![1., 2., 3.])) as ArrayRef,
+        ),
+        (
+            "1",
+            Arc::new(Float64Array::from(vec![2., 4., 6.])) as ArrayRef,
+        ),
+    ])
+    .unwrap()];
+    let scoring = [RecordBatch::try_from_iter([(
+        "0",
+        Arc::new(Float64Array::from(vec![4., 5.])) as ArrayRef,
+    )])
+    .unwrap()];
+    let wide = "1".to_owned() + &"0".repeat(660);
+    let cases = [
+        None,
+        Some("null".to_owned()),
+        Some("false".to_owned()),
+        Some("true".to_owned()),
+        Some("2".to_owned()),
+        Some(wide.clone()),
+        Some(format!("-{wide}")),
+        Some("2.0".to_owned()),
+        Some("1.5".to_owned()),
+        Some(r#""0_2""#.to_owned()),
+        Some(r#""1_0.5""#.to_owned()),
+        Some(r#""unknown""#.to_owned()),
+        Some(format!("\"{}2\"", "0".repeat(650))),
+        Some("[]".to_owned()),
+        Some("[1,2]".to_owned()),
+        Some("{}".to_owned()),
+        Some(r#"{"a":2}"#.to_owned()),
+        Some(format!(r#"{{"a":[{wide},{{"b":-{wide}}}]}}"#)),
+    ];
+    for prediction in cases {
+        let input = prelude(
+            &["feature", "target"],
+            &["feature"],
+            &context,
+            &scoring,
+            &[],
+        );
+        let envelope = plan(input.clone(), &context, &scoring);
+        let run = direct_run(&input, envelope, &[], &context, &scoring).unwrap();
+        let ControlMessage::Step(Step::CallModel(call)) = next(&run) else {
+            panic!("model call")
+        };
+        let field = prediction
+            .as_ref()
+            .map(|v| format!(",\"prediction\":{v}"))
+            .unwrap_or_default();
+        let answer = format!(r#"{{"id":"direct-fixture","model":"kumo-tabular","metadata":{{}},"predictions":[{{"row_index":0,"id":"0"{field}}},{{"row_index":1,"id":"1"{field}}}]}}"#).into_bytes();
+        let reply = sdm_host::encode(&ControlMessage::ModelReply(ModelReply {
+            id: call.id,
+            outcome: ModelOutcome::Response {
+                status: 200,
+                body: AttachmentId(100),
+                content_type: "application/json".into(),
+            },
+        }))
+        .unwrap();
+        run.reply(
+            &reply,
+            Attachments::from([(AttachmentId(100), Attachment::Bytes(answer))]),
+        )
+        .unwrap();
+        let ControlMessage::Step(Step::Done {
+            result: OperationResult::DecodedDirectResponse(decoded),
+            ..
+        }) = next(&run)
+        else {
+            panic!("decoded response")
+        };
+        let laid = finish_response_limit(&run, decoded.value, None, 640).unwrap();
+        let ControlMessage::Step(Step::Done {
+            result: OperationResult::Predict(result),
+            ..
+        }) = next(&laid)
+        else {
+            panic!("prediction result")
+        };
+        let Attachment::Arrow(result) = laid.take_attachment(result.result).unwrap().unwrap()
+        else {
+            panic!("result table")
+        };
+        let batch = &result.batches[0];
+        let expected = prediction.as_deref().unwrap_or("null");
+        for at in 0..2 {
+            let actual = if let Some(text) = batch.column_by_name("prediction_as_answered") {
+                let values = text.as_string::<i32>();
+                if values.is_null(at) {
+                    "null".to_owned()
+                } else {
+                    values.value(at).to_owned()
+                }
+            } else if let Some(column) = batch.column_by_name("prediction") {
+                match column.data_type() {
+                    arrow_schema::DataType::Boolean => column.as_boolean().value(at).to_string(),
+                    arrow_schema::DataType::Int64 => {
+                        column.as_primitive::<Int64Type>().value(at).to_string()
+                    }
+                    arrow_schema::DataType::Float64 => {
+                        serde_json::to_string(&column.as_primitive::<Float64Type>().value(at))
+                            .unwrap()
+                    }
+                    arrow_schema::DataType::Utf8 => {
+                        serde_json::to_string(column.as_string::<i32>().value(at)).unwrap()
+                    }
+                    other => panic!("unexpected carrier {other:?}"),
+                }
+            } else {
+                "null".to_owned()
+            };
+            assert_eq!(actual, expected, "{prediction:?}");
+        }
+    }
+}
+
 fn bound_as(context_rows: usize, kind: &str) -> Value {
     let mut call = prepare(
         json!({"stage":"model","model":"kumo-tabular"}),

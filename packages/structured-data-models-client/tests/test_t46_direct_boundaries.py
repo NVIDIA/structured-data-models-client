@@ -606,6 +606,148 @@ def typed_value(value):
     return (type(value).__name__, value)
 
 
+MISSING_PREDICTION = object()
+PREDICTION_VALUES = [
+    pytest.param(MISSING_PREDICTION, None, id='missing'),
+    pytest.param(None, None, id='null'),
+    pytest.param(False, False, id='false'),
+    pytest.param(True, True, id='true'),
+    pytest.param(2, 2, id='integer'),
+    pytest.param(2**2200, 2**2200, id='wide-integer'),
+    pytest.param(-(2**2200), -(2**2200), id='negative-wide-integer'),
+    pytest.param(2.0, 2, id='whole-float'),
+    pytest.param(1.5, 1.5, id='fraction'),
+    pytest.param('0_2', 2, id='integer-text'),
+    pytest.param('1_0.5', '1_0.5', id='float-text'),
+    pytest.param('unknown', 'unknown', id='other-text'),
+    pytest.param('0' * 650 + '2', 2, id='padded-integer-text'),
+    pytest.param([], [], id='empty-list'),
+    pytest.param([1, 2], [1, 2], id='list'),
+    pytest.param({}, {}, id='empty-object'),
+    pytest.param({'a': 2}, {'a': 2}, id='object'),
+    pytest.param(
+        {'a': [2**2200, {'b': -(2**2200)}]},
+        {'a': [2**2200, {'b': -(2**2200)}]},
+        id='nested-wide',
+    ),
+]
+
+
+@pytest.mark.parametrize('value,int_class', PREDICTION_VALUES)
+@pytest.mark.parametrize(
+    'task,dtype',
+    [
+        ('regression', 'int64'),
+        ('classification', 'int64'),
+        ('classification', 'float64'),
+        ('classification', 'bool'),
+    ],
+)
+@pytest.mark.parametrize('lower', [False, True])
+def test_direct_prediction_value_family_keeps_task_cast_and_catch_policy(
+    monkeypatch, value, int_class, task, dtype, lower
+):
+    # Typed outcomes come from the immutable 144-case frozen public matrix.
+    missing = value is MISSING_PREDICTION
+    if missing:
+        value = None
+    observed = []
+    saved = sys.get_int_max_str_digits()
+    try:
+        for core in (False, True):
+            sys.set_int_max_str_digits(4300)
+            monkeypatch.setenv('SDM_CORE_ROUTES', CORE if core else '')
+            target = [True, False, True] if dtype == 'bool' else [2, 4, 6]
+            context = pd.DataFrame(
+                {
+                    'user_id': [1, 2, 3],
+                    'feature': [1, 2, 3],
+                    'target': pd.Series(target, dtype=dtype),
+                }
+            )
+            scoring = pd.DataFrame({'user_id': [4, 5], 'feature': [4, 5]})
+
+            def edit(answer):
+                for at, item in enumerate(answer['predictions']):
+                    item['prediction'] = copy.deepcopy(value)
+                    if missing:
+                        del item['prediction']
+                    if lower and at == 0:
+                        item['id'] = r"[4+1, '\q']"
+                return answer
+
+            transport = Scripted(edit)
+            events = []
+            result = None
+            failure = None
+            with warnings.catch_warnings():
+                warnings.simplefilter('always')
+
+                def show(
+                    message, category, filename, lineno, file=None, line=None
+                ):
+                    events.append(
+                        (str(message), category, sys.get_int_max_str_digits())
+                    )
+                    if lower and category in (
+                        SyntaxWarning,
+                        DeprecationWarning,
+                    ):
+                        sys.set_int_max_str_digits(640)
+
+                warnings.showwarning = show
+                try:
+                    query = Request(
+                        context, scoring, target='target', task=task
+                    )
+                    with SDMClient(
+                        'http://localhost:1', max_retries=0
+                    ) as client:
+                        client._transport.close()
+                        client._transport = transport
+                        result = client.predict(query, model=KumoTabular())
+                except Exception as exc:
+                    failure = exc
+                finally:
+                    at_end = sys.get_int_max_str_digits()
+                    sys.set_int_max_str_digits(4300)
+            record = {
+                'ok': failure is None,
+                'events': events,
+                'limit_at_end': at_end,
+                'calls': len(transport.calls),
+            }
+            if failure is not None:
+                record['error'] = error(failure)
+            else:
+                record['predictions'] = [
+                    typed_value(item.prediction) for item in result.items
+                ]
+                record['ids'] = [typed_value(item.id) for item in result.items]
+            observed.append(record)
+        assert observed[1] == observed[0]
+        assert observed[1]['ok']
+        assert observed[1]['calls'] == 1
+        assert len(observed[1]['events']) == lower
+        assert observed[1]['limit_at_end'] == (640 if lower else 4300)
+        expected = value
+        if task == 'classification' and dtype == 'int64':
+            expected = (
+                value if lower and value == '0' * 650 + '2' else int_class
+            )
+        if task == 'classification' and dtype == 'float64':
+            if type(value) in (int, float) and abs(value) <= 2:
+                expected = 2.0 if value == 2 else value
+            if value == '0_2' or value == '0' * 650 + '2':
+                expected = 2.0
+            if value == '1_0.5':
+                expected = 10.5
+        assert observed[1]['predictions'] == [typed_value(expected)] * 2
+        assert observed[1]['ids'] == [('int', 4), ('int', 5)]
+    finally:
+        sys.set_int_max_str_digits(saved)
+
+
 @pytest.mark.parametrize('column', ['target', 'feature'])
 @pytest.mark.parametrize('declared', [False, True])
 def test_direct_text_meaning_precedes_regression_target_override(
