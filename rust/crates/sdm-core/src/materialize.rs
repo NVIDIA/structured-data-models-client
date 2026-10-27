@@ -3760,6 +3760,14 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
             )
         });
     }
+    if let Some(frames) = &frames {
+        // The native iterator validates the WHOLE task before generating
+        // its first batch. A later unresolved entity must not let an earlier
+        // batch reset or advance the continuing neighbor stream. The same
+        // resolver supplies concrete node-reference rows to fixed stages.
+        let _ = crate::frame_materialize::lock(frames)
+            .resolve_references(entity, &[&train_keys, &indices])?;
+    }
     excluded_by_caller(&graph, &exclude_cols, &mut excluded)?;
     if num_train > TABLE_ROWS {
         return Err(invalid(

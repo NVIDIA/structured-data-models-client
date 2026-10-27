@@ -514,6 +514,19 @@ impl FrameRun {
             .lookup(&table.name, keys, columns)
     }
 
+    /// Useful node-reference rows of the complete native-converted task.
+    /// This must finish before any later batch can reset or advance neighbors.
+    pub fn resolve_references(
+        &self,
+        table: &Table,
+        columns: &[&ArrayRef],
+    ) -> Result<Vec<usize>, CoreError> {
+        self.snapshot
+            .as_ref()
+            .ok_or_else(|| internal("frame graph not initialized"))?
+            .entity_rows_many(&table.name, columns)
+    }
+
     pub fn walk(
         &mut self,
         asker: &Asker,
