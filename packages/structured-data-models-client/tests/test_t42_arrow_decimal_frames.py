@@ -330,3 +330,25 @@ def test_decimal_public_inspection_edits_and_snapshot_ownership(monkeypatch, bit
         assert schema['rows'].primary_key == ('value_id',)
         outcomes.append((projection(schema), before))
     assert outcomes[0] == outcomes[1]
+
+
+@pytest.mark.parametrize('bits', [128, 256])
+@pytest.mark.parametrize('scale', [-129, 129])
+def test_decimal_constructor_rereads_mutated_native_buffers(monkeypatch, bits, scale):
+    outcomes = []
+    make = pa.decimal128 if bits == 128 else pa.decimal256
+    for core in (False, True):
+        width = bits // 8
+        backing = bytearray(width) + bytearray((1).to_bytes(width, 'little', signed=True))
+        array = pa.Array.from_buffers(make(1, scale), 2, [None, pa.py_buffer(backing)])
+        frame = pd.DataFrame({'value_id': pd.Series(pd.arrays.ArrowExtensionArray(array))})
+        monkeypatch.setenv('SDM_CORE_ROUTES', PATHS if core else '')
+        before = Schema.from_data({'rows': frame})
+        snapshot = before.snapshot()
+        backing[width:2 * width] = bytes(width)
+        after = Schema.from_data({'rows': frame})
+        assert snapshot['rows'].primary_key == 'value_id'
+        assert after['rows'].primary_key is None
+        assert snapshot['rows'].data is frame
+        outcomes.append((projection(snapshot), projection(after)))
+    assert outcomes[0] == outcomes[1]
