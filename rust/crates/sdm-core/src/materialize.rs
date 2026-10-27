@@ -2724,57 +2724,19 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
     // each refusal naming the step it happened in (`forecast_step`).
     // The materializer's own memo is left as it was handed, done or failed,
     // as the client's per-step materializers leave the caller's untouched.
-    // The client's refusals of a forecast before it gathers anything
-    // (`parts_of`): `top_k`, which ranks, then more steps than the host's
-    // limit, 200 by default (`_refuse_too_many`).
-    if inputs
-        .values
-        .as_ref()
-        .is_some_and(|values| values.get("top_k").is_some())
-    {
-        return Err(CoreError::new(
-            Sentence::ForecastTopK,
-            "top_k is a ranking's, and a forecast ranks nothing",
-        )
-        .with_field("field", Detail::text("top_k")));
-    }
-    // The host's limit is checked against the plan's count before any step
-    // is written, so nothing grows with a count past it (T1.36 fix 23).
-    let most = inputs.most_parts.unwrap_or(MOST_PARTS);
-    if steps.count > u64::from(most) {
-        return Err(CoreError::new(
-            Sentence::TooManySteps,
-            "a forecast asks for more steps than the host's limit, one call each",
-        )
-        .with_field("field", Detail::text("query"))
-        .with_field("steps", Detail::Scalar(Scalar::UInt64(steps.count)))
-        .with_field("limit", Detail::Scalar(Scalar::UInt32(most))));
-    }
-    // Then, before anything is gathered, as the client's `_in_parts`
-    // refuses them (`main`'s 1fc5a686): the batch size asked for, a step
-    // being one call (a forecast over more entities than one call scores
-    // would make the steps times the batches), and the population each step
-    // gathers, counted across the steps.
-    let per_call = options::rows_one_call_scores(asked_rows_per_call(inputs.values.as_ref())?);
     let entities = inputs.indices.as_ref().map_or(0, |data| {
         data.batches
             .iter()
             .map(RecordBatch::num_rows)
             .sum::<usize>()
     });
-    let entities = u64::try_from(entities).unwrap_or(u64::MAX);
-    if entities > per_call {
-        return Err(CoreError::new(
-            Sentence::BatchedPartForecast,
-            "a forecast over more entities than one call scores would batch each step",
-        )
-        .with_field("field", Detail::text("indices"))
-        .with_field("part_kind", Detail::text("forecast"))
-        .with_field("entities", Detail::Scalar(Scalar::UInt64(entities)))
-        .with_field("parts", Detail::Scalar(Scalar::UInt64(steps.count)))
-        .with_field("rows_per_call", Detail::Scalar(Scalar::UInt64(per_call))));
-    }
-    refuse_entities(entities, steps.count, inputs.most_entities)?;
+    forecast_questions(
+        &steps,
+        inputs.values.as_ref(),
+        u64::try_from(entities).unwrap_or(u64::MAX),
+        inputs.most_parts,
+        inputs.most_entities,
+    )?;
     let handed = inputs.memo.clone().unwrap_or_else(|| SamplerMemo {
         source: inputs.source.clone(),
         ..SamplerMemo::default()
@@ -2821,6 +2783,58 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
         },
         query: facts,
     }))
+}
+
+/// Validate a forecast's complete question population before any source
+/// read. Frame preparation and provider materialization share these guards.
+pub(crate) fn forecast_questions(
+    steps: &crate::pql::ForecastPlan,
+    values: Option<&sdm_wire::json::Value>,
+    entities: u64,
+    most_parts: Option<u32>,
+    most_entities: Option<u64>,
+) -> Result<(), CoreError> {
+    // The client's refusals of a forecast before it gathers anything
+    // (`parts_of`): `top_k`, which ranks, then more steps than the host's
+    // limit, 200 by default (`_refuse_too_many`).
+    if values.is_some_and(|values| values.get("top_k").is_some()) {
+        return Err(CoreError::new(
+            Sentence::ForecastTopK,
+            "top_k is a ranking's, and a forecast ranks nothing",
+        )
+        .with_field("field", Detail::text("top_k")));
+    }
+    // The host's limit is checked against the plan's count before any step
+    // is written, so nothing grows with a count past it (T1.36 fix 23).
+    let most = most_parts.unwrap_or(MOST_PARTS);
+    if steps.count > u64::from(most) {
+        return Err(CoreError::new(
+            Sentence::TooManySteps,
+            "a forecast asks for more steps than the host's limit, one call each",
+        )
+        .with_field("field", Detail::text("query"))
+        .with_field("steps", Detail::Scalar(Scalar::UInt64(steps.count)))
+        .with_field("limit", Detail::Scalar(Scalar::UInt32(most))));
+    }
+    // Then, before anything is gathered, as the client's `_in_parts`
+    // refuses them (`main`'s 1fc5a686): the batch size asked for, a step
+    // being one call (a forecast over more entities than one call scores
+    // would make the steps times the batches), and the population each step
+    // gathers, counted across the steps.
+    let per_call = options::rows_one_call_scores(asked_rows_per_call(values)?);
+    if entities > per_call {
+        return Err(CoreError::new(
+            Sentence::BatchedPartForecast,
+            "a forecast over more entities than one call scores would batch each step",
+        )
+        .with_field("field", Detail::text("indices"))
+        .with_field("part_kind", Detail::text("forecast"))
+        .with_field("entities", Detail::Scalar(Scalar::UInt64(entities)))
+        .with_field("parts", Detail::Scalar(Scalar::UInt64(steps.count)))
+        .with_field("rows_per_call", Detail::Scalar(Scalar::UInt64(per_call))));
+    }
+    refuse_entities(entities, steps.count, most_entities)?;
+    Ok(())
 }
 
 /// The batch size the call's values ask for (`rows_per_call`), read alone,
