@@ -33,7 +33,7 @@ The complete-link repair is landed at `cc51e6b6eb`; all selected affected wareho
 Test-only follow-up `23e668b0` has both exact CODE approvals and passed all93 control/refusal-map tests.
 The parity repair passed its normal392-second package check and landed atAEA.
 An append-only acknowledgment fixes my omitted protected filenames without changing any tracked file; current final source `234c3adff5` is pushed/verified and the actual stock ratchet passes against the originalcc51base.
-Full CI40430848336 is running on exact234; the local234wheel is genuinely built, and all retained live producers keep their original IDs.
+Full CI40430848336 is green on exact234 after the targeted Java retry; the local234wheel is genuinely built, and all retained live producers keep their original IDs.
 All retained artifacts keep their actual producing source IDs.
 
 | Area | Data comparison | Model comparison and accuracy | Remaining |
@@ -177,11 +177,12 @@ Independent finite result acceptance remains separate from successful execution;
 
 The owner clarified: "Keep Phase 3 here; new agent handles Phase 4".
 The earlier Phase3transfer interpretation was incorrect and is superseded.
-This coordinator remains responsible for Phase3, its tracker, landing, CI and warehouse validation; current-candidate normal handoff is running.
-The cloud owner completed every selected remote/local run and verified cleanup; immutable actual results are in independent finite review.
+This coordinator remains responsible for Phase3, its tracker, final acceptance and integration; final source234 is landed and its normal package handoff passed.
+The cloud owner completed every selected corrective remote/local run and verified cleanup; immutable actual results have both finite review opinions.
+The separate final source-publication job remains active under R13.
 The new Phase4agent prompt has been rebuilt from verified branches/worktrees, package status, exact interrupted work and owner decisions; this coordinator retains Phase3.
 The earlier private Phase3handoff files are marked superseded; they do not transfer ownership or halt Phase3.
-The selective-Java execution binding was twice approved before launch; actual completed results now need finite acceptance.
+The selective-Java execution binding was twice approved before launch; actual completed results now have both finite acceptance opinions.
 There is no pending owner decision for the valid-link repair.
 
 ## Completed evidence retained for final review
