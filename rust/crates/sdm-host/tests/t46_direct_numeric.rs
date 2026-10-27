@@ -1591,6 +1591,8 @@ fn inferred_constructor_schema_precedes_fresh_remaining_guard_observations() {
         "null-target",
         "drop-target",
         "empty-context",
+        "duplicate-present",
+        "duplicate-null",
     ] {
         let mut context_names = vec!["user_id", "feature", "target"];
         let mut predict_names = vec!["user_id", "feature"];
@@ -1629,6 +1631,14 @@ fn inferred_constructor_schema_precedes_fresh_remaining_guard_observations() {
                 context_names.pop();
                 context_arrays.pop();
             }
+            "duplicate-present" | "duplicate-null" => {
+                context_names.push("target");
+                context_arrays.push(if change == "duplicate-present" {
+                    Arc::new(arrow_array::Int64Array::from_iter_values(200..300)) as ArrayRef
+                } else {
+                    Arc::new(arrow_array::Int64Array::from(vec![None; 100])) as ArrayRef
+                });
+            }
             _ => {}
         }
         let context = if change == "empty-context" {
@@ -1664,6 +1674,10 @@ fn inferred_constructor_schema_precedes_fresh_remaining_guard_observations() {
             "drop-target" => assert_eq!(
                 finished.unwrap_err().sentence,
                 sdm_contract::Sentence::DirectSchemaMissing
+            ),
+            "duplicate-present" => assert_eq!(
+                finished.unwrap_err().sentence,
+                sdm_contract::Sentence::DirectAmbiguous
             ),
             _ => {
                 let finished = finished.unwrap();
