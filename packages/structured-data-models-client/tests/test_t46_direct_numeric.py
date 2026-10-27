@@ -79,10 +79,14 @@ def outcome(
     outputs=None,
     model='kumo-tabular',
     transport=None,
+    edit=None,
+    warning_error=False,
+    on_warning=None,
 ):
     monkeypatch.setenv('SDM_CORE_ROUTES', CORE if core else '')
     scripted = Scripted() if transport is None else transport
     inspected = None
+    presented = []
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter('always')
         try:
@@ -101,6 +105,21 @@ def outcome(
                 projection(request.schema),
                 request.inference,
             )
+            if edit is not None:
+                edit(request)
+            if warning_error:
+                from sdm_client.core.warnings import SDMWarning
+
+                warnings.simplefilter('error', SDMWarning)
+            if on_warning is not None:
+
+                def show(
+                    message, category, filename, lineno, file=None, line=None
+                ):
+                    presented.append((str(message), category))
+                    on_warning(request, *frames)
+
+                warnings.showwarning = show
             result = None
             if send:
                 with SDMClient('http://localhost:1', max_retries=0) as client:
@@ -127,7 +146,7 @@ def outcome(
     return (
         inspected,
         answer,
-        [(str(n.message), n.category) for n in caught],
+        [(str(n.message), n.category) for n in caught] + presented,
         scripted.calls,
     )
 
@@ -591,3 +610,173 @@ def test_direct_supplied_native_schema_retains_its_wire_width(
         new[3][0]['schema']['instance_table']['columns']['feature']['dtype']
         == wire
     )
+
+
+@pytest.mark.parametrize('kind', ['float', 'float-string', 'bool-string'])
+@pytest.mark.parametrize('wrong', [False, True])
+def test_direct_numeric_key_spellings_are_checked_before_restoration(
+    monkeypatch, kind, wrong
+):
+    class Identified(Scripted):
+        def predict(self, payload):
+            answer = super().predict(payload)
+            rows = payload['predict']['instance_table']['rows']
+            for item in answer['predictions']:
+                at = item['row_index']
+                item['id'] = repr([rows[1 if wrong and at == 0 else at][0]])
+            return answer
+
+    if kind == 'bool-string':
+        frames = (
+            pd.DataFrame({'user_id': [1, 2, 3], 'target': [2, 4, 6]}),
+            pd.DataFrame({'user_id': [4, 5]}),
+        )
+    else:
+        frames = (
+            pd.DataFrame({'user_id': [1.5, 2.5, 3.5], 'target': [2, 4, 6]}),
+            pd.DataFrame({'user_id': [4.5, 5.5]}),
+        )
+
+    def edit(request):
+        if 'string' in kind:
+            request.schema['instance']['user_id'].dtype = 'string'
+        if kind == 'bool-string':
+            request.predict.instance_table['user_id'] = [True, False]
+
+    old = outcome(
+        monkeypatch, frames, core=False, edit=edit, transport=Identified()
+    )
+    new = outcome(
+        monkeypatch, frames, core=True, edit=edit, transport=Identified()
+    )
+    assert new == old
+    if wrong:
+        assert new[1][2] == 'INVALID_RESPONSE'
+        assert 'pairs row_index 0' in new[1][-1]
+    else:
+        assert new[1][0] == 'ok'
+
+
+@pytest.mark.parametrize('sign', [1.0, -1.0])
+@pytest.mark.parametrize('null', [False, True])
+@pytest.mark.parametrize('masked', [False, True])
+def test_direct_nullable_integer_cast_preserves_native_failure_boundary(
+    monkeypatch, sign, null, masked
+):
+    from sdm_client.errors import StructuredDataError
+
+    context, _ = fixture('int64')
+    values = [1.0, sign * np.inf] + ([None] if null else [])
+    predict = pd.DataFrame(
+        {'feature': pd.Series(values, dtype='Float64' if masked else 'float64')}
+    )
+    old = outcome(monkeypatch, (context, predict), core=False)
+    new = outcome(monkeypatch, (context, predict), core=True)
+    assert new == old
+    assert not new[3]
+    assert new[1][1] is (
+        pd.errors.IntCastingNaNError
+        if null and not masked
+        else StructuredDataError
+    )
+
+
+def wide_text_fixture():
+    return (
+        pd.DataFrame(
+            {
+                'feature': pd.Series(range(2**63, 2**63 + 65), dtype='uint64'),
+                'target': np.arange(65),
+            }
+        ),
+        pd.DataFrame(
+            {'feature': pd.Series([2**63 + 66, 2**63 + 67], dtype='uint64')}
+        ),
+    )
+
+
+@pytest.mark.parametrize('as_error', [False, True])
+def test_direct_text_advice_precedes_fallible_row_and_inference_encoding(
+    monkeypatch, as_error
+):
+    from sdm_client.core.warnings import SDMWarning
+
+    frames = wide_text_fixture()
+    options = {'inference': {'seed': 2**53 + 1}}
+    old = outcome(
+        monkeypatch, frames, core=False, options=options, warning_error=as_error
+    )
+    new = outcome(
+        monkeypatch, frames, core=True, options=options, warning_error=as_error
+    )
+    assert new == old
+    assert not new[3]
+    if as_error:
+        assert new[1][1] is SDMWarning
+        assert not new[2]
+    else:
+        assert new[2] == [
+            (
+                'kumo-tabular cannot read a text column, so feature travel(s) as categorical instead. ',
+                SDMWarning,
+            )
+        ]
+        assert (
+            'cannot be sent as a JSON number without losing precision'
+            in new[1][-1]
+        )
+
+
+@pytest.mark.parametrize(
+    'mutation', ['values', 'reference', 'inference', 'rows', 'task', 'schema']
+)
+def test_direct_text_advice_preserves_captured_references_and_later_reads(
+    monkeypatch, mutation
+):
+    from sdm_client.request import Split
+
+    def mutate(request, context, predict):
+        if mutation == 'values':
+            predict['feature'] = pd.Series(
+                [2**63 + 88, 2**63 + 89], dtype='uint64'
+            )
+        elif mutation == 'reference':
+            request._predict = Split(
+                pd.DataFrame(
+                    {
+                        'feature': pd.Series(
+                            [2**63 + 99, 2**63 + 100], dtype='uint64'
+                        )
+                    }
+                )
+            )
+        elif mutation == 'inference':
+            request.inference['seed'] = 2**53
+        elif mutation == 'rows':
+            context.loc[len(context)] = {'feature': 2**63 + 65, 'target': 65}
+        elif mutation == 'task':
+            request.task = replace(request.task, kind='forecasting')
+        else:
+            request.schema = None
+
+    old = outcome(
+        monkeypatch, wide_text_fixture(), core=False, on_warning=mutate
+    )
+    new = outcome(
+        monkeypatch, wide_text_fixture(), core=True, on_warning=mutate
+    )
+    assert new == old
+    assert new[1][0] == 'ok'
+    assert len(new[2]) == 1
+    body = new[3][0]
+    assert body['task']['kind'] == (
+        'forecasting' if mutation == 'task' else 'regression'
+    )
+    assert len(body['context']['instance_table']['rows']) == (
+        66 if mutation == 'rows' else 65
+    )
+    assert body['predict']['instance_table']['rows'][0][0] == str(
+        2**63 + (88 if mutation == 'values' else 66)
+    )
+    if mutation == 'inference':
+        assert body['inference'] == {'seed': 2**53}

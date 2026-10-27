@@ -260,3 +260,85 @@ fn direct_preparation_rejects_wrong_versions_and_impossible_call_phases() {
     .unwrap_err();
     assert_eq!(error.sentence, sdm_contract::Sentence::InvalidMessage);
 }
+
+fn bound(context_rows: usize) -> Value {
+    let mut call = prepare(
+        json!({"stage":"model","model":"kumo-tabular"}),
+        Attachments::new(),
+    )
+    .unwrap();
+    for stage in [
+        json!({"stage":"outputs","kind":"regression"}),
+        json!({"stage":"capabilities","kind":"regression","anchored":false,"relationships":false,"tables":1}),
+        json!({"stage":"task","kind":"regression"}),
+        json!({"stage":"capacity","rows":context_rows}),
+    ] {
+        let mut input = stage;
+        input["call"] = call;
+        call = prepare(input, Attachments::new()).unwrap();
+    }
+    call
+}
+
+#[test]
+fn final_direct_input_must_agree_with_the_legitimately_checked_bound_call() {
+    let prepared = prepare(json!({"stage":"schema","headers":headers(),"context":2,"predict":3,"entity_table":"instance"}),halves()).unwrap();
+    for axis in [
+        "task-ranking",
+        "task-forecasting",
+        "rows-4",
+        "rows-10001",
+        "schema-tables",
+        "schema-links",
+    ] {
+        let call = bound(3);
+        let mut input = json!({"bound":call,"context":2,"predict":3,"context_header":header(&["feature","target"],3),"predict_header":header(&["feature"],2),"schema":prepared["schema"],"entity_table":"instance","target":"target","task":"regression","inference":{}});
+        let mut attached = halves();
+        match axis {
+            "task-ranking" => input["task"] = json!("ranking"),
+            "task-forecasting" => input["task"] = json!("forecasting"),
+            "schema-tables" => {
+                let mut extra = input["schema"]["tables"][0].clone();
+                extra["name"] = json!("extra");
+                input["schema"]["tables"]
+                    .as_array_mut()
+                    .unwrap()
+                    .push(extra);
+            }
+            "schema-links" => {
+                input["schema"]["links"] = json!([[{"table":"instance","column":"feature"},{"table":"instance","column":"target"}]])
+            }
+            _ => {
+                let count = if axis == "rows-4" { 4 } else { 10_001 };
+                input["context_header"] = header(&["feature", "target"], count);
+                let feature = (0..count).map(|n| n as f64).collect();
+                let target = (0..count).map(|n| (n + 1) as f64).collect();
+                attached.insert(AttachmentId(2), rows(&[("0", feature), ("1", target)]));
+            }
+        }
+        attached.insert(AttachmentId(1), bytes(input));
+        let run = start(
+            json!({"op":"predict","direct":1,"model":"kumo-tabular","request_id":"sdm-fixed","outputs":call["outputs"],"default_outputs":true}),
+            attached,
+        );
+        loop {
+            match next(&run) {
+                ControlMessage::Error { error } => {
+                    assert_eq!(
+                        error.sentence,
+                        sdm_contract::Sentence::InvalidMessage,
+                        "{axis}"
+                    );
+                    break;
+                }
+                ControlMessage::Warnings { .. } => {}
+                ControlMessage::Step(Step::Warnings) => {
+                    let _ = run.take_warnings().unwrap();
+                }
+                other => panic!(
+                    "{axis}: contradictory bound/input facts must refuse before transport, got {other:?}"
+                ),
+            }
+        }
+    }
+}
