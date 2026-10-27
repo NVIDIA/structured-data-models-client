@@ -234,6 +234,25 @@ pub(crate) async fn run(
     mut attached: Attachments,
 ) -> Result<OperationResult, CoreError> {
     let value = match input {
+        Preparation::CheckResponseRows {
+            scope,
+            rows,
+            decimal_limit,
+        } => serde_json::to_value(sdm_request::tabular::response::check_rows(
+            scope,
+            rows,
+            decimal_limit,
+            crate::pql::float_text,
+        )?),
+        Preparation::SelectResponseMember { checked, literal } => serde_json::to_value(
+            sdm_request::tabular::response::select_member(checked, literal)?,
+        ),
+        Preparation::AttributeResponseRow { selected, string } => serde_json::to_value(
+            sdm_request::tabular::response::attribute(selected, string, crate::pql::float_text)?,
+        ),
+        Preparation::LayoutResponse { data, attributed } => {
+            return crate::prepare_response::layout(&asker, data, attributed, attached);
+        }
         Preparation::Overlap { input } => {
             serde_json::to_value(overlap(&asker, input, &mut attached).await?)
         }
@@ -811,7 +830,7 @@ pub(crate) async fn predict(
     let named = bound.named;
     let model = bound.model.to_owned();
     let kind = bound.kind.to_owned();
-    let (envelope, context, scoring, task, primary_key, unicode_version, inference) = match input {
+    let (envelope, context, scoring, task, primary_key, inference) = match input {
         DirectPredict::Empty {
             schema,
             entity_table,
@@ -854,7 +873,6 @@ pub(crate) async fn predict(
             predict_header,
             task,
             primary_key,
-            unicode_version,
             inference,
         } => {
             let context = take_rows(&mut attached, context)?;
@@ -867,7 +885,6 @@ pub(crate) async fn predict(
                 renamed(&predict_header, &scoring)?,
                 task,
                 primary_key,
-                unicode_version,
                 inference,
             )
         }
@@ -886,21 +903,7 @@ pub(crate) async fn predict(
         crate::pql::float_text,
     )?;
     let bytes = policy::call_bytes(&payload)?;
-    let answer = crate::predict::call(
-        &asker,
-        &payload,
-        bytes,
-        request.model_endpoint.as_ref(),
-        Some(&unicode_version),
-    )
-    .await?;
-    if named {
-        let absent = policy::absent(&answer, &outputs);
-        if !absent.is_empty() {
-            let notice = policy::absent_notice(&model, &absent);
-            asker
-                .warn(CoreWarning::new(notice.sentence, notice.message).with_fields(notice.fields));
-        }
-    }
-    crate::predict::finish_direct(&asker, answer, outputs, None)
+    let (response_value, response) =
+        crate::predict::call_response(&asker, bytes, request.model_endpoint.as_ref(), true).await?;
+    crate::prepare_response::decode(&asker, &payload, response_value, &response, outputs, named)
 }

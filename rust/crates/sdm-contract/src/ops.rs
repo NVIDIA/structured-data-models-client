@@ -157,6 +157,7 @@ pub enum OperationResult {
     Materialize(Materialized),
     Predict(Predicted),
     PrepareRequest(crate::prepare::PreparedRequest),
+    DecodedDirectResponse(crate::prepare::DecodedDirectResponse),
     #[cfg(feature = "test-ops")]
     #[schemars(skip)]
     Test(TestResult),
@@ -1523,6 +1524,12 @@ pub struct Predicted {
 #[derive(JsonSchema)]
 #[schemars(deny_unknown_fields)]
 pub struct Attachments {
+    #[schemars(rename = "DecodedDirectResponse.value")]
+    pub decoded_direct_response_value: crate::prepare::DirectResponseData,
+    #[schemars(rename = "DirectResponseData.rows")]
+    pub direct_response_rows: Vec<crate::prepare::DecodedDirectRow>,
+    #[schemars(rename = "LayoutResponse.attributed")]
+    pub attributed_direct_rows: Vec<crate::prepare::AttributedDirectRow>,
     #[schemars(rename = "PrepareRequest.input")]
     pub prepare_request_input: crate::prepare::Preparation,
     #[schemars(rename = "PreparedRequest.value")]

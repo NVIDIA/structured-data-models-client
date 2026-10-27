@@ -516,7 +516,19 @@ class Prepared:
     value: int
 
 
+@dataclasses.dataclass(frozen=True)
+class DecodedDirectResponse:
+    """Owned decoded response buffers for native builtin conversion."""
+
+    value: int
+
+
 _RESULTS: dict[str, tuple[tuple[str, ...], tuple[str, ...], Any]] = {
+    'decoded_direct_response': (
+        ('value',),
+        (),
+        lambda read: DecodedDirectResponse(_int(read['value'], 'value')),
+    ),
     'validate_query': (('accepted', 'diagnostics'), ('query',), _validated),
     'describe_source': (('description',), ('notes', 'frame_rows'), _described),
     'edit_schema': (('schema',), ('declared',), _edited),
@@ -547,7 +559,15 @@ _RESULTS: dict[str, tuple[tuple[str, ...], tuple[str, ...], Any]] = {
 
 def decode(
     result: Any,
-) -> Validated | Described | Edited | Gathered | Predicted | Prepared:
+) -> (
+    Validated
+    | Described
+    | Edited
+    | Gathered
+    | Predicted
+    | Prepared
+    | DecodedDirectResponse
+):
     r"""The result a ``done`` step carries, decoded once.
 
     Raises:
@@ -566,13 +586,28 @@ def decode(
         required,
         optional,
     )
-    built: Validated | Described | Edited | Gathered | Predicted | Prepared = (
-        build(read)
-    )
+    built: (
+        Validated
+        | Described
+        | Edited
+        | Gathered
+        | Predicted
+        | Prepared
+        | DecodedDirectResponse
+    ) = build(read)
     return built
 
 
-_T = TypeVar('_T', Validated, Described, Edited, Gathered, Predicted, Prepared)
+_T = TypeVar(
+    '_T',
+    Validated,
+    Described,
+    Edited,
+    Gathered,
+    Predicted,
+    Prepared,
+    DecodedDirectResponse,
+)
 
 
 def expect(result: Any, kind: type[_T]) -> _T:

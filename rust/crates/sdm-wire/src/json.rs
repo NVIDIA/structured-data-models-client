@@ -297,7 +297,7 @@ fn contains(haystack: &[u8], needle: &[u8]) -> bool {
 /// Each `NaN`, `Infinity` and `-Infinity` token in a value's place outside
 /// text: where it starts, and the token. One where an object's member name
 /// goes is left as it is, so the reading refuses it, as Python's does.
-fn non_finite_tokens(bytes: &[u8]) -> Vec<(usize, &'static str)> {
+pub(crate) fn non_finite_tokens(bytes: &[u8]) -> Vec<(usize, &'static str)> {
     let mut found = Vec::new();
     let (mut in_text, mut escaped) = (false, false);
     // Whether each open bracket is an object's, and whether a member's
