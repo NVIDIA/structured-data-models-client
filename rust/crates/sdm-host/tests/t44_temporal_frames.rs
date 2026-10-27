@@ -7,7 +7,7 @@
 use std::sync::Arc;
 
 use arrow_array::{
-    ArrayRef, Int32Array, Int64Array, RecordBatch, TimestampMicrosecondArray,
+    ArrayRef, Float32Array, Int32Array, Int64Array, RecordBatch, TimestampMicrosecondArray,
     TimestampMillisecondArray, TimestampNanosecondArray, TimestampSecondArray,
 };
 use arrow_schema::TimeUnit;
@@ -455,6 +455,132 @@ fn precise_features_follow_frozen_wire_rounding_and_retain_original_checkpoint_c
                 _ => unreachable!(),
             };
             assert_eq!(retained, counts);
+        }
+    }
+}
+
+fn frozen_counts(record: &Value, name: &str) -> Vec<i64> {
+    record["input"][name]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|count| count.as_i64().unwrap())
+        .collect()
+}
+
+fn frozen_temporal_inputs(record: &Value, entity: bool) -> Attachments {
+    let zone = entity.then_some("America/New_York");
+    let mut attached = inputs(TimeUnit::Nanosecond, false, zone);
+    let Attachment::Bytes(raw) = &attached[&AttachmentId(1)] else {
+        panic!("schema")
+    };
+    let mut schema: Value = serde_json::from_slice(raw).unwrap();
+    schema["tables"][1]["columns"][3] = column("amount", "float32", "numerical");
+    if entity {
+        schema["tables"][0]["columns"]
+            .as_array_mut()
+            .unwrap()
+            .push(column("signup", "date", "timestamp"));
+        schema["tables"][0]["time_column"] = json!("signup");
+    } else {
+        // Clearing the public key also restores event_id's numerical role.
+        schema["tables"][1]["primary_key"] = json!([]);
+        schema["tables"][1]["frame_key_form"] = Value::Null;
+        schema["tables"][1]["columns"][0] = column("event_id", "int64", "numerical");
+    }
+    attached.insert(AttachmentId(1), bytes(schema));
+    attached.insert(
+        AttachmentId(5),
+        bytes(json!({
+            "num_context_samples":3,
+            "num_neighbors":[if entity { 8 } else { 3 }],
+            "num_hops":1,
+            "random_seed":7
+        })),
+    );
+    attached.insert(
+        AttachmentId(9),
+        arrow(vec![
+            ("event_id", integer((0..64).collect())),
+            ("user_id", integer((0..64).map(|row| row / 8 + 1).collect())),
+            ("marker", integer((0..64).collect())),
+            (
+                "amount",
+                Arc::new(Float32Array::from(
+                    (0..64).map(|row| row as f32).collect::<Vec<_>>(),
+                )),
+            ),
+            (
+                "at",
+                Arc::new(
+                    TimestampNanosecondArray::from(frozen_counts(record, "history_counts"))
+                        .with_timezone_opt(zone),
+                ),
+            ),
+        ]),
+    );
+    if entity {
+        assert_eq!(record["input"]["scored_folds"], json!([0, 1]));
+        attached.insert(
+            AttachmentId(8),
+            arrow(vec![
+                ("user_id", integer((1..=8).collect())),
+                (
+                    "age",
+                    Arc::new(Int32Array::from((21..29).collect::<Vec<_>>())),
+                ),
+                (
+                    "signup",
+                    Arc::new(
+                        TimestampNanosecondArray::from(frozen_counts(record, "entity_counts"))
+                            .with_timezone("America/New_York"),
+                    ),
+                ),
+            ]),
+        );
+    }
+    attached
+}
+
+#[test]
+fn frozen_entity_fold_and_keyless_history_keep_complete_payloads_without_host_selection() {
+    for (profile, raw) in [
+        (
+            "pandas2",
+            include_str!(
+                "../../../../packages/structured-data-models-client/tests/t44_fold_keyless_pandas2_reference.json"
+            ),
+        ),
+        (
+            "pandas3",
+            include_str!(
+                "../../../../packages/structured-data-models-client/tests/t44_fold_keyless_pandas3_reference.json"
+            ),
+        ),
+    ] {
+        let reference: Value = serde_json::from_str(raw).unwrap();
+        for (case, entity) in [("fold-entity", true), ("keyless-history", false)] {
+            let record = &reference["records"][case];
+            assert_eq!(record["outcome"], "success", "{profile}/{case}");
+            assert_eq!(record["payloads"].as_array().unwrap().len(), 1);
+            let mut start: Value =
+                serde_json::from_slice(&message((!entity).then_some(4_000_000_000))).unwrap();
+            start["operation"]["anchor_entity"] = json!(entity);
+            let run = HostRun::start(
+                &sdm_host::default_root(),
+                &serde_json::to_vec(&start).unwrap(),
+                frozen_temporal_inputs(record, entity),
+            )
+            .unwrap();
+            // terminal accepts only warning delivery and completion. A fetch
+            // or a native callback request fails this typed Arrow journey.
+            let result = terminal(&run)
+                .unwrap_or_else(|error| panic!("{profile}/{case}: {:?}", decoded(&error)));
+            assert_eq!(
+                payload(&run, result),
+                record["payloads"][0],
+                "{profile}/{case}"
+            );
         }
     }
 }
