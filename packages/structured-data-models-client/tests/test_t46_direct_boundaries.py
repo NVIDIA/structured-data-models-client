@@ -751,10 +751,25 @@ def test_direct_generated_response_field_family_and_error_order(
         assert observed[1]['ok']
     else:
         assert not observed[1]['ok']
-        if observed[1]['error']['type'] in ('TypeError', 'ValueError'):
-            assert observed[1]['error']['code'] is None
-        else:
-            assert observed[1]['error']['code'] == 'INVALID_RESPONSE'
+        assert observed[1]['error']['type'] == 'StructuredDataError'
+        assert observed[1]['error']['code'] == 'INVALID_RESPONSE'
+    if label.startswith(
+        ('item-rankings-', 'item-explanation-', 'item-metadata-')
+    ):
+        cause = observed[1]['error']['cause']
+        assert cause['module'] == 'builtins'
+        assert cause['type'] in ('TypeError', 'ValueError')
+        assert observed[1]['error']['message'].endswith(cause['message'])
+    if label.startswith('item-id-') or label in (
+        'forecast-step-string',
+        'forecast-step-bool',
+        'forecast-step-fraction',
+        'forecast-step-infinity',
+        'paired-id-row_index',
+    ):
+        assert observed[1]['error']['cause']['message'].startswith(
+            'prediction response has '
+        )
     if label == 'global-late-field-before-ID-warning':
         assert not observed[1]['events']
 

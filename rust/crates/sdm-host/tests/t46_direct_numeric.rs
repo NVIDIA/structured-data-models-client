@@ -463,6 +463,90 @@ fn bound(context_rows: usize) -> Value {
     bound_as(context_rows, "regression")
 }
 
+#[test]
+fn direct_generated_optional_owners_and_native_mapping_faults_remain_selected_data() {
+    let context = [RecordBatch::try_from_iter([
+        (
+            "0",
+            Arc::new(Float64Array::from(vec![1., 2., 3.])) as ArrayRef,
+        ),
+        (
+            "1",
+            Arc::new(Float64Array::from(vec![2., 4., 6.])) as ArrayRef,
+        ),
+    ])
+    .unwrap()];
+    let scoring = [RecordBatch::try_from_iter([(
+        "0",
+        Arc::new(Float64Array::from(vec![4., 5.])) as ArrayRef,
+    )])
+    .unwrap()];
+    for (field, value, before, native) in [
+        ("id", json!(4), "prediction response has 'id' = ", None),
+        (
+            "forecast_step",
+            json!("bad"),
+            "prediction response has 'forecast_step' = ",
+            None,
+        ),
+        (
+            "row_index",
+            json!("bad"),
+            "PredictionItem response has 'row_index' = ",
+            None,
+        ),
+        ("explanation", json!(4), "", Some("dict")),
+        ("metadata", json!([["x"]]), "", Some("dict")),
+        ("rankings", json!(4), "", Some("iter")),
+    ] {
+        let input = prelude(
+            &["feature", "target"],
+            &["feature"],
+            &context,
+            &scoring,
+            &[],
+        );
+        let envelope = plan(input.clone(), &context, &scoring);
+        let run = direct_run(&input, envelope, &[], &context, &scoring).unwrap();
+        let ControlMessage::Step(Step::CallModel(call)) = next(&run) else {
+            panic!("model call")
+        };
+        let mut first = json!({"row_index":0,"id":"0","prediction":10});
+        first[field] = value.clone();
+        let answer = json!({"id":"direct-fixture","model":"kumo-tabular","metadata":{},"predictions":[first,{"row_index":1,"id":"1","prediction":11}]});
+        let reply = sdm_host::encode(&ControlMessage::ModelReply(ModelReply {
+            id: call.id,
+            outcome: ModelOutcome::Response {
+                status: 200,
+                body: AttachmentId(100),
+                content_type: "application/json".into(),
+            },
+        }))
+        .unwrap();
+        run.reply(
+            &reply,
+            Attachments::from([(AttachmentId(100), bytes(answer))]),
+        )
+        .unwrap();
+        let ControlMessage::Error { error } = next(&run) else {
+            panic!("selected generated fault")
+        };
+        assert_eq!(
+            error.sentence,
+            sdm_contract::Sentence::DirectResponseContract
+        );
+        assert_eq!(error.fields["before"], sdm_contract::Detail::text(before));
+        assert_eq!(
+            error.fields["offending"],
+            sdm_contract::Detail::text(serde_json::to_string(&value).unwrap())
+        );
+        assert_eq!(
+            error.fields.get("native"),
+            native.map(sdm_contract::Detail::text).as_ref()
+        );
+    }
+}
+
 fn bound_as(context_rows: usize, kind: &str) -> Value {
     let mut call = prepare(
         json!({"stage":"model","model":"kumo-tabular"}),
