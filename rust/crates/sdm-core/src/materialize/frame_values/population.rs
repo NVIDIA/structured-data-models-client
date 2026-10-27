@@ -84,12 +84,31 @@ struct LabelBatchData {
     range: FrameBatchRange,
     complete: bool,
     labelled: task::LabelledContext,
+    native_target: Option<FrameNativeColumnRef>,
+    native_labels: Option<task::LabelledContext>,
 }
 
 /// Actual evaluated rows for one candidate range, including their original IDs.
 #[derive(Clone)]
 pub struct RetainedFrameLabelBatch {
     data: Arc<LabelBatchData>,
+}
+
+impl RetainedFrameLabelBatch {
+    /// Actual list-label rows before entity/assumption masks and NaN-key
+    /// exclusion, without another draw, aggregation or source lookup.
+    pub fn rows(&self) -> Result<ArrowData, CoreError> {
+        let labels = self
+            .data
+            .native_labels
+            .as_ref()
+            .ok_or_else(|| protocol("the label batch has no native list result"))?;
+        Ok(data(labelled_rows(
+            &labels.keys,
+            &labels.anchors,
+            &labels.labels,
+        )?))
+    }
 }
 
 impl std::fmt::Debug for RetainedFrameLabelBatch {
@@ -144,6 +163,15 @@ fn batches(
             || value.population != owner.data.data.meaning.identity
             || value.range != batch.data.range
             || value.complete != batch.data.complete
+            || value.native_target != batch.data.native_target
+            || value.target_encoding
+                != label_encoding(
+                    batch
+                        .data
+                        .native_labels
+                        .as_ref()
+                        .map_or(&batch.data.labelled.labels, |labels| &labels.labels),
+                )
             || value.range.start != end
             || found
                 .last()
@@ -238,7 +266,7 @@ async fn evaluate(
         ArrayRef,
         Option<sdm_contract::data::strings::StringEncoding>,
     )>,
-) -> Result<task::LabelledContext, FrameStageError> {
+) -> Result<task::EvaluatedContext, FrameStageError> {
     let entity = graph
         .prepared
         .graph
@@ -334,7 +362,8 @@ pub(super) async fn label_batch(
     let mut population = source.population.clone();
     population.examples.index = population.examples.index[start..stop].to_vec();
     population.examples.anchors = population.examples.anchors[start..stop].to_vec();
-    let labelled = evaluate(asker, &graph, source, population, native).await?;
+    let evaluated = evaluate(asker, &graph, source, population, native).await?;
+    let labelled = evaluated.context;
     let gathered = previous
         .iter()
         .map(|batch| batch.data.labelled.keys.len())
@@ -342,12 +371,35 @@ pub(super) async fn label_batch(
         .saturating_add(labelled.keys.len());
     let complete = gathered >= source.context_examples;
     let identity = source.meaning.identity.clone();
+    let native_target = match &source.asked.target {
+        Shape::Aggregated(windowed)
+            if windowed.aggregation == labels::Aggregation::ListDistinct =>
+        {
+            let column = windowed
+                .column
+                .as_ref()
+                .ok_or_else(|| protocol("list labels lack their source column"))?;
+            Some(graph.native_binding(&ColumnRef {
+                table: windowed.table.clone(),
+                column: column.clone(),
+            })?)
+        }
+        _ => None,
+    };
+    let target_encoding = label_encoding(
+        evaluated
+            .native_labels
+            .as_ref()
+            .map_or(&labelled.labels, |labels| &labels.labels),
+    );
     let batch = RetainedFrameLabelBatch {
         data: Arc::new(LabelBatchData {
             population: owner,
             range,
             complete,
             labelled,
+            native_target: native_target.clone(),
+            native_labels: evaluated.native_labels,
         }),
     };
     Ok(PreparedFrameLabelBatch {
@@ -355,6 +407,8 @@ pub(super) async fn label_batch(
         range,
         complete,
         owner: asker.attach(Attachment::FrameLabelBatch(batch))?,
+        native_target,
+        target_encoding,
     })
 }
 
@@ -395,7 +449,9 @@ pub(super) async fn labels(
             labels,
         }
     } else {
-        evaluate(asker, &graph, source, source.population.clone(), None).await?
+        evaluate(asker, &graph, source, source.population.clone(), None)
+            .await?
+            .context
     };
     let entity = graph
         .prepared

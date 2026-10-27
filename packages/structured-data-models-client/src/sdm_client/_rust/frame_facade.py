@@ -558,6 +558,32 @@ def _single(
                         error, native_failure, graph.data, part=part
                     )
                     raise
+                native_target = evidence.data.get('native_target')
+                if (
+                    native_target is not None
+                    and type(columns.dtype(native_target))
+                    is pd.CategoricalDtype
+                ):
+                    label_rows = _table(
+                        evidence.owners[evidence.data['owner']].rows()
+                    )
+                    values = label_rows.column('target').to_pylist()
+                    if evidence.data['target_encoding'] == 'utf8_surrogatepass':
+                        values = [
+                            [
+                                value.decode('utf-8', 'surrogatepass')
+                                for value in row
+                            ]
+                            for row in values
+                        ]
+                    try:
+                        columns.label_result(native_target, values)
+                    except Exception as error:
+                        _guard(
+                            NativeFrameFailure.capture(error),
+                            graph.data,
+                            part=part,
+                        )
                 label_batches.append(evidence)
                 if evidence.data['complete']:
                     break

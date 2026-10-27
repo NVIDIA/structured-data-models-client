@@ -53,6 +53,7 @@ def native_inputs(
     exported = []
     native_tables = []
     native_types = {}
+    categorical = {}
     held_tables = []
     prepared_tables = []
     for name, table in schema.tables.items():
@@ -76,6 +77,7 @@ def native_inputs(
         arrays = []
         origins = []
         types = {}
+        category_arrays = {}
         for ordinal, column in enumerate(frame.columns):
             series = time_feature(held, column, frame.iloc[:, ordinal], state)
             dtype = series.dtype
@@ -86,7 +88,19 @@ def native_inputs(
                 'string',
                 'empty',
             )
-            if (
+            if type(dtype) is pd.CategoricalDtype:
+                values, encoding = NativeColumn(series).arrow()
+                array = values.column(0)
+                if not (
+                    pa.types.is_string(array.type)
+                    or pa.types.is_large_string(array.type)
+                    or pa.types.is_binary(array.type)
+                    or pa.types.is_large_binary(array.type)
+                ):
+                    encoding = None
+                category_arrays[column] = series.array
+                origin = 'builtin_primitive'
+            elif (
                 object_text
                 or type(dtype) is pd.StringDtype
                 and dtype.storage
@@ -139,10 +153,11 @@ def native_inputs(
         )
         native_tables.append({'source': source, 'columns': origins})
         native_types[source_name] = types
+        categorical[source_name] = category_arrays
     return (
         exported,
         graph_schema,
-        NativeFrameColumns(native_types),
+        NativeFrameColumns(native_types, categorical),
         native_tables,
     )
 
