@@ -108,6 +108,69 @@ fn resolved_rows_keep_repeated_entities_and_order_without_rewriting_keys() {
 }
 
 #[test]
+fn selected_source_positions_replay_raw_rows_without_sampling() {
+    let (_, snapshot) = snapshot();
+    let selected = snapshot
+        .selected_rows("users", &[2, 0, 2], &["id".to_owned()])
+        .unwrap();
+    assert_eq!(
+        selected
+            .column(0)
+            .as_primitive::<Int64Type>()
+            .values()
+            .as_ref(),
+        &[3, 1, 3]
+    );
+    // A position must have survived the graph's actual sanitization.
+    for rows in [&[1][..], &[3][..]] {
+        assert_eq!(
+            snapshot
+                .selected_rows("users", rows, &["id".to_owned()])
+                .unwrap_err()
+                .code,
+            ErrorCode::InvalidMessage
+        );
+    }
+    assert!(snapshot.selected_rows("missing", &[], &[]).is_err());
+    assert!(
+        snapshot
+            .selected_rows("users", &[0], &["missing".to_owned()])
+            .is_err()
+    );
+}
+
+#[test]
+fn selected_link_pairs_bind_source_rows_and_example_ownership() {
+    let (graph, snapshot) = snapshot();
+    let edge = &graph.edges[0];
+    let source = [6, 7, 8, 0, 1, 2, 6, 7, 8];
+    let source_batch = [0, 0, 0, 1, 1, 1, 2, 2, 2];
+    let target = [2, 0, 2];
+    let target_batch = [0, 1, 2];
+    let pairs = snapshot
+        .selected_link_pairs(edge, &source, &source_batch, &target, &target_batch)
+        .unwrap();
+    assert_eq!(pairs, (0..9).map(|row| (row, row / 3)).collect::<Vec<_>>());
+    assert!(
+        snapshot
+            .selected_link_pairs(edge, &source, &source_batch[..8], &target, &target_batch)
+            .is_err()
+    );
+    assert!(
+        snapshot
+            .selected_link_pairs(edge, &[0], &[0], &[1], &[0])
+            .is_err()
+    );
+    // A selected target from a different example cannot own the reference.
+    assert!(
+        snapshot
+            .selected_link_pairs(edge, &[0], &[0], &[0], &[1])
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
 fn malformed_or_removed_node_rows_are_rejected_before_neighbor_draws() {
     let (graph, snapshot) = snapshot();
     for rows in [&[2, 1][..], &[2, 3][..], &[usize::MAX][..]] {
