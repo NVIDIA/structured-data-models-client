@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! Native Decimal descriptor/storage tests, pending shared-contract linking.
+//! Native Decimal descriptor/storage tests, pending reviewed execution.
 
 #[path = "../src/frames/decimal.rs"]
 mod decimal;

@@ -218,6 +218,7 @@ fn a_done_carrying_a_source_description_arrives_whole_either_side_of_the_cap() {
         let done = ControlMessage::Step(Step::Done {
             result: OperationResult::DescribeSource(DescribedSource {
                 frame_rows: None,
+                frame_decimals: None,
                 description: AttachmentId(4),
                 notes: Vec::new(),
             }),
