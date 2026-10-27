@@ -113,3 +113,53 @@ fn the_simple_profile_and_existing_provider_default_are_kept_distinct_from_full(
         )
     );
 }
+
+#[test]
+fn fixed_native_identity_resolves_the_observed_complete_mapping_classes() {
+    for (source, version) in [
+        (
+            include_str!(
+                "../../../../packages/structured-data-models-client/tests/t44_native_text_identity_pandas2_reference.json"
+            ),
+            UnicodeDataVersion::V14_0,
+        ),
+        (
+            include_str!(
+                "../../../../packages/structured-data-models-client/tests/t44_native_text_identity_pandas3_reference.json"
+            ),
+            UnicodeDataVersion::V17_0,
+        ),
+    ] {
+        let receipt: Value = serde_json::from_str(source).unwrap();
+        for name in ["ordinary-True", "batched-True"] {
+            for observation in receipt["records"][name]["identity_observations"]
+                .as_array()
+                .unwrap()
+            {
+                assert_eq!(
+                    observation["input"],
+                    sdm_engine::words::simple_identity_input()
+                );
+                assert_eq!(
+                    CasingProfile::from_simple_identity(observation["output"].as_str().unwrap()),
+                    Some(CasingProfile::Simple(version))
+                );
+                assert_eq!(observation["options_before"], observation["options_after"]);
+                assert_eq!(
+                    observation["local_events_before"]
+                        .as_array()
+                        .unwrap()
+                        .last()
+                        .unwrap()["stage"],
+                    "exit"
+                );
+            }
+        }
+        assert!(
+            receipt["records"]["sampling-error-True"]["identity_observations"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
+    }
+}
