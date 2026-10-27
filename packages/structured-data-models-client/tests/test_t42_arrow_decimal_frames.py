@@ -276,3 +276,57 @@ def test_repeated_key_error_uses_original_native_decimal_scalar(
     assert outcome[0] == 'error'
     assert outcome[2] == 'INVALID_REQUEST'
     assert 'Decimal(' in outcome[3]
+
+
+@pytest.mark.parametrize('bits', [128, 256])
+def test_missing_key_advice_can_change_later_decimal_scale_and_example(monkeypatch, bits):
+    outcomes = []
+    make = pa.decimal128 if bits == 128 else pa.decimal256
+    for core in (False, True):
+        frame = pd.DataFrame({
+            'value_id': series([None] + [Decimal(i) for i in range(1, 100)], make(3, 0)),
+            'measurement': np.arange(100, dtype='float64'),
+        })
+        changed = False
+        monkeypatch.setenv('SDM_CORE_ROUTES', PATHS if core else '')
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            show = warnings.showwarning
+
+            def mutate(message, *args, **kwargs):
+                nonlocal changed
+                if not changed:
+                    assert 'have no value for it' in str(message)
+                    changed = True
+                    frame['value_id'] = raw_series(bits, 3, 129, [1, 1] + list(range(2, 100)))
+                show(message, *args, **kwargs)
+
+            warnings.showwarning = mutate
+            schema = Schema.from_data({'rows': frame})
+        assert changed
+        assert schema['rows']['value_id'].dtype == 'int64'
+        assert schema['rows'].duplicate_keys == 1
+        messages = [str(item.message) for item in caught]
+        assert any("Decimal('1E-129')" in message for message in messages)
+        outcomes.append((projection(schema), messages))
+    assert outcomes[0] == outcomes[1]
+
+
+@pytest.mark.parametrize('bits', [128, 256])
+@pytest.mark.parametrize('scale', [-129, 129])
+def test_decimal_public_inspection_edits_and_snapshot_ownership(monkeypatch, bits, scale):
+    outcomes = []
+    for core in (False, True):
+        frame = pd.DataFrame({'value_id': raw_series(bits, 1, scale, [0, 1])})
+        monkeypatch.setenv('SDM_CORE_ROUTES', PATHS if core else '')
+        schema = Schema.from_data({'rows': frame})
+        snapshot = schema.snapshot()
+        before = projection(snapshot)
+        schema['rows'].primary_key = None
+        schema['rows'].primary_key = ('value_id',)
+        assert snapshot['rows'].data is frame
+        assert projection(snapshot) == before
+        assert projection(pickle.loads(pickle.dumps(snapshot))) == before
+        assert schema['rows'].primary_key == ('value_id',)
+        outcomes.append((projection(schema), before))
+    assert outcomes[0] == outcomes[1]
