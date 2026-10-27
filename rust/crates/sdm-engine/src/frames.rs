@@ -461,19 +461,30 @@ impl Snapshot {
     }
 
     pub fn entity_rows(&self, table: &str, keys: &ArrayRef) -> Result<Vec<usize>, CoreError> {
+        self.entity_rows_many(table, &[keys])
+    }
+
+    /// Resolve a complete task's ordered key columns without concatenating
+    /// or copying their Arrow buffers. Validation is independent of neighbor
+    /// seed/reset/draw state and reports every unresolved task reference.
+    pub fn entity_rows_many(
+        &self,
+        table: &str,
+        columns: &[&ArrayRef],
+    ) -> Result<Vec<usize>, CoreError> {
         let named_table = self
             .tables
             .get(table)
             .ok_or_else(|| invalid("unknown entity table"))?;
-        let wanted = read_keys(keys)?;
-        let found = wanted
-            .iter()
-            .map(|key| {
+        let mut found = Vec::new();
+        for column in columns {
+            let wanted = read_keys(column)?;
+            found.extend(wanted.iter().map(|key| {
                 key.as_ref()
                     .and_then(|key| named_table.index.get(key))
                     .copied()
-            })
-            .collect::<Vec<_>>();
+            }));
+        }
         let missing = found.iter().filter(|row| row.is_none()).count();
         if missing > 0 {
             return Err(CoreError::new(
