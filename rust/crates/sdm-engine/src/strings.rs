@@ -38,12 +38,22 @@ impl<'a> StringColumn<'a> {
                 .as_any()
                 .downcast_ref::<StringArray>()
                 .map(Values::Utf8)
-                .or_else(|| array.as_any().downcast_ref::<LargeStringArray>().map(Values::LargeUtf8)),
+                .or_else(|| {
+                    array
+                        .as_any()
+                        .downcast_ref::<LargeStringArray>()
+                        .map(Values::LargeUtf8)
+                }),
             StringEncoding::Utf8Surrogatepass => array
                 .as_any()
                 .downcast_ref::<BinaryArray>()
                 .map(Values::Surrogatepass)
-                .or_else(|| array.as_any().downcast_ref::<LargeBinaryArray>().map(Values::LargeSurrogatepass)),
+                .or_else(|| {
+                    array
+                        .as_any()
+                        .downcast_ref::<LargeBinaryArray>()
+                        .map(Values::LargeSurrogatepass)
+                }),
         }
         .ok_or(StringDataError::Physical)?;
         Ok(Self { values })
@@ -64,7 +74,10 @@ impl<'a> StringColumn<'a> {
 
     pub fn get(&self, row: usize) -> Result<Option<UnicodeSlice<'a>>, StringDataError> {
         if row >= self.len() {
-            return Err(StringDataError::Index { row, rows: self.len() });
+            return Err(StringDataError::Index {
+                row,
+                rows: self.len(),
+            });
         }
         macro_rules! ordinary {
             ($values:expr) => {
@@ -95,7 +108,9 @@ impl<'a> StringColumn<'a> {
 mod tests {
     use std::sync::Arc;
 
-    use arrow_array::{Array, ArrayRef, BinaryArray, LargeBinaryArray, LargeStringArray, StringArray};
+    use arrow_array::{
+        Array, ArrayRef, BinaryArray, LargeBinaryArray, LargeStringArray, StringArray,
+    };
     use sdm_contract::data::strings::StringEncoding;
     use sdm_contract::scalar::unicode::UnicodeError;
 
@@ -107,17 +122,25 @@ mod tests {
         let scalar = "😺".as_bytes();
         for source in [
             Arc::new(BinaryArray::from(vec![
-                Some(b"discard".as_slice()), None, Some(b"".as_slice()),
-                Some(native.as_slice()), Some(scalar), Some(b"a\0b".as_slice()),
+                Some(b"discard".as_slice()),
+                None,
+                Some(b"".as_slice()),
+                Some(native.as_slice()),
+                Some(scalar),
+                Some(b"a\0b".as_slice()),
             ])) as ArrayRef,
             Arc::new(LargeBinaryArray::from(vec![
-                Some(b"discard".as_slice()), None, Some(b"".as_slice()),
-                Some(native.as_slice()), Some(scalar), Some(b"a\0b".as_slice()),
+                Some(b"discard".as_slice()),
+                None,
+                Some(b"".as_slice()),
+                Some(native.as_slice()),
+                Some(scalar),
+                Some(b"a\0b".as_slice()),
             ])) as ArrayRef,
         ] {
             let sliced = source.slice(1, 5);
-            let column = StringColumn::new(sliced.as_ref(), StringEncoding::Utf8Surrogatepass)
-                .unwrap();
+            let column =
+                StringColumn::new(sliced.as_ref(), StringEncoding::Utf8Surrogatepass).unwrap();
             assert_eq!(column.len(), 5);
             assert!(column.get(0).unwrap().is_none());
             assert_eq!(column.get(1).unwrap().unwrap().as_bytes(), []);
@@ -140,10 +163,18 @@ mod tests {
     #[test]
     fn ordinary_strings_need_no_binary_or_host_reencoding() {
         for source in [
-            Arc::new(StringArray::from(vec![Some("discard"), None, Some(""), Some("é\0😺")]))
-                as ArrayRef,
-            Arc::new(LargeStringArray::from(vec![Some("discard"), None, Some(""), Some("é\0😺")]))
-                as ArrayRef,
+            Arc::new(StringArray::from(vec![
+                Some("discard"),
+                None,
+                Some(""),
+                Some("é\0😺"),
+            ])) as ArrayRef,
+            Arc::new(LargeStringArray::from(vec![
+                Some("discard"),
+                None,
+                Some(""),
+                Some("é\0😺"),
+            ])) as ArrayRef,
         ] {
             let sliced = source.slice(1, 3);
             let column = StringColumn::new(sliced.as_ref(), StringEncoding::Utf8).unwrap();
@@ -169,7 +200,10 @@ mod tests {
         assert_eq!(column.get(0).unwrap().unwrap().utf8(), Some("ordinary"));
         assert_eq!(
             column.get(1).unwrap_err(),
-            StringDataError::Encoding { row: 1, error: UnicodeError::Byte(0) }
+            StringDataError::Encoding {
+                row: 1,
+                error: UnicodeError::Byte(0)
+            }
         );
         assert_eq!(
             column.get(2).unwrap_err(),

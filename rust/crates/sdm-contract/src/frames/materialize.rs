@@ -14,8 +14,8 @@ pub use native::{
     NativeFrameConstruction, NativeFrameText, UncastableFrameInput,
 };
 
-use crate::data::{AttachmentId, Relation};
 use crate::data::strings::StringEncoding;
+use crate::data::{AttachmentId, Relation};
 use crate::ops::{ColumnRef, Materialized, QueryFacts, Seed, Stype};
 use crate::pql::ValidatedQuery;
 use crate::{ColumnType, Scalar};

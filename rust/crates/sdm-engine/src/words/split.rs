@@ -19,7 +19,8 @@ pub(super) fn ranges<T: Copy>(
     let mut start = None;
     let mut at = 0;
     while at < text.len() {
-        let boundary = scalar(text[at]).is_some_and(|point| space(point) || super::punctuation(point));
+        let boundary =
+            scalar(text[at]).is_some_and(|point| space(point) || super::punctuation(point));
         let next = if boundary {
             Some(at + 1)
         } else {
@@ -51,13 +52,21 @@ fn line_break<T: Copy>(
     space: fn(char) -> bool,
 ) -> Option<usize> {
     let prefix = text.get(at..at + 3)?;
-    if !prefix.iter().copied().map(scalar).eq(['<', 'b', 'r'].map(Some)) {
+    if !prefix
+        .iter()
+        .copied()
+        .map(scalar)
+        .eq(['<', 'b', 'r'].map(Some))
+    {
         return None;
     }
     let mut end = at + 3;
     // PUNCTUATION is replaced before the reference's HTML regex. Treat it
     // as whitespace here too, without rewriting or copying the input.
-    while text.get(end).copied().and_then(scalar)
+    while text
+        .get(end)
+        .copied()
+        .and_then(scalar)
         .is_some_and(|point| space(point) || super::punctuation(point))
     {
         end += 1;
@@ -103,7 +112,12 @@ mod tests {
             let points: Vec<_> = text.chars().map(u32::from).collect();
             let words: Vec<String> = ranges(&points, char::from_u32, crate::words::space)
                 .into_iter()
-                .map(|range| points[range].iter().map(|&point| char::from_u32(point).unwrap()).collect())
+                .map(|range| {
+                    points[range]
+                        .iter()
+                        .map(|&point| char::from_u32(point).unwrap())
+                        .collect()
+                })
                 .collect();
             assert_eq!(words, expected);
         }

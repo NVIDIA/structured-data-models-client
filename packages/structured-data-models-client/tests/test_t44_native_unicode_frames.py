@@ -278,7 +278,9 @@ def test_native_unicode_keeps_full_inspection_wire_and_result_meaning(
 
 
 @pytest.mark.parametrize('case', ['front', 'beyond-cap'])
-def test_native_text_conversion_precedes_character_cap_after_sampling(core, case):
+def test_native_text_conversion_precedes_character_cap_after_sampling(
+    core, case
+):
     recorded = json.loads(
         Path(__file__)
         .with_name('t44_native_text_conversion_failures_reference.json')
@@ -292,8 +294,11 @@ def test_native_text_conversion_precedes_character_cap_after_sampling(core, case
     values = ['valid'] * 48 + [invalid] * 16
     frames['orders']['note'] = text(values, 'python')
     options = dict(
-        indices=[7, 8], num_context_samples=3, num_neighbors=[3],
-        num_hops=1, random_seed=7,
+        indices=[7, 8],
+        num_context_samples=3,
+        num_neighbors=[3],
+        num_hops=1,
+        random_seed=7,
     )
     notices = recorded['warnings']
     if core:
@@ -301,7 +306,9 @@ def test_native_text_conversion_precedes_character_cap_after_sampling(core, case
     switched = []
     original_show = warnings.showwarning
 
-    def switch_at_hops(message, category, filename, lineno, file=None, line=None):
+    def switch_at_hops(
+        message, category, filename, lineno, file=None, line=None
+    ):
         if str(message) == notices[0]['message']:
             assert pd.options.future.infer_string is False
             assert pd.options.mode.string_storage == 'python'
@@ -345,8 +352,14 @@ def test_native_text_conversion_precedes_character_cap_after_sampling(core, case
     ] == notices
     assert not recorded['sent']
     assert [event['event'] for event in recorded['trace']] == [
-        'schema-ready', 'query-ready', 'warning', 'hops-option-switch',
-        'sample-enter', 'sample-exit', 'normalize-enter', 'astype-str-enter',
+        'schema-ready',
+        'query-ready',
+        'warning',
+        'hops-option-switch',
+        'sample-enter',
+        'sample-exit',
+        'normalize-enter',
+        'astype-str-enter',
         'normalize-error',
     ]
     if core:
@@ -372,5 +385,6 @@ def test_native_text_conversion_precedes_character_cap_after_sampling(core, case
         assert after_failure == json.loads(checkpoint['metadata'])['neighbors']
         initial = np.random.RandomState(123).get_state()
         assert after_failure != {
-            'words': initial[1].tolist(), 'position': int(initial[2]),
+            'words': initial[1].tolist(),
+            'position': int(initial[2]),
         }
