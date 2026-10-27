@@ -12,11 +12,19 @@ import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-SOURCE = Path('rust/crates/sdm-engine/tests/data/t46_simd_fallback_controls.json')
+SOURCE = Path(
+    'rust/crates/sdm-engine/tests/data/t46_simd_fallback_controls.json'
+)
 OUTPUT = Path('rust/crates/sdm-engine/src/index_sort/recorded.rs')
-SOURCE_SHA256 = '5e619c4cb1a968c65c446b7e79acc49fb091d3e486ad105de13fc0361469f4c1'
-RECEIPT_SHA256 = 'b3fa744af2117b91ff7a76b7e6ec13c7ea16d3fb5b6c0977fea93f1809889947'
-PRODUCER_SHA256 = 'bc4937120808dd9a981a9e77739ae3f532f6d040ddecf9613b198a8e5111a0c5'
+SOURCE_SHA256 = (
+    '5e619c4cb1a968c65c446b7e79acc49fb091d3e486ad105de13fc0361469f4c1'
+)
+RECEIPT_SHA256 = (
+    'b3fa744af2117b91ff7a76b7e6ec13c7ea16d3fb5b6c0977fea93f1809889947'
+)
+PRODUCER_SHA256 = (
+    'bc4937120808dd9a981a9e77739ae3f532f6d040ddecf9613b198a8e5111a0c5'
+)
 
 
 def main() -> None:
