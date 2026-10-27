@@ -1772,3 +1772,224 @@ def test_direct_lossless_int64_cells_reach_transport_in_both_halves(
     assert new[3][0]['predict']['instance_table']['rows'][0][0] == str(
         sign * (2**53 + 3)
     )
+
+
+@pytest.mark.parametrize(
+    'change',
+    [
+        'baseline',
+        'drop-predict',
+        'drop-context',
+        'add-context',
+        'add-predict',
+        'scored-values',
+        'constant-target',
+        'null-target',
+        'drop-target',
+        'empty-context',
+        'warning-error',
+    ],
+)
+def test_direct_constructor_schema_advice_precedes_fresh_frame_guards(
+    monkeypatch, change
+):
+    from sdm_client.core.warnings import SDMWarning
+
+    observed = []
+    for core in (False, True):
+        monkeypatch.setenv('SDM_CORE_ROUTES', CORE if core else '')
+        context = pd.DataFrame(
+            {
+                'user_id': pd.Series([None, *range(1, 100)], dtype='Int64'),
+                'feature': pd.Series(range(100), dtype='int64'),
+                'target': pd.Series(range(100, 200), dtype='int64'),
+            }
+        )
+        predict = pd.DataFrame(
+            {
+                'user_id': pd.Series([100, 101], dtype='Int64'),
+                'feature': pd.Series([100, 101], dtype='int64'),
+            }
+        )
+        events = []
+        with warnings.catch_warnings():
+            warnings.simplefilter('always')
+            if change == 'warning-error':
+                warnings.simplefilter('error', SDMWarning)
+
+            def show(message, category, filename, lineno, file=None, line=None):
+                events.append((str(message), category))
+                if len(events) != 1:
+                    return
+                if change == 'drop-predict':
+                    predict.drop(columns=['feature'], inplace=True)
+                elif change == 'drop-context':
+                    context.drop(columns=['feature'], inplace=True)
+                elif change == 'add-context':
+                    context['new_feature'] = range(100)
+                elif change == 'add-predict':
+                    predict['new_feature'] = [2, 3]
+                elif change == 'scored-values':
+                    predict['feature'] = pd.Series(
+                        [2**63, 2**63 + 1], dtype='uint64'
+                    )
+                elif change == 'constant-target':
+                    context['target'] = 2
+                elif change == 'null-target':
+                    context['target'] = pd.Series([None] * 100, dtype='Int64')
+                elif change == 'drop-target':
+                    context.drop(columns=['target'], inplace=True)
+                elif change == 'empty-context':
+                    context.drop(index=context.index, inplace=True)
+
+            warnings.showwarning = show
+            try:
+                request = Request(
+                    context, predict, target='target', task='regression'
+                )
+                result = ('ok', repr(request), projection(request.schema))
+            except Exception as error:
+                result = (
+                    'error',
+                    type(error),
+                    getattr(error, 'code', None),
+                    str(error),
+                )
+        observed.append(
+            (result, events, list(context.columns), list(predict.columns))
+        )
+    assert observed[1] == observed[0]
+    if change in ('drop-predict', 'add-context', 'scored-values'):
+        assert observed[0][0][2] == 'INVALID_REQUEST'
+    elif change == 'drop-target':
+        assert observed[0][0][1] is KeyError
+    elif change == 'warning-error':
+        assert observed[0][0][1] is SDMWarning
+        assert not observed[0][1]
+    else:
+        assert observed[0][0][0] == 'ok'
+        assert len(observed[0][1]) == (2 if change == 'constant-target' else 1)
+
+
+@pytest.mark.parametrize(
+    'zeros,limit,lower',
+    [(639, 640, False), (640, 640, False), (650, 0, False), (650, 4300, True)],
+)
+def test_direct_class_restoration_uses_fresh_decimal_limit(
+    monkeypatch, zeros, limit, lower
+):
+    import sys
+
+    label = '0' * zeros + '2'
+    observed = []
+    saved = sys.get_int_max_str_digits()
+    try:
+        for core in (False, True):
+            monkeypatch.setenv('SDM_CORE_ROUTES', CORE if core else '')
+            sys.set_int_max_str_digits(limit)
+
+            class Classified(Scripted):
+                def predict(self, payload):
+                    answer = super().predict(payload)
+                    for at, item in enumerate(answer['predictions']):
+                        item['id'] = (
+                            r"[4+1, '\q']" if lower and at == 0 else str(at)
+                        )
+                        item['prediction'] = label
+                        item['probabilities'] = {label: 0.75, '4': 0.25}
+                    return answer
+
+            context = pd.DataFrame({'user_id': [1, 2, 3], 'target': [2, 4, 6]})
+            predict = pd.DataFrame({'user_id': [4, 5]})
+            events = []
+            with warnings.catch_warnings():
+                warnings.simplefilter('always')
+
+                def show(
+                    message, category, filename, lineno, file=None, line=None
+                ):
+                    events.append((str(message), category))
+                    if lower:
+                        sys.set_int_max_str_digits(640)
+
+                warnings.showwarning = show
+                request = Request(
+                    context, predict, target='target', task='classification'
+                )
+                with SDMClient('http://localhost:1', max_retries=0) as client:
+                    client._transport.close()
+                    client._transport = Classified()
+                    result = client.predict(request, model=KumoTabular())
+                    frame = result.to_pandas()
+                observed.append(
+                    (
+                        [
+                            (
+                                item.prediction,
+                                type(item.prediction),
+                                item.probabilities,
+                            )
+                            for item in result.items
+                        ],
+                        frame.to_dict(orient='list'),
+                        [str(t) for t in frame.dtypes],
+                        events,
+                    )
+                )
+        assert observed[1] == observed[0]
+        expected = label if lower or (limit and zeros + 1 > limit) else 2
+        assert observed[1][0][0][0] == expected
+        assert observed[1][0][0][1] is type(expected)
+        assert list(observed[1][0][0][2]) == [str(expected), '4']
+    finally:
+        sys.set_int_max_str_digits(saved)
+
+
+@pytest.mark.parametrize(
+    'value,dtype,kind',
+    [
+        (float(-(2**63)), 'int64', int),
+        (9.21e18, 'int64', int),
+        (float(np.nextafter(float(2**63), 0.0)), 'int64', int),
+        (1.5, 'float64', float),
+        (float(2**63), 'uint64', int),
+        (float(np.nextafter(float(-(2**63)), -np.inf)), 'object', int),
+        (True, 'bool', bool),
+    ],
+)
+def test_direct_whole_float_classes_retain_scalar_type_and_frame_dtype(
+    monkeypatch, value, dtype, kind
+):
+    observed = []
+    for core in (False, True):
+        monkeypatch.setenv('SDM_CORE_ROUTES', CORE if core else '')
+
+        class Classified(Scripted):
+            def predict(self, payload):
+                answer = super().predict(payload)
+                for item in answer['predictions']:
+                    item['prediction'] = value
+                return answer
+
+        context, predict = fixture('int64')
+        request = Request(
+            context, predict, target='target', task='classification'
+        )
+        with SDMClient('http://localhost:1', max_retries=0) as client:
+            client._transport.close()
+            client._transport = Classified()
+            result = client.predict(request, model=KumoTabular())
+            frame = result.to_pandas()
+        observed.append(
+            (
+                [
+                    (item.prediction, type(item.prediction))
+                    for item in result.items
+                ],
+                frame.to_dict(orient='list'),
+                str(frame['prediction'].dtype),
+            )
+        )
+    assert observed[1] == observed[0]
+    assert observed[1][0][0][1] is kind
+    assert observed[1][2] == dtype
