@@ -92,7 +92,10 @@ fn start(column: ArrayRef) -> SourceDescription {
 
 #[test]
 fn adjacent_scaled_decimals_nominate_a_key_without_float_collisions() {
-    let values = vec![Some(1_250_000_000_000_000_001), Some(1_250_000_000_000_000_002)];
+    let values = vec![
+        Some(1_250_000_000_000_000_001),
+        Some(1_250_000_000_000_000_002),
+    ];
     let arrays: [ArrayRef; 2] = [
         Arc::new(
             Decimal128Array::from(values.clone())
@@ -115,15 +118,23 @@ fn adjacent_scaled_decimals_nominate_a_key_without_float_collisions() {
         let table = &description.tables[0];
         assert_eq!(table.columns[0].dtype, Dtype::Float64);
         assert_eq!(table.primary_key, ["value_id"]);
-        assert_eq!(table.columns[0].stype, Stype::ID);
+        assert_eq!(table.columns[0].stype, Stype::Id);
     }
 }
 
 #[test]
 fn decimal256_wide_keys_preserve_exact_values() {
     let array = Decimal256Array::from(vec![
-        Some("1000000000000000000000000000000000000000000000000000000000000".parse::<i256>().unwrap()),
-        Some("2000000000000000000000000000000000000000000000000000000000000".parse::<i256>().unwrap()),
+        Some(
+            "1000000000000000000000000000000000000000000000000000000000000"
+                .parse::<i256>()
+                .unwrap(),
+        ),
+        Some(
+            "2000000000000000000000000000000000000000000000000000000000000"
+                .parse::<i256>()
+                .unwrap(),
+        ),
     ])
     .with_precision_and_scale(76, 0)
     .unwrap();
@@ -131,7 +142,7 @@ fn decimal256_wide_keys_preserve_exact_values() {
     let table = &description.tables[0];
     assert_eq!(table.columns[0].dtype, Dtype::String);
     assert_eq!(table.primary_key, ["value_id"]);
-    assert_eq!(table.columns[0].stype, Stype::ID);
+    assert_eq!(table.columns[0].stype, Stype::Id);
 }
 
 #[test]
@@ -145,7 +156,11 @@ fn known_decimal_type_survives_empty_and_all_null_arrays() {
             let table = &description.tables[0];
             assert_eq!(
                 table.columns[0].dtype,
-                if scale > 0 { Dtype::Float64 } else { Dtype::Int64 }
+                if scale > 0 {
+                    Dtype::Float64
+                } else {
+                    Dtype::Int64
+                }
             );
             assert!(table.primary_key.is_empty());
             assert!(table.time_column.is_none());
