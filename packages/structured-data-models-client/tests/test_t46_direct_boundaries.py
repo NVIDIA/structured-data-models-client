@@ -1,0 +1,759 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+"""Frozen43e whole inference, native ownership and generated response boundaries."""
+
+from __future__ import annotations
+
+import copy
+import math
+import warnings
+
+import pandas as pd
+import pytest
+from test_t46_direct_numeric import CORE
+
+from sdm_client import Column, KumoTabular, Request, Schema, SDMClient, Table
+
+FRAMES = 'schema.from-data/frames/frames,schema.from-data/mapping/frames'
+
+
+class ObservationFailure(Exception):
+    pass
+
+
+def observe(function):
+    try:
+        return function()
+    except Exception as failure:
+        raise ObservationFailure('probe observation failed') from failure
+
+
+def error(e):
+    return {
+        'module': type(e).__module__,
+        'type': type(e).__name__,
+        'code': getattr(e, 'code', None),
+        'message': str(e),
+        'cause': None
+        if e.__cause__ is None
+        else {
+            'module': type(e.__cause__).__module__,
+            'type': type(e.__cause__).__name__,
+            'message': str(e.__cause__),
+        },
+    }
+
+
+def columns(table):
+    return {
+        name: {
+            'name': col.name,
+            'dtype': col.dtype,
+            'stype': str(col.stype),
+            'declared': col.stype_declared,
+            'before': col._stype_before_key,
+            'table_is_owner': getattr(col, '_table', None) is table,
+        }
+        for name, col in table.columns.items()
+    }
+
+
+def schema_state(schema):
+    return {
+        name: {
+            'name': table.name,
+            'key': table.primary_key,
+            'time': table.time_column,
+            'duplicates': table.duplicate_keys,
+            'schema_is_owner': getattr(table, '_schema', None) is schema,
+            'columns': columns(table),
+        }
+        for name, table in schema.tables.items()
+    }
+
+
+def result_state(result, frame):
+    return {
+        'frame': frame.to_dict(orient='list'),
+        'dtypes': [str(t) for t in frame.dtypes],
+        'model': result.model,
+        'request_id': result.request_id,
+        'metadata': result.metadata,
+        'items': [repr(i) for i in result.items],
+    }
+
+
+def key_boundary(
+    label,
+    api,
+    change,
+    *,
+    n=100,
+    initial_repeat=False,
+    time=False,
+    error_warning=False,
+):
+    key = pd.Series([None, *range(1, n)], dtype='Int64')
+    if initial_repeat:
+        key.iloc[2] = 1
+    context = pd.DataFrame(
+        {'user_id': key, 'feature': range(n), 'target': range(n, 2 * n)}
+    )
+    if time:
+        context['created_at'] = pd.date_range('2026-01-01', periods=n).as_unit(
+            'us'
+        )
+    predict = pd.DataFrame(
+        {'user_id': pd.Series([n, n + 1], dtype='Int64'), 'feature': [n, n + 1]}
+    )
+    if time:
+        predict['created_at'] = pd.date_range('2027-01-01', periods=2).as_unit(
+            'us'
+        )
+    record = {'case': f'{api}/{label}', 'events': []}
+    with warnings.catch_warnings():
+        warnings.simplefilter('always')
+        if error_warning:
+            from sdm_client.core.warnings import SDMWarning
+
+            warnings.simplefilter('error', SDMWarning)
+
+        def show(message, category, filename, lineno, file=None, line=None):
+            record['events'].append(
+                observe(
+                    lambda: {
+                        'type': category.__name__,
+                        'message': str(message),
+                        'context_rows': len(context),
+                        'columns': list(context.columns),
+                        'key_values': context['user_id']
+                        .astype(object)
+                        .where(context['user_id'].notna(), None)
+                        .tolist()
+                        if 'user_id' in context
+                        else None,
+                    }
+                )
+            )
+            event = len(record['events'])
+            if change == 'create' and event == 1:
+                context.loc[2, 'user_id'] = 1
+            if change == 'remove' and event == 1:
+                context.loc[2, 'user_id'] = 2
+            if change == 'fill-missing' and event == 1:
+                context.loc[0, 'user_id'] = n + 2
+            if change == 'no-remedy' and event == 1:
+                context.loc[2, 'user_id'] = 1
+                context.loc[2, ['feature', 'target']] = context.loc[
+                    1, ['feature', 'target']
+                ]
+            if change == 'target-remedy' and event == 1:
+                context.loc[2, 'user_id'] = 1
+                context.loc[2, 'feature'] = context.loc[1, 'feature']
+            if change == 'unusable-remedy' and event == 1:
+                context.loc[2, 'user_id'] = 1
+                context.loc[0, ['feature', 'target']] = None
+            if change == 'drop-key' and event == 1:
+                context.drop(columns=['user_id'], inplace=True)
+            if change == 'empty' and event == 1:
+                context.drop(index=context.index, inplace=True)
+            if change == 'boolean-key' and event == 1:
+                context['user_id'] = pd.Series(
+                    [True, False] * (n // 2), dtype='boolean'
+                )
+            if change == 'chained' and event == 1:
+                context.loc[2, 'user_id'] = 1
+            if change == 'chained' and event == 2:
+                predict.drop(columns=['feature'], inplace=True)
+            if change == 'after-repeat' and event == 1:
+                context.loc[2, 'user_id'] = 1
+            if change == 'after-repeat' and event == 2:
+                context.loc[2, 'user_id'] = 2
+            if change == 'time-null' and event == 1:
+                context['created_at'] = pd.Series(
+                    pd.NaT, index=context.index, dtype='datetime64[us]'
+                )
+            if change == 'time-after-repeat' and event == 1:
+                context.loc[2, 'user_id'] = 1
+            if change == 'time-after-repeat' and event == 2:
+                context['created_at'] = pd.Series(
+                    pd.NaT, index=context.index, dtype='datetime64[us]'
+                )
+            if change == 'time-drop' and event == 1:
+                context.drop(columns=['created_at'], inplace=True)
+            if change == 'time-numeric' and event == 1:
+                context['created_at'] = range(n)
+            if change == 'time-added' and event == 1:
+                context['created_at'] = pd.date_range(
+                    '2026-01-01', periods=n
+                ).as_unit('us')
+
+        warnings.showwarning = show
+        try:
+            if api == 'request':
+                obj = Request(
+                    context, predict, target='target', task='regression'
+                )
+            else:
+                schema = Schema.from_data(
+                    {'instance': context}, relationships=()
+                )
+        except ObservationFailure:
+            raise
+        except Exception as e:
+            record.update(ok=False, error=error(e))
+        else:
+            if api == 'request':
+                schema = obj.schema
+                record['inspection'] = repr(obj)
+            record.update(ok=True, schema=schema_state(schema))
+    record['final_context_columns'] = list(context.columns)
+    record['final_context_dtypes'] = [str(t) for t in context.dtypes]
+    record['final_predict_columns'] = list(predict.columns)
+    return record
+
+
+class Scripted:
+    url = 'scripted://direct-boundaries-r7'
+
+    def __init__(self, edit=None):
+        self.calls = []
+        self.responses = []
+        self.edit = edit
+
+    def close(self):
+        pass
+
+    def predict(self, payload):
+        self.calls.append(copy.deepcopy(payload))
+        answer = {
+            'id': 'independent-server',
+            'model': 'kumo-tabular',
+            'metadata': {},
+            'predictions': [
+                {'row_index': i, 'id': str(i), 'prediction': 10 + i}
+                for i in range(2)
+            ],
+        }
+        if self.edit is not None:
+            answer = self.edit(answer)
+        self.responses.append(copy.deepcopy(answer))
+        return answer
+
+
+def ownership_boundary(mode):
+    context = pd.DataFrame(
+        {'user_id': [1, 2, 3], 'feature': [2, 3, 4], 'target': [2, 4, 6]}
+    )
+    predict = pd.DataFrame(
+        {
+            'user_id': [2 if mode == 'overlap-replacement' else 4, 5],
+            'feature': [5, 6],
+        }
+    )
+    record = {'case': 'ownership/' + mode, 'events': []}
+    transport = Scripted()
+    refs = {}
+    with warnings.catch_warnings():
+        warnings.simplefilter('always')
+
+        def show(message, category, filename, lineno, file=None, line=None):
+            record['events'].append(
+                {'type': category.__name__, 'message': str(message)}
+            )
+            if mode == 'overlap-replacement' and 'also in context' in str(
+                message
+            ):
+                refs['replacement'] = Column('user_id', 'int64', 'numerical')
+                request.schema.tables['instance'].columns['user_id'] = refs[
+                    'replacement'
+                ]
+
+        warnings.showwarning = show
+        request = None
+
+        def setup():
+            request = Request(
+                context, predict, target='target', task='regression'
+            )
+            destination = request.schema.tables['instance']
+            refs['original_table'] = destination
+            refs['original_columns'] = destination.columns
+            if mode in ['unowned-column', 'bad-nonkey']:
+                col = Column(
+                    'user_id' if mode == 'unowned-column' else 'feature',
+                    'int64' if mode == 'unowned-column' else 'string',
+                    'numerical' if mode == 'unowned-column' else 'text',
+                )
+                if mode == 'bad-nonkey':
+                    col.dtype = 'int64'
+                refs['replacement'] = col
+                destination.columns[col.name] = col
+            elif mode in ['borrowed-column', 'borrowed-former-key']:
+                name = 'user_id' if mode == 'borrowed-column' else 'feature'
+                col = Column(name, 'int64', 'numerical')
+                donor = Table(
+                    name='donor',
+                    data=context.copy(),
+                    columns={name: col},
+                    primary_key=name if mode == 'borrowed-former-key' else None,
+                )
+                refs.update(donor=donor, replacement=col)
+                destination.columns[name] = col
+            elif mode in ['unowned-table', 'borrowed-table']:
+                incoming = Table(
+                    name='instance',
+                    data=context.copy(),
+                    columns={
+                        name: Column(name, 'int64', 'numerical')
+                        for name in context.columns
+                    },
+                    primary_key='user_id',
+                )
+                if mode == 'borrowed-table':
+                    donor = Schema({'instance': incoming}, ())
+                    incoming = donor.tables['instance']
+                    refs['donor_schema'] = donor
+                incoming.columns['user_id'] = Column(
+                    'user_id', 'int64', 'numerical'
+                )
+                refs['replacement_table'] = incoming
+                refs['replacement'] = incoming.columns['user_id']
+                request.schema.tables['instance'] = incoming
+            elif mode == 'explicit-nonkey-ID':
+                destination.columns['feature'] = Column(
+                    'feature', 'int64', 'ID'
+                )
+                refs['replacement'] = destination.columns['feature']
+            elif mode == 'release-key':
+                donor = Table(
+                    name='donor',
+                    data=context.copy(),
+                    columns={
+                        'feature': Column('feature', 'int64', 'numerical')
+                    },
+                    primary_key='feature',
+                )
+                refs.update(donor=donor, replacement=donor.columns['feature'])
+                destination.columns['feature'] = donor.columns['feature']
+            elif mode == 'unknown-model-before-adoption':
+                refs['replacement'] = Column('user_id', 'int64', 'numerical')
+                destination.columns['user_id'] = refs['replacement']
+            return request
+
+        try:
+            request = setup()
+        except ObservationFailure:
+            raise
+        except Exception as e:
+            record.update(ok=False, failed_operation='setup', error=error(e))
+        else:
+            record['before'] = schema_state(request.schema)
+            try:
+                with SDMClient('http://localhost:1', max_retries=0) as client:
+                    client._transport.close()
+                    client._transport = transport
+                    result = client.predict(
+                        request,
+                        model='unknown'
+                        if mode == 'unknown-model-before-adoption'
+                        else KumoTabular(),
+                    )
+                    frame = result.to_pandas()
+            except ObservationFailure:
+                raise
+            except Exception as e:
+                record.update(
+                    ok=False,
+                    failed_operation='predict_or_to_pandas',
+                    error=error(e),
+                )
+            else:
+                record.update(ok=True, result=result_state(result, frame))
+        if request is not None:
+            record['after'] = schema_state(request.schema)
+            current = request.schema.tables.get('instance')
+            col = (
+                current.columns.get('user_id') if current is not None else None
+            )
+            record['identity'] = {
+                'same_table_as_original': current is refs.get('original_table'),
+                'same_columns_dict': current is not None
+                and current.columns is refs.get('original_columns'),
+                'same_inserted_table': current is refs.get('replacement_table'),
+                'same_inserted_column': current is not None
+                and refs.get('replacement') is not None
+                and any(
+                    c is refs['replacement'] for c in current.columns.values()
+                ),
+                'live_table_schema_ref': current is not None
+                and getattr(current, '_schema', None) is request.schema,
+            }
+        if 'replacement' in refs:
+            c = refs['replacement']
+            record['original_inserted_column'] = {
+                'stype': str(c.stype),
+                'before': c._stype_before_key,
+                'owner_is_destination': getattr(c, '_table', None)
+                is request.schema.tables['instance'],
+                'owner_is_donor': 'donor' in refs
+                and getattr(c, '_table', None) is refs['donor'],
+                'owner_is_none': getattr(c, '_table', None) is None,
+            }
+        if 'donor_schema' in refs:
+            record['donor_schema'] = schema_state(refs['donor_schema'])
+        if 'donor' in refs:
+            record['donor_columns'] = columns(refs['donor'])
+    record['bodies'] = transport.calls
+    record['responses'] = transport.responses
+    return record
+
+
+def response_boundary(label, change):
+    context = pd.DataFrame({'user_id': [1, 2, 3], 'target': [2, 4, 6]})
+    predict = pd.DataFrame({'user_id': [4, 5]})
+    transport = Scripted(change)
+    record = {'case': 'response/' + label, 'events': []}
+    with warnings.catch_warnings():
+        warnings.simplefilter('always')
+
+        def show(message, category, filename, lineno, file=None, line=None):
+            record['events'].append(
+                {'type': category.__name__, 'message': str(message)}
+            )
+
+        warnings.showwarning = show
+        try:
+            request = Request(
+                context, predict, target='target', task='regression'
+            )
+            with SDMClient('http://localhost:1', max_retries=0) as client:
+                client._transport.close()
+                client._transport = transport
+                result = client.predict(request, model=KumoTabular())
+                frame = result.to_pandas()
+        except ObservationFailure:
+            raise
+        except Exception as e:
+            record.update(ok=False, error=error(e))
+        else:
+            record.update(ok=True, result=result_state(result, frame))
+    record['bodies'] = transport.calls
+    record['responses'] = transport.responses
+    return record
+
+
+def top(field, value, missing=False):
+    def edit(answer):
+        if missing:
+            answer.pop(field, None)
+        else:
+            answer[field] = value
+        return answer
+
+    return edit
+
+
+def item(fields):
+    def edit(answer):
+        answer['predictions'][0].update(fields)
+        return answer
+
+    return edit
+
+
+RESPONSE_CASES = []
+
+
+def response_case(label, change):
+    RESPONSE_CASES.append(pytest.param(label, change, id=label))
+
+
+for value in [None, [], 4, 'bad']:
+    response_case(
+        'root-' + type(value).__name__, lambda answer, value=value: value
+    )
+for field in ['id', 'model', 'predictions', 'metadata']:
+    response_case(field + '-missing', top(field, None, True))
+    for label, value in [('null', None), ('integer', 4), ('array', [])]:
+        response_case(field + '-' + label, top(field, value))
+for label, value in [
+    ('string', 'bad'),
+    ('nonempty-object', {'x': {}}),
+    ('empty-object', {}),
+]:
+    response_case('predictions-' + label, top('predictions', value))
+for label, value in [
+    ('null', None),
+    ('integer', 4),
+    ('array', []),
+    ('string', 'bad'),
+]:
+    response_case('item-' + label, top('predictions', [value]))
+for label, value in [('integer', 4), ('bool', True), ('array', [])]:
+    response_case('item-id-' + label, item({'id': value}))
+for label, value in [
+    ('string', '0'),
+    ('bool', False),
+    ('fraction', 0.5),
+    ('infinity', float('inf')),
+    ('wide-integer', 2**200),
+    ('wide-whole-float', 1e20),
+]:
+    response_case('forecast-step-' + label, item({'forecast_step': value}))
+for field in ['probabilities', 'scores', 'embeddings', 'quantiles']:
+    for label, value in [
+        ('string', 'bad'),
+        ('bool', True),
+        ('object', {'x': 'bad'})
+        if field in ['scores', 'embeddings']
+        else ('array', []),
+    ]:
+        response_case(field + '-container-' + label, item({field: value}))
+    for label, value in [
+        ('bool', True),
+        ('text', 'bad'),
+        ('null', None),
+        ('infinity', float('inf')),
+        ('wide-int', 10**400),
+        ('wide-text', '1' + '0' * 400),
+    ]:
+        response_case(
+            field + '-member-' + label,
+            item(
+                {
+                    field: {'x': value}
+                    if field in ['probabilities', 'quantiles']
+                    else [value]
+                }
+            ),
+        )
+for field in ['rankings', 'explanation', 'metadata']:
+    for label, value in [
+        ('integer', 4),
+        ('text', 'bad'),
+        ('pair-arity', [['x']]),
+        ('unhashable', [[[], 1]]),
+    ]:
+        response_case('item-' + field + '-' + label, item({field: value}))
+for first, second in [
+    ('id', 'row_index'),
+    ('probabilities', 'scores'),
+    ('scores', 'rankings'),
+    ('rankings', 'embeddings'),
+    ('embeddings', 'quantiles'),
+    ('embeddings', 'explanation'),
+    ('quantiles', 'explanation'),
+    ('explanation', 'metadata'),
+]:
+    bad = {
+        'id': 4,
+        'row_index': 'bad',
+        'probabilities': [],
+        'scores': 'bad',
+        'rankings': 4,
+        'embeddings': 'bad',
+        'quantiles': [],
+        'explanation': 4,
+        'metadata': 4,
+    }
+    response_case(
+        'paired-' + first + '-' + second,
+        item({first: bad[first], second: bad[second]}),
+    )
+
+
+def late(answer):
+    answer['predictions'][0]['id'] = r"[4+1, '\q']"
+    answer['predictions'][1]['embeddings'] = 'bad'
+    return answer
+
+
+response_case('global-late-field-before-ID-warning', late)
+response_case('valid-independent-model', top('model', 'independent-model'))
+response_case(
+    'valid-dict-pair-explanation',
+    item(
+        {
+            'explanation': [['x', 1]],
+            'metadata': [['y', 2]],
+            'rankings': [[['z', 3]]],
+            'embeddings': [1, '2.5'],
+            'quantiles': {'0.5': '2.0'},
+        }
+    ),
+)
+
+
+def comparable(value):
+    if isinstance(value, float) and math.isnan(value):
+        return ('nonfinite', 'nan')
+    if isinstance(value, dict):
+        return {key: comparable(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [comparable(item) for item in value]
+    return value
+
+
+@pytest.mark.parametrize('api', ['request', 'schema'])
+@pytest.mark.parametrize(
+    'label,change,n,initial_repeat',
+    [
+        ('missing-baseline', 'none', 100, False),
+        ('create-repeat', 'create', 100, False),
+        ('remove-repeat', 'remove', 200, True),
+        ('fill-missing', 'fill-missing', 100, False),
+        ('no-remedy', 'no-remedy', 100, False),
+        ('target-remedy', 'target-remedy', 100, False),
+        ('unusable-remedy', 'unusable-remedy', 100, False),
+        ('drop-nominee', 'drop-key', 100, False),
+        ('empty-after-advice', 'empty', 100, False),
+        ('nominee-retyped-bool', 'boolean-key', 100, False),
+        ('after-repeat-count-fixed', 'after-repeat', 100, False),
+    ],
+)
+def test_shared_inference_adoption_uses_reached_values_without_renomination(
+    monkeypatch, api, label, change, n, initial_repeat
+):
+    observed = []
+    for core in (False, True):
+        monkeypatch.setenv(
+            'SDM_CORE_ROUTES',
+            (CORE if api == 'request' else FRAMES) if core else '',
+        )
+        observed.append(
+            key_boundary(label, api, change, n=n, initial_repeat=initial_repeat)
+        )
+    assert comparable(observed[1]) == comparable(observed[0])
+    assert observed[1]['ok']
+    table = observed[1]['schema']['instance']
+    assert table['key'] == 'user_id'
+    assert table['columns']['user_id']['dtype'] == 'int64'
+    assert table['columns']['user_id']['stype'] == 'ID'
+    expected = (
+        98
+        if change == 'boolean-key'
+        else 1
+        if change
+        in (
+            'create',
+            'no-remedy',
+            'target-remedy',
+            'unusable-remedy',
+            'after-repeat',
+        )
+        else 0
+    )
+    assert table['duplicates'] == expected
+
+
+@pytest.mark.parametrize(
+    'change',
+    [
+        'time-null',
+        'time-after-repeat',
+        'time-drop',
+        'time-numeric',
+        'time-added',
+    ],
+)
+def test_shared_time_choice_observes_after_adoption_advice(monkeypatch, change):
+    observed = []
+    for core in (False, True):
+        monkeypatch.setenv('SDM_CORE_ROUTES', FRAMES if core else '')
+        observed.append(
+            key_boundary(change, 'schema', change, time=change != 'time-added')
+        )
+    assert comparable(observed[1]) == comparable(observed[0])
+    if change == 'time-drop':
+        assert observed[1]['error']['type'] == 'KeyError'
+    else:
+        assert observed[1]['ok']
+        assert observed[1]['schema']['instance']['time'] == (
+            'created_at' if change == 'time-numeric' else None
+        )
+
+
+@pytest.mark.parametrize('as_error', [False, True])
+def test_adoption_warning_effects_precede_later_constructor_guards(
+    monkeypatch, as_error
+):
+    observed = []
+    for core in (False, True):
+        monkeypatch.setenv('SDM_CORE_ROUTES', CORE if core else '')
+        observed.append(
+            key_boundary('chain', 'request', 'chained', error_warning=as_error)
+        )
+    assert comparable(observed[1]) == comparable(observed[0])
+    assert not observed[1]['ok']
+    if as_error:
+        assert observed[1]['error']['type'] == 'SDMWarning'
+        assert not observed[1]['events']
+    else:
+        assert len(observed[1]['events']) == 2
+        assert (
+            "missing column(s) ['feature']" in observed[1]['error']['message']
+        )
+
+
+@pytest.mark.parametrize(
+    'mode',
+    [
+        'unowned-column',
+        'borrowed-column',
+        'borrowed-former-key',
+        'unowned-table',
+        'borrowed-table',
+        'explicit-nonkey-ID',
+        'release-key',
+        'bad-nonkey',
+        'overlap-replacement',
+        'unknown-model-before-adoption',
+    ],
+)
+def test_direct_consistency_adopts_copies_marks_and_releases_native_metadata(
+    monkeypatch, mode
+):
+    observed = []
+    for core in (False, True):
+        monkeypatch.setenv('SDM_CORE_ROUTES', CORE if core else '')
+        record = ownership_boundary(mode)
+        for body in record['bodies']:
+            body['metadata']['request_id'] = '<drawn>'
+        observed.append(record)
+    assert comparable(observed[1]) == comparable(observed[0])
+    record = observed[1]
+    if mode in ('bad-nonkey', 'unknown-model-before-adoption'):
+        assert not record['ok'] and not record['bodies']
+    else:
+        assert record['ok'] and len(record['bodies']) == 1
+        assert record['identity']['live_table_schema_ref']
+        assert (
+            record['after']['instance']['columns']['user_id']['stype'] == 'ID'
+        )
+    if mode.startswith('borrowed') or mode == 'release-key':
+        assert not record['identity']['same_inserted_column']
+
+
+@pytest.mark.parametrize('label,change', RESPONSE_CASES)
+def test_direct_generated_response_field_family_and_error_order(
+    monkeypatch, label, change
+):
+    observed = []
+    for core in (False, True):
+        monkeypatch.setenv('SDM_CORE_ROUTES', CORE if core else '')
+        record = response_boundary(label, change)
+        for body in record['bodies']:
+            body['metadata']['request_id'] = '<drawn>'
+        observed.append(record)
+    assert comparable(observed[1]) == comparable(observed[0])
+    assert len(observed[1]['bodies']) == 1
+    if label.startswith('forecast-step-wide') or label.startswith('valid-'):
+        assert observed[1]['ok']
+    else:
+        assert not observed[1]['ok']
+        assert observed[1]['error']['code'] == 'INVALID_RESPONSE'
+    if label == 'global-late-field-before-ID-warning':
+        assert not observed[1]['events']
