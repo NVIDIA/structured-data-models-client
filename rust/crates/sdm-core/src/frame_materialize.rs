@@ -496,3 +496,206 @@ impl FrameRun {
         Ok(crate::subgraph::Walked { tables, links })
     }
 }
+
+#[cfg(test)]
+mod parent_hop_tests {
+    use super::*;
+    use arrow_array::Int64Array;
+    use sdm_contract::Step;
+    use sdm_contract::data::NegativeNeighborBound;
+    use sdm_contract::prepare::PreparedRequest;
+    use serde_json::json;
+
+    fn fixture() -> (FrameRun, SourceDescription, Graph) {
+        let column = |name: &str| json!({"name":name,"dtype":"int64","stype":"ID"});
+        let held: HeldSchema = serde_json::from_value(json!({"tables":[
+            {"name":"users","source":{"source":["users"]},"columns":[column("user_id")],"primary_key":["user_id"],"time_column":null},
+            {"name":"orders","source":{"source":["orders"]},"columns":[column("order_id"),column("user_id")],"primary_key":["order_id"],"time_column":null}
+        ],"links":[[{"table":"orders","column":"user_id"},{"table":"users","column":"user_id"}]]})).unwrap();
+        let description = sdm_schema::held::read(held, &BTreeMap::new(), true)
+            .unwrap()
+            .description;
+        let graph = Graph::new(&description).unwrap();
+        let batches = [
+            RecordBatch::try_from_iter([(
+                "user_id",
+                Arc::new(Int64Array::from(vec![1])) as ArrayRef,
+            )])
+            .unwrap(),
+            RecordBatch::try_from_iter([
+                (
+                    "order_id",
+                    Arc::new(Int64Array::from_iter_values(0..12)) as ArrayRef,
+                ),
+                (
+                    "user_id",
+                    Arc::new(Int64Array::from(vec![1; 12])) as ArrayRef,
+                ),
+            ])
+            .unwrap(),
+        ];
+        let tables = description
+            .tables
+            .iter()
+            .zip(batches)
+            .map(|(table, batch)| {
+                (
+                    table.source.clone(),
+                    ArrowData::new(batch.schema(), vec![batch]),
+                )
+            })
+            .collect();
+        (
+            FrameRun {
+                tables,
+                metadata: None,
+                snapshot: None,
+                neighbors: Mt19937::seeded(123),
+                entropy: None,
+            },
+            description,
+            graph,
+        )
+    }
+
+    fn order_ids(walked: &crate::subgraph::Walked) -> Vec<i64> {
+        walked
+            .tables
+            .iter()
+            .find(|table| table.name == "orders")
+            .map(|table| {
+                table
+                    .batch
+                    .column_by_name("order_id")
+                    .unwrap()
+                    .as_any()
+                    .downcast_ref::<Int64Array>()
+                    .unwrap()
+                    .values()
+                    .to_vec()
+            })
+            .unwrap_or_default()
+    }
+
+    #[test]
+    fn projected_hops_keep_native_signed_counts_errors_and_seed_continuation() {
+        for (hop, refused, whole) in [
+            (
+                Hop::Negative(NegativeNeighborBound::new("-0.5".into()).unwrap()),
+                true,
+                false,
+            ),
+            (Hop::Expression("3 OR TRUE".into()), true, false),
+            (
+                Hop::Negative(NegativeNeighborBound::new("-1".into()).unwrap()),
+                false,
+                true,
+            ),
+            (Hop::Keep(3), false, false),
+        ] {
+            let mut run = crate::Run::new(move |asker| async move {
+                let (mut frame, description, graph) = fixture();
+                frame.initialize(&asker, &description, &graph)?;
+                let keys = Arc::new(Int64Array::from(vec![1])) as ArrayRef;
+                // A real earlier walk consumes the retained native stream.
+                frame.walk(
+                    &asker,
+                    &graph,
+                    &graph.tables[0],
+                    &keys,
+                    &[0],
+                    FrameWalkOptions {
+                        hops: &[Hop::Keep(3)],
+                        neighbor_values: None,
+                        excluded: &[],
+                        seed: Some(99),
+                    },
+                )?;
+                assert_ne!(frame.metadata.as_ref().unwrap().neighbors.position, 624);
+                let hops = [hop];
+                let selected = frame.walk(
+                    &asker,
+                    &graph,
+                    &graph.tables[0],
+                    &keys,
+                    &[0],
+                    FrameWalkOptions {
+                        hops: &hops,
+                        neighbor_values: None,
+                        excluded: &[],
+                        seed: Some(7),
+                    },
+                );
+                if refused {
+                    let error = selected
+                        .err()
+                        .expect("fractional/expression native count refusal");
+                    assert_eq!(error.sentence, Sentence::FrameNeighborDtype);
+                    assert_eq!(
+                        frame.metadata.as_ref().unwrap().neighbors,
+                        Mt19937::seeded(7).checkpoint()
+                    );
+                } else {
+                    let first = selected.unwrap_or_else(|error| panic!("{error:?}"));
+                    assert_eq!(
+                        order_ids(&first),
+                        if whole {
+                            (0..12).collect()
+                        } else {
+                            vec![5, 3, 1]
+                        }
+                    );
+                    if whole {
+                        assert_eq!(
+                            frame.metadata.as_ref().unwrap().neighbors,
+                            Mt19937::seeded(7).checkpoint()
+                        );
+                    }
+                }
+                let continued = frame.walk(
+                    &asker,
+                    &graph,
+                    &graph.tables[0],
+                    &keys,
+                    &[0],
+                    FrameWalkOptions {
+                        hops: &[Hop::Keep(3)],
+                        neighbor_values: None,
+                        excluded: &[],
+                        seed: None,
+                    },
+                )?;
+                let selected = order_ids(&continued);
+                // Recorded native sampler vectors: a reset/error or a whole
+                // neighborhood consumes no draw; an earlier partial walk does.
+                assert_eq!(
+                    selected,
+                    if refused || whole {
+                        vec![5, 3, 1]
+                    } else {
+                        vec![6, 2, 3]
+                    }
+                );
+                assert_eq!(
+                    frame.metadata.as_ref().unwrap().neighbors,
+                    frame.neighbors.checkpoint()
+                );
+                let value = asker.attach(Attachment::Bytes(serde_json::to_vec(&json!({"selected":selected,"neighbors":frame.metadata.as_ref().unwrap().neighbors})).unwrap()))?;
+                Ok(sdm_contract::ops::OperationResult::Prepared(
+                    PreparedRequest { value },
+                ))
+            });
+            let Step::Done {
+                result: sdm_contract::ops::OperationResult::Prepared(value),
+            } = run.next().unwrap()
+            else {
+                panic!("a fixed native frame walk must finish without I/O")
+            };
+            let Some(Attachment::Bytes(value)) = run.take_attachment(value.value) else {
+                panic!("useful selected rows")
+            };
+            let value: serde_json::Value = serde_json::from_slice(&value).unwrap();
+            assert_eq!(value["selected"].as_array().unwrap().len(), 3);
+        }
+    }
+}

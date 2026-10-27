@@ -24,19 +24,19 @@
       "moved": "T3.17 fix 1: the source with no table is the core's sentence, filled with the source as a host value; the Python sentence is gone; T3.5: a semantic model described on the core, the model's values held for its sentences and its notes said on the schema"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::<module>": {
-      "moved": "T3.26: the materialize_again refusal is gone: a request the core did not materialize is handed over as plain data (_held, Predict.held) and the core rebuilds what it predicts from (sdm-core held.rs); RANKING read from decompose to tell a ranking by its decomposition; T3.13: EndpointFailed imported, a serving endpoint's failure the core names"
+      "moved": "T3.26: the materialize_again refusal is gone: a request the core did not materialize is handed over as plain data (_held, Predict.held) and the core rebuilds what it predicts from (sdm-core held.rs); RANKING read from decompose to tell a ranking by its decomposition; T3.13: EndpointFailed imported, a serving endpoint's failure the core names; T4.6: structural extraction of the shared transport function and exact decoded forecast carrier presentation; no domain policy is added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_id": {
-      "moved": "T1.36 fix 8: the host's half of the moved entity reading: a row's id as the core's id_as_written column gives it (the JSON text of the reference's item value, read as the transport reads JSON), else the id column's value, a missing one None; no rule of its own, as _as_answered for a prediction"
+      "moved": "T1.36 fix 8: the host's half of the moved entity reading: a row's id as the core's id_as_written column gives it (the JSON text of the reference's item value, read as the transport reads JSON), else the id column's value, a missing one None; no rule of its own, as _as_answered for a prediction; T4.6: restore already decoded integer carriers after native ID effects without repeating text admission; fresh declared-text integer conversion remains a core-owned current-limit rule"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::predict": {
-      "moved": "T3.26: no refusal of a request the core did not materialize; its state, or what it holds (_from_state or _held), is handed over, the core rebuilding the rest; a ranking told by its decomposition; T3.13: a Databricks serving endpoint's envelope, limit and every answer's reading moved into the core (sdm_request::serving): the bridge names the endpoint (model_endpoint) and lets the transport's EndpointFailed through to the run, which tells the core"
+      "moved": "T3.26: no refusal of a request the core did not materialize; its state, or what it holds (_from_state or _held), is handed over, the core rebuilding the rest; a ranking told by its decomposition; T3.13: a Databricks serving endpoint's envelope, limit and every answer's reading moved into the core (sdm_request::serving): the bridge names the endpoint (model_endpoint) and lets the transport's EndpointFailed through to the run, which tells the core; T4.6: reuse the unchanged shared transport exchange and restore already decoded metadata after native effects; core still owns model and result policy"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_carry_the_answers": {
-      "moved": "T2.13: the carried answers' explanation, which the core puts on the result's schema with the model and metadata, handed to _result as the result's; no rule added"
+      "moved": "T2.13: the carried answers' explanation, which the core puts on the result's schema with the model and metadata, handed to _result as the result's; no rule added; T4.6: restore already decoded integer carriers after native ID effects without repeating text admission; fresh declared-text integer conversion remains a core-owned current-limit rule"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_result": {
-      "moved": "T2.11: an answer's embeddings, which the core reads and lays out (sdm-wire response, sdm-request predict), handed into each PredictionItem as the tuple the bindings hold; no rule added"
+      "moved": "T2.11: an answer's embeddings, which the core reads and lays out (sdm-wire response, sdm-request predict), handed into each PredictionItem as the tuple the bindings hold; no rule added; T4.6: restore already decoded integer carriers after native ID effects without repeating text admission; fresh declared-text integer conversion remains a core-owned current-limit rule"
     },
     "packages/structured-data-models-client/src/sdm_client/client.py::SDMClient._answer_in_parts": {
       "moved": "T3.26: a forecast or a ranking the core did not gather goes to the core too, which predicts it from what it holds"
@@ -96,7 +96,7 @@
       "moved": "T3.17 fix 1: imports the errors module for its host values; T3.5: conversion_notes, the host's saying of the core's typed notes of a semantic model; T4.2: build accepts native frame references alongside the same core metadata reader"
     },
     "packages/structured-data-models-client/src/sdm_client/client.py::_predicts_on_the_core": {
-      "refactor": "T2.2: a request over a SQLite source routes as one over DuckDB (_routing.on_the_core with the backend's predict paths); no rule added"
+      "refactor": "T2.2: a request over a SQLite source routes as one over DuckDB (_routing.on_the_core with the backend's predict paths); no rule added; T4.6: select the explicitly opted-in direct preparation bridge for model-neutral Requests; core owns constructor/model validation, body encoding and result policy, and default routing is unchanged"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::_provider": {
       "gone": "T3.8: the provider choice written once, in _rust/providers (for_source), with the source namespace (P2-T2.2-2)"
@@ -126,16 +126,16 @@
       "gone": "T3.17: the unscored candidates' sentence is the core's, filled with the candidates as given"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_mapping": {
-      "moved": "T2.8: the host's half of the moved rankings reading (sdm_wire's response::mappings): a member the core gives as a JSON object, or as the list of its pairs where a key is not text, made the mapping the reference's item holds; no rule of its own"
+      "moved": "T2.8: the host's half of the moved rankings reading (sdm_wire's response::mappings): a member the core gives as a JSON object, or as the list of its pairs where a key is not text, made the mapping the reference's item holds; no rule of its own; T4.6: restore already decoded integer carriers after native ID effects without repeating text admission; fresh declared-text integer conversion remains a core-owned current-limit rule"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_explanation": {
-      "moved": "T2.13: the result's explanation as the core gives it, for a forecast each step's under by_forecast_step keyed by the step's number, as the client's _by_step holds it; which steps explain is sdm-request predict's by_step"
+      "moved": "T2.13: the result's explanation as the core gives it, for a forecast each step's under by_forecast_step keyed by the step's number, as the client's _by_step holds it; which steps explain is sdm-request predict's by_step; T4.6: restore already decoded integer carriers after native ID effects without repeating text admission; fresh declared-text integer conversion remains a core-owned current-limit rule"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_table": {
       "refactor": "T2.13: the result attachment read as a table, as _rows reads it, so its schema's metadata is read too; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::<module>": {
-      "moved": "T3.9 KO3-44: attachment option-encoding argument is structural plumbing; nonfinite option admission moves to Rust and ordinary JSON remains strict; T4.2 contract32: the timestamp transport unit vocabulary is s/ms/us/ns, separate from Duration/Time64 us/ns, matching the dedicated core TimestampUnit domain"
+      "moved": "T3.9 KO3-44: attachment option-encoding argument is structural plumbing; nonfinite option admission moves to Rust and ordinary JSON remains strict; T4.2 contract32: the timestamp transport unit vocabulary is s/ms/us/ns, separate from Duration/Time64 us/ns, matching the dedicated core TimestampUnit domain; T4.6: restore already decoded integer carriers after native ID effects without repeating text admission; fresh declared-text integer conversion remains a core-owned current-limit rule"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::_bits32": {
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
@@ -231,7 +231,7 @@
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::<module>": {
-      "moved": "T3.6: owner-approved P3D-13 removes the routine Snowflake seed warning because the seed is optional; the sampling limitation is documented and no Python SEED_IGNORED mapping remains; T3.5: source_values, decoded and _opening, saying a semantic model's sentences; T3.10: the first invalid-string-escape warning is selected by the core; the host only presents its warning class; T3.10: map the core-selected inference_option_not_finite sentence to authentic installed host-library wording; task, key and refusal selection stay in Rust; T4.2 R2: fixed constructor warning presentation mode preserves native plain text and SDMWarning category; ordinary SQL mode is unchanged; T4.2: present native frame timestamp facts in their admitted unit domain; T4.4: typed coded/frame_schema/frame_graph warning presentation profiles preserve exact frozen graph-warning filters while other warnings retain their code policy"
+      "moved": "T3.6: owner-approved P3D-13 removes the routine Snowflake seed warning because the seed is optional; the sampling limitation is documented and no Python SEED_IGNORED mapping remains; T3.5: source_values, decoded and _opening, saying a semantic model's sentences; T3.10: the first invalid-string-escape warning is selected by the core; the host only presents its warning class; T3.10: map the core-selected inference_option_not_finite sentence to authentic installed host-library wording; task, key and refusal selection stay in Rust; T4.2 R2: fixed constructor warning presentation mode preserves native plain text and SDMWarning category; ordinary SQL mode is unchanged; T4.2: present native frame timestamp facts in their admitted unit domain; T4.4: typed coded/frame_schema/frame_graph warning presentation profiles preserve exact frozen graph-warning filters while other warnings retain their code policy; T4.6: selected native-conversion and public-raise helpers preserve actual exception objects and caller graphs; domain refusal, caught-failure policy and field order stay in Rust"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_Words.convert_field": {
       "moved": "T3.17: the one value formatter gains the conversions the shared templates name (d, p); fix 1: host-held values from the call in progress (holding), the a and I conversions and the to() pairing; T4.2 native temporal frames: format an attached host timestamp value with its original native dtype for the existing timestamp presentation conversion; no inference or sampling rule added"
@@ -261,10 +261,10 @@
       "gone": "T3.17: the choice of template by field, rule and fields is the core's choice of sentence"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::error_from_core": {
-      "moved": "T3.17: the error says the core's sentence, filled by render; no template chosen here; fix 1: host-held values from the call in progress (holding), the a and I conversions and the to() pairing"
+      "moved": "T3.17: the error says the core's sentence, filled by render; no template chosen here; fix 1: host-held values from the call in progress (holding), the a and I conversions and the to() pairing; T4.6: present the selected closed constructor/generated-response fault using actual native conversions, selected original values and locally held exceptions; preserve native cause/context/suppression without selecting domain refusals in Python"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::raise_from_core": {
-      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added; T4.6: use the shared public raise boundary so core-selected explicit native/generated causes survive while only the introduced internal CoreError context is removed"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::said": {
       "moved": "T3.17: a warning says its sentence; fix 1: host-held values from the call in progress (holding), the a and I conversions and the to() pairing"
@@ -363,7 +363,7 @@
       "moved": "T2.14b fix 4: the kind a date, time of day or timestamp candidate is given with (GivenCandidate::Typed), its equality left to Python (MID2 P2-2)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::numpy_warns_on_cast_overflow": {
-      "moved": "T2.14b fix 5 (KO2-88, the orchestrator's): FX-1's FLOAT32_OVERFLOW, which the core reports on every runtime, is shown as RuntimeWarning only where the installed NumPy warns of a float32 cast's overflow (1.24 or later), as the reference's NumPy shows it; how a warning is shown is the host's (KO2-32)"
+      "moved": "T2.14b fix 5 (KO2-88, the orchestrator's): FX-1's FLOAT32_OVERFLOW, which the core reports on every runtime, is shown as RuntimeWarning only where the installed NumPy warns of a float32 cast's overflow (1.24 or later), as the reference's NumPy shows it; how a warning is shown is the host's (KO2-32); T4.6: observe the installed native cast warning category at selected presentation without reclassifying the core-selected numeric fault"
     },
     "packages/structured-data-models-client/src/sdm_client/client.py::_empty_answer": {
       "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
@@ -574,6 +574,27 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres_arrow.py::_utc_text_value": {
       "moved": "T3.10: selection of canonical UTC text moved into the core PostgreSQL SQL plan (ZonedTextUtc). This is only the native datetime/range/multirange encoder, with no provider policy choice or session mutation; standalone capture conversion retains its existing UTC behavior."
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::restored_integer": {
+      "refactor": "T4.6: restore already decoded integer carriers after native ID effects without repeating text admission; fresh declared-text integer conversion remains a core-owned current-limit rule"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::restored_json": {
+      "refactor": "T4.6: restore already decoded integer carriers after native ID effects without repeating text admission; fresh declared-text integer conversion remains a core-owned current-limit rule"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_as_answered": {
+      "refactor": "T4.6: restore already decoded integer carriers after native ID effects without repeating text admission; fresh declared-text integer conversion remains a core-owned current-limit rule"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_forecast_step": {
+      "refactor": "T4.6: restore already decoded integer carriers after native ID effects without repeating text admission; fresh declared-text integer conversion remains a core-owned current-limit rule"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_send": {
+      "refactor": "T4.6: extract the unchanged native transport exchange so gathered and direct callers share one I/O and transport-exception boundary; no model, answer or admission policy is selected here"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::raise_native": {
+      "refactor": "T4.6: propagate the selected actual exception instance and its native cause/context/suppression graph, removing only the explicitly identified internal CoreError; no admission or refusal classification"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::raise_error": {
+      "refactor": "T4.6: propagate the selected actual exception instance and its native cause/context/suppression graph, removing only the explicitly identified internal CoreError; no admission or refusal classification"
     }
   }
 }

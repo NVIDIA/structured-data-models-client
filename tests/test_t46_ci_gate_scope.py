@@ -253,7 +253,9 @@ def test_scoped_rust_runner_uses_its_actual_cli(
             assert argv[position + 1] == 'sqlite'
 
 
-def _captured() -> tuple[dict[str, Any], dict[str, Any]]:
+def _captured(
+    coverage: Any,
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     case = json.loads(
         (ROOT / 'contract/cases/s2/java.databricks-sql.types.json').read_text()
     )
@@ -263,18 +265,23 @@ def _captured() -> tuple[dict[str, Any], dict[str, Any]]:
             / 'contract/captures/databricks-sql/java.databricks-sql.types/capture.json'
         ).read_text()
     )
-    return case, capture['reference']
+    line = capture['reference']
+    coverage.bound_parameters(capture, line)
+    return case, capture, line
 
 
 def test_actual_databricks_capture_credits_omitted_inputs(
     coverage: Any,
 ) -> None:
-    case, line = _captured()
+    case, _, line = _captured(coverage)
     cells = coverage.observed(case, line)
     assert {'binary/feature', 'list/feature', 'int64/primary-key'} <= cells
     assert 'binary/primary-key' not in cells
     assert 'list/target' not in cells
-    assert coverage._undeclared(line) == {'users', 'orders'}
+    assert coverage._databricks_undeclared(line, ['users', 'orders']) == {
+        'users',
+        'orders',
+    }
 
 
 @pytest.mark.parametrize(
@@ -284,8 +291,10 @@ def test_actual_databricks_capture_credits_omitted_inputs(
         'failed',
         'nonempty',
         'boolean-count',
-        'schema',
-        'types',
+        'pk-only',
+        'missing-foreign',
+        'foreign-namespace',
+        'wrong-stage',
         'results',
         'method',
         'parameter-type',
@@ -294,16 +303,13 @@ def test_actual_databricks_capture_credits_omitted_inputs(
         'parameter-empty',
         'duplicate',
         'unrelated-sql',
-        'missing-error',
-        'digest',
-        'unencodable',
         'multiple-results',
     ],
 )
 def test_constraint_credit_requires_successful_unambiguous_empty_lookup(
     coverage: Any, fault: str
 ) -> None:
-    case, line = _captured()
+    case, capture, line = _captured(coverage)
     statements = line['driver']['capture']['statements']
     statement = next(
         s
@@ -319,10 +325,26 @@ def test_constraint_credit_requires_successful_unambiguous_empty_lookup(
         statement['results'][0]['rows'] = 1
     elif fault == 'boolean-count':
         statement['results'][0]['rows'] = False
-    elif fault == 'schema':
-        statement['results'][0]['values']['columns'] = ['column_name']
-    elif fault == 'types':
-        statement['results'][0]['values']['types'] = ['integer'] * 3
+    elif fault == 'pk-only':
+        statements[:] = [
+            s
+            for s in statements
+            if "constraint_type = 'FOREIGN KEY'" not in s['sql']
+        ]
+    elif fault == 'missing-foreign':
+        foreign = next(
+            s
+            for s in statements
+            if "constraint_type = 'FOREIGN KEY'" in s['sql']
+            and s['parameters'][1]['value'] == "'users'"
+        )
+        statements.remove(foreign)
+    elif fault == 'foreign-namespace':
+        at = statements.index(statement)
+        capture['statements'][at]['parameters'][0] = 'unrelated_schema'
+        statement['parameters'][0]['value'] = repr('unrelated_schema')
+    elif fault == 'wrong-stage':
+        statement['stage'] = 'predict'
     elif fault == 'results':
         statement['results'] = []
     elif fault == 'method':
@@ -339,16 +361,45 @@ def test_constraint_credit_requires_successful_unambiguous_empty_lookup(
         statement['parameters'][1]['value'] = "''"
     elif fault == 'duplicate':
         statements.append(copy.deepcopy(statement))
-    elif fault == 'missing-error':
-        statement.pop('error')
-    elif fault == 'digest':
-        statement['results'][0]['digest'] = '0' * 64
-    elif fault == 'unencodable':
-        statement['results'][0]['values']['unencodable'] = ['constraint_name']
     elif fault == 'multiple-results':
         statement['results'].append(copy.deepcopy(statement['results'][0]))
     else:
         statement['sql'] += ' OR 1 = 1'
+    coverage.bound_parameters(capture, line)
+    assert not {'binary/feature', 'list/feature'} & coverage.observed(
+        case, line
+    )
+
+
+@pytest.mark.parametrize(
+    'description', ['digest', 'schema', 'types', 'unencodable']
+)
+def test_descriptive_result_metadata_cannot_authorize_missing_foreign_key_proof(
+    coverage: Any, description: str
+) -> None:
+    case, capture, line = _captured(coverage)
+    statements = line['driver']['capture']['statements']
+    statements[:] = [
+        s
+        for s in statements
+        if "constraint_type = 'FOREIGN KEY'" not in s['sql']
+    ]
+    statement = next(
+        s for s in statements if 'table_constraints tc' in s['sql']
+    )
+    result = statement['results'][0]
+    if description == 'digest':
+        result['digest'] = '0' * 64
+    elif description == 'schema':
+        result['values']['columns'] = ['column_name']
+    elif description == 'types':
+        result['values']['types'] = ['integer'] * 3
+    else:
+        result['values']['unencodable'] = ['constraint_name']
+    # Coverage owns the complete native catalog proof. These descriptions
+    # neither replace the absent foreign-key read nor define a new local
+    # capture-integrity policy beyond the accepted Phase 3 implementation.
+    coverage.bound_parameters(capture, line)
     assert not {'binary/feature', 'list/feature'} & coverage.observed(
         case, line
     )

@@ -291,3 +291,25 @@ fn the_cell_vocabulary_is_the_scope_manifests() {
     let from_manifest: Vec<&str> = types.split('|').collect();
     assert_eq!(cell_types(), from_manifest);
 }
+#[test]
+fn shared_time_choice_keeps_published_view_dimensions_and_reads_older_frame_facts() {
+    let old = serde_json::to_value(sdm_contract::frames::TimeChoice::default()).unwrap();
+    assert!(old.get("instead_of").is_none());
+    let mut choice: sdm_contract::frames::TimeChoice = serde_json::from_value(old.clone()).unwrap();
+    assert!(choice.instead_of.is_empty());
+    choice.column = Some("ordered_at".into());
+    choice.instead_of = vec!["ordered_day".into(), "ordered_hour".into()];
+    let encoded = serde_json::to_value(&choice).unwrap();
+    assert_eq!(
+        encoded["instead_of"],
+        serde_json::json!(["ordered_day", "ordered_hour"])
+    );
+    assert_eq!(
+        serde_json::from_value::<sdm_contract::frames::TimeChoice>(encoded).unwrap(),
+        choice
+    );
+    assert_eq!(
+        serde_json::to_value(sdm_contract::frames::TimeChoice::default()).unwrap(),
+        old
+    );
+}

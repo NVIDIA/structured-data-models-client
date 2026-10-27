@@ -1092,3 +1092,19 @@ fn a_whole_table_read_that_failed_keeps_what_the_preview_doubts() {
     assert_eq!(small.time_column, None);
     assert!(small.time.unconfirmed.is_empty());
 }
+#[test]
+fn moved_time_choice_retains_the_published_view_note_through_link_policy() {
+    let choice = infer::TimeChoice {
+        column: Some("updated_at".into()),
+        fallback: Some("updated_at".into()),
+        instead_of: vec!["updated_day".into()],
+        ..Default::default()
+    };
+    assert_eq!(choice.for_links(false).instead_of, choice.instead_of);
+    assert!(choice.for_links(true).instead_of.is_empty());
+    let other = infer::TimeChoice {
+        column: Some("created_at".into()),
+        ..choice
+    };
+    assert!(other.for_links(false).instead_of.is_empty());
+}
