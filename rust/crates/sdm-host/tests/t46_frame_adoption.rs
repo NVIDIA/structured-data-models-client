@@ -154,3 +154,35 @@ fn assembled_sample_columns_keep_metadata_and_accept_later_value_or_presence_cha
     assert_eq!(stats["value"]["present"], 0);
     assert!(notices.is_empty());
 }
+
+#[test]
+fn native_assembly_cannot_silently_rerun_inference_when_completed_facts_are_missing() {
+    let rows = rows(false);
+    let attached = Attachments::from([
+        (
+            AttachmentId(1),
+            bytes(
+                json!({"tables":[{"name":"instance","source":{"source":["instance"]}}],"primary_keys":{},"time_columns":{}}),
+            ),
+        ),
+        (
+            AttachmentId(2),
+            bytes(
+                json!({"stage":"assemble","tables":[{"source":{"source":["instance"]},"rows":3}]}),
+            ),
+        ),
+        (
+            AttachmentId(3),
+            Attachment::Arrow(ArrowData::new(rows.schema(), vec![rows])),
+        ),
+    ]);
+    let run = HostRun::start(&sdm_host::default_root(), &message(), attached)
+        .unwrap_or_else(|out| panic!("{:?}", sdm_host::read(&out)));
+    let out = match run.next() {
+        Ok(out) | Err(out) => out,
+    };
+    let ControlMessage::Error { error } = sdm_host::read(&out).unwrap() else {
+        panic!("missing facts must be refused before any advice")
+    };
+    assert_eq!(error.sentence, Sentence::InvalidMessage);
+}
