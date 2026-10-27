@@ -9,6 +9,7 @@ from __future__ import annotations
 import copy
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -197,6 +198,44 @@ def test_partial_scope_cannot_claim_aggregate_mode(
     )
     assert done.returncode == 2
     assert 'scope' in done.stderr
+
+
+@pytest.mark.parametrize('database', ['duckdb', 'sqlite', 'postgres'])
+def test_scoped_rust_runner_uses_its_actual_cli(
+    tmp_path: Path, database: str
+) -> None:
+    # Exercise the gate's actual runner function with Cargo recorded rather
+    # than compiled. DuckDB is the Rust CLI default; its explicit database
+    # parser accepts SQLite and memory, while Postgres requires a recording.
+    source = (ROOT / 'scripts/rust_core/gate.sh').read_text()
+    observe = 'observe() {' + source.split('observe() {', 1)[1].split(
+        '\nrefuse() {', 1
+    )[0]
+    (tmp_path / 'rust').mkdir()
+    arguments = tmp_path / 'cargo-arguments.jsonl'
+    done = subprocess.run(
+        ['bash', '-uc',
+         'candidate=$PWD; differs=0; runs=rust-host; made=$PWD; '
+         'database_args=(--database "$database"); '
+         'cargo() { printf "%s\\n" "$@" > "$recorded"; }; '
+         + observe + '\nobserve'],
+        cwd=tmp_path,
+        env={**os.environ, 'database': database, 'recorded': str(arguments)},
+        capture_output=True, text=True, check=False,
+    )
+    if database == 'postgres':
+        assert done.returncode != 0
+        assert 'Postgres' in done.stdout + done.stderr
+        assert not arguments.exists()
+    else:
+        assert done.returncode == 0, done.stdout + done.stderr
+        argv = arguments.read_text().splitlines()
+        assert argv[:7] == ['run', '-q', '-p', 'sdm-testkit', '--bin', 'sdm-contract-run', '--locked']
+        if database == 'duckdb':
+            assert '--database' not in argv
+        else:
+            position = argv.index('--database')
+            assert argv[position + 1] == 'sqlite'
 
 
 def _captured() -> tuple[dict[str, Any], dict[str, Any]]:
