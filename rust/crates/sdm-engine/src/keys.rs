@@ -814,10 +814,81 @@ pub fn cast(entities: &ArrayRef, key: &DataType) -> Result<ArrayRef, CoreError> 
 mod tests {
     use super::*;
     use arrow_array::{
-        BooleanArray, Decimal128Array, Float32Array, Float64Array, Int64Array, NullArray,
-        StringArray, TimestampMicrosecondArray, UInt64Array,
+        BooleanArray, Decimal128Array, Float32Array, Float64Array, Int64Array, LargeStringArray,
+        NullArray, StringArray, TimestampMicrosecondArray, UInt64Array,
     };
     use sdm_contract::ErrorCode;
+
+    #[test]
+    fn identifying_text_is_exact_at_both_offset_widths_and_nonzero_slices() {
+        // Lexical, Unicode, empty, NUL and missing values are distinct native
+        // graph-key facts. No numeric parsing, casing or normalization applies.
+        let values = [
+            Some("outside slice"),
+            Some("007"),
+            Some("7"),
+            Some("7.0"),
+            Some(""),
+            Some("ΟΣ"),
+            Some("İ"),
+            Some("é"),
+            Some("e\u{301}"),
+            Some("\0"),
+            Some("<NA>"),
+            Some("nan"),
+            None,
+            Some("007"),
+            Some("outside slice"),
+        ];
+        let expected = values[1..values.len() - 1]
+            .iter()
+            .map(|value| value.map(|text| Key::Text(text.to_owned())))
+            .collect::<Vec<_>>();
+        let narrow: ArrayRef = Arc::new(StringArray::from(values.to_vec()));
+        let large: ArrayRef = Arc::new(LargeStringArray::from(values.to_vec()));
+        for original in [narrow, large] {
+            assert!(supported(original.data_type()));
+            let sliced = original.slice(1, values.len() - 2);
+            assert_eq!(read(&sliced).unwrap(), expected);
+            // Independently read pages preserve the same ordered keys and
+            // nulls as a single logical slice, without rewriting offsets.
+            let first = sliced.slice(0, 5);
+            let rest = sliced.slice(5, sliced.len() - 5);
+            let mut paged = read(&first).unwrap();
+            paged.extend(read(&rest).unwrap());
+            assert_eq!(paged, expected);
+            assert_eq!(sliced.data_type(), original.data_type());
+            assert_eq!(original.len(), values.len());
+        }
+    }
+
+    #[test]
+    fn empty_and_all_missing_text_keys_preserve_their_native_shape() {
+        for values in [Vec::<Option<&str>>::new(), vec![None, None]] {
+            for array in [
+                Arc::new(StringArray::from(values.clone())) as ArrayRef,
+                Arc::new(LargeStringArray::from(values.clone())) as ArrayRef,
+            ] {
+                assert_eq!(read(&array).unwrap(), vec![None; values.len()]);
+            }
+        }
+    }
+
+    #[test]
+    fn reading_large_offsets_does_not_replace_the_provider_cast_rule() {
+        let entities: ArrayRef = Arc::new(LargeStringArray::from(vec!["7", "007"]));
+        let casted = cast(&entities, &DataType::Int64).unwrap();
+        assert_eq!(read(&casted).unwrap(), vec![Some(Key::Int(7)); 2]);
+        let refused = cast(&entities, &DataType::LargeUtf8).unwrap_err();
+        assert_eq!(refused.code, ErrorCode::UnsupportedRequest);
+        assert_eq!(
+            read(&entities).unwrap(),
+            vec![
+                Some(Key::Text("7".to_owned())),
+                Some(Key::Text("007".to_owned())),
+            ]
+        );
+    }
 
     fn cast_to(entities: ArrayRef, key: &DataType) -> Result<ArrayRef, (String, u64)> {
         cast(&entities, key).map_err(|e| {
