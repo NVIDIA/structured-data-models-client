@@ -1250,3 +1250,86 @@ def test_direct_literal_parse_diagnostics_precede_opaque_id_decision(
         assert bool(new[2]) == (
             identifier not in [r"[4,, '\q']", r"[4 +, '\q']"]
         )
+
+
+@pytest.mark.parametrize(
+    ('kind', 'identifier', 'error_type'),
+    [
+        ('decimal', '[' + '9' * 650 + ']', None),
+        ('hex-singleton', '[0x' + 'f' * 600 + ']', ValueError),
+        ('hex-ignored', '[0x' + 'f' * 600 + ',0]', None),
+    ],
+)
+def test_direct_literal_integer_limit_and_selected_stringification(
+    monkeypatch, kind, identifier, error_type
+):
+    import sys
+
+    class Identified(Scripted):
+        def predict(self, payload):
+            answer = super().predict(payload)
+            answer['predictions'][0]['id'] = identifier
+            answer['predictions'][1]['id'] = '[5]'
+            return answer
+
+    frames = (
+        pd.DataFrame({'user_id': [1, 2, 3], 'target': [2, 4, 6]}),
+        pd.DataFrame({'user_id': [4, 5]}),
+    )
+    limit = sys.get_int_max_str_digits()
+    try:
+
+        def edit(request):
+            sys.set_int_max_str_digits(640)
+
+        old = outcome(
+            monkeypatch, frames, core=False, edit=edit, transport=Identified()
+        )
+        new = outcome(
+            monkeypatch, frames, core=True, edit=edit, transport=Identified()
+        )
+        assert new == old
+        assert len(new[3]) == 1
+        if error_type:
+            assert new[1][1] is error_type
+            assert '640 digits' in new[1][-1]
+        else:
+            assert new[1][0] == 'ok'
+            assert new[1][1][0]['id'] == [4, 5]
+    finally:
+        sys.set_int_max_str_digits(limit)
+
+
+@pytest.mark.parametrize(
+    ('identifier', 'invalid'),
+    [
+        ('[' * 300 + '0' + ']' * 300, True),
+        ('\ufeff[5]', False),
+        ('{"a":4}', False),
+        ('["' + '\U0001f600' * 1020 + '"]', True),
+        ('["' + '\U0001f600' * 1021 + '"]', False),
+    ],
+)
+def test_direct_inner_id_json_and_character_limits_are_separate_from_wire_json(
+    monkeypatch, identifier, invalid
+):
+    class Identified(Scripted):
+        def predict(self, payload):
+            answer = super().predict(payload)
+            answer['predictions'][0]['id'] = identifier
+            answer['predictions'][1]['id'] = '[5]'
+            return answer
+
+    frames = (
+        pd.DataFrame({'user_id': [1, 2, 3], 'target': [2, 4, 6]}),
+        pd.DataFrame({'user_id': [4, 5]}),
+    )
+    old = outcome(monkeypatch, frames, core=False, transport=Identified())
+    new = outcome(monkeypatch, frames, core=True, transport=Identified())
+    assert new == old
+    assert len(new[3]) == 1
+    if invalid:
+        assert new[1][2] == 'INVALID_RESPONSE'
+    else:
+        assert new[1][0] == 'ok'
+        assert new[1][1][0]['id'] == [4, 5]
