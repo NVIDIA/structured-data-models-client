@@ -1,0 +1,22 @@
+{
+ "format": "sdm-capture/1",
+ "recording_commit": "ecf49f7f40673d6f4ffff042c442f8e0e87bd504",
+ "reference_commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+ "legs": {
+  "lakebase": {
+   "databricks-sdk": "0.157.0",
+   "duckdb": "1.5.6",
+   "numpy": "2.5.3",
+   "pandas": "3.0.6",
+   "psycopg": "3.3.6",
+   "pyarrow": "25.0.1",
+   "python": "3.12.15"
+  }
+ },
+ "cases": {
+  "target.aggregation.list-distinct@lakebase": {
+   "input_hash": "a50b8c87c945f0ac16edf340d5064f637039168df15cefd07552e50912d63aee",
+   "capture": "target.aggregation.list-distinct"
+  }
+ }
+}

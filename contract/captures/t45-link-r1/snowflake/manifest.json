@@ -1,0 +1,25 @@
+{
+ "format": "sdm-capture/1",
+ "recording_commit": "ecf49f7f40673d6f4ffff042c442f8e0e87bd504",
+ "reference_commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+ "legs": {
+  "snowflake": {
+   "duckdb": "1.5.6",
+   "numpy": "2.5.3",
+   "pandas": "3.0.6",
+   "pyarrow": "25.0.1",
+   "python": "3.12.15",
+   "snowflake-connector-python": "4.8.0"
+  }
+ },
+ "cases": {
+  "target.aggregation.list-distinct@snowflake": {
+   "input_hash": "a50b8c87c945f0ac16edf340d5064f637039168df15cefd07552e50912d63aee",
+   "capture": "target.aggregation.list-distinct"
+  },
+  "view.semantic.link@snowflake": {
+   "input_hash": "bb8ca4e8d92a8ecf33fd5651864b5f4a907d445e83731d6455baeebad8f4b2b6",
+   "capture": "view.semantic.link"
+  }
+ }
+}
