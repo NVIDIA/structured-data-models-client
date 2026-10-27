@@ -9,9 +9,71 @@ import json
 
 import messages
 import numpy as np
+import pandas as pd
 import pyarrow as pa
+import pytest
 from sdm_client import _native
 from sdm_client._rust import prepare
+
+
+@pytest.mark.parametrize('rows', [0, 2, 5])
+def test_zero_column_scoring_rows_survive_native_admission_and_owner_release(
+    rows,
+):
+    context = pd.DataFrame({'target': [2, 4, 6]})
+    scoring = pd.DataFrame(index=range(rows))
+    context_header, scoring_header = (
+        prepare._header(context),
+        prepare._header(scoring),
+    )
+    arguments = prepare._call(
+        {
+            'stage': 'arguments',
+            'context': {'kind': 'frame'},
+            'predict': {'kind': 'frame'},
+            'related': [],
+            'task': {'value': 'regression'},
+        }
+    )
+    headers = prepare._call(
+        {
+            'stage': 'headers',
+            'arguments': arguments,
+            'context': context_header,
+            'predict': scoring_header,
+            'target_context': {'positions': [0]},
+            'target_predict': {'positions': []},
+            'predict_context': [],
+        }
+    )
+    producer = prepare._buffers(scoring, scoring_header)
+    run = _native.Run.start(
+        messages.start({'op': 'prepare_request', 'input': 1}),
+        {
+            1: messages.encoded(
+                {
+                    'stage': 'context',
+                    'headers': headers,
+                    'context': 2,
+                    'predict': 3,
+                    'entity_table': 'instance',
+                }
+            ),
+            2: prepare._buffers(context, context_header),
+            3: producer,
+        },
+    )
+    del producer, scoring, context
+    gc.collect()
+    reply = json.loads(run.next()[0])
+    assert reply['step'] == 'done', reply
+    prepared = json.loads(run.take_attachment(reply['result']['value']))
+    assert prepared['target'] == 'target'
+    assert prepared['entity_table'] == 'instance'
+    # Context verifies the native Arrow row count against the original header.
+    # Reaching this useful result proves zero-column rows survived ownership.
+    del run
+    gc.collect()
 
 
 def test_direct_schema_start_owns_numeric_buffers_before_next():

@@ -29,9 +29,9 @@ use arrow_array::{
     DurationMillisecondArray, DurationNanosecondArray, DurationSecondArray, FixedSizeBinaryArray,
     FixedSizeListArray, Float16Array, Float32Array, Float64Array, Int32Array, Int64Array,
     LargeBinaryArray, LargeListArray, LargeListViewArray, LargeStringArray, ListArray,
-    ListViewArray, NullArray, PrimitiveArray, RecordBatch, RunArray, StringArray, StringViewArray,
-    StructArray, Time32SecondArray, Time64MicrosecondArray, TimestampMillisecondArray,
-    TimestampSecondArray, UInt64Array, new_empty_array,
+    ListViewArray, NullArray, PrimitiveArray, RecordBatch, RecordBatchOptions, RunArray,
+    StringArray, StringViewArray, StructArray, Time32SecondArray, Time64MicrosecondArray,
+    TimestampMillisecondArray, TimestampSecondArray, UInt64Array, new_empty_array,
 };
 use arrow_buffer::{OffsetBuffer, ScalarBuffer, i256};
 use arrow_schema::{
@@ -62,6 +62,40 @@ fn text(error: &CoreError, field: &str) -> String {
 fn column(admitted: &ArrowData, name: &str) -> ArrayRef {
     let index = admitted.schema.index_of(name).unwrap();
     Arc::clone(admitted.batches[0].column(index))
+}
+
+#[test]
+fn zero_column_batches_keep_each_explicit_row_count_during_admission() {
+    let schema = Arc::new(Schema::empty());
+    let counts = [0, 2, 5];
+    let batches = counts
+        .iter()
+        .map(|&rows| {
+            RecordBatch::try_new_with_options(
+                schema.clone(),
+                vec![],
+                &RecordBatchOptions::new().with_row_count(Some(rows)),
+            )
+            .unwrap()
+        })
+        .collect();
+    let original = ArrowData::new(schema.clone(), batches);
+    let admitted = admit(&original).unwrap();
+    assert_eq!(admitted.schema, schema);
+    assert_eq!(
+        admitted
+            .batches
+            .iter()
+            .map(RecordBatch::num_rows)
+            .collect::<Vec<_>>(),
+        counts
+    );
+    assert!(
+        admitted
+            .batches
+            .iter()
+            .all(|batch| batch.num_columns() == 0)
+    );
 }
 
 #[test]

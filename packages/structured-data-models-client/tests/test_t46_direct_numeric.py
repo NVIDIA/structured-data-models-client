@@ -293,9 +293,14 @@ def test_direct_constructor_semantic_guards_match_source_order(
         context.columns = pd.Index([1, 'target'], dtype=object)
         predict.columns = pd.Index([1], dtype=object)
     frames = context, predict
-    assert outcome(monkeypatch, frames, core=True, send=False) == outcome(
-        monkeypatch, frames, core=False, send=False
-    )
+    actual = outcome(monkeypatch, frames, core=True, send=False)
+    reference = outcome(monkeypatch, frames, core=False, send=False)
+    if variant == 'missing':
+        assert len(predict) == 2 and len(predict.columns) == 0
+        assert actual[1][2] == reference[1][2] == 'INVALID_REQUEST'
+        assert 'predict is missing column(s)' in actual[1][3]
+        assert not actual[3]
+    assert actual == reference
 
 
 @pytest.mark.parametrize(
