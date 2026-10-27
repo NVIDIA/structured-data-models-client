@@ -410,6 +410,22 @@ def test_the_expected_tests_are_the_files_own() -> None:
                 assert len(with_parameters) == count and not bare, (name, test)
 
 
+def test_production_smoke_includes_the_frame_ownership_tests() -> None:
+    # These tests use shipped operations: the ownership boundary must hold
+    # on the production wheel as well as the test-ops wheel.
+    files = {
+        'test_t42_frames.py',
+        'test_t42_string_ownership.py',
+        'test_t42_temporal_ownership.py',
+        'test_t44_numeric_checkpoint_ownership.py',
+        'test_t46_direct_ownership.py',
+    }
+    for build in ('production', 'test-ops'):
+        assert files <= set(smoke.FILES[build])
+    assert len(smoke.EXPECTED['test_t42_temporal_ownership.py']) == 16
+    assert len(smoke.EXPECTED['test_t42_string_ownership.py']) == 4
+
+
 def test_the_expected_tests_sync_sees_classes_async_tests_and_parameters() -> (
     None
 ):
