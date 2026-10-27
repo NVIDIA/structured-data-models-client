@@ -90,6 +90,12 @@ pub fn resolved_attachments(
                     sdm_contract::prepare::Preparation::CompleteRelationalResponse { part } => {
                         named.extend([part.data.response, part.data.rows, part.rows, part.target_rows].into_iter().map(|id| (id, AttachmentKind::Bytes)));
                     }
+                    sdm_contract::prepare::Preparation::FinishRelationalResponse { input } => {
+                        named.extend(input.attachments().into_iter().map(|id| (id, AttachmentKind::Bytes)));
+                    }
+                    sdm_contract::prepare::Preparation::PrepareRelationalRankPopulation { source } => {
+                        named.extend(source.attachments().into_iter().map(|id| (id, AttachmentKind::Bytes)));
+                    }
                     _ => {}
                 }
                 let rows = match input {
