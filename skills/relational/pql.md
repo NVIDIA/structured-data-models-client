@@ -351,8 +351,8 @@ Read the column number: it points at the token, not at the clause.
 
 ```
 PREDICT COUNT(orders.*, 0, 30, days, 3) FOR EACH users.user_id
-→ Invalid Syntax ... Could not process the text: ","; in line 1 and col 35
-  ...
+→ [INVALID_REQUEST] ... Expected ')' to close the aggregation, but found ','
+  at row 1, column 35.
 ```
 
 That one is a forecast written as a fifth argument. Forecasts are

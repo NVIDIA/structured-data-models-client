@@ -17,7 +17,7 @@ the keys, time columns and relationships, and an edit to it is still
 checked. A schema of tables in their source holds its source, which no
 client pickles: the core route's refuses as the old route's does, with the
 Source's own refusal, and everything the core route adds to a schema's
-state (the core's description of the source, the store of engine tables)
+state (what the source said of each column, the store of engine tables)
 pickles and reloads with the rest of it.
 """
 
@@ -85,7 +85,7 @@ def test_a_schema_the_reference_pickled_loads_as_the_reference_reads_it(
         w for w in shown if not issubclass(w.category, ResourceWarning)
     ] == []
     assert _writer().projection(loaded) == EXPECTED['schemas'][name]
-    assert loaded._core_description is None
+    assert not _described_on_the_core(loaded)
     assert loaded.source is None
     # Its relationships are still checked when edited.
     with pytest.raises(StructuredDataError):
@@ -97,6 +97,22 @@ def test_a_schema_the_reference_pickled_loads_as_the_reference_reads_it(
     assert _writer().projection(again) == EXPECTED['schemas'][name]
 
 
+def _described_on_the_core(schema: Any) -> bool:
+    from sdm_client.schema import _described_on_the_core as described
+
+    return described(schema)
+
+
+def _facts(schema: Any) -> dict[tuple[str, str], Any]:
+    r"""What the source said of each column, as the schema keeps it on the
+    column (T3.16)."""
+    return {
+        (name, column_name): column._source
+        for name, table in schema.tables.items()
+        for column_name, column in table.columns.items()
+    }
+
+
 def _shop(routes: str, monkeypatch: pytest.MonkeyPatch) -> Any:
     from sdm_client import Schema, _routing
     from sdm_connectors import DuckDBSource
@@ -104,7 +120,7 @@ def _shop(routes: str, monkeypatch: pytest.MonkeyPatch) -> Any:
     if routes:
         monkeypatch.setenv(_routing.ENVIRONMENT, routes)
     else:
-        monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+        monkeypatch.setenv(_routing.ENVIRONMENT, '')
     connection = duckdb.connect()
     connection.execute(
         'CREATE TABLE users (user_id BIGINT PRIMARY KEY, age BIGINT)'
@@ -131,12 +147,12 @@ def test_a_core_built_schema_pickles_as_the_old_route_s(
     from sdm_client import Relationship, Schema, StructuredDataError, _routing
 
     core = _shop(','.join(_routing.FROM_SOURCE_DUCKDB_TABLES), monkeypatch)
-    assert core._core_description is not None
+    assert _described_on_the_core(core)
     refusals = {}
     routes = {'core': core}
     if importlib.util.find_spec('sdm_relational_engine') is not None:
         routes['old'] = _shop('', monkeypatch)
-        assert routes['old']._core_description is None
+        assert not _described_on_the_core(routes['old'])
     for route, schema in routes.items():
         with pytest.raises(TypeError) as refused:
             pickle.dumps(schema)
@@ -168,7 +184,7 @@ def test_a_core_built_schema_pickles_as_the_old_route_s(
     assert [
         w for w in shown if not issubclass(w.category, ResourceWarning)
     ] == []
-    assert loaded._core_description == core._core_description
+    assert _facts(loaded) == _facts(core)
     assert type(loaded._engine_tables) is type(core._engine_tables)
     assert _writer().projection(loaded) == {
         **_writer().projection(core),
@@ -210,7 +226,7 @@ def test_an_edited_core_built_schema_round_trips_its_state(
     written = io.BytesIO()
     _WithoutTheSource(written).dump(core)
     loaded = pickle.loads(written.getvalue())
-    assert loaded._core_description == core._core_description
+    assert _facts(loaded) == _facts(core)
     assert _writer().projection(loaded) == {
         **_writer().projection(core),
         'source': False,
@@ -222,4 +238,4 @@ def test_an_edited_core_built_schema_round_trips_its_state(
         loaded['orders'].time_column = 'user_id'
     assert refused.value.details['field'] == 'time_column'
     loaded['orders'].time_column = 'ts'
-    assert loaded._core_description['tables'][1]['time_column'] == 'ts'
+    assert loaded['orders'].time_column == 'ts'

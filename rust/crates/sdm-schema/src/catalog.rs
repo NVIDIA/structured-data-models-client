@@ -12,7 +12,7 @@ use arrow_array::cast::AsArray;
 use arrow_array::types::{Int32Type, Int64Type};
 use arrow_array::{ArrayRef, RecordBatch};
 use sdm_contract::data::results;
-use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind};
+use sdm_contract::{CoreError, Detail, Sentence};
 
 /// One row of a `key_counts` answer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -24,12 +24,31 @@ pub struct KeyCount {
     pub missing: i64,
 }
 
-/// The column `name` of a batch, which the checked shape guarantees.
+/// The column of a batch the core names by its own alias, `name`: the
+/// column of that name, else the one column whose name is it in another
+/// case, as a source folds an unquoted alias (Snowflake upper-cases the
+/// reference's `AS k`, `as table_index`); `None` for none, or for two.
+pub fn result_column<'a>(batch: &'a RecordBatch, name: &str) -> Option<&'a ArrayRef> {
+    batch.column_by_name(name).or_else(|| {
+        let mut found = batch
+            .schema_ref()
+            .fields()
+            .iter()
+            .enumerate()
+            .filter(|(_, field)| field.name().eq_ignore_ascii_case(name));
+        match (found.next(), found.next()) {
+            (Some((at, _)), None) => Some(batch.column(at)),
+            _ => None,
+        }
+    })
+}
+
+/// The column `name` of a batch, which the checked shape guarantees, as
+/// [`result_column`] finds it.
 fn named<'a>(batch: &'a RecordBatch, name: &str) -> Result<&'a ArrayRef, CoreError> {
-    batch.column_by_name(name).ok_or_else(|| {
+    result_column(batch, name).ok_or_else(|| {
         CoreError::new(
-            ErrorKind::Internal,
-            ErrorCode::InternalError,
+            Sentence::Internal,
             "a catalog answer lacks a column its checked shape holds",
         )
         .with_field("column", Detail::text(name))
@@ -44,8 +63,7 @@ fn integers(batch: &RecordBatch, name: &str) -> Result<Vec<i64>, CoreError> {
     let column = named(batch, name)?;
     let retyped = || {
         CoreError::new(
-            ErrorKind::Internal,
-            ErrorCode::InternalError,
+            Sentence::Internal,
             "a key count's column is not of its checked type",
         )
         .with_field("column", Detail::text(name))

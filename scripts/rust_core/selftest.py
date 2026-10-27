@@ -74,7 +74,10 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
-import tomllib
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import bridge_freeze  # noqa: E402
@@ -259,6 +262,8 @@ def deps_cases(results: list[Result], base: dict[str, Any]) -> None:
 
     def design_graph(m: Metadata) -> None:
         for crate, deps in l0_deps.ALLOWED.items():
+            if crate in l0_deps.PLANNED:
+                continue
             for dep in deps:
                 if not any(
                     d['pkg'] == m.ids[dep] for d in m.node(crate)['deps']
@@ -387,41 +392,61 @@ def deps_cases(results: list[Result], base: dict[str, Any]) -> None:
         'sdm-py reaches snowflake-connector-rs',
     )
 
-    # A future Java binding (sdm-jni) links jni, and no Python.
+    # Java's binding (sdm-jni, T3.2): classified before it exists, so a
+    # workspace without it passes, and once it exists it links jni, no
+    # Python and no driver, and reaches the core through sdm-host alone.
     with tempfile.TemporaryDirectory(prefix='sdm-l0-') as tmp:
         manifest = Path(tmp) / 'sdm-jni/Cargo.toml'
         manifest.parent.mkdir()
         manifest.write_text(
             '[package]\nname = "sdm-jni"\n\n[lints.rust]\nunsafe_code = "deny"\n'
         )
-        classes, allowed = dict(l0_deps.CLASSES), dict(l0_deps.ALLOWED)
-        l0_deps.CLASSES['sdm-jni'] = l0_deps.BINDING
-        l0_deps.ALLOWED['sdm-jni'] = frozenset({'sdm-host', 'sdm-contract'})
-        try:
+        assert l0_deps.CLASSES['sdm-jni'] == l0_deps.BINDING
 
-            def jni(m: Metadata, extra: str | None = None) -> None:
-                m.member('sdm-jni', manifest)
-                for dep in ('sdm-host', 'sdm-contract', 'jni'):
+        def jni(m: Metadata, extra: str | None = None, drop: str = '') -> None:
+            m.member('sdm-jni', manifest)
+            # The binding exists from T3.11: its edges are the fixture's.
+            m.node('sdm-jni')['deps'] = []
+            for dep in ('sdm-host', 'sdm-contract', 'jni'):
+                if dep != drop:
                     m.edge('sdm-jni', dep)
-                if extra:
-                    m.edge('sdm-jni', extra)
+            if extra:
+                m.edge('sdm-jni', extra)
 
-            case('control: a Java binding, sdm-jni, on jni', jni, None)
-            case(
-                'a Java binding on pyo3',
-                lambda m: jni(m, 'pyo3'),
-                'sdm-jni reaches pyo3',
-            )
-            case(
-                'a Java binding on duckdb',
-                lambda m: jni(m, 'duckdb'),
-                'sdm-jni reaches duckdb',
-            )
-        finally:
-            l0_deps.CLASSES.clear()
-            l0_deps.CLASSES.update(classes)
-            l0_deps.ALLOWED.clear()
-            l0_deps.ALLOWED.update(allowed)
+        case('control: a Java binding, sdm-jni, on jni', jni, None)
+        case(
+            'a Java binding on pyo3',
+            lambda m: jni(m, 'pyo3'),
+            'sdm-jni reaches pyo3',
+        )
+        case(
+            'a Java binding on duckdb',
+            lambda m: jni(m, 'duckdb'),
+            'sdm-jni reaches duckdb',
+        )
+        case(
+            'a Java binding on sdm-core',
+            lambda m: jni(m, 'sdm-core'),
+            'sdm-jni -> sdm-core',
+        )
+        case(
+            'a Java binding without sdm-contract (E21)',
+            lambda m: jni(m, drop='sdm-contract'),
+            'sdm-jni: does not depend on sdm-contract',
+        )
+        bound = Path(tmp) / 'sdm-other/Cargo.toml'
+        bound.parent.mkdir()
+        bound.write_text(
+            '[package]\nname = "sdm-other"\n\n[lints.rust]\nunsafe_code = "deny"\n'
+        )
+        case(
+            'an unclassified binding',
+            lambda m: (
+                m.member('sdm-other', bound),
+                m.edge('sdm-other', 'sdm-host'),
+            ),
+            'sdm-other: a workspace crate with no class',
+        )
 
     # The parser rule's source half, and the unsafe check: crates copied.
     def with_crate(
@@ -788,14 +813,52 @@ def freeze_cases(results: list[Result]) -> None:
         '        return indices\n\n'
     )
 
+    def schema_build_site(root: Path) -> tuple[Path, list[str], ast.Assign]:
+        path = root / schema
+        text = path.read_text()
+        functions = [
+            node
+            for node in ast.parse(text).body
+            if isinstance(node, ast.FunctionDef) and node.name == 'from_source'
+        ]
+        if len(functions) != 1:
+            raise AssertionError(f'{path}: expected one from_source function')
+        expected = ast.parse(
+            'schema = build(cls, source, json.loads(finished.take(described.description)))'
+        ).body[0]
+        sites = [
+            node
+            for node in functions[0].body
+            if isinstance(node, ast.Assign)
+            and ast.dump(node) == ast.dump(expected)
+        ]
+        if len(sites) != 1:
+            raise AssertionError(
+                f'{path}: expected one schema build assignment'
+            )
+        return path, text.splitlines(keepends=True), sites[0]
+
     def added_raise(root: Path) -> None:
-        edit(
-            root / schema,
-            '    return build(cls, source, described)\n',
+        path, lines, site = schema_build_site(root)
+        lines.insert(
+            site.lineno - 1,
             '    if described is None:\n'
-            "        raise StructuredDataError('none', code='INTERNAL_ERROR')\n"
-            '    return build(cls, source, described)\n',
+            "        raise StructuredDataError('none', code='INTERNAL_ERROR')\n",
         )
+        path.write_text(''.join(lines))
+
+    def copied_description(root: Path) -> None:
+        path, lines, site = schema_build_site(root)
+        assert isinstance(site.value, ast.Call)
+        description = site.value.args[2]
+        assert description.end_lineno is not None
+        assert description.end_col_offset is not None
+        at = description.end_lineno - 1
+        # AST columns count UTF-8 bytes, even when earlier text is non-ASCII.
+        line = lines[at].encode('utf-8')
+        column = description.end_col_offset
+        lines[at] = (line[:column] + b'.copy()' + line[column:]).decode('utf-8')
+        path.write_text(''.join(lines))
 
     # The tree, through git, and its copy against itself.
     expect(
@@ -1027,8 +1090,8 @@ def freeze_cases(results: list[Result]) -> None:
             'a swallowing try',
             lambda r: edit(
                 r / materialize,
-                '    described, held = description(schema)\n',
-                '    try:\n        described, held = description(schema)\n'
+                '    choice, provider = providers.for_source(schema.source)\n',
+                '    try:\n        choice, provider = providers.for_source(schema.source)\n'
                 '    except StructuredDataError:\n        pass\n',
             ),
             gather,
@@ -1037,10 +1100,10 @@ def freeze_cases(results: list[Result]) -> None:
             'an aliased contextlib.suppress',
             lambda r: edit(
                 r / materialize,
-                '    described, held = description(schema)\n',
+                '    choice, provider = providers.for_source(schema.source)\n',
                 '    import contextlib\n\n    quiet = contextlib.suppress\n'
                 '    with quiet(ValueError):\n'
-                '        described, held = description(schema)\n',
+                '        choice, provider = providers.for_source(schema.source)\n',
             ),
             gather,
         ),
@@ -1314,11 +1377,7 @@ def freeze_cases(results: list[Result]) -> None:
         ),
         (
             'a copy on a value',
-            lambda r: edit(
-                r / schema,
-                '    return build(cls, source, described)\n',
-                '    return build(cls, source, described.copy())\n',
-            ),
+            copied_description,
             from_source,
         ),
     ):
@@ -2366,6 +2425,28 @@ def scan_cases(results: list[Result]) -> None:
             '\nconst POSITION: &str = "cid";\n',
         ),
         '`cid` names a dialect (cid)',
+    )
+
+    def jni(root: Path, text: str) -> None:
+        source = root / 'rust/bindings/sdm-jni/src'
+        # The binding exists from T3.11: its root is replaced in the copy.
+        source.mkdir(parents=True, exist_ok=True)
+        (source / 'lib.rs').write_text(text)
+
+    dialects(
+        "control: Java's binding, sdm-jni, as the tree holds it (absent until T3.11)",
+        lambda r: None,
+        None,
+    )
+    dialects(
+        "another dialect's name in Java's binding, sdm-jni, once it exists",
+        lambda r: jni(r, 'const DIALECT: &str = "Snowflake";\n'),
+        '`Snowflake` names a dialect (snowflake)',
+    )
+    dialects(
+        "control: Java's binding with no dialect word",
+        lambda r: jni(r, 'const ANSWER: u8 = 42;\n'),
+        None,
     )
     dialects(
         "another dialect's name in the binding, sdm-py",

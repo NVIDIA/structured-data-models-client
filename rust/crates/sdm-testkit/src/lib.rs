@@ -45,6 +45,7 @@ pub mod kit;
 pub mod layer;
 pub mod memory;
 pub mod observation;
+pub mod plan_b;
 pub mod pre_given;
 pub mod replay;
 pub mod sqlite;

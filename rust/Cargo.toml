@@ -3,11 +3,11 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # The Rust core of sdm-client: the contract, the core and the host layer, the
-# dev-only test host, and the Python binding over them. The layout and rules
+# dev-only test host, and the Python and Java bindings over them. The layout and rules
 # are in docs/design/rust-core/phase-1/design.md.
 [workspace]
 resolver = "2"
-members = ["crates/*", "bindings/sdm-py"]
+members = ["crates/*", "bindings/sdm-py", "bindings/sdm-jni"]
 
 [workspace.package]
 # Released with the client at its version; a guard holds sdm-py's version
@@ -33,6 +33,9 @@ arrow-schema = "58"
 arrow-select = "58"
 base64 = "0.22"
 duckdb = { version = "=1.10506.0", features = ["bundled"] }
+# Python's regular expressions, lookaround and backtracking order included,
+# for the view expressions' checks ported from the old client (T3.5).
+fancy-regex = "0.19"
 half = "2"
 indexmap = { version = "2", features = ["serde"] }
 # The one calendar and zone library (decision A7). Zones come from the host's
@@ -40,6 +43,10 @@ indexmap = { version = "2", features = ["serde"] }
 # so `tz-system` stays off.
 jiff = { version = "0.2.38", default-features = false, features = ["std", "tzdb-zoneinfo", "tzdb-bundle-always"] }
 jiff-tzdb = "0.1.9"
+# The Java binding's JNI layer, in sdm-jni alone (T3.11, design choice 10).
+jni = "0.22.4"
+# The facade tracing's `log` feature writes to; sdm-jni bridges it to SLF4J.
+log = "0.4"
 proptest = { version = "1", default-features = false, features = ["std"] }
 pyo3 = { version = "0.28", features = ["abi3-py310"] }
 # Bridges the `log` records tracing emits to Python's logging, in sdm-py
@@ -59,6 +66,10 @@ thiserror = "2"
 # when no subscriber is set, which is how pyo3-log hears it (decision H8).
 tracing = { version = "0.1.44", default-features = false, features = ["std", "log"] }
 anyhow = "1"
+# The view definitions' YAML, read as events and given YAML 1.1's values as
+# PyYAML gives them (T3.5); no encoding detection, the text is already a
+# string.
+yaml-rust2 = { version = "0.13", default-features = false }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

@@ -1,0 +1,293 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+  All rights reserved.
+  SPDX-License-Identifier: Apache-2.0
+
+  The Java library on the Rust core (design choice 10): one JAR, Java 17
+  bytecode, holding the native library sdm-jni for each platform under
+  com/nvidia/sdm/native/<os>-<arch>/. The natives are built by cargo and
+  copied into ${sdm.natives} (<platform>/libsdm_jni.so or .dylib) before
+  `mvn package`; README.md says how. Nothing is published until Phase 5.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.nvidia</groupId>
+  <artifactId>structured-data-models-client</artifactId>
+  <!-- Released with the client at its version (rust/Cargo.toml's). -->
+  <version>1.0.0</version>
+  <packaging>jar</packaging>
+
+  <name>Structured Data Models client for Java</name>
+  <description>Predictive queries over structured data, on the client's Rust core</description>
+  <url>https://github.com/NVIDIA/structured-data-models-client</url>
+
+  <licenses>
+    <license>
+      <name>Apache-2.0</name>
+      <url>https://www.apache.org/licenses/LICENSE-2.0</url>
+    </license>
+  </licenses>
+
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <maven.compiler.release>17</maven.compiler.release>
+    <arrow.version>19.0.0</arrow.version>
+    <slf4j.version>2.0.17</slf4j.version>
+    <junit.version>5.13.4</junit.version>
+    <databricks.sdk.version>0.170.0</databricks.sdk.version>
+    <!-- The JDBC drivers the providers are tested with (T3.12): DuckDB at
+         the reference's version (1.5.6), SQLite's and Postgres's current
+         releases. None ships with the JAR: a source is built from the
+         caller's own java.sql.Connection. -->
+    <duckdb.version>1.5.6.0</duckdb.version>
+    <sqlite.version>3.53.4.0</sqlite.version>
+    <postgresql.version>42.7.14</postgresql.version>
+    <databricks.jdbc.version>3.4.2</databricks.jdbc.version>
+    <!-- Where the natives are copied before packaging: one directory per
+         platform. -->
+    <sdm.natives>${project.build.directory}/natives</sdm.natives>
+    <!-- A native library the tests load in place of the one packaged from
+         ${sdm.natives} (README.md); empty loads the packaged one. -->
+    <sdm.native.library></sdm.native.library>
+    <!-- The runtime flags choice 10 names; every test runs with them. -->
+    <sdm.java.flags>--enable-native-access=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED</sdm.java.flags>
+  </properties>
+
+  <dependencies>
+    <!-- Official unified authentication, including refreshed OAuth credentials. -->
+    <dependency>
+      <groupId>com.databricks</groupId>
+      <artifactId>databricks-sdk-java</artifactId>
+      <version>${databricks.sdk.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.arrow</groupId>
+      <artifactId>arrow-c-data</artifactId>
+      <version>${arrow.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.arrow</groupId>
+      <artifactId>arrow-vector</artifactId>
+      <version>${arrow.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.arrow</groupId>
+      <artifactId>arrow-memory-core</artifactId>
+      <version>${arrow.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.arrow</groupId>
+      <artifactId>arrow-memory-unsafe</artifactId>
+      <version>${arrow.version}</version>
+      <scope>runtime</scope>
+    </dependency>
+    <!-- The logging API only (KO3-30): the application binds a logger. -->
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-api</artifactId>
+      <version>${slf4j.version}</version>
+    </dependency>
+
+    <!-- DuckDB's driver, compiled against for its Arrow interface (a key set
+         registered as an Arrow stream, a result exported as one), which the
+         DuckDB provider reaches only for a DuckDB connection; the caller
+         brings the driver (provided, never shipped). -->
+    <dependency>
+      <groupId>org.duckdb</groupId>
+      <artifactId>duckdb_jdbc</artifactId>
+      <version>${duckdb.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.xerial</groupId>
+      <artifactId>sqlite-jdbc</artifactId>
+      <version>${sqlite.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <!-- Postgres's driver (pgjdbc), compiled against for what JDBC does not
+         say (a column type's OID, the session's IntervalStyle, whether a
+         transaction is open, a statement read in text), which the Postgres
+         provider reaches only for a Postgres connection; the caller brings
+         the driver (provided, never shipped). -->
+    <dependency>
+      <groupId>org.postgresql</groupId>
+      <artifactId>postgresql</artifactId>
+      <version>${postgresql.version}</version>
+      <scope>provided</scope>
+    </dependency>
+
+    <!-- Databricks's public native array parser handles default text results.
+         This version pins that api.impl coupling; the caller supplies the driver,
+         as for DuckDB and Postgres. Never shipped in the client JAR. -->
+    <dependency>
+      <groupId>com.databricks</groupId>
+      <artifactId>databricks-jdbc</artifactId>
+      <version>${databricks.jdbc.version}</version>
+      <scope>provided</scope>
+    </dependency>
+
+    <!-- The tests' logger, so a test can see the core's events reach SLF4J. -->
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-simple</artifactId>
+      <version>${slf4j.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <version>${junit.version}</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <resources>
+      <resource>
+        <directory>${sdm.natives}</directory>
+        <targetPath>com/nvidia/sdm/native</targetPath>
+        <includes>
+          <include>*/libsdm_jni.so</include>
+          <include>*/libsdm_jni.dylib</include>
+        </includes>
+      </resource>
+    </resources>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>3.14.0</version>
+        <configuration>
+          <release>17</release>
+          <compilerArgs>
+            <!-- Arrow's class files name annotations of a library it does not
+                 ship (the Checker Framework's), which javac reports as
+                 classfile warnings; every other warning fails the build. -->
+            <arg>-Xlint:all,-classfile</arg>
+            <arg>-Werror</arg>
+          </compilerArgs>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-resources-plugin</artifactId>
+        <version>3.3.1</version>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>3.5.3</version>
+        <configuration>
+          <argLine>${sdm.java.flags}</argLine>
+          <systemPropertyVariables>
+            <sdm.native.library>${sdm.native.library}</sdm.native.library>
+            <sdm.java.flags>${sdm.java.flags}</sdm.java.flags>
+          </systemPropertyVariables>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <version>3.4.2</version>
+        <configuration>
+          <archive>
+            <manifest>
+              <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
+            </manifest>
+            <manifestEntries>
+              <Automatic-Module-Name>com.nvidia.sdm</Automatic-Module-Name>
+            </manifestEntries>
+          </archive>
+        </configuration>
+      </plugin>
+      <!-- The runtime dependencies beside the JAR, in target/lib: the
+           contract runner (contract/runners/run_java.py) and the JAR-load
+           test run the JAR with them on the class path. -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-dependency-plugin</artifactId>
+        <version>3.8.1</version>
+        <executions>
+          <execution>
+            <id>runtime-dependencies</id>
+            <phase>package</phase>
+            <goals>
+              <goal>copy-dependencies</goal>
+            </goals>
+            <configuration>
+              <includeScope>runtime</includeScope>
+              <outputDirectory>${project.build.directory}/lib</outputDirectory>
+            </configuration>
+          </execution>
+          <!-- The JDBC drivers beside them, in target/jdbc: the contract
+               runner's database legs open their connections with these. -->
+          <execution>
+            <id>jdbc-drivers</id>
+            <phase>package</phase>
+            <goals>
+              <goal>copy-dependencies</goal>
+            </goals>
+            <configuration>
+              <includeScope>test</includeScope>
+              <includeArtifactIds>duckdb_jdbc,sqlite-jdbc,postgresql,databricks-jdbc</includeArtifactIds>
+              <outputDirectory>${project.build.directory}/jdbc</outputDirectory>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-install-plugin</artifactId>
+        <version>3.1.4</version>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-clean-plugin</artifactId>
+        <version>3.5.0</version>
+      </plugin>
+    </plugins>
+  </build>
+
+  <profiles>
+    <!-- The release JAR: refuses to build without every platform's native
+         (locked check 14: a JAR missing one architecture's native). -->
+    <profile>
+      <id>all-natives</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-enforcer-plugin</artifactId>
+            <version>3.6.1</version>
+            <executions>
+              <execution>
+                <id>every-native</id>
+                <phase>validate</phase>
+                <goals>
+                  <goal>enforce</goal>
+                </goals>
+                <configuration>
+                  <rules>
+                    <requireFilesExist>
+                      <message>The JAR needs the native library of every platform: linux-x86_64, linux-aarch64, macos-aarch64 and macos-x86_64</message>
+                      <files>
+                        <file>${sdm.natives}/linux-x86_64/libsdm_jni.so</file>
+                        <file>${sdm.natives}/linux-aarch64/libsdm_jni.so</file>
+                        <file>${sdm.natives}/macos-aarch64/libsdm_jni.dylib</file>
+                        <file>${sdm.natives}/macos-x86_64/libsdm_jni.dylib</file>
+                      </files>
+                    </requireFilesExist>
+                  </rules>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
+</project>

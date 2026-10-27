@@ -481,6 +481,28 @@ def _build_session(
     return session
 
 
+class EndpointFailed(Exception):  # noqa: N818 - says what happened
+    r"""An endpoint's failure with no answer to hand over, as its SDK
+    reported it, raised by a transport whose answers the core reads (a
+    Databricks serving endpoint's ``predict_body``, T3.13): the status the
+    error's class gives, its message and its code, which the core reads for
+    codes only and never repeats, and the class's name. The core names the
+    refusal; this carries nothing else of the error, and is never shown."""
+
+    def __init__(
+        self,
+        status: int,
+        detail: str,
+        provider_code: str | None,
+        provider_error: str,
+    ) -> None:
+        super().__init__()
+        self.status = status
+        self.detail = detail
+        self.provider_code = provider_code
+        self.provider_error = provider_error
+
+
 class WireTransport(Protocol):
     r"""What a client needs from whatever carries its requests.
 

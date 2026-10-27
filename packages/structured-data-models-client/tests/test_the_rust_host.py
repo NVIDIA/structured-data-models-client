@@ -226,7 +226,7 @@ def test_the_local_zone_is_named_only_as_the_host_reads_it(
 ) -> None:
     for setting, expected in TZ_SETTINGS:
         monkeypatch.setenv('TZ', setting)
-        assert facts.local_zone([], _native.is_posix_zone) == expected, setting
+        assert facts.local_zone([], _native) == expected, setting
     # An IANA name a root holds, with or without the leading colon, wins
     # over the POSIX reading (EST5EDT is both).
     (tmp_path / 'Europe').mkdir()
@@ -239,7 +239,7 @@ def test_the_local_zone_is_named_only_as_the_host_reads_it(
         ('EST5EDT', 'EST5EDT'),
     ]:
         monkeypatch.setenv('TZ', setting)
-        assert facts.local_zone(roots, _native.is_posix_zone) == {'iana': name}
+        assert facts.local_zone(roots, _native) == {'iana': name}
 
 
 @pytest.mark.parametrize(('setting', 'expected'), TZ_SETTINGS)
@@ -254,8 +254,8 @@ def test_no_tz_setting_refuses_a_run_and_a_valid_one_keeps_its_zone(
     sent: list[Any] = []
     real = facts.host_facts
 
-    def spy(is_posix: Any) -> dict[str, Any]:
-        built = real(is_posix)
+    def spy(native: Any) -> dict[str, Any]:
+        built = real(native)
         sent.append(built['local_zone'])
         return built
 
@@ -284,7 +284,7 @@ def test_the_platform_s_year_padding_is_read_from_strftime() -> None:
         datetime.date(1, 1, 1).strftime('%Y') == '0001'
     )
     assert platform['os'] in ('linux', 'darwin', 'windows')
-    now = facts.host_facts(_native.is_posix_zone)['now']
+    now = facts.host_facts(_native)['now']
     assert (now['t'], now['unit'], now['zone']) == ('ts', 'us', 'UTC')
 
 
@@ -307,7 +307,7 @@ def test_the_date_literal_range_is_pandas_own_where_pandas_bounds_it(
     # pandas 3 holds year 1, and the host declares none.
     import pandas
 
-    built = facts.host_facts(_native.is_posix_zone)
+    built = facts.host_facts(_native)
     declared = built.get('date_literal_range')
     if _pandas_holds_year_1():
         assert declared is None, declared
@@ -325,8 +325,8 @@ def test_the_date_literal_range_is_pandas_own_where_pandas_bounds_it(
     sent: list[Any] = []
     real = facts.host_facts
 
-    def spy(is_posix: Any) -> dict[str, Any]:
-        started = real(is_posix)
+    def spy(native: Any) -> dict[str, Any]:
+        started = real(native)
         sent.append(started.get('date_literal_range'))
         return started
 
@@ -374,18 +374,70 @@ def test_every_code_maps_to_one_structured_data_error_class() -> None:
     assert list(codes) == _stub_codes()
     assert set(errors.ERRORS) == set(codes)
     for code in codes:
-        cls, sentence = errors.ERRORS[code]
-        assert issubclass(cls, StructuredDataError), code
-        assert sentence, code
+        assert issubclass(errors.ERRORS[code], StructuredDataError), code
+
+
+def _sentence_of(code: str) -> str:
+    r"""The first sentence of the core's table of ``code``."""
+    return next(
+        name
+        for name, entry in errors.table().sentences.items()
+        if entry['code'] == code and entry['kind'] == 'error'
+    )
 
 
 def _error(code: str, message: str, **more: Any) -> bytes:
-    error = {'kind': 'internal', 'code': code, 'message': message, **more}
+    error = {
+        'kind': 'internal',
+        'code': code,
+        'sentence': _sentence_of(code),
+        'message': message,
+        **more,
+    }
     return json.dumps({'message': 'error', 'error': error}).encode()
+
+
+def test_an_endpoint_s_refusal_is_raised_as_the_old_client_raises_it() -> None:
+    # T3.27: as `NimRequestError(status, code=...)`, the status and the
+    # endpoint's own code, or none, the rest of the fields its details.
+    from sdm_client.errors import NimRequestError
+
+    for sentence, status, code in [
+        ('serving_callers_fault', 400, 'INVALID_REQUEST'),
+        ('serving_refused', 503, 'TEMPORARILY_UNAVAILABLE'),
+        ('serving_failed', 500, None),
+    ]:
+        fields: dict[str, Any] = {
+            'status': {'t': 'u16', 'v': str(status)},
+            'endpoint': {'t': 'utf8', 'v': 'kumo'},
+        }
+        if code is not None:
+            fields['refused_code'] = {'t': 'utf8', 'v': code}
+            fields['endpoint_code'] = {'t': 'utf8', 'v': code}
+        error = {
+            'kind': 'model_endpoint',
+            'code': 'ENDPOINT_REFUSED',
+            'sentence': sentence,
+            'message': 'm',
+            'fields': fields,
+        }
+        made = errors.error_from_core(
+            json.dumps({'message': 'error', 'error': error}).encode(), {}
+        )
+        assert type(made) is NimRequestError
+        assert made.status_code == status
+        assert made.code == code
+        assert made.details['endpoint'] == 'kumo'
+        assert 'status' not in made.details
+        assert 'refused_code' not in made.details
+        assert "serving endpoint 'kumo'" in str(made)
 
 
 def test_the_mapping_keys_on_the_code_and_reads_no_message_text() -> None:
     for code in _native.ERROR_CODES:
+        if code == 'ENDPOINT_REFUSED':
+            # Raised under the endpoint's own code (the next test).
+            continue
         made = [
             errors.error_from_core(_error(code, message, kind=kind), {})
             for message, kind in [
@@ -394,12 +446,12 @@ def test_the_mapping_keys_on_the_code_and_reads_no_message_text() -> None:
                 (f'{CANARY} INVALID_REQUEST', 'data_source'),
             ]
         ]
-        assert {type(error) for error in made} == {errors.ERRORS[code][0]}
+        assert {type(error) for error in made} == {errors.ERRORS[code]}
         assert {error.code for error in made} == {code}
         assert len({str(error) for error in made}) == 1
         assert all(CANARY not in str(error) for error in made)
-    # Nothing that maps an error reads a message: only a warning's text is
-    # shown, by said, for a code the warning table does not word (T1.23).
+    # Nothing reads a message the core wrote: every error and warning says
+    # the core's sentence (T3.17).
     tree = ast.parse(Path(errors.__file__).read_text(encoding='utf-8'))
     for function in tree.body:
         if not isinstance(function, ast.FunctionDef):
@@ -409,15 +461,13 @@ def test_the_mapping_keys_on_the_code_and_reads_no_message_text() -> None:
             for node in ast.walk(function)
             if isinstance(node, ast.Constant) and node.value == 'message'
         ]
-        if function.name == 'said':
-            assert reads
-        else:
-            assert not reads, function.name
+        assert not reads, function.name
 
 
 def test_a_batched_part_is_worded_by_its_part_s_kind() -> None:
-    # The core names the part's kind `part_kind` (T2.8 fix 4): `kind` is the
-    # error's own, which the details carry too.
+    # The core names the part's kind `part_kind` (T2.8 fix 4), and says the
+    # sentence of it (T3.17): `kind` is the error's own, which the details
+    # carry too.
     def said(part_kind: str) -> str:
         fields = {
             'field': {'t': 'utf8', 'v': 'indices'},
@@ -427,12 +477,13 @@ def test_a_batched_part_is_worded_by_its_part_s_kind() -> None:
             'parts': {'t': 'u64', 'v': '2'},
             'rows_per_call': {'t': 'u64', 'v': '10000'},
         }
-        error = errors.error_from_core(
+        sent = json.loads(
             _error(
                 'UNSUPPORTED_REQUEST', 'm', kind='unsupported', fields=fields
-            ),
-            {},
+            )
         )
+        sent['error']['sentence'] = f'batched_part_{part_kind}'
+        error = errors.error_from_core(json.dumps(sent).encode(), {})
         assert type(error) is StructuredDataError
         return str(error)
 
@@ -508,26 +559,27 @@ class _Synthetic(SDMWarning):
 def test_warnings_keep_their_order_and_map_to_their_classes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setitem(errors.WARNINGS, 'TEST_SYNTHETIC', _Synthetic)
+    monkeypatch.setitem(errors.WARNINGS, 'CONTEXT_CAPPED', _Synthetic)
     sent = [
-        {'code': 'TEST_SYNTHETIC', 'message': 'first'},
-        {'code': 'TEST_OTHER', 'message': 'second'},
-        {'code': 'TEST_SYNTHETIC', 'message': 'third'},
+        _warning('context_capped', cap=1000, most=5000),
+        _warning('outputs_absent', model='kumo', absent=['explanation']),
+        _warning('context_capped', cap=2000, most=5000),
     ]
     control = json.dumps({'message': 'warnings', 'warnings': sent}).encode()
     with warnings.catch_warnings(record=True) as shown:
         warnings.simplefilter('always')
         errors.warn_from_core(control, {})
-    assert [(w.category, str(w.message)) for w in shown] == [
-        (_Synthetic, '[TEST_SYNTHETIC] first'),
-        (SDMWarning, '[TEST_OTHER] second'),
-        (_Synthetic, '[TEST_SYNTHETIC] third'),
+    assert [(w.category, str(w.message).split(' ', 2)[:2]) for w in shown] == [
+        (_Synthetic, ['[CONTEXT_CAPPED]', '1,000']),
+        (SDMWarning, ['[OUTPUTS_ABSENT]', 'kumo']),
+        (_Synthetic, ['[CONTEXT_CAPPED]', '2,000']),
     ]
 
 
-def _warning(code: str, **fields: Any) -> dict[str, Any]:
-    r"""A core warning of ``code`` whose fields are ``fields``, each a text,
-    a list of texts, a count or a scalar already encoded."""
+def _warning(sentence: str, **fields: Any) -> dict[str, Any]:
+    r"""A core warning saying ``sentence``, of the code the core's table
+    gives it, whose fields are ``fields``, each a text, a list of texts, a
+    count or a scalar already encoded."""
 
     def encoded(value: Any) -> Any:
         if isinstance(value, list):
@@ -538,8 +590,10 @@ def _warning(code: str, **fields: Any) -> dict[str, Any]:
             return {'t': 'u64', 'v': str(value)}
         return {'t': 'utf8', 'v': value}
 
+    code = errors.table().sentences.get(sentence, {}).get('code', 'NOT_A_CODE')
     return {
         'code': code,
+        'sentence': sentence,
         'message': 'the core says this naming nothing',
         'fields': {name: encoded(value) for name, value in fields.items()},
     }
@@ -567,7 +621,7 @@ def test_the_schema_s_warnings_are_worded_here_as_the_reference_words_them() -> 
     # wrote itself before T1.23, word for word.
     assert _shown(
         _warning(
-            'LINK_CANNOT_JOIN',
+            'link_cannot_join_types',
             source_table='orders',
             source_column='user_id',
             target_table='users',
@@ -588,7 +642,7 @@ def test_the_schema_s_warnings_are_worded_here_as_the_reference_words_them() -> 
     ]
     assert _shown(
         _warning(
-            'LINK_CANNOT_JOIN',
+            'link_cannot_join_not_the_key',
             source_table='lines',
             source_column='sku',
             target_table='items',
@@ -605,12 +659,12 @@ def test_the_schema_s_warnings_are_worded_here_as_the_reference_words_them() -> 
     )
     two_ways = _shown(
         _warning(
-            'TABLES_NAME_EACH_OTHER',
+            'tables_name_each_other',
             source_table='accounts',
             target_table='refunds',
         ),
         _warning(
-            'TWO_WAYS_TO_A_TABLE',
+            'two_ways_to_a_table',
             source_table='refunds',
             target_table='accounts',
             columns=['account_id', 'payer'],
@@ -638,14 +692,14 @@ def test_the_schema_s_warnings_are_worded_here_as_the_reference_words_them() -> 
     stamp = {'t': 'ts', 'unit': 'us', 'zone': None, 'v': '1757585707263000'}
     guessed = _shown(
         _warning(
-            'TIME_COLUMNS_GUESSED',
+            'time_columns_refused_edit_stamp',
             table='plans',
             column='modified_at',
             reason='edit_stamp',
             variant='refused_edit_stamp',
         ),
         _warning(
-            'TIME_COLUMNS_GUESSED',
+            'time_columns_refused_constant',
             table='plans',
             column='stamped',
             reason='constant',
@@ -655,7 +709,7 @@ def test_the_schema_s_warnings_are_worded_here_as_the_reference_words_them() -> 
             variant='refused_constant',
         ),
         _warning(
-            'TIME_COLUMNS_GUESSED',
+            'time_columns_taken_earliest',
             table='visits',
             column='seen',
             variant='taken_earliest',
@@ -685,13 +739,13 @@ def test_the_schema_s_warnings_are_worded_here_as_the_reference_words_them() -> 
     # Columns left out, said once a table.
     assert _shown(
         _warning(
-            'COLUMNS_LEFT_OUT', table='users', column='f', dtype='intlist'
+            'columns_left_out', table='users', column='f', dtype='intlist'
         ),
         _warning(
-            'COLUMNS_LEFT_OUT', table='users', column='g', dtype='stringlist'
+            'columns_left_out', table='users', column='g', dtype='stringlist'
         ),
         _warning(
-            'COLUMNS_LEFT_OUT', table='orders', column='h', dtype='floatlist'
+            'columns_left_out', table='orders', column='h', dtype='floatlist'
         ),
     ) == [
         (
@@ -711,7 +765,7 @@ def test_the_schema_s_warnings_are_worded_here_as_the_reference_words_them() -> 
     ]
     assert _shown(
         _warning(
-            'TIME_VALUES_UNREAD',
+            'time_values_unread',
             table='users',
             column='f',
             unread=1_234,
@@ -738,7 +792,7 @@ def test_a_remedy_names_a_table_as_python_writes_its_name() -> None:
     for vector in vectors:
         [(_, text)] = _shown(
             _warning(
-                'TIME_COLUMNS_GUESSED',
+                'time_columns_refused_load_stamp',
                 table=vector['name'],
                 column='c',
                 variant='refused_load_stamp',
@@ -748,47 +802,15 @@ def test_a_remedy_names_a_table_as_python_writes_its_name() -> None:
         assert ast.literal_eval(vector['repr']) == vector['name']
 
 
-def test_a_warning_the_table_cannot_word_is_shown_in_the_core_s_sentence() -> (
-    None
-):
-    # An unknown code, an unknown variant, and a field the words need left
-    # out: each shown, in the core's own sentence, never raised.
-    for given in (
-        _warning('NOT_A_CODE_HERE'),
-        _warning('TIME_COLUMNS_GUESSED', table='t', column='c', variant='new'),
-        _warning('TWO_WAYS_TO_A_TABLE', source_table='a'),
-    ):
-        [(_, text)] = _shown(given)
-        assert text.endswith('the core says this naming nothing'), text
-
-
-#: The core's warnings this host does not word, each with why: none. Every
-#: code and variant the core gives (`_native.WARNING_CODES`) is worded from
-#: `errors.SAID` (T1.23 fix 1, subagent P2-1).
-CORE_WORDED: dict[tuple[str, str | None], str] = {}
-
-
-def test_every_warning_the_core_gives_is_worded_here() -> None:
-    # The binding lists every code the core may give with its variants, as
-    # it lists its error codes; each is worded by SAID exactly once, or
-    # named here as the core's to word, with the reason. The fallback to the
-    # core's sentence stays for robustness; this test is the guard.
-    given = {
-        (code, variant)
-        for code, variants in _native.WARNING_CODES
-        for variant in (variants or (None,))
-    }
-    assert len(given) >= 22
-    worded = {
-        (code, variant)
-        for code, templates in errors.SAID.items()
-        for variant in templates
-    }
-    assert given - set(CORE_WORDED) == worded
-    assert not set(CORE_WORDED) & worded
-    for code, variants in _native.WARNING_CODES:
-        assert code == code.upper() and ' ' not in code, code
-        assert len(set(variants)) == len(variants), code
+def test_a_warning_its_fields_cannot_fill_names_the_core_s_defect() -> None:
+    # A sentence named without the fields its template names is the core's
+    # defect, said as one, never raised and never a sentence the core did
+    # not choose (T3.17).
+    [(_, text)] = _shown(_warning('two_ways_to_a_table', source_table='a'))
+    assert text == (
+        "[TWO_WAYS_TO_A_TABLE] the core said 'two_ways_to_a_table' without "
+        'what it names; this is a defect, not a problem with the request'
+    )
 
 
 #: T2.14b's keys (contract/tests/t214b-pending.json) for the sampler's
@@ -833,13 +855,13 @@ def test_the_sampler_s_warnings_are_worded_as_the_core_worded_them() -> None:
             break
         assert _shown(
             _warning(
-                'MISSING_INDICES',
+                'missing_' + variant,
                 indices=indices,
                 tables=tables,
                 variant=variant,
             )
         ) == [('UserWarning', f'[MISSING_INDICES] {words}{tail}')], variant
-    assert not m4 or _shown(_warning('CONTEXT_BEFORE_DATA')) == [
+    assert not m4 or _shown(_warning('context_before_data_untimed')) == [
         (
             'UserWarning',
             "[CONTEXT_BEFORE_DATA] the context's anchor time is too early, or "
@@ -847,7 +869,7 @@ def test_the_sampler_s_warnings_are_worded_as_the_core_worded_them() -> None:
             'far as the examples need',
         )
     ]
-    assert not m4 or _shown(_warning('ANCHOR_AFTER_DATA')) == [
+    assert not m4 or _shown(_warning('anchor_after_data')) == [
         (
             'UserWarning',
             '[ANCHOR_AFTER_DATA] the anchor time is after the latest time in '
@@ -857,7 +879,7 @@ def test_the_sampler_s_warnings_are_worded_as_the_core_worded_them() -> None:
     # T1.26b: a context collected short, in the reference's words; the
     # host gives it once in a process (sdm-host, decision E52).
     assert _shown(
-        _warning('CONTEXT_COVERAGE', examples=1000, candidates=10000)
+        _warning('context_coverage', examples=1000, candidates=10000)
     ) == [
         (
             'UserWarning',
@@ -875,7 +897,7 @@ def test_a_day_first_date_literal_is_worded_as_pandas_words_it() -> None:
     # words of the reference's `pd.to_datetime`, as a UserWarning.
     assert _shown(
         _warning(
-            'DATE_LITERAL_DAY_FIRST',
+            'date_literal_day_first',
             format='%d.%m.%Y %H:%M:%S',
             start_row=1,
             start_col=41,

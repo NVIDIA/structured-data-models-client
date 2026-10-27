@@ -314,16 +314,18 @@ def dry_run(tmp_path: pathlib.Path, *extra: str) -> str:
 
 def test_the_runner_runs_the_legs_on_every_database_by_default(tmp_path):
     text = dry_run(tmp_path)
-    assert '--database sqlite' in text, text
-    assert '--database postgres' in text, text
+    for database in ('sqlite', 'postgres'):
+        assert f'python_leg python-core {database}' in text, text
+        assert f'rust_host {database}' in text, text
     assert SECRET_PQL not in text
 
 
 def test_the_runner_runs_only_the_databases_named(tmp_path):
     text = dry_run(tmp_path, '--databases', 'duckdb')
     assert '== 7. THE run' in text, text
-    assert '--database sqlite' not in text, text
-    assert '--database postgres' not in text, text
+    for database in ('sqlite', 'postgres'):
+        assert f'python_leg python-core {database}' not in text, text
+        assert f'rust_host {database}' not in text, text
 
 
 # --- check 9's dummy bundles ---------------------------------------------------

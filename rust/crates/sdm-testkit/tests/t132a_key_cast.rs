@@ -520,7 +520,7 @@ fn key_type(key: &str) {
         "{key} is a recorded key type"
     );
     let contract = root().join("contract");
-    let loaded = case::load(&[contract.join("cases")]).unwrap();
+    let loaded = case::load_for(&[contract.join("cases")], case::Database::Duckdb).unwrap();
     let template = loaded
         .iter()
         .find(|l| l.case.id == "key.uint8")

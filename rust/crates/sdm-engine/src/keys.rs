@@ -29,7 +29,7 @@ use arrow_array::{Array, ArrayRef};
 use arrow_schema::DataType;
 use sdm_contract::data::{WrittenNumber, written_number};
 use sdm_contract::types::ColumnType;
-use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
+use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 
 use crate::not_yet;
 
@@ -713,8 +713,7 @@ fn uncast(position: usize, key: &DataType, why: Uncast) -> CoreError {
         .map(|t| t.cell_type())
         .unwrap_or("unknown");
     CoreError::new(
-        ErrorKind::InvalidRequest,
-        ErrorCode::InvalidRequest,
+        Sentence::EntityUncast,
         "an entity to predict for does not cast to the type of the entity table's key",
     )
     .with_field("field", Detail::text("indices"))
@@ -818,6 +817,7 @@ mod tests {
         BooleanArray, Decimal128Array, Float32Array, Float64Array, Int64Array, NullArray,
         StringArray, TimestampMicrosecondArray, UInt64Array,
     };
+    use sdm_contract::ErrorCode;
 
     fn cast_to(entities: ArrayRef, key: &DataType) -> Result<ArrayRef, (String, u64)> {
         cast(&entities, key).map_err(|e| {

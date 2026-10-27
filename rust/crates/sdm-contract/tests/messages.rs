@@ -28,10 +28,22 @@ fn every_message_round_trips() {
 fn provider_choices_round_trip() {
     for choice in [
         ProviderChoice::Sql {
+            timestamp_encoding: None,
             dialect: Dialect::new("duckdb"),
+            namespace: Vec::new(),
+            view: None,
         },
         ProviderChoice::Host {
             capabilities: ProviderCapabilities {
+                opaque_vendor: None,
+                compares_stored_times: false,
+                samples_by_key_dtype: false,
+                reads_nan_as_missing: false,
+                derived_relations: false,
+                neighbor_lookback: false,
+                keys_optional: false,
+                key_enforcement: false,
+                sample_rows: false,
                 optional: BTreeSet::from([OptionalRequest::Preview, OptionalRequest::CountRows]),
                 max_keys_per_request: Some(10_000),
                 max_seed: u64::MAX,
@@ -47,6 +59,83 @@ fn provider_choices_round_trip() {
         assert_eq!(
             serde_json::from_str::<ProviderChoice>(&text).unwrap(),
             choice
+        );
+    }
+}
+
+/// A SQL provider's namespace (contract v28): left out, it reads as none
+/// and is written back left out, so a v27 choice reads as it did; each
+/// part a name or `null`, the source's current one (a Databricks source
+/// given its catalog and not its schema); anything else refused.
+#[test]
+fn a_provider_namespace_takes_names_and_null_parts() {
+    for (text, namespace) in [
+        (r#"{"provider":"sql","dialect":"postgres"}"#, vec![]),
+        (
+            r#"{"provider":"sql","dialect":"postgres","namespace":["sales"]}"#,
+            vec![Some("sales".to_owned())],
+        ),
+        (
+            r#"{"provider":"sql","dialect":"databricks","namespace":["main",null]}"#,
+            vec![Some("main".to_owned()), None],
+        ),
+    ] {
+        let read: ProviderChoice = serde_json::from_str(text).unwrap();
+        let ProviderChoice::Sql {
+            namespace: held, ..
+        } = &read
+        else {
+            panic!("not a SQL provider: {text}");
+        };
+        assert_eq!(held, &namespace, "{text}");
+        let written: serde_json::Value = serde_json::to_value(&read).unwrap();
+        let given: serde_json::Value = serde_json::from_str(text).unwrap();
+        assert_eq!(written, given, "{text}");
+    }
+    for refused in [
+        r#"{"provider":"sql","dialect":"postgres","namespace":"sales"}"#,
+        r#"{"provider":"sql","dialect":"postgres","namespace":[1]}"#,
+        r#"{"provider":"host","capabilities":{"optional":[],"max_keys_per_request":null,
+            "sampling":"seeded_stable","max_seed":1,"text_times":null},"namespace":["sales"]}"#,
+    ] {
+        assert!(
+            serde_json::from_str::<ProviderChoice>(refused).is_err(),
+            "{refused}"
+        );
+    }
+}
+
+/// A table named for describe_source keeps only the columns it lists
+/// (contract v28): left out, it reads as none and is written back left out,
+/// so a v27 table reads as it did; a list of names reads as given; anything
+/// else is refused.
+#[test]
+fn a_named_table_lists_the_columns_it_keeps_or_none() {
+    use sdm_contract::ops::NamedTable;
+    for (text, kept) in [
+        (
+            r#"{"name":"users","source":{"source":["app_users"]}}"#,
+            None,
+        ),
+        (
+            r#"{"name":"users","source":{"source":["app_users"]},"columns":["id","target"]}"#,
+            Some(vec!["id".to_owned(), "target".to_owned()]),
+        ),
+    ] {
+        let read: NamedTable = serde_json::from_str(text).unwrap();
+        assert_eq!(read.columns, kept, "{text}");
+        let written = serde_json::to_value(&read).unwrap();
+        let given: serde_json::Value = serde_json::from_str(text).unwrap();
+        assert_eq!(written, given, "{text}");
+    }
+    for refused in [
+        r#"{"name":"users","source":{"source":["app_users"]},"columns":"id"}"#,
+        r#"{"name":"users","source":{"source":["app_users"]},"columns":[1]}"#,
+        r#"{"name":"users","source":{"source":["app_users"]},"columns":[null]}"#,
+    ] {
+        assert!(
+            serde_json::from_str::<NamedTable>(refused).is_err(),
+            "{refused}"
         );
     }
 }
@@ -204,7 +293,8 @@ fn every_error_code_is_listed_once_and_spelled_as_the_contract_spells_it() {
         | ErrorCode::RunCancelled
         | ErrorCode::RunPoisoned
         | ErrorCode::RunBusy
-        | ErrorCode::InvalidMessage => ErrorCode::ALL.contains(&code),
+        | ErrorCode::InvalidMessage
+        | ErrorCode::EndpointRefused => ErrorCode::ALL.contains(&code),
     };
     let mut names = BTreeSet::new();
     for code in ErrorCode::ALL {
@@ -272,6 +362,8 @@ fn a_provider_error_keeps_its_retryability_and_codes_in_the_core_error() {
     use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind};
     for retryable in [true, false] {
         let error = CoreError::provider(&ProviderError {
+            error_class: None,
+            driver_message: Some("secret driver value does not exist".into()),
             kind: ErrorKind::DataSource,
             retryable,
             sqlstate: Some("40001".into()),
@@ -282,10 +374,36 @@ fn a_provider_error_keeps_its_retryability_and_codes_in_the_core_error() {
         assert_eq!(error.retryable, retryable);
         assert_eq!(error.fields["sqlstate"], Detail::text("40001"));
         assert_eq!(error.fields["vendor_code"], Detail::text("1213"));
+        let public = serde_json::to_string(&error).unwrap();
+        assert!(!public.contains("secret driver value"));
+        assert!(!public.contains("driver_message"));
     }
     // An error written without the field is not retryable.
-    let error: CoreError =
-        serde_json::from_str(r#"{"kind":"internal","code":"INTERNAL_ERROR","message":""}"#)
-            .unwrap();
+    let error: CoreError = serde_json::from_str(
+        r#"{"kind":"internal","code":"INTERNAL_ERROR","sentence":"internal","message":""}"#,
+    )
+    .unwrap();
     assert!(!error.retryable);
+}
+
+#[test]
+fn internal_driver_diagnostics_and_key_enforcement_are_optional_plain_data() {
+    use sdm_contract::data::{DataRequest, DescribePart, ProviderError};
+    let old = serde_json::json!({"kind": "data_source", "retryable": false});
+    let error: ProviderError = serde_json::from_value(old.clone()).unwrap();
+    assert_eq!(error.driver_message, None);
+    let with = serde_json::json!({"driver_message": "Schema DOES NOT EXIST", "kind": "data_source", "retryable": false, "sqlstate": null, "vendor_code": null});
+    let error: ProviderError = serde_json::from_value(with.clone()).unwrap();
+    assert_eq!(serde_json::to_value(error).unwrap(), with);
+    let request: DataRequest = serde_json::from_value(serde_json::json!({
+        "request": "describe", "part": "key_enforcement", "tables": [{"source": ["D", "S", "t"]}]
+    }))
+    .unwrap();
+    assert!(matches!(
+        request,
+        DataRequest::Describe {
+            part: DescribePart::KeyEnforcement,
+            ..
+        }
+    ));
 }

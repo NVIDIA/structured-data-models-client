@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import uuid
 import warnings
 from pathlib import Path
@@ -368,7 +369,11 @@ def test_a_foreign_key_to_a_unique_column_keys_a_keyless_table(
     assert schema.relationships == [
         Relationship('sale', 'region_code', 'region', 'code')
     ]
-    messages = [str(warning.message) for warning in caught]
+    # The words after the core route's leading `[CODE] ` (E41(i), E59(d)).
+    messages = [
+        re.sub(r'^\[[A-Z][A-Z0-9_]*\] ', '', str(warning.message))
+        for warning in caught
+    ]
     assert (
         "sale.store_ref refers to store.ref, but the primary key of 'store' "
         "is 'store_id'. A relationship joins to a primary key, so none was "
@@ -573,12 +578,19 @@ def test_left_out_tables_mean_every_table_in_the_source(source: Any) -> None:
     assert schema['app_orders'].time_column == 'ts'
 
 
-def test_a_question_repeats_none_of_the_reads_that_described_the_tables(
+@pytest.mark.parametrize('core_default', [False, True])
+def test_metadata_refresh_follows_the_selected_route(
     postgres_source: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    core_default: bool,
 ) -> None:
-    r"""The time range is still read per question, so new rows are seen."""
+    r"""The default core refreshes metadata; the explicit legacy route caches it."""
     import psycopg
 
+    if core_default:
+        monkeypatch.delenv('SDM_CORE_ROUTES', raising=False)
+    else:
+        monkeypatch.setenv('SDM_CORE_ROUTES', '')
     statements: list[str] = []
 
     class Recorded(psycopg.Cursor):
@@ -595,7 +607,7 @@ def test_a_question_repeats_none_of_the_reads_that_described_the_tables(
 
     assert any('information_schema' in sql for sql in described)
     assert asked
-    assert not set(described) & set(asked)
+    assert bool(set(described) & set(asked)) is core_default
 
 
 def test_a_question_cannot_change_what_the_next_one_is_given(

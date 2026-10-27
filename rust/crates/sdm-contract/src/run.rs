@@ -75,6 +75,22 @@ pub struct FetchStep {
     /// it; left out on a request's first fetch (design choice 1, paging).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub continuation: Option<String>,
+    /// Why the run asks it, where a host or a comparison of the run's
+    /// statements with the old client's needs to know: `locate`, a read of
+    /// a table as it stands at this `materialize` (its namespace, catalog,
+    /// keys and preview), which the owner's plan B adds and the old client
+    /// made once, at `from_source` (contract v28, T3.4). Left out, a read
+    /// of the operation's own.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub purpose: Option<FetchPurpose>,
+}
+
+/// Why a run asks a fetch ([`FetchStep::purpose`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum FetchPurpose {
+    /// A read of a table as it stands at this `materialize`.
+    Locate,
 }
 
 /// Which model endpoint a call goes to.
@@ -144,6 +160,31 @@ pub enum ModelOutcome {
     /// The transport failed before an answer: its kind and whether trying
     /// again may succeed; the transport's message stays in the host.
     TransportError { kind: ErrorKind, retryable: bool },
+    /// The endpoint failed with no body to hand over, as an SDK's error
+    /// reports it (contract v28, T3.27, for T3.13): what the host was told.
+    Failed { answer: ModelAnswer },
+}
+
+/// A model call's failure as the host's transport reported it
+/// ([`ModelOutcome::Failed`]): the HTTP status, and the facts the core
+/// reads the endpoint's own codes from. The detail can quote the request,
+/// so it travels as an attachment, and the core reads it only for codes,
+/// never repeating it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ModelAnswer {
+    pub status: u16,
+    /// A bytes attachment of the error's message or the REST body, as UTF-8
+    /// text, if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<AttachmentId>,
+    /// The error code the SDK's error carries apart from its message
+    /// (`error_code`), if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_code: Option<String>,
+    /// The name of the SDK error's class (`BadRequest`), if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_error: Option<String>,
 }
 
 /// Starts a run.

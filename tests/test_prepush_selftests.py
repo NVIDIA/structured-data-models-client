@@ -6,9 +6,9 @@
 tier skipping the tooling self-tests; the acceptance tests are the test
 author's, in `tests/test_t132e_prepush_selftests.py`. Run in a temporary
 repository, with stand-ins for `uv`, `uvx` and `cargo` that record what they
-were asked to run: a lane that changes nothing skips them and says so, a lane
-that changes `lane.py` runs all four, and under the hook a pushed ref that
-changes `lane.py` runs them though HEAD changes nothing."""
+were asked to run: an explicit cheap check skips them without tooling changes
+and runs all four when tooling changed. Automatic push hooks run ownership
+checks only, following the owner's review-before-checks rule."""
 
 from __future__ import annotations
 
@@ -41,8 +41,10 @@ def _lane(tmp_path: Path) -> tuple[Path, dict[str, str]]:
         stub = bin_dir / tool
         stub.write_text(f'#!/usr/bin/env bash\necho "{tool} $*" >>"{log}"\n')
         stub.chmod(0o755)
+    # The caller's SDM_PHASE_BRANCH names another phase than this
+    # repository's; the branch checked out says which.
     env = {
-        **os.environ,
+        **{k: v for k, v in os.environ.items() if k != 'SDM_PHASE_BRANCH'},
         'PATH': f'{bin_dir}{os.pathsep}{os.environ["PATH"]}',
         'TMPDIR': str(tmp_path),
         'GIT_CONFIG_GLOBAL': os.devnull,
@@ -82,7 +84,7 @@ def _prepush(
         check=False,
     )
     assert done.returncode == 0, done.stdout + done.stderr
-    return done.stdout, log.read_text()
+    return done.stdout, log.read_text() if log.exists() else ''
 
 
 def test_an_unchanged_lane_py_skips_its_self_test_and_says_why(
@@ -115,7 +117,7 @@ def test_changing_lane_py_runs_all_four(tmp_path: Path) -> None:
     assert not any(line.startswith('skipped') for line in out.splitlines())
 
 
-def test_a_pushed_ref_that_changes_lane_py_runs_them_from_an_unchanged_head(
+def test_a_pushed_ref_does_not_start_package_checks_even_when_tools_changed(
     tmp_path: Path,
 ) -> None:
     repo, env = _lane(tmp_path)
@@ -131,9 +133,9 @@ def test_a_pushed_ref_that_changes_lane_py_runs_them_from_an_unchanged_head(
     )
     pushed = f'refs/heads/other {sha} refs/heads/other {"0" * 40}\n'
     out, ran = _prepush(repo, env, pushed)
-    assert 'scripts/rust_core/lane_selftest.py' in ran
-    assert 'scripts/rust_core/land_selftest.py' in ran
-    # The control: HEAD alone, unchanged, skips them.
+    assert ran == ''
+    assert 'push safety passed' in out
+    # An empty ref list also must not start checks before review.
     out, ran = _prepush(repo, env, '')
-    assert 'lane_selftest.py' not in ran
-    assert any(line.startswith('skipped') for line in out.splitlines())
+    assert ran == ''
+    assert 'push safety passed' in out

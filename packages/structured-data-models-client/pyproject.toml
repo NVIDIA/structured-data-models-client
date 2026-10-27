@@ -48,6 +48,8 @@ dependencies = [
     "pandas>=2.2.2",
     "numpy>=1.23.5",
     "pyarrow>=14.0.1",
+    # The existing relational validator floor also supplies its error formatter.
+    "pydantic>=2.7",
     "requests>=2.28",
     "urllib3>=1.26",
 ]
@@ -86,7 +88,7 @@ databricks-serving = ["databricks-sdk>=0.68.0,<1.0"]
 all = [
     "structured-data-models-client[relational,sqlite,duckdb,postgres,snowflake,databricks,lakebase,s3]",
 ]
-test = ["pytest", "pytest-xdist", "requests-mock"]
+test = ["pytest", "pytest-xdist", "requests-mock", "jsonschema>=4.18", "pyyaml"]
 
 # The Python package is src/sdm_client, py.typed and _native.pyi included;
 # the extension module lands beside them. The shipped build has the

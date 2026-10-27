@@ -11,10 +11,12 @@ pub mod attached;
 pub mod big_integer;
 pub mod compose;
 mod describe;
+mod discover;
 pub mod dispatch;
 mod edit;
 pub mod exact_number;
 mod fallback;
+mod held;
 mod lag;
 pub mod materialize;
 pub mod pql;
@@ -25,9 +27,17 @@ pub mod run;
 mod subgraph;
 #[cfg(feature = "test-ops")]
 mod test_ops;
+pub mod view;
+pub mod view_steps;
+pub mod view_words;
 
 pub use compose::{CompositionRoot, DataAccess};
 pub use dispatch::start;
+pub use edit::{dtype_names, meanings, wire_names};
+/// The text a float is spelled in, as the reference's language writes it
+/// (Python's `repr`): for a host that hands the data layer a value to
+/// write as the reference does (T3.12 fix 1).
+pub use pql::float_text;
 pub use run::{
     ArrowData, Ask, Asker, Attachment, AttachmentIds, Attachments, FetchResult, ModelResult, Reply,
     Run, RunState,
@@ -36,17 +46,7 @@ pub use run::{
 /// so a host reaches it through the core, never through an edge to
 /// `sdm-engine` (decision E30).
 pub use sdm_engine::time::{UnknownZone, Zones};
-
-/// Every warning the core gives, with the variants of each (none: one
-/// sentence), for a host to word each (decision E59(d)): the schema's,
-/// the key rules', then the sampler's, then the PQL adapter's, then predict's (T1.28b).
-pub fn warning_codes() -> Vec<(&'static str, &'static [&'static str])> {
-    sdm_schema::assemble::WARNINGS
-        .iter()
-        .chain(sdm_schema::keys::WARNINGS)
-        .chain(materialize::WARNINGS)
-        .chain(pql::WARNINGS)
-        .chain(predict::WARNINGS)
-        .copied()
-        .collect()
-}
+/// What each model supports, as the client describes it to a caller
+/// (`capabilities()`), re-exported so a host reaches the request crate's
+/// table through the core (decision E30).
+pub use sdm_request::predict::{Capabilities, capabilities};

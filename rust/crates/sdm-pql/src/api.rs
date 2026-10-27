@@ -21,7 +21,7 @@ use crate::schema::SchemaDefinition;
 use crate::validator::predictive_query::PredictiveQueryValidator;
 use crate::visitor::{ParseError, parse_query_held};
 
-pub use crate::visitor::DateWarning;
+pub use crate::visitor::{DateWarning, LiteralWarning};
 
 /// A query the grammar accepts, not yet resolved against a schema.
 #[derive(Debug)]
@@ -46,13 +46,12 @@ pub enum Resolved {
     Refused(ValidationResponse),
 }
 
-/// What parsing gives: the parsed query, or why not; and D4's warning for
-/// each day-first date literal read, in the order read, whether or not the
-/// query parses.
+/// What parsing gives: the parsed query, or why not; and the warnings of
+/// the literals read, in order, whether or not the query parses.
 #[derive(Debug)]
 pub struct Parse {
     pub outcome: Result<Parsed, Unparsed>,
-    pub warnings: Vec<DateWarning>,
+    pub warnings: Vec<LiteralWarning>,
 }
 
 /// Why text is no parsed query.

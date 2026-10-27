@@ -35,9 +35,15 @@ fn contract() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../contract")
 }
 
+/// A Postgres source under its schema, as every run reads one: the
+/// source's, or its session's current one, which the core reads once per
+/// run before any table (T3.7).
 fn postgres() -> ProviderChoice {
     ProviderChoice::Sql {
+        timestamp_encoding: None,
         dialect: Dialect::new("postgres"),
+        namespace: vec![Some("public".to_owned())],
+        view: None,
     }
 }
 
@@ -102,6 +108,9 @@ fn every_request_kind_plans_as_postgres_statements() {
 
 fn relation(parts: &[&str]) -> Relation {
     Relation {
+        columns: Vec::new(),
+        filter: None,
+        found: false,
         source: parts.iter().map(|p| (*p).to_owned()).collect(),
     }
 }

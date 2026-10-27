@@ -184,7 +184,14 @@ fn lone_surrogates_replaced(bytes: &[u8]) -> std::borrow::Cow<'_, [u8]> {
     out.map_or(Cow::Borrowed(bytes), Cow::Owned)
 }
 
-/// [`read_answer`] of bytes already decoded to UTF-8.
+/// Reads the option attachment's nonfinite numeric tokens losslessly.
+/// This does not decide which options admit them, and does not apply the
+/// endpoint decoder's encoding detection or surrogate replacement.
+pub fn read_options(bytes: &[u8]) -> Result<Value, ReadError> {
+    read_answer_utf8(bytes)
+}
+
+/// Lossless nonfinite-token decoding shared by answer and option readers.
 fn read_answer_utf8(bytes: &[u8]) -> Result<Value, ReadError> {
     let tokens = non_finite_tokens(bytes);
     if tokens.is_empty() {
@@ -559,6 +566,19 @@ impl Value {
         }
     }
 
+    /// Whether a decoded value has only ordinary JSON numeric tokens.
+    /// Unlike [`Self::all_finite`], this preserves finite numbers outside
+    /// double range; only the three extra literal tokens admitted by
+    /// [`read_options`] and [`read_answer`] are excluded.
+    pub fn all_json_numbers(&self) -> bool {
+        match self {
+            Value::Number(token) => !matches!(token.as_str(), "NaN" | "Infinity" | "-Infinity"),
+            Value::Array(items) => items.iter().all(Value::all_json_numbers),
+            Value::Object(members) => members.iter().all(|(_, v)| v.all_json_numbers()),
+            _ => true,
+        }
+    }
+
     /// Whether every number in the value reads as a finite double: an
     /// integer token always does, as an integer of any size; a float token
     /// past a double's range (`1e400`) reads as an infinity, and does not.
@@ -715,4 +735,45 @@ pub fn whole(token: &str) -> Option<i128> {
 pub fn is_integer_token(token: &str) -> bool {
     let digits = token.strip_prefix('-').unwrap_or(token);
     !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit())
+}
+
+#[cfg(test)]
+mod option_attachment_tests {
+    use super::{Value, read, read_options};
+
+    #[test]
+    fn nonfinite_tokens_belong_only_to_the_option_decoder() {
+        let bytes = br#"{"lag_timesteps":NaN,"text":"NaN","nested":[Infinity,-Infinity]}"#;
+        assert!(read(bytes).is_err());
+        let value = read_options(bytes).unwrap();
+        assert_eq!(
+            value.get("lag_timesteps"),
+            Some(&Value::Number("NaN".into()))
+        );
+        assert_eq!(value.get("text"), Some(&Value::Text("NaN".into())));
+        assert!(!value.get("nested").unwrap().all_finite());
+        assert!(read_options(br#"{"lag_timesteps":NaNa}"#).is_err());
+    }
+
+    #[test]
+    fn ordinary_json_numbers_keep_their_full_exponent_range() {
+        let finite =
+            read_options(br#"{"lag_timesteps":1e400,"nested":[-1e400,18446744073709551616]}"#)
+                .unwrap();
+        assert!(finite.all_json_numbers());
+        assert!(!finite.all_finite(), "finite JSON need not fit a double");
+        for token in ["NaN", "Infinity", "-Infinity"] {
+            let nested = read_options(format!(r#"{{"nested":[{token}]}}"#).as_bytes()).unwrap();
+            assert!(!nested.all_json_numbers(), "{token}");
+            let text = read_options(format!(r#"{{"nested":["{token}"]}}"#).as_bytes()).unwrap();
+            assert!(text.all_json_numbers(), "{token} text stays text");
+        }
+    }
+
+    #[test]
+    fn options_do_not_inherit_endpoint_encoding_or_surrogate_repair() {
+        assert!(read_options(b"\xff\xfe{\0}\0").is_err());
+        assert!(read_options(br#"{"lag_timesteps":NaN,"text":"\ud800"}"#).is_err());
+        assert!(read_options(br#"{"lag_timesteps":NaN,"text":"\uE000NaN"}"#).is_ok());
+    }
 }

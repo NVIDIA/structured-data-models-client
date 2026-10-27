@@ -54,6 +54,7 @@ routes are observed and answered by the same code.
 
 from __future__ import annotations
 
+import io
 import json
 import math
 import random
@@ -1013,15 +1014,29 @@ def databricks_workspace(
     does; it records each call and its answer."""
     calls: list[dict[str, Any]] = []
 
+    def answered(records: Any) -> dict[str, Any]:
+        body = records[0]['request_json'].encode()
+        status, text = answer(script, body)
+        calls.append({'body': body, 'status': status, 'answer': text})
+        return {'predictions': [{'response_json': text}]}
+
     class Endpoints:
         def query(self, *, name: str, **kwargs: Any) -> Any:
-            body = kwargs['dataframe_records'][0]['request_json'].encode()
-            status, text = answer(script, body)
-            calls.append({'body': body, 'status': status, 'answer': text})
-            return {'predictions': [{'response_json': text}]}
+            return answered(kwargs['dataframe_records'])
+
+    class ApiClient:
+        # The core route's call (T3.13): the envelope the core wrote,
+        # posted as it is, and the reply's bytes as the SDK's raw answer.
+        def do(self, method: str, path: str, **kwargs: Any) -> Any:
+            sent = kwargs['data']
+            sent = sent.read() if hasattr(sent, 'read') else sent
+            records = json.loads(sent)['dataframe_records']
+            reply = json.dumps(answered(records)).encode()
+            return {'contents': io.BytesIO(reply)}
 
     class Workspace:
         serving_endpoints = Endpoints()
+        api_client = ApiClient()
 
     yield Workspace(), calls
 

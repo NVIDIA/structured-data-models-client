@@ -2,10 +2,10 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The pure-Rust host's Postgres provider: it replays recorded fetch
-//! results instead of reading Postgres through a Rust driver (KO2-20).
+//! The pure-Rust host's strict SQL replay: it reads actual recorded fetch
+//! results instead of opening another database driver (KO2-20).
 //!
-//! A recording is what a Postgres server answered each fetch the core asked
+//! A recording is what a source answered each fetch the core asked
 //! for one case, in order: the fetch's request and plan as the core wrote
 //! them, and the answer, its rows as an Arrow IPC stream, or the provider's
 //! error as the contract carries it. The Python runner writes one
@@ -41,6 +41,10 @@
 //! "case": <key>, "fetches": [{"request", "plan", "statements", "data" |
 //! "error"}]}`,
 //! `data` the IPC stream in standard base64.
+//! Warehouse lines also carry `core`, the existing case core-input shape,
+//! projected from the actual host starts. Namespace and view names stay
+//! paired with the raw fetches. Materialize descriptions and predict
+//! states are never recorded as inputs: this host builds its own (E50).
 
 use std::cell::Cell;
 use std::collections::BTreeMap;
@@ -56,6 +60,7 @@ use sdm_contract::run::FetchStep;
 use serde::Deserialize;
 use serde_json::Value;
 
+use crate::case::CoreInputs;
 use crate::duck::Fetched;
 
 /// The recording's format, named on every line.
@@ -67,6 +72,10 @@ struct Line {
     format: String,
     case: String,
     fetches: Vec<Fetch>,
+    /// Present for warehouse recordings: starting arguments only, never
+    /// a description or materialized state supplied by the other host.
+    #[serde(default)]
+    core: Option<CoreInputs>,
 }
 
 #[derive(Deserialize)]
@@ -104,9 +113,14 @@ enum Answer {
 }
 
 /// The recorded fetches of every case in a recording, by the case's key
-/// (`<case>@postgres`).
+/// (`<case>@<leg>`).
 pub struct Recording {
-    cases: BTreeMap<String, Vec<Recorded>>,
+    cases: BTreeMap<String, RecordedCase>,
+}
+
+struct RecordedCase {
+    fetches: Vec<Recorded>,
+    core: Option<CoreInputs>,
 }
 
 impl Recording {
@@ -139,7 +153,16 @@ impl Recording {
                     answer,
                 });
             }
-            if cases.insert(line.case.clone(), fetches).is_some() {
+            if cases
+                .insert(
+                    line.case.clone(),
+                    RecordedCase {
+                        fetches,
+                        core: line.core,
+                    },
+                )
+                .is_some()
+            {
                 bail!("the recording holds {} twice", line.case);
             }
         }
@@ -148,16 +171,25 @@ impl Recording {
 
     /// The replay of the case keyed `case`, from its first fetch.
     pub fn replay(&self, case: &str) -> Result<Replay<'_>> {
-        let fetches = self
+        let recorded = self
             .cases
             .get(case)
             .ok_or_else(|| anyhow!("{case}: the recording holds no fetches for it"))?;
         Ok(Replay {
             case: case.to_owned(),
-            fetches,
+            fetches: &recorded.fetches,
             next: Cell::new(0),
             past_the_end: false,
         })
+    }
+
+    /// The recorded starting arguments, where this recording carries
+    /// them. Older Postgres lines deliberately retain their old derivation.
+    pub fn core(&self, case: &str) -> Result<Option<&CoreInputs>> {
+        self.cases
+            .get(case)
+            .map(|recorded| recorded.core.as_ref())
+            .ok_or_else(|| anyhow!("{case}: the recording holds no fetches for it"))
     }
 }
 
@@ -230,6 +262,8 @@ impl Replay<'_> {
                 return Ok(Replayed {
                     statements: &[],
                     answer: Err(ProviderError {
+                        error_class: None,
+                        driver_message: None,
                         kind: ErrorKind::DataSource,
                         retryable: false,
                         sqlstate: None,

@@ -685,6 +685,7 @@ def _t135() -> ModuleType:
     return _load(ROOT / 'tests/test_t135_evidence.py', 't136_t135_evidence')
 
 
+@pytest.mark.tooling
 def test_the_pack_classes_a_reference_cell_entry_as_an_improvement(
     tmp_path: Path,
 ) -> None:
@@ -712,6 +713,7 @@ def test_the_pack_classes_a_reference_cell_entry_as_an_improvement(
     assert t135.class_of(paths, 'key.regress') == 'regression'
 
 
+@pytest.mark.tooling
 def test_the_pack_excuses_nothing_by_an_item_outside_the_reference_cell(
     tmp_path: Path,
 ) -> None:

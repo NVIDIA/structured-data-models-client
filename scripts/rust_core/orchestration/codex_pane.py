@@ -13,6 +13,7 @@ so the herdr and Codex details are written once:
   alias (``codex --yolo``) on gpt-6-astra at high reasoning effort.
 - ``review``: check the worktree out at the exact SHA and send the round's
   prompt, which points at a brief file and names a fresh report file.
+  It needs no handoff stamp: the stamp is required only by landing.
   At most ``SDM_CODEX_CAP`` (default 4) reviews run at once; ``--queue``
   waits for a free slot, otherwise the command exits 3.
 - ``wait``: block until the round settles and print one line:

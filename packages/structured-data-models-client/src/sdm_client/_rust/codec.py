@@ -285,15 +285,15 @@ def _scalar(value: Any) -> Any:
     of hop counts and the engine's config classes a sequence of transforms;
     any other value refused, as the encoder refuses it. From T1.28b a NumPy
     float wider than a double (``np.longdouble``) is written as the double
-    it holds where that double is exactly its value, as the engine's config
-    classes read it, else refused."""
+    it holds where that double is exactly its value, or as NaN where it
+    holds NaN, as the engine's config classes read it, else refused."""
     import numpy as np
 
     if isinstance(value, np.floating):
         item = value.item()
         if isinstance(item, float):
             return item
-        if float(value) == value:
+        if float(value) == value or np.isnan(value):
             return float(value)
         raise TypeError(
             f'Object of type {type(value).__name__} is not JSON serializable'
@@ -350,18 +350,22 @@ def encode(message: dict[str, Any]) -> bytes:
     return data
 
 
-def attachment(value: Any, *, named: bool = False) -> bytes:
+def attachment(
+    value: Any, *, named: bool = False, option_values: bool = False
+) -> bytes:
     r"""An input-sized field as a bytes attachment of its JSON. A value JSON
     cannot hold (one of a type the encoder does not know, a number that is
     not finite, one nested past what the encoder writes) is refused as the
     client's transport refuses it, ``INVALID_REQUEST``: from T1.28a the
     call's option values travel here as the caller gave them, and from
     T2.9 (``named``, for them alone) the refusal names the first option
-    whose value JSON cannot hold, in ``details['field']``."""
+    whose value JSON cannot hold, in ``details['field']``.
+    With ``option_values``, nonfinite numeric tokens cross losslessly for
+    Rust's option admission; ordinary attachments remain strict JSON."""
 
     def written(item: Any) -> bytes:
         return json.dumps(
-            item, ensure_ascii=False, allow_nan=False, default=_scalar
+            item, ensure_ascii=False, allow_nan=option_values, default=_scalar
         ).encode()
 
     def writes(item: Any) -> bool:

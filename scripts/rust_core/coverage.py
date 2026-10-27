@@ -35,7 +35,11 @@ design "Contract corpus"). The rules, each problem printed naming its rule:
 6. a contradicted cell claim fails (T1.32g; design, "Coverage generator"):
    each cell a case claims, acceptance or diagnostic alike, must be held by
    a column of the case's source in the case's ``python-ref`` observation
-   (``contract/reference/*.jsonl``), at a stage the case reached. A claim
+   (``contract/reference/*.jsonl``), or, for a case with none there (a
+   warehouse-only case), in the old client's reference line of any of its
+   warehouse captures (``contract/captures/**/<leg>/<case>/capture.json``,
+   the sample read by the relation's last name part, case-folded), at a
+   stage the case reached. A claim
    ``<type>/<role>`` holds when some column the reference read is admitted
    as ``<type>`` (:func:`cell_type`: the Arrow type the driver returned, in
    the reference's sample of the table at ``from_source``, through the
@@ -43,9 +47,9 @@ design "Contract corpus"). The rules, each problem printed naming its rule:
    scope-format.md: "a cell names the type the core receives") and plays
    ``<role>`` there (:func:`observed`): the key, time column, links and
    other columns of the schema the reference described, with the case's
-   edits; the query's target from ``materialize`` on; and, in a refusal at
-   ``from_source`` before any schema, only what the case's options declare
-   and ``feature`` for a column of a table holding no declared constraint.
+   edits; the query's target from ``materialize`` on; and, for a column
+   refused or left out at ``from_source``, its declared input role or
+   ``feature`` where recorded constraints establish no other role (E96(b)).
    A claim with no observation of the case, or an observation that does
    not show it (no capture, no sample, a shape it does not read), fails;
    it is never taken on trust;
@@ -73,6 +77,7 @@ import functools
 import importlib.util
 import json
 import re
+import subprocess
 import sys
 from collections import Counter
 from pathlib import Path
@@ -89,6 +94,11 @@ SCHEMA = f'{PHASE_0}/scope.schema.json'
 CASES = 'contract/cases'
 #: The reference observations rule 6 holds the cells' claims to (T1.13).
 REFERENCE = 'contract/reference'
+#: The warehouse legs' captures (Phase 3, design choice 2): each holds the
+#: old client's reference line of its case on its leg (``<case>@<leg>``),
+#: which rule 6 reads for a case with no line in :data:`REFERENCE`.
+CAPTURES = 'contract/captures'
+CAPTURE_FORMAT = 'sdm-capture/1'
 #: Where every phase's ``decisions.md`` is (T2.0).
 DECISIONS_DIR = 'docs/design/rust-core'
 SLICES = ('S0', 'S1', 'S2', 'S3')
@@ -312,6 +322,190 @@ def read_reference(tree: Any, report: Report) -> dict[str, Any] | None:
     return None if unread else found
 
 
+def read_captures(
+    tree: Any, report: Report, wanted: set[str]
+) -> dict[str, list[dict[str, Any]]]:
+    r"""The reference lines of the warehouse captures of the cases in
+    ``wanted``, by case, one per leg (``<leg>/<case>/capture.json`` under
+    :data:`CAPTURES`, of :data:`CAPTURE_FORMAT`, its line keyed
+    ``<case>@<leg>``); a capture it cannot read, or whose line is not its
+    case's on its leg, reported. A sample the old client read as rows (a
+    Postgres leg) is typed by the Arrow its capture holds for it
+    (:func:`row_schemas`)."""
+    found: dict[str, list[dict[str, Any]]] = {}
+    try:
+        names = [
+            name
+            for name in tree.files(CAPTURES)
+            if name.endswith('/capture.json') and name.split('/')[-2] in wanted
+        ]
+    except _module('ratchet').Unreadable as error:
+        report.fail('read', str(error))
+        return found
+    blobs = Blobs(tree)
+    try:
+        for name in names:
+            _read_capture(tree, report, name, blobs, found)
+    finally:
+        blobs.close()
+    return found
+
+
+def _read_capture(
+    tree: Any,
+    report: Report,
+    name: str,
+    blobs: Blobs,
+    found: dict[str, list[dict[str, Any]]],
+) -> None:
+    r"""One capture of :func:`read_captures`, its line added to ``found``."""
+    case_id, leg = name.split('/')[-2], name.split('/')[-3]
+    try:
+        capture = _json(_text(tree, name), name)
+    except Unreadable as error:
+        report.fail('read', str(error))
+        return
+    line = capture.get('reference') if isinstance(capture, dict) else None
+    if not (
+        isinstance(capture, dict)
+        and capture.get('format') == CAPTURE_FORMAT
+        and capture.get('case') == case_id
+        and capture.get('leg') == leg
+        and isinstance(line, dict)
+        and line.get('case') == f'{case_id}@{leg}'
+    ):
+        report.fail('read', f'{name}: not a capture of {case_id} on {leg}')
+        return
+    base = name.rpartition('/')[0]
+    bound_parameters(capture, line)
+    row_schemas(capture, line, lambda path: blobs.read(f'{base}/{path}'))
+    found.setdefault(case_id, []).append(line)
+
+
+class Blobs:
+    r"""A commit's files as bytes (the captures' Arrow tables), read through
+    one ``git cat-file --batch`` process (:meth:`close` ends it)."""
+
+    def __init__(self, tree: Any) -> None:
+        self.tree = tree
+        self._batch: subprocess.Popen[bytes] | None = None
+
+    def read(self, path: str) -> bytes | None:
+        r"""The file at ``path``, or None when the commit has none there."""
+        if self._batch is None:
+            self._batch = subprocess.Popen(
+                ['git', '-C', str(self.tree.repo), 'cat-file', '--batch'],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+            )
+        assert self._batch.stdin is not None and self._batch.stdout is not None
+        self._batch.stdin.write(f'{self.tree.sha}:{path}\n'.encode())
+        self._batch.stdin.flush()
+        header = self._batch.stdout.readline().split()
+        if len(header) != 3:
+            return None
+        data = self._batch.stdout.read(int(header[2]))
+        self._batch.stdout.read(1)
+        return data if header[1] == b'blob' else None
+
+    def close(self) -> None:
+        if self._batch is not None:
+            self._batch.kill()
+            self._batch.wait()
+            self._batch = None
+
+
+def bound_parameters(capture: dict[str, Any], line: dict[str, Any]) -> None:
+    r"""The capture's typed bindings beside its exact reference statement.
+
+    Constraint evidence needs the bound schema and table, not a guess from
+    the SQL or a parsed Python repr. Only matching two-string recordings
+    supply these local coverage facts; the original capture stays unchanged.
+    """
+    driver = line.get('driver')
+    recorded = driver.get('capture') if isinstance(driver, dict) else None
+    statements = (
+        recorded.get('statements') if isinstance(recorded, dict) else None
+    )
+    if not isinstance(statements, list):
+        return
+    for statement in statements:
+        if isinstance(statement, dict):
+            statement.pop('_coverage_parameters', None)
+    # Derived state is never evidence, even when the raw input is absent.
+    held = capture.get('statements')
+    if not isinstance(held, list):
+        return
+    for statement, kept in zip(statements, held, strict=False):
+        if not isinstance(statement, dict) or not isinstance(kept, dict):
+            continue
+        parameters = kept.get('parameters')
+        if (
+            statement.get('stage') == 'from_source'
+            and statement.get('sql') == kept.get('text')
+            and isinstance(parameters, list)
+            and len(parameters) == 2
+            and all(isinstance(value, str) for value in parameters)
+            and statement.get('parameters')
+            == [
+                {'type': 'builtins.str', 'value': repr(value)}
+                for value in parameters
+            ]
+        ):
+            statement['_coverage_parameters'] = list(parameters)
+
+
+def row_schemas(
+    capture: dict[str, Any],
+    line: dict[str, Any],
+    read: Any,
+) -> None:
+    r"""Each warehouse sample at ``from_source`` that ``line`` holds as rows
+    (a Postgres leg's driver reads rows), given the Arrow schema of the
+    table ``capture`` holds for the same statement at the same position,
+    read by ``read`` (a capture-relative path to its bytes, or None): the
+    recording mode keeps a psycopg read as the core's Postgres provider
+    types it from the driver's type codes (T3.20), the types the core
+    receives. Without pyarrow, or a table to read, the sample stays rows,
+    and shows no cell."""
+    try:
+        import pyarrow as pa
+    except ImportError:
+        return
+    driver = line.get('driver')
+    captured = driver.get('capture') if isinstance(driver, dict) else None
+    statements = (
+        captured.get('statements') if isinstance(captured, dict) else None
+    )
+    held = capture.get('statements')
+    if not isinstance(statements, list) or not isinstance(held, list):
+        return
+    for statement, kept in zip(statements, held, strict=False):
+        if not (
+            isinstance(statement, dict)
+            and isinstance(kept, dict)
+            and statement.get('stage') == 'from_source'
+            and statement.get('sql') == kept.get('text')
+            and isinstance(kept.get('result'), str)
+            and isinstance(statement.get('results'), list)
+            and _WAREHOUSE_SAMPLE.fullmatch(str(statement['sql']).strip())
+        ):
+            continue
+        results = [r for r in statement['results'] if isinstance(r, dict)]
+        if not results or any('schema' in r for r in results):
+            continue
+        data = read(kept['result'])
+        if data is None:
+            continue
+        try:
+            schema = pa.ipc.open_stream(data).schema
+        except (pa.ArrowInvalid, OSError):
+            continue
+        fields = [{'name': f.name, 'type': str(f.type)} for f in schema]
+        for result in results:
+            result['schema'] = fields
+
+
 # --- the rules -----------------------------------------------------------------
 
 
@@ -372,28 +566,201 @@ def rule_2_3(language: str, manifest: dict[str, Any], report: Report) -> None:
         report.fail('rule 3', f'{language}: backend {backend} is in no path')
 
 
+def on_leg(path: str, leg: str) -> str:
+    r"""A case's DuckDB path as the same operation and mode on ``leg``'s
+    backend (``run_python.py``'s ``on_database``); any other is itself."""
+    head, _, backend = path.rpartition('/')
+    return f'{head}/{leg}' if backend == 'duckdb' else path
+
+
+def claims(case: dict[str, Any]) -> dict[str, set[str]]:
+    r"""What a case covers (T3.2; carried row P2-T2.16-3): its own paths and
+    cells, and each of its DuckDB paths on every other leg it runs on
+    (``run_python.py``'s ``case_legs``: SQLite, Postgres and the warehouse
+    legs), so a database or warehouse leg claims its own path."""
+    legs = _module('register').runner().case_legs(case)
+    # How the case's source is opened on each leg (the orchestrator's
+    # decision, T3.2): with the leg's source class (DatabricksSource,
+    # SnowflakeSource, PostgresSource, DuckDBSource, SQLiteSource),
+    # source.open/explicit; a connect case's raw connection or session,
+    # found by detection, source.open/auto.
+    mode = 'auto' if 'connect' in (case.get('input') or {}) else 'explicit'
+    opened = {f'source.open/{mode}/{leg}' for leg in legs}
+    return {
+        'paths': {on_leg(path, leg) for path in case['paths'] for leg in legs}
+        | set(case['paths'])
+        | opened,
+        'cells': set(case['cells']),
+    }
+
+
 def generated(
     language: str, manifest: dict[str, Any], corpus: dict[str, dict[str, Any]]
 ) -> dict[str, dict[str, list[str]]]:
     r"""Each path's and cell's cases as the corpus says: the acceptance
-    cases naming it, by ID; none in Java until a Java runner observes."""
+    cases claiming it (:func:`claims`), by ID. Java runs the same case
+    files as Python (Phase 3 design choice 10), so a Java path's cases are
+    the cases claiming it; each Java leg is admitted where the Java host
+    reports its provider, which the ratchet's no-removal rule then holds."""
     out: dict[str, dict[str, list[str]]] = {'paths': {}, 'cells': {}}
+    claimed = {
+        case_id: claims(case)
+        for case_id, case in corpus.items()
+        if case['status'] == 'acceptance'
+    }
     for key in out:
         for name in _ids(manifest, key):
             out[key][name] = sorted(
                 case_id
-                for case_id, case in corpus.items()
-                if language == 'python'
-                and case['status'] == 'acceptance'
-                and name in case[key]
+                for case_id, held in claimed.items()
+                if name in held[key]
             )
     return out
+
+
+#: A client test's ID, by the manifest's language: for Python a pytest node
+#: ID, ``<file>::<test>``; for Java (T3.12) a JUnit test method,
+#: ``java/src/test/java/<file>.java#<method>``. A manifest names only its
+#: own language's tests: a Java test exercises no Python path, and none of
+#: Python's a Java one.
+_TESTS = {
+    'python': re.compile(
+        r'(?P<file>[A-Za-z0-9_./-]+\.py)::(?P<name>test_[A-Za-z0-9_]+)'
+    ),
+    'java': re.compile(
+        r'(?P<file>java/src/test/java/[A-Za-z0-9_./-]+\.java)#(?P<name>[A-Za-z0-9_]+)'
+    ),
+}
+#: How a file defines the test, for Python: a pytest function. A Java
+#: test is the one JUnit ran, as Surefire's reports of the Java test run
+#: record it (:func:`junit_ran`, :func:`junit_problem`), never read from the
+#: source.
+_DEFINED = {
+    'python': r'^\s*def {name}\(',
+}
+
+
+#: Each language's form, as a problem names it.
+_FORM = {
+    'python': '<file>::<test>',
+    'java': 'java/src/test/java/<file>.java#<method>',
+}
+
+
+def _test_problem(test: str, root: Any, language: str = 'python') -> str | None:
+    r"""Why ``test`` names no test of ``language`` the tree defines, or None.
+    ``root`` is the candidate's tree (its ``read``) or a directory."""
+    found = _TESTS[language].fullmatch(test)
+    if found is None:
+        return f'not {_FORM[language]}'
+    if root is None:
+        root = HERE.parents[1]
+    try:
+        source = (
+            (root / found['file']).read_text(encoding='utf-8')
+            if isinstance(root, Path)
+            else root.read(found['file'])
+        )
+    except Exception:  # noqa: BLE001 - an unreadable file defines no test
+        source = None
+    if language == 'java':
+        # The file is the tree's and names the method (a cheap guard against
+        # a misnamed test at landing); that JUnit ran it is the Java test
+        # run's to say (junit_run).
+        named = source and re.search(
+            rf'\b{re.escape(found["name"])}\s*\(', source
+        )
+        return None if named else 'no test the tree defines'
+    defined = _DEFINED[language].format(name=re.escape(found['name']))
+    if not source or not re.search(defined, source, re.M):
+        return 'no test the tree defines'
+    return None
+
+
+def junit_ran(reports: Path) -> set[tuple[str, str]]:
+    r"""Each test JUnit ran and did not skip, as Surefire's reports in
+    ``reports`` (``TEST-*.xml``) record it: its class and its method's name
+    (a parameterized test's invocations, ``name(String)[1]``, by the name
+    before its parameters). Only :func:`junit_run` reads them, from a
+    directory its own Maven run filled."""
+    import xml.etree.ElementTree as ElementTree
+
+    ran: set[tuple[str, str]] = set()
+    for path in sorted(reports.glob('TEST-*.xml')):
+        for case in ElementTree.parse(path).getroot().iter('testcase'):
+            if case.find('skipped') is not None:
+                continue
+            name = re.split(r'[(\[]', case.get('name', ''), maxsplit=1)[0]
+            ran.add((case.get('classname', ''), name))
+    return ran
+
+
+def junit_problem(test: str, ran: set[tuple[str, str]]) -> str | None:
+    r"""Why the Java test ``test`` (``java/src/test/java/<file>.java#<method>``)
+    is no test JUnit ran, by :func:`junit_ran`, or None: its file's class,
+    or a class nested in it, ran the method, and did not skip it."""
+    found = _TESTS['java'].fullmatch(test)
+    if found is None:
+        return f'not {_FORM["java"]}'
+    name = (
+        found['file'].removeprefix('java/src/test/java/').removesuffix('.java')
+    )
+    owner = name.replace('/', '.')
+    if any(
+        method == found['name']
+        and (cls == owner or cls.startswith(owner + '$'))
+        for cls, method in ran
+    ):
+        return None
+    return 'not a test JUnit ran (target/surefire-reports)'
+
+
+def junit_run(repo: Path, command: list[str], report: Report) -> None:
+    r"""The Java test run the check owns: the Surefire reports directory
+    emptied (that directory alone; the rest of the build directory, the
+    natives a CI job put there among it, stays), Maven's ``verify``
+    (``command``) run in ``repo``, then each test the Java manifest names
+    held to the reports that run left (:func:`junit_check`), and no other."""
+    import shutil
+    import subprocess
+
+    reports = repo / 'java/target/surefire-reports'
+    if reports.is_dir():
+        shutil.rmtree(reports)
+    ran = subprocess.run(command, cwd=repo, check=False)
+    if ran.returncode != 0:
+        report.fail(
+            'rule 4', f'java: the Java test run failed ({ran.returncode})'
+        )
+        return
+    junit_check(repo, reports, report)
+
+
+def junit_check(repo: Path, reports: Path, report: Report) -> None:
+    r"""Each test the Java manifest names, held to the Java test run whose
+    Surefire reports :func:`junit_run` left in ``reports``: rule 4's Java
+    half."""
+    ran = junit_ran(reports)
+    try:
+        manifest = _yaml(
+            (repo / MANIFESTS['java']).read_text(encoding='utf-8'),
+            MANIFESTS['java'],
+        )
+    except (OSError, Unreadable) as error:
+        report.fail('read', str(error))
+        return
+    for path, tests in sorted(tested(manifest).items()):
+        for test in tests:
+            problem = junit_problem(test, ran)
+            if problem is not None:
+                report.fail('rule 4', f'java: path {path}: {test}: {problem}')
 
 
 def rule_4(
     manifests: dict[str, dict[str, Any]],
     corpus: dict[str, dict[str, Any]],
     report: Report,
+    root: Any = None,
 ) -> None:
     python = manifests.get('python')
     if python is not None:
@@ -413,6 +780,13 @@ def rule_4(
                             'Python manifest',
                         )
     for language, manifest in sorted(manifests.items()):
+        for path, tests in sorted(tested(manifest).items()):
+            for test in tests:
+                problem = _test_problem(test, root, language)
+                if problem is not None:
+                    report.fail(
+                        'rule 4', f'{language}: path {path}: {test}: {problem}'
+                    )
         made = generated(language, manifest, corpus)
         for key in ('paths', 'cells'):
             for item in manifest[key]:
@@ -432,30 +806,87 @@ def rule_4(
                     )
 
 
-def rule_5(
+def tested(manifest: dict[str, Any]) -> dict[str, list[str]]:
+    r"""Each path a client test claims (its ``tests``, pytest node IDs),
+    where the case format cannot express it (T3.2, P2-T2.16-3); rule 4
+    holds each to a test the tree defines."""
+    return {
+        str(item['id']): [str(test) for test in item.get('tests') or []]
+        for item in manifest.get('paths') or []
+        if item.get('tests')
+    }
+
+
+def uncovered(
     manifests: dict[str, dict[str, Any]],
     corpus: dict[str, dict[str, Any]],
-    report: Report,
+    language: str,
+    active: str,
 ) -> list[str]:
-    r"""The active slice's paths, each with an acceptance case; the paths
-    covered are returned for the summary."""
-    language, active = ACTIVE
+    r"""The paths of ``language``'s manifest in ``active`` and the slices
+    before it with no acceptance case claiming them on any leg
+    (:func:`generated`) and no client test (:func:`tested`): the S1, S2 and
+    Java rules' list (T3.2)."""
     manifest = manifests.get(language)
     if manifest is None:
         return []
     made = generated(language, manifest, corpus)
+    # A claim only in the manifest's own language's form counts.
+    form = _TESTS.get(language)
+    claimed = {
+        path: [t for t in tests if form is not None and form.fullmatch(t)]
+        for path, tests in tested(manifest).items()
+    }
+    gated = SLICES[: SLICES.index(active) + 1]
+    return [
+        str(item['id'])
+        for item in manifest['paths']
+        if item['slice'] in gated
+        and not made['paths'][str(item['id'])]
+        and not claimed.get(str(item['id']))
+    ]
+
+
+def rule_5(
+    manifests: dict[str, dict[str, Any]],
+    corpus: dict[str, dict[str, Any]],
+    report: Report,
+    gate: tuple[str, str] = ACTIVE,
+) -> list[str]:
+    r"""The gated slice's paths, each with an acceptance case or a named
+    client test claiming it (:func:`uncovered`), and from S1 on every cell
+    of an expected outcome with an acceptance case (the S1, S2 and Java
+    rules, T3.2); the paths covered are returned for the summary."""
+    language, active = gate
+    manifest = manifests.get(language)
+    if manifest is None:
+        return []
+    made = generated(language, manifest, corpus)
+    empty = set(uncovered(manifests, corpus, language, active))
     gated = SLICES[: SLICES.index(active) + 1]
     covered = []
     for item in manifest['paths']:
         if item['slice'] not in gated:
             continue
-        if made['paths'][str(item['id'])]:
-            covered.append(str(item['id']))
+        name = str(item['id'])
+        if name not in empty:
+            covered.append(name)
         else:
             report.fail(
                 'rule 5',
-                f'{language}: {active} path {item["id"]} has no acceptance case',
+                f'{language}: {item["slice"]} path {name} has no acceptance '
+                'case',
             )
+    if active != 'S0':
+        for item in manifest['cells']:
+            if item.get('expect') == 'unknown':
+                continue
+            if not made['cells'][str(item['id'])]:
+                report.fail(
+                    'rule 5',
+                    f'{language}: cell {item["id"]} has no acceptance case '
+                    f'({active})',
+                )
     if not covered and not report.problems:
         report.fail('rule 5', f'{language}: {active} has no path to gate')
     return covered
@@ -517,8 +948,62 @@ _UNIT = re.compile(
 #: The reference's sample of a table at ``from_source``, and its read of the
 #: table's declared constraints (contract/reference's statements).
 _SAMPLE = re.compile(r'SELECT .+ FROM "((?:[^"]|"")+)" LIMIT [0-9]+', re.S)
+#: A warehouse's sample of a table at ``from_source``: its relation, a
+#: quoted name of one to three parts (``"db"."s"."t"``, `` `c`.`s`.`t` ``),
+#: or the view's filtered relation over it (``(SELECT ... FROM <relation>
+#: AS source ...)``).
+_PART = r'(?:"(?:[^"]|"")+"|`(?:[^`]|``)+`)'
+_RELATION = rf'{_PART}(?:\.{_PART}){{0,2}}'
+_WAREHOUSE_SAMPLE = re.compile(
+    rf'SELECT .+? FROM (?:({_RELATION})|\(SELECT .+ FROM ({_RELATION}) '
+    r'AS source\b.*\)) LIMIT [0-9]+',
+    re.S,
+)
 _CONSTRAINTS = re.compile(
     r"FROM duckdb_constraints\(\)\s+WHERE table_name = '((?:[^']|'')+)'"
+)
+#: The frozen reference's two Databricks catalog reads. Both must succeed
+#: with no rows before E96(b)'s omitted columns default to input features.
+#: An unfamiliar query never establishes absence of constraints.
+_DB_KEYS = (
+    'SELECT tc.constraint_type, tc.constraint_name, kcu.column_name '
+    'FROM {catalog}.information_schema.table_constraints tc '
+    'JOIN {catalog}.information_schema.key_column_usage kcu '
+    'ON tc.constraint_catalog = kcu.constraint_catalog '
+    'AND tc.constraint_schema = kcu.constraint_schema '
+    'AND tc.constraint_name = kcu.constraint_name '
+    'WHERE tc.table_schema = lower(?) AND tc.table_name = lower(?) '
+    "AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE')"
+)
+_DB_FOREIGN = (
+    'SELECT tc.constraint_name, kcu.column_name, ccu.table_catalog, '
+    'ccu.table_schema, ccu.table_name, ccu.column_name '
+    'FROM {catalog}.information_schema.table_constraints tc '
+    'JOIN {catalog}.information_schema.referential_constraints rc '
+    'ON tc.constraint_catalog = rc.constraint_catalog '
+    'AND tc.constraint_schema = rc.constraint_schema '
+    'AND tc.constraint_name = rc.constraint_name '
+    'JOIN {catalog}.information_schema.key_column_usage kcu '
+    'ON tc.constraint_catalog = kcu.constraint_catalog '
+    'AND tc.constraint_schema = kcu.constraint_schema '
+    'AND tc.constraint_name = kcu.constraint_name '
+    'JOIN {catalog}.information_schema.constraint_column_usage ccu '
+    'ON rc.unique_constraint_catalog = ccu.constraint_catalog '
+    'AND rc.unique_constraint_schema = ccu.constraint_schema '
+    'AND rc.unique_constraint_name = ccu.constraint_name '
+    "WHERE tc.constraint_type = 'FOREIGN KEY' "
+    'AND tc.table_schema = lower(?) AND tc.table_name = lower(?)'
+)
+_DB_CATALOG = re.compile(
+    r' FROM (`(?:[^`]|``)+`).information_schema.table_constraints tc '
+)
+#: Actual corpus source forms: a logical name or three identifier parts,
+#: plain or backtick-quoted, with literal published namespace placeholders.
+_DB_SOURCE_PART = re.compile(
+    r'(?:`(?:[^`]|``)+`|\{(?:catalog|schema)\}|[A-Za-z_][A-Za-z_0-9]*)'
+)
+_DB_SOURCE = re.compile(
+    rf'{_DB_SOURCE_PART.pattern}(?:\.{_DB_SOURCE_PART.pattern}){{0,2}}'
 )
 #: A PQL query's first column reference before its ``FOR``: its target,
 #: with or without an ``EVALUATE`` or ``EXPLAIN`` before ``PREDICT``, for
@@ -631,14 +1116,23 @@ def received(line: dict[str, Any]) -> dict[tuple[str, str], set[str]]:
     table and name, with the cell types the core admits it as: the Arrow
     schema of the driver's answer to the reference's sample of the table."""
     found: dict[tuple[str, str], set[str]] = {}
+    warehouse = _is_capture(line)
+    as_rows = False
     for statement in _statements(line):
-        sample = _SAMPLE.fullmatch(statement['sql'].strip())
-        if sample is None:
-            continue
-        table = sample.group(1).replace('""', '"')
+        if warehouse:
+            sample = _WAREHOUSE_SAMPLE.fullmatch(statement['sql'].strip())
+            if sample is None:
+                continue
+            table = _relation_key(sample.group(1) or sample.group(2))
+        else:
+            sample = _SAMPLE.fullmatch(statement['sql'].strip())
+            if sample is None:
+                continue
+            table = sample.group(1).replace('""', '"')
         for result in statement['results']:
             schema = result.get('schema') if isinstance(result, dict) else None
             if not isinstance(schema, list):
+                as_rows = True
                 continue
             for field in schema:
                 if not (
@@ -651,9 +1145,104 @@ def received(line: dict[str, Any]) -> dict[tuple[str, str], set[str]]:
                 found.setdefault((table, field['name']), set()).update(
                     [cell] if cell is not None else []
                 )
+    if not found and warehouse and as_rows:
+        # A Postgres leg's driver reads rows, and its capture held no Arrow
+        # of them (:func:`row_schemas`): no type to hold a claim to.
+        raise Unevidenced('a sample read as rows, with no Arrow type')
     if not found:
         raise Unevidenced('no sample of a table at from_source')
     return found
+
+
+def _is_capture(line: dict[str, Any]) -> bool:
+    r"""Whether ``line`` is a warehouse capture's reference line, keyed
+    ``<case>@<leg>``; a DuckDB reference line is keyed by its case."""
+    return '@' in str(line.get('case'))
+
+
+def _relation_key(relation: str) -> str:
+    r"""A warehouse relation by its table: the last part of its name,
+    unquoted and case-folded (Snowflake folds an unquoted name, and a view
+    names its tables as the warehouse gives them back)."""
+    identity = _databricks_identity(relation)
+    if identity is not None:
+        return identity[-1]
+    last = relation
+    for part in re.finditer(_PART, relation):
+        last = part.group(0)
+    quote = last[:1]
+    if quote in ('"', '`') and last.endswith(quote):
+        last = last[1:-1].replace(quote * 2, quote)
+    return last.rpartition('.')[2].casefold()
+
+
+def _databricks_identity(source: str) -> tuple[str, ...] | None:
+    r"""One logical name or a complete qualified identity, never a suffix.
+
+    Placeholders are literal atoms, not wildcards or environment lookups.
+    Partial qualification and unknown spellings supply no identity proof.
+    """
+    if _DB_SOURCE.fullmatch(source) is None:
+        return None
+    parts = tuple(
+        part[1:-1].replace('``', '`') if part.startswith('`') else part
+        for part in _DB_SOURCE_PART.findall(source)
+    )
+    if len(parts) not in (1, 3) or any(
+        ('{' in part or '}' in part) and part not in ('{catalog}', '{schema}')
+        for part in parts
+    ):
+        return None
+    return tuple(part.casefold() for part in parts)
+
+
+def _constraint_sql(sql: str) -> str | None:
+    r"""Fold only outside whitespace for the two frozen catalog queries.
+
+    Preserve all bytes inside single, double and backtick quotes, including
+    doubled quote escapes. Unknown query shapes still fail the exact match;
+    an unterminated quote supplies no constraint evidence.
+    """
+    out: list[str] = []
+    quote = None
+    index = 0
+    while index < len(sql):
+        char = sql[index]
+        if quote is not None:
+            out.append(char)
+            if char == quote:
+                if index + 1 < len(sql) and sql[index + 1] == quote:
+                    out.append(sql[index + 1])
+                    index += 1
+                else:
+                    quote = None
+        elif char in '\'"`':
+            quote = char
+            out.append(char)
+        elif char in ' \t\r\n':
+            if out and out[-1] != ' ':
+                out.append(' ')
+        else:
+            out.append(char)
+        index += 1
+    return None if quote is not None else ''.join(out).strip(' ')
+
+
+def _as_named(
+    types: dict[tuple[str, str], set[str]], names: list[str]
+) -> dict[tuple[str, str], set[str]]:
+    r"""A capture's sampled columns keyed by the source name the case or
+    the described schema gives each table (``names``), matched by
+    :func:`_relation_key`; a table two names would match stays unmatched."""
+    by_key: dict[str, list[str]] = {}
+    for name in names:
+        by_key.setdefault(_relation_key(name), []).append(name)
+    out: dict[tuple[str, str], set[str]] = {}
+    for (table, column), cells in types.items():
+        found = by_key.get(table, [])
+        source = found[0] if len(set(found)) == 1 else table
+        out.setdefault((source, column), set()).update(cells)
+    return out
 
 
 def _undeclared(line: dict[str, Any]) -> set[str]:
@@ -669,6 +1258,96 @@ def _undeclared(line: dict[str, Any]) -> set[str]:
             for r in statement['results']
         )
     return {table for table, counts in rows.items() if counts == [0]}
+
+
+def _databricks_undeclared(
+    line: dict[str, Any], sources: list[str]
+) -> set[str]:
+    r"""Case sources joined to complete empty-constraint identity proof.
+
+    Match the exact reference queries, typed bound names and the sampled
+    three-part relation. Missing, failed, nonempty or unknown evidence
+    does not prove that an omitted column was an unconstrained feature.
+    Qualified sources match all parts before any logical alias is granted.
+    """
+    if not str(line.get('case')).endswith('@databricks-sql'):
+        return set()
+    statements = _statements(line)
+    samples: dict[tuple[str, ...], str] = {}
+    for statement in statements:
+        sample = _WAREHOUSE_SAMPLE.fullmatch(statement['sql'].strip())
+        if sample is not None:
+            relation = sample.group(1) or sample.group(2)
+            identity = _databricks_identity(relation)
+            if identity is None or len(identity) != 3:
+                return set()
+            samples[identity] = _relation_key(relation)
+    # The later role join uses table aliases. Do not discard namespace
+    # identity when more than one sampled relation could supply that name.
+    names = Counter(samples.values())
+    reads: dict[tuple[str, ...], dict[str, list[int | None]]] = {}
+    for statement in statements:
+        sql = _constraint_sql(statement['sql'])
+        if sql is None:
+            continue
+        catalog = _DB_CATALOG.search(sql)
+        if catalog is None:
+            continue
+        kind = next(
+            (
+                name
+                for name, query in [
+                    ('keys', _DB_KEYS),
+                    ('foreign', _DB_FOREIGN),
+                ]
+                if sql == query.format(catalog=catalog.group(1))
+            ),
+            None,
+        )
+        if kind is None:
+            continue
+        parameters = statement.get('_coverage_parameters')
+        if not (_strs(parameters) and len(parameters) == 2):
+            return set()
+        schema, table = (value.replace('`', '``') for value in parameters)
+        identity = _databricks_identity(
+            f'{catalog.group(1)}.`{schema}`.`{table}`'
+        )
+        if identity is None or identity not in samples:
+            continue
+        results = statement['results']
+        count = None
+        if (
+            statement.get('error') is None
+            and len(results) == 1
+            and isinstance(results[0], dict)
+            and results[0].get('method') == 'fetchall'
+            and type(results[0].get('rows')) is int
+        ):
+            count = results[0]['rows']
+        reads.setdefault(identity, {}).setdefault(kind, []).append(count)
+    proven = {
+        identity
+        for identity, kinds in reads.items()
+        if names[samples[identity]] == 1
+        and kinds.get('keys') == [0]
+        and kinds.get('foreign') == [0]
+    }
+    found = set()
+    for source in sources:
+        identity = _databricks_identity(source)
+        if identity is None:
+            continue
+        if len(identity) == 1:
+            matching = [
+                sample for sample in samples if sample[-1] == identity[0]
+            ]
+            if len(matching) != 1:
+                continue
+            [identity] = matching
+        if identity in proven:
+            found.add(source)
+    return found
 
 
 def _keys(value: Any) -> set[str]:
@@ -785,7 +1464,9 @@ def observed(case: dict[str, Any], line: dict[str, Any]) -> set[str]:
     options = given.get('from_source') or {}
     named = options.get('tables') if isinstance(options, dict) else None
     if _strs(named):
-        # A list of tables names each as itself (Schema.from_source).
+        # A list of tables names each as itself (Schema.from_source); an
+        # empty one names no table, as the client reads it (G12: it chooses
+        # none and refuses, never every table).
         named = {name: name for name in named}
     if named is not None and not isinstance(named, dict):
         raise Unevidenced('table options it does not read')
@@ -795,6 +1476,25 @@ def observed(case: dict[str, Any], line: dict[str, Any]) -> set[str]:
     free = _undeclared(line)
     public = line.get('public')
     schema = public.get('schema') if isinstance(public, dict) else None
+    if _is_capture(line):
+        tables = schema.get('tables') if isinstance(schema, dict) else None
+        names = (
+            [str(v) for v in named.values()]
+            if named is not None
+            else [
+                str(table.get('name'))
+                for table in tables or []
+                if isinstance(table, dict)
+            ]
+        )
+        types = _as_named(types, names)
+        free = {
+            source
+            for source, _ in _as_named(
+                {(table, ''): set() for table in free}, names
+            )
+        }
+        free.update(_databricks_undeclared(line, names))
     roles: dict[tuple[str, str], set[str]] = {}
     held: set[tuple[str, str]] = set()
     if schema is not None:
@@ -826,7 +1526,7 @@ def observed(case: dict[str, Any], line: dict[str, Any]) -> set[str]:
     # table could make it anything else (a refusal covers its rejected
     # input, and claims no later stage).
     for source, column in types:
-        name = to_name.get(source, None if named else source)
+        name = to_name.get(source, None if named is not None else source)
         if name is None or (name, column) in held:
             continue
         mine = declared.get((name, column), set())
@@ -839,7 +1539,7 @@ def observed(case: dict[str, Any], line: dict[str, Any]) -> set[str]:
         roles.setdefault(target, set()).add('target')
     cells = set()
     for (name, column), played in roles.items():
-        source = (named or {}).get(name, None if named else name)
+        source = (named or {}).get(name, None if named is not None else name)
         for cell in types.get((source, column), set()) if source else set():
             cells.update(f'{cell}/{role}' for role in played)
     return cells
@@ -875,28 +1575,38 @@ def rule_6(
     corpus: dict[str, dict[str, Any]],
     reference: dict[str, Any],
     report: Report,
+    captured: dict[str, list[dict[str, Any]]] | None = None,
 ) -> None:
     r"""Each case's cell claims, acceptance and diagnostic alike, held to
-    its reference observation; a claim with none to hold it to fails."""
+    its reference observation: its DuckDB line, else (a warehouse-only
+    case) the reference lines of its warehouse captures, a claim held when
+    any leg's line shows it; a claim with none to hold it to fails."""
     for case_id, case in sorted(corpus.items()):
         claims = case['cells']
         if not claims:
             continue
         line = reference.get(case_id)
-        if line is None:
+        lines = [line] if line is not None else (captured or {}).get(case_id)
+        if not lines:
             report.fail(
                 'rule 6',
                 f'case {case_id}: claims {", ".join(claims)} with no '
                 'reference observation of the case to hold them to',
             )
             continue
-        try:
-            shown = observed(case, line)
-        except Unevidenced as error:
+        shown = set()
+        errors = []
+        for each in lines:
+            try:
+                shown |= observed(case, each)
+            except Unevidenced as error:
+                errors.append(str(error))
+        if len(errors) == len(lines):
             report.fail(
                 'rule 6',
                 f'case {case_id}: claims {", ".join(claims)}, and its '
-                f'reference observation shows none of them: {error}',
+                'reference observation shows none of them: '
+                + '; '.join(sorted(set(errors))),
             )
             continue
         for claim in claims:
@@ -962,7 +1672,12 @@ def rule_8(
             drop('cell', name, 'turns unknown')
 
 
-def check(repo: Path, rev: str, checkpoint: str) -> tuple[Report, list[str]]:
+def check(
+    repo: Path,
+    rev: str,
+    checkpoint: str,
+    gates: tuple[tuple[str, str], ...] = (ACTIVE,),
+) -> tuple[Report, list[str]]:
     ratchet = _module('ratchet')
     report = Report()
     summary: list[str] = []
@@ -988,14 +1703,21 @@ def check(repo: Path, rev: str, checkpoint: str) -> tuple[Report, list[str]]:
     corpus = read_cases(candidate, report)
     reference = read_reference(candidate, report)
     if corpus is not None and reference is not None:
-        rule_6(corpus, reference, report)
+        wanted = {
+            case_id
+            for case_id, case in corpus.items()
+            if case['cells'] and case_id not in reference
+        }
+        captured = read_captures(candidate, report, wanted)
+        rule_6(corpus, reference, report, captured)
     if corpus is not None and len(manifests) == len(MANIFESTS):
-        rule_4(manifests, corpus, report)
-        covered = rule_5(manifests, corpus, report)
-        summary.append(
-            f'{ACTIVE[0]} {ACTIVE[1]}: {len(covered)} paths, each with an '
-            f'acceptance case; {len(corpus)} cases read'
-        )
+        rule_4(manifests, corpus, report, candidate)
+        for gate in gates:
+            covered = rule_5(manifests, corpus, report, gate)
+            summary.append(
+                f'{gate[0]} {gate[1]}: {len(covered)} paths, each with an '
+                f'acceptance case or a named test; {len(corpus)} cases read'
+            )
     for language, path in MANIFESTS.items():
         try:
             old_text = before.read(path)
@@ -1040,11 +1762,67 @@ def check(repo: Path, rev: str, checkpoint: str) -> tuple[Report, list[str]]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
-    parser.add_argument('--check', action='store_true', required=True)
+    # --check, or the report list's --gate SLICE alone (T3.2): the same
+    # check, gating the slices named.
+    parser.add_argument('--check', action='store_true')
     parser.add_argument('--repo', type=Path)
     parser.add_argument('--rev', default='HEAD')
-    parser.add_argument('--checkpoint', required=True)
+    parser.add_argument('--checkpoint')
+    parser.add_argument(
+        '--junit-run',
+        action='store_true',
+        help="runs the Java tests (Maven's verify) and holds each Java test "
+        'the manifest names to that run alone (run, not skipped)',
+    )
+    parser.add_argument('--maven', default='mvn', help='the Maven to run')
+    parser.add_argument(
+        '--maven-arg',
+        action='append',
+        default=[],
+        help="an argument to Maven's run",
+    )
+    parser.add_argument(
+        '--gate',
+        action='append',
+        metavar='LANGUAGE:SLICE',
+        help='a slice whose paths and cells gate, such as python:S1 or '
+        'java:S1 (T3.2); default python:S0, the active slice',
+    )
     arguments = parser.parse_args(argv)
+    if arguments.junit_run:
+        junit = Report()
+        root = arguments.repo or Path(__file__).resolve().parents[2]
+        junit_run(
+            root,
+            [
+                arguments.maven,
+                '-B',
+                *arguments.maven_arg,
+                '-f',
+                'java/pom.xml',
+                'verify',
+            ],
+            junit,
+        )
+        for problem in junit.problems:
+            print(problem)
+        print(f'coverage: {"FAIL" if junit.problems else "ok"} (JUnit run)')
+        return 1 if junit.problems else 0
+    if arguments.checkpoint is None:
+        parser.error('--checkpoint is required')
+    if not arguments.check and not arguments.gate:
+        parser.error('give --check, --gate LANGUAGE:SLICE, or both')
+    gates = []
+    for given in arguments.gate or [':'.join(ACTIVE)]:
+        # A bare slice is Python's (the report list's --gate S2).
+        language, _, active = (
+            given.partition(':') if ':' in given else ('python', ':', given)
+        )
+        if language not in MANIFESTS or active not in SLICES:
+            parser.error(
+                f'--gate {given}: a language of {sorted(MANIFESTS)} and a slice of {SLICES}'
+            )
+        gates.append((language, active))
     repo = arguments.repo
     if repo is None:
         try:
@@ -1056,7 +1834,9 @@ def main(argv: list[str] | None = None) -> int:
         except _module('ratchet').Unreadable as error:
             print(f'coverage: {error}', file=sys.stderr)
             return 2
-    report, summary = check(repo, arguments.rev, arguments.checkpoint)
+    report, summary = check(
+        repo, arguments.rev, arguments.checkpoint, tuple(gates)
+    )
     for line in summary:
         print(f'coverage: {line}')
     for problem in report.problems:

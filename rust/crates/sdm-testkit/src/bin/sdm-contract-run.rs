@@ -8,6 +8,7 @@
 //! sdm-contract-run [--pre-given-specs] --out FILE CASE_OR_DIRECTORY...
 //! sdm-contract-run --providers
 //! sdm-contract-run --replay RECORDING --out FILE CASE_OR_DIRECTORY...
+//! sdm-contract-run --replay RECORDING --replay-leg LEG --out FILE CASE_OR_DIRECTORY...
 //! sdm-contract-run --database sqlite --out FILE CASE_OR_DIRECTORY...
 //! sdm-contract-run --database memory [--layer default] --out FILE CASE_OR_DIRECTORY...
 //! sdm-contract-run --kit DATABASE [--fault truncate|silent_capability] --out REPORT
@@ -38,6 +39,10 @@
 //! answered from a recording of a Postgres server's answers
 //! (`run_python.py --record-fetches`; [`sdm_testkit::replay`], KO2-20),
 //! each observation keyed `<case>@postgres`.
+//! With `--replay-leg databricks-sql|databricks-spark|snowflake|lakebase`,
+//! it replays that leg's actual fetch recording and its recorded starting
+//! arguments, including the source's namespace and semantic view. It
+//! renders and checks every request normally; no warehouse is emulated.
 //!
 //! `--providers` prints the databases this host has a provider for
 //! ([`sdm_testkit::PROVIDERS`]) as a JSON list, the staging rule's marker
@@ -110,13 +115,33 @@ fn run(arguments: &[String]) -> Result<(PathBuf, usize)> {
         ),
         _ => (None, arguments),
     };
+    if recording.is_some() && database.is_some() {
+        bail!("--replay cannot select another --database");
+    }
+    let (replay_leg, arguments) = match arguments {
+        [flag, leg, rest @ ..] if flag == "--replay-leg" => {
+            if recording.is_none() || database.is_some() {
+                bail!("--replay-leg needs --replay and cannot select another --database");
+            }
+            let warehouse = match leg.as_str() {
+                "postgres" => None,
+                "databricks-sql" => Some(case::Warehouse::DatabricksSql),
+                "databricks-spark" => Some(case::Warehouse::DatabricksSpark),
+                "snowflake" => Some(case::Warehouse::Snowflake),
+                "lakebase" => Some(case::Warehouse::Lakebase),
+                _ => bail!("an unsupported replay leg"),
+            };
+            ((leg.as_str(), warehouse), rest)
+        }
+        _ => (("postgres", None), arguments),
+    };
     let (out, cases) = match arguments {
         [flag, out, cases @ ..] if flag == "--out" && !cases.is_empty() => (
             PathBuf::from(out),
             cases.iter().map(PathBuf::from).collect::<Vec<_>>(),
         ),
         _ => bail!(
-            "usage: sdm-contract-run [--pre-given-specs] [--database sqlite | --database memory [--layer default] | --replay RECORDING] --out FILE CASE_OR_DIRECTORY..."
+            "usage: sdm-contract-run [--pre-given-specs] [--database sqlite | --database memory [--layer default] | --replay RECORDING [--replay-leg LEG]] --out FILE CASE_OR_DIRECTORY..."
         ),
     };
     let mut partial = out.clone().into_os_string();
@@ -130,9 +155,26 @@ fn run(arguments: &[String]) -> Result<(PathBuf, usize)> {
             _ => {}
         }
     }
+    // The cases that run on the database this run answers from: a
+    // warehouse-only case (S2's `warehouses`) runs on none of them, and is
+    // selected out, never run on DuckDB (`case::load_for`, T3.2).
+    let on = if sqlite {
+        case::Database::Sqlite
+    } else if recording.is_some() {
+        case::Database::Postgres
+    } else {
+        case::Database::Duckdb
+    };
     let mut loaded = case::load(&cases)?;
     if loaded.is_empty() {
         bail!("no cases");
+    }
+    loaded.retain(|each| match replay_leg.1 {
+        Some(warehouse) => each.case.warehouses().contains(&warehouse),
+        None => each.case.databases().contains(&on),
+    });
+    if loaded.is_empty() {
+        bail!("no case runs on the database asked for");
     }
     if pre_given_specs {
         for each in &mut loaded {
@@ -168,22 +210,22 @@ fn run(arguments: &[String]) -> Result<(PathBuf, usize)> {
             }
             None => (host::run(&each.case, &bases)?, each.clone()),
             Some(recording) => {
-                if !each.case.databases().contains(&case::Database::Postgres) {
-                    continue;
-                }
                 let mut keyed = each.clone();
-                keyed.case.id = format!("{}@postgres", each.case.id);
+                keyed.case.id = format!("{}@{}", each.case.id, replay_leg.0);
                 // A diagnostic case whose core asks past what python-core
                 // recorded is observed refused (`replay::PAST_THE_RECORDING`);
                 // an acceptance case's fails the run (T2.8 fixes 3 and 4).
-                (host::run_replayed(&each.case, recording)?, keyed)
+                (
+                    host::run_replayed_on(&each.case, recording, replay_leg.0)?,
+                    keyed,
+                )
             }
         };
         let each = &keyed;
         count += 1;
         // On SQLite every case reads data, its calls made through its
         // until (T2.1d).
-        let read_bases = sqlite || reads_data(&each.case);
+        let read_bases = sqlite || replay_leg.1.is_some() || reads_data(&each.case);
         let digest = read_bases.then_some(bases_digest.as_str());
         lines.push_str(&observation::write(&identity, each, &observed, digest).to_string());
         lines.push('\n');

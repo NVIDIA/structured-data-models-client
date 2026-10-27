@@ -30,17 +30,20 @@ from __future__ import annotations
 
 import dataclasses
 import re
+import warnings
 from collections.abc import Mapping, Sequence
 from numbers import Integral
 from typing import TYPE_CHECKING, Any, NoReturn
 
 import pandas as pd
-from predictive_query import RELATIONAL, TABULAR
 
+from sdm_client.base import PROFILE_MODELS
+from sdm_client.core.warnings import SDMWarning
 from sdm_client.decompose import (
     FORECAST,
     RANKING,
     Decomposition,
+    _decimal_as_typed,
     about_the_part,
     parts_of,
     refuse_a_part_that_would_take_several_calls,
@@ -58,10 +61,16 @@ from sdm_client.request import Request
 from sdm_client.schema import _MAX_CATEGORICAL_CARDINALITY as _MAX_CATEGORICAL
 from sdm_client.schema import Schema
 
-if TYPE_CHECKING:
-    from predictive_query import Profile, ValidatedPredictiveQuery
+#: The language's profiles a query is resolved for, by name: the core
+#: validates for a name, and only the old route's validator reads the old
+#: PQL package's object of it (T3.16, rule 11).
+RELATIONAL = 'RELATIONAL'
+TABULAR = 'TABULAR'
 
-    from sdm_client._rust.materialize import Unresolved
+if TYPE_CHECKING:
+    from predictive_query import ValidatedPredictiveQuery
+
+    from sdm_client._rust.results import CoreParts, CoreQuery
 
 
 def _refuse_the_task(task: str, why: str) -> NoReturn:
@@ -79,9 +88,9 @@ def _refuse_the_task(task: str, why: str) -> NoReturn:
 def _alone(asked: Any) -> bool:
     r"""Whether ``asked`` is a query only the core resolves (KO2-36), read
     on the core route only, where the bridge is imported."""
-    from sdm_client._rust.materialize import Unresolved
+    from sdm_client._rust.results import CoreQuery
 
-    return isinstance(asked, Unresolved)
+    return isinstance(asked, CoreQuery)
 
 
 class PredictiveQuery:
@@ -487,7 +496,7 @@ class PredictiveQuery:
 
     def _on_the_core(
         self,
-        asked: ValidatedPredictiveQuery | Unresolved,
+        asked: ValidatedPredictiveQuery | CoreQuery,
         *,
         indices: Sequence[Any],
         num_context_samples: int | None,
@@ -503,20 +512,43 @@ class PredictiveQuery:
         and, for a query only the core resolves (KO2-36) that the core does
         not resolve either, with the old validator's diagnostics."""
         given = None if candidates is None else list(candidates)
+
+        def candidate(fields: dict[str, Any]) -> Any:
+            # A candidate the core names by its position among those given.
+            assert given is not None
+            return given[fields['candidate']]
+
+        from sdm_client._rust import errors
+
         try:
-            whole = self._relational_materializer.materialize(
-                query=asked,
-                indices=indices,
-                num_context_samples=num_context_samples,
-                options=options,
-                candidates=given,
-            )
+            # What only this client holds, which the core's sentences name:
+            # the question as written, and a candidate as given, its type's
+            # name and its value written as the column's type (T3.17).
+            with errors.holding(
+                query=lambda fields: self.text,
+                candidate=candidate,
+                part_candidate=lambda fields: given[
+                    fields['ranking_candidate']
+                ],
+                candidate_type=lambda fields: type(candidate(fields)).__name__,
+                written=lambda fields: _decimal_as_typed(
+                    candidate(fields), fields.get('dtype')
+                ),
+            ):
+                whole = self._relational_materializer.materialize(
+                    query=asked,
+                    indices=indices,
+                    num_context_samples=num_context_samples,
+                    options=options,
+                    candidates=given,
+                )
         except MissingExtraError:
             raise
         except StructuredDataError as error:
             details = getattr(error, 'details', None) or {}
             if (
                 _alone(asked)
+                and asked.refusal is not None
                 and error.code == 'INVALID_REQUEST'
                 and details.get('rule') is None
                 and details.get('field') == 'query'
@@ -524,28 +556,27 @@ class PredictiveQuery:
                 # The core does not resolve it either: the old validator's
                 # diagnostics say why, a mistyped column's among them.
                 raise asked.refusal from error
-            said = said_as_parts_are(
-                error,
-                self.text,
-                given,
-                steps=getattr(asked, 'num_forecasts', None),
-                options=options,
-            )
-            if said is error:
-                # The core's own words: raised as the core raised them, with
-                # no cause chained.
-                raise
-            raise said from error
-        state = whole._core_state
-        if state.get('ranking') is not None:
-            assert given is not None
-            return self._kept_as_parts(whole, given, indices)
-        if state.get('forecast') is None:
+            # The core's own words, its part's included: raised as the core
+            # raised them, with no cause chained, the details as the old
+            # route's.
+            said_as_parts_are(error, given)
+            raise
+        parts = None if whole._core is None else whole._core.parts
+        if parts is None:
             return whole
-        return self._kept_as_steps(whole, Decomposition(FORECAST, ()), indices)
+        if parts.kind == 'ranking':
+            assert given is not None
+            return self._kept_as_parts(whole, parts, given, indices)
+        return self._kept_as_steps(
+            whole, parts, Decomposition(FORECAST, ()), indices
+        )
 
     def _kept_as_parts(
-        self, whole: Request, given: list[Any], indices: Sequence[Any]
+        self,
+        whole: Request,
+        parts: CoreParts,
+        given: list[Any],
+        indices: Sequence[Any],
     ) -> Request:
         r"""A ranking the core gathered as one question per candidate, kept
         together as :meth:`_in_parts` keeps the parts it gathers: one
@@ -553,17 +584,16 @@ class PredictiveQuery:
         about the candidate as the caller gave it."""
         import copy
 
-        state = whole._core_state
-        ranking = state['ranking']
+        from sdm_client._rust.results import CoreRanking, CoreRequest
+
+        version = whole._core.version
         gathered = []
         for position, named, payload, query in [
-            (
-                ranking['candidate'],
-                ranking['value'],
-                whole.payloads[0],
-                state['query'],
+            (parts.position, parts.name, whole.payloads[0], parts.query),
+            *(
+                (part.position, part.name, part.payload, part.query)
+                for part in parts.later
             ),
-            *ranking['parts'],
         ]:
             part = Request.materialized(
                 payloads=(payload,),
@@ -574,7 +604,7 @@ class PredictiveQuery:
                 entity_table=whole.entity_table,
                 requested_inference=whole.requested_inference,
             )
-            part._core_state = {'version': state['version']}
+            part._core = CoreRequest(version=version)
             gathered.append((part, query, position, named))
         carrier = copy.copy(gathered[0][0])
         carrier._parts = tuple(part for part, *_ in gathered)
@@ -583,35 +613,44 @@ class PredictiveQuery:
             tuple(
                 (query, given[position]) for _, query, position, _ in gathered
             ),
-            ranking.get('top_k'),
+            parts.top_k,
         )
         # What predict on the core reads of the ranking: how many candidates
         # a row keeps, and each question's candidate by its position among
         # those given and by its name in the result.
-        carrier._core_state = {
-            'version': state['version'],
-            'ranking': {
-                'top_k': ranking.get('top_k'),
-                'positions': [position for _, _, position, _ in gathered],
-                'values': [named for *_, named in gathered],
-            },
-        }
+        carrier._core = CoreRequest(
+            version=version,
+            ranking=CoreRanking(
+                top_k=parts.top_k,
+                positions=tuple(position for _, _, position, _ in gathered),
+                values=tuple(str(named) for *_, named in gathered),
+            ),
+        )
         carrier._asked = self.text
         return carrier
 
     def _kept_as_steps(
-        self, whole: Request, rewritten: Decomposition, indices: Sequence[Any]
+        self,
+        whole: Request,
+        parts: CoreParts,
+        rewritten: Decomposition,
+        indices: Sequence[Any],
     ) -> Request:
         r"""A forecast the core gathered in steps, kept together as
         :meth:`_in_parts` keeps the parts it gathers: one request per step,
         with the step's payload and query."""
         import copy
 
-        state = whole._core_state
+        from sdm_client._rust.results import CoreRequest
+
+        version = whole._core.version
         gathered = []
         for step, payload, query in [
-            (1, whole.payloads[0], state['query']),
-            *state.get('forecast', ()),
+            (parts.position, whole.payloads[0], parts.query),
+            *(
+                (part.position, part.payload, part.query)
+                for part in parts.later
+            ),
         ]:
             part = Request.materialized(
                 payloads=(payload,),
@@ -622,7 +661,7 @@ class PredictiveQuery:
                 entity_table=whole.entity_table,
                 requested_inference=whole.requested_inference,
             )
-            part._core_state = {'version': state['version']}
+            part._core = CoreRequest(version=version)
             gathered.append((part, query, step))
         carrier = copy.copy(gathered[0][0])
         carrier._parts = tuple(part for part, _, _ in gathered)
@@ -633,57 +672,93 @@ class PredictiveQuery:
         carrier._asked = self.text
         return carrier
 
-    def _resolve(
-        self, profile: Profile
-    ) -> ValidatedPredictiveQuery | Unresolved:
+    def _resolve(self, profile: str) -> ValidatedPredictiveQuery | CoreQuery:
         r"""Parse and validate the query.
 
         On the core route (S0, the private routing seam) the core decides
-        validity, and an accepted query is resolved by the old validator for
-        the old materializer, which also checks that the two agree.
+        validity (P2-MID2-1, design choice 9). A query it accepts that a
+        relational materialize gathers on the core is the core's to resolve
+        as it gathers it: :class:`~sdm_client._rust.results.CoreQuery`,
+        the text alone, so the old validator is never reached on the core
+        route. Only where the old materializer gathers it is the accepted
+        query resolved by the old validator, for that materializer, which
+        also checks that the two agree.
 
-        Where a relational materialize runs on the core over a schema
-        holding a column the old validator's language cannot name (a dot, a
-        backtick or a line break in its name), a query the old validator
-        refuses is the core's to resolve as it gathers it (KO2-36, T2.18):
-        :class:`~sdm_client._rust.materialize.Unresolved`, holding the old
-        validator's refusal for a call only the old route answers.
+        On the old route the old validator decides. Where a relational
+        materialize runs on the core over a schema holding a column the
+        old validator's language cannot name (a dot, a backtick or a line
+        break in its name), a query the old validator refuses is the core's
+        to resolve as it gathers it (KO2-36, T2.18): ``CoreQuery``, holding
+        the old validator's refusal for a call only the old route answers.
         """
-        from predictive_query import validate
-
         from sdm_client import _routing
+
+        core = _routing.route(_routing.S0) == 'core'
+        gathered_on_the_core = profile == RELATIONAL and _routing.on_the_core(
+            self.schema.source, _routing.MATERIALIZE
+        )
         from sdm_client.schema import (
             names_a_query_cannot_say,
             to_schema_definition,
         )
 
-        core = _routing.route(_routing.S0) == 'core'
-        definition = to_schema_definition(self.schema)
-        alone = (
-            profile == RELATIONAL
-            and _routing.on_the_core(self.schema.source, _routing.MATERIALIZE)
-            and names_a_query_cannot_say(self.schema)
-        )
         if core:
             from sdm_client._rust import s0
+            from sdm_client._rust.spec import query_schema
 
-            accepted, messages = s0.validate(self.text, definition, profile)
+            # The schema as the core reads it, written with no object of the
+            # old PQL package (T3.16, rule 11).
+            accepted, messages, held, resolved = s0.validate(
+                self.text, query_schema(self.schema), profile
+            )
             if not accepted:
                 raise self._refusal(messages, profile)
-            if not alone:
-                return s0.shadow(self.text, definition, profile)
-        old, response = validate(self.text, definition, profile)
+            if gathered_on_the_core:
+                from sdm_client._rust import errors
+                from sdm_client._rust.results import CoreQuery
+
+                # No shadow check reads it to say its day-first literal, so
+                # the core's warning is shown.
+                errors.warn_held(held)
+                return CoreQuery(
+                    text=str(
+                        (None if resolved is None else resolved.text)
+                        or self.text
+                    ),
+                    num_forecasts=(
+                        None if resolved is None else resolved.num_forecasts
+                    ),
+                    refusal=None,
+                )
+            with warnings.catch_warnings():
+                # Said once, as the core's query schema was written.
+                warnings.simplefilter('ignore', SDMWarning)
+                definition = to_schema_definition(self.schema)
+            return s0.shadow(self.text, definition, profile)
+        from predictive_query import validate
+
+        from sdm_client.base import language_profile
+
+        definition = to_schema_definition(self.schema)
+
+        old, response = validate(
+            self.text, definition, language_profile(profile)
+        )
         if old is not None and response.ok:
             return old
         reasons = [error.message for error in response.errors]
-        if alone:
-            from sdm_client._rust.materialize import Unresolved
+        if gathered_on_the_core and names_a_query_cannot_say(self.schema):
+            from sdm_client._rust.results import CoreQuery
 
-            return Unresolved(self.text, self._refusal(reasons, profile))
+            return CoreQuery(
+                text=self.text,
+                num_forecasts=None,
+                refusal=self._refusal(reasons, profile),
+            )
         raise self._refusal(reasons, profile)
 
     def _refusal(
-        self, messages: list[str], profile: Profile
+        self, messages: list[str], profile: str
     ) -> StructuredDataError:
         r"""The refusal of a query the language does not accept.
 
@@ -699,7 +774,7 @@ class PredictiveQuery:
             or 'the query did not resolve'
         )
         return StructuredDataError(
-            f'{self.text!r} is not a query {profile.capabilities.model} '
+            f'{self.text!r} is not a query {PROFILE_MODELS[profile]} '
             f'can answer: {_without_a_remedy_this_caller_cannot_run(reasons)}'
             f'{self._why_the_target_is_text(reasons, profile)}'
             f'{self._how_to_resolve_an_ambiguous_link(reasons)}',
@@ -754,7 +829,7 @@ class PredictiveQuery:
             f'== {target!r} and link.source_column in {rest!r})].'
         )
 
-    def _why_the_target_is_text(self, reasons: str, profile: Profile) -> str:
+    def _why_the_target_is_text(self, reasons: str, profile: str) -> str:
         r"""Say why a target is `text`, when that is what refused the query.
 
         Inference types a string column by how many distinct values it holds,
@@ -801,7 +876,7 @@ class PredictiveQuery:
         if ceiling is not None and distinct is not None and distinct > ceiling:
             return (
                 f'{said}. Typing it categorical would not help here, though: '
-                f'{profile.capabilities.model} classifies at most {ceiling} '
+                f'{PROFILE_MODELS[profile]} classifies at most {ceiling} '
                 f'classes and this column holds {distinct:,}, so the send '
                 f'would be refused. Predict a column with fewer classes, or '
                 f'group these into that many first'

@@ -73,7 +73,10 @@ INVENTORY = Path('docs/design/rust-core/phase-0/phase-1b-inventory.yaml')
 #: A task ID, the legacy form of a case: ``T0.6``, ``T1.7c``, ``T1.11f``.
 TASK = re.compile(r'T[0-9]+\.[0-9]+[a-z]?')
 #: A line's key on another database: the case, ``@``, the database.
-ON_DATABASE = re.compile(r'(?P<case>.+)@(?:sqlite|postgres)')
+ON_DATABASE = re.compile(
+    r'(?P<case>.+)@(?:sqlite|postgres'
+    r'|databricks-sql|databricks-spark|snowflake|lakebase)'
+)
 #: A projected outcome as ratchet.py writes it (the schema's pattern).
 OUTCOME = re.compile(
     r'(?P<result>success|refusal) ?(?P<code>[A-Z][A-Z0-9_]*|-)?'
@@ -123,6 +126,107 @@ def runner() -> ModuleType:
     return module
 
 
+def _sibling(name: str, path: Path) -> ModuleType:
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    # Registered before it runs: its dataclasses look their module up.
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+@functools.cache
+def owner_approved() -> Any:
+    r"""This harness's reading of an owner's approval, ``ratchet.py``'s
+    allowlist (U4), and of a decisions file's rows with their statuses
+    (``capture_check.py``'s)."""
+    ratchet = _sibling(
+        'register_ratchet', REPO / 'scripts/rust_core/ratchet.py'
+    )
+    check = _sibling(
+        'register_capture_check', REPO / 'contract/runners/capture_check.py'
+    )
+    return ratchet.owner_approved, check.decision_rows
+
+
+#: The entries the owner approved before T3.2's rule, whose rows read
+#: otherwise: Phase 0's numbered rows (a plan section's decision, not a
+#: status cell), statuses written as "confirmed by owner" or naming the
+#: owner's answer in the row's text, and a row approving part of what it
+#: names. Each landed under the review of its time, and keeps its approval;
+#: every other entry approved by the owner names a row the owner approved.
+BEFORE_THE_ROW_RULE = frozenset(
+    {
+        'PK-1',
+        'PK-2',
+        'PK-3',
+        'PK-4',
+        'PK-6',
+        'PK-7',
+        'PK-8',
+        'PK-9',
+        'PD-1',
+        'PD-2',
+        'PD-3',
+        'PD-4',
+        'PD-5',
+        'PD-6',
+        'DF-2',
+        'RS-2',
+        'RS-4',
+        'RS-7',
+        'DT-1',
+        'DT-2',
+        'DT-3',
+        'DT-8',
+        'DT-16',
+        'DT-17',
+        'ORD-3',
+        'P1B-12',
+        'P1B-14',
+        'P1B-17',
+        'P1B-20',
+        'P1B-22',
+        'P1B-23',
+        'P1B-39',
+        'P1B-33',
+        'P1B-34',
+        'P1B-35',
+        'P1B-36',
+        'HOST-5',
+        'PQL-3',
+        'PQL-4',
+        'P1B-42',
+        'P2B-11',
+        'P2C-10',
+    }
+)
+
+
+def owner_row_problem(entry: dict[str, Any], root: Path) -> str | None:
+    r"""Why an entry approved by the owner names no row the owner approved
+    (T3.2): its ``decision_ref`` must name a row of its decisions file
+    whose status reads as the owner's approval (``ratchet.py``'s
+    ``owner_approved``, an allowlist), or nothing does."""
+    ref = entry.get('decision_ref')
+    if not isinstance(ref, dict):
+        return 'approved by the owner, with no decision_ref naming the row'
+    path = root / str(ref.get('file'))
+    try:
+        text = path.read_text(encoding='utf-8')
+    except (OSError, UnicodeDecodeError):
+        return None  # the decision_ref rule names the file
+    approved, rows = owner_approved()
+    row = rows(text).get(str(ref.get('row')))
+    if row is None or not approved(row[1]):
+        return (
+            f'approved by the owner, and its decision_ref {ref.get("row")} is '
+            'no row the owner approved'
+        )
+    return None
+
+
 def case_ids(root: Path) -> dict[str, dict[str, Any]]:
     r"""The corpus under ``root``, by ID, read by the runner's loader."""
     return {case['id']: case for case, _ in runner().load_cases([root / CASES])}
@@ -161,6 +265,17 @@ def reference_refusals(root: Path) -> dict[str, str]:
         for case, outcome in _reference_lines(root).items()
         if outcome.get('result') == 'refusal'
         and isinstance(outcome.get('stage'), str)
+    }
+
+
+def reference_codes(root: Path) -> dict[str, str | None]:
+    r"""The code of each line the committed reference refuses, by the
+    line's key: a row whose old outcome is ``none`` keeps the reference's
+    own refusal where its code is the same (T3.12 fix 1)."""
+    return {
+        case: outcome.get('code')
+        for case, outcome in _reference_lines(root).items()
+        if outcome.get('result') == 'refusal'
     }
 
 
@@ -261,8 +376,16 @@ def problems(
         ]
     corpus = case_ids(root)
     inventory = inventory_ids(root)
-    accepted = reference_outcomes(root)
-    refused = reference_refusals(root)
+    accepted = {}
+    refused = {}
+    codes = {}
+    # One local snapshot: fixtures can change these files between validations.
+    for case, outcome in _reference_lines(root).items():
+        accepted[case] = str(outcome['result'])
+        if outcome.get('result') == 'refusal':
+            if isinstance(outcome.get('stage'), str):
+                refused[case] = outcome['stage']
+            codes[case] = outcome.get('code')
     for entry in entries:
         where = entry['id']
         for case in entry['cases']:
@@ -275,6 +398,16 @@ def problems(
                     f'{where}: case {case}: not a corpus case, a task ID '
                     'or an inventory case'
                 )
+        # An entry the owner approves names the row holding the owner's
+        # approval (T3.2), read by allowlist (ratchet.py's owner_approved).
+        if (
+            entry.get('status') == 'approved'
+            and entry.get('approved_by') == 'owner'
+            and where not in BEFORE_THE_ROW_RULE
+        ):
+            problem = owner_row_problem(entry, root)
+            if problem is not None:
+                found.append(f'{where}: {problem}')
         ref = entry['decision_ref']
         if ref is not None:
             path = root / ref['file']
@@ -298,7 +431,7 @@ def problems(
                         )
         for outcome in entry.get('case_outcomes', []):
             found += _outcome_problems(
-                entry, outcome, corpus, accepted, refused
+                entry, outcome, corpus, accepted, refused, codes
             )
         for key in ('more_exact', 'fewer_deprecations'):
             for item in entry.get(key, []):
@@ -388,6 +521,7 @@ def _outcome_problems(
     corpus: dict[str, Any],
     accepted: dict[str, str],
     refused: dict[str, str] | None = None,
+    codes: dict[str, str | None] | None = None,
 ) -> list[str]:
     where = f'{entry["id"]}: {outcome["case"]} on {outcome["runner"]}'
     found = []
@@ -397,6 +531,19 @@ def _outcome_problems(
     if case not in corpus and outcome['new'] != 'removed':
         found.append(f'{where}: not a corpus case')
     old, new = parse_outcome(outcome['old']), parse_outcome(outcome['new'])
+    if outcome['old'] == 'none' and codes is not None:
+        # A line no baseline holds (a runner's first) moves from the
+        # committed reference's outcome, as the ratchet moves it: its
+        # refusal, code and call, or its answer (T3.12 fix 1).
+        key = str(outcome['case'])
+        if accepted.get(key) == 'success':
+            old = {'result': 'success', 'code': None, 'stage': None}
+        elif key in codes:
+            old = {
+                'result': 'refusal',
+                'code': codes[key],
+                'stage': (refused or {}).get(key),
+            }
     if new is not None and new['code'] == PANIC:
         found.append(f'{where}: no entry accepts {PANIC}, a panic')
     calls = outcome.get('statements_differ')

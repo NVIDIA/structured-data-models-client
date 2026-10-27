@@ -10,9 +10,9 @@
     "id": "rule:column_type",
     "rule": "column_type",
     "code": "UNSUPPORTED_REQUEST",
-    "where": "rust/crates/sdm-schema/src/infer.rs:685",
+    "where": "rust/crates/sdm-schema/src/infer.rs:799",
     "also": [
-      "rust/crates/sdm-schema/src/infer.rs:688",
+      "rust/crates/sdm-schema/src/infer.rs:802",
       "rust/crates/sdm-schema/src/values.rs:156"
     ]
   },
@@ -32,14 +32,14 @@
     "id": "rule:empty_table",
     "rule": "empty_table",
     "code": "UNSUPPORTED_REQUEST",
-    "where": "rust/crates/sdm-schema/src/infer.rs:466",
+    "where": "rust/crates/sdm-schema/src/infer.rs:593",
     "also": []
   },
   {
     "id": "rule:entity_key",
     "rule": "entity_key",
     "code": "UNSUPPORTED_REQUEST",
-    "where": "rust/crates/sdm-core/src/materialize.rs:2798",
+    "where": "rust/crates/sdm-core/src/materialize.rs:2851",
     "also": []
   },
   {
@@ -51,7 +51,7 @@
       "rust/crates/sdm-engine/src/keys.rs:737",
       "rust/crates/sdm-engine/src/keys.rs:807",
       "rust/crates/sdm-engine/src/keys.rs:810",
-      "rust/crates/sdm-schema/src/infer.rs:625"
+      "rust/crates/sdm-schema/src/infer.rs:735"
     ]
   },
   {
@@ -83,7 +83,7 @@
     "code": "UNSUPPORTED_REQUEST",
     "where": "rust/crates/sdm-core/src/materialize.rs:541",
     "also": [
-      "rust/crates/sdm-core/src/pql.rs:346",
+      "rust/crates/sdm-core/src/pql.rs:352",
       "rust/crates/sdm-request/src/predict.rs:261"
     ]
   },
@@ -123,20 +123,20 @@
     "id": "rule:text_time",
     "rule": "text_time",
     "code": "UNSUPPORTED_REQUEST",
-    "where": "rust/crates/sdm-core/src/materialize.rs:4360",
+    "where": "rust/crates/sdm-core/src/materialize.rs:4434",
     "also": [
-      "rust/crates/sdm-schema/src/infer.rs:808",
-      "rust/crates/sdm-schema/src/infer.rs:1485"
+      "rust/crates/sdm-schema/src/infer.rs:922",
+      "rust/crates/sdm-schema/src/infer.rs:1599"
     ]
   },
   {
     "id": "rule:text_time_order",
     "rule": "text_time_order",
     "code": "UNSUPPORTED_REQUEST",
-    "where": "rust/crates/sdm-core/src/materialize.rs:4361",
+    "where": "rust/crates/sdm-core/src/materialize.rs:4435",
     "also": [
-      "rust/crates/sdm-schema/src/infer.rs:809",
-      "rust/crates/sdm-schema/src/infer.rs:1484"
+      "rust/crates/sdm-schema/src/infer.rs:923",
+      "rust/crates/sdm-schema/src/infer.rs:1598"
     ]
   },
   {
@@ -152,9 +152,9 @@
     "id": "rule:text_time_zones",
     "rule": "text_time_zones",
     "code": "UNSUPPORTED_REQUEST",
-    "where": "rust/crates/sdm-core/src/materialize.rs:4362",
+    "where": "rust/crates/sdm-core/src/materialize.rs:4436",
     "also": [
-      "rust/crates/sdm-schema/src/infer.rs:810"
+      "rust/crates/sdm-schema/src/infer.rs:924"
     ]
   },
   {
@@ -285,24 +285,36 @@
     "id": "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_anchor#1",
     "rule": null,
     "code": "INVALID_REQUEST",
-    "where": "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py:190"
+    "where": "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py:126"
   },
   {
     "id": "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_payload#1",
     "rule": null,
     "code": "INVALID_REQUEST",
-    "where": "packages/structured-data-models-client/src/sdm_client/_rust/predict.py:124"
+    "where": "packages/structured-data-models-client/src/sdm_client/_rust/predict.py:123"
+  },
+  {
+    "id": "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::predict#1",
+    "rule": null,
+    "code": "INVALID_REQUEST",
+    "where": "packages/structured-data-models-client/src/sdm_client/_rust/predict.py:245"
+  },
+  {
+    "id": "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::predict#2",
+    "rule": null,
+    "code": "INVALID_REQUEST",
+    "where": "packages/structured-data-models-client/src/sdm_client/_rust/predict.py:262"
   },
   {
     "id": "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::from_source#1",
     "rule": null,
     "code": "INVALID_REQUEST",
-    "where": "packages/structured-data-models-client/src/sdm_client/_rust/schema.py:98"
+    "where": "packages/structured-data-models-client/src/sdm_client/_rust/schema.py:99"
   },
   {
     "id": "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::from_source#2",
     "rule": null,
     "code": "INVALID_REQUEST",
-    "where": "packages/structured-data-models-client/src/sdm_client/_rust/schema.py:123"
+    "where": "packages/structured-data-models-client/src/sdm_client/_rust/schema.py:132"
   }
 ]

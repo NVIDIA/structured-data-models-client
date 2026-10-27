@@ -27,7 +27,7 @@ use sdm_contract::run::{
 };
 use sdm_contract::{
     CONTRACT_VERSION, ControlMessage, CoreError, CoreWarning, Detail, ErrorCode, ErrorKind,
-    HostFacts, Scalar, Step, Unit,
+    HostFacts, Scalar, Sentence, Step, Unit,
 };
 use sdm_core::{ArrowData, Attachment, FetchResult, ModelResult, Reply, Run, RunState};
 use sdm_host::{
@@ -261,12 +261,8 @@ fn a_panic_is_contained_and_poisons_the_run() {
     );
     // An error is not a panic, whatever its fields say.
     let failure = contain::<()>(|| {
-        Err(CoreError::new(
-            ErrorKind::Internal,
-            ErrorCode::InternalError,
-            "set by a host",
-        )
-        .with_field("panic", Detail::Scalar(Scalar::Bool(true))))
+        Err(CoreError::new(Sentence::Internal, "set by a host")
+            .with_field("panic", Detail::Scalar(Scalar::Bool(true))))
     })
     .unwrap_err();
     assert!(!failure.panicked);
@@ -283,6 +279,7 @@ fn a_second_call_while_one_is_in_the_run_is_busy() {
         Ok(OperationResult::ValidateQuery(QueryValidation {
             accepted: true,
             diagnostics: vec![],
+            query: None,
         }))
     })));
     let first = {
@@ -317,6 +314,15 @@ fn table(column: ArrayRef) -> ArrowData {
 fn fetching_run() -> Run {
     let host = ProviderChoice::Host {
         capabilities: ProviderCapabilities {
+            opaque_vendor: None,
+            compares_stored_times: false,
+            samples_by_key_dtype: false,
+            reads_nan_as_missing: false,
+            derived_relations: false,
+            neighbor_lookback: false,
+            keys_optional: false,
+            key_enforcement: false,
+            sample_rows: false,
             optional: Default::default(),
             max_keys_per_request: None,
             max_seed: u64::MAX,
@@ -362,6 +368,7 @@ fn fetching_run() -> Run {
                     span: None,
                 })
                 .collect(),
+            query: None,
         }))
     })
 }
@@ -399,6 +406,8 @@ fn fetched_data_is_admitted_and_host_ids_are_scoped_to_their_message() {
     // ...and may name other data 1 in the next; the first id means nothing
     // now.
     let error = ProviderError {
+        error_class: None,
+        driver_message: None,
         kind: ErrorKind::DataSource,
         retryable: false,
         sqlstate: None,
@@ -522,11 +531,7 @@ fn data_admission_refuses_ends_the_run_with_the_refusal() {
 
 fn model_run() -> Run {
     Run::new(|asker| async move {
-        asker.warn(CoreWarning {
-            code: "FIRST".into(),
-            message: String::new(),
-            fields: BTreeMap::new(),
-        });
+        asker.warn(CoreWarning::new(Sentence::ContextCapped, ""));
         let reply = asker
             .call_model(
                 Endpoint::Predict,
@@ -534,21 +539,14 @@ fn model_run() -> Run {
                 b"{\"q\":1}".to_vec(),
             )
             .await;
-        asker.warn(CoreWarning {
-            code: "SECOND".into(),
-            message: String::new(),
-            fields: BTreeMap::new(),
-        });
+        asker.warn(CoreWarning::new(Sentence::HopsIgnored, ""));
         let Reply::Model(ModelResult::Response { body, .. }) = reply else {
-            return Err(CoreError::new(
-                ErrorKind::ModelEndpoint,
-                ErrorCode::TransportError,
-                "no",
-            ));
+            return Err(CoreError::new(Sentence::TransportFailed, "no"));
         };
         Ok(OperationResult::ValidateQuery(QueryValidation {
             accepted: body == b"answer",
             diagnostics: vec![],
+            query: None,
         }))
     })
 }
@@ -604,7 +602,7 @@ fn a_model_call_s_body_is_the_run_s_attachment_1_and_its_answer_the_host_s() {
         panic!("a warnings message");
     };
     let codes: Vec<&str> = warnings.iter().map(|w| w.code.as_str()).collect();
-    assert_eq!(codes, ["FIRST", "SECOND"]);
+    assert_eq!(codes, ["CONTEXT_CAPPED", "HOPS_IGNORED"]);
     assert!(run.take_warnings().unwrap().is_none());
 }
 
@@ -656,12 +654,14 @@ fn request_state_leaves_one_run_as_bytes_and_returns_under_the_host_s_id() {
     state.query = AttachmentId(1);
     let predict = start_message(
         Operation::Predict(Predict {
-            state,
+            state: Some(state),
+            held: None,
             model: "kumo-relational".into(),
             request_id: "sdm-000000000000".into(),
             outputs: vec!["prediction".into()],
             default_outputs: false,
             inference_asked: vec![],
+            model_endpoint: None,
         }),
         vec![],
     );
@@ -700,10 +700,12 @@ fn request_state_leaves_one_run_as_bytes_and_returns_under_the_host_s_id() {
     let materialize = start_message(
         Operation::Materialize(Materialize {
             provider: ProviderChoice::Sql {
+                timestamp_encoding: None,
                 dialect: Dialect::new("duckdb"),
+                namespace: Vec::new(),
+                view: None,
             },
             schema: AttachmentId(1),
-            held: None,
             query: AttachmentId(2),
             indices: Some(AttachmentId(3)),
             anchor_time: None,

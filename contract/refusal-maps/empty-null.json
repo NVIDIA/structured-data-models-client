@@ -18,17 +18,17 @@
       "rule": "empty_table",
       "owner": "T1.32d",
       "register": "P1B-11",
-      "where": "rust/crates/sdm-schema/src/infer.rs:466",
+      "where": "rust/crates/sdm-schema/src/infer.rs:314",
       "why": "An empty table, which the reference refuses with an unnamed RuntimeError (\"Table 'orders' is empty\", P1B-1): kept refused by name at T1.23 (P1B-11), INVALID_REQUEST since the owner's switch of 2026-10-13 (E97, built at T1.32g), the rule kept",
       "observed": {
-        "python-core": {
-          "stage": "from_source",
-          "error": "StructuredDataError",
+        "rust-host": {
           "code": "INVALID_REQUEST",
           "operation": "describe_source",
           "rule": "empty_table"
         },
-        "rust-host": {
+        "python-core": {
+          "stage": "from_source",
+          "error": "StructuredDataError",
           "code": "INVALID_REQUEST",
           "operation": "describe_source",
           "rule": "empty_table"
@@ -42,18 +42,18 @@
       "owner": "T1.32d",
       "register": "none",
       "reference": "same",
-      "where": "rust/crates/sdm-core/src/materialize.rs:2684",
+      "where": "rust/crates/sdm-core/src/materialize.rs:2977-2983",
       "holds": "the entities to predict for are none",
       "why": "The reference's own refusal, which the core makes from T1.28a (the ledger's row moved into the core: python-core hands the empty indices to it), INVALID_REQUEST as the reference's; rust-host cannot carry the call (gap), owned by the package that admits the case",
       "observed": {
-        "python-core": {
-          "stage": "materialize",
-          "error": "StructuredDataError",
+        "rust-host": {
           "code": "INVALID_REQUEST",
           "operation": null,
           "rule": null
         },
-        "rust-host": {
+        "python-core": {
+          "stage": "materialize",
+          "error": "StructuredDataError",
           "code": "INVALID_REQUEST",
           "operation": null,
           "rule": null

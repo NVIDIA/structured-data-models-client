@@ -292,6 +292,8 @@ def observe(core: bool) -> dict[str, Any]:
             + _routing.MATERIALIZE_DUCKDB
             + _routing.PREDICT_DUCKDB
         )
+    else:
+        os.environ['SDM_CORE_ROUTES'] = ''
     try:
         connection = _connection()
         try:

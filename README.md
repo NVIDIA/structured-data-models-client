@@ -90,8 +90,8 @@ differs on Databricks.
 
 ## Requirements
 
-Python 3.10 through 3.14. The client, the language and the connectors are pure
-Python and install anywhere.
+Python 3.10 through 3.14.
+The client includes a native Rust core; the language and connectors are Python packages.
 
 The relational engine is a native build, so it ships wheels rather than a
 source distribution: `manylinux_2_28` for x86-64 and aarch64, macOS 11 or newer
@@ -140,6 +140,85 @@ Full documentation is under [`docs/`](docs/index.md):
 [`skills/`](skills/README.md) is the same material written for a coding agent.
 Every example in it that can run is run against a live endpoint by the test
 suite, and compared to the output printed beneath it.
+
+## Repository layout
+
+The client is moving onto a shared Rust core under `rust/`.
+Until that move ends, the repository also holds a harness that checks the core against the Python code, and the tooling that runs the move.
+
+### Product (ships to users)
+
+- `packages/structured-data-models-client/`: the public `sdm_client` API.
+  - `src/sdm_client/_rust/`: the Python host of the Rust core: the run loop, the message codec, the error table, and `providers/`, which run the core's SQL on the user's DuckDB, SQLite or Postgres connection.
+  - `src/sdm_client/_routing.py`: picks, per call, the Python code or the Rust core.
+- `packages/structured-data-models-connectors/`: `sdm_connectors`, the `Source` classes and the driver helpers in `backends/`.
+- `packages/structured-data-models-relational-engine/`: `sdm_relational_engine`, the Python graph builder, samplers and payload encoder, and the C++ neighbor sampler in `csrc/`.
+- `packages/structured-data-models-pql/`: `predictive_query`, the Python PQL grammar, parser and validator.
+- `packages/structured-data-models-api/`: `sdm_api`, the wire types generated from the model's OpenAPI file.
+- `rust/`: the Rust core; see [`rust/README.md`](rust/README.md).
+  - `rust/crates/`: the library crates (all but `sdm-testkit` ship).
+  - `rust/bindings/sdm-py/`: the Python module `sdm_client._native`.
+- `docs/get-started/`, `docs/about/`, `docs/reference/`: user documentation.
+- `examples/`: notebooks, in `local/` and `databricks/`.
+- `skills/`: the same material written for a coding agent.
+- `scripts/` (top-level files): repository checks and generators, such as the hygiene check, the `sdm_api` generator and the public API snapshot.
+- `.github/workflows/`: CI and publishing.
+
+### Product tests
+
+- `packages/<package>/tests/`: each package's tests; `packages/structured-data-models-client/tests_test_ops/` needs a core built with test-only operations.
+- `rust/crates/<crate>/tests/` and `rust/bindings/sdm-py/tests/`: the Rust and binding tests.
+- `rust/testdata/`: shared Rust test data, including a vendored time zone database.
+- `tests/golden/public_api.json` and `tests/golden/wire_payloads.json`: snapshots of the public API and the wire payloads.
+- `tests/test_release_contract.py`, `tests/test_skills.py`, `tests/test_native_wheel.py`, `tests/test_wheel_smoke.py`, `tests/test_rust_binding_edges.py`, `tests/test_rust_contract.py`: release, skills, native build and installed-wheel checks.
+- `qa/`: manual probes against live endpoints and warehouses.
+
+### Migration only (to be removed when the move to the Rust core ends)
+
+- `contract/`: the equivalence harness that runs each case on the Python code and on the core and compares the answers.
+  - `cases/`, `fixtures/`, `bases.yaml`: the calls and the test databases.
+  - `reference/`, `baselines/`, `pinned/`, `*-vectors.json`: recorded answers of the Python code.
+  - `runners/`, `tools/`, `tests/`: the runners, the recorders, and the harness's own tests and gates.
+- `rust/crates/sdm-testkit/`: a Rust stand-in host that runs the contract cases without Python.
+- `scripts/rust_core/`: the comparator, the gates, and the lane and landing tooling; `orchestration/` holds the helpers for parallel agents.
+  It also holds product build and release tools for now, which must move out before it goes: `native_wheel.py`, `pull_image.sh`, `rust_notices.py`, `contract_lock.py` and `wheel_smoke.py`.
+- `scripts/live/`: live Databricks and model checks, and real-data benchmarks; the smoke check `rfm_smoke.py` may be worth keeping.
+- `tests/` (the files not listed under product tests): mostly tests of the harness and of the migration tooling, but mixed: `tests/test_ci_workflow.py` also checks the product's CI jobs (native wheels, toolchain checksums), and `tests/test_live_smoke_offline.py` checks the live smoke script.
+  Sort each file before removing any.
+- `docs/design/rust-core/`: the migration's design notes and evidence.
+
+### How a prediction flows
+
+The Rust core never opens a connection or a socket.
+It hands the host steps, "run these SQL statements" or "send this request body", and the host answers with Arrow tables or response bytes.
+The paths below are under `packages/` for Python and under `rust/crates/` for Rust.
+
+1. **Connect a source.**
+   Python: `sdm_connectors/source.py` (`DuckDBSource`, `SQLiteSource`, `PostgresSource`, `DatabricksSource`, `SnowflakeSource`).
+   Rust: none; the connection stays in the host, and `sdm_client/_rust/providers/` runs the core's SQL on it.
+2. **Describe the schema** (`Schema.from_source`).
+   Python: `sdm_client/schema.py`, with the engine's `rfm/backend/<db>/table.py` and `rfm/metadata_inference/`.
+   Rust: `sdm-core/src/describe.rs` drives, `sdm-data` writes the catalog SQL, `sdm-schema` infers types, keys, time columns and links.
+3. **Validate the PQL** (`PredictiveQuery`).
+   Python: `sdm_client/query.py` and the `predictive_query` package.
+   Rust: `sdm-pql`, reached only through `sdm-core/src/pql.rs`.
+4. **Materialize the examples** (`query.materialize`: the entities, the anchor time, the labels of past rows).
+   Python: `sdm_client/materializers/relational.py` and the engine's `rfm/rfm.py` and `rfm/query/`.
+   Rust: `sdm-core/src/materialize.rs`, with time, random streams and labels in `sdm-engine`.
+5. **Sample each entity's neighbors.**
+   Python: the engine's `rfm/base/sql_sampler.py` and `rfm/backend/<db>/sampler.py` in the warehouse, or `rfm/backend/local/` and `csrc/neighbor_sampler.cpp` in memory.
+   Rust: `sdm-core/src/subgraph.rs` and `sdm-engine/src/sample.rs`, with the SQL from `sdm-data`, run by the host; `sdm-core/src/fallback.rs` samples in memory.
+6. **Build the request.**
+   Python: `sdm_client/request.py`, `sdm_client/adapters/`, and the engine's `rfm/inference/payload.py`.
+   Rust: `sdm-request` (payload and options) over `sdm-wire` (the model's JSON types).
+7. **Call the model** (`SDMClient.predict`).
+   Python: `sdm_client/client.py` and `sdm_client/core/transport.py`.
+   Rust: `sdm-core/src/predict.rs` and `sdm-request/src/predict.rs` build the body; the host sends it from `sdm_client/_rust/predict.py`.
+8. **Return the result** (`PredictionResult.to_pandas()`).
+   Python: `sdm_client/result.py`.
+   Rust: `sdm-wire/src/response.rs` reads the answer and `sdm-request` lays out the rows; errors carry codes from `sdm-contract/src/error.rs`, which `sdm_client/_rust/errors.py` turns into exceptions.
+
+Each call runs on the Python code unless `_routing.py` routes it to the core.
 
 ## Contributing
 

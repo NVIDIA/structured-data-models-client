@@ -17,15 +17,14 @@ use arrow_array::cast::AsArray;
 use arrow_array::types::Int64Type;
 use arrow_array::{Array, ArrayRef, BooleanArray, Int64Array, ListArray, RecordBatch, StringArray};
 use sdm_contract::catalog::{
-    CatalogAnswer, CatalogColumn, CatalogForeignKey, CatalogIndex, CatalogKey, IndexColumns,
+    CatalogAnswer, CatalogColumn, CatalogForeignKey, CatalogIndex, CatalogKey, IndexCoverage,
     KeyKind,
 };
-use sdm_contract::data::{DescribePart, catalog_columns as c};
-use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind};
+use sdm_contract::data::{DescribePart, catalog_columns as c, views_unread};
+use sdm_contract::{CoreError, Detail, Sentence};
 
 fn unread(name: &str, message: &str) -> CoreError {
-    CoreError::new(ErrorKind::Internal, ErrorCode::InternalError, message)
-        .with_field("column", Detail::text(name))
+    CoreError::new(Sentence::Internal, message).with_field("column", Detail::text(name))
 }
 
 fn column<'a>(batch: &'a RecordBatch, name: &str) -> Result<&'a ArrayRef, CoreError> {
@@ -76,6 +75,34 @@ pub(crate) fn lists<'a>(batch: &'a RecordBatch, name: &str) -> Result<&'a ListAr
     Ok(lists)
 }
 
+/// The column at `at` of `batch` as text, for a reader that reads its
+/// answer by position (a warehouse's, whose catalog may name two columns
+/// alike): a string column of any width, or a column of nulls (a session
+/// with no current schema, a cell the row adapter had none of).
+pub(crate) fn text_at(batch: &RecordBatch, at: usize) -> Result<StringArray, CoreError> {
+    let unread = || {
+        CoreError::new(
+            Sentence::Internal,
+            "a catalog answer's column is missing or not text",
+        )
+        .with_field("position", Detail::text(at.to_string()))
+    };
+    let column = batch.columns().get(at).ok_or_else(unread)?;
+    if let Some(strings) = column.as_string_opt::<i32>() {
+        return Ok(strings.clone());
+    }
+    if let Some(strings) = column.as_string_opt::<i64>() {
+        return Ok(strings.iter().collect());
+    }
+    if let Some(strings) = column.as_string_view_opt() {
+        return Ok(strings.iter().collect());
+    }
+    if *column.data_type() == arrow_schema::DataType::Null {
+        return Ok(StringArray::new_null(column.len()));
+    }
+    Err(unread())
+}
+
 /// Row `row`'s text, `None` where it is null.
 pub(crate) fn text(strings: &StringArray, row: usize) -> Option<String> {
     (!strings.is_null(row)).then(|| strings.value(row).to_owned())
@@ -100,14 +127,14 @@ pub(crate) fn names(lists: &ListArray, row: usize) -> Vec<String> {
 /// Row `row`'s index columns as a host provider gives them: resolved when
 /// the list and each name in it are given, unresolved where the list or a
 /// name is null, never the names left over.
-fn index_columns(lists: &ListArray, row: usize) -> IndexColumns {
+fn index_columns(lists: &ListArray, row: usize) -> IndexCoverage {
     if lists.is_null(row) {
-        return IndexColumns::Unresolved;
+        return IndexCoverage::Unresolved;
     }
     let items = lists.value(row);
     match items.as_string_opt::<i32>() {
-        Some(strings) if strings.null_count() == 0 => IndexColumns::Resolved(names(lists, row)),
-        _ => IndexColumns::Unresolved,
+        Some(strings) if strings.null_count() == 0 => IndexCoverage::Resolved(names(lists, row)),
+        _ => IndexCoverage::Unresolved,
     }
 }
 
@@ -118,12 +145,21 @@ pub(crate) fn flag(flags: &BooleanArray, row: usize) -> bool {
 
 /// Each table's name, in order, from the text column `name`.
 pub(crate) fn tables(batches: &[RecordBatch], name: &str) -> Result<CatalogAnswer, CoreError> {
+    Ok(CatalogAnswer::Tables(text_names(batches, name)?))
+}
+
+/// A `namespace` answer: parts in order, a row with none left out.
+pub(crate) fn namespace(batches: &[RecordBatch], name: &str) -> Result<CatalogAnswer, CoreError> {
+    Ok(CatalogAnswer::Namespace(text_names(batches, name)?))
+}
+
+fn text_names(batches: &[RecordBatch], name: &str) -> Result<Vec<String>, CoreError> {
     let mut found = Vec::new();
     for batch in batches {
         let names = strings(batch, name)?;
         found.extend((0..batch.num_rows()).filter_map(|row| text(names, row)));
     }
-    Ok(CatalogAnswer::Tables(found))
+    Ok(found)
 }
 
 /// The columns of a `columns` answer, by role.
@@ -179,6 +215,7 @@ pub(crate) fn keys(
                 kind: text(kinds, row).map_or(KeyKind::Other, |k| kind_of(&k)),
                 columns: names(lists, row),
                 index: None,
+                enforced: true,
             });
         }
     }
@@ -223,6 +260,13 @@ pub(crate) fn host(
     batches: &[RecordBatch],
 ) -> Result<CatalogAnswer, CoreError> {
     match part {
+        // No view is read here (T3.27): only a dialect that reads views answers it.
+        DescribePart::ViewDefinition => Err(views_unread()),
+        DescribePart::Namespace => namespace(batches, c::NAME),
+        DescribePart::KeyEnforcement => Ok(CatalogAnswer::KeyEnforcement(text_names(
+            batches,
+            c::TABLE,
+        )?)),
         DescribePart::Tables => tables(batches, c::TABLE),
         DescribePart::Columns => columns(
             batches,

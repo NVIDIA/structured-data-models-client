@@ -11,13 +11,13 @@ use std::collections::BTreeSet;
 
 use sdm_contract::data::AttachmentId;
 use sdm_contract::ops::AttachmentKind;
-use sdm_contract::{CoreError, Detail, ErrorCode, Scalar};
+use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 use serde::de::DeserializeOwned;
 
 use crate::run::{Attachment, Attachments};
 
 fn invalid(message: &str, id: AttachmentId) -> CoreError {
-    CoreError::protocol(ErrorCode::InvalidMessage, message)
+    CoreError::protocol(Sentence::InvalidMessage, message)
         .with_field("attachment", Detail::Scalar(Scalar::UInt32(id.0)))
 }
 

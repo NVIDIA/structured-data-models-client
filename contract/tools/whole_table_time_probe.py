@@ -270,7 +270,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         outs = {}
         for side, python, extra in (
-            ('old', args.reference_python, {}),
+            ('old', args.reference_python, {'SDM_CORE_ROUTES': ''}),
             ('core', args.candidate_python, {'SDM_CORE_ROUTES': routes}),
         ):
             outs[side] = Path(tmp) / f'{side}.json'

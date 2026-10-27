@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -38,6 +39,9 @@ SCRIPTS = Path(__file__).resolve().parent
 LANE_PY = SCRIPTS / 'lane.py'
 LAND_PY = SCRIPTS / 'land.py'
 PHASE = 'rust-core-phase-1'
+sys.path.insert(0, str(SCRIPTS))
+from phases import CURRENT  # noqa: E402
+
 BRANCH = f'{PHASE}-lane-1b'
 PROTECTED = ('main', 'rust-core', PHASE)
 
@@ -152,6 +156,12 @@ class World:
             # phase cases below change or drop it.
             SDM_PHASE_BRANCH=PHASE,
         )
+        # The cases' own lane limit, not the machine's (heavy.conf's
+        # MAX_LANES, two packages at once since 2026-10-23): several cases
+        # start a second lane; the limit's own case sets its own.
+        limits = self.tmp / 'heavy.conf'
+        limits.write_text('MAX_LANES=4\n')
+        self.env['SDM_HEAVY_CONFIG'] = str(limits)
         self.gh_state({'runs': [], 'green_on': [], 'calls': []})
         self.remote = self.tmp / 'remote.git'
         self.git('init', '--quiet', '--bare', str(self.remote), cwd=self.tmp)
@@ -163,6 +173,26 @@ class World:
         self.git(
             'clone', '--quiet', str(self.remote), str(self.seed), cwd=self.tmp
         )
+        # A lane's installed hook runs that checkout's real checker.
+        # Keep its imports in the committed fixture instead of installing
+        # a hook that points to an absent prepush.sh in an empty tree.
+        scripts = self.seed / 'scripts/rust_core'
+        scripts.mkdir(parents=True)
+        for name in (
+            'prepush.sh',
+            'lane.py',
+            'land.py',
+            'phases.py',
+            'commit_msg.py',
+            'judging.py',
+            'handoff.py',
+            'affected.py',
+        ):
+            shutil.copy2(SCRIPTS / name, scripts / name)
+        shutil.copy2(
+            SCRIPTS.parents[1] / '.gitignore', self.seed / '.gitignore'
+        )
+        self.git('add', 'scripts', '.gitignore', cwd=self.seed)
         self.base = self.commit(self.seed, 'Base')
         self.git('push', '--quiet', 'origin', 'HEAD:refs/heads/main', 'HEAD:refs/heads/rust-core', cwd=self.seed)  # fmt: skip
         self.phase = self.commit(self.seed, 'Land T1.11d: the landed package')
@@ -228,6 +258,50 @@ class World:
 
     def put_lane(self, sha: str) -> None:
         self.git('push', '--quiet', 'origin', f'{sha}:refs/heads/{BRANCH}', cwd=self.seed)  # fmt: skip
+
+    def preexisting_bad_lane(self, sha: str) -> None:
+        """Seed untrusted history only in this case's owned bare input.
+
+        The real push must refuse it first; land.py must still refuse
+        history that was already on a remote before this checkout's hook.
+        """
+        if (
+            self.remote.resolve() != self.tmp / 'remote.git'
+            or self.worktree.resolve().parent != self.tmp
+            or self.git(
+                'rev-parse', '--is-bare-repository', cwd=self.remote
+            ).strip()
+            != 'true'
+        ):
+            raise AssertionError(
+                'bad-history seed is not a private bare fixture'
+            )
+        before = self.refs()
+        pushed = self.git_ok(
+            'push',
+            '--quiet',
+            'origin',
+            f'{sha}:refs/heads/{BRANCH}',
+            cwd=self.worktree,
+        )
+        if (
+            pushed.code == 0
+            or 'REFUSED' not in pushed.text
+            or self.refs() != before
+        ):
+            raise AssertionError(
+                f'the real pre-push hook did not refuse: {pushed.text}'
+            )
+        self.git(
+            'fetch',
+            '--quiet',
+            '--no-tags',
+            str(self.worktree),
+            f'{sha}:refs/heads/{BRANCH}',
+            cwd=self.remote,
+        )
+        if self.refs() != {**before, f'refs/heads/{BRANCH}': sha}:
+            raise AssertionError('bad-history seed changed another fixture ref')
 
     def unlanded(self, *messages: str) -> list[str]:
         """Commits on the remote lane, on top of the phase head."""
@@ -817,7 +891,8 @@ def _(w: World) -> tuple[bool, str]:
 @case('check --pushed-refs: a push naming no lane is not checked')
 def _(w: World) -> tuple[bool, str]:
     sha = w.commit(w.clone, 'no package named')
-    ran = pushed(w, f'refs/heads/main {sha} refs/heads/main {w.base}')
+    # A topic branch: main is protected since T3.0 (the owner, Q14).
+    ran = pushed(w, f'refs/heads/topic {sha} refs/heads/topic {w.base}')
     ok = ran.code == 0 and 'no lane branch in this push' in ran.text
     return verdict(ok, 'nothing to check', ran)
 
@@ -825,15 +900,36 @@ def _(w: World) -> tuple[bool, str]:
 # --- land.py on a lane --------------------------------------------------------
 
 
-def candidate(w: World, message: str = 'T1.11e: the work') -> str:
+def candidate(
+    w: World,
+    message: str = 'T1.11e: the work',
+    *,
+    preexisting_bad: bool = False,
+) -> str:
     w.start()
     sha = w.commit(w.worktree, message)
-    w.git('push', '--quiet', 'origin', f'HEAD:{BRANCH}', cwd=w.worktree)
+    if preexisting_bad:
+        w.preexisting_bad_lane(sha)
+    else:
+        w.git('push', '--quiet', 'origin', f'HEAD:{BRANCH}', cwd=w.worktree)
     w.set_runs(green_on=[BRANCH, PHASE])
     return sha
 
 
 def land_args(w: World, sha: str, title: str) -> list[str]:
+    # A landing stands on the candidate's handoff stamp (the owner's
+    # "2026-10-22 evening: CI off the landing path"; T3.2 fix 4).
+    common = Path(
+        w.git(
+            'rev-parse',
+            '--path-format=absolute',
+            '--git-common-dir',
+            cwd=w.worktree,
+        ).strip()
+    )
+    stamp = common / 'sdm-handoff' / f'{sha}.json'
+    stamp.parent.mkdir(parents=True, exist_ok=True)
+    stamp.write_text(json.dumps({'sha': sha, 'package': 'T1.11e', 'ok': True}))
     reviews = []
     for name in ('a', 'b'):
         path = w.tmp / f'review-{name}.txt'
@@ -861,7 +957,7 @@ def _(w: World) -> tuple[bool, str]:
 
 @case('land.py: refuses a lane commit that does not name the package')
 def _(w: World) -> tuple[bool, str]:
-    sha = candidate(w, 'An unnamed change')
+    sha = candidate(w, 'An unnamed change', preexisting_bad=True)
     before = w.refs()
     ran = w.land(*land_args(w, sha, 'Land T1.11e: the work'))
     ok = (
@@ -897,7 +993,7 @@ for message, why in REPROS:
 
     @case(f'land.py: refuses {message.splitlines()[0]!r} under T1.11e')
     def _(w: World, message: str = message, why: str = why) -> tuple[bool, str]:
-        sha = candidate(w, message)
+        sha = candidate(w, message, preexisting_bad=True)
         before = w.refs()
         ran = w.land(*land_args(w, sha, 'Land T1.11e: the work'))
         ok = ran.code == 2 and why in ran.text and w.refs() == before
@@ -1030,7 +1126,9 @@ def landing_commit(
 for label, why in (
     ('changes a file', 'changes no file'),
     ('has a Base-SHA outside the phase', 'not in the phase branch'),
-    ('lands another package', "is not 'Land T1.11e"),
+    # Since T3.0 another package's landing commit below is a stack: both
+    # refuse it, the check as a stack, land.py naming stack-land.
+    ('lands another package', 'T1.11f'),
 ):
 
     @case(f'check and land.py: refuse a landing commit that {label}')
@@ -1043,7 +1141,7 @@ for label, why in (
             change='changes' in label,
         )
         checked = w.lane('check', cwd=w.worktree)
-        w.git('push', '--quiet', 'origin', f'HEAD:{BRANCH}', cwd=w.worktree)
+        w.preexisting_bad_lane(sha)
         before = w.refs()
         ran = w.land(*land_args(w, sha, 'Land T1.11e: the work'))
         ok = (
@@ -1125,10 +1223,95 @@ def _(w: World) -> tuple[bool, str]:
     # The clone has main checked out, so phases.CURRENT, which this
     # remote lacks.
     return verdict(
-        refused_untouched(w, ran, f'origin has no {PHASE_2}', before),
+        refused_untouched(w, ran, f'origin has no {CURRENT}', before),
         'refused, naming the phase in progress',
         ran,
     )
+
+
+PHASE_3 = 'rust-core-phase-3'
+
+
+def phase_3(w: World, headings: tuple[str, ...] | None = None) -> Path:
+    """A Phase 3 branch on the remote, cut from the Phase 1 head, the
+    tools pointed at it, and a brief holding the template's headings (all
+    of them, or ``headings``)."""
+    w.git('push', '--quiet', 'origin', f'{w.phase}:refs/heads/{PHASE_3}', cwd=w.seed)  # fmt: skip
+    w.env['SDM_PHASE_BRANCH'] = PHASE_3
+    import brief_check
+
+    wanted = brief_check.required(brief_check.TEMPLATE)
+    brief = w.tmp / 'brief.md'
+    brief.write_text(
+        '# T3.4: a brief\n\n'
+        + ''.join(
+            f'{heading}\n\nnone: a seeded brief.\n\n'
+            for heading in (wanted if headings is None else headings)
+        )
+    )
+    return brief
+
+
+@case('phase 3: a whole package ID and a full brief start the lane')
+def _(w: World) -> tuple[bool, str]:
+    brief = phase_3(w)
+    ran = w.start('T3.4', '--brief', str(brief))
+    ok = ran.code == 0 and w.package(w.worktree) == 'T3.4'
+    return verdict(ok, 'started', ran)
+
+
+@case('phase 3: a package ID with a letter is refused (T3.2)')
+def _(w: World) -> tuple[bool, str]:
+    brief = phase_3(w)
+    before = w.refs()
+    ran = w.start('T3.4a', '--brief', str(brief))
+    return verdict(
+        refused_untouched(w, ran, "the package 'T3.4a' has a letter", before),
+        'refused, nothing changed',
+        ran,
+    )
+
+
+@case('phase 3: a lane started with no brief still starts')
+def _(w: World) -> tuple[bool, str]:
+    phase_3(w)
+    ran = w.start('T3.4')
+    return verdict(ran.code == 0, 'started', ran)
+
+
+@case('phase: a lane is never started on a finished phase (T3.2)')
+def _(w: World) -> tuple[bool, str]:
+    w.git('push', '--quiet', 'origin', f'{w.phase}:refs/heads/rust-core', cwd=w.seed)  # fmt: skip
+    w.commit(w.seed, 'Merge the phase')
+    w.git('push', '--quiet', 'origin', 'HEAD:refs/heads/rust-core', cwd=w.seed)  # fmt: skip
+    before = w.refs()
+    ran = w.start()
+    return verdict(
+        refused_untouched(w, ran, f'{PHASE} is finished', before),
+        'refused, nothing changed',
+        ran,
+    )
+
+
+@case('phase 3: a brief missing a heading is refused, naming it (T3.2)')
+def _(w: World) -> tuple[bool, str]:
+    import brief_check
+
+    wanted = brief_check.required(brief_check.TEMPLATE)
+    brief = phase_3(w, tuple(wanted[1:]))
+    before = w.refs()
+    ran = w.start('T3.4', '--brief', str(brief))
+    return verdict(
+        refused_untouched(w, ran, f'lacks the heading {wanted[0][3:]}', before),
+        'refused, naming the heading',
+        ran,
+    )
+
+
+@case('phase 1: a lettered ID and no brief still start, as before T3.2')
+def _(w: World) -> tuple[bool, str]:
+    ran = w.start('T1.11e')
+    return verdict(ran.code == 0, 'started', ran)
 
 
 @case('phase: a phase name that is no phase branch is refused, by name')
@@ -1161,6 +1344,42 @@ def _(w: World) -> tuple[bool, str]:
 
 
 # --- status -------------------------------------------------------------------
+
+
+@case(
+    'start: past MAX_LANES a lane is refused, naming the active one, until it pauses'
+)
+def _(w: World) -> tuple[bool, str]:
+    # The owner's rule (2026-10-22), T3.2 fix 4: at most MAX_LANES packages.
+    conf = w.tmp / 'heavy.conf'
+    conf.write_text('MAX_LANES=1\n')
+    w.env['SDM_HEAVY_CONFIG'] = str(conf)
+    second = w.tmp / 'lane-2c'
+
+    def start_second() -> Ran:
+        return w.lane(
+            'start', '--lane', '2c', '--package', 'T1.11g',
+            '--worktree', str(second),
+        )  # fmt: skip
+
+    first = w.start()
+    refused = start_second()
+    held = w.lane('pause', '--lane', '1b')
+    again = start_second()
+    ok = (
+        first.code == 0
+        and refused.code == 2
+        and 'lane 1b (T1.11e)' in refused.text
+        and 'lane.py pause --lane' in refused.text
+        and held.code == 0
+        and again.code == 0
+        and w.package(second) == 'T1.11g'
+    )
+    return verdict(
+        ok,
+        'refused past the limit, started once the first paused',
+        f'{refused.text} || {held.text} || {again.text}',
+    )
 
 
 @case('status: equal, behind, ahead with its package, and the latest run')

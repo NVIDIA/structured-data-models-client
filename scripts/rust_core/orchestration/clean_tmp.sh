@@ -13,13 +13,19 @@
 #   process using its worktree (owner-approved 2026-10-13, step 3).
 # `clean_tmp.sh --after-land <worktree>` removes that worktree's build output after a landing unless a
 # process is using it (step 4; auto_land.py calls it with --apply only when SDM_CLEAN_AFTER_LAND=1).
+# The local NVMe (T3.0): each agent's $SDM_TARGET_ROOT/<name> (Cargo's incremental state; the builds
+# themselves are in the shared sccache) under the same stale and CAP_GIB rules, each $SDM_TMP_ROOT/<name>
+# when stale, and in each lane's environment directory $SDM_CELLS_ROOT/<lane> (scripts/rust_core/cells.sh)
+# an older env-<key> that `current` no longer names, when no process uses it, and its cargo-target over
+# CAP_GIB. `clean_tmp.sh --release <name>` is a lane's or an agent's end: its target, tmp and environment
+# directories go (the environment's source worktree by `git worktree remove`, which refuses an edited one).
 #
 # Dry run by default: it prints "would remove <dir>" and removes nothing. --apply removes.
 # Never removes: a path git tracks, a git worktree, /, $HOME, ~/code, the repo, the state dir or
 # anything inside it, or a directory holding one of those: a .git within 4 levels below it, or
 # any worktree `git -C <repo> worktree list` names under it.
 #
-#   clean_tmp.sh [--apply | --dry-run] [--after-land <worktree>]
+#   clean_tmp.sh [--apply | --dry-run] [--after-land <worktree> | --release <name>]
 #
 # Environment:
 #   SDM_SCRATCH     the agents' scratch directory to sweep (optional; never ~/code or a git worktree)
@@ -27,14 +33,18 @@
 #                   of this script)
 #   SDM_ORCH_STATE  state directory, never touched (default ~/.local/share/sdm-orchestration)
 #   AGE, CAP_GIB    as above
+#   SDM_TARGET_ROOT, SDM_TMP_ROOT, SDM_CELLS_ROOT
+#                   the agents' target and tmp directories and the lanes' environments (default
+#                   /mnt/localssd/target, /mnt/localssd/tmp, /mnt/localssd/cells)
 set -u
-APPLY=0; AFTER=""
+APPLY=0; AFTER=""; RELEASE=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --apply) APPLY=1;;
     --dry-run) APPLY=0;;
     --after-land) AFTER=${2:?--after-land needs a worktree}; shift;;
-    -h|--help) sed -n '6,29p' "$0" | sed 's/^# \{0,1\}//'; exit 0;;
+    --release) RELEASE=${2:?--release needs a lane or agent name}; shift;;
+    -h|--help) sed -n '6,40p' "$0" | sed 's/^# \{0,1\}//'; exit 0;;
     *) echo "clean_tmp.sh: unknown argument $1 (see --help)" >&2; exit 2;;
   esac
   shift
@@ -99,11 +109,58 @@ if [ -n "$AFTER" ]; then
   done
   exit 0
 fi
+TARGET_ROOT=${SDM_TARGET_ROOT:-/mnt/localssd/target}
+TMP_ROOT=${SDM_TMP_ROOT:-/mnt/localssd/tmp}
+CELLS_ROOT=${SDM_CELLS_ROOT:-/mnt/localssd/cells}
+if [ -n "$RELEASE" ]; then
+  case "$RELEASE" in */* | . | .. | '') echo "clean_tmp.sh: --release takes a plain name, not $RELEASE" >&2; exit 2;; esac
+  for d in "$TARGET_ROOT/$RELEASE" "$TMP_ROOT/$RELEASE" "$CELLS_ROOT/$RELEASE"; do
+    [ -d "$d" ] || continue
+    if uses "$d" || lsof -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | grep -q "^$(real "$d")"; then
+      echo "skip busy $d"; continue
+    fi
+    if [ -e "$d/src/.git" ] && [ -n "$REPO" ]; then
+      if [ "$APPLY" = 1 ]; then
+        git -C "$REPO" worktree remove "$d/src" || { echo "skip $d: its source worktree did not come off"; continue; }
+      else
+        echo "would remove the worktree $d/src"
+        echo "would remove $d ($(du -sh "$d" 2>/dev/null | cut -f1))"
+        continue
+      fi
+    fi
+    gone "$d"
+  done
+  exit 0
+fi
 AGE=${AGE:-180}
 busy=$(lsof -d cwd -Fn 2>/dev/null | sed -n 's/^n//p')
+# The Unix sockets a process listens on: a directory holding one (a live
+# daemon's, such as Codex's under /tmp/codex-daemon-*) is in use however old
+# its files are (T3.2).
+sockets=$(ss -xlH 2>/dev/null | awk '{print $5}')
+listens() { # $1 = path; true when a listening socket is inside it
+  [ -n "$sockets" ] && printf '%s\n' "$sockets" | grep -q "^$1/"
+}
+# What a running process holds (Codex r1, T3.2): every file a process has
+# open (its /proc fd links), and every directory a process names as its
+# CARGO_TARGET_DIR or TMPDIR (an active lane's or agent's build and scratch
+# directories, idle as they may be between runs). A directory holding one, or
+# named by one, is in use however old its files are.
+held=$(find /proc/[0-9]*/fd -maxdepth 1 -type l -printf '%l\n' 2>/dev/null | grep '^/' | sort -u)
+claimed=$(for e in /proc/[0-9]*/environ; do
+  tr '\0' '\n' <"$e" 2>/dev/null | sed -n 's/^\(CARGO_TARGET_DIR\|TMPDIR\)=//p'
+done | sed 's:/*$::' | grep '^/' | sort -u)
+under() { # $1 = path; true when a line of standard input is $1 or under it
+  awk -v p="$1" 'index($0, p "/") == 1 || $0 == p { f = 1 } END { exit !f }'
+}
+active() { # $1 = path; true when an open file is inside it, or a claimed directory is it or inside it
+  { printf '%s\n' "$held"; printf '%s\n' "$claimed"; } | under "$1"
+}
 stale() { # $1 = path; stale if no file inside newer than AGE minutes and not a cwd prefix
   local p=$1
   echo "$busy" | grep -q "^$p" && { echo "skip busy $p"; return 1; }
+  listens "$p" && { echo "skip listening $p"; return 1; }
+  active "$p" && { echo "skip in use $p"; return 1; }
   [ -z "$(find "$p" -mmin -"$AGE" -print -quit 2>/dev/null)" ]
 }
 CAP_GIB=${CAP_GIB:-15}
@@ -150,14 +207,29 @@ fi
 if [ -z "$REPO" ]; then
   echo "skip build output: no repo (set SDM_REPO)"
 else
-  for t in "$REPO"*/target "$REPO"*/rust/target "$HOME"/.cache/sdm-*target*; do
+  for t in "$REPO"*/target "$REPO"*/rust/target "$HOME"/.cache/sdm-*target* "$TARGET_ROOT"/* "$CELLS_ROOT"/*/cargo-target; do
     [ -d "$t" ] || continue
-    case "$t" in */rust/target) w=${t%/rust/target};; */.cache/*) w=$t;; *) w=${t%/target};; esac
+    case "$t" in "$TARGET_ROOT"/* | "$CELLS_ROOT"/*) w=$t;; */rust/target) w=${t%/rust/target};; */.cache/*) w=$t;; *) w=${t%/target};; esac
     if stale "$t"; then gone "$t"; continue; fi
     [ "$(gib "$t")" -ge "$CAP_GIB" ] || continue
     [ -z "$(find "$t" -mmin -30 -print -quit 2>/dev/null)" ] || { echo "skip active $t ($(gib "$t") GiB)"; continue; }
     build_busy "$w" && { echo "skip busy $t ($(gib "$t") GiB)"; continue; }
+    active "$t" && { echo "skip in use $t ($(gib "$t") GiB)"; continue; }
     gone "$t"
+  done
+  for d in "$TMP_ROOT"/*; do
+    [ -d "$d" ] || continue
+    git -C "$d" rev-parse --is-inside-work-tree >/dev/null 2>&1 && continue
+    stale "$d" && gone "$d"
+  done
+  for lane in "$CELLS_ROOT"/*; do
+    [ -d "$lane" ] || continue
+    keep=$(readlink "$lane/current" 2>/dev/null)
+    for env in "$lane"/env-*; do
+      [ -d "$env" ] && [ "${env##*/}" != "$keep" ] || continue
+      if uses "$env/" || echo "$busy" | grep -q "^$env"; then echo "skip busy $env"; continue; fi
+      gone "$env"
+    done
   done
   if [ "$APPLY" = 1 ]; then
     git -C "$REPO" worktree prune

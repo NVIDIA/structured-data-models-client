@@ -35,9 +35,9 @@
       "owner": "T1.32a",
       "register": "none",
       "reference": "same",
-      "where": "rust/crates/sdm-request/src/payload.rs:382",
+      "where": "rust/crates/sdm-request/src/payload.rs:381",
       "holds": "a value is outside the range int64 holds",
-      "why": "The reference's own refusal of uint64 keys past int64's maximum in stage, class and code, on both runners, but not in its message or details: the core says only that the request is not one it accepts, with the column in its details, where the reference names the column, row and value and gives the remedy (send the column as strings) with no details. T1.32a keeps the core's details (no value, H17), the remedy being the host's to word",
+      "why": "The reference's own refusal of uint64 keys past int64's maximum in stage, class and code, on both runners, but not in all of its message or its details: the core names the column, row and range and gives the remedy (send the column as strings) in the reference's words, leaving out the value itself, where the reference names it too and gives no details. T1.32a keeps the core's details (no value, H17); the sentence is the core's from T3.17",
       "observed": {
         "python-core": {
           "stage": "materialize",

@@ -23,6 +23,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -55,6 +56,8 @@ def _differences(
     *,
     other_field: bool = False,
     target_as: Any = None,
+    reference_text: str | None = '1' * 64,
+    observed_text: str | None = '1' * 64,
 ) -> set[str | None]:
     r"""The rules that fail, the observation differing from the reference
     in ``TARGET`` and ``DIGEST`` (and in ``metadata.source_query`` with
@@ -71,6 +74,16 @@ def _differences(
         CASE.read_bytes()
     )
     observation = copy.deepcopy(reference)
+    # A missing optional digest is absent, never JSON null. Remove both
+    # supported spellings so missing evidence reaches the result check.
+    for public, text in (
+        (reference['public'], reference_text),
+        (observation['public'], observed_text),
+    ):
+        public.pop('result_text', None)
+        public['result'].pop('text_digest', None)
+        if text is not None:
+            public['result_text'] = text
     observation['identity']['runner'] = 'python-core'
     observation['identity']['reference'] = None
     parsed = observation['public']['payloads'][0]['parsed']
@@ -94,10 +107,8 @@ def _differences(
     return {rule for rule, _ in report.failures}
 
 
-def test_an_approved_more_exact_entry_excuses_only_its_fields(
-    tmp_path: Path,
-) -> None:
-    entry = {
+def _approved_entry() -> dict[str, Any]:
+    return {
         'id': 'P2E-1',
         'status': 'approved',
         'approved_by': 'owner',
@@ -114,6 +125,12 @@ def test_an_approved_more_exact_entry_excuses_only_its_fields(
             }
         ],
     }
+
+
+def test_an_approved_more_exact_entry_excuses_only_its_fields(
+    tmp_path: Path,
+) -> None:
+    entry = _approved_entry()
     # Not vacuous: with the entry proposed, both differences fail.
     proposed = {**entry, 'status': 'proposed', 'approved_by': None}
     assert {'payload', 'result'} <= _differences(tmp_path, proposed)
@@ -144,3 +161,18 @@ def test_an_approved_more_exact_entry_excuses_only_its_fields(
     # value, so it still differs (fix 2).
     fake = ['number', {'unexpected': True}, ['wrong'], None]
     assert 'payload' in _differences(tmp_path, entry, target_as=fake)
+
+
+@pytest.mark.parametrize(
+    ('reference_text', 'observed_text'),
+    [(None, None), ('a' * 64, None), (None, 'a' * 64), ('a' * 64, 'b' * 64)],
+)
+def test_excusing_the_typed_digest_still_requires_matching_text(
+    tmp_path: Path, reference_text: str | None, observed_text: str | None
+) -> None:
+    assert 'result' in _differences(
+        tmp_path,
+        _approved_entry(),
+        reference_text=reference_text,
+        observed_text=observed_text,
+    )

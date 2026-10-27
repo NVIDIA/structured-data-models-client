@@ -42,6 +42,16 @@ Run where the contract tests run (CI's ``engine`` job until T1.18):
   (seeded: an unlisted refusal, a stale entry, retyped evidence) and
   ``refusal_map.write``'s output from that run, so no map is edited by
   hand; the writer reports a new refusal and drops a lifted entry.
+
+After reviewing the raw metadata changes, regenerate only the description
+and materialize-schema digests with the existing collectors, serially::
+
+    SDM_PROBE_PINS_WRITE=1 python -m pytest -n 0 \\
+        contract/tests/test_refusal_map.py::test_the_python_core_run_is_held_to_the_map \\
+        contract/tests/test_refusal_map.py::test_the_family_map_holds_on_python_core_and_is_the_writer_s
+
+The writer preserves descriptions, probe and field inventories, and every
+nonmetadata digest. It refuses a parallel writer.
 """
 
 from __future__ import annotations
@@ -49,6 +59,7 @@ from __future__ import annotations
 import copy
 import importlib.util
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -348,6 +359,9 @@ def test_the_python_core_run_is_held_to_the_map() -> None:
     assert refusal_map.check(document, 'python-core', observed) == []
     # The ladder ends at predict's result.
     assert refusal_map.success('predict') in observed.values()
+    if os.environ.get('SDM_PROBE_PINS_WRITE') == '1':
+        assert not os.environ.get('PYTEST_XDIST_WORKER'), 'write pins serially'
+        _write_probe_pin(PIN, digests)
     assert refusal_map.agree(_pin(), digests) == []
     assert len(digests) >= 4 and any(
         'materialize_schema' in each for each in digests.values()
@@ -941,6 +955,70 @@ def test_a_family_map_without_a_case_s_probe_or_with_a_stranger_fails() -> None:
 FAMILY_PIN = ROOT / 'contract/pinned/families.probes.json'
 
 
+def _write_probe_pin(
+    path: Path, digests: dict[str, dict[str, str]], family: str | None = None
+) -> None:
+    """Regenerate metadata digests from the collectors without changing scope."""
+    document = json.loads(path.read_text(encoding='utf-8'))
+    section = document if family is None else document['families'][family]
+    probes = section['probes']
+    assert probes and set(probes) == set(digests), 'probe inventory changed'
+    metadata = {'described', 'materialize_schema'}
+    for name, found in digests.items():
+        wanted = probes[name]
+        assert set(wanted) == set(found), f'{name}: pin field inventory changed'
+        for key, value in found.items():
+            assert isinstance(value, str) and re.fullmatch(
+                r'[0-9a-f]{64}', value
+            )
+            if key not in metadata:
+                assert value == wanted[key], f'{name}: {key} is not metadata'
+    section['probes'] = copy.deepcopy(digests)
+    path.write_text(
+        json.dumps(document, indent=2, sort_keys=True) + '\n', encoding='utf-8'
+    )
+
+
+def test_repinning_preserves_inventory_descriptions_and_nonmetadata(tmp_path):
+    path = tmp_path / 'pin.json'
+    before = {
+        'description': 'A synthetic generated pin.',
+        'probes': {
+            'one': {
+                'described': 'a' * 64,
+                'materialize_schema': 'b' * 64,
+                'warnings': 'c' * 64,
+            }
+        },
+    }
+    path.write_text(json.dumps(before))
+    found = copy.deepcopy(before['probes'])
+    found['one']['described'] = 'd' * 64
+    found['one']['materialize_schema'] = 'e' * 64
+    _write_probe_pin(path, found)
+    assert json.loads(path.read_text()) == {**before, 'probes': found}
+
+
+@pytest.mark.parametrize('fault', ['missing', 'extra', 'field', 'warnings'])
+def test_repinning_refuses_inventory_or_nonmetadata_drift(tmp_path, fault):
+    path = tmp_path / 'pin.json'
+    probes = {'one': {'described': 'a' * 64, 'warnings': 'c' * 64}}
+    path.write_text(json.dumps({'description': 'Unchanged.', 'probes': probes}))
+    original = path.read_bytes()
+    found = copy.deepcopy(probes)
+    if fault == 'missing':
+        found.clear()
+    elif fault == 'extra':
+        found['two'] = copy.deepcopy(found['one'])
+    elif fault == 'field':
+        found['one']['materialize_schema'] = 'b' * 64
+    else:
+        found['one']['warnings'] = 'd' * 64
+    with pytest.raises(AssertionError):
+        _write_probe_pin(path, found)
+    assert path.read_bytes() == original
+
+
 def _python_core_run(
     document: dict[str, Any],
     digests: dict[str, dict[str, str]] | None = None,
@@ -1010,6 +1088,9 @@ def test_the_family_map_holds_on_python_core_and_is_the_writer_s(
     # Where both hosts reach describe_source, the description, the schema
     # materialize samples and the core's warnings (codes and fields) are
     # the pin's, which rust-host is held to too (T1.23).
+    if os.environ.get('SDM_PROBE_PINS_WRITE') == '1':
+        assert not os.environ.get('PYTEST_XDIST_WORKER'), 'write pins serially'
+        _write_probe_pin(FAMILY_PIN, digests, family)
     pinned = json.loads(FAMILY_PIN.read_text(encoding='utf-8'))
     assert refusal_map.agree(pinned['families'][family], digests) == []
     # Generated, not edited: the writer, given this run, makes the map as

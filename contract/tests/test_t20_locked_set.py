@@ -44,7 +44,11 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
+import pytest
 import yaml
+
+# Gate tooling (T3.0): CI runs it in the tooling jobs, not in every matrix job.
+pytestmark = pytest.mark.tooling
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -185,9 +189,11 @@ def test_a_half_the_locked_set_does_not_name_is_a_usage_error(
     assert 'gate summary' not in done.stdout
 
 
-#: A phase with no locked-set file yet, and a half of it.
-NO_SET_PHASE = 3
-NO_SET_HALF = '3a'
+#: A phase with no locked-set file, and a half of it: one far past the
+#: migration's five, so no real phase's file ever makes it exist
+#: (P2-T2.0a-1: Phase 3 adds its own).
+NO_SET_PHASE = 99
+NO_SET_HALF = '99a'
 
 
 def test_a_half_of_a_phase_without_its_locked_set_is_a_usage_error(
@@ -197,9 +203,7 @@ def test_a_half_of_a_phase_without_its_locked_set_is_a_usage_error(
     stubs: dict[str, Any],
 ) -> None:
     r"""Seeded: a half of a phase whose locked-set file does not exist
-    (Phase 3's, before its design lands one) is refused naming the half:
-    no locked set, no locked checks. Written for Phase 2 until T2.0a
-    landed its file; Phase 3 keeps the premise true."""
+    is refused naming the half: no locked set, no locked checks."""
     commit(stubbed)
     assert not (stubbed / LOCKED_SET(NO_SET_PHASE)).exists()
     done = run_locked(stubbed, stubs, observed, tmp_path, NO_SET_HALF)

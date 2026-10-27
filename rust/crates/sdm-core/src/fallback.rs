@@ -18,10 +18,10 @@
 //! of both limits as it arrives, so none is asked for past them, and more
 //! rows than the limit, or more bytes of Arrow data held (the seeds, every
 //! scan and the answer) than `max_bytes`, end the run with `UNSUPPORTED_REQUEST` naming the request,
-//! the rule [`LIMIT_RULE`], the `limit` and its `most`. A value the fallback does
+//! the rule `fallback_limit`, the `limit` and its `most`. A value the fallback does
 //! not read (a time in a column that is neither a zone-less timestamp nor a
 //! date, a key joined to seeds of another type, a column the row format
-//! does not order) ends the run the same way, rule [`RULE`], naming the
+//! does not order) ends the run the same way, rule `fallback`, naming the
 //! `field`, never silently answered otherwise. A provider's failure of a scan is the
 //! request's answer, as the provider's own failure of the request would be.
 //!
@@ -63,15 +63,10 @@ use sdm_contract::data::{
     MATCHES_COLUMN, ProviderError, Relation, SEED_BATCH, TieBreak, Window, refused, seed_integer,
     seed_key_columns,
 };
-use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
+use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 use sdm_engine::random::{Entropy, default_rng};
 
 use crate::run::{ArrowData, Asker, Budget, FetchResult, Reply, internal, schema_mismatch};
-
-/// The rule the fallback's refusal of a value it does not read names.
-pub(crate) const RULE: &str = "fallback";
-/// The rule the fallback's refusal past a declared limit names.
-pub(crate) const LIMIT_RULE: &str = "fallback_limit";
 
 /// The answer to `request`, an optional request the run's provider does not
 /// declare, within `limits`: the rows the fallback computed, or the
@@ -367,6 +362,23 @@ async fn answered(held: &mut Held<'_>, seeds: Option<ArrowData>) -> Result<Arrow
             order,
             ..
         } => {
+            let limit = match per_seed {
+                Some(sdm_contract::data::NeighborLimit::Unsigned(limit)) => Some(*limit),
+                // This non-SQL provider uses a row-position bound: no
+                // nonnegative position meets a negative bound. SQL
+                // providers keep their own native LIMIT semantics.
+                Some(sdm_contract::data::NeighborLimit::Negative { .. }) => Some(0),
+                None => None,
+                Some(sdm_contract::data::NeighborLimit::Expression { .. }) => {
+                    return Err(not_kept(
+                        Sentence::FallbackExpression,
+                        request,
+                        "per_seed",
+                        "the in-memory fallback does not execute caller-authored provider expressions",
+                    )
+                    .into());
+                }
+            };
             named(request, "columns", columns)?;
             let seeds = seeds_of(held, seeds)?;
             let mut asked = key.clone();
@@ -380,8 +392,8 @@ async fn answered(held: &mut Held<'_>, seeds: Option<ArrowData>) -> Result<Arrow
             if let Some(window) = window {
                 pairs = within(request, &scanned, &seeds, window, pairs)?;
             }
-            if let (Some(limit), Some(TieBreak(terms))) = (per_seed, order) {
-                pairs = first_per_seed(request, &scanned, &seeds, terms, *limit, pairs)?;
+            if let (Some(limit), Some(TieBreak(terms))) = (limit, order) {
+                pairs = first_per_seed(request, &scanned, &seeds, terms, limit, pairs)?;
             }
             let mut out = Out::default();
             out.batch(&seeds, &pairs)?;
@@ -478,6 +490,7 @@ async fn first_column(held: &Held<'_>, table: &Relation) -> Result<String, Faile
             .map(|column| column.name)
             .ok_or_else(|| {
                 not_kept(
+                    Sentence::FallbackNoColumn,
                     held.request,
                     "table",
                     "the table has no column to count rows by",
@@ -522,6 +535,7 @@ fn joined(
         // Integers of two widths, compared as the exact integers they are.
         let (Some(widened_t), Some(widened_s)) = (integers(t), integers(s)) else {
             return Err(not_kept(
+                Sentence::FallbackSeedTypes,
                 request,
                 "seeds",
                 "the in-memory fallback joins a key only to seeds of its own type, or integers to integers",
@@ -675,14 +689,13 @@ fn first_per_seed(
         ));
         sorted.push(values);
     }
-    let converter =
-        RowConverter::new(fields).map_err(|_| not_kept(request, "order", NOT_ORDERED))?;
+    let converter = RowConverter::new(fields).map_err(|_| unordered(request, "order"))?;
     let rows = convert(request, "order", &converter, &sorted)?;
     let batch = convert(
         request,
         "order",
         &RowConverter::new(vec![SortField::new(sorted[0].data_type().clone())])
-            .map_err(|_| not_kept(request, "order", NOT_ORDERED))?,
+            .map_err(|_| unordered(request, "order"))?,
         &sorted[..1],
     )?;
     let mut order: Vec<usize> = (0..pairs.len()).collect();
@@ -726,7 +739,14 @@ fn wall_us(
     field: &str,
     array: &ArrayRef,
 ) -> Result<Vec<Option<i64>>, CoreError> {
-    let past = || not_kept(request, field, "a time is past what microseconds hold");
+    let past = || {
+        not_kept(
+            Sentence::FallbackTimePast,
+            request,
+            field,
+            "a time is past what microseconds hold",
+        )
+    };
     let scaled = |values: Vec<Option<i64>>, per: i64| {
         values
             .into_iter()
@@ -772,6 +792,7 @@ fn wall_us(
             1_000,
         ),
         _ => Err(not_kept(
+            Sentence::FallbackTimeType,
             request,
             field,
             "the in-memory fallback reads a time only from a zone-less timestamp or a date",
@@ -889,30 +910,32 @@ impl Scanned {
 /// The refusal of a request past the fallback's declared `limit`.
 fn over(request: &DataRequest, limit: &str, most: u64) -> CoreError {
     CoreError::new(
-        ErrorKind::Unsupported,
-        ErrorCode::UnsupportedRequest,
+        Sentence::FallbackLimit,
         "the request is past a limit of the in-memory fallback the provider declares",
     )
     .with_field("request", Detail::text(request.name()))
-    .with_field("rule", Detail::text(LIMIT_RULE))
     .with_field("limit", Detail::text(limit))
     .with_field("most", Detail::Scalar(Scalar::UInt64(most)))
 }
 
 /// The refusal of what the fallback does not read, naming the request's
 /// `field`.
-fn not_kept(request: &DataRequest, field: &str, message: &str) -> CoreError {
-    CoreError::new(
-        ErrorKind::Unsupported,
-        ErrorCode::UnsupportedRequest,
-        message,
-    )
-    .with_field("request", Detail::text(request.name()))
-    .with_field("rule", Detail::text(RULE))
-    .with_field("field", Detail::text(field))
+fn not_kept(sentence: Sentence, request: &DataRequest, field: &str, message: &str) -> CoreError {
+    CoreError::new(sentence, message)
+        .with_field("request", Detail::text(request.name()))
+        .with_field("field", Detail::text(field))
 }
 
-const NOT_ORDERED: &str = "the in-memory fallback does not order a column of this type";
+/// The refusal of a column the fallback does not order, naming the
+/// request's `field`.
+fn unordered(request: &DataRequest, field: &str) -> CoreError {
+    not_kept(
+        Sentence::FallbackUnordered,
+        request,
+        field,
+        "the in-memory fallback does not order a column of this type",
+    )
+}
 
 /// Refuses a request naming no column where it must name some, as each
 /// dialect refuses it.
@@ -944,7 +967,7 @@ fn converter(
             .map(|a| SortField::new(a.data_type().clone()))
             .collect(),
     )
-    .map_err(|_| not_kept(request, field, NOT_ORDERED))
+    .map_err(|_| unordered(request, field))
 }
 
 fn convert(
@@ -955,7 +978,7 @@ fn convert(
 ) -> Result<Rows, CoreError> {
     converter
         .convert_columns(arrays)
-        .map_err(|_| not_kept(request, field, NOT_ORDERED))
+        .map_err(|_| unordered(request, field))
 }
 
 /// `arrays`' rows in the row format, each value as SQL compares it

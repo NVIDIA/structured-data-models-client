@@ -1,6 +1,6 @@
 {
  "about": "Every SQL statement the core hands the Python host's DuckDB provider, per fetch in order, for Schema.from_source and PredictiveQuery.materialize over the shop base, as it is (\"plain\") and with orders held in a table named \"a.b\" beside a schema a holding a table b (\"dotted\"). Recorded by t21b_statements_record.py at the contract version named; regenerated, never edited (T2.1b).",
- "contract": 25,
+ "contract": 29,
  "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
  "anchor_time": "2024-03-01",
  "indices": [
@@ -41,6 +41,24 @@
    ],
    [
     "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT \"user_id\") AS d, COUNT(CASE WHEN \"user_id\" IS NULL THEN 1 END) AS z\nFROM \"users\"\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT \"order_id\") AS d, COUNT(CASE WHEN \"order_id\" IS NULL THEN 1 END) AS z\nFROM \"orders\""
+   ],
+   [
+    "PRAGMA table_info(\"users\")"
+   ],
+   [
+    "SELECT constraint_type, constraint_column_names\nFROM duckdb_constraints()\nWHERE table_name = 'users'\n  AND database_name = current_database() AND schema_name = current_schema()"
+   ],
+   [
+    "SELECT \"user_id\", \"age\", \"country\" FROM \"users\" LIMIT 1000"
+   ],
+   [
+    "PRAGMA table_info(\"orders\")"
+   ],
+   [
+    "SELECT constraint_type, constraint_column_names\nFROM duckdb_constraints()\nWHERE table_name = 'orders'\n  AND database_name = current_database() AND schema_name = current_schema()"
+   ],
+   [
+    "SELECT \"order_id\", \"user_id\", \"price\", \"ts\" FROM \"orders\" LIMIT 1000"
    ],
    [
     "SELECT table_name, expressions FROM duckdb_indexes()"
@@ -88,6 +106,24 @@
    ],
    [
     "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT \"user_id\") AS d, COUNT(CASE WHEN \"user_id\" IS NULL THEN 1 END) AS z\nFROM \"users\"\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT \"order_id\") AS d, COUNT(CASE WHEN \"order_id\" IS NULL THEN 1 END) AS z\nFROM \"a.b\""
+   ],
+   [
+    "PRAGMA table_info(\"users\")"
+   ],
+   [
+    "SELECT constraint_type, constraint_column_names\nFROM duckdb_constraints()\nWHERE table_name = 'users'\n  AND database_name = current_database() AND schema_name = current_schema()"
+   ],
+   [
+    "SELECT \"user_id\", \"age\", \"country\" FROM \"users\" LIMIT 1000"
+   ],
+   [
+    "SELECT CAST(c.column_index - 1 AS INTEGER) AS cid, c.column_name AS name,\n       c.data_type AS type, NOT c.is_nullable AS notnull,\n       c.column_default AS dflt_value,\n       COALESCE(list_contains(k.columns, c.column_name), false) AS pk\nFROM duckdb_columns() c\nLEFT JOIN (\n  SELECT constraint_column_names AS columns\n  FROM duckdb_constraints()\n  WHERE table_name = 'a.b'\n    AND database_name = current_database() AND schema_name = current_schema()\n    AND constraint_type = 'PRIMARY KEY'\n) k ON true\nWHERE c.table_name = 'a.b'\n  AND c.database_name = current_database() AND c.schema_name = current_schema()\nORDER BY c.column_index"
+   ],
+   [
+    "SELECT constraint_type, constraint_column_names\nFROM duckdb_constraints()\nWHERE table_name = 'a.b'\n  AND database_name = current_database() AND schema_name = current_schema()"
+   ],
+   [
+    "SELECT \"order_id\", \"user_id\", \"price\", \"ts\" FROM \"a.b\" LIMIT 1000"
    ],
    [
     "SELECT table_name, expressions FROM duckdb_indexes()"

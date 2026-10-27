@@ -17,6 +17,7 @@ not an observation is refused by name (``read:``), never a traceback.
 
 from __future__ import annotations
 
+import copy
 import importlib.util
 import json
 import os
@@ -280,3 +281,445 @@ def test_the_cell_types_are_pyarrow_s_text_through_the_admission_table() -> (
         table += [(pa.list_view(pa.int32()), 'list')]
     found = {str(arrow): cell_type(str(arrow)) for arrow, _ in table}
     assert found == {str(arrow): cell for arrow, cell in table}
+
+
+def test_a_warehouse_only_case_is_held_to_its_captures_reference_line() -> None:
+    # Codex and Claude T3.20 r1 P1-1: a case with no DuckDB line is held to
+    # the old client's reference line in each of its warehouse captures,
+    # the sample named as the warehouse names the relation; a claim no leg
+    # shows, a case with no capture, and a sample read as rows all fail.
+    coverage = _coverage_module()
+    case = {
+        'id': 'w.case',
+        'cells': ['int64/primary-key', 'timestamp-us/time-column'],
+        'input': {},
+    }
+    sample = 'SELECT "id", "ts" FROM "{catalog}"."{schema}"."ORDERS" LIMIT 1000'
+
+    def line(types: Any) -> dict[str, Any]:
+        result: dict[str, Any] = {'rows': 2}
+        if types is not None:
+            result['schema'] = [
+                {'name': 'id', 'type': types[0]},
+                {'name': 'ts', 'type': types[1]},
+            ]
+        return {
+            'case': 'w.case@snowflake',
+            'outcome': {'result': 'success', 'stage': 'from_source'},
+            'driver': {
+                'capture': {
+                    'statements': [
+                        {
+                            'stage': 'from_source',
+                            'sql': sample,
+                            'results': [result],
+                        }
+                    ]
+                }
+            },
+            'public': {
+                'schema': {
+                    'tables': [
+                        {
+                            'name': 'orders',
+                            'columns': [{'name': 'id'}, {'name': 'ts'}],
+                            'primary_key': 'id',
+                            'time_column': 'ts',
+                        }
+                    ],
+                    'links': [],
+                }
+            },
+        }
+
+    def problems(captured: dict[str, Any]) -> list[str]:
+        report = coverage.Report()
+        coverage.rule_6({'w.case': case}, {}, report, captured)
+        return list(report.problems)
+
+    held = line(('int64', 'timestamp[us]'))
+    assert problems({'w.case': [held]}) == []
+    narrower = line(('int8', 'timestamp[us]'))
+    assert problems({'w.case': [narrower, held]}) == []
+    [one] = problems({'w.case': [narrower]})
+    assert one.startswith('rule 6: case w.case: claims int64/primary-key')
+    [none] = problems({})
+    assert 'no reference observation' in none
+    [rows] = problems({'w.case': [line(None)]})
+    assert 'a sample read as rows' in rows
+
+
+def _databricks_omitted_features(
+    change: Callable[[dict[str, Any]], None],
+    source: str = 'users',
+) -> list[str]:
+    """The real ordinary capture through the capture reader and rule 6."""
+    coverage = _coverage_module()
+    case_id = 'java.databricks-sql.types'
+    path = f'contract/captures/databricks-sql/{case_id}/capture.json'
+    capture = json.loads((ROOT / path).read_text())
+    change(capture)
+    case = json.loads((ROOT / f'contract/cases/s2/{case_id}.json').read_text())
+    case['input']['from_source']['tables']['users'] = source
+    case['cells'] = ['binary/feature', 'list/feature']
+    real_tree = coverage._module('ratchet').Tree(
+        ROOT, _git(dict(os.environ), 'rev-parse', 'HEAD')
+    )
+
+    class CaptureTree:
+        repo = real_tree.repo
+        sha = real_tree.sha
+
+        def files(self, prefix: str) -> list[str]:
+            assert prefix == coverage.CAPTURES
+            return [path]
+
+        def read(self, name: str) -> str | None:
+            return json.dumps(capture) if name == path else real_tree.read(name)
+
+    report = coverage.Report()
+    captured = coverage.read_captures(CaptureTree(), report, {case_id})
+    coverage.rule_6({case_id: case}, {}, report, captured)
+    return list(report.problems)
+
+
+def test_real_databricks_omitted_columns_keep_their_evidenced_input_roles() -> (
+    None
+):
+    # E96(b): the reference reads token:binary and tags:list<int32>, then
+    # leaves them out. Both real catalog constraint reads return no rows.
+    assert _databricks_omitted_features(lambda capture: None) == []
+
+
+def test_constraint_query_spacing_outside_quotes_does_not_change_proof() -> (
+    None
+):
+    def change(capture: dict[str, Any]) -> None:
+        statements = capture['reference']['driver']['capture']['statements']
+        for statement, kept in zip(
+            statements, capture['statements'], strict=True
+        ):
+            if 'information_schema.table_constraints tc' in kept['text']:
+                kept['text'] = (
+                    kept['text'].replace('\n', '\r\n\t').replace(' = ', '\t=\n')
+                )
+                statement['sql'] = kept['text']
+
+    assert _databricks_omitted_features(change) == []
+
+
+@pytest.mark.parametrize('whitespace', ['  ', '\t', '\n'])
+@pytest.mark.parametrize('quoted', ['catalog', 'PRIMARY KEY', 'FOREIGN KEY'])
+def test_quoted_constraint_identity_and_literal_bytes_are_never_collapsed(
+    quoted: str, whitespace: str
+) -> None:
+    def change(capture: dict[str, Any]) -> None:
+        statements = capture['reference']['driver']['capture']['statements']
+        for statement, kept in zip(
+            statements, capture['statements'], strict=True
+        ):
+            text = kept['text']
+            if quoted == 'catalog':
+                # The sample is cat name; constraints are a distinct catalog
+                # with an extra space, tab or newline inside its identifier.
+                text = text.replace('`{catalog}`', '`cat name`')
+                if 'information_schema.table_constraints tc' in text:
+                    text = text.replace('`cat name`', f'`cat{whitespace}name`')
+            else:
+                changed = quoted.replace(' ', whitespace)
+                text = text.replace(f"'{quoted}'", f"'{changed}'")
+            kept['text'] = text
+            statement['sql'] = text
+
+    source = '`cat name`.`{schema}`.`users`' if quoted == 'catalog' else 'users'
+    problems = _databricks_omitted_features(change, source=source)
+    assert len(problems) == 2, problems
+    assert all(
+        'rule 6: case java.databricks-sql.types: claims ' in p for p in problems
+    )
+
+
+@pytest.mark.parametrize(
+    'source',
+    [
+        '{catalog}.{schema}.users',
+        '`{catalog}`.`{schema}`.`users`',
+        '`{catalog}`.{schema}.USERS',
+    ],
+)
+def test_qualified_source_must_match_the_proven_sample_identity(
+    source: str,
+) -> None:
+    assert (
+        _databricks_omitted_features(lambda capture: None, source=source) == []
+    )
+
+
+@pytest.mark.parametrize(
+    ('source', 'table'),
+    [
+        ('`{catalog}`.{schema}.USERS', 'users'),
+        ('{catalog}.`{schema}`.USERS', 'users'),
+        ('`cat``name`.schema.USERS', 'users'),
+        ('catalog.schema.`user.name`', 'user.name'),
+        ('`user``name`', 'user`name'),
+    ],
+)
+def test_table_alias_uses_the_complete_databricks_identity(
+    source: str, table: str
+) -> None:
+    coverage = _coverage_module()
+    assert coverage._relation_key(source) == table
+    assert coverage._as_named({(table, 'token'): {'binary'}}, [source]) == {
+        (source, 'token'): {'binary'}
+    }
+
+
+@pytest.mark.parametrize(
+    'source',
+    [
+        '{catalog}.another.users',
+        'another.{schema}.users',
+        '`{CATALOG}`.`{schema}`.`users`',
+        '{schema}.users',
+        'users trailing',
+        'catalog..users',
+    ],
+)
+def test_a_single_sample_does_not_prove_a_different_or_unknown_source(
+    source: str,
+) -> None:
+    # The genuine sample and complete zero-row proof remain unchanged.
+    # A matching final name cannot replace the case's catalog/schema.
+    problems = _databricks_omitted_features(lambda capture: None, source=source)
+    assert len(problems) == 2, problems
+    assert all(
+        'rule 6: case java.databricks-sql.types: claims ' in p for p in problems
+    )
+
+
+@pytest.mark.parametrize(
+    'raw', ['missing', 'null', 'object', 'string', 'empty']
+)
+def test_serialized_derived_bindings_never_replace_missing_raw_evidence(
+    raw: str,
+) -> None:
+    def change(capture: dict[str, Any]) -> None:
+        statements = capture['reference']['driver']['capture']['statements']
+        for statement, kept in zip(
+            statements, capture['statements'], strict=True
+        ):
+            parameters = kept.get('parameters')
+            if isinstance(parameters, list) and len(parameters) == 2:
+                statement['_coverage_parameters'] = list(parameters)
+        if raw == 'missing':
+            capture.pop('statements')
+        else:
+            capture['statements'] = {
+                'null': None,
+                'object': {},
+                'string': 'not a statement list',
+                'empty': [],
+            }[raw]
+
+    problems = _databricks_omitted_features(change)
+    assert len(problems) == 2, problems
+    assert all(
+        'rule 6: case java.databricks-sql.types: claims ' in p for p in problems
+    )
+
+
+def test_constraint_absence_does_not_cross_sampled_namespaces() -> None:
+    def change(capture: dict[str, Any]) -> None:
+        statements = capture['reference']['driver']['capture']['statements']
+        recorded = capture['statements']
+        samples = []
+        for index, (statement, kept) in enumerate(
+            zip(statements, recorded, strict=True)
+        ):
+            if kept.get('parameters') == ['{schema}', 'users']:
+                # Both catalog reads now prove absence only for a.users.
+                kept['parameters'][0] = 'a'
+                statement['parameters'][0]['value'] = repr('a')
+            relation = '`{catalog}`.`{schema}`.`users`'
+            if relation in kept['text'] and kept['text'].endswith('LIMIT 1000'):
+                a = '`{catalog}`.`a`.`users`'
+                b = '`{catalog}`.`b`.`users`'
+                kept['text'] = kept['text'].replace(relation, a)
+                statement['sql'] = kept['text']
+                other_kept, other_statement = copy.deepcopy((kept, statement))
+                other_kept['text'] = other_kept['text'].replace(a, b)
+                other_statement['sql'] = other_kept['text']
+                samples.append((index, other_kept, other_statement))
+        assert len(samples) == 1
+        index, kept, statement = samples[0]
+        recorded.insert(index + 1, kept)
+        statements.insert(index + 1, statement)
+
+    # Both a.users and b.users are sampled, but the case names only b.users
+    # and no catalog read establishes constraint absence for b.users.
+    problems = _databricks_omitted_features(change, source='{catalog}.b.users')
+    assert len(problems) == 2, problems
+    assert all(
+        'rule 6: case java.databricks-sql.types: claims ' in p for p in problems
+    )
+
+
+@pytest.mark.parametrize('kind', ['keys', 'foreign'])
+@pytest.mark.parametrize(
+    'fault',
+    [
+        'missing',
+        'nonempty',
+        'unknown count',
+        'failed',
+        'missing parameters',
+        'wrong namespace',
+        'wrong table',
+        'unrecognized SQL',
+    ],
+)
+def test_omitted_warehouse_roles_need_complete_empty_constraint_evidence(
+    kind: str, fault: str
+) -> None:
+    def change(capture: dict[str, Any]) -> None:
+        recorded = capture['statements']
+        statements = capture['reference']['driver']['capture']['statements']
+        selected = [
+            i
+            for i, kept in enumerate(recorded)
+            if kept.get('parameters') == ['{schema}', 'users']
+            and (
+                "constraint_type IN ('PRIMARY KEY', 'UNIQUE')"
+                if kind == 'keys'
+                else "constraint_type = 'FOREIGN KEY'"
+            )
+            in kept['text']
+        ]
+        assert len(selected) == 1
+        [index] = selected
+        statement, kept = statements[index], recorded[index]
+        if fault == 'missing':
+            statements.pop(index)
+            recorded.pop(index)
+        elif fault == 'nonempty':
+            statement['results'][0]['rows'] = 1
+        elif fault == 'unknown count':
+            statement['results'][0]['rows'] = None
+        elif fault == 'failed':
+            statement['error'] = {'type': 'RuntimeError'}
+        elif fault == 'missing parameters':
+            kept.pop('parameters')
+        elif fault in ('wrong namespace', 'wrong table'):
+            parameter = 0 if fault == 'wrong namespace' else 1
+            kept['parameters'][parameter] = 'another'
+            statement['parameters'][parameter]['value'] = repr('another')
+        elif fault == 'unrecognized SQL':
+            kept['text'] += ' AND 1 = 0'
+            statement['sql'] = kept['text']
+        else:
+            raise AssertionError(fault)
+
+    problems = _databricks_omitted_features(change)
+    assert len(problems) == 2
+    assert all(
+        problem.startswith('rule 6: case java.databricks-sql.types: claims ')
+        for problem in problems
+    ), problems
+
+
+def test_a_row_read_sample_is_typed_by_the_arrow_its_capture_holds() -> None:
+    # T3.20 r2: a Postgres leg's driver reads rows; its capture holds each
+    # read as the Arrow the core's Postgres provider builds from the
+    # driver's type codes, and rule 6 reads that Arrow's types for a sample
+    # its reference line holds as rows.
+    pa = pytest.importorskip('pyarrow')
+    coverage = _coverage_module()
+    sample = 'SELECT "id", "ts" FROM "{schema}"."orders" LIMIT 1000'
+    line = {
+        'case': 'w.case@lakebase',
+        'outcome': {'result': 'success', 'stage': 'from_source'},
+        'driver': {
+            'capture': {
+                'statements': [
+                    {'stage': 'from_source', 'sql': sample, 'results': [{}]}
+                ]
+            }
+        },
+        'public': {
+            'schema': {
+                'tables': [
+                    {
+                        'name': 'orders',
+                        'columns': [{'name': 'id'}, {'name': 'ts'}],
+                        'primary_key': 'id',
+                        'time_column': 'ts',
+                    }
+                ],
+                'links': [],
+            }
+        },
+    }
+    capture = {'statements': [{'text': sample, 'result': 'tables/a.arrows'}]}
+    table = pa.table(
+        {
+            'id': pa.array([1], pa.int32()),
+            'ts': pa.array([0], pa.timestamp('us')),
+        }
+    )
+    sink = pa.BufferOutputStream()
+    with pa.ipc.new_stream(sink, table.schema) as writer:
+        writer.write_table(table)
+    blobs = {'tables/a.arrows': sink.getvalue().to_pybytes()}
+    coverage.row_schemas(capture, line, blobs.get)
+    case = {
+        'id': 'w.case',
+        'cells': ['int32/primary-key', 'timestamp-us/time-column'],
+        'input': {},
+    }
+    report = coverage.Report()
+    coverage.rule_6({'w.case': case}, {}, report, {'w.case': [line]})
+    assert report.problems == []
+
+
+def test_the_captures_tables_are_read_through_one_git_process(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Claude T3.20 r3 P3: each Lakebase sample's Arrow was read with its own
+    # git cat-file, which made a coverage run take minutes; every table of
+    # one commit is read through one git cat-file --batch process.
+    coverage = _coverage_module()
+    started: list[Any] = []
+    real = coverage.subprocess.Popen
+
+    def counting(*args: Any, **kwargs: Any) -> Any:
+        started.append(args[0])
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(coverage.subprocess, 'Popen', counting)
+    paths = [
+        name
+        for name in _git(
+            dict(os.environ),
+            'ls-tree',
+            '-r',
+            '--name-only',
+            'HEAD',
+            'contract/captures/lakebase/base.binary/tables/',
+        ).splitlines()
+    ][:3]
+    assert len(paths) == 3
+    tree = coverage._module('ratchet').Tree(
+        ROOT, _git(dict(os.environ), 'rev-parse', 'HEAD')
+    )
+    blobs = coverage.Blobs(tree)
+    try:
+        read = [blobs.read(path) for path in paths]
+        assert blobs.read('contract/captures/no-such-file') is None
+    finally:
+        blobs.close()
+    assert [args for args in started if 'cat-file' in args] == [
+        ['git', '-C', str(ROOT), 'cat-file', '--batch']
+    ]
+    for path, data in zip(paths, read, strict=True):
+        assert data == (ROOT / path).read_bytes()

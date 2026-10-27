@@ -37,6 +37,9 @@ use std::process::{Command, Stdio};
 
 use serde_json::Value;
 
+#[path = "support/p3f2.rs"]
+mod p3f2;
+
 fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..")
 }
@@ -211,7 +214,12 @@ fn operations(id: &str) -> Vec<String> {
 
 /// Why rust-host's `line` does not answer as python-ref's `wanted`, if it
 /// does not.
-fn problem(id: &str, line: &Value, wanted: &Value) -> Option<String> {
+fn problem(
+    id: &str,
+    line: &Value,
+    wanted: &Value,
+    approved: Option<&Option<String>>,
+) -> Option<String> {
     if line["identity"]["runner"] != "rust-host" {
         return Some("not rust-host's".to_owned());
     }
@@ -221,13 +229,7 @@ fn problem(id: &str, line: &Value, wanted: &Value) -> Option<String> {
         .iter()
         .map(|o| o.as_str().unwrap())
         .collect();
-    // A decided case is refused at materialize (its register entry's
-    // answer), so the operations after it do not run.
-    let decided = DECIDED.contains(&id);
     for operation in operations(id) {
-        if decided && operation == "predict" {
-            continue;
-        }
         if !ran.contains(operation.as_str()) {
             return Some(format!("its core operation {operation} did not run"));
         }
@@ -256,9 +258,15 @@ fn problem(id: &str, line: &Value, wanted: &Value) -> Option<String> {
         .map(|b| vec![without_request_id(b)])
         .unwrap_or_default();
     let mut found = Vec::new();
-    differences(&Value::Array(sent), &Value::Array(written), "", &mut found);
-    if !found.is_empty() {
-        return Some(format!("the payload differs: {}", found.join("; ")));
+    if let Some(problem) = approved {
+        if problem.is_some() {
+            return problem.clone();
+        }
+    } else {
+        differences(&Value::Array(sent), &Value::Array(written), "", &mut found);
+        if !found.is_empty() {
+            return Some(format!("the payload differs: {}", found.join("; ")));
+        }
     }
     let columns: BTreeSet<&str> = predicted["result"]["columns"]
         .as_array()
@@ -275,18 +283,8 @@ fn problem(id: &str, line: &Value, wanted: &Value) -> Option<String> {
     None
 }
 
-/// The cases whose answer the orchestrator decided apart from the
-/// reference's (`contract/tests/test_t211_sampling.py`'s `DECIDED`):
-/// num_neighbors=[-1], which the reference answers differently on each
-/// database, refused by name, INVALID_REQUEST (KO2-82; register P2I-4).
-const DECIDED: [&str; 1] = ["sample.num-neighbors.minus-one"];
-
-/// A decided case's answer as the register carries it (P2I-4: refused at
-/// materialize, INVALID_REQUEST), in the shape of an observation's; its
-/// case's `expect` stays the reference's DuckDB outcome.
-fn decided(_id: &str) -> Value {
-    serde_json::json!({"outcome": {"result": "refusal", "code": "INVALID_REQUEST"}})
-}
+// KO3-44 lifts the former decided negative-neighbor refusal: both
+// local SQL sources must reach predict and match their own reference.
 
 /// Each T2.11 case on `database` through rust-host, held to python-ref's
 /// line: a key not pending must answer as the reference does, a pending
@@ -296,6 +294,8 @@ fn answers_as_the_reference(database: &str) {
     assert!(!ids.is_empty(), "no T2.11 case authored on {database}");
     let observed = observe("contract/cases/s1", &ids, database);
     let reference = reference();
+    // Same approved-field reader and reached-key checks as the Python consumer.
+    let approved = p3f2::problems(&root(), &observed, &reference);
     let pending = named("pending", "rust:");
     let mut problems = Vec::new();
     for id in ids {
@@ -303,10 +303,7 @@ fn answers_as_the_reference(database: &str) {
         let found = match (observed.get(&key), reference.get(&key)) {
             (None, _) => Some("not observed".to_owned()),
             (_, None) => Some("no python-ref line".to_owned()),
-            (Some(line), Some(_)) if DECIDED.contains(&id.as_str()) => {
-                problem(&id, line, &decided(&id))
-            }
-            (Some(line), Some(wanted)) => problem(&id, line, wanted),
+            (Some(line), Some(wanted)) => problem(&id, line, wanted, approved.get(&key)),
         };
         match (found, pending.contains(&key)) {
             (Some(why), false) => problems.push(format!("{key}: {why}")),

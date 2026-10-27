@@ -65,6 +65,9 @@ from typing import Any
 import pytest
 import yaml
 
+# Gate tooling (T3.0): CI runs it in the tooling jobs, not in every matrix job.
+pytestmark = pytest.mark.tooling
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -133,9 +136,7 @@ def with_fixtures(r: Path) -> None:
 def repo(origin: tuple[Path, str], tmp_path: Path) -> Path:
     r"""A worktree at a landing (not judged) on the checkpoint adding the
     fixture cases: the checkpoint each test's candidate is judged against."""
-    source, landed = origin
-    tree = tmp_path / 'tree'
-    git(source, 'worktree', 'add', '-q', '--detach', str(tree), landed)
+    tree = helpers.repo.__wrapped__(origin, tmp_path)
     land(tree, 'T1.32e', with_fixtures)
     return tree
 
@@ -755,7 +756,12 @@ def test_the_register_still_refuses_an_entry_accepting_internal_error(
             'cases': [REAL_CASE],
             'status': 'approved',
             'approved_by': 'owner',
-            'decision_ref': None,
+            # An owner's entry names an owner-approved row (register.py,
+            # T3.2), so the one problem left is the one this test seeds.
+            'decision_ref': {
+                'file': 'docs/design/rust-core/phase-1/decisions.md',
+                'row': 'E1',
+            },
             'notes': 'Seeded: the reference outcome itself, owner-approved.',
             'case_outcomes': [
                 {

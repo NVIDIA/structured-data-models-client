@@ -24,7 +24,7 @@ from sdm_client import _native
 from sdm_client._rust import codec, errors
 from sdm_client._rust.run import run
 from sdm_client.core.warnings import SDMWarning
-from sdm_client.errors import StructuredDataError
+from sdm_client.errors import NimRequestError, StructuredDataError
 
 CANARY = 'CANARY-41d9'
 KINDS = (
@@ -46,11 +46,34 @@ def _test(test: str, attached: Any = None, **fields: Any) -> Any:
     return run({'op': 'test', 'test': test, **fields}, attachments)
 
 
+def _sentence_of(code: str) -> str:
+    r"""The first sentence of the core's table of ``code``."""
+    return next(
+        name
+        for name, entry in errors.table().sentences.items()
+        if entry['code'] == code and entry['kind'] == 'error'
+    )
+
+
 def test_every_code_reaches_its_class_through_a_run() -> None:
     reached = {}
     for code in _native.ERROR_CODES:
         for kind in KINDS:
-            error = {'kind': kind, 'code': code, 'message': CANARY}
+            error = {
+                'kind': kind,
+                'code': code,
+                'sentence': _sentence_of(code),
+                'message': CANARY,
+            }
+            expected_code = code
+            if code == 'ENDPOINT_REFUSED':
+                # A valid endpoint refusal carries its HTTP status and its
+                # separate endpoint code, which is the caller's public code.
+                expected_code = 'TEST_ENDPOINT_CODE'
+                error['fields'] = {
+                    'status': {'t': 'u16', 'v': '422'},
+                    'refused_code': {'t': 'utf8', 'v': expected_code},
+                }
             with pytest.raises(StructuredDataError) as raised:
                 _test('fail', error, error=1)
             found = raised.value
@@ -59,8 +82,13 @@ def test_every_code_reaches_its_class_through_a_run() -> None:
                 # refused at the boundary, naming the attachment.
                 assert found.code == 'INVALID_MESSAGE'
                 continue
-            assert found.code == code
-            assert type(found) is errors.ERRORS[code][0]
+            assert found.code == expected_code
+            assert type(found) is errors.ERRORS[code]
+            if code == 'ENDPOINT_REFUSED':
+                assert isinstance(found, NimRequestError)
+                assert found.status_code == 422
+                assert 'status' not in found.details
+                assert 'refused_code' not in found.details
             assert found.details['kind'] == kind
             assert CANARY not in str(found)
             reached.setdefault(code, []).append(kind)
@@ -77,6 +105,7 @@ def test_retryability_is_carried_to_the_details() -> None:
         error = {
             'kind': 'data_source',
             'code': 'PROVIDER_ERROR',
+            'sentence': 'provider_failed',
             'message': 'm',
             'retryable': retryable,
         }
@@ -92,19 +121,40 @@ class _Synthetic(SDMWarning):
 def test_warnings_keep_their_order_and_class_through_a_run(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setitem(errors.WARNINGS, 'TEST_SYNTHETIC', _Synthetic)
+    monkeypatch.setitem(errors.WARNINGS, 'CONTEXT_CAPPED', _Synthetic)
+
+    def capped(cap: int) -> dict[str, Any]:
+        return {
+            'code': 'CONTEXT_CAPPED',
+            'sentence': 'context_capped',
+            'message': 'm',
+            'fields': {
+                'cap': {'t': 'u64', 'v': str(cap)},
+                'most': {'t': 'u64', 'v': '5000'},
+            },
+        }
+
     sent = [
-        {'code': 'TEST_SYNTHETIC', 'message': 'first'},
-        {'code': 'TEST_OTHER', 'message': 'second'},
-        {'code': 'TEST_SYNTHETIC', 'message': 'third'},
+        capped(1000),
+        {
+            'code': 'OUTPUTS_ABSENT',
+            'sentence': 'outputs_absent',
+            'message': 'm',
+            'fields': {
+                'model': {'t': 'utf8', 'v': 'kumo'},
+                'absent': [{'t': 'utf8', 'v': 'explanation'}],
+            },
+        },
+        capped(2000),
     ]
     with warnings.catch_warnings(record=True) as shown:
         warnings.simplefilter('always')
         _test('warn', sent, warnings=1)
-    assert [(w.category, str(w.message)) for w in shown] == [
-        (_Synthetic, '[TEST_SYNTHETIC] first'),
-        (SDMWarning, '[TEST_OTHER] second'),
-        (_Synthetic, '[TEST_SYNTHETIC] third'),
+    said = [(w.category, str(w.message).split(' ', 2)[:2]) for w in shown]
+    assert said == [
+        (_Synthetic, ['[CONTEXT_CAPPED]', '1,000']),
+        (SDMWarning, ['[OUTPUTS_ABSENT]', 'kumo']),
+        (_Synthetic, ['[CONTEXT_CAPPED]', '2,000']),
     ]
 
 

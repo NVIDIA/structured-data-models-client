@@ -1,0 +1,59 @@
+{
+  "format": "sdm-case/1",
+  "id": "view.metric.adventureworks.demand-30d",
+  "status": "acceptance",
+  "slice": "S2",
+  "warehouses": [
+    "databricks-sql",
+    "databricks-spark"
+  ],
+  "paths": [
+    "schema.from-source/semantic-model/databricks-metric-view",
+    "query.materialize/indices-regression/databricks-metric-view",
+    "client.predict/regression/databricks-metric-view"
+  ],
+  "routes": [
+    "schema.from-source/semantic-model/databricks-metric-view",
+    "query.materialize/indices-binary/databricks-metric-view",
+    "query.materialize/indices-multiclass/databricks-metric-view",
+    "query.materialize/indices-regression/databricks-metric-view",
+    "query.materialize/indices-link-prediction/databricks-metric-view",
+    "query.materialize/indices-ranking/databricks-metric-view",
+    "query.materialize/indices-forecast/databricks-metric-view",
+    "client.predict/binary/databricks-metric-view",
+    "client.predict/multiclass/databricks-metric-view",
+    "client.predict/regression/databricks-metric-view",
+    "client.predict/link-prediction/databricks-metric-view",
+    "client.predict/ranking/databricks-metric-view",
+    "client.predict/forecast/databricks-metric-view"
+  ],
+  "cells": [
+    "int32/foreign-key",
+    "timestamp-us-tz/time-column",
+    "float64/feature"
+  ],
+  "input": {
+    "base": "adventureworks",
+    "pql": "PREDICT SUM(adventureworks_sales_order_details.OrderQty, 0, 30, days) FOR EACH products.ProductID",
+    "materialize": {
+      "indices": [
+        709
+      ],
+      "inference_config": {
+        "num_estimators": 4,
+        "column_shuffle": true
+      }
+    },
+    "view": {
+      "kind": "metric_view",
+      "name": "{adventureworks_metric_view}"
+    }
+  },
+  "until": "predict",
+  "expect": {
+    "outcome": "success",
+    "stage": "predict"
+  },
+  "why": "The deleted AdventureWorks notebook (contract/fixtures/adventureworks/notebook-fa0637d4.ipynb), view_demand_30d, a regression through the view, with the notebook's four-estimator inference_config and its top product on the fixture (709). The owner's existing AdventureWorks metric view (KO3-21), named by the {adventureworks_metric_view} placeholder the capture resolves from the environment, its name private; it is the quickstart notebook's sales_metrics view (the order lines joined to customers and products, thirteen dimensions, the derived Discounted among them) with a third measure, order_count, over the full AdventureWorks tables of its own schema, so the base loaded into the test schema is not what it reads",
+  "source": "written by T3.5's test author from the reference at 43e55f4f"
+}

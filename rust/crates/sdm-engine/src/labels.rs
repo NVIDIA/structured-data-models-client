@@ -39,7 +39,7 @@
 //! What the executor does by a path this does not port is refused by name
 //! ([`crate::not_yet`], register P1B-3).
 
-use sdm_contract::{CoreError, ErrorCode, ErrorKind};
+use sdm_contract::{CoreError, Sentence};
 
 use crate::not_yet;
 
@@ -283,8 +283,7 @@ pub fn aggregate_kept(
         || kept.is_some_and(|k| k.len() != rows)
     {
         return Err(CoreError::new(
-            ErrorKind::Internal,
-            ErrorCode::InternalError,
+            Sentence::Internal,
             "a label's rows, times and windows do not align",
         ));
     }
@@ -499,8 +498,7 @@ impl Labels {
 /// constants of matching types, met with others: a fault of this build.
 fn unpaired() -> CoreError {
     CoreError::new(
-        ErrorKind::Internal,
-        ErrorCode::InternalError,
+        Sentence::Internal,
         "a condition pairs a value and a constant of types the query's validation keeps apart",
     )
 }
@@ -509,8 +507,7 @@ fn unpaired() -> CoreError {
 /// validation refuses before it reaches here.
 fn ordered_null() -> CoreError {
     CoreError::new(
-        ErrorKind::Internal,
-        ErrorCode::InternalError,
+        Sentence::Internal,
         "a comparison with NULL other than = and != reached the labels",
     )
 }
@@ -839,8 +836,7 @@ pub fn truth(target: &Target) -> Result<Truth, CoreError> {
             let right = truth(right)?;
             if left.values.len() != right.values.len() {
                 return Err(CoreError::new(
-                    ErrorKind::Internal,
-                    ErrorCode::InternalError,
+                    Sentence::Internal,
                     "a logical target's sides do not cover the same rows",
                 ));
             }
@@ -863,8 +859,7 @@ pub fn truth(target: &Target) -> Result<Truth, CoreError> {
             })
         }
         Target::Column(_) | Target::Aggregated(_) => Err(CoreError::new(
-            ErrorKind::Internal,
-            ErrorCode::InternalError,
+            Sentence::Internal,
             "a column or an aggregation stands where a condition is read",
         )),
     }
@@ -917,8 +912,7 @@ fn leaf(target: &Target, test: &Test<'_>, top: bool) -> Result<Truth, CoreError>
             })
         }
         _ => Err(CoreError::new(
-            ErrorKind::Internal,
-            ErrorCode::InternalError,
+            Sentence::Internal,
             "a condition of a condition reached the labels",
         )),
     }
@@ -1097,8 +1091,7 @@ fn int_member(constant: &Constant, top: bool) -> Result<Option<i64>, CoreError> 
         Constant::Float(f) if top => {
             if f.fract() != 0.0 || !f.is_finite() {
                 return Err(CoreError::new(
-                    ErrorKind::InvalidRequest,
-                    ErrorCode::InvalidRequest,
+                    Sentence::InListFraction,
                     "an IN list of an integer column holds a float with a fraction",
                 )
                 .with_field("field", sdm_contract::Detail::text("query")));
@@ -1208,8 +1201,7 @@ fn labelled(target: &Target, classes: bool) -> Result<Labelled, CoreError> {
             Target::Aggregated(aggregated) => aggregated_null(aggregated.present.clone(), *op),
             Target::Column(column) => null_condition(column.present(), *op),
             _ => Err(CoreError::new(
-                ErrorKind::Internal,
-                ErrorCode::InternalError,
+                Sentence::Internal,
                 "a condition of a condition reached the labels",
             )),
         },
@@ -1233,6 +1225,7 @@ fn labelled(target: &Target, classes: bool) -> Result<Labelled, CoreError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sdm_contract::ErrorCode;
 
     fn bounds(ends: &[i64]) -> Bounds<'_> {
         Bounds { starts: None, ends }

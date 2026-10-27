@@ -18,8 +18,8 @@ use sdm_contract::facts::PlatformFacts;
 use sdm_contract::run::{FetchOutcome, FetchReply, ReplyId, StartRun};
 use sdm_contract::test_ops::{TestFetch, TestOperation};
 use sdm_contract::{
-    CONTRACT_VERSION, ControlMessage, CoreError, Detail, ErrorCode, ErrorKind, HostFacts, Scalar,
-    Unit,
+    CONTRACT_VERSION, Code, ControlMessage, CoreError, Detail, ErrorCode, ErrorKind, HostFacts,
+    Scalar, Sentence, Unit,
 };
 use sdm_core::{Attachment, Run};
 use sdm_host::{Attachments, HostRun, Outgoing, ZoneResolver, encode, read};
@@ -53,10 +53,15 @@ fn error_of(out: &Outgoing) -> CoreError {
     }
 }
 
-/// A `CoreError` of any pair, as a host could write one.
+/// A `CoreError` of any pair, as a host could write one, saying a
+/// sentence of its code.
 fn any_pair(kind: ErrorKind, code: ErrorCode) -> CoreError {
+    let sentence = Sentence::ALL
+        .iter()
+        .find(|s| s.code() == Code::Error(code))
+        .expect("every code has a sentence");
     serde_json::from_value(serde_json::json!({
-        "kind": kind, "code": code, "message": "m",
+        "kind": kind, "code": code, "sentence": sentence, "message": "m",
     }))
     .unwrap()
 }
@@ -72,7 +77,7 @@ fn an_outgoing_error_outside_the_table_is_internal_naming_the_pair() {
     ] {
         let (kind, code) = (outside.kind, outside.code);
         let error = if wrap {
-            CoreError::new(ErrorKind::Internal, ErrorCode::InternalError, "m").caused_by(outside)
+            CoreError::new(Sentence::Internal, "m").caused_by(outside)
         } else {
             outside
         };
@@ -94,14 +99,20 @@ fn an_outgoing_error_outside_the_table_is_internal_naming_the_pair() {
 #[test]
 fn an_outgoing_error_in_the_table_is_written_as_it_is() {
     for code in ErrorCode::ALL {
+        let sentence = *Sentence::ALL
+            .iter()
+            .find(|s| s.code() == Code::Error(code))
+            .expect("every code has a sentence");
         for &kind in code.kinds() {
-            let error = CoreError::new(kind, code, "m");
+            let mut error = CoreError::new(sentence, "m");
+            error.kind = kind;
             let run = HostRun::with(
                 Run::new(move |_| async move { Err(error) }),
                 Arc::new(ZoneResolver::new([])),
             );
             let written = error_of(&run.next().unwrap_err());
             assert_eq!((written.kind, written.code), (kind, code));
+            assert_eq!(written.sentence, sentence);
         }
     }
 }
@@ -194,6 +205,8 @@ fn a_provider_s_kind_outside_its_code_s_set_ends_the_fetch_as_internal() {
             id: ReplyId(1),
             outcome: FetchOutcome::Error {
                 error: ProviderError {
+                    error_class: None,
+                    driver_message: None,
                     kind,
                     retryable: true,
                     sqlstate: None,

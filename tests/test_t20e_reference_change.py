@@ -69,6 +69,9 @@ from typing import Any
 
 import pytest
 
+# Gate tooling (T3.0): CI runs it in the tooling jobs, not in every matrix job.
+pytestmark = pytest.mark.tooling
+
 ROOT = Path(__file__).resolve().parents[1]
 
 # --- the interface assumed (the implementer matches it, or asks) ---------------
@@ -179,16 +182,13 @@ def build(tmp: Path) -> tuple[Path, str]:
 
 
 @pytest.fixture(scope='module')
-def origin(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, str]:
-    return build(tmp_path_factory.mktemp('origin'))
+def origin(owned_module_dir: Callable[[str], Path]) -> tuple[Path, str]:
+    return build(owned_module_dir('origin'))
 
 
 @pytest.fixture
 def repo(origin: tuple[Path, str], tmp_path: Path) -> Path:
-    source, landed = origin
-    tree = tmp_path / 'tree'
-    git(source, 'worktree', 'add', '-q', '--detach', str(tree), landed)
-    return tree
+    return helpers.repo.__wrapped__(origin, tmp_path)
 
 
 def row(text: str, status: str = APPROVED, ident: str = 'P2E-901') -> str:

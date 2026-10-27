@@ -1,0 +1,407 @@
+# Phase 3 decisions
+
+The owner's decisions for Phase 3, newest last.
+As in Phase 2 (KO2-14), this file records only the owner's own decisions; the orchestrator's and implementers' choices go in [design.md](design.md) and each package's tracker.
+Phase 1's and Phase 2's rows ([phase-1/decisions.md](../phase-1/decisions.md), [phase-2/decisions.md](../phase-2/decisions.md)) stay in force unless a row here changes them; cite them by ID, never copy them.
+A status `approved by owner <date>` records an answer the owner wrote; an agent never writes that status for itself (plan section 2, decision 12).
+Each Decision cell says no more than the owner's words, which the Owner's words cell quotes exactly, with the question as it was asked; a row that would need more is an open question in design.md instead.
+A row is at most 1,000 characters.
+Row IDs start `KO3-`: a capital letter, as `capture_check.py` and `coverage.py` read IDs, and a `3` so they never collide with earlier phases' rows.
+
+**Reference approvals.**
+A row approves a new reference commit exactly as Phase 2's do (phase-2/decisions.md, "Reference approvals"); Phase 3 has none yet.
+
+## Before the design: package size (2026-10-20)
+
+Source: the owner's answer on 2026-10-20 to the orchestrator's package-granularity question, recorded in the orchestrator's state file `phase-2/owner-answers-2026-10-17.md`, section "2026-10-20 (UTC): package granularity".
+The question, as asked: "1 owner decision rows that approve recorded differences ride with the package that needs them (reference approvals and comparison loosenings go in the landing just ahead, never alone); 2 CI-config changes ride with the package that needs them; 3 Phases 3-5 at about 7-10 landings each, integer IDs (T3.1, T3.2), groups capped at about 10 hours of implementation."
+
+| # | Decision | Owner's words | Status |
+|---|---|---|---|
+| KO3-1 | Owner decision rows that approve recorded differences ride with the package that needs them; reference approvals and comparison loosenings go in the landing just ahead, never alone; CI-config changes ride with the package that needs them; Phases 3 to 5 at about 7 to 10 landings each, with integer IDs (T3.1, T3.2), groups capped at about 10 hours of implementation | "yes to all" | approved by owner 2026-10-20 |
+
+## The root-cause analysis's decisions (2026-10-21, evening)
+
+Source: the owner's answers to the nine decisions at the end of Phase 2's root-cause analysis (`$SDM_ORCH_STATE/phase-3/rca/RCA.md`, "Decisions only the owner can make"), recorded in `$SDM_ORCH_STATE/phase-3/owner-answers-2026-10-21.md`.
+Each question is summarized in the Decision cell as it was asked; the RCA file holds its full text and recommendation.
+
+| # | Decision | Owner's words | Status |
+|---|---|---|---|
+| KO3-2 | RCA decision 1, one severity bar for both reviewers (any measured difference from the reference on a public call, any red gate or CI job the change caused, and any decision row wider than the owner's words is at least P2): not decided; the owner asked a question back | "1. Severity: Has this really been a problem?" | answered by KO3-47 |
+| KO3-3 | RCA decision 2, stop and redesign: when the same family of finding blocks two rounds in a row, or a fix's own change causes a new blocking finding twice in a row, stop patching; without a large redesign session for a simple missed case | "2. Yes to Stop and redesign, but sometimes you might've just missed some dumb case so we shouldn't need a large redesign sesion for that..." | approved by owner 2026-10-21 |
+| KO3-4 | RCA decision 3, speed infrastructure (the stacked queue, the CI fix, environment and disk hygiene, the command hook) is schedule work built in Phase 3's first package, not "machinery" | "3. Yes please." | approved by owner 2026-10-21 |
+| KO3-5 | RCA decision 4, docs-only fix rounds: the reviewer who raised the finding confirms its fix; any round writing decision rows or register entries keeps Claude | "4. Sure..." | approved by owner 2026-10-21 |
+| KO3-6 | RCA decision 5, Phase 3's budget (at most 10 landings and a 16-hour planned critical path): approved, then replaced the same evening by KO3-12, which rejects hard budgets | "5. Yes" | superseded by KO3-12 |
+| KO3-7 | RCA decision 6, what "match the reference" covers: answers, refusal kinds and user-visible messages; statement counts, warning repeat counts, tie order among equal scores and hash order only when a user can see them, otherwise one standing register class the owner approves once | "6. Yes" | approved by owner 2026-10-21 |
+| KO3-8 | RCA decision 7, a blocking hook for the banned shell commands for every Claude agent; Codex keeps the watcher | "7. Yes" | approved by owner 2026-10-21 |
+| KO3-9 | RCA decision 8, overnight delegation for Phase 3, on condition each decision is written plainly when made and put to the owner in the morning, before the final candidate | "8. Yes" | approved by owner 2026-10-21 |
+| KO3-10 | RCA decision 9, process lessons live in `learnings.md` with the product lessons | "9. Yes" | approved by owner 2026-10-21 |
+| KO3-11 | The lessons are enforced by mechanisms, not by updating a Markdown file | "The problem is all these "lessons" aren't being enforced, you just seem to be updating some random md file and not officially enforcing them. How can you enforce? Think carefully. Could be templates, scripts, github actions, pre-commit hooks, etc. You have a lot of lessons learned / RCAs found but they don't translate to your decisions above" | the owner's instruction, 2026-10-21 |
+
+## The five Phase 3 process changes (2026-10-21, evening)
+
+Source: the owner's answers to the orchestrator's first proposal of five process changes and then to the revised five, recorded in `$SDM_ORCH_STATE/phase-3/owner-answers-2026-10-21.md`; T3.0 built the revised five.
+
+| # | Decision | Owner's words | Status |
+|---|---|---|---|
+| KO3-12 | No hard budgets of landings or hours; change the process itself | "1. The problem with setting "budgets" like the 10 landings and 16-hour critical path is it can lead to shoddy work. Is there a way to change the process itself? Imagine 16 hours go by and it just throws its hands in the air" | approved by owner 2026-10-21 (with KO3-17) |
+| KO3-13 | Stack all the time, with CI mandatory every N packages, for example 4 | "2. Yes we should be stacking all the time. But maybe this can be limited to every N packages (e.g. 4 packages) before CI is mandatory" | approved by owner 2026-10-21 (with KO3-17) |
+| KO3-14 | Fix the slow checking-tool tests in CI, with a warning and fix system | "3. Yes please. What even are these tool tests? and yes we need some warning + fix system." | approved by owner 2026-10-21 (with KO3-17) |
+| KO3-15 | Reviewers do not live-test; checking against the old client is the implementer's, the tests' and CI's | "4. Do we think this "compare with the old client" will add too many slowdowns in the review phases? The reviewers shouldn't really need to live test, that's the point of CI or the implementer and the tests we write." | approved by owner 2026-10-21 (with KO3-17) |
+| KO3-16 | Test environments must fit the machine's cores, memory and disk | "5. This "own test environment" thing will blow up ssd and memory, remember that we can't run too many jobs in parallel due to limited cpu cores, memory, and disk." | approved by owner 2026-10-21 (with KO3-17) |
+| KO3-17 | The revised five changes are built (T3.0), then Phase 3's design begins | "Yes, do these. After this is done, we will begin the phase 3 design doc" | approved by owner 2026-10-21 |
+
+## Live access (2026-10-22)
+
+Source: the owner's answers on 2026-10-22 to the orchestrator's nine live-access questions, recorded in `$SDM_ORCH_STATE/phase-3/owner-answers-2026-10-21.md`, section "2026-10-22: live access answers".
+The questions, as asked: 1 the Databricks CLI profile; 2 the catalog, schema and volume; 3 the SQL warehouse; 4 the metric view and GPU serving endpoint; 5 the job-run budget; 6 which notebook; 7 Snowflake access; 8 the Lakebase instance; 9 whether aarch64 is in scope.
+The repository is public, so private names in the owner's words are replaced by a bracketed description; the unredacted words stay in the state file.
+
+| # | Decision | Owner's words | Status |
+|---|---|---|---|
+| KO3-18 | The Databricks CLI profile for live work is the one the owner named | "1. [the owner's profile name]" | approved by owner 2026-10-22 |
+| KO3-19 | The catalog, schema and volume are the ones the owner has used before, found by the orchestrator | "2. Just whatever I have used in the past, find it. Might be some [workspace name] sandbox thing related to kumo relational" | approved by owner 2026-10-22 |
+| KO3-20 | A SQL warehouse may be used | "3. Yes" | approved by owner 2026-10-22 |
+| KO3-21 | Existing metric views and GPU serving endpoints the owner created are reused | "4. Yes, there should already be one or more that I have created" | approved by owner 2026-10-22 |
+| KO3-22 | Most of the implementation is written without incremental checks on Databricks; the live tests run at the end | "5. I suggest coding the majority of the implementation instead of running incremental checks in databricks. Then run the tests at the "end". Does that make sense? Databricks warehouse can be slow and we want to avoid spending a long time re-testing after every change" | approved by owner 2026-10-22 |
+| KO3-23 | Phase 2's datasets and testing are replicated on the warehouses, starting from the quickstart notebook, which alone is not enough for testing | "6. Can we replicate whatever dataset/testing you've done in phase 2 here? and yes there's already the quickstart for databricks in the https://github.com/NVIDIA/structured-data-models-client/blob/main/examples/databricks/kumo_relational_quickstart.ipynb that you can start with, but it's not enough for testing" | approved by owner 2026-10-22 |
+| KO3-24 | Snowflake is tested with the credentials in the owner's env file, which is not read directly | "7. I have added [a private env file] which contains three env vars: SNOWFLAKE_URL, SNOWFLAKE_USERNAME, SNOWFLAKE_ACCESS_TOKEN. Avoid reading it directly as it has credentials. You can use this for testing." | approved by owner 2026-10-22 |
+| KO3-25 | The Lakebase instance is one in the owner's workspace, found by the orchestrator | "8. You should be able to find another one in our [workspace name] workspace" | approved by owner 2026-10-22 |
+| KO3-26 | Both x86_64 and aarch64 are in scope | "9. Yes, both x86 and aarch64. I'm not sure you're right, I believe we support both, but double-check" | approved by owner 2026-10-22 |
+
+## Java in Phase 3 (2026-10-22)
+
+Source: the owner's message on 2026-10-22, recorded in `$SDM_ORCH_STATE/phase-3/owner-answers-2026-10-21.md`, section "2026-10-22: Java in Phase 3", written after reading the draft design, which kept Java out under Phase 2's KO2-34.
+
+| # | Decision | Owner's words | Status |
+|---|---|---|---|
+| KO3-27 | Start adding Java support in Phase 3 (Phase 2's KO2-34 had deferred Java until S2 is switched for Python) | "BTW side note - is it possible to begin the Java implementation as well? I'm looking at our migration-plan.md at https://github.com/NVIDIA/structured-data-models-client/blob/rust-core/docs/design/rust-core/migration-plan.md and it includes "Java follows on Databricks" so I'm wondering why you've not considered it here. I think we should start adding Java support as well in phase 3" | approved by owner 2026-10-22 |
+
+## The Java questions (2026-10-22)
+
+Source: the owner's answers on 2026-10-22 to the design's Java questions Q16 to Q22 (as numbered in the design at 8f9f4b1f; design.md numbers them J1 to J7 since round 2), and to the follow-up on JDK 17, recorded in `$SDM_ORCH_STATE/phase-3/owner-answers-2026-10-21.md`, sections "2026-10-22: Java questions Q16 to Q22" and "2026-10-22: Q21 follow-up (JDK 17)".
+Each question is summarized in the Decision cell as it was asked.
+
+| # | Decision | Owner's words | Status |
+|---|---|---|---|
+| KO3-28 | Q16, a fifth lane for Java: Java on its own lane from the start, a fifth package in flight, with `heavy` queueing its builds | "16: Yes" | approved by owner 2026-10-22 |
+| KO3-29 | Q17, the Java API's shape: mirror Python's public API with Java names and plain data | "17: Yes" | approved by owner 2026-10-22 |
+| KO3-30 | Q18, logging: depend on the SLF4J 2 API only, bind nothing | "18: Sure" | approved by owner 2026-10-22 |
+| KO3-31 | Q19, Maven coordinates and publishing: the orchestrator picks coordinates that follow Java's naming convention; the owner asks whether Maven is the right tool | "19: pick whatever makes sense and aligns with java naming convention. Side note - is Maven the right tool to be using, or something else?" | approved by owner 2026-10-22 |
+| KO3-32 | Q20, platforms for the natives: Linux x86_64 and aarch64 at least; macOS only if there is an easy way that Phase 2 also used | "20: Do linux x86 and ARM minimum, not sure how to test macOS. If there's an easy way (e.g. github actions) then sure, as long as we also did it in phase 2. If we didn't, don't worry about it" | approved by owner 2026-10-22 |
+| KO3-33 | Q21, JDKs in CI: the owner first leaned to JDK 21 only | "21: Maybe do Java 21, no need for 17 right? It's old." | superseded by KO3-34 |
+| KO3-34 | Q21's follow-up: build for Java 17 and test on JDK 17 and 21, as recommended | "Q21, ok do as you recommend and support 17" | approved by owner 2026-10-22 |
+| KO3-35 | Q22, runtime flags and Databricks questions: the orchestrator documents the flags, runs every Java test with them, asks the Java consumer to confirm, and includes the two metric-view questions in Java's live check | "22: Sure, you do it." | approved by owner 2026-10-22 |
+
+## The design questions (2026-10-22, night)
+
+Source: the owner's answers on 2026-10-22 (night) to the design's open questions as the orchestrator sent them, simplified, recorded in `$SDM_ORCH_STATE/phase-3/owner-answers-2026-10-21.md`, section "2026-10-22 (night): the design questions, simplified".
+The questions are numbered as they were sent; their text, as sent, is recorded in the same file, section "Record: the simplified question list the owner answered on 2026-10-22 (night)"; each Decision cell gives the question as asked and its recommendation.
+
+| # | Decision | Owner's words | Status |
+|---|---|---|---|
+| KO3-36 | Q5, the switch: flip every S0, S1 and S2 path to the core at once; an input still refused by name on a switched path (one of KO2-94's three) stays refused on the epic branch until Phase 4 lifts it | "5: Yes." | approved by owner 2026-10-22 |
+| KO3-37 | Q6, old-engine tests after the flip: tests of old-engine internals run on the old route only until Phase 5, each listed in the evidence | "6: Sure." | approved by owner 2026-10-22 |
+| KO3-38 | Q7, the job matrix: the 21 cells ask the quickstart's questions and the deleted notebook's, and the notebooks run once on the core | "7: Sure." | approved by owner 2026-10-22 |
+| KO3-39 | Q8, live timing at the switch: kept, run at the end because it is slow | "8: Sure, but at the end probably since it's slow." | approved by owner 2026-10-22 |
+| KO3-40 | Q9, view YAML values read as the old client's PyYAML reads them (YAML 1.1) | "9: Sure." | approved by owner 2026-10-22 |
+| KO3-41 | Q10, the old client's sampling statements on Databricks and Snowflake (RS-6); and the owner's rule for differences: feature parity with the old client or better, where better means a better error or more support | "10: Sure, although you might potentially find bugs in the old client. Ideally our new client has feature parity or is even better than old client. Better means better error or more support." | approved by owner 2026-10-22 |
+| KO3-42 | Q11, comparing the core with the old client on the old client's own recorded data gates | "11: Sure." | approved by owner 2026-10-22 |
+| KO3-43 | Q12, L3 on the warehouses: 20 generated sources per warehouse | "12: Yes." | approved by owner 2026-10-22 |
+| KO3-44 | Q13, the three refusals decided overnight in Phase 2 that refuse input the old client answers (a NaN `lag_timesteps`, `num_neighbors` text that is not a number, a negative `num_neighbors`) are lifted to match the old client | "13: Ok." | approved by owner 2026-10-22 |
+| KO3-45 | D5, the offline judge for the warehouse legs, option (a): judged offline on the stand-in, statements diagnostic there, the dialects' SQL first run live in the end campaign; the two 100,001-row batching cases off the warehouse legs | "D5: Sure." | approved by owner 2026-10-22 |
+| KO3-46 | G1, one standing register class the owner approves once for statement counts, warning repeat counts, tie order and hash order a user cannot see | "G1: Sure." | approved by owner 2026-10-22 |
+| KO3-47 | G2, the severity bar, amended: a difference from the old client does not block a landing when the core does better, as KO3-41 defines better | "G2: I don't want to "block a landing" - discrepancies are ok as long as our rust core does better. Again, see above for my definition of "better"." | approved by owner 2026-10-22 |
+| KO3-48 | G3, the design's "no" list of carried items, reopened only when the dry run or a Phase 3 case hits one | "G3: Accepted." | approved by owner 2026-10-22 |
+| KO3-49 | G4, a quota or capacity error in a live run is retried once, and only a failure after the retry counts toward the stop rule | "G4: Sure." | approved by owner 2026-10-22 |
+
+## Live resources, and the night's other answers (2026-10-22)
+
+Sources: the owner's answers on 2026-10-22 to the orchestrator's four live-resource questions (1 starting the stopped Lakebase instance; 2 write safety for Snowflake, whose credentials carry the account's admin role; 3 where the tests read and write on Databricks; 4 the model serving endpoint), in `$SDM_ORCH_STATE/phase-3/owner-answers-2026-10-21.md`, section "2026-10-22: live resource answers"; and, in section "2026-10-22 (night): overnight mandate and Q14, Q15", the owner's mandate for the night and answers to the design's questions on a bigger machine and on protecting `rust-core` (Q12 and Q11 as numbered at 050f68f7).
+Private names in the owner's words are replaced by a bracketed description; the unredacted words stay in the state file.
+
+| # | Decision | Owner's words | Status |
+|---|---|---|---|
+| KO3-50 | The stopped Lakebase instance may be started for the tests | "1. Lakebase: Yes you can start it" | approved by owner 2026-10-22 |
+| KO3-51 | A helper or safety lets the tests write only to one schema used for all testing; the client's own logic is read-only | "2. Create some helper script or safety that only writes to a certain schema (maybe a schema that we use for all our testing purpose). Then all our actual logic should be read-only within the client, so it's less of a concern." | approved by owner 2026-10-22 |
+| KO3-52 | On Databricks, the tests read the existing schema where AdventureWorks is already loaded (not the schema marked safe to drop), found by the orchestrator | "3. We should already have a schema in databricks [workspace name] I believe. Find it. It's not the "safe to drop" schema. Find it, it might be a kumo relational or kumo rfm naming or something else in which adventureworks tables are already loaded" | approved by owner 2026-10-22 |
+| KO3-53 | The tests use a serving endpoint for the Kumo relational model version 26, kept warm | "4. Use the Kumo relational / rfm v26 I believe. You can serve endpoint, no need to scale to zero since we need our testing to be quick" | approved by owner 2026-10-22 |
+| KO3-54 | The Java packages as the design proposed them | "As for the Java packages - it looks good. I'm really hopeful that this can go by faster, since Python already did a lot of the work with interface planning." | approved by owner 2026-10-22 |
+| KO3-55 | Q12, a bigger build machine: no | "Bigger machine: no" | approved by owner 2026-10-22 |
+| KO3-56 | Q11, protecting `rust-core`: a pre-commit check or similar stops agents pushing it | "You should add pre-commit check or something to avoid pushing rust-core" | approved by owner 2026-10-22 |
+| KO3-57 | Q10 of the simplified list also listed "7 of my Phase 2 overnight decisions for you to confirm: error wording; Postgres key equality; the data time-range wording in errors; and four others"; the owner's answer confirms the items it named that map to register entries exactly: "Postgres key equality" (P2G-4 and P2G-5, the two entries on Postgres numeric key equality) and "the data time-range wording in errors" (KO2-89); "error wording" names no entry exactly, so it confirms nothing, and P2D-2 to P2D-5 stand under the overnight delegation (KO2-88), listed for the owner's morning reading | "10: Sure, although you might potentially find bugs in the old client. Ideally our new client has feature parity or is even better than old client. Better means better error or more support." | approved by owner 2026-10-22 (P2G-4, P2G-5 and KO2-89 only) |
+| KO3-58 | The night's mandate: by the morning, T3.0 done and this design reviewed and approved with the Java work; Phase 3 may start in full if it looks good | "Ok - I'm going to bed. By the morning: ensure that T3.0 is done, the design doc is ready (after reviews and approval), includes the java work. In fact, you can even get started on phase 3 fully if it looks good. Add this to your memory. Any questions before I leave?" | approved by owner 2026-10-22 |
+
+## Warehouse table shape (2026-10-24)
+
+Source: the owner's answers on 2026-10-24 to the orchestrator's question on how a schema reused across materialize calls reads a warehouse table that changed (A, keep what the first read found, as the old client does; or B, read each table as it stands at every run), and the items listed with it.
+These rows record the owner's decisions, which the owner made on 2026-10-24.
+The register's entries P3A-1 to P3A-5 name these original decisions; the later item-10 approval below closes their proposed metadata within the scope presented to the owner.
+
+| # | Decision | Owner's words | Status |
+|---|---|---|---|
+| KO3-59 | Plan B: no remembered table shape between materialize runs; each materialize reads each table's location, columns and types as they stand (rows were always read fresh) | "Ok, I'm convinced. Let's plan B." | approved by owner 2026-10-24 |
+| KO3-60 | Item 1: a column the user adds that the source lacks is a named error, not silently dropped | "1. Sure" | approved by owner 2026-10-24 |
+| KO3-61 | Item 3: a column retyped against the source is a named error | "3. Sure" | approved by owner 2026-10-24 |
+| KO3-62 | Item 6: one query object freezing its graph at first materialize, on the old client, is registered and confirmed | "6. Hmm ok" | approved by owner 2026-10-24 |
+
+## Previously approved Snowflake sampled-case comparison (2026-10-22)
+
+Source: the retained primary owner record `$SDM_ORCH_STATE/phase-3/owner-answers-2026-10-21.md`, heading "2026-10-22 evening: Snowflake sampling, option C", lines119-123.
+The existing protected `contract/runners/capture_check.py::APPROVED_SAMPLED` and commit `31b96c9e36fbfb4400505b4b05e61fb6c2337701` already enforce this one-case, one-backend authority.
+This row records that prior approval for the policy checkpoint; it does not create a new decision or change sampling product behavior.
+
+| # | Decision | Owner's words | Status |
+|---|---|---|---|
+| KO3-63 | In `compare-policy.yaml`, activate only the previously approved `snowflake.sampled.entity-table` sampling comparison; keep sampling product behavior unchanged; no multicall or Databricks extension. | "Ok let's do C, no product change. That loosens the comparison which is ok." | approved by owner 2026-10-22 |
+
+## View conversion answers (2026-10-24)
+
+Source: the owner's direct continuation answers recorded in `$SDM_ORCH_STATE/phase-3/owner-answers-2026-10-24-codex.md`, items 11 and 16 and the later answer retiring P3J-7 and P3J-8.
+These decisions cover only the entries and the two emulation files listed below; they grant no approval to P3J-12 through P3J-15.
+
+| # | Decision | Owner's words | Status |
+|---|---|---|---|
+| T35-OWNER-2026-10-24-ERRORS-1 | Item 11: approve the clearer view errors P3J-1 through P3J-5 and P3J-9 through P3J-11 as presented | "Approved" | approved by owner 2026-10-24 |
+| T35-OWNER-2026-10-24-YAML-1 | Item 16: approve the YAML scanner differences P3J-6 as presented | "Approved" | approved by owner 2026-10-24 |
+| T35-OWNER-2026-10-24-RETIRED-1 | Retire P3J-7 and P3J-8 as obsolete proposals replaced by P3J-9; the register uses rejected for a retired entry, without claiming restored Python parity | "Ok retire 7/8 as superseded." | approved by owner 2026-10-24 |
+| T35-OWNER-2026-10-24-LOOKUP-ERRORS-1 | Item 17: P3D-4 named error for no current database and P3D-9 named errors when a semantic view is missing or its definition cannot be read | "Approved" for no current database and "Approved" for unreadable semantic views | approved by owner 2026-10-24 |
+| T35-OWNER-2026-10-24-EMULATION-1 | Original item 7: approve only `sdm-pql/src/conversions.rs` and generated `sdm-pql/src/printable.rs` on the emulation allowlist, for number/date parsing and text escaping of view defaults shared by Python and Java | "Approve these two files" | approved by owner 2026-10-24 |
+
+## Kickoff answers
+
+None yet beyond the rows above: the open questions are in [design.md](design.md), "Owner questions", each with a recommendation.
+
+## Snowflake continuation answers (2026-10-24)
+
+These rows preserve the owner's scoped continuation answers.
+The owner subsequently confirmed the missing-anchor behavior already approved by both independent round-1 reviewers: retain the entity with empty temporal history and continue other rows.
+
+| # | Decision | Owner's words | Status |
+|---|---|---|---|
+| T36-OWNER-2026-10-24-COUNTS-1 | P3D-2 and P3D-3: count exact Snowflake objects, including views, with the explained query cost | "Approved, but why was there a wildcard match in the old client? Was it for semantic views, or just poorly written code?"; after context on view cost, "Ok" | approved by owner 2026-10-24 |
+| T36-OWNER-2026-10-24-ERRORS-1 | P3D-4, P3D-5 and P3D-9: named namespace and semantic-view errors | "Approved" for no current database and unreadable semantic views; item 11 "Approved" includes P3D-5 | approved by owner 2026-10-24 |
+| T36-OWNER-2026-10-24-FKS-1 | P3D-6: preserve independent foreign keys to the same target | "Ok" after the explanation of the two independent keys | approved by owner 2026-10-24 |
+| T36-OWNER-2026-10-24-UTC-1 | P3D-7: compare zoned Snowflake and Databricks instants in UTC, preserving NTZ wall time, and report the non-UTC checks | "If possible, sure do this. But double-check what we're dong with Databricks"; "Ok, let me know about this." | approved by owner 2026-10-24 |
+| T36-OWNER-2026-10-24-REFRESH-1 | P3D-12: refresh run-local metadata and namespace resolution per materialize, not a full database reload | "Yep." | approved by owner 2026-10-24 |
+| T36-OWNER-2026-10-24-DIAGNOSTICS-1 | Repair internal driver-message transport and preserve old namespace retry behavior | "Ok sounds good." | approved by owner 2026-10-24 |
+| T36-OWNER-2026-10-24-SEED-1 | Remove the routine Snowflake seed warning, since the seed is optional, and document the limitation | "The question is, are users expected to provide a seed? If not, I'd suggest not having a warning at all." | approved by owner 2026-10-24 |
+| T36-OWNER-2026-10-24-HYBRID-1 | Detect enforced hybrid-table primary keys and preserve the old client's counting behavior | "Yes, check them." | approved by owner 2026-10-24 |
+| T36-OWNER-2026-10-24-ANCHORS-1 | P3D-8 and P3K-2: retain an entity with a missing anchor, use empty temporal history, continue other rows, and invent no replacement timestamp | "Use empty window history" | approved by owner 2026-10-24 |
+
+## Postgres zoned text, 2026-10-24
+
+| Decision | Scope | Owner answer | Status |
+|---|---|---|---|
+| T39-OWNER-2026-10-24-UTC-TEXT-1 | Canonical UTC text for Postgres zoned timestamp array elements and zoned range bounds on both hosts, preserving scalar timestamps and timezone-free values and leaving caller sessions unchanged | "Use UTC consistently in both hosts (recommended)" after explicit notice that non-UTC old Python text changes | approved by owner 2026-10-24 |
+
+## View SQL representation review, 2026-10-24
+
+Both independent T3.9 round-1 reviewers explicitly approved the bounded representation difference below on `ae3d10da5e3b135c1e8e8f1b7615df4e9ead2b37`.
+This records reviewer authority for equivalent SQL, not owner authorization for different model inputs or semantic definitions.
+P3J-14's separate owner policy approval is recorded below.
+
+| Decision | Scope | Evidence | Status |
+|---|---|---|---|
+| T39-REVIEW-2026-10-24-P3J12 | P3J-12: derived expressions rendered inside the data layer's relation with the same source rows, filters, expressions, limits and aggregates | `T3.9-sol-broad-r1.md` and `T3.9-sol-focused-r1.md`: `APPROVE-P3J-12` | approved by both independent reviewers 2026-10-24 |
+
+## T3.10 implementation of the approved switch
+
+| ID | Decision | Authority | Status |
+| --- | --- | --- | --- |
+| T310-DEFAULTS | Covered S0/S1/S2 entrypoints default to the core together; an explicit private routing selection preserves legacy comparison controls and invalid selections still fail | KO3-36; owner-approved switch, implemented without a new user setting | implementation of approved owner policy |
+| T310-LEGACY-TESTS | Existing old-route comparisons explicitly select legacy code; the engine package alone keeps its internal suite on the old route until Phase 5 | KO3-37 | implementation of approved owner policy |
+| T310-S2-INVENTORY | Append all 79 landed S2 acceptance IDs to half 3a, preserving the 309 existing IDs and every check | Locked-set design: the S2 list joins once in T3.10 | implementation of approved inventory extension |
+
+## Remaining continuation approvals (2026-10-24)
+
+Source: the owner's direct answers preserved in `$SDM_ORCH_STATE/phase-3/owner-answers-2026-10-24-codex.md`.
+Items 10 through 14 answer Claude's main-session list of 2026-10-24 at 16:32:32 UTC.
+These rows close approval bookkeeping for the proposals actually presented, without changing behavior, captured expectations or comparison rules.
+The view-refresh row records the later direct answer and its correctness condition.
+
+| # | Decision and presented context | Owner's words | Status |
+|---|---|---|---|
+| T310-OWNER-2026-10-24-PLAN-B-1 | Item 10, "Your plan-B choice (P3A-1 to 5)": re-read each table's location and shape at every materialize rather than remember it. Approve those presented consequences, including named missing-column/type errors and repeated-query refresh; this is no permission to preserve incorrect stale sampler bounds or counts. | "Approved" | approved by owner 2026-10-24 |
+| T310-OWNER-2026-10-24-CLEARER-ERRORS-1 | Item 11, "Clearer errors": P3E-5, P3E-6 and P3B-1 give named errors where the old client crashed or gave a vague error. This row covers only these three entries; view and Snowflake entries retain their own decisions. It grants no new refusal of a previously supported input. | "Approved" | approved by owner 2026-10-24 |
+| T310-OWNER-2026-10-24-PYTHON-DIFFERENCES-1 | Item 12, "Small Python-side differences (P3E-2, P3E-4, P3E-7)": warning codes in brackets, reading a column added by hand, and Postgres reading its current schema once per run. | "Approved" | approved by owner 2026-10-24 |
+| T310-OWNER-2026-10-24-JAVA-NAMES-1 | Item 13, JV-1: Java's typed API rejects non-text key/time-column names at compile time rather than Python's runtime error. | "JV-1 to 3: Approved" | approved by owner 2026-10-24 |
+| T310-OWNER-2026-10-24-JAVA-RECORDS-1 | Item 13, JV-2: Java refuses anonymous Postgres record OID 2249 or its array by name rather than passing Python tuple text; the core writes no such statement and user-defined composite types are unchanged. | "JV-1 to 3: Approved" | approved by owner 2026-10-24 |
+| T310-OWNER-2026-10-24-JAVA-DEEP-JSON-1 | Item 13, JV-3: Java passes server text beyond 2,000 Postgres JSON levels and the core refuses it on both hosts, preserving the public outcome. JV-1 through JV-3 grant no approval to Databricks dtype conversions. | "JV-1 to 3: Approved" | approved by owner 2026-10-24 |
+| T310-OWNER-2026-10-24-KEY-SPELLING-1 | Item 14, "Key-list spelling (P3K-1)": a few key kinds have different text but the database reads the same values. Approval is limited to the stated answer-neutral spelling and chunk-boundary difference, excluding exact-decimal answer changes already covered by P2C-3. Retire any obsolete part after implementation verification; this row supplies no new execution evidence. | "Approved." | approved by owner 2026-10-24 |
+| T310-OWNER-2026-10-24-VIEW-REFRESH-1 | Later question 1, P3J-14: adopt current semantic expressions and filters at the next materialize with normal complete conversion validation and named refusals when held tables or columns are incompatible. Validation bypass and incompatible model inputs are not approved. | "As long as they're correct, sure." | approved by owner 2026-10-24 |
+
+## T3.13 independent review decisions, 2026-10-24
+
+The broad Sol High review of candidate `7ddfd7b5d0216c9e67ab832845eb731116bed564` explicitly approved the following improvement.
+This records that bounded approval only; both package approvals and postapproval checks remain required.
+
+| # | Decision | Reviewer evidence | Status |
+|---|---|---|---|
+| T313-REVIEW-P3S-2 | A malformed successful serving reply whose JSON is a list or scalar produces the core's named `TRANSPORT_ERROR` rather than an escaping SDK crash | `T3.13-sol-broad-r1.md`: `APPROVE-P3S-2` | approved by independent reviewer 2026-10-24 |
+| T313-REVIEW-P3S-3 | P3S-3: retain every old diagnostic value, including caller-fault `endpoint_code=None`, and add structured endpoint/code context plus common kind/retryability fields; no fabricated host exception classes | `T3.13-sol-broad-r6.md` and `T3.13-sol-focused-r6.md`: `APPROVE-P3S-3` | approved by both independent reviewers 2026-10-24 |
+| T313-OWNER-2026-10-24-SDK-AUTH-1 | Use Databricks' official Java SDK and its supported authentication methods; retire the token-only and missing-client-identity proposal P3S-7 | "We should use the native java library provided by Databricks. If it supports more than token auth, we should support it" | approved by owner 2026-10-24 |
+| T313-OWNER-2026-10-24-SERVING-EMULATION-1 | Retire the proposed request-crate emulation exception in favor of the shared wire codec and explicit serving rules; no request-crate leaf is allowlisted | Superseded by the owner's shared-codec choice below | rejected, superseded |
+| T313-OWNER-2026-10-24-SHARED-SERVING-1 | Use the existing `sdm-wire` JSON codec for both envelope layers and count actual UTF-8 bytes, preserving number tokens and member order; use explicit JSON type names, nonblank diagnostic text/title fallback, bounded ASCII codes, ASCII-insensitive known code/phrase matching and standard whitespace, with named malformed response handling instead of status clamping; preserve useful stable gateway codes without inventing host exception classes | "Shared wire codec and explicit rules (recommended)" | approved by owner 2026-10-24 |
+
+## Phase-end generated-source diagnostics, 2026-10-25
+
+These decisions resolve the two bounded questions raised by the generated-source comparisons.
+They grant no numeric tolerance, missing evidence, changed public identifiers or new refusal of supported input.
+
+| # | Decision and presented context | Owner's words | Status |
+|---|---|---|---|
+| T310-OWNER-2026-10-25-EARLY-INVALID-1 | Keep the earlier rejection of a regression-only prediction statistic on a classification task with the same invalid-option error; the old client gathers data and may emit an anchor-after-data warning before rejecting, whereas Rust may omit that downstream warning and avoid the unnecessary gathering; valid requests retain the date warning | "Ok for the first question, keep Rust's behavior about reporting the same invalid-option error earlier" | approved by owner 2026-10-25 |
+| T310-OWNER-2026-10-25-H9-EQUIVALENCE-1 | Accept different internal table/seed numbering and query batching only when exact evidence proves the same source values, typed rows, row multiplicities and semantic table/seed identities; preserve raw SQL traces, require complete mappings and keep public payloads unchanged | "Accept with exact evidence (recommended)" | approved by owner 2026-10-25 |
+
+## Superseding phase completion instruction, 2026-10-25
+
+This instruction replaces the earlier stop-before-merging boundary once Phase 3 is complete.
+It does not waive required checks, evidence or final reviews, or approve a tabular ordering change before its requested benchmark.
+
+| # | Decision and presented context | Owner's words | Status |
+|---|---|---|---|
+| T310-OWNER-2026-10-25-MERGE-1 | After Phase 3 passes its required completion checks and final reviews, merge it into `rust-core` and push; then rebase Phase 4 and its dependent work onto the latest `rust-core`, preserving its commits instead of adding a merge commit; make necessary documentation or tooling updates | "Yes, merge Phase 3 into rust-core once it's complete, and push it. Then rebase phase 4 (not just a merge commit) onto latest rust-core. Update any docs/tooling if you need, but this is my command" | approved by owner 2026-10-25 |
+
+## Stable invalid-escape wording, 2026-10-25
+
+The question was presented at 14:30 UTC and answered at 15:21 UTC.
+The question and answer below are copied from the retained primary transcript.
+The options were "Keep stable wording (recommended)" and "Match each Python version".
+P3E-9 records this one warning-body exception to P3E-2; every other warning requirement remains unchanged.
+
+| # | Question as presented | Owner's words | Status |
+|---|---|---|---|
+| T310-OWNER-2026-10-25-STABLE-ESCAPE-1 | Python 3.14 added a long explanation to its invalid-escape warning. May the core keep the concise body `invalid escape sequence '\\/'` across Python and Java? The warning code, category and timing stay the same; results are unchanged. I recommend stable wording. The existing compatibility rule requires your approval for this text difference. | "Keep stable wording (recommended)" | approved by owner 2026-10-25 |
+
+## Owner-approved fixture repair check scope, 2026-10-25
+
+The owner answered the reviewed proposal at 16:30:22 UTC after both code reviews and the 27 selector controls passed.
+The exact question and answer are preserved from the primary transcript in `$SDM_ORCH_STATE/phase-3/owner-answers-2026-10-25-fixture-scope.md`.
+This one-time exception is limited to the explicit source-pinned scope below; whole changed test files remain the default.
+Both exact-source reviews and required controls still precede its use on a combined candidate.
+
+| # | Proposal | Owner's words | Status |
+|---|---|---|---|
+| T310-OWNER-2026-10-25-FIXTURE-SCOPE-1 | Permit explicit handoff scope `t310-fixtures-7ab261a6d` for T3.10 only, with the fixture files and full-CI workflow pinned to source `7ab261a6d0139c87e6c1bae13d563fded79843e3`: run all ten real factory controls, all four lifecycle outcomes and two real gate fixture consumer smokes in place of unchanged semantic scenarios in the named fixture-only files. Keep complete changed coverage-checker tests, every other substantive regression, normal lint and all 49 gate scenarios in actual final-source full CI; refuse a changed pinned file and record the exact selected suites, hashes and this decision row in the stamp. | "Use targeted fixture checks (recommended)" | approved by owner 2026-10-25 |
+
+
+## Owner-approved restoration of two valid input-role claims, 2026-10-25
+
+The owner answered "Approved" on 2026-10-25 to the corrected question naming the two input labels and the normal meaningful repair sequence.
+The exact question and reply are preserved in `$SDM_ORCH_STATE/phase-3/owner-answers-2026-10-25-input-claims-restoration.primary.json` and its Markdown companion.
+The earlier removal approval followed a mistaken diagnosis and remains historical; it is not the source of this restoration approval.
+P3M-2 records only the two metadata strings already restored in G; the original case bytes, inputs, SQL, expectations and outcomes remain unchanged by this repair.
+The earlier P3M-1 proposal and failed G CI evidence remain historical and are not relabeled as acceptance.
+The separate CI installer repair requests the existing client test extra for the already-committed wording-census tests; it changes no product dependency.
+The genuine repair package uses actual landed G as its base and prior judging harness, with no empty landing, checker override, comparison relaxation or fixture-scope extension.
+
+| # | Proposal | Owner's words | Status |
+|---|---|---|---|
+| T310-OWNER-2026-10-25-RESTORE-INPUT-CLAIMS-1 | Restore and admit only `binary/feature` and `list/feature` for `java.databricks-sql.types`, as valid warehouse INPUT-role coverage claims under E96(b), even though those columns are omitted from public schema/model payload. Keep exact G case blob `9f82573b05d3890e72f28121fce7b0193336ff7a` and its unchanged inputs/expectations/outcomes; use the independently landed G coverage repair for the next genuine repair package, preserving all old red CI evidence and ordinary independent judging. | "Approved" | approved by owner 2026-10-25 |
+
+## Owner-approved K gate-fixture repair check scope, 2026-10-25
+
+This is a distinct approval for the exact reviewed K source, not an extension of the earlier 7ab scope's authority.
+The owner was asked: "May I test the fixes locally, then run the full suite in CI before merging, instead of repeating the full suite both locally and in CI?"
+The owner replied exactly "Yes please".
+The coordinating agent relayed that actual reply; the exact question, answer and relay source are preserved in `$SDM_ORCH_STATE/phase-3/owner-answers-2026-10-25-K-fixture-scope.relay.md` and its JSON companion.
+This approval authorizes only the finite scope below after both exact CODE reviews and required postapproval controls.
+The ten selectors are pinned by SHA256 `4a0d7c311dbe7229139a7060f2a8073f124fcdc3d38cae5f684ad6561ebb17eb` and enumerated in `handoff.py`.
+The approved local run keeps four complete modules: workflow tests, fresh Cargo controls, ratchet tests and public gate controls.
+It also runs the actual coverage/allocation control, all three real locked capture-admission cases, the locked 1b sound path, exact citation rekeying and two real phase-2 reference consumers.
+Only the remaining unchanged scenarios in `test_gate_modes.py` and `test_t20f_gate.py` narrow locally.
+Both exact CODE approvals and required postapproval controls remain necessary, and all 49 gate scenarios remain mandatory in actual final-source full CI.
+
+| # | Proposal | Owner's words | Status |
+|---|---|---|---|
+| T310-OWNER-2026-10-25-FIXTURE-SCOPE-K | Permit explicit T3.10 handoff scope `t310-gate-captures-eb267cbf1`, with twelve original fixture/workflow/consumer files pinned to reviewed source `eb267cbf10ef130cf15e67dd5a9b20e7e85931f3` and exactly the ten selectors named above. Keep complete changed and mandatory substantive modules, every additional changed test, normal full-delta lint and all 49 gate scenarios in final-source full CI. Refuse missing or modified pinned inputs, another package or incomplete owner approval, and retain exact selected suites, hashes and this decision row in the normal handoff stamp. | "Yes please" | approved by owner 2026-10-25 |
+
+## Owner-approved phase-end performance costs and evidence reuse, 2026-10-26
+
+These approvals retain all correctness and prediction-accuracy requirements and mandatory final-source full CI.
+They do not authorize relabeling a native artifact or blanket reuse across changed behavior.
+The separate second Snowflake sampling question remains unanswered.
+
+| # | Decision and presented context | Owner's words | Status |
+|---|---|---|---|
+| T310-OWNER-2026-10-26-PERFORMANCE-COSTS-1 | Accept measured Databricks warehouse latency approximately 2× slower, Snowflake latency 21–32% slower because metadata is refreshed, native library approximately 16 MB versus 9.6 MB baseline, and five SQLite overhead cases exceeding target by at most 0.4 ms; document costs and optimize afterwards, retaining all correctness and accuracy requirements | "Accept documented costs; optimize afterwards (Recommended)" | approved by owner 2026-10-26 |
+| T310-OWNER-2026-10-26-UNAFFECTED-REUSE-1 | Retain completed warehouse/model results only when two independent reviewers verify later fixes cannot affect those cases; rerun every affected case, preserve original build/result commit IDs and require green full CI on the final branch | "Reuse proven unaffected results; rerun affected cases (Recommended)" | approved by owner 2026-10-26 |
+
+
+## Final finite warehouse applicability evidence, 2026-10-26
+
+This section records application of existing semantic approvals, not new owner answers or final Phase 3 acceptance.
+The exact source-pinned CODE review packet retains original observations, typed source proofs and raw strict comparison failures.
+
+- KO2-35 applies exact-decimal semantics to the six measured Databricks SQL cases listed in P2B-1: exact rational key identities, mathematically nearest feature values and exact sums read once at binary32.
+- P2F-1 applies its existing own-row lag rule to the two measured Databricks SQL keys; its two Snowflake keys were already listed and remain unchanged.
+- E120 is the global authority for the one Databricks bare-clock inference change in DT-17; the SQLite-only KO2-61 row is not a new Databricks approval.
+- T36-OWNER-2026-10-24-UTC-1 covers the two original Snowflake UTC-window cases; only two measured TARGET scalars gain exact fields, with the changed ltz-time row vector still requiring its finite source proof.
+- KO2-36 covers the corrected name.dot-entity Databricks outcome and retained declared odd-name relationship under P2E-1.
+- P3F-1 records only the measured key.declared-int32 named-refusal-to-success transition, individually approved by the owner in the exact row below; implementation review is not substituted for that owner answer.
+
+The actual d90 metric time-choice warning matches the frozen Python body exactly after only the existing P3E-2 diagnostic-code prefix is removed.
+Its class remains SDMWarning, and no warning suppression or new wording allowance is added.
+The final original negative-neighbor Databricks case has no strict differences.
+The catalog/table and relationship permutations remain exact finite human evidence, with their raw diagnostics retained; no generic ordering matcher is introduced.
+Unknown historical warning bodies remain unknown.
+The separate second Snowflake sampled-case allowance and its failed quality result remain outside this batch, with no sampling, accuracy or row-vector relaxation.
+
+
+### Individual declared-key support approval
+
+The exact question, answer and bounded scope are retained in `$SDM_ORCH_STATE/phase-3/owner-answer-20261026-dk-int32-support.primary.json`.
+This individual approval covers no other input, sampling behavior or accuracy allowance.
+
+| # | Question as presented | Owner's words | Status |
+|---|---|---|---|
+| T310-OWNER-2026-10-26-DK-INT32-SUPPORT-1 | May we keep one verified Databricks improvement: a valid 32-bit key case now succeeds instead of the old client’s incorrect “no primary key” error? Fixing lost foreign-key metadata restored relationship/key discovery, and the full prediction recheck succeeded. This approves only that compatibility entry. | "Keep corrected support (recommended)" | approved by owner 2026-10-26 |
+
+
+## Java boundary restoration and measured proposal disposition, 2026-10-26
+
+The private design packet is pinned by SHA256 `880b40b175e062d1c1881245933c02487a89f11c03b0fe8e9a904e7c85351adf` and its actual public baseline facts by `47d2d6c698c167d713b4477e564c06dd2227a9a06fa2664026a8ebf629d133fa`.
+Its authentic official d90 JAR and embedded native retain their original producer identities; the Java/core production inputs are unchanged through 42dbb880.
+P3S-5's conversion-only nested storage observation does not establish a semantic feature-selection change: the existing typed catalog facts already precede generic inference on public discovery.
+P3S-6's actual B7 diagnostics preserve the correct class/state; no speculative parser change or future-wrapper waiver is introduced.
+P3S-8 is a defect to repair, with optional internal diagnostic omission only at the Java fetch-reply budget boundary and all independent facts, privacy and strict control limits retained.
+These entries are withdrawn or repaired rather than accepted as new compatibility exceptions; two exact independent CODE reviews and the normal checks remain required before landing.
+
+| # | Disposition | Basis | Status |
+|---|---|---|---|
+| T310-REVIEW-2026-10-26-JAVA-BOUNDARIES-1 | Withdraw P3S-5/P3S-6 as unestablished public semantic exceptions on the measured routes, and repair P3S-8's oversized optional internal diagnostic without changing public failure contracts or the control cap | Authentic public Java baseline, actual B7 driver facts and independently reviewed bounded design; no owner compatibility waiver | reviewer disposition, exact source reviews and checks required |
+
+## Owner-directed identical-input Snowflake validation, 2026-10-26
+
+The original owner message is preserved in `$SDM_ORCH_STATE/phase-3/owner-answer-20261026-sf-identical-input-no-sampler.primary.json`, SHA256 `a248f756b673dbd669535536101741008ee2a7e5ce9d407b3d64e79dc47659dd`.
+The owner directed: "Ok don't change any sampling, i.e. for snowflake. Just compare on identical rows/contexts."
+The source-pinned completed control receipt is `$SDM_ORCH_STATE/phase-3/sf-identical-original-draw-C2-20261026/execution/controlled-original-input-complete.private.json`, SHA256 `8f48d1c726ea4904f2cfec81390fd7be010cfd63da645efdd7a460232d096361`.
+For only original `multicall.entities-per-call.10001@snowflake`, the complete 10101-row typed source and one original ordered 10000-row draw were bound before actual current42 public materialization; both complete requests equal the original reference requests under existing E35 request-ID masking only.
+The supplied draw is explicitly not warehouse execution evidence, and no fictitious SAMPLE statement or replay artifact is created.
+Both actual current model26 batches produce all10001 predictions exactly equal to the authentic old S2 responses; each batch and aggregate RMSE ratio is1.0, with normal cleanup and zero remaining fixture objects verified.
+Materialization uses authentic current42 native provenance, while the separate unchanged SDK/normalizer runtime truthfully retains its older b1 producer identity.
+The historical independent-draw 26.5percent accuracy failure remains retained, and this controlled result does not declare independent draws equal or change the five-percent quality requirement.
+No sampling code, case inventory, comparison matcher, numeric tolerance or compare-policy sampled-case allowance is expanded.
+
+| # | Question and scope | Owner's words | Status |
+|---|---|---|---|
+| T310-OWNER-2026-10-26-SF-IDENTICAL-INPUT-1 | Keep Snowflake sampling unchanged and validate the one original multicall question on identical original captured source rows and contexts; preserve the independent-draw failure and all source/model identities | "Ok don't change any sampling, i.e. for snowflake. Just compare on identical rows/contexts." | approved by owner 2026-10-26 |
+
+
+## Complete valid sampled foreign-key links, 2026-10-26
+
+The old Python client and Rust source15e retain only the first partial mapping for a logical foreign key, dropping links supplied by later sampled paths.
+The original diamond has43 already-sampled source rows with matching sampled targets, but table discovery order leaves21 or22 links.
+The shared request producer now merges those partial mappings by sampled source-row occurrence, preserving the first supplying partial and the legacy last-valid duplicate within each partial.
+Sampling, selected rows, temporal bounds, labels, feature values, table order, public APIs and warehouse reads remain unchanged.
+Only an existing partial map may supply a missing key; merely finding another target row in the source is insufficient.
+The exact existing315-case DuckDB audit identifies nine changed payloads,1320 valid null-to-key fills and their existing null-dependent numeric dtype consequences, with no other materialized fields changed.
+The deployed model26 experiment on the original diamond has RMSE2.4701percent worse across three predictions, within the owner's five-percent limit; it demonstrates no accuracy improvement or universal temporal-leakage guarantee.
+Both independent code and actual-result reviews precede this decision record.
+The exact owner message is preserved in `$SDM_ORCH_STATE/phase-3/owner-answer-20261026-complete-sampled-links.primary.json`.
+All affected existing warehouse/runtime cases and final-source full CI remain required.
+
+| # | Question and scope | Owner's words | Status |
+|---|---|---|---|
+| T310-OWNER-2026-10-26-COMPLETE-SAMPLED-LINKS-1 | Keep every valid link supplied by the existing sampled partial maps instead of preserving the old partial-link behavior, subject to affected-case checks and final CI; sampling stays unchanged | 'Regarding the earlier question on "Keep all valid links" vs "Preserve the old partial-link behavior" - sure, keep all valid links' | approved by owner 2026-10-26 |

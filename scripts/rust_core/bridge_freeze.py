@@ -12,7 +12,8 @@ that keep a row of the design's "Host-held semantics" ledger:
 - the ``_rust/`` bridges, ``_rust/schema.py``, ``_rust/materialize.py`` and
   ``_rust/predict.py``, with what they share, ``_rust/codec.py``,
   ``_rust/edits.py``, ``_rust/errors.py`` and ``_rust/providers/postgres.py``
-  (T2.14a, FR P3-2), whole: every function and method;
+  (T2.14a, FR P3-2), with ``_rust/providers/postgres_arrow.py``, its Arrow
+  building since T3.20 (T3.7), whole: every function and method;
 - the files shared with the old route, for the functions ``COVERED`` names:
   in ``client.py``, ``query.py`` and ``materializers/relational.py`` the
   functions the core route enters (T2.14c measured them); in ``schema.py``
@@ -241,6 +242,9 @@ WHOLE = (
     _CLIENT / '_rust/edits.py',
     _CLIENT / '_rust/errors.py',
     _CLIENT / '_rust/providers/postgres.py',
+    # The Postgres provider's Arrow building, moved out of postgres.py by
+    # T3.20 (frozen at T3.7).
+    _CLIENT / '_rust/providers/postgres_arrow.py',
 )
 #: The files shared with the old route, covered for the functions named
 #: here and for their module statements: the ledgered rules and what the

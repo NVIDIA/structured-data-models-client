@@ -79,6 +79,7 @@ def _module(path: Path, name: str) -> ModuleType:
 
 
 LS = _module(SCRIPTS / 'lane_selftest.py', 't20e_lane_selftest')
+LAND_SELFTEST = _module(SCRIPTS / 'land_selftest.py', 't20e_land_selftest')
 
 
 @pytest.fixture
@@ -147,6 +148,15 @@ def publish(w: Any) -> str:
 
 
 def land_args(w: Any, sha: str) -> list[str]:
+    common = Path(
+        w.git(
+            'rev-parse',
+            '--path-format=absolute',
+            '--git-common-dir',
+            cwd=w.worktree,
+        ).strip()
+    )
+    LAND_SELFTEST.write_stamp(common, sha, PACKAGE)
     reviews = []
     for name in ('a', 'b'):
         path = w.tmp / f'review-{name}.txt'

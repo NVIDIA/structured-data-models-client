@@ -50,13 +50,19 @@ fn source() -> Connection {
 
 fn relation(parts: &[&str]) -> Relation {
     Relation {
+        columns: Vec::new(),
+        filter: None,
+        found: false,
         source: parts.iter().map(|p| (*p).to_owned()).collect(),
     }
 }
 
 fn plan(request: &DataRequest) -> Result<FetchPlan, sdm_contract::CoreError> {
     let duckdb = ProviderChoice::Sql {
+        timestamp_encoding: None,
         dialect: Dialect::new("duckdb"),
+        namespace: Vec::new(),
+        view: None,
     };
     sdm_host::default_root().data_access(&duckdb)?.plan(request)
 }
@@ -73,6 +79,7 @@ fn run(connection: &Connection, request: DataRequest) -> (String, Vec<duck::Fetc
         request,
         plan,
         continuation: None,
+        purpose: None,
     };
     let fetched = duck::answer(connection, &step).unwrap_or_else(|e| panic!("{text}: {e:?}"));
     (text, vec![fetched])

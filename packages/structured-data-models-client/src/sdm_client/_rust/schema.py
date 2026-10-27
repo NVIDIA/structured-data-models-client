@@ -50,10 +50,7 @@ import warnings
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
-from sdm_client._rust import codec
-from sdm_client._rust.providers.duckdb import DuckDBProvider
-from sdm_client._rust.providers.postgres import PostgresProvider
-from sdm_client._rust.providers.sqlite import SqliteProvider
+from sdm_client._rust import codec, errors, providers, results
 from sdm_client._rust.run import run
 from sdm_client.errors import StructuredDataError
 
@@ -70,9 +67,12 @@ def from_source(
     time_columns: Mapping[str, str | None] | None,
     relationships: Sequence[Relationship] | None,
     check_keys: bool,
+    columns: Mapping[str, Sequence[str]] | None = None,
 ) -> Schema:
-    r"""The schema of the tables named, or of every table, of the DuckDB
-    or SQLite ``source``, described on the core.
+    r"""The schema of the tables named, or of every table, of the DuckDB,
+    SQLite or Postgres ``source``, described on the core; of a table
+    ``columns`` names, only the columns it keeps (contract v28), as the
+    reference reads only the columns a schema describes.
 
     Each key and time column is written as the contract's ``Given``: a
     value the contract's type cannot hold (a number, a set, a mapping) as
@@ -84,7 +84,8 @@ def from_source(
         StructuredDataError: The core's refusal, as :mod:`.errors` maps it,
             ``UNSUPPORTED_REQUEST`` naming the rule for an input it does not
             describe yet; ``INVALID_REQUEST`` for a relationship that is not
-            a ``Relationship``, which the contract cannot carry.
+            a ``Relationship``, which the contract cannot carry; a source
+            holding no table, named as the reference names it.
     """
     from sdm_client.schema import Relationship
 
@@ -104,7 +105,15 @@ def from_source(
     # a dot (contract v26, design choice 12).
     spec = {
         'tables': [
-            {'name': name, 'source': codec.relation(named)}
+            {
+                'name': name,
+                'source': codec.relation(named),
+                **(
+                    {'columns': [str(c) for c in columns[name]]}
+                    if columns is not None and name in columns
+                    else {}
+                ),
+            }
             for name, named in (tables or {}).items()
         ],
         'primary_keys': {
@@ -135,28 +144,62 @@ def from_source(
             for link in links
         ]
         spec['relationships'] = given
-    choice, provider = _provider(source)
+    choice, provider = providers.for_source(source)
     operation = {
         'op': 'describe_source',
         'provider': choice,
         'source': 1,
         'check_keys': bool(check_keys),
     }
-    finished = run(
-        operation,
-        {1: codec.attachment(spec)},
-        provider=provider,
+    # The source, which only this host holds, as the core's sentence of a
+    # source with no table names it (`engine_graph`'s refusal, T3.17), and
+    # a semantic model's as its sentences name it (T3.5).
+    with errors.holding(**errors.source_values(source)):
+        finished = run(
+            operation,
+            {1: codec.attachment(spec)},
+            provider=provider,
+        )
+    described = results.expect(finished.result, results.Described)
+    schema = build(
+        cls, source, json.loads(finished.take(described.description))
     )
-    described = json.loads(finished.take(finished.result['description']))
-    return build(cls, source, described)
+    schema._conversion_notes = conversion_notes(described.notes, schema)
+    return schema
+
+
+def conversion_notes(
+    notes: Sequence[results.ViewNote], schema: Schema
+) -> tuple[str, ...]:
+    r"""A semantic model's conversion notes, as the core gave them at
+    describe, in words: each rendered from its sentence and fields, the
+    core naming each table as the schema does. A note of a table the
+    schema does not hold, or of a time column its table no longer has,
+    says nothing the schema holds, so it is left out, as the old client
+    leaves it out (``CL/schema.py:1401-1433``)."""
+    said = []
+    for note in notes:
+        if note.table is not None:
+            table = schema.tables.get(note.table)
+            if table is None:
+                continue
+            if (
+                note.time_column is not None
+                and table.time_column != note.time_column
+            ):
+                continue
+        said.append(errors.render(note.sentence, errors.decoded(note.fields)))
+    return tuple(said)
 
 
 def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
     r"""Today's ``Schema`` of a ``SourceDescription``, as the core assembled
     it: each column's meaning as the description gives it, with what it
     meant before the schema joined on it (``Column._stype_before_key``,
-    which the schema gives back if it stops joining on it), each table's
-    key and time column, and the links."""
+    which the schema gives back if it stops joining on it) and what the
+    source said of it (``Column._source``, T3.16), each table's key and
+    time column, and the links."""
+    from sdm_client._rust.results import SourceFacts
     from sdm_client.core.warnings import SDMWarning
     from sdm_client.materializers.sources import EngineTables, wire_dtype
     from sdm_client.schema import Column, Relationship, SourceTable
@@ -164,6 +207,11 @@ def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
     built: dict[str, SourceTable] = {}
     for table in described['tables']:
         name = table['name']
+        # The columns a time column was set on, which the old route's setter
+        # records as a meaning assigned (`stype_declared`): the column
+        # inference took, then the time column the schema holds, as the
+        # reference's schema shows them.
+        timed = {table['time_column_inferred'], table['time_column']} - {None}
         columns = {}
         for column in table['columns']:
             dtype = wire_dtype(column['dtype'])
@@ -172,9 +220,23 @@ def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
                     'the core described a column with no wire dtype',
                     code='INTERNAL_ERROR',
                 )
-            columns[column['name']] = Column(
-                column['name'], dtype, column['stype']
-            )
+            # Written as the core answered it, field by field: the core
+            # checked and marked it (decision E55), and the old route's
+            # checks, which ask the old PQL package, are not run again
+            # (T3.16, the structure design's rule 11). What the source said
+            # of it is kept with it and handed back whole to the core.
+            made = Column.__new__(Column)
+            for field, value in (
+                ('name', column['name']),
+                ('dtype', dtype),
+                ('stype', column['stype']),
+                ('untyped', False),
+                ('stype_declared', column['name'] in timed),
+                ('_stype_before_key', column['stype_before_key']),
+                ('_source', SourceFacts.of_described(column, table['source'])),
+            ):
+                object.__setattr__(made, field, value)
+            columns[column['name']] = made
         # Every column the core described is kept, whatever its name: the
         # core holds a query's table and column apart, so a dot, a backtick
         # or a line break in a column's name is data (KO2-36, T2.18). The
@@ -188,20 +250,14 @@ def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
         table_shape.columns = columns
         table_shape._own_columns()
         keys = tuple(table['primary_key'])
-        if keys:
-            table_shape.primary_key = keys[0] if len(keys) == 1 else keys
-        # The column inference took ordered the table before the links or
-        # the caller settled another, as the reference's schema shows it.
-        table_shape.time_column = table['time_column_inferred']
-        table_shape.time_column = table['time_column']
-        # Once the key and time column are set, whose setters re-derive
-        # the marks of a table held on its own.
-        for column in table['columns']:
-            object.__setattr__(
-                table_shape.columns[column['name']],
-                '_stype_before_key',
-                column['stype_before_key'],
-            )
+        # The key and time column as the core answered them, which marked
+        # the columns already.
+        object.__setattr__(
+            table_shape,
+            'primary_key',
+            None if not keys else keys[0] if len(keys) == 1 else keys,
+        )
+        object.__setattr__(table_shape, 'time_column', table['time_column'])
         duplicates = table['duplicate_keys']
         object.__setattr__(
             table_shape,
@@ -226,21 +282,4 @@ def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
         warnings.simplefilter('ignore', SDMWarning)
         schema = cls(built, links, source=source)
     schema._engine_tables = EngineTables()
-    # Kept for materialize on the core (T1.11c), which needs what the
-    # catalog said of each column and the schema does not hold: the type
-    # received, whether it may be null, whether the source keys it.
-    schema._core_description = described
     return schema
-
-
-def _provider(source: Any) -> tuple[dict[str, Any], Any]:
-    r"""The provider choice a run over ``source`` names, and the provider
-    answering its fetches: its backend's built-in SQL dialect, DuckDB's,
-    SQLite's (T2.2) or Postgres's (T2.3), on its connection."""
-    backend = source.backend
-    made = {
-        'duckdb': DuckDBProvider,
-        'sqlite': SqliteProvider,
-        'postgres': PostgresProvider,
-    }[backend]
-    return {'provider': 'sql', 'dialect': backend}, made(source.connection)

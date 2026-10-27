@@ -122,6 +122,7 @@ def _twin(repo: Path) -> str:
     return checkpoint
 
 
+@pytest.mark.tooling
 def test_the_frozen_files_keep_the_old_sha_after_an_approved_rerecord(
     repo: Path,
 ) -> None:
@@ -130,6 +131,7 @@ def test_the_frozen_files_keep_the_old_sha_after_an_approved_rerecord(
     _twin(repo)
 
 
+@pytest.mark.tooling
 @pytest.mark.parametrize('left', [TABLE_FILE, PROSE_FILE])
 def test_any_other_file_left_at_the_old_sha_is_refused_by_name(
     repo: Path, left: str

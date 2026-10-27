@@ -348,7 +348,7 @@ def test_runner_makes_a_relative_out_absolute(tmp_path):
     text = done.stdout + done.stderr
     absolute = tmp_path.resolve() / 'out'
     assert f'run dir {absolute}' in done.stdout, text
-    assert f'--out {absolute}/python-core.jsonl' in done.stdout, text
+    assert f'{absolute}/python-core.jsonl' in done.stdout, text
     assert ' --out out/' not in done.stdout
     assert not out.exists()
 
@@ -383,3 +383,474 @@ def test_runner_refuses_missing_options():
     )  # fmt: skip
     assert done.returncode == 2
     assert 'missing --bundle' in done.stderr
+
+
+# --- Phase 3 warehouse and Java coverage -------------------------------------
+
+
+def test_expect_uses_a_warehouse_case_s_own_first_reference_leg(tmp_path):
+    original = tmp_path / 'warehouse-original'
+    original.mkdir()
+    case = {
+        **copy.deepcopy(CASE),
+        'warehouses': ['databricks-sql', 'snowflake'],
+        'slice': 'S2',
+    }
+    write_case(original, case)
+    ref = tmp_path / 'reference.jsonl'
+    jsonl(
+        ref,
+        [
+            observation(case['id'] + '@snowflake', 'success', 'predict'),
+            observation(
+                case['id'] + '@databricks-sql',
+                'refusal',
+                'materialize',
+                'INVALID_REQUEST',
+                'StructuredDataError',
+            ),
+        ],
+    )
+    out = tmp_path / 'normalized'
+    done = tool('expect', original, ref, out, '--prefix', PREFIX)
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert json.loads((out / (case['id'] + '.json')).read_text())['expect'] == {
+        'outcome': 'refusal',
+        'stage': 'materialize',
+        'code': 'INVALID_REQUEST',
+        'error': 'StructuredDataError',
+    }
+    assert (
+        tool('digests', original, '--prefix', PREFIX)
+        .stdout.split('INPUTS_SHA256 ')[1]
+        .split()[0]
+        == tool('digests', out, '--prefix', PREFIX)
+        .stdout.split('INPUTS_SHA256 ')[1]
+        .split()[0]
+    )
+
+
+def test_counts_retain_hyphenated_warehouse_legs_and_count_payload_differences(
+    tmp_path,
+):
+    run = run_dir(tmp_path, [])
+    for path in (run / 'cases').glob('*.json'):
+        case = json.loads(path.read_text())
+        case['slice'] = 'S2'
+        case['warehouses'] = ['databricks-sql']
+        path.write_text(json.dumps(case))
+    rows = [
+        observation(
+            'dummy.' + letter + '@databricks-sql', 'success', 'materialize'
+        )
+        for letter in 'abc'
+    ]
+    for name in ('python-ref', 'python-core', 'rust-host'):
+        jsonl(run / (name + '.jsonl'), rows)
+    jsonl(run / 'python-old.jsonl', [])
+    (run / 'compare.txt').write_text(
+        'diagnostic: payload: dummy.b@databricks-sql: python-core: differs\n'
+    )
+    done = tool(
+        'counts',
+        run,
+        '--prefix',
+        PREFIX,
+        '--threshold',
+        0,
+        '--databases',
+        'databricks-sql',
+    )
+    assert done.returncode == 1, done.stdout + done.stderr
+    assert 'databricks-sql 3' in (run / 'counts.md').read_text()
+    assert "with no approval: 1 ['dummy.b']" in done.stdout
+    reported = tool(
+        'report', run, '--prefix', PREFIX, '--databases', 'databricks-sql'
+    )
+    assert reported.returncode == 0, reported.stdout + reported.stderr
+    assert (
+        '| dummy.b@databricks-sql | success | success | not run there | success | 1 |'
+        in (run / 'report.md').read_text()
+    )
+
+
+@pytest.mark.parametrize('count', [3, 5])
+def test_counts_union_payload_and_outcome_cases_across_hosts_once(
+    tmp_path, count
+):
+    ids = ['dummy.' + letter for letter in 'abcde'[:count]]
+    rows = [observation(cid, 'success', 'materialize') for cid in ids]
+    run = run_dir(tmp_path, rows)
+    for cid in ids:
+        write_case(run / 'cases', {**copy.deepcopy(CASE), 'id': cid})
+    for who in ('python-core', 'rust-host', 'python-old'):
+        jsonl(run / (who + '.jsonl'), rows)
+    reference = [
+        *rows[:-1],
+        observation(
+            ids[-1],
+            'refusal',
+            'materialize',
+            'INVALID_REQUEST',
+            'StructuredDataError',
+        ),
+    ]
+    jsonl(run / 'python-ref.jsonl', reference)
+    (run / 'compare.txt').write_text(
+        ''.join(
+            f'diagnostic: payload: {cid}: python-core: differs\n'
+            for cid in ids[:-1]
+        )
+        + f'diagnostic: result: {ids[0]}: rust-host: differs\n'
+    )
+    done = tool('counts', run, '--prefix', PREFIX, '--threshold', count - 1)
+    assert done.returncode == 1, done.stdout + done.stderr
+    assert f'with no approval: {count} {ids!r}' in done.stdout
+    allowed = tool('counts', run, '--prefix', PREFIX, '--threshold', count)
+    assert allowed.returncode == 0, allowed.stdout + allowed.stderr
+
+
+def test_java_authored_subset_is_counted_and_cannot_be_missing(tmp_path):
+    rows = [
+        observation('dummy.' + letter, 'success', 'materialize')
+        for letter in 'abc'
+    ]
+    run = run_dir(tmp_path, rows)
+    for path in (run / 'cases').glob('*.json'):
+        case = json.loads(path.read_text())
+        case['core'] = {'validate_query': {}}
+        path.write_text(json.dumps(case))
+    subset = tmp_path / 'java-case-ids.txt'
+    subset.write_text('dummy.a\n')
+    jsonl(run / 'java.jsonl', [])
+    done = tool(
+        'counts',
+        run,
+        '--prefix',
+        PREFIX,
+        '--threshold',
+        4,
+        '--databases',
+        'duckdb',
+        '--java-case-ids',
+        subset,
+    )
+    assert done.returncode == 1, done.stdout + done.stderr
+    assert "panics: 1 ['dummy.a']" in done.stdout
+    jsonl(run / 'java.jsonl', [rows[0]])
+    assert (
+        tool(
+            'counts',
+            run,
+            '--prefix',
+            PREFIX,
+            '--threshold',
+            4,
+            '--databases',
+            'duckdb',
+            '--java-case-ids',
+            subset,
+        ).returncode
+        == 0
+    )
+    subset.write_text('dummy.unknown\n')
+    assert (
+        tool(
+            'counts',
+            run,
+            '--prefix',
+            PREFIX,
+            '--threshold',
+            4,
+            '--databases',
+            'duckdb',
+            '--java-case-ids',
+            subset,
+        ).returncode
+        != 0
+    )
+
+
+def test_counts_fail_when_a_required_reference_line_is_missing(tmp_path):
+    rows = [
+        observation('dummy.' + letter, 'success', 'materialize')
+        for letter in 'abc'
+    ]
+    run = run_dir(tmp_path, rows)
+    jsonl(run / 'python-ref.jsonl', rows[:2])
+    done = tool(
+        'counts',
+        run,
+        '--prefix',
+        PREFIX,
+        '--threshold',
+        4,
+        '--databases',
+        'duckdb',
+    )
+    assert done.returncode != 0
+    assert 'reference' in done.stdout + done.stderr
+
+
+@pytest.mark.parametrize('kind', ['panic', 'over-threshold'])
+def test_phase3_counts_keep_the_existing_no_go_controls(tmp_path, kind):
+    run = tmp_path / 'control'
+    made = tool('dummy', kind, run, '--prefix', PREFIX, '--threshold', 4)
+    assert made.returncode == 0, made.stdout + made.stderr
+    counted = tool('counts', run, '--prefix', PREFIX, '--threshold', 4)
+    assert counted.returncode == 1, counted.stdout + counted.stderr
+
+
+def test_runner_dry_mode_does_not_call_a_case_reader(tmp_path):
+    sentinel = tmp_path / 'tool-sentinel'
+    sentinel.write_text('#!/bin/sh\necho SEALED_READER_WAS_CALLED\nexit 99\n')
+    sentinel.chmod(0o700)
+    done, _ = runner(tmp_path, '--tool-python', str(sentinel))
+    assert done.returncode == 1
+    assert 'precondition(s) failed' in done.stdout
+    assert 'SEALED_READER_WAS_CALLED' not in done.stdout + done.stderr
+
+
+def test_runner_stamps_before_loading_or_digesting_any_case():
+    text = RUNNER.read_text()
+    executed_stamp = text.index('do_ stamp_once')
+    assert executed_stamp < text.index('do_ copy_bundle')
+    assert executed_stamp < text.index('do_ "${heldout[@]}" digests')
+    # The preflight no longer invokes candidate-owned digest tooling.
+    preflight = text[
+        text.index('echo "== preconditions') : text.index('snapshot()')
+    ]
+    assert '"${heldout[@]}" digests' not in preflight
+
+
+def test_comparator_failure_cannot_be_counted_as_a_clean_run(tmp_path):
+    rows = [
+        observation('dummy.' + letter, 'success', 'materialize')
+        for letter in 'abc'
+    ]
+    run = run_dir(tmp_path, rows)
+    (run / 'compare.txt').write_text(
+        'Traceback (most recent call last):\nRuntimeError: comparator failed\n'
+    )
+    done = tool('counts', run, '--prefix', PREFIX, '--threshold', 4)
+    assert done.returncode != 0
+    assert 'comparison' in (done.stdout + done.stderr).lower()
+
+
+def test_execute_makes_global_stamp_before_its_first_case_tool(tmp_path):
+    """Actual shell flow, with dummy checkouts and a reader that only checks ordering."""
+    for name in ('git', 'bash'):
+        if shutil.which(name) is None:
+            pytest.skip(f'no {name}')
+    candidate, reference = tmp_path / 'candidate', tmp_path / 'reference'
+    for checkout in (candidate, reference):
+        checkout.mkdir()
+        subprocess.run(['git', 'init', '-q', str(checkout)], check=True)
+        (checkout / 'dummy').write_text('owned test checkout\n')
+        if checkout == candidate:
+            (checkout / 'contract/runners').mkdir(parents=True)
+            (checkout / 'contract/runners/run_python.py').write_text(
+                '# dummy\n'
+            )
+            (checkout / 'docs/design/rust-core').mkdir(parents=True)
+            (checkout / 'docs/design/rust-core/register.yaml').write_text(
+                'entries: []\n'
+            )
+        subprocess.run(['git', '-C', str(checkout), 'add', '.'], check=True)
+        subprocess.run(
+            [
+                'git',
+                '-C',
+                str(checkout),
+                '-c',
+                'user.name=Tool test',
+                '-c',
+                'user.email=test@example.com',
+                'commit',
+                '-q',
+                '--signoff',
+                '-m',
+                'dummy',
+            ],
+            check=True,
+        )
+    reference_sha = subprocess.check_output(
+        ['git', '-C', str(reference), 'rev-parse', 'HEAD'], text=True
+    ).strip()
+    dummy = tmp_path / 'dummy-bundle'
+    dummy.mkdir()
+    stamp = pathlib.Path(str(dummy.resolve()) + '.started')
+    binary = tmp_path / 'bin'
+    binary.mkdir()
+    python = binary / 'python'
+    python.write_text('#!/bin/sh\nexit 0\n')
+    python.chmod(0o700)
+    cargo = binary / 'cargo'
+    cargo.write_text('#!/bin/sh\nexit 0\n')
+    cargo.chmod(0o700)
+    checker = binary / 'case-reader'
+    checker.write_text(
+        f'#!{sys.executable}\nfrom pathlib import Path\nassert Path({str(stamp)!r}).is_file(), "reader ran before marker"\nprint("verified marker precedes case reader")\nraise SystemExit(1)\n'
+    )
+    checker.chmod(0o700)
+    done = subprocess.run(
+        [
+            'bash',
+            str(RUNNER),
+            '--bundle',
+            str(dummy),
+            '--prefix',
+            PREFIX,
+            '--bundle-sha',
+            '0' * 64,
+            '--inputs-sha',
+            '0' * 64,
+            '--candidate',
+            str(candidate),
+            '--reference',
+            str(reference),
+            '--reference-sha',
+            reference_sha,
+            '--python',
+            str(python),
+            '--reference-python',
+            str(python),
+            '--tool-python',
+            str(checker),
+            '--databases',
+            'duckdb',
+            '--out',
+            str(tmp_path / 'out'),
+            '--threshold',
+            '4',
+            '--execute',
+        ],
+        capture_output=True,
+        text=True,
+        env={'PATH': str(binary) + ':/usr/bin:/bin'},
+        timeout=30,
+    )
+    assert done.returncode == 1, done.stdout + done.stderr
+    assert 'verified marker precedes case reader' in done.stdout
+    assert stamp.is_file()
+    assert not list((tmp_path / 'out/cases-orig').glob('*.json'))
+
+
+def _heldout_module():
+    spec = importlib.util.spec_from_file_location('heldout_review_edges', TOOL)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_java_comparison_selects_exact_admitted_case_keys_per_database(
+    tmp_path, monkeypatch
+):
+    from types import SimpleNamespace
+
+    held = _heldout_module()
+    run = tmp_path / 'comparison'
+    (run / 'cases').mkdir(parents=True)
+    for relative, name in [
+        ('s0/s0.accept.binary-classification.json', 'dummy.s0'),
+        ('s1/base.multiclass.json', 'dummy.s1'),
+    ]:
+        case = json.loads((ROOT / 'contract/cases' / relative).read_text())
+        write_case(
+            run / 'cases',
+            {
+                **case,
+                'id': name,
+                'status': 'diagnostic',
+            },
+        )
+    subset = tmp_path / 'java.txt'
+    subset.write_text('dummy.s0\ndummy.s1\n')
+    all_keys = [
+        name + suffix
+        for name in ('dummy.s0', 'dummy.s1')
+        for suffix in ('', '@sqlite', '@postgres')
+    ]
+    admitted = {'dummy.s0', 'dummy.s1', 'dummy.s1@sqlite', 'dummy.s1@postgres'}
+    for who in ('python-ref', 'python-core', 'rust-host', 'python-old', 'java'):
+        keys = admitted if who == 'java' else all_keys
+        jsonl(
+            run / (who + '.jsonl'),
+            [observation(key, 'success', 'predict') for key in keys],
+        )
+    seen = {}
+
+    def compare(paths, reference, files, **kwargs):
+        if any(path.name == 'java.jsonl' for path in files):
+            db = kwargs['database']
+            loader = held._head_loader(ROOT / 'contract')
+            cases = loader.load_cases(paths)
+            keys = {
+                loader.case_key(case['id'], db)
+                for case, _ in cases
+                if db in loader.case_legs(case)
+            }
+            expected = {key for key in admitted if held.database_of(key) == db}
+            assert keys == expected
+            for path in (reference, *files):
+                assert set(held._observations(path)) == expected
+            seen[db] = keys
+        return SimpleNamespace(notes=[], texts=[], failures=[])
+
+    monkeypatch.setattr(
+        held, '_comparison_tool', lambda: SimpleNamespace(compare=compare)
+    )
+    assert (
+        held.cmd_compare(
+            SimpleNamespace(
+                run_dir=run,
+                prefix=PREFIX,
+                databases='duckdb,sqlite,postgres',
+                java_case_ids=subset,
+            )
+        )
+        == 0
+    )
+    assert seen == {
+        'duckdb': {'dummy.s0', 'dummy.s1'},
+        'sqlite': {'dummy.s1@sqlite'},
+        'postgres': {'dummy.s1@postgres'},
+    }
+
+
+@pytest.mark.parametrize(
+    'rule',
+    [
+        'sql.text',
+        'sql.parameters',
+        'sql.bindings',
+        'payload',
+        'result',
+        'schema',
+    ],
+)
+def test_h11_uses_the_comparator_policy_for_five_reported_differences(
+    tmp_path, rule
+):
+    held = _heldout_module()
+    comparator = held._comparison_tool()
+    ids = ['dummy.' + letter for letter in 'abcde']
+    rows = [observation(cid, 'success', 'materialize') for cid in ids]
+    run = run_dir(tmp_path, rows)
+    for cid in ids:
+        write_case(run / 'cases', {**copy.deepcopy(CASE), 'id': cid})
+    for who in ('python-ref', 'python-core', 'python-old', 'rust-host'):
+        jsonl(run / (who + '.jsonl'), rows)
+    report = comparator.Report(comparator._capture_check().policy()['rules'])
+    for cid in ids:
+        report.fail(f'{cid}: python-core: observed values differ', rule)
+    report.demote(
+        0
+    )  # held-out case diagnostics, without changing a rule's class
+    (run / 'compare.txt').write_text('\n'.join(report.notes) + '\n')
+    done = tool('counts', run, '--prefix', PREFIX, '--threshold', 4)
+    assert done.returncode == (0 if rule.startswith('sql.') else 1), (
+        done.stdout + done.stderr
+    )

@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"$CLAUDE_PROJECT_DIR/scripts/rust_core/orchestration/guard_cmd.py\"; if [ -f \"$f\" ]; then python3 \"$f\"; fi",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

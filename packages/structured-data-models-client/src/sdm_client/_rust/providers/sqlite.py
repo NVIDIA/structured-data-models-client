@@ -34,6 +34,10 @@ import weakref
 from collections.abc import Mapping
 from typing import Any
 
+from sdm_connectors import providers
+from sdm_connectors.providers import PlanNotRun as PlanNotRun
+from sdm_connectors.providers import arrow_table
+
 #: The key-set tables this module made, by connection (temporary tables are
 #: the connection's own): only these are ever replaced. A connection object
 #: that takes no weak reference (a wrapper's) is known by its ``id``.
@@ -50,10 +54,6 @@ def _made(connection: Any) -> set[str]:
         return _MADE_BY_ID.setdefault(id(connection), set())
 
 
-class PlanNotRun(Exception):
-    r"""A plan this provider does not run. Its text names no value."""
-
-
 class SqliteProvider:
     r"""Answers fetch steps on ``connection``, an ADBC SQLite connection or
     what stands in for one."""
@@ -64,31 +64,14 @@ class SqliteProvider:
     def __call__(
         self, step: dict[str, Any], keys: Mapping[int, Any] | None = None
     ) -> Any:
-        plan = step['plan']
-        if plan['plan'] != 'sql':
-            raise PlanNotRun("a host plan is not a SQL provider's to run")
-        statements = plan['statements']
-        if not statements or any(
-            statement['dialect'] != 'sqlite' for statement in statements
-        ):
-            raise PlanNotRun('a plan with no statement or another dialect')
-        relations: dict[str, int] = {}
-        for statement in statements:
-            for param in statement['params']:
-                if param['param'] != 'key_set':
-                    raise PlanNotRun('a plan with a scalar parameter')
-                attachment = param['keys']['attachment']
-                if keys is None or attachment not in keys:
-                    raise PlanNotRun('a plan naming a key set not handed over')
-                bound = relations.setdefault(param['relation'], attachment)
-                if bound != attachment:
-                    raise PlanNotRun('a plan binding two key sets to one name')
+        statements = providers.statements(step, 'sqlite')
+        relations = providers.bound_relations(statements, keys)
         made = _made(self._connection)
         with self._connection.cursor() as cursor:
             for relation, attachment in relations.items():
                 cursor.adbc_ingest(
                     relation,
-                    _arrow_table((keys or {})[attachment]),
+                    arrow_table((keys or {})[attachment]),
                     mode='replace' if relation in made else 'create',
                     temporary=True,
                 )
@@ -96,16 +79,3 @@ class SqliteProvider:
             for statement in statements:
                 cursor.execute(statement['text'])
             return cursor.fetch_arrow_table()
-
-
-def _arrow_table(stream: Any) -> Any:
-    r"""A key set the core sent, an object exporting an Arrow stream, read
-    whole as a pyarrow table, through the PyCapsule interface pyarrow 14.0.1
-    reads (decision E16)."""
-    import pyarrow as pa
-
-    # The private importer, because pyarrow 14.0.1, the floor, has no public
-    # reader of a stream capsule (RecordBatchReader.from_stream is 15's).
-    return pa.RecordBatchReader._import_from_c_capsule(
-        stream.__arrow_c_stream__()
-    ).read_all()

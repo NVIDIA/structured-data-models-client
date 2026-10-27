@@ -66,18 +66,21 @@ from __future__ import annotations
 
 import argparse
 import copy
+import functools
 import hashlib
 import importlib.metadata
 import importlib.util
 import json
 import os
 import platform
+import re
 import struct
 import subprocess
 import sys
 import warnings
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 HERE = Path(__file__).resolve().parent
@@ -104,6 +107,29 @@ EARLIER_PINS = {
 #: choice 2, KO2-19), in this order. DuckDB's observations keep the bare
 #: case ID; the others are keyed ``<case>@<database>``.
 DATABASES = ('duckdb', 'sqlite', 'postgres')
+#: The warehouse legs (Phase 3 design choice 1), in this order, keyed
+#: ``<case>@<leg>`` as the databases are: an S2 case runs on the ones its
+#: ``warehouses`` names and only there; an S1 case without ``databases`` on
+#: every one as well (:func:`case_legs`).
+WAREHOUSES = ('databricks-sql', 'databricks-spark', 'snowflake', 'lakebase')
+#: Every leg a case may run on.
+LEGS = DATABASES + WAREHOUSES
+#: Each ``input.connect`` path and the one leg it opens (design choice 1).
+CONNECT_LEGS = {
+    'warehouse': 'databricks-sql',
+    'spark': 'databricks-spark',
+    'snowpark': 'snowflake',
+    'lakebase': 'lakebase',
+}
+#: Each ``input.view`` kind and the legs that keep it: a metric view is
+#: Databricks', a semantic view Snowflake's.
+VIEW_LEGS = {
+    'metric_view': ('databricks-sql', 'databricks-spark'),
+    'semantic_view': ('snowflake',),
+}
+#: The S1 cases left off the warehouse legs: the two 100,001-row batching
+#: cases, which add nothing there to what they test (KO3-45).
+OFF_WAREHOUSES = ('multicall.entities.100000', 'multicall.entities.100001')
 
 #: The runtime cells (design, "Runtime cells"): Python, pandas, pyarrow and
 #: NumPy versions. An environment with exactly one's versions is that cell.
@@ -162,7 +188,19 @@ def _invalid(validate: Any, document: Any) -> str | None:
     if error is None:
         return None
     where = '/'.join(str(part) for part in error.absolute_path) or '(root)'
-    return f'{where} fails {error.validator!r}'
+    named = ''
+    if error.validator == 'additionalProperties' and isinstance(
+        error.instance, dict
+    ):
+        # The keys the format does not have, by name (a key is the format's
+        # word, never an input's value): the dry run's refusals named none.
+        allowed = set((error.schema or {}).get('properties') or {})
+        unknown = sorted(
+            str(key) for key in error.instance if key not in allowed
+        )
+        if unknown:
+            named = f' ({", ".join(unknown)} not a field there)'
+    return f'{where} fails {error.validator!r}{named}'
 
 
 #: Each item of a list, in a path into a document.
@@ -342,32 +380,55 @@ def _indices(given: dict[str, Any]) -> str | None:
     spec = given['materialize']
     for key in ('indices', 'candidates'):
         for position, value in enumerate(spec.get(key, ())):
-            if type(value) not in (int, str):
+            if type(value) not in (int, NegativeZero, str):
                 return f'input/materialize/{key}/{position} is not an integer'
-    if 'top_k' in spec and type(spec['top_k']) is not int:
+    if 'top_k' in spec and type(spec['top_k']) not in (int, NegativeZero):
         return 'input/materialize/top_k is not an integer'
+    # A whole number as written: -0 is refused, as the Rust loader refuses
+    # it (P2-T2.1i-1).
     if 'fail_call' in given and type(given['fail_call']) is not int:
-        return 'input/fail_call is not an integer'
+        return 'input/fail_call is not a whole number written as one'
     return None
 
 
 def on_database(path: str, database: str) -> str:
-    r"""A case's DuckDB route or path as the same operation and mode over
-    ``database``'s source; any other is itself."""
+    r"""Force actual source kinds, retaining the warehouse's observation key.
+
+    Lakebase opens a PostgresSource, including when a cross-warehouse case
+    explicitly lists its legacy Lakebase alias beside another active leg.
+    """
     head, _, backend = path.rpartition('/')
-    return f'{head}/{database}' if backend == 'duckdb' else path
+    if backend in ('duckdb', 'lakebase'):
+        actual = database if backend == 'duckdb' else backend
+        return f'{head}/{provider_for_leg(actual)}'
+    return path
 
 
 def routes_on(case: dict[str, Any], database: str) -> list[str]:
     r"""The routes python-core forces for ``case`` on ``database``: on DuckDB
-    the case's own; elsewhere the case's own over ``database``
+    the case's own with source aliases normalized; elsewhere those routes
+    over ``database``
     (:func:`on_database`) and every route of each public call the case
     makes, through its ``until`` (T2.1d). Off DuckDB the old route is not
     the reference's (python-old runs on DuckDB only, T2.1a fix 4), so no
     call of a core leg takes it: a case that routes only its DuckDB stop
     (S0's validation, a source refused at ``from_source``) still runs on
-    the core where the database lets the call go further."""
-    routes = [on_database(route, database) for route in case['routes']]
+    the core where the database lets the call go further.
+
+    The three source-opening paths present in the cases' ``routes`` are
+    host-owned in scope-python, so stay coverage facts rather than core
+    selections. Other unknown paths still reach the routing refusal.
+    """
+    routes = [
+        on_database(route, database)
+        for route in case['routes']
+        if route
+        not in {
+            'source.connect-databricks/warehouse/databricks-sql',
+            'source.open/auto/databricks-sql',
+            'source.open/auto/databricks-spark',
+        }
+    ]
     if database == 'duckdb':
         return routes
     from sdm_client import _routing
@@ -392,6 +453,15 @@ def case_key(case_id: str, database: str) -> str:
     r"""An observation's key on ``database``: DuckDB's the bare case ID,
     another's ``<case>@<database>``."""
     return case_id if database == 'duckdb' else f'{case_id}@{database}'
+
+
+def provider_for_leg(database: str) -> str:
+    r"""The core capability a leg uses: Lakebase opens a PostgresSource.
+
+    The Databricks SQL and Spark legs retain their separate provider IDs;
+    a loader's shared SQL engine name is not an advertised capability.
+    """
+    return 'postgres' if database == 'lakebase' else database
 
 
 def check_legs(
@@ -433,7 +503,7 @@ def check_legs(
     )
     problems = []
     for leg in sorted(providers):
-        if database not in tuple(providers[leg]):
+        if provider_for_leg(database) not in tuple(providers[leg]):
             continue
         made = observed.get(leg, set())
         if not made:
@@ -451,9 +521,72 @@ def check_legs(
 
 def case_databases(case: dict[str, Any]) -> tuple[str, ...]:
     r"""The databases a loaded case runs on, in :data:`DATABASES` order:
-    all three unless its ``databases`` (with its exclusion) narrows them."""
+    all three unless its ``databases`` (with its exclusion) narrows them;
+    for a case naming ``warehouses``, those legs, in :data:`WAREHOUSES`
+    order, and only those (design choice 1)."""
+    if 'warehouses' in case:
+        return tuple(leg for leg in WAREHOUSES if leg in case['warehouses'])
     named = case.get('databases', DATABASES)
     return tuple(database for database in DATABASES if database in named)
+
+
+def case_warehouses(case: dict[str, Any]) -> tuple[str, ...]:
+    r"""The warehouse legs a loaded case runs on, in :data:`WAREHOUSES`
+    order (design choice 1): an S2 case's ``warehouses``; an S1 case with
+    no ``databases`` every leg, but the batching cases of
+    :data:`OFF_WAREHOUSES` (KO3-45); any other none. A leg whose engine
+    cannot store the case's data is the loader's to refuse by name
+    (``databases.Unloadable``), never left out here."""
+    if 'warehouses' in case:
+        named = case['warehouses']
+    elif (
+        case.get('slice') == 'S1'
+        and 'databases' not in case
+        and case.get('id') not in OFF_WAREHOUSES
+    ):
+        named = WAREHOUSES
+    else:
+        named = ()
+    return tuple(leg for leg in WAREHOUSES if leg in named)
+
+
+def case_legs(case: dict[str, Any]) -> tuple[str, ...]:
+    r"""Every leg a loaded case runs on, in :data:`LEGS` order."""
+    if 'warehouses' in case:
+        return case_warehouses(case)
+    return case_databases(case) + case_warehouses(case)
+
+
+def warehouse_problem(case: dict[str, Any]) -> str | None:
+    r"""What the case schema cannot say of a case's warehouse fields, or
+    None (design choice 1): ``input.view`` and ``input.connect`` only on a
+    case naming ``warehouses``; a view's kind kept by every leg named
+    (:data:`VIEW_LEGS`); a connect path's case naming exactly its leg
+    (:data:`CONNECT_LEGS`); ``input.named_part`` only on a case naming
+    warehouses, none of them Lakebase, and no connect path. sdm-testkit's
+    loader holds the same rules."""
+    given = case['input']
+    legs = case.get('warehouses')
+    if ('view' in given or 'connect' in given) and legs is None:
+        return 'input/view and input/connect need warehouses'
+    view = given.get('view')
+    if view is not None:
+        kept = VIEW_LEGS[view['kind']]
+        if any(leg not in kept for leg in legs):
+            return (
+                f'input/view/kind {view["kind"]} is not kept on every leg named'
+            )
+    connect = given.get('connect')
+    if connect is not None and legs != [CONNECT_LEGS[connect]]:
+        return f'input/connect {connect} runs on {CONNECT_LEGS[connect]} alone'
+    if 'warehouse_setup' in given and legs is None:
+        return 'input/warehouse_setup needs warehouses'
+    if 'named_part' in given:
+        if legs is None or connect is not None:
+            return 'input/named_part needs warehouses and no connect'
+        if 'lakebase' in legs:
+            return 'input/named_part on lakebase, whose source names one part'
+    return None
 
 
 def digest(data: bytes) -> str:
@@ -479,14 +612,22 @@ def load_cases(paths: Iterable[Path]) -> list[tuple[dict[str, Any], str]]:
     for path in case_files(paths):
         data = path.read_bytes()
         try:
-            case = json.loads(data)
+            # NaN and Infinity are not JSON: refused, as the Rust loader
+            # refuses them (P2-T2.1i-1).
+            case = json.loads(
+                data, parse_constant=_not_json, parse_int=_json_int
+            )
         except (ValueError, RecursionError):
             # Not JSON, or nested past the parser's depth: refused by name,
             # as the Rust loader refuses it (T1.21c).
             raise RunnerFailure(
                 f'{path.name}: not a case: not JSON it reads'
             ) from None
-        problem = _invalid(validate, case) or _indices(case['input'])
+        problem = (
+            _invalid(validate, case)
+            or _indices(case['input'])
+            or warehouse_problem(case)
+        )
         if problem is not None:
             raise RunnerFailure(f'{path.name}: not a case: {problem}')
         if case['id'] in seen:
@@ -494,6 +635,23 @@ def load_cases(paths: Iterable[Path]) -> list[tuple[dict[str, Any], str]]:
         seen.add(case['id'])
         cases.append((case, digest(data)))
     return cases
+
+
+class NegativeZero(int):
+    r"""A JSON integer written ``-0``: zero, which the case format takes
+    where it takes an integer of any form (an index, ``top_k``), and
+    refuses where it takes a whole number as written (``fail_call``), as
+    sdm-testkit's loader does (P2-T2.1i-1)."""
+
+
+def _json_int(text: str) -> int:
+    return NegativeZero(0) if text == '-0' else int(text)
+
+
+def _not_json(constant: str) -> Any:
+    r"""``json``'s reading of ``NaN``, ``Infinity`` or ``-Infinity``, which
+    are not JSON: refused."""
+    raise ValueError(f'{constant} is not JSON')
 
 
 def load_bases(path: Path = BASES) -> dict[str, list[str]]:
@@ -752,6 +910,9 @@ class _Capture:
         #: schema, in order (T1.24b).
         self.edits: list[dict[str, Any]] = []
         self.fetches: list[dict[str, Any]] = []
+        #: The driver's log of the case, where the capture records one, whose
+        #: statements this marks with each fetch's purpose (T3.4).
+        self.driver_log: Any = None
         #: Each fetch with the answer the host replied with, in the order
         #: replied, for ``--record-fetches`` (the replay's recording, T2.3).
         self.answered: list[dict[str, Any]] = []
@@ -859,15 +1020,21 @@ class _Capture:
                 }
             )
         elif operation['op'] == 'edit_schema':
-            # The schema and the edit a setter passed (T1.24b): the
-            # description the core last answered, the schema as the host
-            # holds it, and the edit; kept apart from ``inputs``, whose
-            # shape a gate's checkpoint fixes.
+            # The schema and the edit a setter passed (T1.24b): the schema
+            # as the host holds it, from T3.16 as plain data alone, before
+            # it beside the description the core last answered (`held`);
+            # and the edit; kept apart from ``inputs``, whose shape a gate's
+            # checkpoint fixes.
+            held = operation.get('held')
             self.edits.append(
                 {
                     'op': 'edit_schema',
                     'schema': json.loads(attachments[operation['schema']]),
-                    'held': json.loads(attachments[operation['held']]),
+                    **(
+                        {}
+                        if held is None
+                        else {'held': json.loads(attachments[held])}
+                    ),
                     'edit': json.loads(attachments[operation['edit']]),
                 }
             )
@@ -901,14 +1068,31 @@ class _Capture:
     def stepped(self, step: dict[str, Any]) -> None:
         if step.get('step') == 'fetch':
             self.fetches.extend(
-                {'request': asked['request'], 'plan': asked['plan']}
+                {
+                    'request': asked['request'],
+                    'plan': asked['plan'],
+                    **(
+                        {'purpose': asked['purpose']}
+                        if 'purpose' in asked
+                        else {}
+                    ),
+                }
                 for asked in step['requests']
             )
+            # The statements answering this step are marked with its
+            # purpose, where every fetch of it says one (T3.4).
+            if self.driver_log is not None:
+                purposes = {asked.get('purpose') for asked in step['requests']}
+                self.driver_log.purpose = (
+                    purposes.pop() if len(purposes) == 1 else None
+                )
             for asked in step['requests']:
                 self._asked[asked['id']] = {
                     'request': asked['request'],
                     'plan': asked['plan'],
                 }
+        elif self.driver_log is not None:
+            self.driver_log.purpose = None
         if step.get('step') == 'call_model':
             self._call = step['body']
 
@@ -2078,6 +2262,23 @@ def _description(
     return [str(c[0]) for c in described], types
 
 
+def _postgres_type_names(connection: Any, schema: str) -> dict[int, str]:
+    """Names of schema-local types whose server OIDs change on recreation.
+
+    Read during fixture setup, before the connection reaches the source,
+    so the same composite or array records the same name on both clients.
+    Keep unknown type codes unchanged rather than guessing their identity.
+    """
+    with connection.cursor() as cursor:
+        cursor.execute(
+            'SELECT t.oid, t.typname FROM pg_type t '
+            'JOIN pg_namespace n ON n.oid = t.typnamespace '
+            'WHERE n.nspname = %s',
+            (schema,),
+        )
+        return {int(oid): str(name) for oid, name in cursor.fetchall()}
+
+
 class DriverLog:
     r"""What the capture recorded of one case: each statement, in the order
     the driver ran them, with its handle (0 the connection the source was
@@ -2095,9 +2296,16 @@ class DriverLog:
         self.handles = 0
         #: The public call the runner is making, set by it before each.
         self.stage: str | None = None
+        #: Why the core asked the fetch the statements now answer, where it
+        #: said (``FetchStep.purpose``: ``locate``, plan B's read of a table
+        #: as it stands, T3.4); set by the core's capture at each step.
+        self.purpose: str | None = None
         #: The names of the types the server numbers per run (Postgres's
         #: composite types), by number, for the results' type names.
         self.type_names: dict[int, str] = {}
+        #: The recording mode's keeper of every result whole (Phase 3,
+        #: choice 2), or None outside it.
+        self.recorder: Recorder | None = None
 
     def handle(self) -> int:
         number = self.handles
@@ -2159,9 +2367,22 @@ class _Captured:
 
     def execute(self, *arguments: Any, **keywords: Any) -> Any:
         # Bound as the driver binds them: execute(query, parameters=None).
-        query = keywords.get('query', arguments[0] if arguments else None)
-        parameters = keywords.get(
-            'parameters', arguments[1] if len(arguments) > 1 else None
+        query = keywords.get(
+            'query',
+            keywords.get(
+                'operation',
+                keywords.get('command', arguments[0] if arguments else None),
+            ),
+        )
+        # Bound by each driver's own name: DuckDB's and Databricks'
+        # parameters, Snowflake's params (qmark), Spark's args.
+        parameters = next(
+            (
+                keywords[name]
+                for name in ('parameters', 'params', 'args')
+                if name in keywords
+            ),
+            arguments[1] if len(arguments) > 1 else None,
         )
         statement: dict[str, Any] = {
             'handle': self._handle,
@@ -2173,6 +2394,8 @@ class _Captured:
         }
         if not isinstance(query, str):
             self._log.incomplete.append('execute:not_text')
+        if self._log.purpose is not None:
+            statement['purpose'] = self._log.purpose
         self._log.statements.append(statement)
         object.__setattr__(self, '_statement', statement)
         try:
@@ -2193,8 +2416,21 @@ class _Captured:
             return derived
         return self._same(answer)
 
+    def _fetch(self, method: str, *arguments: Any, **keywords: Any) -> Any:
+        # Execution can succeed while fetching fails (Databricks' FK
+        # catalog reads). Preserve that failure before the client catches
+        # it, just as execute preserves an execution failure.
+        try:
+            return getattr(self._driver, method)(*arguments, **keywords)
+        except BaseException as error:
+            if self._statement is None:
+                self._log.incomplete.append(f'{method}:no_statement')
+            else:
+                self._statement['error'] = type(error).__name__
+            raise
+
     def _read(self, method: str, *arguments: Any, **keywords: Any) -> Any:
-        answer = getattr(self._driver, method)(*arguments, **keywords)
+        answer = self._fetch(method, *arguments, **keywords)
         statement = self._statement
         if statement is None:
             self._log.incomplete.append(f'{method}:no_statement')
@@ -2215,6 +2451,7 @@ class _Captured:
             result['values'] = result_values(
                 names, types, rows, duckdb_types=self._DUCKDB_TYPES
             )
+            kept: Any = rows
         else:
             # The DuckDB types are recorded for an Arrow read too, and the
             # comparator requires them from every Python driver's read.
@@ -2230,7 +2467,9 @@ class _Captured:
                 'digest': _arrow_digest(answer),
                 'values': arrow_values(answer, types),
             }
+            kept = answer
         statement['results'].append(result)
+        _keep(self._log, statement, kept, names, cursor=self._driver)
         return answer
 
     def fetchall(self, *arguments: Any, **keywords: Any) -> Any:
@@ -2421,32 +2660,93 @@ def query_log(connection: Any) -> list[str]:
 
 
 class StatementLog:
-    r"""The query log of a SQLite or Postgres run (T2.1a fix 4), DuckDB's
-    own log's twin: every statement the driver itself executes, by its
-    cursor's ``execute`` and ``executemany`` (ADBC's and psycopg's), in
-    order, with ``''`` for a relation bound by name (ADBC's
-    ``adbc_ingest``), whatever object called it, the capture's proxy or
-    not. It wraps the driver's own cursor class for one case, restored
-    after; test-only, as the capture is. :func:`_logged_texts` holds the
-    capture's statements to it, as to DuckDB's."""
+    r"""The query log of a run off DuckDB (T2.1a fix 4), DuckDB's own log's
+    twin: every statement the driver itself runs, in order, with ``''``
+    for a relation bound by name (ADBC's ``adbc_ingest``), whatever object
+    called it, the capture's proxy or not. It wraps the driver's own
+    classes for one case, restored after, and is entered only as a
+    context (``with``), so a case that fails leaves the driver as it was
+    (P2-T2.1a-2); test-only, as the capture is. :func:`_logged_texts`
+    holds the capture's statements to it, as to DuckDB's.
 
-    #: The driver's cursor class and the methods logged, per database.
-    TARGETS = {
-        'sqlite': ('adbc_driver_manager.dbapi', 'Cursor'),
-        'postgres': ('psycopg', 'Cursor'),
+    What it wraps, per leg: ADBC SQLite's cursor; psycopg's cursor on
+    Postgres and Lakebase, ``copy`` and ``stream`` with ``execute`` and
+    ``executemany`` (P2-T2.1a-2); the Databricks SQL connector's and
+    Snowflake connector's cursors (Phase 3); and a Spark session's ``sql``,
+    the classic session's and Spark Connect's, each that is importable."""
+
+    #: Each leg's driver classes (module, class) and the methods logged,
+    #: each method with whether it binds a relation rather than runs one.
+    TARGETS: dict[
+        str, tuple[tuple[str, str, tuple[tuple[str, bool], ...]], ...]
+    ] = {
+        'sqlite': (
+            (
+                'adbc_driver_manager.dbapi',
+                'Cursor',
+                (
+                    ('execute', False),
+                    ('executemany', False),
+                    ('adbc_ingest', True),
+                ),
+            ),
+        ),
+        'postgres': (
+            (
+                'psycopg',
+                'Cursor',
+                (
+                    ('execute', False),
+                    ('executemany', False),
+                    ('copy', False),
+                    ('stream', False),
+                ),
+            ),
+        ),
+        'lakebase': (
+            (
+                'psycopg',
+                'Cursor',
+                (
+                    ('execute', False),
+                    ('executemany', False),
+                    ('copy', False),
+                    ('stream', False),
+                ),
+            ),
+        ),
+        'databricks-sql': (
+            (
+                'databricks.sql.client',
+                'Cursor',
+                (('execute', False), ('executemany', False)),
+            ),
+        ),
+        'snowflake': (
+            (
+                'snowflake.connector.cursor',
+                'SnowflakeCursor',
+                (('execute', False), ('executemany', False)),
+            ),
+        ),
+        'databricks-spark': (
+            ('pyspark.sql.session', 'SparkSession', (('sql', False),)),
+            ('pyspark.sql.connect.session', 'SparkSession', (('sql', False),)),
+        ),
     }
+    #: The names a driver's method takes its statement by.
+    _QUERY = ('query', 'operation', 'command', 'statement', 'sqlQuery')
 
     def __init__(self, database: str) -> None:
         self.database = database
         self.texts: list[str] = []
-        self._saved: list[tuple[Any, str, Any]] = []
+        self._saved: list[tuple[Any, str, Any, bool]] = []
 
     def __enter__(self) -> StatementLog:
         import importlib
 
-        module, name = self.TARGETS[self.database]
-        cls = getattr(importlib.import_module(module), name)
         log = self.texts
+        found = 0
 
         def text(query: Any) -> str:
             # A statement composed by the driver's own SQL builder logs its
@@ -2455,37 +2755,1716 @@ class StatementLog:
                 query if isinstance(query, str) else f'<{type(query).__name__}>'
             )
 
-        def wrap(method: str, binding: bool) -> None:
-            original = getattr(cls, method, None)
-            if original is None:
+        def wrap(cls: Any, method: str, binding: bool) -> None:
+            if not hasattr(cls, method):
                 return
+            own = method in cls.__dict__
+            original = cls.__dict__[method] if own else getattr(cls, method)
 
             def logged(self: Any, *arguments: Any, **keywords: Any) -> Any:
                 if binding:
                     log.append('')
                 else:
-                    query = keywords.get(
-                        'query',
-                        keywords.get(
-                            'operation', arguments[0] if arguments else None
+                    query = next(
+                        (
+                            keywords[k]
+                            for k in StatementLog._QUERY
+                            if k in keywords
                         ),
+                        arguments[0] if arguments else None,
                     )
                     log.append(text(query))
                 return original(self, *arguments, **keywords)
 
-            self._saved.append((cls, method, original))
+            self._saved.append((cls, method, original, own))
             setattr(cls, method, logged)
 
-        wrap('execute', False)
-        wrap('executemany', False)
-        if self.database == 'sqlite':
-            wrap('adbc_ingest', True)
+        try:
+            seen: set[int] = set()
+            for module, name, methods in self.TARGETS[self.database]:
+                try:
+                    cls = getattr(importlib.import_module(module), name)
+                except (ImportError, AttributeError):
+                    # Spark Connect or the classic session alone: each one
+                    # importable is logged.
+                    continue
+                if id(cls) in seen:
+                    continue
+                seen.add(id(cls))
+                found += 1
+                for method, binding in methods:
+                    wrap(cls, method, binding)
+            if not found:
+                raise RunnerFailure(
+                    f'the {self.database} driver is not installed: its '
+                    'statements cannot be logged'
+                )
+        except BaseException:
+            self.__exit__(None, None, None)
+            raise
         return self
 
     def __exit__(self, *exc: Any) -> None:
         while self._saved:
-            cls, method, original = self._saved.pop()
-            setattr(cls, method, original)
+            cls, method, original, own = self._saved.pop()
+            if own:
+                setattr(cls, method, original)
+            else:
+                delattr(cls, method)
+
+
+# --- warehouse legs and the recording mode (Phase 3, choice 2) -----------------------
+
+#: A placeholder a case writes for a private name: ``{catalog}`` and
+#: ``{schema}`` (``{catalog}`` standing for Snowflake's database), or an
+#: existing view's (``{shop_metric_view}``). On a warehouse leg the run
+#: resolves each from the live configuration's ``names`` (:func:`resolved`),
+#: and the recording mode writes each back before anything is written
+#: (:func:`placeheld`).
+PLACEHOLDER = re.compile(r'\{([a-z][a-z0-9_]*)\}')
+#: The parts of a case's ``input`` the placeholders are resolved in: what
+#: names the warehouse's objects. ``base`` and ``setup`` build the data in a
+#: local DuckDB, and ``pql`` and ``materialize`` name no warehouse object.
+_RESOLVED_IN = ('from_source', 'edits', 'view', 'warehouse_setup')
+#: The environment variable naming the live configuration file, a JSON file
+#: outside the repository that only the orchestrator writes (C-1, E-0, E-1;
+#: :func:`live_configuration`).
+LIVE_CONFIGURATION = 'SDM_LIVE_CONFIG'
+#: The live configuration's format.
+LIVE_FORMAT = 'sdm-live/1'
+#: The environment variables whose values are private names wherever they
+#: are set (hosts, accounts, users): a capture holding one is not written.
+PRIVATE_ENVIRONMENT = (
+    'DATABRICKS_HOST',
+    'DATABRICKS_CLIENT_ID',
+    'DATABRICKS_WAREHOUSE_ID',
+    'SNOWFLAKE_ACCOUNT',
+    'SNOWFLAKE_USER',
+    'SNOWFLAKE_HOST',
+    'PGHOST',
+    'PGUSER',
+    'USER',
+    'LOGNAME',
+)
+#: The shortest value counted as a private name: a shorter one ("db",
+#: "1") would match ordinary words and refuse every capture.
+_PRIVATE_MIN = 4
+#: The recording mode's own format (design choice 2): one line per case
+#: and leg, the input T3.3's ``captures.py import`` turns into the capture
+#: (``sdm-capture/1``), which ``capture_check.py
+#: recording`` holds complete.
+RECORD_FORMAT = 'sdm-record/1'
+#: A statement's random draw: Databricks' ``TABLESAMPLE (p PERCENT)
+#: [REPEATABLE (seed)]`` with the percentage as the old client printed it
+#: (RE/backend/databricks/sampler.py:255-262), and Snowflake's unseeded
+#: ``SAMPLE ROW (n ROWS)`` (RE/backend/snow/sampler.py:132).
+DRAWS = (
+    (
+        'tablesample',
+        re.compile(
+            r'\bTABLESAMPLE\s*\(\s*(?P<fraction>[^\s()]+)\s+PERCENT\s*\)'
+            r'(?:\s*REPEATABLE\s*\(\s*(?P<seed>[^\s()]+)\s*\))?',
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        'sample_rows',
+        re.compile(
+            r'\bSAMPLE\s+ROW\s*\(\s*(?P<fraction>[^\s()]+)\s+ROWS\s*\)',
+            re.IGNORECASE,
+        ),
+    ),
+)
+_FROM = re.compile(r'\bFROM\s+', re.IGNORECASE)
+#: A read of a relation derived from a view (the old client's
+#: ``_quoted_source_name``, RE/backend/databricks/table.py:170-195, pasted
+#: into ``FROM``), ending in the ``LIMIT`` its samples take: re-run without
+#: the limit, it is the relation as the warehouse evaluates it.
+_DERIVED = re.compile(r'\bFROM\s+\(\s*SELECT\b', re.IGNORECASE)
+_LIMIT = re.compile(r'\s+LIMIT\s+[0-9]+\s*$', re.IGNORECASE)
+
+
+def draws_of(sql: str | None) -> list[dict[str, Any]]:
+    r"""The random draws one statement's text makes, in order: each draw's
+    kind, the table it draws from as written (the text between the last
+    ``FROM`` before it and it), and its fraction and seed as written
+    (``None`` for an unseeded draw). ``capture_check.py`` reads the same
+    draws from a capture's statements, so a draw recorded and a draw made
+    are the one rule."""
+    if not sql:
+        return []
+    found = []
+    for kind, pattern in DRAWS:
+        for match in pattern.finditer(sql):
+            before = [m.end() for m in _FROM.finditer(sql, 0, match.start())]
+            table = sql[before[-1] : match.start()].strip() if before else ''
+            found.append(
+                {
+                    'kind': kind,
+                    'at': match.start(),
+                    'table': table,
+                    'fraction': match.group('fraction'),
+                    'seed': match.groupdict().get('seed'),
+                }
+            )
+    found.sort(key=lambda draw: draw['at'])
+    for draw in found:
+        del draw['at']
+    return found
+
+
+def input_hash(
+    case: dict[str, Any], bases: dict[str, list[str]] | None = None
+) -> str:
+    r"""The hash of what the old client's answer to a case depends on
+    (design choice 2): its ``input``, its ``until`` and its base's
+    statements (``bases`` as :func:`load_bases` gives them, this
+    checkout's by default), as canonical JSON. A capture records it, so
+    ``capture_check.py`` finds a case changed after the capture
+    mechanically; its ``why``, paths, routes, status, expectation and
+    ``core`` change nothing the old client is asked, so a case given
+    ``core`` later keeps its capture (T3.4's brief)."""
+    bases = load_bases() if bases is None else bases
+    asked = {
+        'input': case['input'],
+        'until': case['until'],
+        'base': bases.get(case['input']['base']),
+    }
+    return digest(
+        json.dumps(asked, sort_keys=True, ensure_ascii=False).encode('utf-8')
+    )
+
+
+#: The environment variable each placeholder's private name is read from:
+#: ``{catalog}`` from ``SDM_CAPTURE_CATALOG``, ``{shop_metric_view}`` from
+#: ``SDM_CAPTURE_SHOP_METRIC_VIEW``.
+CAPTURE_NAME = 'SDM_CAPTURE_'
+
+
+def placeholder_names(environ: Mapping[str, str]) -> dict[str, str]:
+    r"""Each placeholder's private name the environment sets
+    (:data:`CAPTURE_NAME`), by placeholder."""
+    return {
+        key[len(CAPTURE_NAME) :].lower(): value
+        for key, value in environ.items()
+        if key.startswith(CAPTURE_NAME) and value
+    }
+
+
+def resolve_placeholders(
+    case: dict[str, Any], environ: Mapping[str, str] | None = None
+) -> dict[str, Any]:
+    r"""``case`` with each ``{name}`` in its ``input`` replaced by
+    ``environ['SDM_CAPTURE_' + NAME]`` (the S2 test authors' placeholders:
+    ``{catalog}``, ``{schema}`` and the existing views'), for a live run; a
+    placeholder with nothing set fails the run, named by its placeholder,
+    never by a value. The case given is not changed."""
+    environ = os.environ if environ is None else environ
+    return resolved(case, placeholder_names(environ), everywhere=True)
+
+
+def resolved(
+    case: dict[str, Any], names: Mapping[str, str], everywhere: bool = False
+) -> dict[str, Any]:
+    r"""``case`` with every placeholder in the parts of its ``input`` that
+    name warehouse objects (:data:`_RESOLVED_IN`) replaced by its private
+    name from ``names``; a placeholder ``names`` lacks fails the run, named
+    by its placeholder, never by a value."""
+
+    def resolve(value: Any) -> Any:
+        if isinstance(value, str):
+
+            def name(match: re.Match[str]) -> str:
+                if match.group(1) not in names:
+                    raise RunnerFailure(
+                        f'{case["id"]}: the live configuration names no '
+                        f'{{{match.group(1)}}}'
+                    )
+                return names[match.group(1)]
+
+            return PLACEHOLDER.sub(name, value)
+        if isinstance(value, list):
+            return [resolve(item) for item in value]
+        if isinstance(value, dict):
+            return {key: resolve(item) for key, item in value.items()}
+        return value
+
+    out = copy.deepcopy(case)
+    if everywhere:
+        out['input'] = resolve(out['input'])
+        return out
+    for key in _RESOLVED_IN:
+        if key in out['input']:
+            out['input'][key] = resolve(out['input'][key])
+    return out
+
+
+def _resolve_environment(value: Any, private: list[str]) -> Any:
+    r"""A configuration value with each ``{"env": NAME}`` read from the
+    environment; every text it holds is added to ``private``."""
+    if isinstance(value, dict) and set(value) == {'env'}:
+        read = os.environ.get(str(value['env']))
+        if read is None:
+            raise RunnerFailure(
+                f'the live configuration reads {value["env"]}, which is unset'
+            )
+        private.append(read)
+        return read
+    if isinstance(value, dict):
+        return {
+            key: _resolve_environment(item, private)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_resolve_environment(item, private) for item in value]
+    if isinstance(value, str):
+        private.append(value)
+    return value
+
+
+def live_configuration(
+    leg: str, environ: Mapping[str, str] | None = None
+) -> tuple[dict[str, Any], dict[str, str], list[str]]:
+    r"""The live configuration of ``leg``: how its connection is opened, the
+    private name of each placeholder (``names``), and every private value
+    a capture must not hold.
+
+    It is the JSON file ``SDM_LIVE_CONFIG`` names, outside the repository::
+
+        {"format": "sdm-live/1",
+         "private": ["<a host>", ...],
+         "legs": {"<leg>": {"driver": {...}, "warehouse": {...},
+                            "lakebase": {...}}}}
+
+    The placeholders' private names come from the environment
+    (``SDM_CAPTURE_CATALOG``, ``SDM_CAPTURE_SCHEMA``, an existing view's
+    ``SDM_CAPTURE_SHOP_METRIC_VIEW``; :func:`resolve_placeholders`).
+
+    ``driver`` holds the keyword arguments of the leg's own driver connect
+    (``databricks.sql.connect``, ``snowflake.connector.connect``);
+    ``warehouse`` those of ``sdm_connectors.databricks.warehouse`` (with
+    ``profile``, the workspace client's), which the ``warehouse`` connect
+    path and, without ``driver``, every databricks-sql case opens through;
+    ``lakebase`` those of ``sdm_connectors.databricks.lakebase`` (with
+    ``profile``), which every lakebase case opens through. Any value may be
+    ``{"env": "NAME"}``, read from the environment (Snowflake's
+    credentials, KO3-24). Every text the file holds, every placeholder's name, connect
+    arguments alike, every private value read from the environment, and
+    the values of :data:`PRIVATE_ENVIRONMENT` set at least
+    :data:`_PRIVATE_MIN` long are private."""
+    environ = os.environ if environ is None else environ
+    where = environ.get(LIVE_CONFIGURATION)
+    if not where:
+        raise RunnerFailure(
+            f'a {leg} run needs {LIVE_CONFIGURATION}, the live configuration'
+        )
+    try:
+        document = json.loads(Path(where).read_text(encoding='utf-8'))
+    except (OSError, ValueError, RecursionError) as error:
+        raise RunnerFailure(
+            f'the live configuration cannot be read ({type(error).__name__})'
+        ) from None
+    if not isinstance(document, dict) or document.get('format') != LIVE_FORMAT:
+        raise RunnerFailure(f'the live configuration is not {LIVE_FORMAT}')
+    spec = (document.get('legs') or {}).get(leg)
+    if not isinstance(spec, dict):
+        raise RunnerFailure(f'the live configuration has no {leg} leg')
+    private: list[str] = []
+    spec = _resolve_environment(spec, private)
+    # Each placeholder's private name, from the environment
+    # (resolve_placeholders), private wherever it appears.
+    names = placeholder_names(environ)
+    private.extend(names.values())
+    _resolve_environment(document.get('private') or [], private)
+    private.extend(
+        environ[name] for name in PRIVATE_ENVIRONMENT if environ.get(name)
+    )
+    kept = sorted(
+        {value for value in private if len(value) >= _PRIVATE_MIN},
+        key=lambda value: (-len(value), value),
+    )
+    return spec, dict(names), kept
+
+
+def _name_pattern(value: str) -> re.Pattern[str]:
+    r"""``value`` as a whole name, in any case: not inside a longer name."""
+    return re.compile(
+        r'(?<![A-Za-z0-9_])' + re.escape(value) + r'(?![A-Za-z0-9_])',
+        re.IGNORECASE,
+    )
+
+
+class Placeheld:
+    r"""Writes each private name of a leg back as its placeholder, and finds
+    any private value left (design choice 2: "Names of catalogs, schemas,
+    hosts and users are replaced by placeholders before anything is
+    written, and the write fails on any private name from the
+    environment")."""
+
+    def __init__(
+        self, names: Mapping[str, str], private: Iterable[str]
+    ) -> None:
+        # The longest name first, so a name inside another is not split.
+        self._names = [
+            (_name_pattern(value), '{' + key + '}')
+            for key, value in sorted(
+                names.items(), key=lambda item: (-len(item[1]), item[0])
+            )
+        ]
+        self._private = [value.lower() for value in private]
+
+    def text(self, value: str) -> str:
+        for pattern, placeholder in self._names:
+            value = pattern.sub(placeholder, value)
+        return value
+
+    def value(self, value: Any) -> Any:
+        r"""A JSON-like value with every text placeheld, keys included."""
+        if isinstance(value, str):
+            return self.text(value)
+        if isinstance(value, list):
+            return [self.value(item) for item in value]
+        if isinstance(value, tuple):
+            return tuple(self.value(item) for item in value)
+        if isinstance(value, dict):
+            return {
+                self.value(key): self.value(item) for key, item in value.items()
+            }
+        return value
+
+    def table(self, table: Any) -> Any:
+        r"""An Arrow table with every text value and field name placeheld,
+        column by column (a result may name a column twice); a table
+        holding none comes back as it is."""
+        import pyarrow as pa
+
+        columns = [column.to_pylist() for column in table.columns]
+        names = [field.name for field in table.schema]
+        held_columns = self.value(columns)
+        held_names = [self.text(name) for name in names]
+        if held_columns == columns and held_names == names:
+            return table
+        fields = [
+            field.with_name(name)
+            for field, name in zip(table.schema, held_names, strict=True)
+        ]
+        return pa.Table.from_arrays(
+            [
+                pa.array(values, type=field.type)
+                for values, field in zip(held_columns, fields, strict=True)
+            ],
+            schema=pa.schema(fields, metadata=table.schema.metadata),
+        )
+
+    def leaked(self, text: str) -> bool:
+        r"""Whether ``text`` holds a private value, in any case."""
+        lowered = text.lower()
+        return any(value in lowered for value in self._private)
+
+
+def arrow_ipc(table: Any) -> str:
+    r"""An Arrow table as the base64 text of one IPC stream, its batches
+    combined (batch boundaries are no part of a result, H9), compressed
+    with zstd where the build has it."""
+    import base64
+
+    import pyarrow as pa
+
+    options = pa.ipc.IpcWriteOptions(
+        compression='zstd' if pa.Codec.is_available('zstd') else None
+    )
+    sink = pa.BufferOutputStream()
+    combined = table.combine_chunks()
+    with pa.ipc.new_stream(sink, combined.schema, options=options) as writer:
+        writer.write_table(combined)
+    return base64.b64encode(sink.getvalue().to_pybytes()).decode('ascii')
+
+
+def read_arrow_ipc(text: str) -> Any:
+    r"""The Arrow table :func:`arrow_ipc` wrote."""
+    import base64
+
+    import pyarrow as pa
+
+    return pa.ipc.open_stream(base64.b64decode(text)).read_all()
+
+
+class Recorder:
+    r"""What the recording mode keeps beside the driver capture: every
+    result as the driver gave it, by statement and read (an Arrow read as
+    its table, with the warehouse's own column types; a read as rows as
+    the column names and the rows), which the capture writes whole."""
+
+    def __init__(self) -> None:
+        self.kept: dict[tuple[int, int], Any] = {}
+
+
+#: The core's Postgres provider's Arrow mapping, which the recording mode
+#: keeps a psycopg read as (loaded by its path: the recording runs beside a
+#: reference client, which has no such provider).
+POSTGRES_ARROW = (
+    REPO
+    / 'packages/structured-data-models-client/src/sdm_client/_rust/providers'
+    / 'postgres_arrow.py'
+)
+
+
+def _postgres_arrow() -> Any:
+    name = 'run_python_postgres_arrow'
+    if name in sys.modules:
+        return sys.modules[name]
+    spec = importlib.util.spec_from_file_location(name, POSTGRES_ARROW)
+    if spec is None or spec.loader is None:
+        raise RunnerFailure("the Postgres provider's Arrow mapping is missing")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _psycopg_cursor(driver: Any) -> bool:
+    r"""Whether ``driver`` is a psycopg cursor holding a result: its rows
+    are kept as the Postgres provider types them (:func:`_keep`)."""
+    return (
+        type(driver).__module__.split('.', 1)[0] == 'psycopg'
+        and getattr(driver, 'description', None) is not None
+        and hasattr(driver, 'connection')
+    )
+
+
+def _keep(
+    log: DriverLog,
+    statement: dict[str, Any],
+    answer: Any,
+    names: Iterable[str] | None = None,
+    cursor: Any = None,
+) -> None:
+    r"""Keeps the result just recorded on ``statement`` for the recording
+    mode (``log.recorder``); nothing without one. A psycopg ``cursor``'s
+    rows are kept as the Arrow the core's Postgres provider builds from the
+    driver's type codes (``postgres_arrow.rows_arrow``), not as the types
+    Arrow would infer from the values."""
+    recorder = log.recorder
+    if recorder is None:
+        return
+    # By identity, not equality: two identical executions on one cursor are
+    # two statements, each with its own results (Codex r1, T3.2 fix 5).
+    position = next(
+        n
+        for n in range(len(log.statements) - 1, -1, -1)
+        if log.statements[n] is statement
+    )
+    key = (position, len(statement['results']) - 1)
+    if hasattr(answer, 'schema') and hasattr(answer, 'num_rows'):
+        recorder.kept[key] = answer
+    elif cursor is not None and _psycopg_cursor(cursor):
+        recorder.kept[key] = _postgres_arrow().rows_arrow(
+            cursor.description,
+            [tuple(row) for row in answer],
+            cursor.connection,
+        )
+    else:
+        recorder.kept[key] = (list(names or []), [tuple(row) for row in answer])
+
+
+def rows_table(names: list[str], rows: list[tuple[Any, ...]]) -> Any:
+    r"""Rows read from a driver as an Arrow table, each column's type the
+    one Arrow infers from its values (null when it holds none)."""
+    import pyarrow as pa
+
+    columns = list(zip(*rows, strict=True)) if rows else [() for _ in names]
+    return pa.Table.from_arrays(
+        [pa.array(list(column)) for column in columns], names=list(names)
+    )
+
+
+class _CapturedWarehouse(_Captured):
+    r"""The capture of a warehouse driver's connection or cursor (Phase 3):
+    the DB-API calls of :class:`_Captured`, ``executemany``, and each
+    Arrow read the driver has (``fetchall_arrow``, ``fetchmany_arrow``,
+    Databricks'; ``fetch_arrow_all``, ``fetch_pandas_all``, Snowflake's),
+    each kept whole in the recording mode."""
+
+    __slots__ = ()
+    _DUCKDB_TYPES = False
+    #: The driver's Arrow reads, recorded where the driver has them.
+    _READS = ('fetchall_arrow', 'fetchmany_arrow')
+
+    def executemany(self, *arguments: Any, **keywords: Any) -> Any:
+        # Bound as DB-API binds them: executemany(operation, seq_of_params).
+        query = keywords.get(
+            'operation',
+            keywords.get('query', arguments[0] if arguments else None),
+        )
+        rows = keywords.get(
+            'seq_of_parameters',
+            keywords.get(
+                'params_seq', arguments[1] if len(arguments) > 1 else None
+            ),
+        )
+        rows = list(rows) if rows is not None else None
+        statement: dict[str, Any] = {
+            'handle': self._handle,
+            'stage': self._log.stage,
+            'sql': query if isinstance(query, str) else None,
+            'parameters': (
+                None
+                if rows is None
+                else [
+                    {'name': str(position), **_typed(row)}
+                    for position, row in enumerate(rows)
+                ]
+            ),
+            'results': [],
+            'error': None,
+        }
+        if not isinstance(query, str):
+            self._log.incomplete.append('executemany:not_text')
+        if self._log.purpose is not None:
+            statement['purpose'] = self._log.purpose
+        self._log.statements.append(statement)
+        object.__setattr__(self, '_statement', statement)
+        if rows is not None:
+            if 'seq_of_parameters' in keywords:
+                keywords['seq_of_parameters'] = rows
+            elif 'params_seq' in keywords:
+                keywords['params_seq'] = rows
+            elif len(arguments) > 1:
+                arguments = (arguments[0], rows, *arguments[2:])
+        try:
+            answer = self._driver.executemany(*arguments, **keywords)
+        except BaseException as error:
+            statement['error'] = type(error).__name__
+            raise
+        return self._same(answer)
+
+    def __getattr__(self, name: str) -> Any:
+        # A read is offered only where the driver has it: the reference's
+        # reader takes the first Arrow read the cursor has (reader.py's
+        # ``hasattr`` order), so a capture offering one the driver lacks
+        # would change what it calls.
+        if name in self._READS:
+            if not hasattr(self._driver, name):
+                raise AttributeError(name)
+            return functools.partial(self._recorded_read, name)
+        return super().__getattr__(name)
+
+    def _recorded_read(
+        self, name: str, *arguments: Any, **keywords: Any
+    ) -> Any:
+        return self._read(name, *arguments, **keywords)
+
+
+class _CapturedDatabricks(_CapturedWarehouse):
+    r"""The capture of a Databricks SQL connection or cursor, under the
+    driver's package, which the reference's dispatch reads."""
+
+    __slots__ = ()
+
+
+class _CapturedSnowflake(_CapturedWarehouse):
+    r"""The capture of a Snowflake connector connection or cursor, under the
+    driver's package. ``fetch_arrow_all`` and ``fetch_pandas_all`` are its
+    reads (RE/backend/snow/table.py:200,319); a pandas read is kept as the
+    Arrow it converts from."""
+
+    __slots__ = ('_recoverable_fetch',)
+
+    _READS = ('fetch_arrow_all', 'fetch_pandas_all')
+
+    def __init__(self, driver: Any, log: DriverLog) -> None:
+        super().__init__(driver, log)
+        object.__setattr__(self, '_recoverable_fetch', None)
+
+    def _fetch(self, method: str, *arguments: Any, **keywords: Any) -> Any:
+        statement = self._statement
+        previous = statement['error'] if statement is not None else None
+        fallback = (
+            self._recoverable_fetch is not None
+            and self._recoverable_fetch[0] is statement
+        )
+        try:
+            return super()._fetch(method, *arguments, **keywords)
+        except BaseException as error:
+            # A real driver's exception class is already loaded when raised.
+            # Fake cursors need no optional connector installed, and an
+            # unrelated same-name exception is not this supported fallback.
+            driver_errors = sys.modules.get('snowflake.connector.errors')
+            unsupported = getattr(driver_errors, 'NotSupportedError', None)
+            recoverable = None
+            if statement is not None:
+                statement.setdefault('fetch_errors', []).append(
+                    {'method': method, 'error': type(error).__name__}
+                )
+                # A failed execute or an earlier fatal fetch cannot become a
+                # successful statement by reading the driver's stale result.
+                if previous is not None and not fallback:
+                    statement['error'] = previous
+                if (
+                    previous is None
+                    and not statement['results']
+                    and method == 'fetch_arrow_all'
+                    and isinstance(unsupported, type)
+                    and isinstance(error, unsupported)
+                ):
+                    recoverable = (statement, type(error).__name__)
+            object.__setattr__(self, '_recoverable_fetch', recoverable)
+            raise
+
+    def _read(self, method: str, *arguments: Any, **keywords: Any) -> Any:
+        pending = self._recoverable_fetch
+        answer = super()._read(method, *arguments, **keywords)
+        if (
+            method == 'fetchall'
+            and pending is not None
+            and pending[0] is self._statement
+            and pending[0]['error'] == pending[1]
+        ):
+            # This is the provider's rows-only SHOW/DESCRIBE fallback, after
+            # the same execution's successful read has been recorded whole.
+            pending[0]['error'] = None
+        object.__setattr__(self, '_recoverable_fetch', None)
+        return answer
+
+    def _recorded_read(
+        self, name: str, *arguments: Any, **keywords: Any
+    ) -> Any:
+        answer = self._fetch(name, *arguments, **keywords)
+        if name == 'fetch_pandas_all':
+            import pyarrow as pa
+
+            self._recorded_arrow(
+                name, pa.Table.from_pandas(answer, preserve_index=False)
+            )
+        else:
+            self._recorded_arrow(name, answer)
+        object.__setattr__(self, '_recoverable_fetch', None)
+        return answer
+
+    def _recorded_arrow(self, method: str, answer: Any) -> Any:
+        statement = self._statement
+        if statement is None:
+            self._log.incomplete.append(f'{method}:no_statement')
+            return answer
+        if answer is None:
+            # The connector gives None for a result with no rows unless
+            # force_return_table: recorded as no rows read.
+            statement['results'].append(
+                {
+                    'method': method,
+                    'rows': 0,
+                    'values': result_values([], None, [], duckdb_types=False),
+                }
+            )
+            _keep(self._log, statement, [], [])
+            return answer
+        statement['results'].append(
+            {
+                'method': method,
+                'rows': answer.num_rows,
+                'schema': [
+                    {'name': field.name, 'type': str(field.type)}
+                    for field in answer.schema
+                ],
+                'digest': _arrow_digest(answer),
+                'values': arrow_values(answer),
+            }
+        )
+        _keep(self._log, statement, answer)
+        return answer
+
+
+class _CapturedPsycopg(_CapturedPostgres):
+    r"""The capture of a psycopg connection (Postgres and Lakebase): the
+    calls of :class:`_CapturedPostgres`, and ``executemany``, ``copy`` and
+    ``stream`` (P2-T2.1a-2), each recorded as a statement whose result is
+    every row or block the caller read."""
+
+    __slots__ = ()
+
+    def _statement_of(
+        self, method: str, query: Any, parameters: Any
+    ) -> dict[str, Any]:
+        statement: dict[str, Any] = {
+            'handle': self._handle,
+            'stage': self._log.stage,
+            'sql': query if isinstance(query, str) else None,
+            'parameters': _parameters(parameters),
+            'results': [],
+            'error': None,
+        }
+        if not isinstance(query, str):
+            self._log.incomplete.append(f'{method}:not_text')
+        if self._log.purpose is not None:
+            statement['purpose'] = self._log.purpose
+        self._log.statements.append(statement)
+        return statement
+
+    def executemany(
+        self, query: Any, params_seq: Any, *rest: Any, **keywords: Any
+    ) -> Any:
+        rows = list(params_seq)
+        statement = self._statement_of('executemany', query, None)
+        statement['parameters'] = [
+            {'name': str(position), **_typed(row)}
+            for position, row in enumerate(rows)
+        ]
+        object.__setattr__(self, '_statement', statement)
+        try:
+            return self._same(
+                self._driver.executemany(query, rows, *rest, **keywords)
+            )
+        except BaseException as error:
+            statement['error'] = type(error).__name__
+            raise
+
+    def stream(
+        self, query: Any, params: Any = None, *rest: Any, **keywords: Any
+    ) -> Any:
+        statement = self._statement_of('stream', query, params)
+        log = self._log
+
+        def rows() -> Iterator[Any]:
+            read: list[Any] = []
+            try:
+                for row in self._driver.stream(
+                    query, params, *rest, **keywords
+                ):
+                    read.append(row)
+                    yield row
+            except BaseException as error:
+                statement['error'] = type(error).__name__
+                raise
+            finally:
+                described = _description(self._driver)
+                names = described[0] if described else []
+                statement['results'].append(
+                    {
+                        'method': 'stream',
+                        'rows': len(read),
+                        'digest': _rows_digest(read),
+                        'values': result_values(
+                            names, None, read, duckdb_types=False
+                        ),
+                    }
+                )
+                _keep(log, statement, read, names)
+
+        return rows()
+
+    def copy(
+        self,
+        statement_text: Any,
+        params: Any = None,
+        *rest: Any,
+        **keywords: Any,
+    ) -> Any:
+        statement = self._statement_of('copy', statement_text, params)
+        manager = self._driver.copy(statement_text, params, *rest, **keywords)
+        return _CapturedCopy(manager, statement, self._log)
+
+
+class _CapturedCopy:
+    r"""A psycopg ``Copy`` as the capture hands it back: every block or row
+    read or written goes through unchanged and is recorded on the
+    statement."""
+
+    def __init__(
+        self, manager: Any, statement: dict[str, Any], log: DriverLog
+    ) -> None:
+        self._manager = manager
+        self._copy: Any = None
+        self._statement = statement
+        self._log = log
+        self._read: list[Any] = []
+
+    def __enter__(self) -> _CapturedCopy:
+        self._copy = self._manager.__enter__()
+        return self
+
+    def __exit__(self, *exc: Any) -> Any:
+        if exc[0] is not None:
+            self._statement['error'] = exc[0].__name__
+        blocks = [(item,) for item in self._read]
+        self._statement['results'].append(
+            {
+                'method': 'copy',
+                'rows': len(blocks),
+                'digest': _rows_digest(blocks),
+                'values': result_values(
+                    ['block'], None, blocks, duckdb_types=False
+                ),
+            }
+        )
+        _keep(self._log, self._statement, blocks, ['block'])
+        return self._manager.__exit__(*exc)
+
+    def _through(self, method: str, *arguments: Any) -> Any:
+        answer = getattr(self._copy, method)(*arguments)
+        if answer:
+            self._read.append(answer)
+        return answer
+
+    def read(self) -> Any:
+        return self._through('read')
+
+    def read_row(self) -> Any:
+        return self._through('read_row')
+
+    def rows(self) -> Iterator[Any]:
+        for row in self._copy.rows():
+            self._read.append(row)
+            yield row
+
+    def __iter__(self) -> Iterator[Any]:
+        for block in self._copy:
+            self._read.append(block)
+            yield block
+
+    def write(self, buffer: Any) -> Any:
+        self._read.append(buffer)
+        return self._copy.write(buffer)
+
+    def write_row(self, row: Any) -> Any:
+        self._read.append(row)
+        return self._copy.write_row(row)
+
+    def __getattr__(self, name: str) -> Any:
+        self._log.incomplete.append(f'copy.{name}')
+        return getattr(self._copy, name)
+
+
+class _CapturedFrame:
+    r"""A Spark DataFrame ``spark.sql`` gave, as the capture hands it back:
+    reading it (``toArrow``, ``collect``, ``first``, ``toPandas``) runs the
+    statement, and each read is recorded on it, the Arrow kept whole."""
+
+    __slots__ = ('_driver', '_log', '_statement')
+
+    def __init__(
+        self, driver: Any, log: DriverLog, statement: dict[str, Any]
+    ) -> None:
+        object.__setattr__(self, '_driver', driver)
+        object.__setattr__(self, '_log', log)
+        object.__setattr__(self, '_statement', statement)
+
+    @property  # type: ignore[misc]
+    def __class__(self) -> type:
+        return type(self._driver)
+
+    def _ran(
+        self,
+        method: str,
+        answer: Any,
+        table: Any = None,
+        rows: list[Any] | None = None,
+    ) -> Any:
+        statement = self._statement
+        if table is not None:
+            statement['results'].append(
+                {
+                    'method': method,
+                    'rows': table.num_rows,
+                    'schema': [
+                        {'name': field.name, 'type': str(field.type)}
+                        for field in table.schema
+                    ],
+                    'digest': _arrow_digest(table),
+                    'values': arrow_values(table),
+                }
+            )
+            _keep(self._log, statement, table)
+        else:
+            read = rows or []
+            names = list(getattr(self._driver, 'columns', []) or [])
+            statement['results'].append(
+                {
+                    'method': method,
+                    'rows': len(read),
+                    'digest': _rows_digest(read),
+                    'values': result_values(
+                        names, None, read, duckdb_types=False
+                    ),
+                }
+            )
+            _keep(self._log, statement, read, names)
+        return answer
+
+    def _run(self, method: str, *arguments: Any, **keywords: Any) -> Any:
+        try:
+            return getattr(self._driver, method)(*arguments, **keywords)
+        except BaseException as error:
+            self._statement['error'] = type(error).__name__
+            raise
+
+    def toArrow(self) -> Any:  # noqa: N802 - Spark's name
+        answer = self._run('toArrow')
+        return self._ran('toArrow', answer, table=answer)
+
+    def collect(self) -> Any:
+        answer = self._run('collect')
+        return self._ran('collect', answer, rows=[tuple(row) for row in answer])
+
+    def first(self) -> Any:
+        answer = self._run('first')
+        return self._ran(
+            'first', answer, rows=[] if answer is None else [tuple(answer)]
+        )
+
+    def toPandas(self) -> Any:  # noqa: N802 - Spark's name
+        import pyarrow as pa
+
+        answer = self._run('toPandas')
+        return self._ran(
+            'toPandas',
+            answer,
+            table=pa.Table.from_pandas(answer, preserve_index=False),
+        )
+
+    def __getattr__(self, name: str) -> Any:
+        # Any other method (a transformation, or a read the capture does
+        # not record) leaves the capture incomplete rather than unseen.
+        self._log.incomplete.append(f'frame.{name}')
+        return getattr(self._driver, name)
+
+    def __repr__(self) -> str:
+        return repr(self._driver)
+
+
+class _CapturedSpark:
+    r"""A Spark session as the capture hands it to a source (the reference's
+    ``SparkCursor`` runs SQL through ``spark.sql`` and reads
+    ``DataFrame.toArrow()``, CN/backends/spark.py:40,84-91): each ``sql``
+    call is a statement, its positional ``args`` its parameters, and the
+    frame it gives is captured. Named ``SparkSession`` under a ``pyspark``
+    package, which the reference's dispatch reads over the type's MRO."""
+
+    __slots__ = ('_driver', '_log', '_handle')
+
+    def __init__(self, driver: Any, log: DriverLog) -> None:
+        object.__setattr__(self, '_driver', driver)
+        object.__setattr__(self, '_log', log)
+        object.__setattr__(self, '_handle', log.handle())
+
+    def sql(self, query: Any, args: Any = None, **keywords: Any) -> Any:
+        statement: dict[str, Any] = {
+            'handle': self._handle,
+            'stage': self._log.stage,
+            'sql': query if isinstance(query, str) else None,
+            'parameters': _parameters(args),
+            'results': [],
+            'error': None,
+        }
+        if not isinstance(query, str):
+            self._log.incomplete.append('sql:not_text')
+        if self._log.purpose is not None:
+            statement['purpose'] = self._log.purpose
+        self._log.statements.append(statement)
+        try:
+            if args is None:
+                frame = self._driver.sql(query, **keywords)
+            else:
+                frame = self._driver.sql(query, args=args, **keywords)
+        except BaseException as error:
+            statement['error'] = type(error).__name__
+            raise
+        return _CapturedFrame(frame, self._log, statement)
+
+    def __getattr__(self, name: str) -> Any:
+        if name in ('table', 'read', 'createDataFrame', 'range'):
+            self._log.incomplete.append(f'spark.{name}')
+        else:
+            self._log.passed.append(f'spark.{name}')
+        return getattr(self._driver, name)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        setattr(self._driver, name, value)
+
+    def __repr__(self) -> str:
+        return repr(self._driver)
+
+
+_CapturedSpark.__name__ = 'SparkSession'
+_CapturedSpark.__qualname__ = 'SparkSession'
+_CapturedSpark.__module__ = 'pyspark.sql.sdm_capture'
+
+
+class _CapturedSnowpark:
+    r"""A Snowpark session as the capture hands it to a source: the reference
+    reaches it through its own connector connection
+    (``SnowflakeSource``), which the capture wraps. Named ``Session`` under
+    ``snowflake.snowpark``, which the reference's dispatch reads."""
+
+    __slots__ = ('_driver', '_log', '_connection')
+
+    def __init__(self, driver: Any, log: DriverLog) -> None:
+        object.__setattr__(self, '_driver', driver)
+        object.__setattr__(self, '_log', log)
+        object.__setattr__(self, '_connection', None)
+
+    @property
+    def connection(self) -> Any:
+        if self._connection is None:
+            object.__setattr__(
+                self,
+                '_connection',
+                _CapturedSnowflake(self._driver.connection, self._log),
+            )
+        return self._connection
+
+    def __getattr__(self, name: str) -> Any:
+        if name in ('sql', 'table', 'create_dataframe'):
+            self._log.incomplete.append(f'snowpark.{name}')
+        else:
+            self._log.passed.append(f'snowpark.{name}')
+        return getattr(self._driver, name)
+
+    def __repr__(self) -> str:
+        return repr(self._driver)
+
+
+_CapturedSnowpark.__name__ = 'Session'
+_CapturedSnowpark.__qualname__ = 'Session'
+_CapturedSnowpark.__module__ = 'snowflake.snowpark.sdm_capture'
+_CapturedDatabricks.__module__ = 'databricks.sql.sdm_capture'
+_CapturedSnowflake.__module__ = 'snowflake.connector.sdm_capture'
+_CapturedPsycopg.__module__ = 'psycopg.sdm_capture'
+#: The capture of each warehouse leg's connection, by leg; a connect case's
+#: session (Spark's, Snowpark's) by its path.
+_WAREHOUSE_CAPTURES: dict[str, Any] = {
+    'databricks-sql': _CapturedDatabricks,
+    'databricks-spark': _CapturedSpark,
+    'snowflake': _CapturedSnowflake,
+    'lakebase': _CapturedPsycopg,
+    'snowpark': _CapturedSnowpark,
+}
+
+
+class WarehouseTarget:
+    r"""What the contract loader (``databases.load(duck, leg, target)``,
+    T3.3's warehouse part) loads a case's tables into on a warehouse leg:
+    the leg's open connection (a Spark session on ``databricks-spark``),
+    the private names of the case's placeholders (``catalog`` and
+    ``schema``: the one dedicated test schema, KO3-51), and the case's
+    resolved ``input.view``, created from its YAML when it has one."""
+
+    def __init__(
+        self,
+        connection: Any,
+        names: Mapping[str, str],
+        view: Mapping[str, Any] | None,
+        setup: list[str] | None = None,
+    ) -> None:
+        self.connection = connection
+        self.names = dict(names)
+        self.view = dict(view) if view is not None else None
+        self.setup = list(setup or [])
+
+
+def _quoted(
+    leg: str, names: Mapping[str, str], table: str, fold: bool = False
+) -> str:
+    r"""``table`` in the test schema, qualified and quoted as ``leg``'s
+    engine reads it, its name exactly as the case's DuckDB data has it, or
+    with ``fold`` in upper case, as the loader stored it."""
+    if fold:
+        table = table.upper()
+    if leg in ('databricks-sql', 'databricks-spark'):
+        parts = [names.get('catalog', ''), names.get('schema', ''), table]
+        return '.'.join('`' + part.replace('`', '``') + '`' for part in parts)
+    if leg == 'snowflake':
+        parts = [names.get('catalog', ''), names.get('schema', ''), table]
+    else:
+        parts = [names.get('schema', ''), table]
+    return '.'.join('"' + part.replace('"', '""') + '"' for part in parts)
+
+
+def raw_arrow(leg: str, connection: Any, sql: str) -> Any:
+    r"""What ``sql`` answers on ``leg``, read through the leg's driver
+    outside the capture, as Arrow with the warehouse's own column types
+    (psycopg's rows as the Arrow :func:`rows_table` infers)."""
+    if leg == 'databricks-spark':
+        return connection.sql(sql).toArrow()
+    if leg == 'lakebase':
+        with connection.cursor() as cursor:
+            cursor.execute(sql)
+            rows = [tuple(row) for row in cursor.fetchall()]
+            names = [column[0] for column in cursor.description or ()]
+        return rows_table(names, rows)
+    cursor = connection.cursor()
+    try:
+        cursor.execute(sql)
+        if leg == 'snowflake':
+            return cursor.fetch_arrow_all(force_return_table=True)
+        return cursor.fetchall_arrow()
+    finally:
+        cursor.close()
+
+
+#: The statement each leg's session time zone is read with, outside the
+#: capture, kept with the recording.
+_ZONE = {
+    'databricks-sql': 'SELECT current_timezone() AS zone',
+    'databricks-spark': 'SELECT current_timezone() AS zone',
+    # Snowflake's session parameter is read with SHOW PARAMETERS, whose
+    # answer is a row of (key, value, default, level, description, type);
+    # it has no CURRENT_SETTING (Codex r1, T3.2 fix 5).
+    'snowflake': "SHOW PARAMETERS LIKE 'TIMEZONE' IN SESSION",
+    'lakebase': "SELECT current_setting('TimeZone') AS zone",
+}
+
+
+def session_zone(leg: str, connection: Any) -> str | None:
+    r"""The session time zone of ``leg``'s ``connection``, read outside
+    the capture: the one column of :data:`_ZONE`'s answer, or on Snowflake
+    the ``value`` column of ``SHOW PARAMETERS``, read through the cursor's
+    rows and description (a SHOW answer is no Arrow result)."""
+    if leg != 'snowflake':
+        zone = raw_arrow(leg, connection, _ZONE[leg]).to_pylist()
+        return str(next(iter(zone[0].values()))) if zone else None
+    cursor = connection.cursor()
+    try:
+        cursor.execute(_ZONE[leg])
+        rows = cursor.fetchall()
+        names = [str(column[0]).lower() for column in cursor.description or ()]
+    finally:
+        cursor.close()
+    if not rows or 'value' not in names:
+        return None
+    return str(rows[0][names.index('value')])
+
+
+#: Each leg's driver distributions, whose versions a capture records.
+_DRIVERS = {
+    'databricks-sql': ('databricks-sql-connector', 'databricks-sdk'),
+    'databricks-spark': ('pyspark', 'databricks-connect'),
+    'snowflake': ('snowflake-connector-python', 'snowflake-snowpark-python'),
+    'lakebase': ('psycopg', 'databricks-sdk'),
+}
+
+
+def _driver_version(live: Live, name: str) -> str | None:
+    r"""A driver's distribution version, or its consumed managed module.
+
+    Managed Spark can supply PySpark without distribution metadata. Read
+    only that already loaded client's declared version, never the server's
+    version or the notebook runtime release, and leave other legs alone.
+    """
+    found = _version(name)
+    if found is not None or name != 'pyspark' or live.leg != 'databricks-spark':
+        return found
+    connection = getattr(live, 'connection', None)
+    if not any(
+        cls.__name__ == 'SparkSession' and cls.__module__.startswith('pyspark.')
+        for cls in type(connection).__mro__
+    ):
+        return None
+    module = sys.modules.get('pyspark')
+    if not isinstance(module, ModuleType):
+        return None
+    version = vars(module).get('__version__')
+    return version if isinstance(version, str) and version.strip() else None
+
+
+def _workspace(options: dict[str, Any]) -> Any:
+    r"""The workspace client a connect function is given: the profile the
+    configuration names, else the ambient one."""
+    from databricks.sdk import WorkspaceClient
+
+    profile = options.pop('profile', None)
+    return WorkspaceClient(profile=profile) if profile else WorkspaceClient()
+
+
+def connect_leg(
+    leg: str,
+    spec: Mapping[str, Any],
+    names: Mapping[str, str],
+    path: str | None,
+    in_schema: bool = False,
+) -> tuple[Any, Any]:
+    r"""The leg's connection, opened as the live configuration says
+    (:func:`live_configuration`), and what closes it: through the case's
+    connect ``path`` when it has one, its namespace the test schema so a
+    connection handed over as it is resolves the case's tables there, as
+    with ``in_schema`` (a source naming one part reads the other from the
+    session)."""
+    catalog, schema = names.get('catalog'), names.get('schema')
+    if leg == 'databricks-sql':
+        if path == 'warehouse' or 'driver' not in spec:
+            from sdm_connectors.databricks import warehouse
+
+            options = dict(spec.get('warehouse') or {})
+            warehouse_id = options.pop('warehouse_id', None)
+            if not warehouse_id:
+                raise RunnerFailure('the live configuration names no warehouse')
+            workspace = _workspace(options)
+            driver = dict(options.pop('driver', {}) or {})
+            if path == 'warehouse' or in_schema:
+                driver.update(catalog=catalog, schema=schema)
+            connection = warehouse(warehouse_id, workspace=workspace, **driver)
+        else:
+            import databricks.sql
+
+            connection = databricks.sql.connect(**spec['driver'])
+        return connection, connection.close
+    if leg == 'databricks-spark':
+        from pyspark.sql import SparkSession
+
+        session = (
+            SparkSession.getActiveSession()
+            or SparkSession.builder.getOrCreate()
+        )
+        if path == 'spark' or in_schema:
+            session.sql(f'USE CATALOG `{catalog}`')
+            session.sql(f'USE SCHEMA `{schema}`')
+        # The notebook owns its session: closing the case's stops nothing.
+        return session, lambda: None
+    if leg == 'snowflake':
+        if path == 'snowpark':
+            from snowflake.snowpark import Session
+
+            session = Session.builder.configs(
+                {**spec['driver'], 'database': catalog, 'schema': schema}
+            ).create()
+            return session, session.close
+        import snowflake.connector
+
+        driver = dict(spec['driver'])
+        if in_schema:
+            driver.update(database=catalog, schema=schema)
+        connection = snowflake.connector.connect(**driver)
+        return connection, connection.close
+    if leg == 'lakebase':
+        from sdm_connectors.databricks import lakebase
+
+        options = dict(spec.get('lakebase') or {})
+        endpoint = options.pop('endpoint', None)
+        database = options.pop('database', None)
+        if not endpoint or not database:
+            raise RunnerFailure(
+                'the live configuration names no Lakebase endpoint'
+            )
+        workspace = _workspace(options)
+        driver = dict(options.pop('driver', {}) or {})
+        if path == 'lakebase':
+            driver['options'] = f'-c search_path={schema}'
+        connection = lakebase(
+            endpoint, database=database, workspace=workspace, **driver
+        )
+        return connection, connection.close
+    raise RunnerFailure(f'{leg} is not a warehouse leg')
+
+
+def warehouse_namespace(
+    leg: str, names: Mapping[str, str], given: Mapping[str, Any]
+) -> list[str | None]:
+    """The source's explicit ordered namespace, before private-name binding.
+
+    Connect cases use their session's current namespace instead.
+    The comparator uses the same source arguments with symbolic names.
+    """
+    if 'connect' in given:
+        return []
+    if leg == 'lakebase':
+        return [names.get('schema')]
+    named = given.get('named_part')
+    return [
+        names.get('catalog') if named in (None, 'catalog') else None,
+        names.get('schema') if named in (None, 'schema') else None,
+    ]
+
+
+def warehouse_source(
+    leg: str, captured: Any, names: Mapping[str, str], given: Mapping[str, Any]
+) -> Any:
+    r"""The public source a user builds on ``leg`` over the captured
+    connection: for a connect case, ``Source(connection)``, which finds the
+    leg's source class by the connection's type (CN/source.py:97-107), as
+    the case's ``Source(session)`` does; the leg's source class in the test
+    schema otherwise, naming only the case's ``named_part`` when it has
+    one, and a view case's semantic model of it."""
+    import sdm_connectors
+
+    if 'connect' in given:
+        return sdm_connectors.Source(captured)
+    parts = warehouse_namespace(leg, names, given)
+    if leg in ('databricks-sql', 'databricks-spark'):
+        source = sdm_connectors.DatabricksSource(
+            captured,
+            **{
+                key: value
+                for key, value in zip(('catalog', 'schema'), parts, strict=True)
+                if value
+            },
+        )
+    elif leg == 'snowflake':
+        source = sdm_connectors.SnowflakeSource(
+            captured,
+            **{
+                key: value
+                for key, value in zip(
+                    ('database', 'schema'), parts, strict=True
+                )
+                if value
+            },
+        )
+    else:
+        return sdm_connectors.PostgresSource(captured, schema=parts[0])
+    view = given.get('view')
+    if view is None:
+        return source
+    return source.semantic_model(
+        view['name'], trust_expressions=view.get('trust_expressions', False)
+    )
+
+
+def _duck_tables(duck: Any) -> list[str]:
+    r"""The tables of the case's DuckDB data, in name order: what the loader
+    loads, and the capture reads back through the leg's driver."""
+    return [
+        str(row[0])
+        for row in duck.execute(
+            'SELECT table_name FROM information_schema.tables '
+            "WHERE table_schema = 'main' ORDER BY table_name"
+        ).fetchall()
+    ]
+
+
+class Live:
+    r"""One case's open warehouse leg: the connection, the private names,
+    the case resolved, the tables as the warehouse holds them, and what
+    closes it all."""
+
+    def __init__(
+        self, case: dict[str, Any], bases: dict[str, list[str]], leg: str
+    ) -> None:
+        self.leg = leg
+        self.type_names: dict[int, str] = {}
+        spec, self.names, self.private = live_configuration(leg)
+        self.case = resolve_placeholders(case)
+        given = self.case['input']
+        duck = _connection(case, bases)
+        self._undo: list[Any] = []
+        try:
+            self.connection, close = connect_leg(
+                leg,
+                spec,
+                self.names,
+                given.get('connect'),
+                in_schema='named_part' in given,
+            )
+            self._undo.append(close)
+            # The connect path's session is not the driver connection the
+            # loader writes through: Snowpark's is.
+            writer = (
+                self.connection.connection
+                if given.get('connect') == 'snowpark'
+                else self.connection
+            )
+            self.raw = writer
+            loader = _sibling('databases')
+            self.table_names = _duck_tables(duck)
+            loader.load(
+                duck,
+                leg,
+                WarehouseTarget(
+                    writer,
+                    self.names,
+                    given.get('view'),
+                    given.get('warehouse_setup'),
+                ),
+            )
+            if leg == 'lakebase':
+                self.type_names = _postgres_type_names(
+                    writer, self.names['schema']
+                )
+            self.tables = [
+                (
+                    name,
+                    raw_arrow(
+                        leg,
+                        writer,
+                        'SELECT * FROM '
+                        + _quoted(
+                            leg,
+                            self.names,
+                            name,
+                            loader.folds(leg, given.get('view')),
+                        ),
+                    ),
+                )
+                for name in self.table_names
+            ]
+            self.zone = session_zone(leg, writer)
+        except RunnerFailure:
+            self.close()
+            raise
+        except Exception as error:  # noqa: BLE001 - opening is not the call
+            self.close()
+            raise RunnerFailure(
+                f'{case["id"]}: {leg} could not be opened or loaded '
+                f'({type(error).__name__})'
+            ) from None
+        finally:
+            duck.close()
+
+    def captured(self, log: DriverLog) -> Any:
+        log.type_names = self.type_names
+        path = self.case['input'].get('connect')
+        kind = 'snowpark' if path == 'snowpark' else self.leg
+        return _WAREHOUSE_CAPTURES[kind](self.connection, log)
+
+    def relations(self, log: DriverLog) -> list[dict[str, Any]]:
+        r"""Each relation derived from a view that a statement read, as the
+        warehouse evaluates it: the statement's text without its sample's
+        ``LIMIT``, run outside the capture (a statement the warehouse
+        refused gives none; its column is served by exact replay alone,
+        B2)."""
+        found = []
+        seen: set[str] = set()
+        for position, statement in enumerate(log.statements):
+            sql = statement['sql']
+            if (
+                not sql
+                or statement['error'] is not None
+                or statement['parameters']
+                or not _DERIVED.search(sql)
+                or not _LIMIT.search(sql)
+            ):
+                continue
+            whole = _LIMIT.sub('', sql)
+            if whole in seen:
+                continue
+            seen.add(whole)
+            try:
+                table = raw_arrow(self.leg, self.raw, whole)
+            except Exception as error:  # noqa: BLE001 - recorded, B2
+                found.append(
+                    {
+                        'statement': position,
+                        'sql': whole,
+                        'error': type(error).__name__,
+                    }
+                )
+                continue
+            found.append({'statement': position, 'sql': whole, 'table': table})
+        return found
+
+    def close(self) -> None:
+        while self._undo:
+            try:
+                self._undo.pop()()
+            except Exception:  # noqa: BLE001, S110 - closing after the case
+                pass
+
+
+def capture_line(
+    live: Live,
+    case: dict[str, Any],
+    bases: dict[str, list[str]],
+    log: DriverLog,
+    observation: dict[str, Any],
+    relations: list[dict[str, Any]],
+) -> dict[str, Any]:
+    r"""One case's capture on its leg (design choice 2), before placeholders:
+    the reference line, every statement with its parameters and each
+    result whole, every table of the case as the warehouse returns it, each
+    view-derived relation as the warehouse evaluates it, every random draw
+    with the rows it picked, the session zone, the versions, and the
+    case's input hash."""
+    recorder = log.recorder
+    statements = []
+    draws = []
+    for position, statement in enumerate(log.statements):
+        results = []
+        for read, result in enumerate(statement['results']):
+            kept = recorder.kept.get((position, read)) if recorder else None
+            if kept is None:
+                table = None
+            elif isinstance(kept, tuple):
+                table = rows_table(*kept)
+                if not same_rows(table, kept[1]):
+                    raise RunnerFailure(
+                        f'{observation["case"]}: statement {position} read '
+                        f'{read} kept a table that is not the rows read; '
+                        'nothing is written'
+                    )
+            else:
+                table = kept
+            results.append({**result, 'arrow': table})
+        statements.append({**statement, 'results': results})
+        for draw in draws_of(statement['sql']):
+            draws.append({'statement': position, **draw})
+    versions = dict(observation['identity']['versions'])
+    for name in _DRIVERS[live.leg]:
+        found = _driver_version(live, name)
+        if found is not None:
+            versions[name] = found
+    runtime = os.environ.get('DATABRICKS_RUNTIME_VERSION')
+    if runtime:
+        versions['runtime'] = runtime
+    reference = observation['identity'].get('reference') or {}
+    return {
+        'format': RECORD_FORMAT,
+        'case': observation['case'],
+        'leg': live.leg,
+        'input': input_hash(case, bases),
+        'recording': {
+            'commit': observation['identity']['commit']['sha'],
+            'reference': (reference.get('commit') or {}).get('sha'),
+            # Why a tree that was not clean may stand (capture_check.py's
+            # dirty-tree rule), as the recording run is given it.
+            **(
+                {'excuse': os.environ['SDM_RECORD_EXCUSE']}
+                if os.environ.get('SDM_RECORD_EXCUSE')
+                else {}
+            ),
+        },
+        'versions': versions,
+        'zone': live.zone,
+        'observation': observation,
+        'statements': statements,
+        'tables': [
+            {'name': name, 'arrow': table} for name, table in live.tables
+        ],
+        'relations': relations,
+        'draws': draws,
+        'incomplete': sorted(set(log.incomplete)),
+    }
+
+
+def saved_digest(result: dict[str, Any], table: Any) -> str:
+    r"""The digest, in order, of a kept result's rows in the canonical form
+    its read recorded: an Arrow read's (it has a ``schema``) through
+    :func:`arrow_values`, a row read's through :func:`result_values` over
+    the table's rows, so a saved table is held to the read it stands for
+    (Codex r2 P1-1)."""
+    if 'schema' in result:
+        return arrow_values(table)['ordered']
+    names = list(table.schema.names)
+    columns = [column.to_pylist() for column in table.columns]
+    rows = list(zip(*columns, strict=True)) if columns else []
+    return result_values(names, None, rows, duckdb_types=False)['ordered']
+
+
+def same_rows(table: Any, rows: list[tuple[Any, ...]]) -> bool:
+    r"""Whether ``table`` holds ``rows``, value for value: a row read's
+    table types its columns as Arrow infers them, so a decimal's scale may
+    change (``Decimal('1.0')`` kept as ``1.00``) while its value does not
+    (Codex r3 P1-1); NaN equals NaN."""
+    columns = [column.to_pylist() for column in table.columns]
+    kept = list(zip(*columns, strict=True)) if columns else []
+    if len(kept) != len(rows):
+        return False
+
+    def same(a: Any, b: Any) -> bool:
+        if isinstance(a, float) and isinstance(b, float) and a != a and b != b:
+            return True
+        return bool(a == b) and (a is None) == (b is None)
+
+    return all(
+        len(mine) == len(theirs)
+        and all(same(a, b) for a, b in zip(mine, theirs, strict=True))
+        for mine, theirs in zip(kept, rows, strict=True)
+    )
+
+
+def _hold_reads(line: dict[str, Any], held: Placeheld) -> None:
+    r"""Each kept result checked against its read before it is written
+    (a kept Arrow table that is not the rows read is refused, naming the
+    case; a row read's table was held to its rows, value for value, when
+    it was made), and given ``held``, the digest of its placeheld table,
+    where that is not the read's digest: placeholders change its rows, and
+    a row read's inferred types may change their text, not their values."""
+    for position, statement in enumerate(line.get('statements') or []):
+        for read, result in enumerate(statement.get('results') or []):
+            table = result.get('arrow')
+            if not (hasattr(table, 'schema') and hasattr(table, 'num_rows')):
+                continue
+            recorded = (result.get('values') or {}).get('ordered')
+            if 'schema' in result and saved_digest(result, table) != recorded:
+                raise RunnerFailure(
+                    f'{line["case"]}: statement {position} read {read} kept '
+                    'a table that is not the rows read; nothing is written'
+                )
+            placeheld = saved_digest(result, held.table(table))
+            if placeheld != recorded:
+                result['held'] = placeheld
+
+
+def written(line: dict[str, Any], held: Placeheld) -> str:
+    r"""A capture line as the text the recording mode writes: every private
+    name placeheld, every Arrow table as IPC text, and the write refused
+    (:class:`RunnerFailure`, naming the case, never the value) when any
+    private value is left anywhere in it, a table's values and names
+    included (each checked before it is encoded, so an encoding's bytes
+    never pass for a name)."""
+    tables: list[Any] = []
+    _hold_reads(line, held)
+
+    def hold(value: Any) -> Any:
+        if hasattr(value, 'schema') and hasattr(value, 'num_rows'):
+            try:
+                table = held.table(value)
+            except Exception as error:  # noqa: BLE001 - named, never written
+                raise RunnerFailure(
+                    f'{line["case"]}: a table of its capture cannot be '
+                    f'placeheld ({type(error).__name__}); nothing is written'
+                ) from None
+            if held.leaked(
+                json.dumps(
+                    [table.schema.names, table.to_pylist()],
+                    default=str,
+                    ensure_ascii=False,
+                )
+            ):
+                raise RunnerFailure(
+                    f'{line["case"]}: a table of its capture holds a private '
+                    'name; nothing is written'
+                )
+            tables.append(table)
+            return {'\0arrow': len(tables) - 1}
+        if isinstance(value, dict):
+            return {
+                held.text(str(key)): hold(item) for key, item in value.items()
+            }
+        if isinstance(value, list | tuple):
+            return [hold(item) for item in value]
+        if isinstance(value, str):
+            return held.text(value)
+        return value
+
+    held_line = hold(line)
+    if held.leaked(json.dumps(held_line, sort_keys=True, ensure_ascii=False)):
+        raise RunnerFailure(
+            f'{line["case"]}: its capture holds a private name; nothing is '
+            'written'
+        )
+
+    def encode(value: Any) -> Any:
+        if isinstance(value, dict):
+            if set(value) == {'\0arrow'}:
+                return arrow_ipc(tables[value['\0arrow']])
+            return {key: encode(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [encode(item) for item in value]
+        return value
+
+    return json.dumps(encode(held_line), sort_keys=True, ensure_ascii=False)
+
+
+# The Postgres leg's capture is psycopg's whole: copy, stream and
+# executemany recorded, never passed through unseen (P2-T2.1a-2).
+_CAPTURES['postgres'] = _CapturedPsycopg
+# Each warehouse leg's capture (Phase 3, choice 2), as capture() hands it.
+_CAPTURES.update(
+    {
+        'databricks-sql': _CapturedDatabricks,
+        'databricks-spark': _CapturedSpark,
+        'snowflake': _CapturedSnowflake,
+        'lakebase': _CapturedPsycopg,
+    }
+)
 
 
 # --- one case --------------------------------------------------------------------
@@ -2570,14 +4549,7 @@ def _open(
             scoped = make_conninfo(dsn, dbname=name)
             loader.load(duck, 'postgres', scoped)
             with psycopg.connect(scoped) as side:
-                types = {
-                    int(oid): str(typname)
-                    for oid, typname in side.execute(
-                        'SELECT t.oid, t.typname FROM pg_type t '
-                        'JOIN pg_namespace n ON n.oid = t.typnamespace '
-                        "WHERE n.nspname = 'public'"
-                    ).fetchall()
-                }
+                types = _postgres_type_names(side, 'public')
             connection = psycopg.connect(scoped)
         undo.append(connection.close)
     except RunnerFailure:
@@ -2629,7 +4601,13 @@ def _materialize_arguments(spec: dict[str, Any]) -> dict[str, Any]:
         arguments['candidates'] = list(spec['candidates'])
     if 'top_k' in spec:
         arguments['top_k'] = spec['top_k']
-    for key in ('rows_per_call', 'lag_timesteps', *SAMPLING_OPTIONS):
+    for key in (
+        'rows_per_call',
+        'lag_timesteps',
+        # The quickstart's context size (Phase 3's S2 cases).
+        'num_context_samples',
+        *SAMPLING_OPTIONS,
+    ):
         if key in spec:
             # As written (T2.8c's, T2.9's and T2.11's cases): a value the
             # reference refuses is the case's input, and a null is None
@@ -2687,14 +4665,17 @@ def _edit(schema: Any, edits: list[dict[str, Any]]) -> None:
             ]
 
 
-def presented(schema: Any) -> list[str]:
+def presented(schema: Any, described: Any = None) -> list[str]:
     r"""Each way a schema the core described departs from the description
-    it was built from (T1.21d): a table's key or time column, a column's
-    meaning or what it meant before the schema joined on it, or the links,
-    as the Python object holds them once built. Building it re-runs the
-    object's own key marking and link checks, which must change nothing of
-    the core's answer; empty for a schema not described on the core."""
-    described = getattr(schema, '_core_description', None)
+    it was built from (T1.21d), ``described``, the description the run's
+    ``describe_source`` answered (from T3.16 the schema keeps none; before,
+    the one it kept): a table's key or time column, a column's meaning or
+    what it meant before the schema joined on it, or the links, as the
+    Python object holds them once built. Building it re-runs the object's
+    own key marking and link checks, which must change nothing of the
+    core's answer; empty for a schema not described on the core."""
+    if described is None:
+        described = getattr(schema, '_core_description', None)
     if described is None:
         return []
     found = []
@@ -2732,8 +4713,8 @@ def presented(schema: Any) -> list[str]:
     return found
 
 
-def _require_presented(schema: Any) -> None:
-    found = presented(schema)
+def _require_presented(schema: Any, capture: Any = None) -> None:
+    found = presented(schema, None if capture is None else capture.described)
     if found:
         raise RunnerFailure(
             "the Schema built from the core's description departs from it: "
@@ -2824,48 +4805,161 @@ def _result_projection(result: Any) -> dict[str, Any]:
     }
 
 
+def _result_text(result: Any) -> str:
+    r"""The SHA-256 of the public result's rows with each value as its text
+    (P2-T2.21-1): a result whose digest an entry excuses for a value's
+    type is still held to its values. Beside the result, never in it, so
+    every projection of ``public.result`` is the one recorded before."""
+    frame = result.to_pandas()
+    rows = [
+        [str(value) for value in row]
+        for row in frame.itertuples(index=False, name=None)
+    ]
+    return digest(json.dumps(rows).encode())
+
+
 def _call(
     case: dict[str, Any],
     bases: dict[str, list[str]],
     driver_capture: bool = True,
     database: str = 'duckdb',
+    keep: dict[str, Any] | None = None,
+    core_runs: Any = None,
 ) -> tuple[dict[str, Any], list[str], dict[str, Any], dict[str, Any]]:
-    r"""Makes the case's public calls on ``database``, with the driver
-    capture on or off: its outcome, warning classes, driver record and
-    public projection."""
-    from sdm_client import KumoRelational, PredictiveQuery, Schema, SDMClient
-
-    serve = _sibling('scripted_endpoint').serve
-
-    given = case['input']
+    r"""Makes the case's public calls on ``database`` (a database or a
+    warehouse leg), with the driver capture on or off: its outcome, warning
+    classes, driver record and public projection. On a warehouse leg the
+    case's placeholders are resolved from the live configuration
+    (:class:`Live`); with ``keep``, the recording mode's, every result is
+    kept whole and ``keep`` gets the leg, the capture's log and the
+    view-derived relations, read before the leg closes."""
+    live: Live | None = None
+    if database in WAREHOUSES:
+        live = Live(case, bases, database)
+    given = (live.case if live is not None else case)['input']
     # The call's arguments are the harness's to build: an input it cannot
     # build is a runner failure, never the case's outcome.
     try:
         arguments = _materialize_arguments(given['materialize'])
         from_source = _from_source_arguments(given.get('from_source', {}))
     except Exception:  # noqa: BLE001 - building the input is not the call
+        if live is not None:
+            live.close()
         raise RunnerFailure(
             f'{case["id"]}: its materialize arguments could not be built'
         ) from None
-    connection, cleanup, types = _open(case, bases, database)
-    # Setup is everything run before the connection reaches the source; the
-    # query log (DuckDB's own, or the driver's statement log off DuckDB)
-    # and the capture start after it.
-    statements = None
-    if database == 'duckdb':
-        enable_query_log(connection)
+    if live is not None:
+        connection, cleanup, types = live.connection, live.close, {}
     else:
-        statements = StatementLog(database).__enter__()
-    log = DriverLog() if driver_capture else None
-    if log is not None:
-        log.type_names = types
-    given_to_source = (
-        capture(connection, log, database) if log is not None else connection
-    )
+        connection, cleanup, types = _open(case, bases, database)
+    # Setup is everything run before the connection reaches the source; the
+    # query log (DuckDB's own, or off DuckDB the driver's statement log,
+    # entered only in a with, so it is always left, P2-T2.1a-2) and the
+    # capture start after it.
+    logs = database != 'duckdb'
+    try:
+        if database == 'duckdb':
+            enable_query_log(connection)
+        log = DriverLog() if driver_capture else None
+        if log is not None and core_runs is not None:
+            # The core's capture marks each statement of a fetch the core
+            # asked for plan B's read of a table as it stands (T3.4).
+            core_runs.driver_log = log
+        if log is not None:
+            log.type_names = types
+            if keep is not None:
+                log.recorder = Recorder()
+        if live is not None:
+            given_to_source = (
+                live.captured(log) if log is not None else connection
+            )
+        else:
+            given_to_source = (
+                capture(connection, log, database)
+                if log is not None
+                else connection
+            )
+    except BaseException:
+        cleanup()
+        raise
     public: dict[str, Any] = {'schema': None, 'payloads': [], 'result': None}
-    stage = 'from_source'
     if log is not None:
-        log.stage = stage
+        log.stage = 'from_source'
+
+    def calls(statements: StatementLog | None) -> tuple[Any, ...]:
+        return _calls(
+            case,
+            database,
+            given,
+            arguments,
+            from_source,
+            given_to_source,
+            live,
+            log,
+            keep,
+            connection,
+            cleanup,
+            public,
+            statements,
+            core_runs,
+        )
+
+    if logs:
+        with StatementLog(database) as statements:
+            outcome, logged, shown = calls(statements)
+    else:
+        outcome, logged, shown = calls(None)
+    compared, differing = _logged_texts(log, logged)
+    driver = {
+        'capture': log.record() if log is not None else None,
+        # DuckDB's own query log, or off DuckDB the driver's statement log.
+        'query_log': {
+            'statements': sum(1 for text in logged if text),
+            'bindings': sum(1 for text in logged if not text),
+            'compared': compared,
+            'differing': differing,
+        },
+    }
+    return (
+        outcome,
+        [type(warning.message).__name__ for warning in shown],
+        driver,
+        public,
+        [
+            {
+                'class': type(warning.message).__name__,
+                'module': _origin(warning.filename),
+            }
+            for warning in shown
+        ],
+    )
+
+
+def _calls(
+    case: dict[str, Any],
+    database: str,
+    given: dict[str, Any],
+    arguments: dict[str, Any],
+    from_source: dict[str, Any],
+    given_to_source: Any,
+    live: Any,
+    log: DriverLog | None,
+    keep: dict[str, Any] | None,
+    connection: Any,
+    cleanup: Any,
+    public: dict[str, Any],
+    statements: StatementLog | None,
+    core_runs: Any = None,
+) -> tuple[Any, ...]:
+    r"""The case's public calls (:func:`_call`'s), under the statement log
+    when there is one: the outcome, the statements logged and the
+    warnings shown; ``core_runs``, the record of the case's core runs
+    (``_Capture``), holds the description the schema is held to
+    (:func:`presented`)."""
+    from sdm_client import KumoRelational, PredictiveQuery, Schema, SDMClient
+
+    serve = _sibling('scripted_endpoint').serve
+    stage = 'from_source'
     with (
         # The scripted endpoint, failing the case's chosen call and
         # answering a classification with its probabilities (T2.8's ranking
@@ -2885,10 +4979,13 @@ def _call(
     ):
         warnings.simplefilter('always')
         try:
-            schema = Schema.from_source(
-                _source(database, given_to_source), **from_source
+            source = (
+                warehouse_source(database, given_to_source, live.names, given)
+                if live is not None
+                else _source(database, given_to_source)
             )
-            _require_presented(schema)
+            schema = Schema.from_source(source, **from_source)
+            _require_presented(schema, core_runs)
             public['schema'] = _schema_projection(schema)
             # The user's edits finish describing the schema, so a refusal
             # of one is the from_source stage's.
@@ -2916,53 +5013,38 @@ def _call(
                         request, model=KumoRelational(), **outputs
                     )
                 public['result'] = _result_projection(result)
+                public['result_text'] = _result_text(result)
             outcome = _outcome('success', stage)
         except RunnerFailure:
             raise
         except Exception as error:  # noqa: BLE001 - the call's outcome
             if _route_error(error):
+                # Its text names routes, the client's own words, never an
+                # input: which route was refused, and why (T3.2).
                 raise RunnerFailure(
                     f'{case["id"]}: the route was refused '
-                    f'({type(error).__name__})'
+                    f'({type(error).__name__}: {error})'
                 ) from None
             outcome = _outcome('refusal', stage, error)
         finally:
             try:
                 if statements is not None:
-                    statements.__exit__(None, None, None)
-                    logged = statements.texts
+                    logged = list(statements.texts)
+                elif live is not None:
+                    logged = []
                 else:
                     logged = query_log(connection)
+                if keep is not None and live is not None and log is not None:
+                    keep.update(
+                        live=live, log=log, relations=live.relations(log)
+                    )
             finally:
                 cleanup()
         public['payloads'] = [
             {'method': method, 'path': path, **_payload(body)}
             for method, path, body in received.requests
         ]
-    compared, differing = _logged_texts(log, logged)
-    driver = {
-        'capture': log.record() if log is not None else None,
-        # DuckDB's own query log, or off DuckDB the driver's statement log.
-        'query_log': {
-            'statements': sum(1 for text in logged if text),
-            'bindings': sum(1 for text in logged if not text),
-            'compared': compared,
-            'differing': differing,
-        },
-    }
-    return (
-        outcome,
-        [type(warning.message).__name__ for warning in shown],
-        driver,
-        public,
-        [
-            {
-                'class': type(warning.message).__name__,
-                'module': _origin(warning.filename),
-            }
-            for warning in shown
-        ],
-    )
+    return outcome, logged, shown
 
 
 def _origin(filename: str) -> str | None:
@@ -2998,6 +5080,42 @@ def _origin(filename: str) -> str | None:
 # --- the run ---------------------------------------------------------------------
 
 
+#: Where the checkout declares its contract version.
+CONTRACT_SOURCE = REPO / 'rust/crates/sdm-contract/src/lib.rs'
+
+
+def contract_refusal(installed: Any, root: Path = REPO) -> str | None:
+    r"""Why the installed client may not run the cases of the checkout at
+    ``root`` (P2-MID2-7): its contract version is not the one
+    ``rust/crates/sdm-contract`` declares there, naming both; or None."""
+    return stale_client(installed, root / 'rust/crates/sdm-contract/src/lib.rs')
+
+
+def stale_client(installed: Any, source: Path = CONTRACT_SOURCE) -> str | None:
+    r"""Why the installed client may not run this checkout's cases
+    (P2-MID2-7): its core's contract version is not the one the checkout
+    declares, so it is a wheel built from another tree; or None. A
+    checkout that declares none (a tree without the core) is not held."""
+    try:
+        text = source.read_text(encoding='utf-8')
+    except OSError:
+        return None
+    declared = re.findall(
+        r'^pub const CONTRACT_VERSION: u32 = (\d+);$', text, re.M
+    )
+    if len(declared) != 1:
+        return (
+            f'{source.name} declares {len(declared)} contract versions, not one'
+        )
+    if installed != int(declared[0]):
+        return (
+            f"the installed client's contract version {installed} is not the "
+            f"checkout's {declared[0]}: a stale wheel; rebuild the lane's "
+            'environment (scripts/rust_core/cells.sh)'
+        )
+    return None
+
+
 def _native_sha256() -> str | None:
     module = sys.modules.get('sdm_client._native')
     location = getattr(module, '__file__', None)
@@ -3022,13 +5140,34 @@ def run(
     driver_capture: bool = True,
     database: str = 'duckdb',
     record_fetches: Path | None = None,
+    record: Path | None = None,
 ) -> list[dict[str, Any]]:
     r"""Every case's observation on ``database``, keyed by :func:`case_key`,
     or :class:`RunnerFailure`. A case that does not run on ``database``
-    (its ``databases``) is left out; python-core runs on SQLite or
+    (its legs, :func:`case_legs`) is left out; python-core runs on SQLite or
     Postgres only when the core reports a provider for it
     (``sdm_client._native.PROVIDERS``), as it does for DuckDB from the
-    start."""
+    start.
+
+    On a warehouse leg (Phase 3, choice 2) python-ref runs the old client
+    live, on the leg the live configuration opens, and every observation
+    is written with each private name as its placeholder, the run failing
+    on any private value left (:class:`Placeheld`). ``record``, the
+    recording mode, writes each case's capture there as well, one
+    ``sdm-capture/1`` line per case (:func:`capture_line`), all or
+    nothing."""
+    if record is not None and (
+        mode != 'python-ref' or database not in WAREHOUSES or not driver_capture
+    ):
+        raise RunnerFailure(
+            'the recording mode runs python-ref on a warehouse leg, with the '
+            'driver capture'
+        )
+    if database in WAREHOUSES and mode == 'python-old':
+        raise RunnerFailure(
+            f'python-old runs on DuckDB only; the {database} reference side '
+            "is the capture's reference line"
+        )
     if mode == 'python-old' and database != 'duckdb':
         # The orchestrator's decision (T2.1a fix 4): off DuckDB the
         # reference side is python-ref's committed lines until the core's
@@ -3038,10 +5177,12 @@ def run(
             f'python-old runs on DuckDB only; the {database} reference side '
             'is python-ref, its lines committed'
         )
-    cases = [pair for pair in cases if database in case_databases(pair[0])]
+    cases = [pair for pair in cases if database in case_legs(pair[0])]
     if not cases:
         raise RunnerFailure(f'no case runs on {database}')
-    os.environ.pop('SDM_CORE_ROUTES', None)
+    # The candidate defaults to the core from T3.10. An old/reference run
+    # selects the legacy code explicitly, including between its cases.
+    os.environ['SDM_CORE_ROUTES'] = ''
     guard = _Guard(reference) if reference is not None else None
     if guard is not None:
         guard.check('before the first case')
@@ -3053,27 +5194,39 @@ def run(
     versions = _versions()
     if 'duckdb' not in versions:
         raise RunnerFailure('duckdb is not installed')
+    if mode == 'python-core':
+        from sdm_client import _native
+
+        refused = stale_client(getattr(_native, 'CONTRACT_VERSION', None))
+        if refused is not None:
+            raise RunnerFailure(refused)
     if mode == 'python-core' and database != 'duckdb':
         from sdm_client import _native
 
-        if database not in _native.PROVIDERS:
+        if provider_for_leg(database) not in _native.PROVIDERS:
             raise RunnerFailure(
                 f'the core reports no {database} provider: the {database} '
                 'job runs the reference side only'
             )
     recorded = []
+    kept: list[dict[str, Any]] = []
     for case, case_digest in cases:
         capture = boundary.reset() if boundary is not None else None
         if capture is not None:
             capture.recording = record_fetches is not None
         if mode == 'python-core':
             os.environ['SDM_CORE_ROUTES'] = ','.join(routes_on(case, database))
+        else:
+            os.environ['SDM_CORE_ROUTES'] = ''
+        keep: dict[str, Any] | None = {} if record is not None else None
         try:
             outcome, shown, driver, public, origins = _call(
-                case, bases, driver_capture, database
+                case, bases, driver_capture, database, keep, capture
             )
         finally:
             os.environ.pop('SDM_CORE_ROUTES', None)
+        if keep is not None and record is not None:
+            kept.append(keep)
         recorded.append(
             (
                 case,
@@ -3150,6 +5303,10 @@ def run(
                 f'{case["id"]}: its observation is not valid: {problem}'
             )
         observations.append(observation)
+    if database in WAREHOUSES and mode == 'python-ref':
+        observations = _held_observations(
+            observations, cases, bases, kept, record
+        )
     if record_fetches is not None:
         # The replay's recording (T2.3, KO2-20): each case's fetches, with
         # the answers the Postgres provider replied with, in order, and the
@@ -3158,20 +5315,113 @@ def run(
         record_fetches.write_text(
             ''.join(
                 json.dumps(
-                    {
-                        'format': 'sdm-replay/1',
-                        'case': case_key(case['id'], database),
-                        'fetches': _with_statements(case, capture, driver),
-                    },
+                    _replay_line(case, database, capture, driver),
                     sort_keys=True,
                 )
                 + '\n'
                 for case, _, _, _, capture, _, driver, *_ in recorded
-                if capture is not None and capture.answered
+                if capture is not None
+                and (capture.answered or database in WAREHOUSES)
             ),
             encoding='utf-8',
         )
     return observations
+
+
+def _held_observations(
+    observations: list[dict[str, Any]],
+    cases: list[tuple[dict[str, Any], str]],
+    bases: dict[str, list[str]],
+    kept: list[dict[str, Any]],
+    record: Path | None,
+) -> list[dict[str, Any]]:
+    r"""A warehouse leg's observations with every private name as its
+    placeholder, and with ``record`` each case's capture written there,
+    one line each, all or nothing; a private value left in either fails
+    the run before anything is written (design choice 2)."""
+    spec_names: dict[str, str] = {}
+    private: list[str] = []
+    if kept:
+        spec_names, private = kept[0]['live'].names, kept[0]['live'].private
+    else:
+        _, spec_names, private = live_configuration(
+            observations[0]['case'].rpartition('@')[2]
+        )
+    held = Placeheld(spec_names, private)
+    out = []
+    for observation in observations:
+        placed = held.value(observation)
+        if held.leaked(json.dumps(placed, sort_keys=True, ensure_ascii=False)):
+            raise RunnerFailure(
+                f'{observation["case"]}: its observation holds a private name; '
+                'nothing is written'
+            )
+        out.append(placed)
+    if record is not None:
+        lines = [
+            written(
+                capture_line(
+                    keep['live'],
+                    case,
+                    bases,
+                    keep['log'],
+                    observation,
+                    keep['relations'],
+                ),
+                held,
+            )
+            + '\n'
+            for (case, _), keep, observation in zip(
+                cases, kept, observations, strict=True
+            )
+        ]
+        partial = record.with_name(record.name + '.partial')
+        partial.write_text(''.join(lines), encoding='utf-8')
+        partial.replace(record)
+    return out
+
+
+def _replay_line(
+    case: dict[str, Any],
+    database: str,
+    capture: _Capture,
+    driver: dict[str, Any],
+) -> dict[str, Any]:
+    line: dict[str, Any] = {
+        'format': 'sdm-replay/1',
+        'case': case_key(case['id'], database),
+        'fetches': _with_statements(case, capture, driver),
+    }
+    if database in WAREHOUSES:
+        line['core'] = _replay_core(capture)
+    return line
+
+
+def _replay_core(capture: _Capture) -> dict[str, Any]:
+    r"""The starts a warehouse replay needs, projected to the existing
+    pure-Rust host's inputs. Its own description and materialized state
+    must be rebuilt, never copied from this host's answers (E50).
+
+    This is private replay data: namespace and view names remain exactly
+    those of the fetch recording, with no publication-time substitution.
+    """
+    fields = {
+        'validate_query': ('profile', 'schema'),
+        'describe_source': ('provider', 'source', 'check_keys'),
+        'materialize': ('provider', 'indices', 'anchor_time', 'seed'),
+        'predict': ('model',),
+    }
+    core: dict[str, Any] = {}
+    for started in capture.inputs:
+        operation = started['op']
+        if operation not in fields:
+            raise RunnerFailure('an operation this replay does not carry')
+        if operation in core:
+            raise RunnerFailure(f'more than one {operation} start in a replay')
+        core[operation] = {name: started[name] for name in fields[operation]}
+    if 'describe_source' not in core:
+        raise RunnerFailure('a warehouse replay has no describe_source start')
+    return core
 
 
 def _with_statements(
@@ -3209,7 +5459,7 @@ def legs_main(argv: list[str]) -> int:
     :func:`check_legs` over the observations files, ``FILE`` the JSON
     object of each core leg's providers; exit 1 naming each problem."""
     parser = argparse.ArgumentParser(prog='run_python.py legs')
-    parser.add_argument('--database', choices=DATABASES, required=True)
+    parser.add_argument('--database', choices=LEGS, required=True)
     parser.add_argument('--providers', type=Path, required=True)
     parser.add_argument('observations', type=Path, nargs='*')
     arguments = parser.parse_args(argv)
@@ -3236,14 +5486,124 @@ def legs_main(argv: list[str]) -> int:
     return 1 if problems else 0
 
 
+def environment_refusal(
+    environ: Mapping[str, str], prefix: str = sys.prefix
+) -> str | None:
+    r"""Why this interpreter may not run the client's routes, or None (T3.0).
+
+    On the orchestration machine (``SDM_ORCH_STATE`` set, outside CI), a
+    checkout's own ``.venv`` is shared and holds whatever client was last
+    installed there: Phase 2 read a stale one as an environment fault for
+    twelve hours. A runner under it refuses, naming the lane's environment,
+    which ``scripts/rust_core/cells.sh`` builds for the lane's tree. With
+    ``SDM_LANE_ENV`` set (that environment's directory), any interpreter
+    outside it refuses. CI builds its environment per run and is not held."""
+    if environ.get('GITHUB_ACTIONS') == 'true':
+        return None
+    here = Path(prefix).resolve()
+    lane = environ.get('SDM_LANE_ENV')
+    right = (
+        f'{lane}/current/cell-<cell>/bin/python (cells.sh prints each cell)'
+        if lane
+        else "your lane's environment: build it with scripts/rust_core/cells.sh "
+        '$SDM_CELLS_ROOT/<lane>, set SDM_LANE_ENV to that directory, and run '
+        'with the cell python it prints'
+    )
+    if lane:
+        root = Path(lane).resolve()
+        if here == root or root in here.parents:
+            return None
+        return (
+            f'this runner runs under {prefix}, outside the lane environment '
+            f'{lane} (SDM_LANE_ENV): run it with {right}'
+        )
+    if (
+        environ.get('SDM_ORCH_STATE')
+        and here.name == '.venv'
+        and (here.parent / '.git').exists()
+    ):
+        return (
+            f"this runner runs under {prefix}, a checkout's shared .venv, "
+            'whose client is whatever was last installed there, not this '
+            f"tree's: run it with {right}"
+        )
+    return None
+
+
+def publish_observations(
+    observations: list[dict[str, Any]], database: str
+) -> list[dict[str, Any]]:
+    """A publication copy, after raw starts/fetches have been recorded.
+
+    Java and reference warehouse runners already publish through Placeheld.
+    Python core and Rust keep their private replay data unchanged and use
+    this same mapping only at the final observation-file boundary.
+    """
+    if database not in WAREHOUSES:
+        return observations
+    _, names, private = live_configuration(database)
+    held = Placeheld(names, private)
+    published = held.value(observations)
+    if held.leaked(json.dumps(published, sort_keys=True, ensure_ascii=False)):
+        raise RunnerFailure(
+            'a published observation retained private configuration'
+        )
+    return published
+
+
+def publish_main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(
+        description='Publish raw warehouse observations without changing replay files'
+    )
+    parser.add_argument('--database', choices=WAREHOUSES, required=True)
+    parser.add_argument('--on', type=Path, required=True)
+    parser.add_argument('--out', type=Path, required=True)
+    args = parser.parse_args(argv)
+    try:
+        raw = [
+            json.loads(line)
+            for line in args.on.read_text().splitlines()
+            if line.strip()
+        ]
+        published = publish_observations(raw, args.database)
+        with args.out.open('x') as stream:
+            for observation in published:
+                stream.write(json.dumps(observation, sort_keys=True) + '\n')
+    except (OSError, ValueError, RunnerFailure) as error:
+        print(
+            f'observation publication failed ({type(error).__name__})',
+            file=sys.stderr,
+        )
+        return 1
+    return 0
+
+
+def _capture_run() -> Any:
+    """The live runner's existing driver and loader write guard."""
+    path = REPO / 'scripts/live/capture_run.py'
+    spec = importlib.util.spec_from_file_location('runner_live_guard', path)
+    assert spec is not None and spec.loader is not None
+    loaded = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = loaded
+    spec.loader.exec_module(loaded)
+    return loaded
+
+
 def main(argv: list[str] | None = None) -> int:
     given = sys.argv[1:] if argv is None else argv
     if given[:1] == ['legs']:
         return legs_main(given[1:])
+    if given[:1] == ['publish']:
+        return publish_main(given[1:])
     parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     parser.add_argument('--mode', choices=MODES, required=True)
     parser.add_argument('--reference', type=Path)
     parser.add_argument('--out', type=Path, required=True)
+    parser.add_argument(
+        '--guard-live',
+        action='store_true',
+        help='install the existing live write guard before any warehouse driver is opened',
+    )
     parser.add_argument(
         '--inventory',
         action='append',
@@ -3259,11 +5619,21 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         '--database',
-        choices=DATABASES,
+        choices=LEGS,
         default='duckdb',
-        help='the database each case runs on (default duckdb): the others '
-        "are loaded from the case's DuckDB tables (databases.py), Postgres "
-        "in a new database on SDM_POSTGRES_TEST_DSN's server",
+        help='the database or warehouse leg each case runs on (default '
+        "duckdb): the others are loaded from the case's DuckDB tables "
+        '(databases.py), Postgres in a new database on '
+        "SDM_POSTGRES_TEST_DSN's server, a warehouse leg in the test schema "
+        'the live configuration (SDM_LIVE_CONFIG) names',
+    )
+    parser.add_argument(
+        '--record',
+        type=Path,
+        metavar='FILE',
+        help='the recording mode (Phase 3, choice 2): python-ref on a '
+        "warehouse leg writes each case's capture (sdm-capture/1) to FILE, "
+        'every private name as its placeholder',
     )
     parser.add_argument(
         '--record-fetches',
@@ -3275,6 +5645,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument('cases', type=Path, nargs='*')
     arguments = parser.parse_args(argv)
+    if arguments.guard_live and arguments.database not in WAREHOUSES:
+        parser.error('--guard-live needs a warehouse database')
+    if arguments.mode != 'python-ref':
+        refused = environment_refusal(os.environ)
+        if refused is not None:
+            print(f'runner failure: {refused}', file=sys.stderr)
+            return 1
     if arguments.record_fetches is not None and arguments.mode != 'python-core':
         parser.error('--record-fetches is given in python-core mode only')
     if (arguments.mode == 'python-ref') != (arguments.reference is not None):
@@ -3283,7 +5660,15 @@ def main(argv: list[str] | None = None) -> int:
     partial = arguments.out.with_name(arguments.out.name + '.partial')
     arguments.out.unlink(missing_ok=True)
     partial.unlink(missing_ok=True)
+    if arguments.record is not None:
+        arguments.record.unlink(missing_ok=True)
+    undo = None
     try:
+        if arguments.guard_live:
+            helper = _capture_run()
+            undo = helper.install_guard(
+                arguments.database, helper.load_guard(), _sibling('databases')
+            )
         cases = load_cases(arguments.cases) if arguments.cases else []
         cases.extend(inventory_cases(arguments.inventory))
         if not cases:
@@ -3295,10 +5680,18 @@ def main(argv: list[str] | None = None) -> int:
             driver_capture=not arguments.no_capture,
             database=arguments.database,
             record_fetches=arguments.record_fetches,
+            record=arguments.record,
         )
+        if arguments.guard_live and helper.environment_failure(observations):
+            raise RunnerFailure(
+                'warehouse environment failure, not product evidence'
+            )
     except RunnerFailure as failure:
         print(f'runner failure: {failure}', file=sys.stderr)
         return 1
+    finally:
+        if undo is not None:
+            undo()
     partial.write_text(
         ''.join(
             json.dumps(item, sort_keys=True) + '\n' for item in observations

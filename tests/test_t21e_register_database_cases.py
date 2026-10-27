@@ -18,6 +18,8 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 CASE = 'key.decimal-38-10'
 
@@ -58,10 +60,49 @@ def _problems(cases: list[str], more_exact: str | None = None) -> list[str]:
     return [p for p in found if p.startswith(f'{entry["id"]}:')]
 
 
-def test_an_entry_names_a_case_s_line_on_another_database() -> None:
-    line = f'{CASE}@postgres'
+@pytest.mark.parametrize(
+    'database',
+    [
+        'sqlite',
+        'postgres',
+        'databricks-sql',
+        'databricks-spark',
+        'snowflake',
+        'lakebase',
+    ],
+)
+def test_an_entry_names_a_case_s_line_on_another_database(
+    database: str,
+) -> None:
+    line = f'{CASE}@{database}'
     assert _problems([line], more_exact=line) == []
     assert _problems([f'{CASE}@sqlite']) == []
     # Another database, and a case outside the corpus, are refused.
     assert _problems([f'{CASE}@mysql'])
     assert _problems(['nonesuch.case@postgres'])
+
+
+@pytest.mark.parametrize(
+    'database', ['lakebase', 'snowflake', 'databricks-sql', 'databricks-spark']
+)
+def test_warehouse_outcome_rows_use_the_existing_observation_case_key(
+    database: str,
+) -> None:
+    register = _register()
+    changed = copy.deepcopy(
+        register.load(ROOT / 'docs/design/rust-core/register.yaml')
+    )
+    entry = next(e for e in changed['entries'] if CASE in e['cases'])
+    entry['case_outcomes'] = [
+        {
+            'case': f'{CASE}@{database}',
+            'cell': 'ref-pandas3',
+            'runner': 'python-core',
+            'old': 'none',
+            'new': 'success at predict',
+            'summary': 'A warehouse line uses the same case key as its observation.',
+        }
+    ]
+    assert not [
+        p for p in register.problems(changed, ROOT) if p.startswith('schema:')
+    ]

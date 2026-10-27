@@ -80,7 +80,13 @@ def _first_schema_error(document: Any) -> str | None:
     if error is None:
         return None
     where = '/'.join(str(part) for part in error.absolute_path) or '(root)'
-    return f'{where} fails {error.validator!r}'
+    named = ''
+    if error.validator == 'additionalProperties':
+        # From T3.2 the refusal names the keys the format does not have.
+        allowed = set(error.schema.get('properties') or {})
+        unknown = sorted(str(k) for k in error.instance if k not in allowed)
+        named = f' ({", ".join(unknown)} not a field there)' if unknown else ''
+    return f'{where} fails {error.validator!r}{named}'
 
 
 def _typed(given: dict[str, Any]) -> str | None:
@@ -94,7 +100,8 @@ def _typed(given: dict[str, Any]) -> str | None:
     if 'top_k' in spec and type(spec['top_k']) is not int:
         return 'input/materialize/top_k is not an integer'
     if 'fail_call' in given and type(given['fail_call']) is not int:
-        return 'input/fail_call is not an integer'
+        # From T3.2: -0 is refused too, so the words say what is asked.
+        return 'input/fail_call is not a whole number written as one'
     return None
 
 

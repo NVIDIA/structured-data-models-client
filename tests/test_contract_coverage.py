@@ -43,6 +43,9 @@ from typing import Any
 import pytest
 import yaml
 
+# Gate tooling (T3.0): CI runs it in the tooling jobs, not in every matrix job.
+pytestmark = pytest.mark.tooling
+
 ROOT = Path(__file__).resolve().parents[1]
 COVERAGE = ROOT / 'scripts/rust_core/coverage.py'
 spec = importlib.util.spec_from_file_location(
@@ -80,6 +83,9 @@ PROBLEM = re.compile(r'^(rule [1-8]|schema|read):')
 CLAIMING = 'base.regression'
 #: An S1 path no case names, and a cell no case names.
 PATH = 'source.open/explicit/duckdb'
+#: An S1 path no case claims: from T3.2 every DuckDB case claims ``PATH``,
+#: the explicit opening of its source (coverage.py's ``claims``).
+UNCLAIMED = 'source.open/auto/duckdb'
 CELL = 'int8/feature'
 #: An accepted cell no case names.
 ACCEPTED_CELL = 'float64/feature'
@@ -102,11 +108,38 @@ def build(repo: Path) -> tuple[Path, str]:
         capture_output=True,
         check=True,
     ).stdout.split(b'\0')
+    # The seeded tests judge their own fixture: the corpus's cases the
+    # committed reference observes (rule 6's evidence), never a case added
+    # beside them without a reference line yet (a dry run's stubs, T3.2),
+    # whose rule 6 line every exact problem list would then carry.
+    recorded = {
+        json.loads(text)['case'].partition('@')[0]
+        for path in sorted((ROOT / REFERENCE).glob('*.jsonl'))
+        for text in path.read_text(encoding='utf-8').splitlines()
+        if text.strip()
+    }
     for name in filter(None, (item.decode() for item in listed)):
         source = ROOT / name
+        if (
+            name.startswith(CASES + '/')
+            and name.endswith('.json')
+            and json.loads(source.read_text(encoding='utf-8')).get('id')
+            not in recorded
+        ):
+            continue
         if source.is_file():
             (repo / name).parent.mkdir(parents=True, exist_ok=True)
             (repo / name).write_bytes(source.read_bytes())
+    # The client tests the manifests claim a path by (``tests``, rule 4
+    # from T3.2), which the copy's tree must define as the candidate's does.
+    for manifest in (PYTHON, JAVA):
+        text = (ROOT / manifest).read_text(encoding='utf-8')
+        claimed = re.findall(r'([\w./-]+\.py)::', text) + re.findall(
+            r'(java/src/test/java/[\w./-]+\.java)#', text
+        )
+        for name in sorted(set(claimed)):
+            (repo / name).parent.mkdir(parents=True, exist_ok=True)
+            (repo / name).write_bytes((ROOT / name).read_bytes())
     landed = commit(
         repo,
         'Land T1.14: the start',
@@ -116,8 +149,8 @@ def build(repo: Path) -> tuple[Path, str]:
 
 
 @pytest.fixture(scope='module')
-def origin(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, str]:
-    return build(tmp_path_factory.mktemp('origin'))
+def origin(owned_module_dir: Callable[[str], Path]) -> tuple[Path, str]:
+    return build(owned_module_dir('origin'))
 
 
 @pytest.fixture
@@ -125,6 +158,10 @@ def repo(origin: tuple[Path, str], tmp_path: Path) -> Path:
     r"""A worktree at the checkpoint, for one test's candidate."""
     source, landed = origin
     tree = tmp_path / 'tree'
+    # Passed-only tmp_path retention can remove this path but leave its Git
+    # registration. Prune missing worktrees in this fixture's own origin,
+    # preserving every extant worktree and its failed-test evidence.
+    git(source, 'worktree', 'prune', '--expire', 'now')
     git(source, 'worktree', 'add', '-q', '--detach', str(tree), landed)
     return tree
 
@@ -634,8 +671,8 @@ def test_a_path_moved_into_s0_without_an_acceptance_case_fails(
     r"""Moving a slice earlier is allowed by rule 8, and the path then needs
     S0's coverage."""
     landed = git(repo, 'rev-parse', 'HEAD')
-    commit(repo, edit=manifest(PYTHON, update('paths', PATH, slice='S0')))
-    found = failing(check(repo, landed), 'rule 5', PATH)
+    commit(repo, edit=manifest(PYTHON, update('paths', UNCLAIMED, slice='S0')))
+    found = failing(check(repo, landed), 'rule 5', UNCLAIMED)
     assert rules(found) == {'rule 5'}, found
 
 

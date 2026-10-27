@@ -15,7 +15,7 @@ use serde_json::{Value, json};
 
 fn corpus() -> Vec<Case> {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../contract/cases");
-    case::load(&[root])
+    case::load_for(&[root], case::Database::Duckdb)
         .unwrap()
         .into_iter()
         .map(|l| l.case)

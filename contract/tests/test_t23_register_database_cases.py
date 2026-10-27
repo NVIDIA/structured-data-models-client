@@ -2,10 +2,10 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""T2.3: lane C's Postgres entries name their Postgres lines
-(``<case>@postgres``, T2.1e) or a task, never a case bare, so no approved
-entry excuses the DuckDB line of the same case, which a family's guard
-keeps unexcused.
+r"""T2.3: lane C's Postgres-family entries name database-scoped lines.
+
+Entries name ``<case>@postgres``, ``<case>@lakebase`` or a task, never a
+case bare, so no approved entry excuses the DuckDB line of the same case.
 """
 
 from __future__ import annotations
@@ -26,7 +26,9 @@ def test_no_postgres_entry_names_a_case_bare() -> None:
     assert lane_c
     for entry in lane_c:
         for case in entry['cases']:
-            assert case.endswith('@postgres') or TASK.fullmatch(case), (
+            assert case.endswith(('@postgres', '@lakebase')) or TASK.fullmatch(
+                case
+            ), (
                 entry['id'],
                 case,
             )

@@ -37,7 +37,8 @@
 #
 #   observations  required: with neither --run nor --observations the gate
 #                 fails, since the tree checks alone judge no behaviour;
-#                 --run python-core,python-old,rust-host makes them here:
+#                 --run python-core,python-old,rust-host makes them here
+#                 (from T3.2 also java, the Java host's run_java.py):
 #                 the Python runners with $PYTHON (default python3, an
 #                 environment holding the candidate's client), rust-host with
 #                 cargo, each with the checkpoint's run_python.py and test
@@ -122,8 +123,10 @@
 #                                acceptance cases.
 #                   census, coverage-s1, l3, l7, ci
 #                                no step: they left the locked gate as
-#                                end-of-phase reports and land.py's
-#                                exact-SHA rule (KO2-76, T2.1s), so a half
+#                                end-of-phase reports and the full CI run
+#                                at the phase's end (KO2-76, T2.1s; the
+#                                owner, 2026-10-22: CI off the landing
+#                                path), so a half
 #                                naming one, or the limits or ci key they
 #                                read, is a usage error naming it;
 #                   main         (2a; T2.0f, locked check 7) the fetched
@@ -437,11 +440,12 @@ STEPS = set(COMMON) | {'l0'}
 # A half's own steps: Phase 1's, and Phase 2's main (T2.0f).
 OWN = {'seeded', 'wheel-smoke', 'inventory', 'main'}
 # The steps and keys that left the locked gate (KO2-76, T2.1s): the census,
-# coverage, L3, L7 and ci are end-of-phase reports and land.py's exact-SHA
-# rule, so a half naming one is refused by name.
+# coverage, L3, L7 and ci are end-of-phase reports and the phase-end CI run
+# (a landing stands on its handoff stamp since 2026-10-22), so a half naming
+# one is refused by name.
 GONE = {'census', 'coverage-s1', 'l3', 'l7', 'ci'}
 GONE_KEYS = {'limits', 'ci'}
-GONE_WHY = 'left the locked gate under KO2-76 (an end-of-phase report or land.py\'s exact-SHA rule)'
+GONE_WHY = 'left the locked gate under KO2-76 (an end-of-phase report, or the full CI run at the phase\'s end)'
 CASE = re.compile(r'[a-z0-9][a-z0-9._-]*')
 def fail(why):
     sys.exit(f'gate.sh: {why}')
@@ -625,6 +629,11 @@ observe() {
         (cd "$tree/rust" && CARGO_TARGET_DIR="$target" cargo run -q \
           -p sdm-testkit --bin sdm-contract-run --locked -- \
           --out "$made/rust-host.jsonl" ../contract/cases) || return 1 ;;
+      java)
+        # The Java host's runner (Phase 3 design choice 10, T3.11's), on
+        # every leg it reports a provider for.
+        "$PYTHON" -I "$tree/contract/runners/run_java.py" \
+          --out "$made/java.jsonl" "$tree/contract/cases" || return 1 ;;
       *) echo "no runner $runner"; return 1 ;;
     esac
     echo "$runner: $made/$runner.jsonl"
@@ -704,11 +713,66 @@ judge_compare() {
     "$PYTHON" "$here/scripts/rust_core/ratchet.py" effective --repo "$candidate" \
       "${where[@]}" "${epic[@]+"${epic[@]}"}" --out "$scratch/effective.json" || return 1
   fi
-  "$PYTHON" "$here/scripts/rust_core/compare.py" \
-    --cases "$candidate/contract/cases" --bases "$candidate/contract/bases.yaml" \
-    --reference "$(ls "$candidate"/contract/reference/*.jsonl)" \
-    --expect "$scratch/effective.json" \
-    --register "$candidate/docs/design/rust-core/register.yaml" "${given[@]}"
+  local status=0 leg file
+  # One comparison per leg the observations hold lines of (Claude r1
+  # P1-2): compare.py judges one database or warehouse leg a run, each with
+  # only the files that hold that leg's lines, so a warehouse or Java line
+  # is judged on its leg, against the reference lines recorded on it.
+  local pairs
+  # A file given and unreadable, empty or not observation lines is refused
+  # by name, never dropped from the comparison (Codex r2 P1-3).
+  pairs=$("$PYTHON" -I -c '
+import json, sys
+refused = []
+for path in sys.argv[1:]:
+    try:
+        text = open(path, encoding="utf-8").read()
+        legs = {
+            json.loads(line)["case"].partition("@")[2] or "duckdb"
+            for line in text.splitlines()
+            if line.strip()
+        }
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as error:
+        refused.append(f"{path}: unreadable ({type(error).__name__})")
+        continue
+    if not legs:
+        refused.append(f"{path}: no observation lines")
+    for leg in sorted(legs):
+        print(leg + "\t" + path)
+for line in refused:
+    print(f"compare: REFUSED {line}", file=sys.stderr)
+sys.exit(1 if refused else 0)
+' "${given[@]}") || return 1
+  local legs
+  legs=$(cut -f1 <<<"$pairs" | sort -u | grep -v '^$')
+  [ -n "$legs" ] || { echo 'compare: no observation lines in the given files'; return 1; }
+  for leg in duckdb $(grep -vx duckdb <<<"$legs"); do
+    grep -qx "$leg" <<<"$legs" || continue
+    local files=()
+    while IFS=$'\t' read -r on file; do
+      [ "$on" = "$leg" ] && files+=("$file")
+    done <<<"$pairs"
+    echo "compare on $leg: ${files[*]}"
+    "$PYTHON" "$here/scripts/rust_core/compare.py" \
+      --cases "$candidate/contract/cases" --bases "$candidate/contract/bases.yaml" \
+      --reference "$(ls "$candidate"/contract/reference/*.jsonl)" \
+      --expect "$scratch/effective.json" \
+      --register "$candidate/docs/design/rust-core/register.yaml" \
+      --database "$leg" "${files[@]}" || status=1
+  done
+  # Locked check 1: no case pending live at the final run. From C-1's
+  # captures on (contract/captures/), every case and warehouse leg needs a
+  # capture of its current input (capture_check.py captures --locked).
+  if [ -n "$locked" ] && [ -d "$candidate/contract/captures" ]; then
+    local manifests=()
+    while IFS= read -r -d '' manifest; do manifests+=("$manifest"); done < <(
+      find "$candidate/contract/captures" -name manifest.json -print0)
+    "$PYTHON" "$here/contract/runners/capture_check.py" captures --locked \
+      --cases "$candidate/contract/cases" "${manifests[@]+"${manifests[@]}"}" || status=1
+  elif [ -n "$locked" ]; then
+    echo 'no contract/captures/ yet: the warehouse legs wait for C-1, and are not judged here'
+  fi
+  return $status
 }
 if want compare && { [ ${#given[@]} -gt 0 ] || [ -n "$only" ]; }; then
   step compare judge_compare
@@ -823,12 +887,18 @@ else:
     print(f'the {len(also)} locked cases are acceptance cases')
 EOF
 }
-# The main step (locked check 7): the fetched origin/main, never a local
-# main, is an ancestor of the candidate and of the reference commit the
-# candidate's contract/reference-env.txt names, so the phase branch and
+# The main step (locked check 7): origin/main, fetched by this step right
+# before it reads it (P2-T2.0f-1: an older fetch passed a stale main), never
+# a local main, is an ancestor of the candidate and of the reference commit
+# the candidate's contract/reference-env.txt names, so the phase branch and
 # the reference are both at main's head as of this run.
 main_merged() {
   local g=(git -C "$candidate") tip reference status=0
+  if ! GIT_TERMINAL_PROMPT=0 GH_PROMPT_DISABLED=1 timeout 300 \
+    "${g[@]}" fetch --quiet origin main </dev/null; then
+    echo 'could not fetch origin/main right before the run: main is judged as of now, never as last fetched'
+    return 1
+  fi
   tip=$("${g[@]}" rev-parse -q --verify 'refs/remotes/origin/main^{commit}') || {
     echo 'no fetched origin/main (refs/remotes/origin/main): fetch it; a local main is not read'
     return 1

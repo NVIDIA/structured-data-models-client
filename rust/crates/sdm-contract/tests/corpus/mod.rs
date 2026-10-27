@@ -23,8 +23,8 @@ use sdm_contract::run::{
     StartRun,
 };
 use sdm_contract::{
-    CONTRACT_VERSION, ColumnType, ControlMessage, CoreError, CoreWarning, Detail, ErrorCode,
-    ErrorKind, Field, HostFacts, Scalar, Step, Unit,
+    CONTRACT_VERSION, ColumnType, ControlMessage, CoreError, CoreWarning, Detail, ErrorKind, Field,
+    HostFacts, Scalar, Sentence, Step, Unit,
 };
 
 pub fn facts() -> HostFacts {
@@ -120,22 +120,26 @@ pub fn messages() -> Vec<ControlMessage> {
         start(Operation::ValidateQuery(validate)),
         start(Operation::DescribeSource(DescribeSource {
             provider: sdm_contract::data::ProviderChoice::Sql {
+                timestamp_encoding: None,
                 dialect: Dialect::new("duckdb"),
+                namespace: Vec::new(),
+                view: None,
             },
             source: AttachmentId(1),
             check_keys: true,
         })),
         start(Operation::EditSchema(EditSchema {
             schema: AttachmentId(1),
-            held: Some(AttachmentId(2)),
             edit: AttachmentId(3),
         })),
         start(Operation::Materialize(Materialize {
             provider: sdm_contract::data::ProviderChoice::Sql {
+                timestamp_encoding: None,
                 dialect: Dialect::new("duckdb"),
+                namespace: Vec::new(),
+                view: None,
             },
             schema: AttachmentId(1),
-            held: Some(AttachmentId(5)),
             query: AttachmentId(2),
             indices: Some(AttachmentId(3)),
             anchor_time: None,
@@ -154,20 +158,24 @@ pub fn messages() -> Vec<ControlMessage> {
             }),
         })),
         start(Operation::Predict(Predict {
-            state: state.clone(),
+            state: Some(state.clone()),
+            held: None,
             model: "kumo-relational".into(),
             request_id: "sdm-000000000000".into(),
             outputs: vec!["prediction".into()],
             default_outputs: false,
             inference_asked: vec![],
+            model_endpoint: None,
         })),
         start(Operation::Predict(Predict {
-            state: state.clone(),
+            state: Some(state.clone()),
+            held: None,
             model: "kumo-relational".into(),
             request_id: "sdm-000000000001".into(),
             outputs: vec![],
             default_outputs: true,
             inference_asked: vec![],
+            model_endpoint: None,
         })),
         ControlMessage::Step(Step::Fetch {
             requests: vec![FetchStep {
@@ -196,6 +204,7 @@ pub fn messages() -> Vec<ControlMessage> {
                     limit: None,
                 },
                 plan: FetchPlan::Sql {
+                    result_conversions: Vec::new(),
                     statements: vec![SqlStatement {
                         dialect: Dialect::new("duckdb"),
                         text: "SELECT id, at FROM orders WHERE id IN (SELECT id FROM keys)".into(),
@@ -212,6 +221,7 @@ pub fn messages() -> Vec<ControlMessage> {
                     expect: ExpectedSchema::Discover {},
                 },
                 continuation: None,
+                purpose: None,
             }],
         }),
         ControlMessage::Step(Step::Fetch {
@@ -224,6 +234,7 @@ pub fn messages() -> Vec<ControlMessage> {
                         columns: vec!["order_id".into(), "ts".into()],
                         seeds: seeds(&["anchor"]),
                         window: Some(Window {
+                            source_type: None,
                             column: "ts".into(),
                             lower: None,
                             upper: Some(SeedBound {
@@ -231,7 +242,7 @@ pub fn messages() -> Vec<ControlMessage> {
                                 inclusive: true,
                             }),
                         }),
-                        per_seed: Some(32),
+                        per_seed: Some(32_u64.into()),
                         order: Some(TieBreak(vec![
                             TieTerm {
                                 column: "ts".into(),
@@ -251,6 +262,7 @@ pub fn messages() -> Vec<ControlMessage> {
                         expect: ExpectedSchema::Discover {},
                     },
                     continuation: None,
+                    purpose: None,
                 },
                 FetchStep {
                     id: ReplyId(3),
@@ -264,10 +276,12 @@ pub fn messages() -> Vec<ControlMessage> {
                         expect: ExpectedSchema::Discover {},
                     },
                     continuation: None,
+                    purpose: None,
                 },
                 FetchStep {
                     id: ReplyId(4),
                     request: DataRequest::SampleEntities {
+                        rows: None,
                         table: "users".into(),
                         key: vec!["user_id".into()],
                         n: 10_000,
@@ -282,6 +296,7 @@ pub fn messages() -> Vec<ControlMessage> {
                         expect: ExpectedSchema::Discover {},
                     },
                     continuation: None,
+                    purpose: None,
                 },
                 FetchStep {
                     id: ReplyId(5),
@@ -295,11 +310,13 @@ pub fn messages() -> Vec<ControlMessage> {
                         expect: ExpectedSchema::Discover {},
                     },
                     continuation: None,
+                    purpose: None,
                 },
                 FetchStep {
                     id: ReplyId(6),
                     request: DataRequest::KeyCounts {
                         keys: vec![TableKey {
+                            unique: false,
                             table: "orders".into(),
                             columns: vec!["order_id".into()],
                             label: None,
@@ -309,6 +326,7 @@ pub fn messages() -> Vec<ControlMessage> {
                         expect: ExpectedSchema::Discover {},
                     },
                     continuation: None,
+                    purpose: None,
                 },
                 FetchStep {
                     id: ReplyId(7),
@@ -320,6 +338,7 @@ pub fn messages() -> Vec<ControlMessage> {
                         expect: ExpectedSchema::Discover {},
                     },
                     continuation: None,
+                    purpose: None,
                 },
                 FetchStep {
                     id: ReplyId(8),
@@ -331,6 +350,7 @@ pub fn messages() -> Vec<ControlMessage> {
                         expect: ExpectedSchema::Discover {},
                     },
                     continuation: None,
+                    purpose: None,
                 },
                 FetchStep {
                     id: ReplyId(9),
@@ -342,6 +362,7 @@ pub fn messages() -> Vec<ControlMessage> {
                         expect: ExpectedSchema::Discover {},
                     },
                     continuation: None,
+                    purpose: None,
                 },
             ],
         }),
@@ -356,6 +377,8 @@ pub fn messages() -> Vec<ControlMessage> {
             id: ReplyId(2),
             outcome: FetchOutcome::Error {
                 error: ProviderError {
+                    error_class: None,
+                    driver_message: None,
                     kind: ErrorKind::DataSource,
                     retryable: true,
                     sqlstate: Some("42P01".into()),
@@ -398,11 +421,13 @@ pub fn messages() -> Vec<ControlMessage> {
                         end_col: 17,
                     }),
                 }],
+                query: None,
             }),
         }),
         ControlMessage::Step(Step::Done {
             result: OperationResult::DescribeSource(DescribedSource {
                 description: AttachmentId(9),
+                notes: Vec::new(),
             }),
         }),
         ControlMessage::Step(Step::Done {
@@ -432,9 +457,11 @@ pub fn messages() -> Vec<ControlMessage> {
         },
         ControlMessage::Cancel {},
         ControlMessage::Error {
-            error: CoreError::new(ErrorKind::Internal, ErrorCode::InternalError, "panicked")
+            error: CoreError::new(Sentence::Internal, "panicked")
                 .with_field("panic", Detail::Scalar(Scalar::Bool(true)))
                 .caused_by(CoreError::provider(&ProviderError {
+                    error_class: None,
+                    driver_message: None,
                     kind: ErrorKind::DataSource,
                     retryable: true,
                     sqlstate: Some("08006".into()),
@@ -442,14 +469,12 @@ pub fn messages() -> Vec<ControlMessage> {
                 })),
         },
         ControlMessage::Warnings {
-            warnings: vec![CoreWarning {
-                code: "COMPOSITE_KEY_DROPPED".into(),
-                message: "dropped".into(),
-                fields: BTreeMap::from([(
-                    "columns".into(),
+            warnings: vec![
+                CoreWarning::new(Sentence::KeyRepeatsColumns, "repeats").with_field(
+                    "columns",
                     Detail::List(vec![Scalar::Utf8("a".into()), Scalar::Utf8("b".into())]),
-                )]),
-            }],
+                ),
+            ],
         },
         ControlMessage::SamplerState {
             state: SamplerState {

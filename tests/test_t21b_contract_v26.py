@@ -17,8 +17,9 @@ The design's row for T2.1b, each exit with the tests below that prove it:
   Rust loader (written beside the implementation, in ``sdm-contract``'s
   tests) deserializes each into the type it names. Every v25 vector among
   the refusals is shown valid under v25, so its refusal is the bump's.
-- **The binding jobs green on the bump**: the native module speaks 27, and
-  a host speaking 25 is refused by name (``test_the_core_speaks_*``).
+- **The binding jobs green on the bump**: the native module speaks the
+  current locked version, and a host speaking 25 is refused by name
+  (``test_the_core_speaks_*``).
 - **SQL goldens unchanged**: the statements the core renders on the public
   route over the ``shop`` base, recorded at v25 by
   ``tests/golden/t21b_statements_record.py``, are rendered the same at v26
@@ -178,10 +179,14 @@ def test_v25_stays_locked_as_merged() -> None:
 
 def test_the_lock_holds_v26_locked_to_its_own_file() -> None:
     # Schema lock: v26, merged into rust-core mid-phase, is locked to its
-    # own file; v27 is the phase's working entry beside it (T2.12).
+    # own file; later entries must agree with the current native contract.
+    from sdm_client._rust.run import native
+
     lock = _lock_module()
     entries = lock.parse_lock(LOCK.read_text(encoding='utf-8'))
-    assert max(entries) == 27
+    current = native().CONTRACT_VERSION
+    assert max(entries) == current
+    assert entries[current][1] == f'sdm-contract-{current}.json'
     digest, file = entries[26]
     assert file == 'sdm-contract-26.json'
     assert lock.digest(V26.read_bytes()) == digest
@@ -189,20 +194,21 @@ def test_the_lock_holds_v26_locked_to_its_own_file() -> None:
     assert lock.main(['--no-base']) == 0
 
 
-def test_the_core_speaks_v27_and_refuses_a_v25_host_by_name() -> None:
-    # The binding on the bump: the native module is v27 (v26 with T2.12's
-    # key label), and a start written for v25 is refused by name, never
-    # read (decision H25).
+def test_the_core_speaks_the_locked_version_and_refuses_a_v25_host() -> None:
+    # The installed binding speaks the current locked contract, and a start
+    # written for v25 is refused by name, never read (decision H25).
     from sdm_client._rust import codec, errors, facts
     from sdm_client._rust.run import native
 
     core = native()
-    assert core.CONTRACT_VERSION == 27
+    assert core.CONTRACT_VERSION == max(
+        _lock_module().parse_lock(LOCK.read_text())
+    )
     start = codec.encode(
         {
             'message': 'start',
             'contract': 25,
-            'facts': facts.host_facts(core.is_posix_zone),
+            'facts': facts.host_facts(core),
             'operation': {
                 'op': 'describe_source',
                 'provider': {'provider': 'sql', 'dialect': 'duckdb'},

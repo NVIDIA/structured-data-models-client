@@ -25,12 +25,10 @@ which ``RelationalMaterializer.materialize`` builds the ``Request``.
 
 The core's ``materialize`` samples the source through its backend's
 provider (:mod:`.providers`) and lays out the payload the engine lays out;
-this module hands it the description the core last answered of the
-schema and the schema as it stands (from T1.24b, decision E67), which the
-core reads together: what the schema says now, with what the description
-said of each column that the schema does not hold (the type the source
-handed over, whether it may be null, whether the source keys it); and the
-entities to predict for as one Arrow column of the type pyarrow gives
+this module hands it the schema as it stands, as plain data, each column
+with what the source said of it where the core described it (T3.16; the
+core reads from the source the facts of a column that carries none); and
+the entities to predict for as one Arrow column of the type pyarrow gives
 their values, which the core casts to the key's type (T1.32a). From T1.21d the core holds that schema to the reference's
 consistency check itself, marking the columns it joins on again from what
 each column means and meant before it was joined on (decision E55); this
@@ -44,9 +42,7 @@ the core (decision E61): the anchor time and seed in their fields, an
 unseeded sample, an anchor at each entity's own time and a context size as
 the contract says them, and the names of the rest; the core refuses with
 ``UNSUPPORTED_REQUEST``, naming the rule, each it does not take yet, and
-any schema it does not sample yet (register entry P1B-3), and, from
-T1.24b, a schema changed in a way no edit it takes says
-(``schema_edited``), which this module no longer refuses itself.
+and any schema it does not sample yet (register entry P1B-3).
 """
 
 from __future__ import annotations
@@ -57,19 +53,18 @@ import math
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
-from sdm_client._routing import RouteError
-from sdm_client._rust import codec
-from sdm_client._rust.providers.duckdb import DuckDBProvider
-from sdm_client._rust.providers.postgres import PostgresProvider
-from sdm_client._rust.providers.sqlite import SqliteProvider
+from sdm_client._rust import codec, errors, providers, results
+from sdm_client._rust.results import CoreQuery, CoreRequest, QueryFacts
 from sdm_client._rust.run import run
+from sdm_client._rust.spec import held_schema
 from sdm_client.errors import StructuredDataError
 
 if TYPE_CHECKING:
     from predictive_query import ValidatedPredictiveQuery
 
     from sdm_client.materializers.relational import RelationalMaterializer
-    from sdm_client.schema import Schema
+
+__all__ = ['CoreQuery', 'gather']
 
 #: The options the contract carries in fields of their own (from T1.28a
 #: the seed, the statistic and the inference options among the call's
@@ -115,65 +110,6 @@ VALUED = frozenset(
         'use_prediction_time',
     }
 )
-
-
-def description(schema: Schema) -> tuple[dict[str, Any], dict[str, Any]]:
-    r"""The schema as the contract's ``Materialize`` and ``EditSchema`` take
-    it: the ``SourceDescription`` the core last answered of it
-    (``describe_source``'s, or the last edit's), and the schema as it
-    stands (``HeldSchema``): each table by the name the schema holds it
-    under, its source's name of the table, its columns' data types and
-    meanings and what each meant before the schema joined on it, its key
-    and time column, and the links. The core reads the two together
-    (decision E67): what the schema says now, with what the description
-    said of each column that the schema does not hold, and refuses by name
-    a schema changed in a way it does not follow yet (``schema_edited``);
-    this module checks none of it.
-
-    Raises:
-        RouteError: The schema was not described on the core, so what the
-            source said of its columns is not known here.
-    """
-    from sdm_client.schema import _as_key_tuple
-
-    described = getattr(schema, '_core_description', None)
-    if described is None:
-        raise RouteError(
-            'materialize on the core needs a schema Schema.from_source '
-            'described on the core'
-        )
-    tables = []
-    for name, table in schema.tables.items():
-        key = table.primary_key
-        tables.append(
-            {
-                'name': name,
-                'source': codec.relation(getattr(table, 'source_name', name)),
-                'columns': [
-                    {
-                        'name': column_name,
-                        'dtype': column.dtype,
-                        'stype': str(column.stype),
-                        'stype_before_key': (
-                            None
-                            if column._stype_before_key is None
-                            else str(column._stype_before_key)
-                        ),
-                    }
-                    for column_name, column in table.columns.items()
-                ],
-                'primary_key': [] if key is None else list(_as_key_tuple(key)),
-                'time_column': table.time_column,
-            }
-        )
-    links = [
-        [
-            {'table': link.source_table, 'column': link.source_column},
-            {'table': link.target_table, 'column': link.target_column},
-        ]
-        for link in schema.relationships
-    ]
-    return described, {'tables': tables, 'links': links}
 
 
 def _anchor(value: Any) -> dict[str, Any] | None:
@@ -372,9 +308,15 @@ def gather(
     num_context_samples: int | None,
     options: dict[str, Any],
     candidates: Sequence[Any] | None = None,
-) -> tuple[tuple[dict[str, Any], ...], dict[str, Any]]:
-    r"""The payloads of the request, gathered on the core, and the request
-    state's version, which the request keeps for predict on the core.
+) -> tuple[tuple[dict[str, Any], ...], QueryFacts, CoreRequest]:
+    r"""The payloads of the request, gathered on the core; what the core
+    resolved of the query; and what the request keeps for predict on the
+    core (:class:`~sdm_client._rust.results.CoreRequest`), with the parts of
+    a request the core gathered in parts.
+
+    The schema is handed over as it stands, as plain data
+    (:func:`~sdm_client._rust.spec.held_schema`, T3.16): the core reads
+    from the source what it needs of a column that carries no facts.
 
     ``candidates``, a ranking's, are handed over as the caller named them,
     each as the contract's given candidate of its own type
@@ -398,13 +340,11 @@ def gather(
 
     schema = materializer.schema
     anchor = options.get('anchor_time')
-    described, held = description(schema)
-    choice, provider = _provider(schema.source)
+    choice, provider = providers.for_source(schema.source)
     operation = {
         'op': 'materialize',
         'provider': choice,
         'schema': 1,
-        'held': 4,
         'query': 2,
         'indices': 3,
         'anchor_time': _anchor(options.get('anchor_time')),
@@ -423,14 +363,14 @@ def gather(
         'most_parts': max(0, min(int(decompose.MOST_PARTS), 2**32 - 1)),
     }
     attachments = {
-        1: codec.attachment(described),
+        1: codec.attachment(held_schema(schema)),
         2: codec.attachment(query.to_string()),
         3: _indices(indices),
-        4: codec.attachment(held),
-        # Each as the caller gave it, a value JSON cannot hold refused as
-        # the client's transport refuses it; a context size of none is none.
+        # Values retain their types, including nonfinite numeric tokens in
+        # this option attachment only; the core owns their admission.
         5: codec.attachment(
             named=True,
+            option_values=True,
             value={
                 'num_context_samples': num_context_samples,
                 **{
@@ -455,105 +395,84 @@ def gather(
     # The sampler state the core's last run on this materializer left,
     # handed back, so a run skips what the reference's sampler reads once
     # (decision E52); the run leaves its own in its place, done or failed.
-    finished = run(
-        operation,
-        attachments,
-        provider=provider,
-        state=materializer._core_sampler_state,
-    )
-    state = finished.result['state']
-    payload = json.loads(finished.take(state['payload']))
-    query = json.loads(finished.take(state['query']))
-    # What the core resolved of the query (T2.18), which asked() reads and
-    # takes out before the request keeps the state.
-    kept: dict[str, Any] = {
-        'version': state['version'],
-        'facts': finished.result.get('query'),
-    }
+    # A semantic model's, as the core's refusal of a table or column the
+    # model no longer gives names it (T3.5, plan B).
+    with errors.holding(
+        **errors.source_values(schema.source),
+        inference_option=lambda fields: options['inference_config'][
+            fields['key']
+        ],
+    ):
+        finished = run(
+            operation,
+            attachments,
+            provider=provider,
+            state=materializer._core_sampler_state,
+        )
+    gathered = results.expect(finished.result, results.Gathered)
+    state = gathered.state
+    if gathered.query is None:
+        raise StructuredDataError(
+            'the core gathered a query and said nothing of it',
+            code='INTERNAL_ERROR',
+        )
+    payload = json.loads(finished.take(state.payload))
+    query = json.loads(finished.take(state.query))
     payloads = [payload]
-    if state.get('batches') is not None:
+    batches = None
+    if state.batches is not None:
         # A request asked in several calls (T2.8c): each later call's
         # payload, in order, and the rows the core gathered it to score.
-        kept['batches'] = []
-        for batch in state['batches']:
-            payloads.append(json.loads(finished.take(batch['payload'])))
-            kept['batches'].append(batch['rows'])
-    if state.get('ranking') is not None:
+        for batch in state.batches:
+            payloads.append(json.loads(finished.take(batch.payload)))
+        batches = tuple(batch.rows for batch in state.batches)
+    parts = None
+    if state.ranking is not None:
         # A ranking, which the core asked as one binary question per
         # candidate (T2.8): the first candidate's position, query and name
         # (the JSON text of its value, as the result names it), each later
         # one's position among the candidates given, name, payload and
         # query, and how many candidates a row keeps.
-        kept['query'] = query
-        kept['ranking'] = {
-            'top_k': state['ranking'].get('top_k'),
-            'candidate': state['ranking']['candidate'],
-            'value': state['ranking']['value'],
-            'parts': [
-                (
-                    part['candidate'],
-                    part['value'],
-                    json.loads(finished.take(part['payload'])),
-                    json.loads(finished.take(part['query'])),
+        parts = results.CoreParts(
+            kind='ranking',
+            query=query,
+            position=state.ranking.candidate,
+            name=state.ranking.value,
+            top_k=state.ranking.top_k,
+            later=tuple(
+                results.CorePart(
+                    position=part.candidate,
+                    name=part.value,
+                    payload=json.loads(finished.take(part.payload)),
+                    query=json.loads(finished.take(part.query)),
                 )
-                for part in state['ranking']['parts']
-            ],
-        }
-    if state.get('forecast') is not None:
+                for part in state.ranking.parts
+            ),
+        )
+    elif state.forecast is not None:
         # A forecast, which the core asked as one regression per step (T1.36
         # fix 21): step 1's query, and each later step's number, payload
         # and query, from which the client keeps one request per step.
-        kept['query'] = query
-        kept['forecast'] = [
-            (
-                step['step'],
-                json.loads(finished.take(step['payload'])),
-                json.loads(finished.take(step['query'])),
-            )
-            for step in state['forecast']
-        ]
-    return tuple(payloads), kept
-
-
-class Unresolved:
-    r"""A query only the core resolves: one naming a column whose name holds
-    a dot, a backtick or a line break, which the old validator refuses and
-    the core holds apart from its table (KO2-36, T2.18). It is gathered as
-    the caller wrote it, and the core answers what it resolved of it
-    (``Materialized.query``, contract v26), a ranking's questions and a
-    forecast's steps among it (T2.8). ``refusal`` is the old validator's,
-    said of a query the core does not resolve either."""
-
-    def __init__(self, text: str, refusal: StructuredDataError) -> None:
-        self.text = text
-        self.refusal = refusal
-
-    def to_string(self) -> str:
-        r"""The query as the caller wrote it, which materialize sends."""
-        return self.text
-
-
-def asked(state: dict[str, Any]) -> tuple[bool, str]:
-    r"""Whether the target of the query moves with time, and its entity
-    table, as the core resolved them (``state``'s ``facts``, the core's
-    ``Materialized.query``, taken out of it), for every query (T2.14b)."""
-    facts = state.pop('facts', None)
-    if facts is None:
-        raise StructuredDataError(
-            'the core gathered a query and said nothing of it',
-            code='INTERNAL_ERROR',
+        parts = results.CoreParts(
+            kind='forecast',
+            query=query,
+            position=1,
+            name=None,
+            top_k=None,
+            later=tuple(
+                results.CorePart(
+                    position=step.step,
+                    name=None,
+                    payload=json.loads(finished.take(step.payload)),
+                    query=json.loads(finished.take(step.query)),
+                )
+                for step in state.forecast
+            ),
         )
-    return bool(facts['windowed']), str(facts['entity_table'])
-
-
-def _provider(source: Any) -> tuple[dict[str, Any], Any]:
-    r"""The provider choice a run over ``source`` names, and the provider
-    answering its fetches: its backend's built-in SQL dialect, DuckDB's,
-    SQLite's (T2.2) or Postgres's (T2.3), on its connection."""
-    backend = source.backend
-    made = {
-        'duckdb': DuckDBProvider,
-        'sqlite': SqliteProvider,
-        'postgres': PostgresProvider,
-    }[backend]
-    return {'provider': 'sql', 'dialect': backend}, made(source.connection)
+    return (
+        tuple(payloads),
+        gathered.query,
+        results.CoreRequest(
+            version=state.version, batches=batches, parts=parts
+        ),
+    )

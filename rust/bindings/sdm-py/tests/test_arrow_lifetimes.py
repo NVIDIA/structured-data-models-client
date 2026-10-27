@@ -182,6 +182,143 @@ def test_canonical_inputs_cross_sharing_their_buffers() -> None:
     del run
 
 
+def _unaligned_values() -> pa.Array:
+    values = np.ndarray((3,), dtype=np.int64, buffer=bytearray(25), offset=1)
+    values[:] = [1, 2, 3]
+    array = pa.Array.from_buffers(
+        pa.int64(),
+        3,
+        [pa.py_buffer(b'\x05'), pa.py_buffer(values)],
+        null_count=1,
+    )
+    assert array.buffers()[1].address % 8 == 1
+    return array
+
+
+def _unaligned_text() -> pa.Array:
+    offsets = np.ndarray((4,), dtype=np.int32, buffer=bytearray(17), offset=1)
+    offsets[:] = [0, 1, 1, 3]
+    array = pa.Array.from_buffers(
+        pa.utf8(),
+        3,
+        [pa.py_buffer(b'\x05'), pa.py_buffer(offsets), pa.py_buffer(b'acc')],
+        null_count=1,
+    )
+    assert array.buffers()[1].address % 4 == 1
+    return array
+
+
+@pytest.mark.parametrize(
+    'shape',
+    [
+        'utf8-offsets',
+        'dictionary-values',
+    ],
+)
+def test_unaligned_offsets_are_refused_before_the_importer_reads_them(
+    shape: str,
+) -> None:
+    if shape == 'utf8-offsets':
+        array = _unaligned_text()
+    else:
+        array = pa.DictionaryArray.from_arrays(
+            pa.array([0, None, 2], pa.int8()), _unaligned_text()
+        )
+    run = _native.Run.start(*messages.fetch({'expect': 'discover'}))
+    assert messages.read(run.next()[0])['step'] == 'fetch'
+    with pytest.raises(_native.CoreError) as raised:
+        run.reply(messages.fetch_reply(), {1: pa.table({'a': array})})
+    error = raised.value
+    assert (error.kind, error.code) == (
+        'data_source',
+        'PROVIDER_SCHEMA_MISMATCH',
+    )
+    fields = messages.read(error.control)['error']['fields']
+    assert fields['check'] == {'t': 'utf8', 'v': 'declared'}
+    assert fields['attachment'] == {'t': 'u32', 'v': '1'}
+    with pytest.raises(_native.CoreError) as finished:
+        run.next()
+    assert finished.value.code == 'RUN_FINISHED'
+
+
+@pytest.mark.parametrize('shape', ['primitive', 'nested', 'dictionary-indices'])
+def test_valid_unaligned_values_are_copied_before_typed_construction(
+    shape: str,
+) -> None:
+    if shape == 'primitive':
+        array = _unaligned_values()
+    elif shape == 'nested':
+        array = pa.ListArray.from_arrays([0, 1, 2, 3], _unaligned_values())
+    else:
+        array = pa.DictionaryArray.from_arrays(
+            _unaligned_values(), pa.array(['a', 'b', 'c', 'd'])
+        )
+    sent = pa.table({'a': array})
+    expected = sent.to_pylist()
+    run, stream = _echoed(sent)
+    taken = _imported(stream)
+    assert taken.schema.equals(sent.schema, check_metadata=True)
+    assert taken.to_pylist() == expected
+    assert sent.to_pylist() == expected
+    del array, sent, stream, run
+    gc.collect()
+    assert taken.to_pylist() == expected
+
+
+@pytest.mark.parametrize('value', [12, 12345678901234567890123456789])
+def test_valid_unaligned_decimal_keeps_exact_values_metadata_and_nulls(
+    value: int,
+) -> None:
+    decimal_type = pa.decimal128(38, 0)
+    canonical = pa.array(
+        [decimal.Decimal(value), None, decimal.Decimal(-value)], decimal_type
+    )
+    storage = pa.allocate_buffer(canonical.buffers()[1].size + 16)
+    memoryview(storage).cast('B')[8 : 8 + canonical.buffers()[1].size] = (
+        memoryview(canonical.buffers()[1]).cast('B')
+    )
+    unaligned = storage.slice(8, canonical.buffers()[1].size)
+    assert unaligned.address % 16 == 8
+    array = pa.Array.from_buffers(
+        decimal_type,
+        len(canonical),
+        [canonical.buffers()[0], unaligned],
+        null_count=canonical.null_count,
+    )
+    schema = pa.schema(
+        [pa.field('f', decimal_type, metadata={b'origin': b'foreign-decimal'})],
+        metadata={b'fixture': b'preserve'},
+    )
+    sent = pa.Table.from_arrays([array], schema=schema)
+    run, stream = _echoed(sent)
+    taken = _imported(stream)
+    assert taken.schema.equals(schema, check_metadata=True)
+    actual = _only_chunk(taken, 'f')
+    assert actual.equals(canonical)
+    assert actual.buffers()[1].address % 16 == 0
+    assert actual.buffers()[1].address != unaligned.address
+    del run, stream, sent, array, storage, unaligned
+    gc.collect()
+    assert _only_chunk(taken, 'f').equals(canonical)
+
+
+def test_empty_primitive_dangling_buffer_remains_admissible() -> None:
+    # A zero-byte C buffer may use a dangling address. It is never read and
+    # Arrow's importer replaces it with its own aligned empty allocation.
+    array = pa.Array.from_buffers(
+        pa.int64(), 0, [None, pa.foreign_buffer(1, 0)]
+    )
+    batch = pa.record_batch([array], names=['a'])
+    # Tables may omit empty batches entirely. An explicit reader makes the
+    # native preflight see this batch and its zero-byte data buffer.
+    reader = pa.RecordBatchReader.from_batches(batch.schema, [batch])
+    run = _native.Run.start(*messages.fetch({'expect': 'discover'}, echo=True))
+    run.next()
+    run.reply(messages.fetch_reply(), {1: reader})
+    assert messages.read(run.next()[0])['result']['rows'] == 0
+    assert _imported(run.take_attachment(1)).num_rows == 0
+
+
 def test_the_run_holds_the_producer_s_memory_and_releases_it_exactly() -> None:
     before = _held()
     sent = pa.table(_canonical())

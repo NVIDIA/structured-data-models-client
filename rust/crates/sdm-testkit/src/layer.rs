@@ -26,14 +26,14 @@ use arrow_array::cast::AsArray;
 use arrow_array::types::Int64Type;
 use arrow_array::{Array, ArrayRef, RecordBatch};
 use sdm_contract::catalog::{
-    CatalogAnswer, CatalogColumn, CatalogForeignKey, CatalogIndex, CatalogKey, IndexColumns,
+    CatalogAnswer, CatalogColumn, CatalogForeignKey, CatalogIndex, CatalogKey, IndexCoverage,
     KeyKind,
 };
 use sdm_contract::data::{
     DataLayer, DataRequest, DescribePart, Dialect, FetchPlan, ProviderCapabilities, ProviderChoice,
-    catalog_columns as c,
+    catalog_columns as c, views_unread,
 };
-use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind};
+use sdm_contract::{CoreError, Detail, Sentence};
 use sdm_host::CompositionRoot;
 
 /// The data layer of host providers alone.
@@ -49,8 +49,7 @@ pub fn root() -> CompositionRoot {
 /// The refusal of a SQL dialect, which this layer renders none of.
 fn no_dialect(dialect: &Dialect) -> CoreError {
     CoreError::new(
-        ErrorKind::Unsupported,
-        ErrorCode::UnsupportedRequest,
+        Sentence::NoDialectNamed,
         "this data layer renders no SQL dialect",
     )
     .with_field("dialect", Detail::text(dialect.name()))
@@ -60,7 +59,7 @@ impl DataLayer for HostLayer {
     fn capabilities(&self, provider: &ProviderChoice) -> Result<ProviderCapabilities, CoreError> {
         match provider {
             ProviderChoice::Host { capabilities } => Ok(capabilities.clone()),
-            ProviderChoice::Sql { dialect } => Err(no_dialect(dialect)),
+            ProviderChoice::Sql { dialect, .. } => Err(no_dialect(dialect)),
         }
     }
 
@@ -73,7 +72,7 @@ impl DataLayer for HostLayer {
             ProviderChoice::Host { .. } => Ok(FetchPlan::Host {
                 expect: request.expected(),
             }),
-            ProviderChoice::Sql { dialect } => Err(no_dialect(dialect)),
+            ProviderChoice::Sql { dialect, .. } => Err(no_dialect(dialect)),
         }
     }
 
@@ -83,13 +82,12 @@ impl DataLayer for HostLayer {
         provider: &ProviderChoice,
         batches: &[RecordBatch],
     ) -> Result<CatalogAnswer, CoreError> {
-        if let ProviderChoice::Sql { dialect } = provider {
+        if let ProviderChoice::Sql { dialect, .. } = provider {
             return Err(no_dialect(dialect));
         }
         let DataRequest::Describe { part, .. } = request else {
             return Err(CoreError::new(
-                ErrorKind::Internal,
-                ErrorCode::InternalError,
+                Sentence::Internal,
                 "only a catalog answer is read by the data layer",
             )
             .with_field("request", Detail::text(request.name())));
@@ -98,7 +96,7 @@ impl DataLayer for HostLayer {
         for batch in batches {
             rows.read(*part, batch)?;
         }
-        Ok(rows.answer(*part))
+        rows.answer(*part)
     }
 }
 
@@ -106,8 +104,7 @@ impl DataLayer for HostLayer {
 /// (decision H16, check (b)) should have refused first.
 fn unread_answer() -> CoreError {
     CoreError::new(
-        ErrorKind::Internal,
-        ErrorCode::InternalError,
+        Sentence::Internal,
         "a catalog answer is not in the shape its plan expects",
     )
 }
@@ -135,8 +132,30 @@ fn flag(batch: &RecordBatch, name: &str, row: usize) -> Result<bool, CoreError> 
     Ok(flags.is_valid(row) && flags.value(row))
 }
 
+/// Row `row` of the list-of-names column `name`: its names in order, a
+/// null name dropped and the others kept, none where the list is null, as
+/// `sdm-data`'s catalog reader reads a key's and a foreign key's columns
+/// (P2-T2.7-1).
+fn kept_names(batch: &RecordBatch, name: &str, row: usize) -> Result<Vec<String>, CoreError> {
+    let lists = column(batch, name)?
+        .as_list_opt::<i32>()
+        .ok_or_else(|| unread_answer().with_field("column", Detail::text(name)))?;
+    if lists.is_null(row) {
+        return Ok(Vec::new());
+    }
+    let items = lists.value(row);
+    let strings = items
+        .as_string_opt::<i32>()
+        .ok_or_else(|| unread_answer().with_field("column", Detail::text(name)))?;
+    Ok((0..strings.len())
+        .filter(|&i| strings.is_valid(i))
+        .map(|i| strings.value(i).to_owned())
+        .collect())
+}
+
 /// Row `row` of the list-of-names column `name`: its names in order, or
-/// `None` where the list, or any name in it, is null.
+/// `None` where the list, or any name in it, is null, as `sdm-data` reads
+/// an index's columns (unresolved, never the names left over).
 fn names(batch: &RecordBatch, name: &str, row: usize) -> Result<Option<Vec<String>>, CoreError> {
     let lists = column(batch, name)?
         .as_list_opt::<i32>()
@@ -167,12 +186,16 @@ struct Rows {
     foreign_keys: Vec<CatalogForeignKey>,
     indexes: Vec<CatalogIndex>,
     index_columns: Vec<Option<String>>,
+    namespace: Vec<String>,
 }
 
 impl Rows {
     fn read(&mut self, part: DescribePart, batch: &RecordBatch) -> Result<(), CoreError> {
         for row in 0..batch.num_rows() {
             match part {
+                DescribePart::KeyEnforcement | DescribePart::ViewDefinition => {
+                    return Err(views_unread());
+                }
                 DescribePart::Tables => self.tables.extend(text(batch, c::TABLE, row)?),
                 DescribePart::Columns => {
                     if let Some(name) = text(batch, c::NAME, row)? {
@@ -194,8 +217,9 @@ impl Rows {
                         Some(c::KIND_FOREIGN) => KeyKind::Foreign,
                         _ => KeyKind::Other,
                     },
-                    columns: names(batch, c::COLUMNS, row)?.unwrap_or_default(),
+                    columns: kept_names(batch, c::COLUMNS, row)?,
                     index: None,
+                    enforced: true,
                 }),
                 DescribePart::ForeignKeys => {
                     let key = column(batch, c::KEY)?
@@ -206,9 +230,8 @@ impl Rows {
                         key,
                         referenced_table: text(batch, c::REFERENCED_TABLE, row)?
                             .unwrap_or_default(),
-                        columns: names(batch, c::COLUMNS, row)?.unwrap_or_default(),
-                        referenced_columns: names(batch, c::REFERENCED_COLUMNS, row)?
-                            .unwrap_or_default(),
+                        columns: kept_names(batch, c::COLUMNS, row)?,
+                        referenced_columns: kept_names(batch, c::REFERENCED_COLUMNS, row)?,
                     });
                 }
                 DescribePart::Indexes => {
@@ -216,26 +239,32 @@ impl Rows {
                         self.indexes.push(CatalogIndex {
                             table,
                             columns: names(batch, c::COLUMNS, row)?
-                                .map_or(IndexColumns::Unresolved, IndexColumns::Resolved),
+                                .map_or(IndexCoverage::Unresolved, IndexCoverage::Resolved),
                         });
                     }
                 }
                 DescribePart::IndexColumns => {
                     self.index_columns.push(text(batch, c::NAME, row)?);
                 }
+                DescribePart::Namespace => self.namespace.extend(text(batch, c::NAME, row)?),
             }
         }
         Ok(())
     }
 
-    fn answer(self, part: DescribePart) -> CatalogAnswer {
-        match part {
+    fn answer(self, part: DescribePart) -> Result<CatalogAnswer, CoreError> {
+        Ok(match part {
+            // A host provider is never asked for a view's definition (T3.27).
+            DescribePart::KeyEnforcement | DescribePart::ViewDefinition => {
+                return Err(views_unread());
+            }
             DescribePart::Tables => CatalogAnswer::Tables(self.tables),
             DescribePart::Columns => CatalogAnswer::Columns(self.columns),
             DescribePart::Keys => CatalogAnswer::Keys(self.keys),
             DescribePart::ForeignKeys => CatalogAnswer::ForeignKeys(self.foreign_keys),
             DescribePart::Indexes => CatalogAnswer::Indexes(self.indexes),
             DescribePart::IndexColumns => CatalogAnswer::IndexColumns(self.index_columns),
-        }
+            DescribePart::Namespace => CatalogAnswer::Namespace(self.namespace),
+        })
     }
 }

@@ -1,0 +1,977 @@
+#!/usr/bin/env python3
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+r"""The early capture (C-1) and the reference top-up (E-0), per warehouse
+leg (Phase 3 design, "The live-test plan"; T3.3).
+
+    capture_run.py plan --leg LEG [--e0]
+    capture_run.py run --leg LEG --reference CHECKOUT --out DIR [--e0]
+
+``plan`` is the dry mode, run anywhere, reaching nothing: the cases the
+leg records, in order (on Snowflake a case creating a semantic view from
+its YAML first, its statements shown, so a statement the engine refuses
+shows before anything is recorded; C-1: every case that runs on the leg; with
+``--e0``, only those pending live, with no capture on the leg or one whose
+input hash is not the case's), each case whose tables the leg's engine
+cannot hold listed by the loader's reason, never recorded, each case
+:data:`NOT_LIVE` leaves out of the leg listed by name and reason, and the
+environment the run needs, by variable name only (no value is read for
+print). ``run`` records: the old client (``run_python.py --mode
+python-ref``, T3.2's recording mode) over the planned cases on the leg's
+live connection (``SDM_LIVE_CONFIG``), in this process, with every
+statement any driver runs, the loader's and the old client's alike,
+through the live write guard (KO3-51; ``write_guard.py`` beside this file,
+installed on the drivers themselves, without which the run does not
+start), refused outside the one test schema; case by case, a case that
+fails (the runner's failure, any other error, or any statement of the
+case the guard refused, even one the old client's call took for its
+answer) written with its reason to ``DIR/<leg>.failed.json``, none of it
+imported, while the others go on; their lines written to ``DIR/<leg>.record.jsonl``, then each written as a capture under
+``DIR/<leg>/<case>/`` with the leg's manifest (``captures.py import``: the
+placeholders and the private-name search applied again). Nothing is
+written into the repository: the orchestrator commits the captures under
+the protected-path trailer.
+
+The two Databricks legs load the one Databricks test schema, which holds
+one case's tables at a time (the loader refuses a relation it did not
+load): they run one after the other, never together. The SQL-warehouse
+and Snowflake legs run from the reference machine; the Spark and Lakebase
+legs in one-time serverless jobs (``capture.job.template.json``, filled
+and submitted by ``dbx_runs.py``, its notebook ``capture_job.py``).
+"""
+
+from __future__ import annotations
+
+import argparse
+import contextlib
+import importlib.util
+import io
+import json
+import os
+import re
+import signal
+import sys
+import threading
+import time
+from collections.abc import Iterable, Iterator
+from pathlib import Path
+from types import ModuleType
+from typing import Any
+
+ROOT = Path(__file__).resolve().parents[2]
+RUNNERS = ROOT / 'contract/runners'
+CASES = ROOT / 'contract/cases'
+CAPTURES = ROOT / 'contract/captures'
+LEGS = ('databricks-sql', 'databricks-spark', 'snowflake', 'lakebase')
+#: The order the legs record in: the Databricks legs one after the other.
+ORDER = ('databricks-sql', 'snowflake', 'databricks-spark', 'lakebase')
+#: The environment a leg's recording reads, by name: the live
+#: configuration, each placeholder's private name, the write guard's test
+#: schema, and Snowflake's credentials (KO3-24, loaded from the owner's
+#: file, never read here).
+ENVIRONMENT = {
+    'databricks-sql': (
+        'SDM_LIVE_CONFIG',
+        'SDM_CAPTURE_CATALOG',
+        'SDM_CAPTURE_SCHEMA',
+        'SDM_LIVE_TEST_DATABASE',
+        'SDM_LIVE_TEST_SCHEMA',
+    ),
+    'databricks-spark': (
+        'SDM_LIVE_CONFIG',
+        'SDM_CAPTURE_CATALOG',
+        'SDM_CAPTURE_SCHEMA',
+        'SDM_LIVE_TEST_DATABASE',
+        'SDM_LIVE_TEST_SCHEMA',
+    ),
+    'snowflake': (
+        'SDM_LIVE_CONFIG',
+        'SDM_CAPTURE_CATALOG',
+        'SDM_CAPTURE_SCHEMA',
+        'SDM_LIVE_TEST_DATABASE',
+        'SDM_LIVE_TEST_SCHEMA',
+        'SNOWFLAKE_URL',
+        'SNOWFLAKE_USERNAME',
+        'SNOWFLAKE_ACCESS_TOKEN',
+    ),
+    'lakebase': (
+        'SDM_LIVE_CONFIG',
+        'SDM_CAPTURE_SCHEMA',
+        'SDM_LIVE_TEST_SCHEMA',
+    ),
+}
+
+
+def _module(name: str) -> ModuleType:
+    key = f'capture_run_{name}'
+    if key in sys.modules:
+        return sys.modules[key]
+    spec = importlib.util.spec_from_file_location(key, RUNNERS / f'{name}.py')
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[key] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def plan(leg: str, e0: bool = False) -> dict[str, Any]:
+    r"""What ``leg`` records, reaching nothing (the dry mode)."""
+    if leg not in LEGS:
+        raise SystemExit(f'no leg {leg!r}; it is one of {LEGS}')
+    runner = _module('run_python')
+    loader = _module('databases')
+    captures = _module('captures')
+    bases = runner.load_bases()
+    engine = loader.ENGINE[leg]
+    record: list[str] = []
+    refused: list[str] = []
+    current: list[str] = []
+    not_live: list[str] = []
+    for path in sorted(CASES.rglob('*.json')):
+        ((case, _),) = runner.load_cases([path])
+        if leg not in runner.case_warehouses(case):
+            continue
+        if leg in NOT_LIVE.get(case['id'], ((), ''))[0]:
+            not_live.append(f'{case["id"]}: {NOT_LIVE[case["id"]][1]}')
+            continue
+        if e0:
+            capture = CAPTURES / leg / case['id']
+            if (
+                capture / captures.DOCUMENT
+            ).is_file() and captures.read_document(capture)[
+                'input_hash'
+            ] == runner.input_hash(case, bases):
+                current.append(case['id'])
+                continue
+        reason = None
+        if engine in loader.WAREHOUSE_ENGINES:
+            duck = runner._connection(case, bases)
+            try:
+                for table in loader._tables(duck):
+                    loader.stored(duck, table, engine)
+            except loader.Unloadable as error:
+                reason = str(error)
+            finally:
+                duck.close()
+        if reason is None:
+            record.append(str(path))
+        else:
+            refused.append(f'{case["id"]}: {reason}')
+    first: dict[str, Any] | None = None
+    if leg == 'snowflake':
+        # A semantic view created from a case's YAML first: a statement the
+        # live engine refuses shows before any case is recorded.
+        viewed = [
+            path
+            for path in record
+            if (
+                json.loads((ROOT / path).read_text())
+                .get('input', {})
+                .get('view')
+                or {}
+            ).get('yaml')
+        ]
+        record = viewed + [path for path in record if path not in viewed]
+        if viewed:
+            ((case, _),) = runner.load_cases([Path(viewed[0])])
+            ran: list[str] = []
+            schema = loader.CaseSchema(
+                'snowflake', ran.append, ('{catalog}', '{schema}')
+            )
+            duck = runner._connection(case, bases)
+            try:
+                schema.load(duck, fold=True)
+            finally:
+                duck.close()
+            view = case['input']['view']
+            schema.create_view(view['kind'], view['name'], view['yaml'])
+            first = {
+                'case': case['id'],
+                'statements': [
+                    statement[:160] + (' ...' if len(statement) > 160 else '')
+                    for statement in ran
+                    if not statement.startswith('INSERT')
+                ],
+            }
+    return {
+        'leg': leg,
+        'campaign': 'E-0' if e0 else 'C-1',
+        'first': first,
+        'order': list(ORDER),
+        'record': record,
+        'refused_by_the_loader': refused,
+        'not_live': not_live,
+        'current': current,
+        'environment': {name: name in os.environ for name in ENVIRONMENT[leg]},
+    }
+
+
+#: The cases a leg's live plan leaves out, by name, with the legs and the
+#: reason (the owner's allowlist decision): ``captures.py``'s list, which
+#: the capture check reads too.
+NOT_LIVE = _module('captures').NOT_LIVE
+
+
+#: The live write guard, beside this file (KO3-51): a run without it does
+#: not start.
+GUARD = Path(__file__).resolve().with_name('write_guard.py')
+
+
+def load_guard(path: Path | str | None = GUARD) -> ModuleType:
+    r"""The live write guard's module (``write_guard.py``, its
+    ``WriteGuard``, ``install`` and ``from_environment``); a run without it refuses to
+    start."""
+    if not path or not Path(path).is_file():
+        raise SystemExit(
+            f'no live write guard at {path}; every live write goes through '
+            'it (KO3-51)'
+        )
+    spec = importlib.util.spec_from_file_location('sdm_live_write_guard', path)
+    if spec is None or spec.loader is None:
+        raise SystemExit(f'the live write guard {path} cannot be read')
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    for name in ('WriteGuard', 'install', 'from_environment'):
+        if not hasattr(module, name):
+            raise SystemExit(f'the live write guard {path} has no {name}')
+    return module
+
+
+#: Each leg's dialect in the write guard.
+DIALECT = {
+    'databricks-sql': 'databricks',
+    'databricks-spark': 'databricks',
+    'snowflake': 'snowflake',
+    'lakebase': 'postgres',
+}
+
+
+def install_guard(leg: str, guard: ModuleType, loader: Any) -> Any:
+    r"""Every live statement of the run through the one write guard:
+    every driver's entry points (``guard.install``, each dialect's test
+    schema from ``SDM_LIVE_TEST_*``, a dialect with none refusing every
+    statement) and the loader's own statements (``databases.WRITE_GUARD``).
+    The leg's test schema must be set, and be the one its cases resolve
+    ``{catalog}`` and ``{schema}`` to (``SDM_CAPTURE_*``), or the run does
+    not start. Returns what undoes it."""
+    guards = guard.from_environment()
+    own = guards.get(DIALECT[leg])
+    if own is None:
+        raise SystemExit(
+            f'the write guard names no test schema for {leg} (SDM_LIVE_TEST_*)'
+        )
+    for variable, held in (
+        ('SDM_CAPTURE_CATALOG', own.database),
+        ('SDM_CAPTURE_SCHEMA', own.schema),
+    ):
+        value = os.environ.get(variable)
+        if held is None or value is None:
+            continue
+        same = (
+            value.lower() == held.lower()
+            if own.dialect == 'databricks'
+            else value == held
+        )
+        if not same:
+            raise SystemExit(
+                f"{variable} is not the write guard's test schema "
+                '(SDM_LIVE_TEST_*): the loads would be refused'
+            )
+    undo = guard.install(guards)
+    loader.WRITE_GUARD = guard._keeping(own.check)
+    loader.WRITE_GUARD_SETUP = getattr(guard, 'setup', None)
+
+    def uninstall() -> None:
+        loader.WRITE_GUARD = None
+        loader.WRITE_GUARD_SETUP = None
+        undo()
+
+    return uninstall
+
+
+#: How long one case may run, in seconds, before it fails alone: three
+#: times the heaviest case the Spark leg recorded (549 s, a 30 MiB body;
+#: the Spark recording's root-cause analysis, 2026-10-24).
+CASE_TIMEOUT = 1800
+
+
+class CaseTimedOut(BaseException):
+    r"""A case past its time limit. Not an :class:`Exception`, so no
+    handler of the runner's or a driver's takes it for the case's own
+    error or answer; :func:`run` catches it and goes on."""
+
+
+@contextlib.contextmanager
+def _limited(seconds: float | None) -> Iterator[None]:
+    r"""Raises :class:`CaseTimedOut` in the block once ``seconds`` have
+    passed, by the interval timer, which interrupts a statement waiting on
+    its driver's socket; no limit for ``None`` or 0. :func:`run` refuses a
+    limit off the main thread, where no signal arrives."""
+    if not seconds:
+        yield
+        return
+
+    def expired(signum: int, frame: Any) -> None:
+        raise CaseTimedOut
+
+    before = signal.signal(signal.SIGALRM, expired)
+    signal.setitimer(signal.ITIMER_REAL, seconds)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, before)
+
+
+def run(
+    leg: str,
+    reference: Path,
+    out: Path,
+    e0: bool = False,
+    guard_path: Path | str | None = GUARD,
+    case_timeout: float | None = CASE_TIMEOUT,
+    dirty_excuse: str | None = None,
+) -> int:
+    r"""Records ``leg`` live (see the module's text), every write through
+    the live write guard; returns the exit status. As each case ends, a
+    line for it is added to ``DIR/<leg>.progress.jsonl`` (its number,
+    name, ``recorded`` or ``failed`` and its seconds) and printed, and a
+    failure is written to ``DIR/<leg>.failed.json`` at once, so a run cut
+    short leaves what it did; a case running past ``case_timeout``
+    seconds fails alone, and the run goes on; a limit asked for off the
+    main thread is refused before anything runs."""
+    if (
+        case_timeout
+        and threading.current_thread() is not threading.main_thread()
+    ):
+        # The limit is the interval timer's signal, which only the main
+        # thread takes (Claude r1 P2): no run goes on believing itself
+        # limited.
+        raise SystemExit(
+            'a per-case time limit needs the main thread, where the timer '
+            'signal arrives; run there, or pass case_timeout 0 for none'
+        )
+    guard = load_guard(guard_path)
+    planned = plan(leg, e0)
+    missing = [
+        name for name, held in planned['environment'].items() if not held
+    ]
+    if missing:
+        print(f'{leg}: the environment lacks {", ".join(missing)}')
+        return 2
+    if not planned['record']:
+        print(f'{leg}: nothing to record')
+        return 0
+    dirty = dirty_trees(ROOT, Path(reference))
+    dirty_excuse = (
+        dirty_excuse
+        if dirty_excuse is not None
+        else os.environ.get('SDM_RECORD_EXCUSE', '')
+    ).strip()
+    if dirty and not dirty_excuse:
+        # A capture names its harness's and the reference's commits; files
+        # that differ from them make that a false record (T3.20 review).
+        raise SystemExit(
+            f'{", ".join(dirty)}: not a clean checkout of its commit; record '
+            'from clean trees, or name the excuse (--dirty-excuse)'
+        )
+    # The runner in this process, with the loader it loads (by the names
+    # its _sibling reads), so the guard holds every write it makes.
+    loader = _named('databases')
+    runner = _named('run_python')
+    out.mkdir(parents=True, exist_ok=True)
+    parts = out / f'{leg}.cases'
+    parts.mkdir(exist_ok=True)
+    failed: dict[str, str] = {}
+    recorded: list[Path] = []
+    progress = out / f'{leg}.progress.jsonl'
+    # Rewritten whole after each case, never appended to: a Databricks
+    # volume refuses an append to a file once written (Errno 29, the
+    # second recording's Spark run).
+    progressed: list[str] = []
+    progress.write_text('', encoding='utf-8')
+    failures = out / f'{leg}.failed.json'
+
+    def write_failures() -> None:
+        failures.write_text(
+            json.dumps(failed, indent=1, sort_keys=True) + '\n',
+            encoding='utf-8',
+        )
+
+    write_failures()
+    uninstall = install_guard(leg, guard, loader)
+    try:
+        # One case at a time: a case that fails (refused, not opened, or
+        # past its time limit) is written with its reason, and the others
+        # go on.
+        for number, path in enumerate(planned['record']):
+            case = Path(path).stem
+            started = time.monotonic()
+            reason = _one_case(
+                runner,
+                guard,
+                path,
+                reference,
+                leg,
+                parts / f'{number:04d}',
+                case_timeout,
+                dirty_excuse,
+            )
+            if reason is None:
+                recording = parts / f'{number:04d}.record.jsonl'
+                if recording.is_file():
+                    recorded.append(recording)
+            else:
+                failed[case] = reason
+                write_failures()
+            line = {
+                'number': number,
+                'case': case,
+                'status': 'recorded' if reason is None else 'failed',
+                'seconds': round(time.monotonic() - started, 1),
+            }
+            progressed.append(json.dumps(line, sort_keys=True) + '\n')
+            progress.write_text(''.join(progressed), encoding='utf-8')
+            print(
+                f'{leg}: {number + 1}/{len(planned["record"])} {case} '
+                f'{line["status"]} in {line["seconds"]} s',
+                flush=True,
+            )
+    finally:
+        uninstall()
+    whole = out / f'{leg}.record.jsonl'
+    whole.write_text(
+        ''.join(part.read_text(encoding='utf-8') for part in recorded),
+        encoding='utf-8',
+    )
+    for case, reason in sorted(failed.items()):
+        print(f'{leg}: {case} failed: {reason}')
+    for manifest in _module('captures').import_recording(whole, out):
+        print(f'{leg}: wrote {manifest}')
+    return 1 if failed else 0
+
+
+def _one_case(
+    runner: Any,
+    guard: ModuleType,
+    path: str,
+    reference: Path,
+    leg: str,
+    stem: Path,
+    case_timeout: float | None,
+    dirty_excuse: str = '',
+) -> str | None:
+    r"""Records the case at ``path``, its lines beside ``stem``
+    (``.record.jsonl``, ``.python-ref.jsonl``), within ``case_timeout``
+    seconds; returns why it failed, or ``None``."""
+    recording = stem.with_name(stem.name + '.record.jsonl')
+    observations = stem.with_name(stem.name + '.python-ref.jsonl')
+    refusals = len(guard.REFUSALS)
+    try:
+        with _limited(case_timeout), _recording_excuse(dirty_excuse):
+            lines = runner.run(
+                'python-ref',
+                runner.load_cases([Path(path)]),
+                reference,
+                database=leg,
+                record=recording,
+            )
+    except CaseTimedOut:
+        return f'past its time limit of {case_timeout} s'
+    except runner.RunnerFailure as failure:
+        return str(failure)
+    except Exception as error:  # noqa: BLE001 - this case alone fails
+        return f'{type(error).__name__}: {error}'
+    if len(guard.REFUSALS) > refusals:
+        # A statement of the case refused, whoever sent it: the old
+        # client's call would record the refusal as its own answer.
+        return 'the write guard refused: ' + '; '.join(
+            guard.REFUSALS[refusals:]
+        )
+    environment = environment_failure(lines)
+    if environment is not None:
+        # The run's surroundings failed, not the old client: never a
+        # capture (the C-1 Spark leg's predicts, 2026-10-24).
+        return environment
+    # Manifest coverage alone cannot prove results were kept. Check the
+    # original recording, including every statement and Arrow result,
+    # before it is eligible for import or a recorded progress entry.
+    checked = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(checked):
+            status = _module('capture_check').recording_main(
+                [
+                    '--cases',
+                    path,
+                    '--capture',
+                    str(recording),
+                    '--leg',
+                    leg,
+                    '--locked',
+                ]  # fmt: skip
+            )
+    except Exception as error:  # noqa: BLE001 - this case alone fails
+        return f'recording validation failed: {type(error).__name__}: {error}'
+    if status:
+        return 'recording is not complete: ' + checked.getvalue().strip()
+    observations.write_text(
+        ''.join(json.dumps(item, sort_keys=True) + '\n' for item in lines),
+        encoding='utf-8',
+    )
+    return None
+
+
+@contextlib.contextmanager
+def _recording_excuse(excuse: str) -> Iterator[None]:
+    """Give capture_line the same explanation the preflight accepted."""
+    previous = os.environ.get('SDM_RECORD_EXCUSE')
+    try:
+        if excuse:
+            os.environ['SDM_RECORD_EXCUSE'] = excuse
+        else:
+            os.environ.pop('SDM_RECORD_EXCUSE', None)
+        yield
+    finally:
+        if previous is None:
+            os.environ.pop('SDM_RECORD_EXCUSE', None)
+        else:
+            os.environ['SDM_RECORD_EXCUSE'] = previous
+
+
+#: Outcomes that say the run's surroundings failed, not the old client: a
+#: request that never reached the scripted endpoint. No case expects one.
+ENVIRONMENT_CODES = frozenset({'TRANSPORT_ERROR'})
+ENVIRONMENT_ERRORS = frozenset(
+    {'ConnectionError', 'ConnectionRefusedError', 'ConnectTimeout'}
+)
+
+
+def environment_failure(lines: list[Any]) -> str | None:
+    r"""Why the observed ``lines`` hold an environment's failure rather
+    than the old client's answer, or ``None``: an outcome of
+    :data:`ENVIRONMENT_CODES` or :data:`ENVIRONMENT_ERRORS`."""
+    for line in lines:
+        outcome = (line or {}).get('outcome') or {}
+        if (
+            outcome.get('code') in ENVIRONMENT_CODES
+            or outcome.get('error') in ENVIRONMENT_ERRORS
+        ):
+            return (
+                f'{outcome.get("error")} {outcome.get("code")} at '
+                f'{outcome.get("stage")}: the run could not reach what it '
+                'serves or reads, an environment failure, so no capture'
+            )
+    return None
+
+
+def endpoint_host(
+    candidates: tuple[str, ...] = ('127.0.0.1', '::1'),
+) -> str:
+    r"""The first local address the scripted endpoint answers on here,
+    served and called through ``requests`` as the client calls it, set as
+    ``SDM_SCRIPTED_ENDPOINT_HOST`` for the run; none answering stops the
+    run before anything is recorded. Databricks serverless refuses IPv4
+    loopback and serves IPv6 loopback (the second early capture's
+    diagnosis)."""
+    import requests
+
+    endpoint = _named('scripted_endpoint')
+    tried = []
+    for host in candidates:
+        try:
+            with endpoint.serve(host=host) as (url, received):
+                requests.post(f'{url}/v1/predictions', data=b'{}', timeout=10)
+                if received.requests:
+                    os.environ[endpoint.HOST_VARIABLE] = host
+                    return host
+        except Exception as error:  # noqa: BLE001 - try the next address
+            tried.append(f'{host}: {type(error).__name__}')
+            continue
+        tried.append(f'{host}: no request arrived')
+    raise SystemExit(
+        'the scripted endpoint answers on no local address here ('
+        + '; '.join(tried)
+        + '): every predict would fail, so nothing is recorded'
+    )
+
+
+def dirty_trees(*trees: Path) -> list[str]:
+    r"""Each git checkout of ``trees`` whose files differ from its commit
+    (``git status --porcelain`` not empty, or not a checkout)."""
+    import subprocess
+
+    dirty = []
+    for tree in trees:
+        done = subprocess.run(
+            ['git', '-C', str(tree), 'status', '--porcelain'],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if done.returncode != 0 or done.stdout.strip():
+            dirty.append(str(tree))
+    return dirty
+
+
+def local_checkout(source: Path | str, target: Path | str) -> Path:
+    r"""A copy of the checkout ``source`` at ``target`` with each tracked
+    file's mode as its commit holds it: a Databricks volume gives every
+    file one mode, so git reads a checkout there as changed in every file
+    (the C-1 Spark captures: both trees "dirty", by mode alone). Returns
+    ``target``."""
+    import shutil
+    import subprocess
+
+    target = Path(target)
+    shutil.copytree(source, target, symlinks=True, dirs_exist_ok=True)
+    listed = subprocess.run(
+        ['git', '-C', str(target), 'ls-files', '-s', '-z'],
+        capture_output=True,
+        check=True,
+    ).stdout.split(b'\0')
+    for entry in filter(None, listed):
+        meta, _, name = entry.partition(b'\t')
+        mode = meta.split()[0]
+        path = target / os.fsdecode(name)
+        if mode == b'100755':
+            path.chmod(0o755)
+        elif mode == b'100644' and path.exists():
+            path.chmod(0o644)
+    return target
+
+
+def _named(name: str) -> ModuleType:
+    r"""``contract/runners/<name>.py`` loaded under its own name, as the
+    runner's ``_sibling`` loads its neighbours."""
+    if name in sys.modules:
+        return sys.modules[name]
+    spec = importlib.util.spec_from_file_location(name, RUNNERS / f'{name}.py')
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+#: The reference's client package, which the recording mode imports from
+#: the reference checkout itself (``run_python.py``'s
+#: ``_require_reference_client``), beside the reference's wheels.
+CLIENT_SOURCE = Path('packages/structured-data-models-client/src')
+
+
+def bootstrap_reference(reference: Path, site: Path) -> Path:
+    r"""Makes the interpreter whose site directory is ``site`` import
+    ``sdm_client`` from the reference checkout ``reference``: a ``.pth``
+    file naming the checkout's client source, written after the
+    reference's wheels are installed and its client wheel removed (the
+    serverless jobs' layout, ``capture_job.py``), so the client the
+    recording runs is the checkout's, as the runner requires; returns the
+    file."""
+    source = (Path(reference) / CLIENT_SOURCE).resolve()
+    if not (source / 'sdm_client' / '__init__.py').is_file():
+        raise SystemExit(f'{reference}: no reference client at {CLIENT_SOURCE}')
+    path = Path(site) / 'sdm-reference-client.pth'
+    path.write_text(f'{source}\n', encoding='utf-8')
+    return path
+
+
+def installable_wheels(
+    folder: Path | str, tags: Iterable[Any] | None = None
+) -> list[str]:
+    r"""The wheels in ``folder`` this host installs, by its tags
+    (``tags``, else ``packaging.tags.sys_tags()``), sorted: the folder
+    holds every platform's build the jobs' hosts need (serverless runs on
+    x86_64 and aarch64), and pip refuses a whole install naming a wheel
+    the host does not support."""
+    from packaging.tags import sys_tags
+    from packaging.utils import parse_wheel_filename
+
+    supported = set(sys_tags() if tags is None else tags)
+    return sorted(
+        str(path)
+        for path in Path(folder).glob('*.whl')
+        if supported & set(parse_wheel_filename(path.name)[3])
+    )
+
+
+def use_reference_client(reference: Path) -> Path:
+    r"""Makes this process import ``sdm_client`` from the reference
+    checkout ``reference``: its client source first on ``sys.path``, any
+    ``sdm_client`` already imported forgotten, so the client the recording
+    runs is the checkout's, as the runner requires, beside the reference's
+    other packages installed from its wheels (``capture_job.py``; a
+    notebook's environment reads no ``.pth`` file). Returns the source."""
+    source = (Path(reference) / CLIENT_SOURCE).resolve()
+    if not (source / 'sdm_client' / '__init__.py').is_file():
+        raise SystemExit(f'{reference}: no reference client at {CLIENT_SOURCE}')
+    sys.path.insert(0, str(source))
+    for name in [n for n in sys.modules if n.split('.')[0] == 'sdm_client']:
+        del sys.modules[name]
+    return source
+
+
+#: Each job parameter that names part of a run's environment, and the
+#: variable it sets: the live configuration's path, the placeholders'
+#: private names and the write guard's test schema, filled into the job's
+#: spec when it is submitted (``dbx_runs.py spec --set``), never written
+#: in the repository.
+JOB_ENVIRONMENT = {
+    'live_config': 'SDM_LIVE_CONFIG',
+    'capture_catalog': 'SDM_CAPTURE_CATALOG',
+    'capture_schema': 'SDM_CAPTURE_SCHEMA',
+    'test_database': 'SDM_LIVE_TEST_DATABASE',
+    'test_schema': 'SDM_LIVE_TEST_SCHEMA',
+}
+
+
+#: The job parameter holding the other placeholders' private names, a JSON
+#: object by placeholder name (``{"user": ..., "shop_metric_view": ...}``),
+#: each set as ``SDM_CAPTURE_<NAME>``: an existing view's name, its
+#: schema, the view owner the warehouse's describe shows.
+JOB_NAMES = 'capture_names'
+
+
+def job_environment(parameters: dict[str, str]) -> list[str]:
+    r"""Sets the run's environment from a job's parameters
+    (:data:`JOB_ENVIRONMENT`, and each placeholder's name of
+    :data:`JOB_NAMES`), each given one; no value is printed. A name that
+    is not a placeholder's (``[a-z][a-z0-9_]*``), or a value that is not
+    text, is refused by its key. Returns the variables set."""
+    found = []
+    for parameter, variable in JOB_ENVIRONMENT.items():
+        value = (parameters.get(parameter) or '').strip()
+        if value:
+            os.environ[variable] = value
+            found.append(variable)
+    names = json.loads((parameters.get(JOB_NAMES) or '').strip() or '{}')
+    if not isinstance(names, dict):
+        raise SystemExit(f'{JOB_NAMES} is not a JSON object')
+    for key, value in sorted(names.items()):
+        if not (
+            re.fullmatch(r'[a-z][a-z0-9_]*', key)
+            and isinstance(value, str)
+            and value.strip()
+        ):
+            raise SystemExit(f'{JOB_NAMES}: {key!r} is no placeholder name')
+        variable = 'SDM_CAPTURE_' + key.upper()
+        os.environ[variable] = value.strip()
+        found.append(variable)
+    return found
+
+
+def heldout_spark(
+    mode: str,
+    cases: Path,
+    out: Path,
+    *,
+    payload: Path,
+    volume: str,
+    commit: str,
+    reference_commit: str,
+    stamp: Path,
+    record: Path | None = None,
+    record_fetches: Path | None = None,
+    plan: bool = False,
+) -> int:
+    """The existing one-time capture notebook, on an already-started draw.
+
+    The caller prepares the ordinary dbx_runs payload and final source/wheel
+    staging first. Cases are uploaded only after the one global stamp, never
+    during planning. Each invocation uses a fresh subdirectory and job token.
+    """
+    import subprocess
+    import uuid
+
+    if not plan and (
+        not stamp.is_file() or f'candidate {commit}\n' not in stamp.read_text()
+    ):
+        raise SystemExit('no matching global held-out started marker')
+    if mode not in ('python-ref', 'python-core'):
+        raise SystemExit(
+            'Spark held-out mode must be python-ref or python-core'
+        )
+    spec = importlib.util.spec_from_file_location(
+        'heldout_dbx_runs', ROOT / 'scripts/live/dbx_runs.py'
+    )
+    assert spec is not None and spec.loader is not None
+    jobs = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(jobs)
+    profile = jobs.setting(argparse.Namespace(), 'profile')
+    allowed = Path(jobs.setting(argparse.Namespace(), 'volume_dir'))
+    destination = Path(volume)
+    if (
+        not destination.is_absolute()
+        or not destination.is_relative_to(allowed)
+        or '..' in destination.parts
+    ):
+        raise SystemExit(
+            'held-out staging must be inside the authorized volume'
+        )
+    held = json.loads(payload.read_text())
+    tasks = held.get('tasks') or []
+    if len(tasks) != 1:
+        raise SystemExit(
+            'held-out Spark needs one existing capture-notebook task'
+        )
+    parameters = tasks[0]['notebook_task']['base_parameters']
+    if parameters.get('commit') != commit or not parameters.get(
+        'candidate_wheel_dir'
+    ):
+        raise SystemExit(
+            'Spark payload must name final source and candidate wheels'
+        )
+    stage = str(destination / ('heldout-' + uuid.uuid4().hex))
+    parameters.update(
+        {
+            'leg': 'databricks-spark',
+            'mode': mode,
+            'case_dir': stage + '/cases',
+            'out_dir': stage + '/output',
+            'heldout_marker': stage + '/started',
+            'reference_commit': reference_commit,
+        }
+    )
+    held['idempotency_token'] = str(uuid.uuid4())
+    folder = jobs.setting(argparse.Namespace(), 'folder')
+    policy = (
+        jobs.setting(argparse.Namespace(), 'policy_id')
+        if 'new_cluster' in tasks[0]
+        else ''
+    )
+    jobs.check(held, folder, policy)
+    if plan:
+        return 0
+
+    def copy(source: str, target: str, recursive: bool = False) -> None:
+        options = ['--recursive'] if recursive else []
+        subprocess.run(
+            [
+                'databricks',
+                '--profile',
+                profile,
+                'fs',
+                'cp',
+                *options,
+                source,
+                target,
+            ],
+            check=True,
+            stdin=subprocess.DEVNULL,
+        )
+
+    subprocess.run(
+        ['databricks', '--profile', profile, 'fs', 'mkdirs', 'dbfs:' + stage],
+        check=True,
+        stdin=subprocess.DEVNULL,
+    )
+    copy(str(stamp), 'dbfs:' + stage + '/started')
+    copy(str(cases), 'dbfs:' + stage + '/cases', recursive=True)
+    local_payload = out.with_suffix(out.suffix + '.job.json')
+    with local_payload.open('x') as stream:
+        json.dump(held, stream)
+    result = jobs.cli(
+        profile, 'jobs', 'submit', '--no-wait', '--json', json.dumps(held)
+    )
+    run_id = int(result['run_id'])
+    print(f'held-out Spark {mode} run {run_id}', flush=True)
+    status_path = out.with_suffix(out.suffix + '.job-status.json')
+    with status_path.open('x') as stream, contextlib.redirect_stdout(stream):
+        status = jobs.run_wait(
+            argparse.Namespace(
+                profile=profile,
+                run_ids=[run_id],
+                show_url=False,
+                poll=30,
+                max_wait=int(held.get('timeout_seconds') or 36000),
+            )
+        )
+    if status or jobs.collect(profile, run_id, False).get('output') != 'passed':
+        return 1
+    copy('dbfs:' + stage + '/output/observations.jsonl', str(out))
+    copy('dbfs:' + stage + '/output/identity.json', str(out) + '.identity.json')
+    if record is not None:
+        copy('dbfs:' + stage + '/output/recording.jsonl', str(record))
+    if record_fetches is not None:
+        copy('dbfs:' + stage + '/output/fetches.jsonl', str(record_fetches))
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
+    commands = parser.add_subparsers(dest='command', required=True)
+    planning = commands.add_parser('plan', help='what a leg records (dry)')
+    planning.add_argument('--leg', required=True, choices=LEGS)
+    planning.add_argument('--e0', action='store_true')
+    running = commands.add_parser('run', help='record a leg live')
+    running.add_argument('--leg', required=True, choices=LEGS)
+    running.add_argument('--reference', type=Path, required=True)
+    running.add_argument('--out', type=Path, required=True)
+    running.add_argument('--e0', action='store_true')
+    running.add_argument(
+        '--case-timeout',
+        type=float,
+        default=CASE_TIMEOUT,
+        help='seconds one case may run before it fails alone',
+    )
+    running.add_argument(
+        '--dirty-excuse',
+        default=None,
+        help='why recording from a checkout that is not clean is right',
+    )
+    booting = commands.add_parser(
+        'bootstrap', help='import sdm_client from the reference checkout'
+    )
+    booting.add_argument('--reference', type=Path, required=True)
+    booting.add_argument('--site', type=Path, required=True)
+    spark = commands.add_parser(
+        'heldout-spark',
+        help='run an already-stamped held-out leg in the existing one-time notebook',
+    )
+    spark.add_argument(
+        '--mode', choices=['python-ref', 'python-core'], required=True
+    )
+    for name in ('cases', 'out', 'payload', 'stamp'):
+        spark.add_argument('--' + name, type=Path, required=True)
+    for name in ('volume', 'commit', 'reference-commit'):
+        spark.add_argument('--' + name, required=True)
+    spark.add_argument('--record', type=Path)
+    spark.add_argument('--record-fetches', type=Path)
+    spark.add_argument('--plan', action='store_true')
+    arguments = parser.parse_args(argv)
+    if arguments.command == 'heldout-spark':
+        return heldout_spark(
+            arguments.mode,
+            arguments.cases,
+            arguments.out,
+            payload=arguments.payload,
+            volume=arguments.volume,
+            commit=arguments.commit,
+            reference_commit=arguments.reference_commit,
+            stamp=arguments.stamp,
+            record=arguments.record,
+            record_fetches=arguments.record_fetches,
+            plan=arguments.plan,
+        )
+    if arguments.command == 'bootstrap':
+        print(
+            f'wrote {bootstrap_reference(arguments.reference, arguments.site)}'
+        )
+        return 0
+    if arguments.command == 'plan':
+        print(json.dumps(plan(arguments.leg, arguments.e0), indent=1))
+        return 0
+    return run(
+        arguments.leg,
+        arguments.reference,
+        arguments.out,
+        arguments.e0,
+        case_timeout=arguments.case_timeout,
+        dirty_excuse=arguments.dirty_excuse,
+    )
+
+
+if __name__ == '__main__':
+    sys.exit(main())

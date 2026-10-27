@@ -46,6 +46,7 @@ from sdm_client import (
     StructuredDataError,
     _routing,
 )
+from sdm_client._rust.results import CoreRequest
 from sdm_client.errors import NimRequestError
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -80,7 +81,7 @@ def _endpoint() -> Any:
 
 @pytest.fixture(autouse=True)
 def _old(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
 
 
 def _shop() -> list[str]:
@@ -112,7 +113,7 @@ def _materialized(
             indices=[0, 1] if indices is None else indices,
             anchor_time=pd.Timestamp('2024-03-01'),
         )
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     return request
 
 
@@ -164,14 +165,14 @@ def _both(
     outcomes = []
     for routes in (CORE, None):
         if routes is None:
-            monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+            monkeypatch.setenv(_routing.ENVIRONMENT, '')
         else:
             monkeypatch.setenv(_routing.ENVIRONMENT, routes)
         try:
             outcomes.append(_predict(url, request, **arguments))
         except StructuredDataError as error:
             outcomes.append(error)
-    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     return outcomes[0], outcomes[1]
 
 
@@ -193,7 +194,7 @@ def test_the_result_on_the_core_is_the_old_route_s(
 ) -> None:
     request = _materialized(monkeypatch)
     # Contract v26's request state, version 2 (design choice 1).
-    assert request._core_state == {'version': 2}
+    assert request._core == CoreRequest(version=2)
     with _endpoint().serve() as (url, received):
         core, old = _both(monkeypatch, request, url)
     assert not isinstance(core, Exception), core
@@ -222,7 +223,7 @@ def test_another_request_state_version_is_refused_by_name(
 ) -> None:
     request = _materialized(monkeypatch)
     # Version 1, the state contract v25 wrote: not the current version.
-    request._core_state = {'version': 1}
+    request._core = CoreRequest(version=1)
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     with _endpoint().serve() as (url, received):
         with pytest.raises(StructuredDataError) as refused:
@@ -233,14 +234,21 @@ def test_another_request_state_version_is_refused_by_name(
     assert received.requests == []
 
 
-def test_a_request_the_core_did_not_materialize_has_no_core_route(
+def test_a_request_the_core_did_not_materialize_predicts_as_on_the_old_route(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # T3.26 (owner decision 2026-10-23): a request holding no state the
+    # core wrote, as an older client's does, is predicted from its own
+    # contents, as the old route predicts it.
     request = _materialized(monkeypatch)
-    del request._core_state
-    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
-    with pytest.raises(_routing.RouteError):
-        _predict('http://127.0.0.1:9', request)
+    request._core = None
+    with _endpoint().serve() as (url, received):
+        core, old = _both(monkeypatch, request, url)
+    assert not isinstance(core, Exception), core
+    pd.testing.assert_frame_equal(core.to_pandas(), old.to_pandas())
+    assert core.outputs == old.outputs
+    assert len(received.requests) == 2
+    assert request._core is None
 
 
 def test_the_outputs_are_checked_on_the_core_as_on_the_old_route(
@@ -261,7 +269,7 @@ def test_the_outputs_are_checked_on_the_core_as_on_the_old_route(
             seen = []
             for routes in (CORE, None):
                 if routes is None:
-                    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+                    monkeypatch.setenv(_routing.ENVIRONMENT, '')
                 else:
                     monkeypatch.setenv(_routing.ENVIRONMENT, routes)
                 with warnings.catch_warnings(record=True) as caught:
@@ -284,7 +292,7 @@ def test_the_outputs_are_checked_on_the_core_as_on_the_old_route(
             else:
                 pd.testing.assert_frame_equal(core.to_pandas(), old.to_pandas())
                 assert core.outputs == old.outputs, outputs
-    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
 
 
 def test_an_endpoint_s_refusal_is_shown_as_on_the_old_route(
@@ -436,7 +444,7 @@ def test_quantiles_with_no_prediction_are_the_old_route_s_on_the_core(
             warnings.simplefilter('always')
             monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
             core = _predict(url, request, outputs=outputs)
-        monkeypatch.delenv(_routing.ENVIRONMENT)
+        monkeypatch.setenv(_routing.ENVIRONMENT, '')
         with warnings.catch_warnings(record=True) as old_said:
             warnings.simplefilter('always')
             old = _predict(url, request, outputs=outputs)
@@ -762,7 +770,7 @@ def _emoji_request(
         request = PredictiveQuery(QUERY, schema).materialize(
             indices=[0, 1], anchor_time=pd.Timestamp('2024-03-01')
         )
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     return request
 
 
@@ -783,7 +791,7 @@ def _sent(
     with _answering(400, b'{"code": "RECORDED"}') as (url, received):
         with pytest.raises(StructuredDataError) as refused:
             _predict(url, request)
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     return written, received, refused.value
 
 

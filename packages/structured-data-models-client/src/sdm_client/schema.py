@@ -33,6 +33,8 @@ Nothing here contacts a model. Inference reads your frames locally.
 
 from __future__ import annotations
 
+import functools
+import importlib.util
 import warnings
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from collections.abc import Set as AbstractSet
@@ -40,11 +42,6 @@ from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any, NamedTuple, TypeVar
 
 import pandas as pd
-from predictive_query.time_columns import (
-    TimeColumnChoice,
-    choose_time_column,
-    taken_unchecked,
-)
 
 from sdm_client.core import dates
 from sdm_client.core.warnings import SDMWarning, caller_stacklevel
@@ -56,7 +53,10 @@ from sdm_client.wire import (
 )
 
 if TYPE_CHECKING:
+    from predictive_query.time_columns import TimeColumnChoice
     from sdm_connectors import Source
+
+    from sdm_client._rust.results import SourceFacts
 
 # Semantic types this client can declare. These are the contract's, and match
 # ``predictive_query.Stype`` one for one.
@@ -125,6 +125,14 @@ class Column:
     untyped: bool = field(init=False, default=False)
     stype_declared: bool = field(init=False, default=False)
     _stype_before_key: str | None = field(init=False, default=None, repr=False)
+    #: What the source said of the column, where the core described it
+    #: (``sdm_client._rust.results.SourceFacts``, T3.16): kept with the
+    #: column, copied and pickled with it, and handed back whole to the
+    #: core, which reads a column with none from the source. Out of repr
+    #: and equality, so a column is what it says, however it was made.
+    _source: SourceFacts | None = field(
+        init=False, default=None, repr=False, compare=False
+    )
 
     def __post_init__(self) -> None:
         self._check_stype(self.stype)
@@ -185,14 +193,8 @@ class Column:
                 'assign the dtype you want instead',
                 code='INVALID_REQUEST',
             )
-        if (
-            key == 'stype'
-            and getattr(
-                getattr(getattr(self, '_table', None), '_schema', None),
-                '_core_description',
-                None,
-            )
-            is not None
+        if key == 'stype' and _described_on_the_core(
+            getattr(getattr(self, '_table', None), '_schema', None)
         ):
             # A core-built schema's column: the core checks and makes the
             # edit, and its answer is stored (T1.24b, decision E66(g)).
@@ -409,12 +411,8 @@ class _TableShape:
         return _copy_table(self)
 
     def __setattr__(self, key: str, value: Any) -> None:
-        if (
-            key in ('primary_key', 'time_column')
-            and getattr(
-                getattr(self, '_schema', None), '_core_description', None
-            )
-            is not None
+        if key in ('primary_key', 'time_column') and _described_on_the_core(
+            getattr(self, '_schema', None)
         ):
             # A core-built schema's table: the core checks and makes the
             # edit, and its answer is stored (T1.24b, decision E66(g)).
@@ -789,10 +787,7 @@ class SourceTable(_TableShape):
         says nothing about it. A table of frames drops a column from its frame
         before :meth:`Schema.from_data` instead.
         """
-        if (
-            getattr(getattr(self, '_schema', None), '_core_description', None)
-            is not None
-        ):
+        if _described_on_the_core(getattr(self, '_schema', None)):
             # A core-built schema's table: the core checks and makes the
             # edit, and its answer is stored (T1.24b).
             from sdm_client._rust import edits
@@ -905,10 +900,6 @@ class Schema:
         # The engine's own reading of the source's tables, kept so that each
         # question does not read them again. Set by the first read.
         self._engine_tables: Any = None
-        # The core's description of the source, kept by Schema.from_source
-        # on the core route for materialize on the core (private routing
-        # seam, T1.11c); None otherwise.
-        self._core_description: Any = None
         self._conversion_notes: tuple[str, ...] = ()
 
     @property
@@ -952,7 +943,9 @@ class Schema:
         """
         if (
             key == 'relationships'
-            and getattr(self, '_core_description', None) is not None
+            # An edit of a schema that stands: building one is no edit.
+            and 'relationships' in vars(self)
+            and _described_on_the_core(self)
         ):
             # A core-built schema: the core checks and makes the edit, and
             # its answer is stored (T1.24b, decision E66(g)).
@@ -1000,9 +993,16 @@ class Schema:
             {
                 '_source': None,
                 '_engine_tables': None,
-                '_core_description': None,
                 '_conversion_notes': (),
-                **state,
+                # The core's description of the source an earlier client
+                # kept beside the schema (to T3.16): its columns now carry
+                # what the source said of them, and a column with none is
+                # read from the source again.
+                **{
+                    key: value
+                    for key, value in state.items()
+                    if key != '_core_description'
+                },
             },
         )
         with warnings.catch_warnings():
@@ -1057,7 +1057,6 @@ class Schema:
         # What the engine read of the source is shared, not copied: it is what
         # the tables are, and every gather is given its own copy of it.
         copied._engine_tables = self._engine_tables
-        copied._core_description = self._core_description
         copied._conversion_notes = self._conversion_notes
         return copied
 
@@ -1965,6 +1964,26 @@ def _require_column(
     return column
 
 
+def _described_on_the_core(schema: Any) -> bool:
+    r"""Whether ``schema`` was described on the core: a column of it holds
+    what the source said of it (``Column._source``, T3.16), so its edits are
+    the core's ``edit_schema``'s (T1.24b, decision E66(g)); ``None`` and a
+    schema of frames are not.
+
+    The rule follows the facts, wherever they go: a schema of tables adopted
+    from one described on the core edits on the core too, as its copy and
+    snapshot do, and a schema whose every column lost its facts (each table
+    pointed at another relation and edited since) edits on the old route.
+    Either way the edit is the old client's, which the both-routes tests
+    hold."""
+    tables = vars(schema).get('_tables') if schema is not None else None
+    return any(
+        column._source is not None
+        for table in (tables or {}).values()
+        for column in table.columns.values()
+    )
+
+
 def _as_key_tuple(key: Any) -> tuple[str, ...]:
     r"""A primary key as the tuple of column names it is.
 
@@ -2103,6 +2122,9 @@ def _copy_column(column: Column) -> Column:
         '_stype_before_key',
     ):
         object.__setattr__(made, field_name, getattr(column, field_name))
+    # What the source said of it, frozen, so shared (T3.16); a column
+    # unpickled from before it had any holds none.
+    object.__setattr__(made, '_source', getattr(column, '_source', None))
     return made
 
 
@@ -2331,6 +2353,10 @@ def _infer_time_column(table: Table, frame: pd.DataFrame) -> TimeColumnChoice:
         for name, column in table.columns.items()
         if column.stype == 'timestamp' and name != table.primary_key
     ]
+    # The old PQL package's rule, read where a schema of frames is inferred,
+    # never on the core route (T3.16, rule 11).
+    from predictive_query.time_columns import choose_time_column
+
     choice = choose_time_column(frame, stamps)
     table.time_column = choice.column
     return choice
@@ -2420,6 +2446,8 @@ def _warn_how_time_columns_were_inferred(
                     f'so it reads as a log of changes. If it does not say when a row '
                     f'became true, clear it: time_columns={{{name!r}: None}}.'
                 )
+            from predictive_query.time_columns import taken_unchecked
+
             lines.extend(
                 taken_unchecked(name, doubt, f'time_columns={{{name!r}: None}}')
                 for doubt in choice.unconfirmed
@@ -2768,7 +2796,7 @@ class _Links(list):
         object.__setattr__(self, '_schema', schema)
 
     def _resettle(self, links: list[Relationship]) -> None:
-        if getattr(self._schema, '_core_description', None) is not None:
+        if _described_on_the_core(self._schema):
             # A core-built schema: the core checks and makes the edit, and
             # its answer is stored in this list (T1.24b).
             from sdm_client._rust import edits
@@ -3039,17 +3067,50 @@ def supports_dtype(stype: str, dtype: str) -> bool:
     r"""Whether a column of ``dtype`` can mean ``stype``.
 
     Answered by the language rather than by a second table kept here, so the
-    two cannot drift. An unrecognised pair is allowed through: this is a guard
-    against a known-wrong combination, not a whitelist.
+    two cannot drift: the core's table of it (``sdm_client._native.MEANINGS``,
+    T3.16, which the core derives from its own language) where the core is
+    loaded or the old PQL package is not installed; the old PQL package's
+    otherwise, so the old route never loads the core (the routing seam). The
+    two tables are held equal by a test. An unrecognised pair is allowed
+    through: this is a guard against a known-wrong combination, not a
+    whitelist.
     """
+    named = language_dtype(dtype)
+    native = _the_core()
+    if native is not None:
+        if stype not in STYPES or named not in DTYPES:
+            return True
+        return (stype, named) in _meanings(native)
     from predictive_query.schema.typing import Dtype, Stype
 
     try:
-        return Stype(stype).supports_dtype(
-            Dtype(_WIRE_TO_PQL_DTYPE.get(dtype, dtype))
-        )
+        return Stype(stype).supports_dtype(Dtype(named))
     except ValueError:
         return True
+
+
+def _the_core() -> Any:
+    r"""The core, where it is loaded (a core route ran), or where the old
+    PQL package is not installed and it can be; ``None`` otherwise, so an
+    old route's check never loads it."""
+    import sys
+
+    loaded = sys.modules.get('sdm_client._native')
+    if loaded is not None:
+        return loaded
+    if importlib.util.find_spec('predictive_query') is not None:
+        return None
+    try:
+        from sdm_client import _native
+    except ImportError:
+        return None
+    return _native
+
+
+@functools.cache
+def _meanings(native: Any) -> frozenset[tuple[str, str]]:
+    r"""The core's table of each meaning a data type carries."""
+    return frozenset((stype, dtype) for stype, dtype in native.MEANINGS)
 
 
 class _KeyQuality(NamedTuple):
@@ -3216,59 +3277,170 @@ def to_schema_definition(schema: Schema) -> Any:
     from predictive_query.schema.table import TableDefinition
     from predictive_query.schema.typing import Dtype, Stype
 
-    tables = {}
-    for name, table in schema.tables.items():
-        columns = []
-        for column in table.columns.values():
-            try:
-                dtype = Dtype(
-                    _WIRE_TO_PQL_DTYPE.get(column.dtype, column.dtype)
+    # One translation of the schema, the core's query schema's
+    # (:func:`query_schema`, T3.16), as the language's objects.
+    written = query_schema(schema)
+    tables = {
+        table['name']: TableDefinition(
+            cols=[
+                PQLColumn(
+                    name=column['name'],
+                    stype=Stype(column['stype']),
+                    dtype=Dtype(column['dtype']),
                 )
-                stype = Stype(column.stype)
-            except ValueError:
-                continue
-            columns.append(
-                PQLColumn(name=column.name, stype=stype, dtype=dtype)
-            )
-        key = table.primary_key
-        if key is not None and not isinstance(key, str):
-            warnings.warn(
-                f'table {name!r} has the composite primary key '
-                f'{list(key)}, and a predictive query can only name a single '
-                f'key column, so this query is resolved against {name!r} as '
-                f'though it had no key. The request still carries the '
-                f'composite key; only the query does not see it. Name a '
-                f'single column as the primary key if the query needs to '
-                f'identify a row of {name!r}.',
-                category=SDMWarning,
-                stacklevel=caller_stacklevel(),
-            )
-        tables[name] = TableDefinition(
-            cols=columns,
-            pkey=key if isinstance(key, str) else None,
-            time_col=table.time_column,
+                for column in table['columns']
+            ],
+            pkey=table['primary_key'],
+            time_col=table['time_column'],
         )
-
+        for table in written['tables']
+    }
     groups = [
         ColumnKeyGroup(
-            # The group is documented as sorted and deduped, and a ColumnKey
-            # has no ordering of its own, so sort on what it holds.
             columns=tuple(
-                sorted(
-                    (
-                        ColumnKey(link.source_table, link.source_column),
-                        ColumnKey(link.target_table, link.target_column),
-                    ),
-                    key=lambda key: (key.table_name, key.col_name),
-                )
+                ColumnKey(end['table'], end['column']) for end in link
             )
         )
-        for link in schema.relationships
+        for link in written['links']
     ]
     return SchemaDefinition(tables=tables, col_groups=groups)
 
 
-# The wire spells a few types differently from the language.
+def say_a_composite_key_is_dropped(name: str, key: Sequence[str]) -> None:
+    r"""Say that table ``name``'s composite ``key`` is not one a query can
+    name, so the query is resolved as though it had none: one place, for
+    the language's schema definition and the core's query schema alike."""
+    warnings.warn(
+        f'table {name!r} has the composite primary key '
+        f'{list(key)}, and a predictive query can only name a single '
+        f'key column, so this query is resolved against {name!r} as '
+        f'though it had no key. The request still carries the '
+        f'composite key; only the query does not see it. Name a '
+        f'single column as the primary key if the query needs to '
+        f'identify a row of {name!r}.',
+        category=SDMWarning,
+        stacklevel=caller_stacklevel(),
+    )
+
+
+#: The data types and meanings the contract's ``QuerySchema`` names, as it
+#: spells them (``sdm_contract::ops::Dtype`` and ``Stype``, the language's
+#: own): a column of another is not one a query can name, and is left out
+#: of the query's schema, as the language's own schema leaves it out.
+DTYPES = frozenset(
+    {
+        'bool',
+        'int',
+        'byte',
+        'int16',
+        'int32',
+        'int64',
+        'float',
+        'float32',
+        'float64',
+        'string',
+        'binary',
+        'date',
+        'time',
+        'timedelta',
+        'floatlist',
+        'intlist',
+        'stringlist',
+        'unsupported',
+    }
+)
+STYPES = frozenset(
+    {
+        'numerical',
+        'categorical',
+        'multicategorical',
+        'ID',
+        'text',
+        'timestamp',
+        'sequence',
+        'image',
+        'unsupported',
+    }
+)
+
+
+def links_of(schema: Schema) -> list[list[dict[str, str]]]:
+    r"""``schema``'s relationships as the contract writes links, each
+    ``[foreign key, referenced key]``."""
+    return [
+        [
+            {'table': link.source_table, 'column': link.source_column},
+            {'table': link.target_table, 'column': link.target_column},
+        ]
+        for link in schema.relationships
+    ]
+
+
+def query_schema(schema: Schema) -> dict[str, Any]:
+    r"""``schema`` as the contract's ``QuerySchema``, as the language's own
+    schema reads it, written with no object of the old PQL package (T3.16,
+    rule 11), the one translation :func:`to_schema_definition` builds the
+    language's objects from: each column of a
+    data type and meaning a query can name, by the language's names; a
+    single-column key, a composite one said and dropped
+    (:func:`say_a_composite_key_is_dropped`); each link
+    a group of its two ends, in order of table and column."""
+    tables = []
+    for name, table in schema.tables.items():
+        columns = []
+        for column in table.columns.values():
+            dtype = language_dtype(column.dtype)
+            stype = str(column.stype)
+            if dtype not in DTYPES or stype not in STYPES:
+                continue
+            columns.append(
+                {'name': column.name, 'dtype': dtype, 'stype': stype}
+            )
+        key = table.primary_key
+        if key is not None and not isinstance(key, str):
+            say_a_composite_key_is_dropped(name, key)
+        tables.append(
+            {
+                'name': name,
+                'columns': columns,
+                # An empty name is none, as the language's table reads it.
+                'primary_key': key if isinstance(key, str) and key else None,
+                'time_column': table.time_column or None,
+                'end_time_column': None,
+            }
+        )
+    links = [
+        sorted(link, key=lambda end: (end['table'], end['column']))
+        for link in links_of(schema)
+    ]
+    return {'tables': tables, 'links': links}
+
+
+def language_dtype(dtype: str) -> str:
+    r"""The language's name of the data type a column's ``dtype`` names:
+    the core's table of the names a host may give a column
+    (``sdm_client._native.DTYPE_NAMES``, T3.16, the one the core reads a
+    held schema by) where the core is loaded (:func:`_the_core`), else
+    :data:`_WIRE_TO_PQL_DTYPE`, held equal to it by a test; a name neither
+    knows is its own."""
+    return _dtype_names().get(dtype, dtype)
+
+
+def _dtype_names() -> dict[str, str]:
+    native = _the_core()
+    if native is None:
+        return dict(_WIRE_TO_PQL_DTYPE)
+    return _native_dtype_names(native)
+
+
+@functools.cache
+def _native_dtype_names(native: Any) -> dict[str, str]:
+    return dict(native.DTYPE_NAMES)
+
+
+# The wire spells a few types differently from the language: read only in a
+# client built without the core (:func:`language_dtype`); the core's table
+# holds the same, as test_t316_the_schema_as_it_stands.py holds it.
 _WIRE_TO_PQL_DTYPE = {
     'int64': 'int',
     'int32': 'int',

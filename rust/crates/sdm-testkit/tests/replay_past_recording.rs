@@ -13,10 +13,11 @@
 //! never judged on rows it was not recorded with.
 //!
 //! `sdm-contract-run --replay` runs three cases over
-//! `tests/replay-past-recording.jsonl`, a recording of one fetch:
-//! `t28.replay.answered`, whose one fetch (the describe's list of tables,
-//! answered with none) is recorded, so it runs to its end and writes its
-//! line; and two cases recorded with no fetch at all, which the core asks
+//! `tests/replay-past-recording.jsonl`, a recording of two fetches:
+//! `t28.replay.answered`, whose fetches (the session's current schema,
+//! read once since the source names none, T3.7, then the describe's list
+//! of tables in it, answered with none) are recorded, so it runs to its end
+//! and writes its line; and two cases recorded with no fetch at all, which the core asks
 //! one past at once: `t28.replay.diagnostic-past-its-recording` and
 //! `t28.replay.acceptance-past-its-recording`. Each case is `s0.accept.
 //! sum-window`'s, its id and status its own.
@@ -56,9 +57,17 @@ fn case(dir: &Path, id: &str, status: &str) -> PathBuf {
 /// `sdm-contract-run --replay` over the recording and `cases`, in order,
 /// writing to `out`.
 fn replay(cases: &[PathBuf], out: &Path) -> Output {
+    replay_recording(
+        &root().join("rust/crates/sdm-testkit/tests/replay-past-recording.jsonl"),
+        cases,
+        out,
+    )
+}
+
+fn replay_recording(recording: &Path, cases: &[PathBuf], out: &Path) -> Output {
     Command::new(env!("CARGO_BIN_EXE_sdm-contract-run"))
         .arg("--replay")
-        .arg(root().join("rust/crates/sdm-testkit/tests/replay-past-recording.jsonl"))
+        .arg(recording)
         .arg("--out")
         .arg(out)
         .args(cases)
@@ -153,4 +162,41 @@ fn a_diagnostic_case_past_its_recording_is_refused_and_an_acceptance_case_fails_
     assert!(!out.exists(), "a failed run left {}", out.display());
 
     std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn replay_refuses_a_recording_without_either_fetch_s_result_conversion() {
+    let fixture = std::fs::read_to_string(
+        root().join("rust/crates/sdm-testkit/tests/replay-past-recording.jsonl"),
+    )
+    .unwrap();
+    for position in [0, 1] {
+        let dir = std::env::temp_dir().join(format!(
+            "t310-replay-conversion-{}-{position}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let answered = case(&dir, "t28.replay.answered", "acceptance");
+        let mut recording: Value = serde_json::from_str(fixture.lines().next().unwrap()).unwrap();
+        let removed = recording["fetches"][position]["plan"]
+            .as_object_mut()
+            .unwrap()
+            .remove("result_conversions");
+        assert!(
+            removed.is_some(),
+            "fetch {position} has no conversion to omit"
+        );
+        let path = dir.join("missing-conversion.jsonl");
+        std::fs::write(&path, serde_json::to_vec(&recording).unwrap()).unwrap();
+        let out = dir.join("answered.jsonl");
+        let done = replay_recording(&path, &[answered], &out);
+        let said = String::from_utf8_lossy(&done.stderr);
+        assert!(!done.status.success(), "an incomplete plan was replayed");
+        assert!(
+            said.contains(&format!("fetch {position} is not the one recorded")),
+            "{said}"
+        );
+        assert!(!out.exists(), "a failed replay left {}", out.display());
+        std::fs::remove_dir_all(&dir).ok();
+    }
 }

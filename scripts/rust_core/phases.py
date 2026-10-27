@@ -36,7 +36,7 @@ from dataclasses import dataclass
 EPIC = 'rust-core'
 #: The phase in progress: the default wherever no flag, no
 #: ``SDM_PHASE_BRANCH`` and no branch name says which.
-CURRENT = 'rust-core-phase-2'
+CURRENT = 'rust-core-phase-3'
 #: The variable that names the phase branch, shared with the orchestration
 #: tools (``scripts/rust_core/orchestration/README.md``).
 ENVIRONMENT = 'SDM_PHASE_BRANCH'

@@ -16,6 +16,7 @@
    {
     "columns": [
      {
+      "declared_type": "BIGINT",
       "dtype": "int",
       "name": "order_id",
       "nullable": true,
@@ -27,6 +28,7 @@
       "unique": false
      },
      {
+      "declared_type": "BIGINT",
       "dtype": "int",
       "name": "user_id",
       "nullable": true,
@@ -38,6 +40,7 @@
       "unique": false
      },
      {
+      "declared_type": "DOUBLE",
       "dtype": "float",
       "name": "price",
       "nullable": true,
@@ -49,6 +52,7 @@
       "unique": false
      },
      {
+      "declared_type": "TIMESTAMP",
       "dtype": "date",
       "name": "ts",
       "nullable": true,
@@ -81,6 +85,7 @@
    {
     "columns": [
      {
+      "declared_type": "BIGINT",
       "dtype": "int",
       "name": "user_id",
       "nullable": true,
@@ -92,6 +97,7 @@
       "unique": false
      },
      {
+      "declared_type": "INTEGER",
       "dtype": "int",
       "name": "age",
       "nullable": true,
@@ -676,6 +682,309 @@
      "expect": "schema",
      "fields": [
       {
+       "name": "cid",
+       "nullable": false,
+       "type": {
+        "type": "int32"
+       }
+      },
+      {
+       "name": "name",
+       "nullable": false,
+       "type": {
+        "type": "utf8"
+       }
+      },
+      {
+       "name": "type",
+       "nullable": false,
+       "type": {
+        "type": "utf8"
+       }
+      },
+      {
+       "name": "notnull",
+       "nullable": false,
+       "type": {
+        "type": "bool"
+       }
+      },
+      {
+       "name": "dflt_value",
+       "nullable": true,
+       "type": {
+        "type": "utf8"
+       }
+      },
+      {
+       "name": "pk",
+       "nullable": false,
+       "type": {
+        "type": "bool"
+       }
+      }
+     ]
+    },
+    "plan": "sql",
+    "statements": [
+     {
+      "dialect": "duckdb",
+      "params": [],
+      "text": "PRAGMA table_info(\"orders\")"
+     }
+    ]
+   },
+   "purpose": "locate",
+   "request": {
+    "part": "columns",
+    "request": "describe",
+    "tables": [
+     {
+      "source": [
+       "orders"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "plan": {
+    "expect": {
+     "expect": "schema",
+     "fields": [
+      {
+       "name": "constraint_type",
+       "nullable": false,
+       "type": {
+        "type": "utf8"
+       }
+      },
+      {
+       "name": "constraint_column_names",
+       "nullable": false,
+       "type": {
+        "item": {
+         "name": "l",
+         "nullable": true,
+         "type": {
+          "type": "utf8"
+         }
+        },
+        "type": "list"
+       }
+      }
+     ]
+    },
+    "plan": "sql",
+    "statements": [
+     {
+      "dialect": "duckdb",
+      "params": [],
+      "text": "SELECT constraint_type, constraint_column_names\nFROM duckdb_constraints()\nWHERE table_name = 'orders'\n  AND database_name = current_database() AND schema_name = current_schema()"
+     }
+    ]
+   },
+   "purpose": "locate",
+   "request": {
+    "part": "keys",
+    "request": "describe",
+    "tables": [
+     {
+      "source": [
+       "orders"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "plan": {
+    "expect": {
+     "expect": "discover"
+    },
+    "plan": "sql",
+    "statements": [
+     {
+      "dialect": "duckdb",
+      "params": [],
+      "text": "SELECT \"order_id\", \"user_id\", \"price\", \"ts\" FROM \"orders\" LIMIT 1000"
+     }
+    ]
+   },
+   "purpose": "locate",
+   "request": {
+    "columns": [
+     "order_id",
+     "user_id",
+     "price",
+     "ts"
+    ],
+    "limit": 1000,
+    "request": "preview",
+    "table": {
+     "source": [
+      "orders"
+     ]
+    }
+   }
+  },
+  {
+   "plan": {
+    "expect": {
+     "expect": "schema",
+     "fields": [
+      {
+       "name": "cid",
+       "nullable": false,
+       "type": {
+        "type": "int32"
+       }
+      },
+      {
+       "name": "name",
+       "nullable": false,
+       "type": {
+        "type": "utf8"
+       }
+      },
+      {
+       "name": "type",
+       "nullable": false,
+       "type": {
+        "type": "utf8"
+       }
+      },
+      {
+       "name": "notnull",
+       "nullable": false,
+       "type": {
+        "type": "bool"
+       }
+      },
+      {
+       "name": "dflt_value",
+       "nullable": true,
+       "type": {
+        "type": "utf8"
+       }
+      },
+      {
+       "name": "pk",
+       "nullable": false,
+       "type": {
+        "type": "bool"
+       }
+      }
+     ]
+    },
+    "plan": "sql",
+    "statements": [
+     {
+      "dialect": "duckdb",
+      "params": [],
+      "text": "PRAGMA table_info(\"users\")"
+     }
+    ]
+   },
+   "purpose": "locate",
+   "request": {
+    "part": "columns",
+    "request": "describe",
+    "tables": [
+     {
+      "source": [
+       "users"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "plan": {
+    "expect": {
+     "expect": "schema",
+     "fields": [
+      {
+       "name": "constraint_type",
+       "nullable": false,
+       "type": {
+        "type": "utf8"
+       }
+      },
+      {
+       "name": "constraint_column_names",
+       "nullable": false,
+       "type": {
+        "item": {
+         "name": "l",
+         "nullable": true,
+         "type": {
+          "type": "utf8"
+         }
+        },
+        "type": "list"
+       }
+      }
+     ]
+    },
+    "plan": "sql",
+    "statements": [
+     {
+      "dialect": "duckdb",
+      "params": [],
+      "text": "SELECT constraint_type, constraint_column_names\nFROM duckdb_constraints()\nWHERE table_name = 'users'\n  AND database_name = current_database() AND schema_name = current_schema()"
+     }
+    ]
+   },
+   "purpose": "locate",
+   "request": {
+    "part": "keys",
+    "request": "describe",
+    "tables": [
+     {
+      "source": [
+       "users"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "plan": {
+    "expect": {
+     "expect": "discover"
+    },
+    "plan": "sql",
+    "statements": [
+     {
+      "dialect": "duckdb",
+      "params": [],
+      "text": "SELECT \"user_id\", \"age\", \"country\" FROM \"users\" LIMIT 1000"
+     }
+    ]
+   },
+   "purpose": "locate",
+   "request": {
+    "columns": [
+     "user_id",
+     "age",
+     "country"
+    ],
+    "limit": 1000,
+    "request": "preview",
+    "table": {
+     "source": [
+      "users"
+     ]
+    }
+   }
+  },
+  {
+   "plan": {
+    "expect": {
+     "expect": "schema",
+     "fields": [
+      {
        "name": "table_name",
        "nullable": false,
        "type": {
@@ -916,6 +1225,7 @@
       "inclusive": false,
       "seed_column": "start"
      },
+     "source_type": "TIMESTAMP",
      "upper": {
       "inclusive": true,
       "seed_column": "end"
@@ -1106,6 +1416,7 @@
     "window": {
      "column": "ts",
      "lower": null,
+     "source_type": "TIMESTAMP",
      "upper": {
       "inclusive": true,
       "seed_column": "time"
@@ -1168,50 +1479,86 @@
      {
       "columns": [
        {
-        "dtype": "int",
+        "dtype": "int64",
         "name": "order_id",
-        "nullable": true,
-        "received": {
-         "type": "int64"
+        "source": {
+         "declared_type": "BIGINT",
+         "dtype": "int",
+         "nullable": true,
+         "received": {
+          "type": "int64"
+         },
+         "relation": {
+          "source": [
+           "orders"
+          ]
+         },
+         "unique": false
         },
         "stype": "ID",
-        "stype_before_key": null,
-        "unique": false
+        "stype_before_key": null
        },
        {
-        "dtype": "int",
+        "dtype": "int64",
         "name": "user_id",
-        "nullable": true,
-        "received": {
-         "type": "int64"
+        "source": {
+         "declared_type": "BIGINT",
+         "dtype": "int",
+         "nullable": true,
+         "received": {
+          "type": "int64"
+         },
+         "relation": {
+          "source": [
+           "orders"
+          ]
+         },
+         "unique": false
         },
         "stype": "ID",
-        "stype_before_key": null,
-        "unique": false
+        "stype_before_key": null
        },
        {
-        "dtype": "float",
+        "dtype": "float64",
         "name": "price",
-        "nullable": true,
-        "received": {
-         "type": "float64"
+        "source": {
+         "declared_type": "DOUBLE",
+         "dtype": "float",
+         "nullable": true,
+         "received": {
+          "type": "float64"
+         },
+         "relation": {
+          "source": [
+           "orders"
+          ]
+         },
+         "unique": false
         },
         "stype": "numerical",
-        "stype_before_key": null,
-        "unique": false
+        "stype_before_key": null
        },
        {
-        "dtype": "date",
+        "dtype": "timestamp[us]",
         "name": "ts",
-        "nullable": true,
-        "received": {
-         "type": "timestamp",
-         "unit": "us",
-         "zone": null
+        "source": {
+         "declared_type": "TIMESTAMP",
+         "dtype": "date",
+         "nullable": true,
+         "received": {
+          "type": "timestamp",
+          "unit": "us",
+          "zone": null
+         },
+         "relation": {
+          "source": [
+           "orders"
+          ]
+         },
+         "unique": false
         },
         "stype": "timestamp",
-        "stype_before_key": null,
-        "unique": false
+        "stype_before_key": null
        }
       ],
       "duplicate_keys": {
@@ -1227,43 +1574,68 @@
         "orders"
        ]
       },
-      "time_column": "ts",
-      "time_column_inferred": null
+      "time_column": "ts"
      },
      {
       "columns": [
        {
-        "dtype": "int",
+        "dtype": "int64",
         "name": "user_id",
-        "nullable": true,
-        "received": {
-         "type": "int64"
+        "source": {
+         "declared_type": "BIGINT",
+         "dtype": "int",
+         "nullable": true,
+         "received": {
+          "type": "int64"
+         },
+         "relation": {
+          "source": [
+           "users"
+          ]
+         },
+         "unique": false
         },
         "stype": "ID",
-        "stype_before_key": null,
-        "unique": false
+        "stype_before_key": null
        },
        {
-        "dtype": "int",
+        "dtype": "int64",
         "name": "age",
-        "nullable": true,
-        "received": {
-         "type": "int32"
+        "source": {
+         "declared_type": "INTEGER",
+         "dtype": "int",
+         "nullable": true,
+         "received": {
+          "type": "int32"
+         },
+         "relation": {
+          "source": [
+           "users"
+          ]
+         },
+         "unique": false
         },
         "stype": "numerical",
-        "stype_before_key": null,
-        "unique": false
+        "stype_before_key": null
        },
        {
         "dtype": "string",
         "name": "country",
-        "nullable": true,
-        "received": {
-         "type": "utf8"
+        "source": {
+         "dtype": "string",
+         "nullable": true,
+         "received": {
+          "type": "utf8"
+         },
+         "relation": {
+          "source": [
+           "users"
+          ]
+         },
+         "unique": false
         },
         "stype": "categorical",
-        "stype_before_key": null,
-        "unique": false
+        "stype_before_key": null
        }
       ],
       "duplicate_keys": {
@@ -1279,8 +1651,7 @@
         "users"
        ]
       },
-      "time_column": null,
-      "time_column_inferred": null
+      "time_column": null
      }
     ]
    },

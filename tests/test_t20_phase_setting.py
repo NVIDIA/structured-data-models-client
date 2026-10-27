@@ -80,6 +80,7 @@ def _module(path: Path, name: str) -> ModuleType:
 
 
 LS = _module(SCRIPTS / 'lane_selftest.py', 't20_lane_selftest')
+LAND_SELFTEST = _module(SCRIPTS / 'land_selftest.py', 't20_land_selftest')
 WF = _module(ROOT / 'tests/test_ci_workflow.py', 't20_ci_workflow')
 GATE = _module(ROOT / 'tests/test_contract_ci_gate.py', 't20_ci_gate')
 
@@ -118,6 +119,18 @@ def candidate(w: Any, package: str, subject: str | None = None) -> str:
 
 
 def land_args(w: Any, sha: str, package: str, *extra: str) -> list[str]:
+    # A landing stands on the candidate's passing handoff stamp and two
+    # approving reviews (the owner's "2026-10-22 evening: CI off the
+    # landing path"), the stamp as handoff.py run writes it.
+    common = Path(
+        w.git(
+            'rev-parse',
+            '--path-format=absolute',
+            '--git-common-dir',
+            cwd=w.worktree,
+        ).strip()
+    )
+    LAND_SELFTEST.write_stamp(common, sha, package)
     reviews = []
     for name in ('a', 'b'):
         path = w.tmp / f'review-{name}.txt'
@@ -380,18 +393,22 @@ def _pushed(branch: str) -> bool:
 @pytest.mark.parametrize(
     ('branch', 'runs'),
     [
-        (PHASE2, True),
-        (LANE2, True),
-        (f'{PHASE2}-t2.0', True),
+        (PHASE2, False),
+        (LANE2, False),
+        (f'{PHASE2}-t2.0', False),
         (f'{PHASE2}-archive-1b-T2.0-abc1234', False),
         (f'{PHASE1}-archive-1a-T1.20-e587c32', False),
         ('rust-core', True),
+        ('main', True),
     ],
 )
 def test_ci_runs_on_phase_2_pushes_but_not_its_archives(
     branch: str, runs: bool
 ) -> None:
-    r"""Exit 1: Phase 2's archive branches are left out as Phase 1's are."""
+    r"""Exit 1, under the owner's rule of 2026-10-22 ("CI off the landing
+    path"): a push runs CI on ``main`` and ``rust-core`` only; a phase
+    branch, its lanes and topics run in the nightly and on dispatch, every
+    phase alike, and an archive never."""
     assert _pushed(branch) is runs
 
 
@@ -420,7 +437,8 @@ def _evaluate(condition: object, context: dict[str, str]) -> bool:
     ('ref', 'cancels'),
     [
         (PHASE2, False),
-        (LANE2, False),
+        # A lane's newer push supersedes its run (T3.0).
+        (LANE2, True),
         (f'{PHASE2}-t2.0', True),
         ('main', True),
     ],
@@ -428,8 +446,9 @@ def _evaluate(condition: object, context: dict[str, str]) -> bool:
 def test_a_phase_2_run_in_progress_is_kept_as_phase_1_s(
     ref: str, cancels: bool
 ) -> None:
-    r"""Exit 1, ``cancel-in-progress``: the phase branch's and its lanes'
-    runs are never cancelled (the evidence a landing stands on)."""
+    r"""Exit 1, ``cancel-in-progress``: the phase branch's runs are never
+    cancelled (each push there lands a package); a lane's, like a topic's,
+    is cancelled by the lane's newer push (T3.0)."""
     condition = WF._workflow()['concurrency']['cancel-in-progress']
     context = {
         'github.event_name': 'push',

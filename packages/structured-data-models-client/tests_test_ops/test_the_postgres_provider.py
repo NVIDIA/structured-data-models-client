@@ -8,7 +8,8 @@ the design's row ("dialect, psycopg provider (Arrow without pandas)", "key
 sets bound as the dialect binds them", "L4 goldens executed", choice 12's
 relation forms) and ``test_the_duckdb_provider.py``, whose vectors this
 reads: each fetch is planned by the core's data layer for Postgres
-(``{'provider': 'sql', 'dialect': 'postgres'}``), answered by the provider
+(``{'provider': 'sql', 'dialect': 'postgres'}``, under the database's
+``public`` schema since T3.7), answered by the provider
 over a ``psycopg`` connection to a real Postgres, admitted by the core and
 echoed back by the test-only fetch. The data is the DuckDB-built tables the
 vectors name, loaded into a database of their own by the contract loader
@@ -78,7 +79,10 @@ KINDS = json.loads(
 )
 #: The provider under test, module and class.
 PROVIDER = ('sdm_client._rust.providers.postgres', 'PostgresProvider')
-POSTGRES = {'provider': 'sql', 'dialect': 'postgres'}
+#: Under the schema each test's database holds its tables in, ``public``,
+#: as every Postgres read names one (T3.7): the source's, or its session's
+#: current one, read once per run.
+POSTGRES = {'provider': 'sql', 'dialect': 'postgres', 'namespace': ['public']}
 
 
 def _loader() -> Any:
@@ -161,6 +165,70 @@ def _fetch(request: dict[str, Any]) -> dict[str, Any]:
     return {'request': request, 'provider': POSTGRES, 'echo': True}
 
 
+def test_public_window_sums_keep_postgres_chronological_order(
+    server: Server | None,
+) -> None:
+    import pandas as pd
+    from sdm_connectors import PostgresSource
+
+    from sdm_client import PredictiveQuery, Relationship, Schema
+
+    if server is None:
+        pytest.fail('needs the local Postgres test service')
+    connection = server.database(
+        [
+            "CREATE TABLE e AS SELECT 'e' || i AS id FROM range(200) t(i)",
+            'CREATE TABLE a AS SELECT i::BIGINT AS aid, '
+            "'e' || (i % 40) AS e_ref, ((i % 17) * 0.1)::FLOAT AS f, "
+            "TIMESTAMP '2023-11-20' + "
+            'to_seconds(((i // 2) * 25200)::BIGINT) AS ts '
+            'FROM range(400) t(i)',
+        ]
+    )
+    try:
+        # An unordered hash join reverses these windows on PostgreSQL 17.
+        # The public result must not depend on the chosen join strategy.
+        connection.execute('SET enable_nestloop = off')
+        connection.execute('SET enable_mergejoin = off')
+        schema = Schema.from_source(
+            PostgresSource(connection, schema='public'),
+            primary_keys={'e': 'id', 'a': 'aid'},
+            time_columns={'a': 'ts'},
+            relationships=[
+                Relationship(
+                    source_table='a',
+                    source_column='e_ref',
+                    target_table='e',
+                    target_column='id',
+                )
+            ],
+        )
+        with pytest.warns(UserWarning):
+            request = PredictiveQuery(
+                'PREDICT SUM(a.f, 0, 2, months) FOR EACH e.id', schema
+            ).materialize(
+                indices=['e0', 'e1'],
+                anchor_time=pd.Timestamp('2024-01-31'),
+                num_context_samples=1500,
+                prediction_statistic='median',
+            )
+        context = request._payloads[0]['context']['instance_table']
+        key = context['columns'].index('__kumo_entity_ref_0')
+        target = context['columns'].index('TARGET')
+        values = {row[key]: row[target] for row in context['rows']}
+        assert len(context['rows']) == len(values) == 200
+        # Exact targets recorded from the frozen Python reference's
+        # chronological float32 Kahan sums, without a numeric tolerance.
+        assert {name: values[name] for name in ('e13', 'e18', 'e1', 'e15')} == {
+            'e13': 7.899999618530273,
+            'e18': 6.799999713897705,
+            'e1': 6.799999713897705,
+            'e15': 6.099999904632568,
+        }
+    finally:
+        connection.close()
+
+
 def _table(finished: Any) -> pa.Table:
     stream = finished.take(finished.result['data'])
     return pa.RecordBatchReader._import_from_c_capsule(
@@ -180,7 +248,11 @@ def _admitted(connection: Any, request: dict[str, Any]) -> pa.Table:
 
 
 def _keyed(
-    connection: Any, request: dict[str, Any], seeds: pa.Table
+    connection: Any,
+    request: dict[str, Any],
+    seeds: pa.Table,
+    *,
+    key_source_type: str | None = None,
 ) -> tuple[pa.Table, dict[str, Any]]:
     r"""A keyed fetch with ``seeds``, through the core: the core attaches
     them to the step as its own key set, the provider binds them and
@@ -202,9 +274,10 @@ def _keyed(
         return provider(step, dict(seen['keys']))
 
     kinds = {
+        'float': {'type': 'float32'},
+        'double': {'type': 'float64'},
         'uint64': {'type': 'uint64'},
         'int64': {'type': 'int64'},
-        'double': {'type': 'float64'},
     }
     request = dict(request)
     request['seeds'] = {
@@ -212,6 +285,11 @@ def _keyed(
         'columns': [
             {
                 'name': field.name,
+                **(
+                    {'metadata': {'sdm:key_declared_type': key_source_type}}
+                    if field.name == 'key' and key_source_type is not None
+                    else {}
+                ),
                 'type': kinds.get(str(field.type))
                 or {
                     'type': 'decimal128',
@@ -229,6 +307,124 @@ def _keyed(
         provider=answer,
     )
     return _table(finished), seen
+
+
+@pytest.mark.parametrize('sql_type', ['SMALLINT', 'INTEGER', 'BIGINT'])
+@pytest.mark.parametrize('arrow_type', [pa.float32(), pa.float64()])
+def test_integral_float_seeds_find_integer_keys_without_truncating_fractions(
+    server: Server | None, sql_type: str, arrow_type: Any
+) -> None:
+    if server is None:
+        pytest.fail('needs the local Postgres test service')
+    connection = server.database(
+        [
+            f'CREATE TABLE users(user_id {sql_type} PRIMARY KEY, age VARCHAR)',
+            "INSERT INTO users VALUES (1, 'one'), (2, 'two')",
+        ]
+    )
+    try:
+        seeds = pa.table(
+            {
+                'key': pa.array([1.0, 1.5, 2.0], type=arrow_type),
+                'batch': pa.array([0, 1, 2], type=pa.int64()),
+            }
+        )
+        result, _ = _keyed(
+            connection,
+            {
+                'request': 'lookup',
+                'table': {'source': ['public', 'users']},
+                'columns': ['user_id', 'age'],
+                'key': ['user_id'],
+            },
+            seeds,
+            key_source_type=sql_type.lower(),
+        )
+        assert result.column('age').to_pylist() == ['one', 'two']
+        assert result.column('__kumo_batch__').to_pylist() == [0, 2]
+    finally:
+        connection.close()
+
+
+def test_float_binding_never_rounds_integer_columns_into_a_match(
+    server: Server | None,
+) -> None:
+    if server is None:
+        pytest.fail('needs the local Postgres test service')
+    connection = server.database(
+        [
+            'CREATE TABLE users(user_id BIGINT PRIMARY KEY, age VARCHAR)',
+            "INSERT INTO users VALUES (9007199254740992, 'exact53'), "
+            "(9007199254740993, 'rounded53'), "
+            "(1000000000000000128, 'exact60'), "
+            "(1000000000000000100, 'shortest60')",
+        ]
+    )
+    try:
+        seeds = pa.table(
+            {
+                'key': pa.array([9007199254740992.0, 1000000000000000128.0]),
+                'batch': pa.array([0, 1], type=pa.int64()),
+            }
+        )
+        result, _ = _keyed(
+            connection,
+            {
+                'request': 'lookup',
+                'table': {'source': ['public', 'users']},
+                'columns': ['user_id', 'age'],
+                'key': ['user_id'],
+            },
+            seeds,
+            key_source_type='bigint',
+        )
+        assert result.column('age').to_pylist() == ['exact53', 'exact60']
+        assert result.column('__kumo_batch__').to_pylist() == [0, 1]
+    finally:
+        connection.close()
+
+
+@pytest.mark.parametrize('sql_type', ['REAL', 'DOUBLE PRECISION'])
+@pytest.mark.parametrize('arrow_type', [pa.float32(), pa.float64()])
+@pytest.mark.parametrize('carry_declaration', [False, True])
+def test_floating_keys_match_their_own_declared_column_type(
+    server: Server | None, sql_type, arrow_type, carry_declaration
+) -> None:
+    if server is None:
+        pytest.fail('needs the local Postgres test service')
+    connection = server.database(
+        [
+            f'CREATE TABLE users(user_id {sql_type} PRIMARY KEY, age VARCHAR)',
+            "INSERT INTO users VALUES (0.1, 'fraction'), (1.5, 'one-half')",
+        ]
+    )
+    try:
+        result, _ = _keyed(
+            connection,
+            {
+                'request': 'lookup',
+                'table': {'source': ['public', 'users']},
+                'columns': ['user_id', 'age'],
+                'key': ['user_id'],
+            },
+            pa.table(
+                {
+                    'key': pa.array([0.1, 1.5], type=arrow_type),
+                    'batch': pa.array([0, 1], type=pa.int64()),
+                }
+            ),
+            key_source_type=sql_type.lower() if carry_declaration else None,
+        )
+        # A float32 0.1 promoted to double is a different DOUBLE PRECISION
+        # key, but REAL must round either seed width to its own value.
+        expected = (
+            ['one-half']
+            if sql_type == 'DOUBLE PRECISION' and arrow_type == pa.float32()
+            else ['fraction', 'one-half']
+        )
+        assert result.column('age').to_pylist() == expected
+    finally:
+        connection.close()
 
 
 def _seeds(kind: dict[str, Any], values: list[str]) -> pa.Table:
@@ -293,8 +489,14 @@ def test_keys_that_collide_as_float64_bind_join_and_answer_exactly(
     for case in cases:
         exact = _seeds(case['type'], case['values'])
         data, seen = _keyed(vectors_db, case['request'], exact)
+        # The key set travels as the dialect's JSON text (T3.28): one
+        # cell, each key as the old client writes it, its value exact.
         [handed] = seen['keys'].values()
-        assert handed.equals(exact), case['column']
+        assert (handed.num_rows, handed.num_columns) == (1, 1), case['column']
+        rows = json.loads(handed.column(0)[0].as_py(), parse_float=Decimal)
+        assert [Decimal(str(key)) for key in rows] == [
+            Decimal(value) for value in case['values']
+        ], case['column']
         assert _each_seed_finds_its_own_row(data, case['labels']), case[
             'column'
         ]

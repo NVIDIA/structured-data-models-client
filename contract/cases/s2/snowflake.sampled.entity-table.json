@@ -1,0 +1,58 @@
+{
+  "format": "sdm-case/1",
+  "id": "snowflake.sampled.entity-table",
+  "status": "acceptance",
+  "slice": "S2",
+  "warehouses": [
+    "snowflake"
+  ],
+  "paths": [
+    "schema.from-source/all-tables/snowflake",
+    "query.materialize/indices-binary/snowflake",
+    "client.predict/binary/snowflake"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/snowflake",
+    "schema.from-source/catalog-keys/snowflake",
+    "query.materialize/indices-binary/snowflake",
+    "query.materialize/indices-multiclass/snowflake",
+    "query.materialize/indices-regression/snowflake",
+    "query.materialize/indices-link-prediction/snowflake",
+    "query.materialize/indices-ranking/snowflake",
+    "query.materialize/indices-forecast/snowflake",
+    "client.predict/binary/snowflake",
+    "client.predict/multiclass/snowflake",
+    "client.predict/regression/snowflake",
+    "client.predict/link-prediction/snowflake",
+    "client.predict/ranking/snowflake",
+    "client.predict/forecast/snowflake"
+  ],
+  "cells": [
+    "int16/primary-key",
+    "timestamp-us/time-column"
+  ],
+  "input": {
+    "base": "shop",
+    "setup": [
+      "CREATE OR REPLACE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i % 50)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country FROM range(1500) t(i)",
+      "CREATE OR REPLACE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 1500)::BIGINT AS user_id, (10 + (i % 100) * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days((i % 420)::INTEGER) AS ts FROM range(6000) t(i)"
+    ],
+    "pql": "PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2024-01-01",
+      "max_pq_iterations": 1
+    }
+  },
+  "until": "predict",
+  "expect": {
+    "outcome": "success",
+    "stage": "predict",
+    "today": "with max_pq_iterations 1 and the default context of 1,000 (run mode fast, CL/materializers/relational.py:735-741; RE/rfm.py:99-104, :2303), the old client reads the 1,500-row users table with SELECT ... FROM users SAMPLE ROW (1000 ROWS) WHERE \"user_id\" IS NOT NULL, unseeded, a seed only warning (SNOW/sampler.py:79-140), and gets 1,000 rows; which 1,000 differs on every run, so the context, the payload and the answer differ too"
+  },
+  "why": "The one sampled Snowflake case, per the owner's answer \"2026-10-22 evening: Snowflake sampling, option C\" (\"Ok let's do C, no product change. That loosens the comparison which is ok.\"): the entity table (1,500 users) is larger than the old client's sample (1,000 rows), so the core keeps the old client's unseeded SAMPLE ROW (n ROWS) and this case is compared on the sampling statement and the drawn row count only, an owner-approved relaxation whose compare-policy rule is T3.2's. Every other Snowflake case stays below the sampling size.",
+  "source": "written by T3.6's test author from the reference at 43e55f4f"
+}

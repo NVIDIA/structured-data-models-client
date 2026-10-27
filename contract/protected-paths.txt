@@ -22,7 +22,10 @@ contract/scripted-endpoint.json
 contract/pinned/**
 contract/refusal-maps/**
 contract/reference/**
+# The old client's recorded words (T3.23 moved them out of contract/reference/).
+contract/census-words/**
 contract/reference-env.txt
+contract/captures/**
 contract/baselines/**
 contract/compare-policy.yaml
 contract/availability.yaml

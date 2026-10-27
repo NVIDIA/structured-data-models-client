@@ -51,6 +51,7 @@ import importlib.util
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from collections.abc import Callable
@@ -59,6 +60,9 @@ from typing import Any
 
 import pytest
 import yaml
+
+# Gate tooling (T3.0): CI runs it in the tooling jobs, not in every matrix job.
+pytestmark = pytest.mark.tooling
 
 ROOT = Path(__file__).resolve().parents[2]
 if 'ratchet_tests' in sys.modules:
@@ -196,10 +200,15 @@ def stub_the_checkpoint(repo: Path) -> None:
 
 
 @pytest.fixture(scope='module')
-def origin(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
+def origin(
+    owned_module_dir: Callable[[str], Path],
+) -> dict[str, Any]:
     r"""The temporary repository, its landing holding this tree's harness,
     and a later landing whose harness has the locked steps' stubs."""
-    repo, landed = helpers.build(tmp_path_factory.mktemp('origin'))
+    owned = owned_module_dir('origin')
+    repo, landed = helpers.build(
+        owned, coverage_inputs=True, sparse_captures=True
+    )
     stubbed = land(
         repo, 'T1.15', stub_the_checkpoint, protected='scripts/rust_core/**'
     )
@@ -208,12 +217,13 @@ def origin(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
 
 @pytest.fixture(scope='module')
 def observed(
-    origin: dict[str, Any], tmp_path_factory: pytest.TempPathFactory
+    origin: dict[str, Any], owned_module_dir: Callable[[str], Path]
 ) -> dict[str, list[dict[str, Any]]]:
     r"""Each Python runner's observations of the repository's cases, and
     rust-host's stubbed from python-core's."""
+    owned = owned_module_dir('observed')
     repo = origin['repo']
-    out = tmp_path_factory.mktemp('observed')
+    out = owned
     found = {}
     for runner in ('python-core', 'python-old'):
         path = out / f'{runner}.jsonl'
@@ -292,9 +302,7 @@ def rust_host(lines: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def worktree(origin: dict[str, Any], tmp_path: Path, at: str) -> Path:
-    tree = tmp_path / 'tree'
-    git(origin['repo'], 'worktree', 'add', '-q', '--detach', str(tree), at)
-    return tree
+    return helpers.repo.__wrapped__((origin['repo'], at), tmp_path)
 
 
 @pytest.fixture
@@ -484,6 +492,89 @@ def without_the_case(runner: str, lines: list[dict[str, Any]]) -> None:
 # --- --only: one check ---------------------------------------------------------
 
 
+def test_real_coverage_gate_keeps_capture_evidence_without_duplicate_working_files(
+    repo: Path,
+    origin: dict[str, Any],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Run the actual gate and measure its real Git checkpoint allocation."""
+    real_git = shutil.which('git')
+    assert real_git is not None
+    recorder = tmp_path / 'git-allocation.jsonl'
+    bin_dir = tmp_path / 'bin'
+    bin_dir.mkdir()
+    wrapper = bin_dir / 'git'
+    # Every command still executes the real Git, with original output and
+    # status. This recorder changes no fixture inputs or consumer behavior.
+    wrapper.write_text(
+        f'#!{sys.executable}\n'
+        'import json, pathlib, subprocess, sys\n'
+        f'code = subprocess.call([{real_git!r}, *sys.argv[1:]])\n'
+        'args = sys.argv[1:]\n'
+        'if code == 0 and "worktree" in args and "add" in args:\n'
+        '    tree = pathlib.Path(args[-2])\n'
+        '    files = [p for p in (tree / "contract/captures").rglob("*") '
+        'if p.is_file()]\n'
+        '    item = {"tree": str(tree), "capture_files": len(files), '
+        '"capture_paths": sorted(p.relative_to(tree).as_posix() '
+        'for p in files), '
+        '"allocated_bytes": sum(p.stat().st_blocks * 512 for p in files)}\n'
+        f'    with open({str(recorder)!r}, "a") as out:\n'
+        '        out.write(json.dumps(item) + "\\n")\n'
+        'sys.exit(code)\n'
+    )
+    wrapper.chmod(0o700)
+    monkeypatch.setenv('PATH', f'{bin_dir}{os.pathsep}{os.environ["PATH"]}')
+    landed = git(repo, 'rev-parse', 'HEAD')
+    original_tree = git(repo, 'rev-parse', 'HEAD^{tree}')
+    capture_paths = git(repo, 'ls-files', 'contract/captures').splitlines()
+    manifests = sorted(p for p in capture_paths if p.endswith('/manifest.json'))
+    assert manifests
+    # Allow the small admission manifests, rounded generously to 64 KiB
+    # allocation units, while forbidding every bulk JSON/Arrow workfile.
+    manifest_bound = sum(
+        ((ROOT / name).stat().st_size + 65535) // 65536 * 65536
+        for name in manifests
+    )
+    witnesses = [
+        next(p for p in capture_paths if p.endswith('/capture.json')),
+        next(p for p in capture_paths if p.endswith('.arrows')),
+    ]
+    commit(repo)
+    done = gate(repo, '--no-l0', '--base', landed, '--only', 'coverage')
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert summary(done) == {'coverage': 'ok'}, done.stdout
+    assert git(repo, 'rev-parse', 'HEAD^{tree}') == original_tree
+    for name in witnesses:
+        assert (
+            subprocess.check_output(
+                [real_git, '-C', str(repo), 'show', f'HEAD:{name}']
+            )
+            == (ROOT / name).read_bytes()
+        )
+    checkpoints = [
+        json.loads(line) for line in recorder.read_text().splitlines()
+    ]
+    assert checkpoints, 'the real gate never constructed its judging worktree'
+    for item in checkpoints:
+        assert item['capture_paths'] == manifests, item
+        assert item['capture_files'] == len(manifests), item
+        assert 0 < item['allocated_bytes'] <= manifest_bound, item
+    for tree in (repo, origin['repo']):
+        physical = sorted(
+            p.relative_to(tree).as_posix()
+            for p in (tree / 'contract/captures').rglob('*')
+            if p.is_file()
+        )
+        assert physical == manifests
+        for name in manifests:
+            assert (tree / name).read_bytes() == (ROOT / name).read_bytes()
+    # The real gate guards tracked source; normal tool imports may leave
+    # untracked bytecode in this minimal synthetic history.
+    assert git(repo, 'status', '--porcelain', '--untracked-files=no') == ''
+
+
 def test_only_compare_judges_the_observations_given(
     repo: Path, tmp_path: Path, observed: dict[str, list[dict[str, Any]]]
 ) -> None:
@@ -670,6 +761,56 @@ def test_the_post_landing_state_passes(
 
 
 # --- --locked 1a ----------------------------------------------------------------
+
+
+@pytest.mark.parametrize('reference', ['original', 'missing', 'invalid'])
+def test_locked_gate_preserves_real_manifest_admission(
+    stubbed: Path,
+    tmp_path: Path,
+    observed: dict[str, list[dict[str, Any]]],
+    stubs: dict[str, Any],
+    reference: str,
+) -> None:
+    """The real locked gate must run its real manifest admission checker."""
+    manifests = sorted(
+        name
+        for name in git(stubbed, 'ls-files', 'contract/captures').splitlines()
+        if name.endswith('/manifest.json')
+    )
+    assert manifests
+    selected = manifests[0]
+    original = subprocess.check_output(
+        ['git', '-C', str(stubbed), 'show', f'HEAD:{selected}']
+    )
+    if reference != 'original':
+        document = json.loads(original)
+        if reference == 'missing':
+            del document['reference_commit']
+        else:
+            document['reference_commit'] = 'not-a-reference-commit'
+        target = stubbed / selected
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(json.dumps(document))
+        git(stubbed, 'add', '--sparse', '--', selected)
+    commit(stubbed)
+    done = locked(
+        stubbed, stubs, '1a', '--run', 'rust-host', *files(observed, tmp_path)
+    )
+    output = done.stdout + done.stderr
+    assert 'warehouse legs wait for C-1' not in output, output
+    assert '(the locked run fails on any)' in output, output
+    assert f'{len(manifests)} manifests read' in output, output
+    if reference == 'original':
+        assert done.returncode == 0, output
+        assert 'captures: ok;' in output, output
+        assert summary(done)['compare'] == 'ok', output
+        for name in manifests:
+            assert (stubbed / name).read_bytes() == (ROOT / name).read_bytes()
+    else:
+        assert done.returncode == 1, output
+        assert 'captures: FAILED;' in output, output
+        assert f'{selected}: no reference_commit' in output, output
+        assert summary(done)['compare'] == 'FAIL', output
 
 
 def test_locked_1a_passes_on_stubs_and_writes_the_evidence(

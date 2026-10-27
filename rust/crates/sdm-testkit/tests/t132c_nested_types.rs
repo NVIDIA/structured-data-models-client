@@ -385,7 +385,7 @@ fn the_pending_list_only_shrinks() {
 fn kind(prefix: &str) {
     let all = vectors();
     let contract = root().join("contract");
-    let loaded = case::load(&[contract.join("cases")]).unwrap();
+    let loaded = case::load_for(&[contract.join("cases")], case::Database::Duckdb).unwrap();
     let template = loaded
         .iter()
         .find(|l| l.case.id == "nested.list-int")

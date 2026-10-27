@@ -337,20 +337,15 @@ fn edit_raw(description: &Value, edit: &Value) -> Got {
         serde_json::from_value(description.clone()).unwrap();
     let held = serde_json::to_vec(&edits::held(&schema)).unwrap();
     let attachments = BTreeMap::from([
+        (AttachmentId(1), Attachment::Bytes(held)),
         (
-            AttachmentId(1),
-            Attachment::Bytes(serde_json::to_vec(description).unwrap()),
-        ),
-        (AttachmentId(2), Attachment::Bytes(held)),
-        (
-            AttachmentId(3),
+            AttachmentId(2),
             Attachment::Bytes(serde_json::to_vec(edit).unwrap()),
         ),
     ]);
     let operation = Operation::EditSchema(EditSchema {
         schema: AttachmentId(1),
-        held: Some(AttachmentId(2)),
-        edit: AttachmentId(3),
+        edit: AttachmentId(2),
     });
     let handle = match start(operation, CONTRACT_VERSION, attachments) {
         Ok(handle) => handle,

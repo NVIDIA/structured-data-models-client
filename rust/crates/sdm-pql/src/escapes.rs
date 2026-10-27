@@ -96,6 +96,36 @@ mod tests {
     }
 
     #[test]
+    fn deprecated_string_escapes_warn_once_and_keep_literal_order() {
+        use crate::{LiteralWarning, Mode, dates::Reader};
+
+        let query = concat!(
+            r"PREDICT COUNT(t.* WHERE t.s = 'a\/' OR t.s = 'b\/', 0, 3, days)",
+            " FOR EACH u.id WHERE u.ts > 13/01/2024",
+        );
+        let reader = Reader {
+            year: Some(2026),
+            pads_year: true,
+        };
+        let parsed = crate::parse(query, Mode::Inference, reader);
+        assert!(parsed.outcome.is_ok());
+        assert!(matches!(
+            parsed.warnings.as_slice(),
+            [
+                LiteralWarning::DayFirst(_),
+                LiteralWarning::InvalidStringEscape { .. }
+            ]
+        ));
+
+        for literal in [r"'a\\/'", r"'a/b'", r"'a\t'", r"'a\u0041'"] {
+            let query = format!("PREDICT t.s = {literal} FOR EACH t.id");
+            let parsed = crate::parse(&query, Mode::Inference, reader);
+            assert!(parsed.outcome.is_ok(), "{query}");
+            assert!(parsed.warnings.is_empty(), "{query}");
+        }
+    }
+
+    #[test]
     fn no_other_escape_reaches_the_reader() {
         // The codec's other escapes are refused by the visitor before a
         // literal is read, which is why they are not ported.

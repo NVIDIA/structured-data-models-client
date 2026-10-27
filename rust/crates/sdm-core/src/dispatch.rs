@@ -8,12 +8,10 @@ use std::sync::Arc;
 
 use sdm_contract::ops::{
     GivenCandidate, HeldSchema, Operation, OperationResult, QuerySchema, REQUEST_STATE_VERSION,
-    SAMPLER_STATE_VERSION, SamplerMemo, SchemaEdit, SourceDescription, SourceSpec,
+    RequestState, SAMPLER_STATE_VERSION, SamplerMemo, SchemaEdit, SourceSpec,
 };
 use sdm_contract::run::StartRun;
-use sdm_contract::{
-    CONTRACT_VERSION, CoreError, Detail, ErrorCode, ErrorKind, HeldState, HostFacts, Scalar,
-};
+use sdm_contract::{CONTRACT_VERSION, CoreError, Detail, HeldState, HostFacts, Scalar, Sentence};
 use sdm_engine::time::Zones;
 
 use crate::attached::{check_attachments, take_json, take_json_if};
@@ -29,7 +27,7 @@ pub fn check_contract(contract: u32) -> Result<(), CoreError> {
         return Ok(());
     }
     Err(CoreError::protocol(
-        ErrorCode::InvalidMessage,
+        Sentence::InvalidMessage,
         format!(
             "the host speaks contract version {contract}, and this core version {CONTRACT_VERSION}"
         ),
@@ -54,8 +52,7 @@ pub fn start(
     // The clock is an instant in UTC, spelled as the contract spells it (E5).
     if !matches!(&start.facts.now, Scalar::Timestamp { zone: Some(zone), .. } if zone == "UTC") {
         return Err(CoreError::new(
-            ErrorKind::InvalidRequest,
-            ErrorCode::InvalidRequest,
+            Sentence::HostClockNotUtc,
             "the host's clock must be a ts scalar in UTC",
         )
         .with_field("field", Detail::text("facts.now")));
@@ -85,15 +82,21 @@ pub fn start(
             let access = root.data_access(&request.provider)?;
             let check_keys = request.check_keys;
             let zones = Arc::clone(&zones);
-            Run::with_data(access, move |asker| {
-                crate::describe::run(asker, source, check_keys, facts, zones)
+            Run::with_data(access, move |asker| async move {
+                // A semantic model is read through its own definition, which
+                // names its base tables: no session read settles them (T3.5).
+                if asker.data().is_some_and(|data| data.view().is_some()) {
+                    let reader = crate::describe::text_reader(&facts)?;
+                    return crate::view::describe_source(asker, source, &reader).await;
+                }
+                let asker = crate::describe::settled(asker).await?;
+                crate::describe::run(asker, source, check_keys, facts, zones).await
             })
         }
         Operation::EditSchema(request) => {
-            let described: SourceDescription = take_json(&mut attachments, request.schema)?;
-            let held: Option<HeldSchema> = take_json_if(&mut attachments, request.held)?;
+            let held: HeldSchema = take_json(&mut attachments, request.schema)?;
             let edit: SchemaEdit = take_json(&mut attachments, request.edit)?;
-            Run::new(move |asker| crate::edit::run(asker, described, held, edit))
+            Run::new(move |asker| crate::edit::run(asker, held, edit))
         }
         operation @ Operation::Materialize(_) => materialize(
             root,
@@ -105,162 +108,33 @@ pub fn start(
             false,
         )?,
         Operation::Predict(request) => {
-            // The state's version first, by name, before anything of the
-            // state is read (decision H23).
-            if request.state.version != REQUEST_STATE_VERSION {
-                return Err(CoreError::new(
-                    ErrorKind::InvalidRequest,
-                    ErrorCode::InvalidRequest,
-                    "the request state is of a version this core does not read",
-                )
-                .with_field("field", Detail::text("state.version"))
-                .with_field(
-                    "version",
-                    Detail::Scalar(Scalar::UInt32(request.state.version)),
-                )
-                .with_field(
-                    "reads",
-                    Detail::Scalar(Scalar::UInt32(REQUEST_STATE_VERSION)),
-                ));
-            }
-            let Some(Attachment::Bytes(payload)) = attachments.remove(&request.state.payload)
-            else {
-                return Err(internal("the payload is not the bytes named"));
-            };
-            // The query rides with the state: the constant-context notice
-            // names the target from it where the wire calls it TARGET
-            // (T1.28b).
-            let query: String = take_json(&mut attachments, request.state.query)?;
-            // A forecast's later steps, each as the first is (T1.36 fix 21).
-            let forecast = match &request.state.forecast {
-                None => None,
-                Some(steps) => {
-                    let mut later = Vec::with_capacity(steps.len());
-                    for step in steps {
-                        let Some(Attachment::Bytes(payload)) = attachments.remove(&step.payload)
-                        else {
-                            return Err(internal("the payload is not the bytes named"));
-                        };
-                        let query: String = take_json(&mut attachments, step.query)?;
-                        // Each step's call carries its own id (T1.36 fix 24).
-                        let Some(request_id) = step.request_id.clone() else {
-                            return Err(CoreError::new(
-                                ErrorKind::InvalidRequest,
-                                ErrorCode::InvalidRequest,
-                                "a forecast's later step names no request id",
-                            )
-                            .with_field("field", Detail::text("state.forecast.request_id")));
-                        };
-                        later.push((step.step, payload, query, request_id));
-                    }
-                    Some(later)
+            // What predict asks: the state `materialize` answered, or a
+            // request the core did not materialize, rebuilt from what the
+            // host holds of it (T3.26).
+            let asked = match (request.state, request.held) {
+                (Some(state), None) => from_state(state, &request.request_id, &mut attachments)?,
+                (None, Some(held)) => {
+                    crate::held::rebuilt(held, &request.request_id, &mut attachments)?
                 }
-            };
-            // A ranking's later questions, each as the first is (T2.8): the
-            // first asks after the first candidate given, at position 0.
-            let ranking = match &request.state.ranking {
-                None => None,
-                Some(ranking) => {
-                    // Each candidate named by its position, the first's the
-                    // state's own, every later one's past the one before:
-                    // a state that names them otherwise would give the
-                    // answers back under other candidates' names.
-                    let positions = std::iter::once(ranking.candidate)
-                        .chain(ranking.parts.iter().map(|part| part.candidate));
-                    if !positions.clone().zip(positions.skip(1)).all(|(a, b)| a < b) {
-                        return Err(CoreError::new(
-                            ErrorKind::InvalidRequest,
-                            ErrorCode::InvalidRequest,
-                            "a ranking's questions do not name its candidates in the order given",
-                        )
-                        .with_field("field", Detail::text("state.ranking.candidate")));
-                    }
-                    let mut questions = vec![(
-                        ranking.candidate,
-                        ranking.value.clone(),
-                        Vec::new(),
-                        String::new(),
-                        String::new(),
-                    )];
-                    for part in &ranking.parts {
-                        let Some(Attachment::Bytes(payload)) = attachments.remove(&part.payload)
-                        else {
-                            return Err(internal("the payload is not the bytes named"));
-                        };
-                        let query: String = take_json(&mut attachments, part.query)?;
-                        let Some(request_id) = part.request_id.clone() else {
-                            return Err(CoreError::new(
-                                ErrorKind::InvalidRequest,
-                                ErrorCode::InvalidRequest,
-                                "a ranking's later question names no request id",
-                            )
-                            .with_field("field", Detail::text("state.ranking.request_id")));
-                        };
-                        questions.push((
-                            part.candidate,
-                            part.value.clone(),
-                            payload,
-                            query,
-                            request_id,
-                        ));
-                    }
-                    Some((questions, ranking.top_k))
-                }
-            };
-            let ranking = ranking.map(|(mut questions, top_k)| {
-                questions[0].2.clone_from(&payload);
-                questions[0].3.clone_from(&query);
-                questions[0].4.clone_from(&request.request_id);
-                (questions, top_k)
-            });
-            // A request asked in several model calls (`main`'s multi-call
-            // `predict`): each later call's payload, the rows it scores and
-            // the id it carries, which the host draws for each call as for
-            // a forecast's step.
-            let batches = match &request.state.batches {
-                None => None,
-                Some(batches) => {
-                    if request.state.forecast.is_some() {
-                        return Err(CoreError::new(
-                            ErrorKind::InvalidRequest,
-                            ErrorCode::InvalidRequest,
-                            "a forecast's request is one call per step, never batched",
-                        )
-                        .with_field("field", Detail::text("state.batches")));
-                    }
-                    let mut later = Vec::with_capacity(batches.len());
-                    for batch in batches {
-                        let Some(Attachment::Bytes(payload)) = attachments.remove(&batch.payload)
-                        else {
-                            return Err(internal("the payload is not the bytes named"));
-                        };
-                        let Some(request_id) = batch.request_id.clone() else {
-                            return Err(CoreError::new(
-                                ErrorKind::InvalidRequest,
-                                ErrorCode::InvalidRequest,
-                                "a later call of a request names no request id",
-                            )
-                            .with_field("field", Detail::text("state.batches.request_id")));
-                        };
-                        later.push(crate::predict::LaterCall {
-                            payload,
-                            request_id,
-                        });
-                    }
-                    Some(later)
+                _ => {
+                    return Err(CoreError::protocol(
+                        Sentence::InvalidMessage,
+                        "a predict names other than one of a request state and a held request",
+                    ));
                 }
             };
             let inputs = crate::predict::Inputs {
-                payload,
-                query,
+                payload: asked.payload,
+                query: asked.query,
                 model: request.model,
                 request_id: request.request_id,
                 outputs: request.outputs,
                 default_outputs: request.default_outputs,
                 inference_asked: request.inference_asked,
-                forecast,
-                ranking,
-                batches,
+                forecast: asked.forecast,
+                ranking: asked.ranking,
+                batches: asked.batches,
+                endpoint: request.model_endpoint,
             };
             Run::new(move |asker| crate::predict::run(asker, inputs))
         }
@@ -268,6 +142,149 @@ pub fn start(
         Operation::Test(operation) => {
             crate::test_ops::run(root, operation, &mut attachments, facts, zones)?
         }
+    })
+}
+
+/// What `state`, the request state `materialize` answered, asks of
+/// `predict`, its attachments taken from `attachments`; the first call
+/// carries `request_id`. A version other than this build's is refused by
+/// name before anything of the state is read (decision H23).
+fn from_state(
+    request_state: RequestState,
+    request_id: &str,
+    attachments: &mut Attachments,
+) -> Result<crate::predict::Asked, CoreError> {
+    if request_state.version != REQUEST_STATE_VERSION {
+        return Err(CoreError::new(
+            Sentence::StateVersion,
+            "the request state is of a version this core does not read",
+        )
+        .with_field("field", Detail::text("state.version"))
+        .with_field(
+            "version",
+            Detail::Scalar(Scalar::UInt32(request_state.version)),
+        )
+        .with_field(
+            "reads",
+            Detail::Scalar(Scalar::UInt32(REQUEST_STATE_VERSION)),
+        ));
+    }
+    let Some(Attachment::Bytes(payload)) = attachments.remove(&request_state.payload) else {
+        return Err(internal("the payload is not the bytes named"));
+    };
+    // The query rides with the state: the constant-context notice names the
+    // target from it where the wire calls it TARGET (T1.28b).
+    let query: String = take_json(attachments, request_state.query)?;
+    // A forecast's later steps, each as the first is (T1.36 fix 21).
+    let forecast = match &request_state.forecast {
+        None => None,
+        Some(steps) => {
+            let mut later = Vec::with_capacity(steps.len());
+            for step in steps {
+                let Some(Attachment::Bytes(payload)) = attachments.remove(&step.payload) else {
+                    return Err(internal("the payload is not the bytes named"));
+                };
+                let query: String = take_json(attachments, step.query)?;
+                // Each step's call carries its own id (T1.36 fix 24).
+                let Some(request_id) = step.request_id.clone() else {
+                    return Err(CoreError::new(
+                        Sentence::StateUnread,
+                        "a forecast's later step names no request id",
+                    )
+                    .with_field("field", Detail::text("state.forecast.request_id")));
+                };
+                later.push((step.step, payload, query, request_id));
+            }
+            Some(later)
+        }
+    };
+    // A ranking's later questions, each as the first is (T2.8): the first
+    // asks after the first candidate given, at position 0.
+    let ranking = match &request_state.ranking {
+        None => None,
+        Some(ranking) => {
+            // Each candidate named by its position, the first's the state's
+            // own, every later one's past the one before: a state that
+            // names them otherwise would give the answers back under other
+            // candidates' names.
+            let positions = std::iter::once(ranking.candidate)
+                .chain(ranking.parts.iter().map(|part| part.candidate));
+            if !positions.clone().zip(positions.skip(1)).all(|(a, b)| a < b) {
+                return Err(CoreError::new(
+                    Sentence::StateUnread,
+                    "a ranking's questions do not name its candidates in the order given",
+                )
+                .with_field("field", Detail::text("state.ranking.candidate")));
+            }
+            let mut questions = vec![(
+                ranking.candidate,
+                ranking.value.clone(),
+                payload.clone(),
+                query.clone(),
+                request_id.to_owned(),
+            )];
+            for part in &ranking.parts {
+                let Some(Attachment::Bytes(payload)) = attachments.remove(&part.payload) else {
+                    return Err(internal("the payload is not the bytes named"));
+                };
+                let query: String = take_json(attachments, part.query)?;
+                let Some(request_id) = part.request_id.clone() else {
+                    return Err(CoreError::new(
+                        Sentence::StateUnread,
+                        "a ranking's later question names no request id",
+                    )
+                    .with_field("field", Detail::text("state.ranking.request_id")));
+                };
+                questions.push((
+                    part.candidate,
+                    part.value.clone(),
+                    payload,
+                    query,
+                    request_id,
+                ));
+            }
+            Some((questions, ranking.top_k))
+        }
+    };
+    // A request asked in several model calls (`main`'s multi-call
+    // `predict`): each later call's payload and the id it carries, which
+    // the host draws for each call as for a forecast's step.
+    let batches = match &request_state.batches {
+        None => None,
+        Some(batches) => {
+            if request_state.forecast.is_some() {
+                return Err(CoreError::new(
+                    Sentence::StateUnread,
+                    "a forecast's request is one call per step, never batched",
+                )
+                .with_field("field", Detail::text("state.batches")));
+            }
+            let mut later = Vec::with_capacity(batches.len());
+            for batch in batches {
+                let Some(Attachment::Bytes(payload)) = attachments.remove(&batch.payload) else {
+                    return Err(internal("the payload is not the bytes named"));
+                };
+                let Some(request_id) = batch.request_id.clone() else {
+                    return Err(CoreError::new(
+                        Sentence::StateUnread,
+                        "a later call of a request names no request id",
+                    )
+                    .with_field("field", Detail::text("state.batches.request_id")));
+                };
+                later.push(crate::predict::LaterCall {
+                    payload,
+                    request_id,
+                });
+            }
+            Some(later)
+        }
+    };
+    Ok(crate::predict::Asked {
+        payload,
+        query,
+        forecast,
+        ranking,
+        batches,
     })
 }
 
@@ -284,13 +301,10 @@ pub(crate) fn materialize(
 ) -> Result<Run, CoreError> {
     match operation {
         Operation::Materialize(request) => {
-            let described: SourceDescription = take_json(&mut attachments, request.schema)?;
-            let held: Option<HeldSchema> = take_json_if(&mut attachments, request.held)?;
-            // The schema as the host holds it, before anything else of the
-            // call is read; one changed in a way no edit the core takes says
-            // is refused by name (`schema_edited`, decision E67), as the
-            // host's bridge refused it before the core ran until T1.24b.
-            let description = sdm_schema::edit::read_held(described, held, "materialize")?;
+            // The schema as the host holds it, as plain data (T3.16): read
+            // at the run's start, where a column with no facts is read from
+            // the source (`crate::discover`).
+            let held: HeldSchema = take_json(&mut attachments, request.schema)?;
             let query: String = take_json(&mut attachments, request.query)?;
             let indices = match request.indices {
                 Some(id) => match attachments.remove(&id) {
@@ -308,8 +322,7 @@ pub(crate) fn materialize(
             // (`DataAccess::plan`).
             if request.seed.as_ref().is_some_and(|seed| seed.is_negative()) {
                 return Err(CoreError::new(
-                    ErrorKind::InvalidRequest,
-                    ErrorCode::InvalidRequest,
+                    Sentence::SeedNegative,
                     "a sampling seed cannot be negative",
                 )
                 .with_field("field", Detail::text("seed"))
@@ -330,8 +343,7 @@ pub(crate) fn materialize(
                 Some(state) => {
                     if state.version != SAMPLER_STATE_VERSION {
                         return Err(CoreError::new(
-                            ErrorKind::InvalidRequest,
-                            ErrorCode::InvalidRequest,
+                            Sentence::SamplerStateVersion,
                             "the sampler state is of a version this core does not read",
                         )
                         .with_field("field", Detail::text("sampler_state.version"))
@@ -357,10 +369,9 @@ pub(crate) fn materialize(
                     let Some(Attachment::Bytes(bytes)) = attachments.remove(&id) else {
                         return Err(internal("the call's values are not the bytes named"));
                     };
-                    Some(sdm_wire::json::read(&bytes).map_err(|e| {
+                    Some(sdm_wire::json::read_options(&bytes).map_err(|e| {
                         CoreError::new(
-                            ErrorKind::InvalidRequest,
-                            ErrorCode::InvalidRequest,
+                            Sentence::OptionValuesUnread,
                             "the call's option values are not JSON this core reads",
                         )
                         .with_field("field", Detail::text("values"))
@@ -368,31 +379,82 @@ pub(crate) fn materialize(
                     })?)
                 }
             };
-            let source = crate::materialize::fingerprint(&request.provider, &description)?;
             let access = root.data_access(&request.provider)?;
-            let inputs = crate::materialize::Inputs {
-                memo: memo.filter(|memo| memo.source == source),
-                source,
-                description,
-                query,
-                indices,
-                candidates,
-                anchor_time: request.anchor_time,
-                seed: request.seed,
-                unseeded: request.unseeded,
-                anchor_entity: request.anchor_entity,
-                values,
-                options: request.options,
-                most_parts: request.most_parts,
-                most_entities: request.most_entities,
-                most_calls: request.most_calls,
-                facts,
-                zones: Arc::clone(&zones),
-                #[cfg(feature = "test-ops")]
-                labels_only,
-            };
-            Ok(Run::with_data(access, move |asker| {
-                crate::materialize::run(asker, inputs)
+            let provider = request.provider;
+            // The run's inputs, once the schema is read (below) and its
+            // fingerprint taken: the memo is read only if it was made under
+            // this provider and schema (decision E52).
+            let inputs =
+                move |description, source: String, pending, types| crate::materialize::Inputs {
+                    memo: memo.filter(|memo| memo.source == source),
+                    source,
+                    description,
+                    pending,
+                    types,
+                    query,
+                    indices,
+                    candidates,
+                    anchor_time: request.anchor_time,
+                    seed: request.seed,
+                    unseeded: request.unseeded,
+                    anchor_entity: request.anchor_entity,
+                    values,
+                    options: request.options,
+                    most_parts: request.most_parts,
+                    most_entities: request.most_entities,
+                    most_calls: request.most_calls,
+                    facts,
+                    zones: Arc::clone(&zones),
+                    #[cfg(feature = "test-ops")]
+                    labels_only,
+                };
+            Ok(Run::with_data(access, move |asker| async move {
+                // A source's tables (a SQL provider's) are read as they stand
+                // at each run, their location, columns and types, once the
+                // request's inputs are checked (`describe::initialize`), and
+                // nothing of them is remembered between runs (the owner's
+                // plan B, T3.4); a host provider's columns with no facts are
+                // read from it then. Until then the schema is read as the
+                // caller holds it, a column with no facts by its data type,
+                // as an edit reads it.
+                let source_tables = asker
+                    .data()
+                    .is_some_and(crate::compose::DataAccess::reads_a_source);
+                let lacking = !sdm_schema::held::lacking_facts(&held).is_empty();
+                let read = sdm_schema::held::read(
+                    held.clone(),
+                    &std::collections::BTreeMap::new(),
+                    lacking,
+                )?;
+                // The schema as the caller holds it first, as the reference's
+                // `check_consistent` reads it; then as its engine reads the
+                // source (T3.16 review round 1), where its facts are held.
+                crate::materialize::meanings_carried(&read.description, Some(&read.types))?;
+                sdm_schema::assemble::check_links(&read.description, &read.types)?;
+                let description = read.by_the_source();
+                let source = crate::materialize::fingerprint(&provider, &description)?;
+                // Each table read as the columns its description holds,
+                // until its catalog read says which it holds.
+                for table in &description.tables {
+                    asker.guard_held(
+                        &table.source,
+                        table
+                            .columns
+                            .iter()
+                            .map(|column| column.name.clone())
+                            .collect(),
+                    );
+                }
+                crate::materialize::run(
+                    asker,
+                    inputs(
+                        description,
+                        source,
+                        (source_tables || lacking).then_some(held),
+                        read.types,
+                    ),
+                )
+                .await
             }))
         }
         _ => Err(internal("a materialize run of another operation")),

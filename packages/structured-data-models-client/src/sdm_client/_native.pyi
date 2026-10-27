@@ -39,6 +39,7 @@ _Code = Literal[
     'RUN_POISONED',
     'RUN_BUSY',
     'INVALID_MESSAGE',
+    'ENDPOINT_REFUSED',
 ]
 #: The kinds of an error of the core, the contract's ``ErrorKind``.
 _Kind = Literal[
@@ -62,9 +63,13 @@ TEST_OPS: bool
 PROVIDERS: tuple[str, ...]
 #: Every code an error of the core may carry, in the contract's order.
 ERROR_CODES: tuple[_Code, ...]
-#: Every warning the core may give, each with the variants it gives (none:
-#: one sentence), which a host words (decision E59(d)).
-WARNING_CODES: tuple[tuple[str, tuple[str, ...]], ...]
+#: Each ``(stype, dtype)`` the language lets a column mean, by the
+#: contract's names (T3.16): the client's check of a meaning, read in place
+#: of the old PQL package's.
+MEANINGS: tuple[tuple[str, str], ...]
+#: Each data type name a host may give a column, and the contract's name
+#: of the type it names (T3.16): the one table of them.
+DTYPE_NAMES: tuple[tuple[str, str], ...]
 
 class _ArrowStreamExportable(Protocol):
     def __arrow_c_stream__(
@@ -118,5 +123,17 @@ class Run:
 def reset_log_cache() -> None:
     """Forget the logger levels the logging bridge cached."""
 
+def templates() -> str:
+    """The table of what every error's and warning's sentence says, as
+    JSON (T3.17)."""
+
 def is_posix_zone(text: str) -> bool:
     """Whether a run takes ``text`` as a POSIX ``TZ`` local zone."""
+
+def local_zone(setting: str | None, roots: list[str]) -> tuple[str, str] | None:
+    """The local zone by the core's rule (T3.12): ``('iana', name)``,
+    ``('posix', text)`` or ``None``, from ``TZ`` and the lookup roots."""
+
+def capabilities() -> str:
+    """Each model's capabilities, as the client describes them, as JSON
+    (T3.12)."""

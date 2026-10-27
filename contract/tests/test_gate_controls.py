@@ -31,6 +31,9 @@ from typing import Any
 
 import pytest
 
+# Gate tooling (T3.0): CI runs it in the tooling jobs, not in every matrix job.
+pytestmark = pytest.mark.tooling
+
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location(
     'ratchet_tests', ROOT / 'tests/test_contract_ratchet.py'
@@ -44,18 +47,24 @@ CASE = 's0.accept.sum-window'
 
 
 @pytest.fixture(scope='module')
-def origin(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, str]:
-    built: tuple[Path, str] = helpers.build(tmp_path_factory.mktemp('origin'))
+def origin(
+    owned_module_dir: Callable[[str], Path],
+) -> tuple[Path, str]:
+    owned = owned_module_dir('origin')
+    built: tuple[Path, str] = helpers.build(
+        owned, coverage_inputs=True, sparse_captures=True
+    )
     return built
 
 
 @pytest.fixture(scope='module')
 def observed(
-    origin: tuple[Path, str], tmp_path_factory: pytest.TempPathFactory
+    origin: tuple[Path, str], owned_module_dir: Callable[[str], Path]
 ) -> dict[str, list[dict[str, Any]]]:
     r"""Each Python runner's observations of the repository's cases."""
+    owned = owned_module_dir('observed')
     repo, _ = origin
-    out = tmp_path_factory.mktemp('observed')
+    out = owned
     found = {}
     for runner in ('python-core', 'python-old'):
         path = out / f'{runner}.jsonl'
@@ -82,9 +91,7 @@ def observed(
 @pytest.fixture
 def repo(origin: tuple[Path, str], tmp_path: Path) -> Path:
     source, landed = origin
-    tree = tmp_path / 'tree'
-    git(source, 'worktree', 'add', '-q', '--detach', str(tree), landed)
-    return tree
+    return helpers.repo.__wrapped__((source, landed), tmp_path)
 
 
 def files(

@@ -283,7 +283,7 @@ def forecast_through_the_client(explanations, requested):
     )
     request = SimpleNamespace(
         _decomposition=rewritten,
-        parts=tuple(object() for _ in explanations),
+        parts=tuple(SimpleNamespace(payloads=()) for _ in explanations),
     )
     answers = [
         PredictionResult(

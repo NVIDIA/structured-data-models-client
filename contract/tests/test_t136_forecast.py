@@ -378,7 +378,7 @@ def test_a_forecast_cannot_pin_a_session(
     serve = R._module(
         'scripted_endpoint', ROOT / 'contract/runners/scripted_endpoint.py'
     ).serve
-    monkeypatch.delenv('SDM_CORE_ROUTES', raising=False)
+    monkeypatch.setenv('SDM_CORE_ROUTES', '')
     if core:
         monkeypatch.setenv('SDM_CORE_ROUTES', ','.join(R.EN.core_routes({})))
     connection = duckdb.connect()
@@ -532,7 +532,8 @@ def _request_ids(routes: list[str], steps: int) -> list[Any]:
     serve = R._module(
         'scripted_endpoint', ROOT / 'contract/runners/scripted_endpoint.py'
     ).serve
-    previous = os.environ.pop('SDM_CORE_ROUTES', None)
+    previous = os.environ.get('SDM_CORE_ROUTES')
+    os.environ['SDM_CORE_ROUTES'] = ''
     if routes:
         os.environ['SDM_CORE_ROUTES'] = ','.join(routes)
     connection = duckdb.connect()

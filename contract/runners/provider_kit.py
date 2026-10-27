@@ -253,7 +253,13 @@ def _fetch(case: dict[str, Any], source: dict[str, Any], database: str) -> Any:
     capabilities = case.get('capabilities', {})
     fetch: dict[str, Any] = {
         'request': request,
-        'provider': {'provider': 'sql', 'dialect': database},
+        # A Postgres read names its schema, the case database's ``public``,
+        # as every run names the session's (T3.7).
+        'provider': {
+            'provider': 'sql',
+            'dialect': database,
+            **({'namespace': ['public']} if database == 'postgres' else {}),
+        },
         'echo': True,
         'undeclared': list(capabilities.get('withhold', [])),
     }
@@ -462,6 +468,19 @@ def run_kit(database: str, fault: str | None) -> tuple[dict[str, Any], bool]:
     return report, passed
 
 
+def _environment_refusal() -> str | None:
+    r"""run_python.py's refusal of a shared or foreign interpreter on the
+    orchestration machine (T3.0), for the kit alike."""
+    spec = importlib.util.spec_from_file_location(
+        'provider_kit_run_python', ROOT / 'contract/runners/run_python.py'
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    found: str | None = module.environment_refusal(os.environ)
+    return found
+
+
 def _test_ops() -> bool:
     r"""Whether this interpreter's ``sdm_client._native`` has the
     test-only operations."""
@@ -506,6 +525,10 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if not arguments.database or not arguments.out:
         parser.error('--database and --out are required')
+    refused = _environment_refusal()
+    if refused is not None:
+        print(f'provider kit: {refused}', file=sys.stderr)
+        return 2
     if not _test_ops():
         return _elsewhere(argv if argv is not None else sys.argv[1:])
     try:

@@ -21,6 +21,7 @@ core, and a setter that skips it fails here (seeded).
 from __future__ import annotations
 
 import importlib.util
+import json
 import warnings
 from collections.abc import Callable
 from pathlib import Path
@@ -40,6 +41,7 @@ from sdm_client import (
 )
 from sdm_client._rust import edits as on_the_core
 from sdm_client._rust import run as runs
+from sdm_client.schema import _described_on_the_core
 
 ROOT = Path(__file__).resolve().parents[3]
 CORE = ','.join(
@@ -66,21 +68,21 @@ SETUP = (
 
 @pytest.fixture(autouse=True)
 def _old(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
 
 
 def _schema(route: str, monkeypatch: pytest.MonkeyPatch) -> Schema:
     if route == 'core':
         monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     else:
-        monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+        monkeypatch.setenv(_routing.ENVIRONMENT, '')
     connection = duckdb.connect()
     for statement in SETUP:
         connection.execute(statement)
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         schema = Schema.from_source(DuckDBSource(connection))
-    assert (schema._core_description is not None) == (route == 'core')
+    assert _described_on_the_core(schema) == (route == 'core')
     return schema
 
 
@@ -306,28 +308,41 @@ def test_a_setter_that_skips_the_core_fails_here(
         )
 
 
-def test_a_schema_changed_past_its_description_is_refused_by_name(
+def test_a_schema_changed_by_hand_is_edited_and_sampled_as_the_old_route_does(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from sdm_client import UnsupportedRequestError
+    # T3.16: the schema is plain data, each column with what the source said
+    # of it, so a column retyped by hand or a table pointed at another source
+    # table is no longer refused (`schema_edited`): the edit is made and the
+    # schema sampled as the old route makes and samples them.
+    def outcome(route: str, change: Edit) -> Any:
+        schema = _schema(route, monkeypatch)
+        change(schema)
+        try:
+            schema['users']['country'].stype = 'text'
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore')
+                request = PredictiveQuery(
+                    'PREDICT SUM(orders.price, 0, 30, days) FOR EACH '
+                    'users.user_id',
+                    schema,
+                ).materialize(indices=[0, 1])
+        except StructuredDataError as refused:
+            return (type(refused).__name__, refused.code)
+        return (
+            schema['users']['country'].stype,
+            schema['users']['age'].dtype,
+            json.loads(json.dumps(request._payloads[0], default=str)),
+        )
 
     for change in (
         lambda s: setattr(s['users']['age'], 'dtype', 'float64'),
         lambda s: setattr(s['orders'], 'source_name', 'users'),
     ):
-        schema = _schema('core', monkeypatch)
-        change(schema)
-        with pytest.raises(UnsupportedRequestError) as refused:
-            schema['users']['country'].stype = 'text'
-        assert refused.value.details['rule'] == 'schema_edited'
-        assert refused.value.details['operation'] == 'edit_schema'
-        with pytest.raises(UnsupportedRequestError) as refused:
-            PredictiveQuery(
-                'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id',
-                schema,
-            ).materialize(indices=[0, 1])
-        assert refused.value.details['rule'] == 'schema_edited'
-        assert refused.value.details['operation'] == 'materialize'
+        core = outcome('core', change)
+        assert 'schema_edited' not in repr(core)
+        if ENGINE:
+            assert core == outcome('old', change)
 
 
 def test_a_schema_of_frames_never_reaches_the_core(

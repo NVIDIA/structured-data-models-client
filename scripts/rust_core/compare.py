@@ -85,8 +85,9 @@ policy names under ``reach``. A diagnostic rule only reports. The rules:
   a statement the policy's ``ordered`` names, otherwise as a multiset;
   between the core runners, each statement's result likewise. On
   Postgres the reference's two reads whose results it never uses, the
-  current schema's name and each table's row count, are not expected
-  (KO2-58), every other statement is. A runner's
+  the read whose result it never uses, each table's row count, is not
+  expected (KO2-58), every other statement is: the current schema's name
+  too, which the core reads alike since T3.7. A runner's
   record of what ran (the driver capture on a Python runner, the
   provider's own record on ``rust-host``) must be complete, its counts
   equal to DuckDB's own query log; ``rust-host`` is held to the public
@@ -234,6 +235,10 @@ OUTCOME = ('result', 'stage', 'error', 'code')
 #: call, so it has no stage and no exception class. Every other runner
 #: observes both, and a null there is a defect, never a pass.
 UNOBSERVED_BY_RUST_HOST = ('stage', 'error')
+#: The runners that make no public call, so observe neither a stage nor an
+#: exception class: the pure-Rust host, and Java's host, whose S0 lines leave
+#: both null as rust-host's do (T3.2, found by T3.11).
+UNOBSERVING = ('rust-host', 'java')
 #: An endpoint's refusal of a call as the client raises it (decision E47):
 #: the endpoint's own text, under the client's class for it and no code of
 #: the client's. The core, told the endpoint's status, reports the same call
@@ -283,8 +288,9 @@ REGISTER = REPO / 'docs/design/rust-core/register.yaml'
 RUNTIME_DEPRECATIONS = 'HOST-5'
 RUNTIME_LIBRARIES = ('pandas', 'pyarrow')
 #: The runners a ``more_exact`` item may name: the core's, since it is the
-#: core that is more exact than the reference.
-MORE_EXACT_RUNNERS = ('python-core', 'rust-host')
+#: core that is more exact than the reference; from T3.12 the Java host's,
+#: which runs the same core.
+MORE_EXACT_RUNNERS = ('python-core', 'rust-host', 'java')
 #: A ``more_exact`` field: a path under one of the roots the host and
 #: payload rules compare, at least one key or index below it.
 _MORE_EXACT_FIELD = re.compile(
@@ -326,21 +332,59 @@ def _capture_check() -> ModuleType:
 
 def _predicted(core: dict[str, Any], paths: tuple[Any, ...]) -> Any:
     r"""``core.predicted``, its call's request id compared by presence and
-    type only (decision E35, approved by the owner on 2026-10-10)."""
+    type only (decision E35), and payload numbers by exact kind and value."""
     predicted = core.get('predicted')
     if not isinstance(predicted, dict) or 'body' not in predicted:
         return predicted
     masked = {
         **predicted,
-        'body': _capture_check().masked(predicted['body'], paths),
+        'body': _payload(predicted['body'], paths),
     }
     if isinstance(predicted.get('calls'), list):
         # Every call's body where there were several (T2.1g), each masked
         # as the last's is.
-        masked['calls'] = [
-            _capture_check().masked(body, paths) for body in predicted['calls']
-        ]
+        masked['calls'] = [_payload(body, paths) for body in predicted['calls']]
     return masked
+
+
+def _state_payloads(state: Any) -> Any:
+    """Apply numeric agreement only to a request state's JSON payloads.
+
+    Queries, scalar encodings, ranking values and other state fields stay
+    literal; their strings are not captured JSON numeric tokens.
+    """
+    if not isinstance(state, dict):
+        return state
+    held = dict(state)
+    if 'payload' in state:
+        held['payload'] = _lossless(state['payload'])
+    for field in ('forecast', 'batches', 'parts'):
+        if isinstance(state.get(field), list):
+            held[field] = [_state_payloads(part) for part in state[field]]
+    if isinstance(state.get('ranking'), dict):
+        held['ranking'] = _state_payloads(state['ranking'])
+    return held
+
+
+def _core_field(field: str, value: Any) -> Any:
+    """The core rule's payload boundaries, with all other fields literal."""
+    if field == 'materialized':
+        return _state_payloads(value)
+    if field != 'inputs' or not isinstance(value, list):
+        return value
+    return [
+        {
+            **item,
+            **{
+                key: _state_payloads(item[key])
+                for key in ('state', 'held')
+                if key in item
+            },
+        }
+        if isinstance(item, dict) and item.get('op') == 'predict'
+        else item
+        for item in value
+    ]
 
 
 class Report:
@@ -437,6 +481,13 @@ def _observations(
             # Nested past the parser is refused by name, never a traceback.
             report.fail(f'{path.name}:{number}: runner failure: not JSON')
             continue
+        if (
+            isinstance(observation, dict)
+            and observation.get('format') == _capture_check().RECORD_FORMAT
+        ):
+            # A warehouse leg's reference line held in the recording mode's
+            # line (Phase 3 design choice 2), read from it whole.
+            observation = observation.get('observation')
         try:
             problem = runner._invalid(validate, observation)
         except RecursionError:
@@ -527,7 +578,7 @@ def _expectation(
     }
     for field, value in wanted.items():
         seen = outcome[field]
-        if who == 'rust-host' and field in UNOBSERVED_BY_RUST_HOST:
+        if who in UNOBSERVING and field in UNOBSERVED_BY_RUST_HOST:
             continue
         if _rust_host_s_refusal(
             who, field, {'result': expect['outcome'], **wanted}, seen
@@ -546,7 +597,7 @@ def _against_reference(
 ) -> None:
     for field in OUTCOME:
         mine, theirs = outcome[field], reference['outcome'][field]
-        if who == 'rust-host' and field in UNOBSERVED_BY_RUST_HOST:
+        if who in UNOBSERVING and field in UNOBSERVED_BY_RUST_HOST:
             continue
         if _rust_host_s_refusal(who, field, reference['outcome'], mine):
             continue
@@ -586,7 +637,7 @@ def _effective(
     where = f'{case["id"]}: {who} against its effective expectation'
     effective = {field: wanted.get(field, base[field]) for field in OUTCOME}
     for field in OUTCOME:
-        if who == 'rust-host' and field in UNOBSERVED_BY_RUST_HOST:
+        if who in UNOBSERVING and field in UNOBSERVED_BY_RUST_HOST:
             continue
         value = effective[field]
         if _rust_host_s_refusal(who, field, effective, outcome[field]):
@@ -974,14 +1025,16 @@ def _core_agree(
     python: dict[str, Any],
     rust: dict[str, Any],
     stop: str | None = None,
+    host: str = 'rust-host',
 ) -> None:
-    r"""The kind and code rule: the two core runners on ``core`` fields.
+    r"""The kind and code rule: the two core runners on ``core`` fields
+    (python-core against ``host``, ``rust-host`` or ``java``; T3.2 r1).
     On a database line stopping at ``stop`` where one host went on past
     the operations both ran into that call or a later one
     (:func:`shared_operations`, T2.1e), the hosts are held to each other
     on the operations both ran, their fetches the shorter's, and not on
     the results of the operations one alone ran."""
-    where = f'{case["id"]}: python-core against rust-host'
+    where = f'{case["id"]}: python-core against {host}'
     shared = shared_operations(python, rust, stop)
     if shared is not None:
         _core_agree_shared(report, where, python['core'], rust['core'], shared)
@@ -1000,7 +1053,7 @@ def _core_agree(
     if mine is None or theirs is None:
         return
     for field in ('inputs', 'fetches', 'described', 'materialized'):
-        if mine[field] != theirs[field]:
+        if _core_field(field, mine[field]) != _core_field(field, theirs[field]):
             _differ(
                 report,
                 where,
@@ -1073,7 +1126,7 @@ def _core_agree_shared(
         if op in shared:
             held[field] = (mine[field], theirs[field])
     for field, (a, b) in held.items():
-        if a != b:
+        if _core_field(field, a) != _core_field(field, b):
             _differ(
                 report,
                 where,
@@ -1173,6 +1226,80 @@ def stored_schema(
     return out
 
 
+#: Each data type's name on the client's wire (``sdm_contract::ops::Dtype::
+#: wire_name``), as a host's held schema names a column's.
+_WIRE_NAMES = {
+    'bool': 'bool',
+    'int': 'int64',
+    'int64': 'int64',
+    'byte': 'int32',
+    'int16': 'int32',
+    'int32': 'int32',
+    'float': 'float64',
+    'float64': 'float64',
+    'float32': 'float32',
+    'string': 'string',
+    'date': 'timestamp[us]',
+    'time': 'timestamp[us]',
+    'binary': 'binary',
+    'timedelta': 'timedelta',
+    'floatlist': 'floatlist',
+    'intlist': 'intlist',
+    'stringlist': 'stringlist',
+    'unsupported': 'unsupported',
+}
+
+#: What a described column says of its source, which a held column keeps
+#: as its facts (``SourceFacts``, T3.16), each but the relation.
+_FACTS = ('dtype', 'received', 'nullable', 'unique')
+_OPTIONAL_FACTS = ('declared_type', 'exact_number')
+
+
+def held_schema(described: Any) -> Any:
+    r"""``described``, a ``SourceDescription``, as a host holds it and hands
+    it to ``materialize`` (the contract's ``HeldSchema``, from T3.16): each
+    column by its wire data type, its meanings and the facts the source
+    gave of it, of its table's relation; each table's key, time column and
+    repeated keys; the links. ``described`` itself where it is not one."""
+    if not isinstance(described, dict) or not isinstance(
+        described.get('tables'), list
+    ):
+        return described
+    try:
+        tables = []
+        for table in described['tables']:
+            held = {
+                'name': table['name'],
+                'source': table['source'],
+                'columns': [
+                    {
+                        'name': column['name'],
+                        'dtype': _WIRE_NAMES[column['dtype']],
+                        'stype': column['stype'],
+                        'stype_before_key': column['stype_before_key'],
+                        'source': {
+                            'relation': table['source'],
+                            **{key: column[key] for key in _FACTS},
+                            **{
+                                key: column[key]
+                                for key in _OPTIONAL_FACTS
+                                if column.get(key) is not None
+                            },
+                        },
+                    }
+                    for column in table['columns']
+                ],
+                'primary_key': table['primary_key'],
+                'time_column': table['time_column'],
+            }
+            if table.get('duplicate_keys') is not None:
+                held['duplicate_keys'] = table['duplicate_keys']
+            tables.append(held)
+        return {'tables': tables, 'links': described['links']}
+    except (KeyError, TypeError):
+        return described
+
+
 def _case_inputs(
     report: Report,
     case: dict[str, Any],
@@ -1183,7 +1310,8 @@ def _case_inputs(
 ) -> None:
     r"""A core runner's recorded inputs are the case's ``core`` inputs, and
     the schema ``materialize`` sampled is the runner's own: the description
-    its ``describe_source`` answered, where the case makes no edit to it
+    its ``describe_source`` answered, or from T3.16 that description as the
+    host holds it (:func:`held_schema`), where the case makes no edit to it
     (T1.21d; the case names no schema, and with edits the hosts' agreement
     is the ``core`` rule's). Off DuckDB the schema ``validate_query`` is
     handed holds each column's dtype as the type map stores it there
@@ -1230,7 +1358,9 @@ def _case_inputs(
             for each in started
         )
         if not case['input'].get('edits') and any(
-            each.get('schema') != core['described'] for each in started
+            each.get('schema')
+            not in (core['described'], held_schema(core['described']))
+            for each in started
         ):
             _differ(
                 report,
@@ -1398,7 +1528,7 @@ def _reach(
     where = f'{case["id"]}: {who}'
     outcome = observation['outcome']
     if outcome['result'] != 'success' or (
-        who != 'rust-host' and outcome['stage'] != stage
+        who not in UNOBSERVING and outcome['stage'] != stage
     ):
         report.fail(f'{where}: did not reach its result at {stage}', 'reach')
         return
@@ -1471,8 +1601,38 @@ def _host_fields(
             report.fail(f'{where}: host.warnings: differ', 'warnings')
     if stop is not None and stop != 'predict':
         return
+    # The rows as text (P2-T2.21-1): public.result_text, or a line's
+    # result.text_digest, compared where both lines hold one; a line
+    # recorded before it holds none and is not held to it, except where the
+    # typed digest is excused: there the text digest is all that holds the
+    # values, so a line without it fails until it is recorded again (T3.2
+    # r1, Claude P2-4).
+    mine_result, theirs_result = mine['result'], theirs['result']
+    texts = []
+    for public, result in ((mine, mine_result), (theirs, theirs_result)):
+        held = public.get('result_text')
+        if held is None and isinstance(result, dict):
+            held = result.get('text_digest')
+        texts.append(held)
+    if isinstance(mine_result, dict):
+        mine_result = {
+            k: v for k, v in mine_result.items() if k != 'text_digest'
+        }
+    if isinstance(theirs_result, dict):
+        theirs_result = {
+            k: v for k, v in theirs_result.items() if k != 'text_digest'
+        }
+    if None not in texts and texts[0] != texts[1]:
+        report.fail(f'{where}: public.result/text_digest: differs', 'result')
+    elif None in texts and 'public.result/digest' in excused:
+        report.fail(
+            f'{where}: public.result/text_digest: its typed digest is excused '
+            'and a line holds no text digest, so nothing holds its values; '
+            'record that line again (P2-T2.21-1)',
+            'result',
+        )
     found = (
-        _path_of(mine['result'], theirs['result'], 'public.result', excused)
+        _path_of(mine_result, theirs_result, 'public.result', excused)
         if stop is None or theirs['result'] is not None
         else None
     )
@@ -2087,9 +2247,10 @@ def _core_payload(
     stop: str | None = None,
 ) -> None:
     r"""The calls the core wrote are the requests the reference sent, on
-    ``rust-host``, and the requests the endpoint received, on
+    ``rust-host`` and ``java`` (the hosts with no endpoint of their own;
+    T3.2 r1, Codex 5), and the requests the endpoint received, on
     ``python-core``, call by call, in order: the ``payload`` rule on the
-    core; on ``rust-host``, held to the reference only where it reached
+    core; on those hosts, held to the reference only where it reached
     ``predict`` when past its ``stop`` (:func:`past_stop`). One call is
     ``core.predicted.body``; several are ``core.predicted.calls``, every
     call's body in order (T2.1g)."""
@@ -2115,7 +2276,7 @@ def _core_payload(
                 'payload',
             )
     if (
-        who == 'rust-host'
+        who in UNOBSERVING
         and reference is not None
         and stop in (None, 'predict')
     ):
@@ -2131,30 +2292,42 @@ def _core_payload(
         )
         if found:
             report.fail(
-                f'{case["id"]}: rust-host against python-ref: {found}',
+                f'{case["id"]}: {who} against python-ref: {found}',
                 'payload',
             )
+
+
+#: The mark the core puts on a fetch of plan B's read of a table as it
+#: stands at each materialize (``FetchStep.purpose``, the owner's decision of
+#: 2026-10-24, register P3A-1), which a capture records on each statement
+#: answering it: the reads the old client made once, at ``from_source``.
+LOCATE = 'locate'
 
 
 def _by_stage(
     observation: dict[str, Any], key: str = 'statements'
 ) -> dict[str, list[dict[str, Any]]] | None:
     r"""A runner's statements (or bindings) by the public call they ran
-    in, in order; None when it recorded none (no capture)."""
+    in, in order, but those the core marked as plan B's reads of a table as
+    it stands (:data:`LOCATE`), which the old client made once, at
+    ``from_source``: the one rule, every other statement compared whole,
+    its parameters included; None when it recorded none (no capture)."""
     capture = (observation.get('driver') or {}).get('capture')
     if capture is None:
         return None
     grouped: dict[str, list[dict[str, Any]]] = {}
     for each in capture[key]:
+        if each.get('purpose') == LOCATE:
+            continue
         grouped.setdefault(each['stage'], []).append(each)
     return grouped
 
 
-#: The reference's two reads on Postgres whose results it never uses, which
-#: the core does not make (KO2-58, approved by the owner on 2026-10-17):
-#: the current schema's name, and each table's row count.
+#: The reference's read on Postgres whose result it never uses, which the
+#: core does not make (KO2-58, approved by the owner on 2026-10-17): each
+#: table's row count. Its read of the current schema's name the core makes
+#: too, with the same statement, since T3.7.
 _POSTGRES_UNUSED_READS = (
-    re.compile(r'SELECT current_schema\(\)'),
     re.compile(r'SELECT COUNT\(\*\) FROM "(?:[^"]|"")+"\."(?:[^"]|"")+"'),
 )
 
@@ -2163,10 +2336,10 @@ def _expected_statements(
     statements: list[dict[str, Any]], database: str
 ) -> list[dict[str, Any]]:
     r"""The reference's ``statements`` of one public call that a core runner
-    is expected to match: on Postgres, all but the two reads whose results
+    is expected to match: on Postgres (including Lakebase), all but the reads whose results
     the reference never uses (:data:`_POSTGRES_UNUSED_READS`, KO2-58), each
     with no parameters; every one elsewhere."""
-    if database != 'postgres':
+    if _loader().ENGINE.get(database, database) != 'postgres':
         return statements
     return [
         each
@@ -2203,6 +2376,23 @@ def counts(observation: dict[str, Any]) -> dict[str, int] | None:
 #: whose schema the read records, or Python rows, which have none.
 ARROW_READS = ('to_arrow_table', 'fetch_arrow_table', 'query_arrow')
 ROW_READS = ('fetchall', 'fetchmany', 'fetchone')
+#: The warehouse drivers' reads the recording mode records (run_python.py's
+#: captures; T3.2 r1, Codex 6): Databricks SQL's Arrow fetches, Snowflake's
+#: (a pandas read kept as the Arrow it converts from), a Spark DataFrame's
+#: Arrow and pandas reads, each with its Arrow schema; Spark's row reads and
+#: psycopg's stream and copy (Lakebase), which carry the rows and their
+#: names. None carries DuckDB's type names: a warehouse's driver
+#: description is in its own vocabulary, so the Arrow schema is the type
+#: evidence, and a row read's rows are its.
+WAREHOUSE_ARROW_READS = (
+    'fetchall_arrow',
+    'fetchmany_arrow',
+    'fetch_arrow_all',
+    'fetch_pandas_all',
+    'toArrow',
+    'toPandas',
+)
+WAREHOUSE_ROW_READS = ('collect', 'first', 'stream', 'copy')
 #: DuckDB's names of its types, as a Python driver's description gives
 #: them, and the Arrow type (pyarrow's spelling) DuckDB reads each as; a
 #: list is ``X[]`` and ``list<l: X>``, a decimal ``DECIMAL(p,s)`` and
@@ -2421,6 +2611,8 @@ def _evidence(report: Report, at: str, who: str, read: dict[str, Any]) -> bool:
     columns = len(read['values']['columns'])
     method = read['method']
     good = True
+    if method in WAREHOUSE_ARROW_READS + WAREHOUSE_ROW_READS:
+        return _warehouse_evidence(report, at, who, read, columns)
     if method not in ARROW_READS + ROW_READS:
         report.fail(f'{at}: {who} read it by {method!r}', 'sql.result')
         return False
@@ -2439,6 +2631,31 @@ def _evidence(report: Report, at: str, who: str, read: dict[str, Any]) -> bool:
         report.fail(f'{at}: {who} recorded no Arrow schema', 'sql.result')
         good = False
     return good
+
+
+def _warehouse_evidence(
+    report: Report, at: str, who: str, read: dict[str, Any], columns: int
+) -> bool:
+    r"""A warehouse driver's read carries its own evidence: an Arrow read
+    its Arrow schema, one field per column (none only for Snowflake's empty
+    answer, which reads no column), a row read its rows' names and digest;
+    DuckDB's type names are never asked of it."""
+    schema = read.get('schema')
+    if read['method'] in WAREHOUSE_ARROW_READS:
+        if schema is None and columns == 0 and read.get('rows') == 0:
+            return True
+        if not isinstance(schema, list) or len(schema) != columns:
+            report.fail(f'{at}: {who} recorded no Arrow schema', 'sql.result')
+            return False
+        return True
+    if schema is not None or read['values'].get('types') is not None:
+        report.fail(
+            f'{at}: {who}: a row read {read["method"]!r} with type evidence '
+            'it cannot have',
+            'sql.result',
+        )
+        return False
+    return True
 
 
 def _results(
@@ -2542,6 +2759,13 @@ def _arrow_types(
     # DuckDB's names too (which the type check compares), its schema is
     # held to the row read's names as the Arrow types DuckDB reads them as.
     arrow, rows = (a, b) if sa is not None else (b, a)
+    if database in _runner().WAREHOUSES:
+        # A warehouse driver's row read carries its own type names
+        # (Databricks' description, none on a Spark Row), with no Arrow
+        # names to hold an Arrow read's schema to: the two reads of one
+        # result are held to their columns, rows and values, and their
+        # types only where both read Arrow (Codex r2 P1-2).
+        return
     schema, types = arrow['schema'], rows['values']['types']
     if types is None:
         report.fail(f'{at}: neither read records its types', 'sql.result')
@@ -2887,6 +3111,120 @@ def _cell_pair(
         report.demote(since, keep=tuple(r for r in RULES if r != 'warnings'))
 
 
+#: The rules a sampled case is still held to in full (option C): those of
+#: its outcome, route, inputs, schema and warnings, which the sample's draw
+#: does not move.
+SAMPLED_KEEPS = ('outcome', 'route', 'inputs', 'reach', 'schema', 'warnings')
+_SAMPLES = re.compile(r'\bSAMPLE\b', re.IGNORECASE)
+
+
+def _sampled_rows(statement: dict[str, Any]) -> list[int] | None:
+    r"""The successful sample read's recorded, nonnegative row counts."""
+    results = statement.get('results')
+    if statement.get('error') is not None or not results:
+        return None
+    counts = [result.get('rows') for result in results]
+    if any(type(count) is not int or count < 0 for count in counts):
+        return None
+    return counts
+
+
+def sampled_judgment(
+    report: Report,
+    since: int,
+    key: str,
+    sample: dict[str, Any],
+    observed: dict[str, dict[str, Any]],
+    reference: dict[str, Any] | None,
+) -> None:
+    r"""The sampled case's comparison (the owner's "2026-10-22 evening:
+    Snowflake sampling, option C"; ``sampled`` in the policy): its
+    failures since ``since`` under any rule but :data:`SAMPLED_KEEPS` (and
+    those naming no rule) are reported, since an unseeded sample draws other
+    rows each run; then each runner is held to the reference on the
+    sampling statement (at ``sample``'s reference stage and position,
+    matched uniquely within that stage by its exact SQL, outer whitespace
+    aside, and typed parameters, ``sql.result``) and its read and public
+    result row counts (``sql.result`` and ``result``).
+    Complete captures still gate, including freshness reads before the
+    sample, whose physical position may differ (H9)."""
+    kept = [
+        (rule, text)
+        for rule, text in report.failures[since:]
+        if rule is None or rule in SAMPLED_KEEPS
+    ]
+    for rule, text in report.failures[since:]:
+        if (rule, text) not in kept:
+            report.notes.append(f'diagnostic: {rule}: {text} (sampled)')
+    del report.failures[since:]
+    report.failures.extend(kept)
+    if reference is None:
+        report.fail(f'{key}: no python-ref sampling record', 'sql.result')
+        return
+    if not _complete(report, f'{key}: python-ref (sampled)', reference):
+        return
+    stage, position = sample['stage'], sample['statement']
+    theirs = (_by_stage(reference) or {}).get(stage, [])
+    wanted = theirs[position] if position < len(theirs) else None
+    if (
+        wanted is None
+        or not _SAMPLES.search(wanted['sql'])
+        or _sampled_rows(wanted) is None
+    ):
+        report.fail(
+            f'{key}: python-ref: {stage} statement {position} is no sampling '
+            'statement with successful row counts, as the policy names it',
+            'sql.result',
+        )
+        return
+    for who, observation in sorted(observed.items()):
+        where = f'{key}: {who} against python-ref (sampled)'
+        if not _complete(report, where, observation):
+            continue
+        ours = (_by_stage(observation) or {}).get(stage, [])
+        matches = [
+            statement
+            for statement in ours
+            if statement['sql'].strip() == wanted['sql'].strip()
+            and statement['parameters'] == wanted['parameters']
+        ]
+        if len(matches) != 1:
+            report.fail(
+                f'{where}: {stage}: {len(matches)} statements match the '
+                'reference sampling SQL and typed parameters; need one',
+                'sql.result',
+            )
+        elif _sampled_rows(matches[0]) != _sampled_rows(wanted):
+            report.fail(
+                f'{where}: {stage} sampling statement reads '
+                f'{_sampled_rows(matches[0])} rows, against '
+                f'{_sampled_rows(wanted)}',
+                'sql.result',
+            )
+        mine_result = (observation.get('public') or {}).get('result')
+        theirs_result = (reference.get('public') or {}).get('result')
+        mine_rows = (
+            mine_result.get('rows') if isinstance(mine_result, dict) else None
+        )
+        their_rows = (
+            theirs_result.get('rows')
+            if isinstance(theirs_result, dict)
+            else None
+        )
+        if (
+            type(mine_rows) is not int
+            or type(their_rows) is not int
+            or mine_rows < 0
+            or their_rows < 0
+            or mine_rows != their_rows
+        ):
+            report.fail(
+                f'{where}: public.result: {mine_rows} rows, '
+                f'against {their_rows}; need matching nonnegative counts',
+                'result',
+            )
+
+
 def compare(
     cases_dir: list[Path],
     reference_file: Path | None,
@@ -2898,6 +3236,9 @@ def compare(
     improvements: Path | None = None,
     database: str = 'duckdb',
 ) -> Report:
+    r"""The comparison of ``files``' observations on ``database``, a
+    database or a warehouse leg. A warehouse leg is judged as any database
+    is, by every rule, against the reference lines recorded on it."""
     check = _capture_check()
     try:
         policy = (
@@ -2930,12 +3271,11 @@ def compare(
     except runner.RunnerFailure as failure:
         report.fail(f'cases: {failure}')
         return report
-    if database not in runner.DATABASES:
-        report.fail(f'--database: {database} is not one of {runner.DATABASES}')
+    if database not in runner.LEGS:
+        report.fail(f'--database: {database} is not one of {runner.LEGS}')
         return report
-    cases = [
-        case for case, _ in loaded if database in runner.case_databases(case)
-    ]
+    on_warehouse = database in runner.WAREHOUSES
+    cases = [case for case, _ in loaded if database in runner.case_legs(case)]
     try:
         bases = runner.load_bases(bases_file or runner.BASES)
     except runner.RunnerFailure as failure:
@@ -2981,7 +3321,9 @@ def compare(
     every = {
         case['id'] for case, _ in runner.load_cases([runner.CONTRACT / 'cases'])
     }
-    for name in sorted(set(policy['reach']) | set(policy['ordered'])):
+    for name in sorted(
+        set(policy['reach']) | set(policy['ordered']) | set(policy['sampled'])
+    ):
         if name not in every:
             report.fail(f'compare-policy.yaml: {name} is not a case')
     for case in cases:
@@ -2995,23 +3337,39 @@ def compare(
         gating = case['status'] == 'acceptance'
         reach = policy['reach'].get(case['id'])
         ordered = policy['ordered'].get(case['id'], {})
+        sample = policy['sampled'].get(case['id'])
+        if sample is not None and sample['leg'] != database:
+            sample = None
         # The case as this database's lines name it; its expect is
         # DuckDB's, so elsewhere the reference's line is the expectation.
         on_duckdb = database == 'duckdb'
         case = {**case, 'id': runner.case_key(case['id'], database)}
         if not on_duckdb:
-            # The core is started on this database's dialect.
-            case['core'] = {
-                op: (
-                    {
-                        **spec,
-                        'provider': {**spec['provider'], 'dialect': database},
-                    }
-                    if (spec.get('provider') or {}).get('dialect') == 'duckdb'
-                    else spec
-                )
-                for op, spec in case.get('core', {}).items()
-            }
+            # Adapt the generic case's source from declared leg/input facts,
+            # never from a runner's recorded starts. Capability IDs and SQL
+            # dialects differ on Lakebase and the two Databricks legs.
+            adapted = {}
+            for op, spec in case.get('core', {}).items():
+                provider = spec.get('provider') or {}
+                if provider.get('dialect') != 'duckdb':
+                    adapted[op] = spec
+                    continue
+                choice = {
+                    **provider,
+                    'dialect': _loader().ENGINE.get(database, database),
+                }
+                if on_warehouse:
+                    parts = runner.warehouse_namespace(
+                        database,
+                        {'catalog': '{catalog}', 'schema': '{schema}'},
+                        case['input'],
+                    )
+                    if any(part is not None for part in parts):
+                        choice['namespace'] = parts
+                    else:
+                        choice.pop('namespace', None)
+                adapted[op] = {**spec, 'provider': choice}
+            case['core'] = adapted
         before = len(report.failures)
         ref = reference.get(case['id'])
         stops: dict[str, str | None] = {}
@@ -3104,22 +3462,22 @@ def compare(
                     # H1: in a cell other than the reference's, the host
                     # fields against the reference are reported; python-core
                     # against python-old gates them (below).
-                    since = len(report.failures)
+                    hosted = len(report.failures)
                     _host_fields(
                         report, case, who, seen, against, stop=earlier or stop
                     )
                     report.reported(
-                        since, f'cell {cell}, against the reference; H1'
+                        hosted, f'cell {cell}, against the reference; H1'
                     )
                 elif who in PYTHON:
-                    since = len(report.failures)
+                    hosted = len(report.failures)
                     _host_fields(
                         report, case, who, seen, against, stop=earlier or stop
                     )
                     if refused is not None:
                         # The warnings of a call refused by the approval.
                         report.demote(
-                            since,
+                            hosted,
                             keep=tuple(r for r in RULES if r != 'warnings'),
                         )
                 _sql(
@@ -3138,9 +3496,13 @@ def compare(
                         report, case['id'], who, stop, wanted
                     ),
                 )
-                theirs = ref['identity']['versions']['duckdb']
-                mine = observation['identity']['versions']['duckdb']
-                if mine != theirs:
+                theirs = ref['identity']['versions'].get('duckdb')
+                mine = observation['identity']['versions'].get('duckdb')
+                # Java's host opens DuckDB only where its leg does.
+                if mine != theirs and not on_warehouse and mine is not None:
+                    # On a warehouse leg the reference ran on the warehouse,
+                    # where DuckDB only holds the case's tables before they
+                    # are loaded; its version is no part of the answer.
                     _differ(
                         report,
                         f'{case["id"]}: {who}',
@@ -3184,6 +3546,35 @@ def compare(
                 ),
             )
             _sql_core(report, case, python, rust, ordered, large, database)
+        java = observed.get('java', {}).get(case['id'])
+        if python is not None and java is not None:
+            # Java's host on the same core: the core fields agree as
+            # rust-host's do (T3.2 r1, Codex 5).
+            _core_agree(
+                report,
+                case,
+                python,
+                java,
+                None
+                if on_duckdb
+                else line_stop(
+                    effective.get(case['id'], {}).get('python-core'), ref
+                ),
+                host='java',
+            )
+        if sample is not None:
+            sampled_judgment(
+                report,
+                before,
+                case['id'],
+                sample,
+                {
+                    who: by_case[case['id']]
+                    for who, by_case in observed.items()
+                    if case['id'] in by_case
+                },
+                ref,
+            )
         if not gating:
             report.demote(before, keep=('reach',) if reach else ())
     return report

@@ -40,6 +40,10 @@ pub struct Case {
     pub databases: Option<Vec<Database>>,
     #[serde(default, deserialize_with = "some_text")]
     pub exclusion: Option<String>,
+    /// The warehouse legs an S2 case runs on, and only there (Phase 3
+    /// design choice 1); never beside `databases`.
+    #[serde(default, deserialize_with = "some_warehouses")]
+    pub warehouses: Option<Vec<Warehouse>>,
     pub paths: Vec<String>,
     pub routes: Vec<String>,
     #[serde(default, deserialize_with = "present")]
@@ -81,9 +85,48 @@ impl Database {
     }
 }
 
+/// A warehouse leg (Phase 3 design choice 1), in the order every case runs
+/// on them; its observations are keyed `<case>@<leg>`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Warehouse {
+    DatabricksSql,
+    DatabricksSpark,
+    Snowflake,
+    Lakebase,
+}
+
+impl Warehouse {
+    /// Every warehouse leg, in order.
+    pub const ALL: [Warehouse; 4] = [
+        Warehouse::DatabricksSql,
+        Warehouse::DatabricksSpark,
+        Warehouse::Snowflake,
+        Warehouse::Lakebase,
+    ];
+
+    /// The name the case format and the observations' keys use.
+    pub fn name(self) -> &'static str {
+        match self {
+            Warehouse::DatabricksSql => "databricks-sql",
+            Warehouse::DatabricksSpark => "databricks-spark",
+            Warehouse::Snowflake => "snowflake",
+            Warehouse::Lakebase => "lakebase",
+        }
+    }
+}
+
+/// The S1 cases left off the warehouse legs: the two 100,001-row batching
+/// cases (KO3-45), as `run_python.py`'s `OFF_WAREHOUSES` lists them.
+pub const OFF_WAREHOUSES: [&str; 2] = ["multicall.entities.100000", "multicall.entities.100001"];
+
 impl Case {
-    /// The databases the case runs on, in [`Database::ALL`]'s order.
+    /// The databases the case runs on, in [`Database::ALL`]'s order; none
+    /// for a case naming `warehouses`, which runs only there.
     pub fn databases(&self) -> Vec<Database> {
+        if self.warehouses.is_some() {
+            return Vec::new();
+        }
         Database::ALL
             .into_iter()
             .filter(|database| {
@@ -92,6 +135,26 @@ impl Case {
                     .is_none_or(|named| named.contains(database))
             })
             .collect()
+    }
+
+    /// The warehouse legs the case runs on, in [`Warehouse::ALL`]'s order,
+    /// as `run_python.py`'s `case_warehouses` says: an S2 case's
+    /// `warehouses`; an S1 case without `databases` every leg, but the
+    /// batching cases of [`OFF_WAREHOUSES`]; any other none.
+    pub fn warehouses(&self) -> Vec<Warehouse> {
+        match &self.warehouses {
+            Some(named) => Warehouse::ALL
+                .into_iter()
+                .filter(|leg| named.contains(leg))
+                .collect(),
+            None if self.slice == "S1"
+                && self.databases.is_none()
+                && !OFF_WAREHOUSES.contains(&self.id.as_str()) =>
+            {
+                Warehouse::ALL.to_vec()
+            }
+            None => Vec::new(),
+        }
     }
 }
 
@@ -132,7 +195,7 @@ pub struct Input {
     /// order received (T2.1a, for `main`'s multi-call `predict`, T2.8c); a
     /// JSON integer written as one, `1.0` refused as the Python loader
     /// refuses it.
-    #[serde(default, deserialize_with = "present")]
+    #[serde(default, deserialize_with = "some_call")]
     pub fail_call: Option<u64>,
     /// Whether the scripted endpoint answers a classification call asking
     /// for probabilities with them (T2.8's ranking cases), a JSON boolean.
@@ -159,6 +222,86 @@ pub struct Input {
     /// with one on each item (T2.11's cases), a JSON boolean.
     #[serde(default, deserialize_with = "present")]
     pub embeddings: Option<bool>,
+    /// The semantic model the case's source is (Phase 3 design choice 1),
+    /// only on a case naming `warehouses`.
+    #[serde(default, deserialize_with = "present")]
+    pub view: Option<View>,
+    /// The connect path the case's connection is opened through (Phase 3
+    /// design choice 1), only on a case naming exactly its leg.
+    #[serde(default, deserialize_with = "present")]
+    pub connect: Option<Connect>,
+    /// The one namespace part the case's source names, the other read from
+    /// the session (the second early capture, T3.20): only beside
+    /// `warehouses` with two namespace parts, never beside `connect`.
+    #[serde(default, deserialize_with = "present")]
+    pub named_part: Option<NamedPart>,
+    /// Statements the run sends on the warehouse leg after the case's
+    /// tables are loaded (T3.20), at least one; only beside `warehouses`.
+    #[serde(default, deserialize_with = "some_statements")]
+    pub warehouse_setup: Option<Vec<String>>,
+}
+
+/// A namespace part a source may name alone.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NamedPart {
+    Catalog,
+    Schema,
+}
+
+/// A view an S2 case's source is: its kind, its name (a placeholder the run
+/// resolves, for an existing one), the YAML it is created from, and
+/// `trust_expressions` as written.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct View {
+    pub kind: ViewKind,
+    #[serde(deserialize_with = "text")]
+    pub name: String,
+    #[serde(default, deserialize_with = "some_text")]
+    pub yaml: Option<String>,
+    #[serde(default, deserialize_with = "present")]
+    pub trust_expressions: Option<bool>,
+}
+
+/// A view's kind: a Databricks metric view or a Snowflake semantic view.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ViewKind {
+    MetricView,
+    SemanticView,
+}
+
+impl ViewKind {
+    /// The legs that keep a view of this kind.
+    pub fn legs(self) -> &'static [Warehouse] {
+        match self {
+            ViewKind::MetricView => &[Warehouse::DatabricksSql, Warehouse::DatabricksSpark],
+            ViewKind::SemanticView => &[Warehouse::Snowflake],
+        }
+    }
+}
+
+/// A connect path, and the one leg it opens.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Connect {
+    Warehouse,
+    Spark,
+    Snowpark,
+    Lakebase,
+}
+
+impl Connect {
+    /// The leg the path opens.
+    pub fn leg(self) -> Warehouse {
+        match self {
+            Connect::Warehouse => Warehouse::DatabricksSql,
+            Connect::Spark => Warehouse::DatabricksSpark,
+            Connect::Snowpark => Warehouse::Snowflake,
+            Connect::Lakebase => Warehouse::Lakebase,
+        }
+    }
 }
 
 /// Keyword arguments to `Schema.from_source`, each as the case gives it.
@@ -355,6 +498,35 @@ fn some_databases<'de, D: Deserializer<'de>>(
     Ok(Some(databases))
 }
 
+/// `warehouses`, when given: at least one, none twice (`minItems`,
+/// `uniqueItems`).
+fn some_warehouses<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<Vec<Warehouse>>, D::Error> {
+    let legs = Vec::<Warehouse>::deserialize(deserializer)?;
+    let distinct: BTreeSet<Warehouse> = legs.iter().copied().collect();
+    if legs.is_empty() || distinct.len() != legs.len() {
+        return Err(D::Error::custom("warehouses is empty or names a leg twice"));
+    }
+    Ok(Some(legs))
+}
+
+/// `input.fail_call`, when given: a whole number from 0 to `2**64 - 1`
+/// written as one; `-0`, a fraction or an exponent, `1.0` included, is
+/// refused, as the Python loader refuses them (P2-T2.1i-1).
+fn some_call<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<u64>, D::Error> {
+    let raw = Box::<RawValue>::deserialize(deserializer)?;
+    let text = raw.get().trim();
+    if !is_integer_literal(text) || text.starts_with('-') {
+        return Err(D::Error::custom(
+            "fail_call is not a whole number written as one",
+        ));
+    }
+    text.parse::<u64>()
+        .map(Some)
+        .map_err(|_| D::Error::custom("fail_call is not from 0 to 2**64 - 1"))
+}
+
 /// Whether `text` names a decision row, `KO<phase>-<n>`.
 fn is_decision_row(text: &str) -> bool {
     let numbers = |part: &str| !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit());
@@ -499,6 +671,11 @@ pub struct Materialize {
     pub return_embeddings: Option<AsWritten>,
     #[serde(default, deserialize_with = "present")]
     pub exclude_cols_dict: Option<AsWritten>,
+    /// The most context examples materialize takes (Phase 3's quickstart
+    /// cases), kept as written as `rows_per_call` is: any JSON scalar but
+    /// `null`.
+    #[serde(default, deserialize_with = "present")]
+    pub num_context_samples: Option<Written>,
 }
 
 /// Any JSON value, `null`, a list and an object included, kept as the
@@ -709,6 +886,58 @@ impl TryFrom<ExpectFields> for Expect {
     }
 }
 
+/// What the case format holds of a case's warehouse fields beyond each
+/// field's own reading (Phase 3 design choice 1), as `run_python.py`'s
+/// schema and `warehouse_problem` hold it: `warehouses` only on an S2 case,
+/// which must name them, and never beside `databases`; `input.view` and
+/// `input.connect` only beside `warehouses`; a view's kind kept on every
+/// leg named; a connect path's case naming exactly its leg.
+fn warehouse_problem(case: &Case) -> Option<String> {
+    let s2 = case.slice == "S2";
+    match &case.warehouses {
+        Some(_) if !s2 => return Some("warehouses on a case that is not S2".into()),
+        Some(_) if case.databases.is_some() || case.exclusion.is_some() => {
+            return Some("warehouses beside databases".into());
+        }
+        None if s2 => return Some("an S2 case names no warehouses".into()),
+        _ => {}
+    }
+    let legs = case.warehouses.as_deref();
+    let input = &case.input;
+    if (input.view.is_some() || input.connect.is_some()) && legs.is_none() {
+        return Some("input.view and input.connect need warehouses".into());
+    }
+    if let (Some(view), Some(legs)) = (&input.view, legs)
+        && legs.iter().any(|leg| !view.kind.legs().contains(leg))
+    {
+        return Some("input.view's kind is not kept on every leg named".into());
+    }
+    if let (Some(connect), Some(legs)) = (input.connect, legs)
+        && legs != [connect.leg()]
+    {
+        return Some(format!(
+            "input.connect runs on {} alone",
+            connect.leg().name()
+        ));
+    }
+    if input.warehouse_setup.is_some() && legs.is_none() {
+        return Some("input.warehouse_setup needs warehouses".into());
+    }
+    if input.named_part.is_some() {
+        match legs {
+            None => return Some("input.named_part needs warehouses".into()),
+            Some(_) if input.connect.is_some() => {
+                return Some("input.named_part beside input.connect".into());
+            }
+            Some(legs) if legs.contains(&Warehouse::Lakebase) => {
+                return Some("input.named_part on lakebase, whose source names one part".into());
+            }
+            Some(_) => {}
+        }
+    }
+    None
+}
+
 /// A case with the SHA-256 of its file's bytes.
 #[derive(Debug, Clone)]
 pub struct Loaded {
@@ -739,6 +968,18 @@ fn json_files(directory: &Path, found: &mut Vec<PathBuf>) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// The cases named that run on `database`, each read whole as [`load`]
+/// reads it (a malformed case still fails the load): a case naming only
+/// warehouse legs (`warehouses`, Phase 3 design choice 1) is simply not one
+/// of a database's cases, so a walker over every case on DuckDB selects
+/// with this rather than skipping (T3.2).
+pub fn load_for(paths: &[PathBuf], database: Database) -> Result<Vec<Loaded>> {
+    Ok(load(paths)?
+        .into_iter()
+        .filter(|each| each.case.databases().contains(&database))
+        .collect())
 }
 
 /// The case files named, a directory standing for every `*.json` under it,
@@ -788,6 +1029,9 @@ pub fn load(paths: &[PathBuf]) -> Result<Vec<Loaded>> {
         {
             bail!("{name}: not a case: exclusion is not a decision row");
         }
+        if let Some(problem) = warehouse_problem(&case) {
+            bail!("{name}: not a case: {problem}");
+        }
         if !ids.insert(case.id.clone()) {
             bail!("{name}: case id {} repeats", case.id);
         }
@@ -797,4 +1041,38 @@ pub fn load(paths: &[PathBuf]) -> Result<Vec<Loaded>> {
         });
     }
     Ok(loaded)
+}
+
+#[cfg(test)]
+mod load_for_tests {
+    use super::*;
+
+    #[test]
+    fn a_warehouse_only_case_is_no_duckdb_case_and_still_loads() {
+        let contract = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../contract");
+        let vectors: Value = serde_json::from_slice(
+            &std::fs::read(contract.join("tests/t32-case-format-vectors.json")).unwrap(),
+        )
+        .unwrap();
+        let directory = std::env::temp_dir().join(format!("t32-load-for-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let s2 = directory.join("s2.json");
+        std::fs::write(&s2, serde_json::to_vec(&vectors["case"]).unwrap()).unwrap();
+        let s1 = contract.join("cases/s1/base.binary.json");
+        let paths = [s2.clone(), s1];
+        let all: Vec<String> = load(&paths)
+            .unwrap()
+            .into_iter()
+            .map(|each| each.case.id)
+            .collect();
+        let duckdb: Vec<String> = load_for(&paths, Database::Duckdb)
+            .unwrap()
+            .into_iter()
+            .map(|each| each.case.id)
+            .collect();
+        std::fs::remove_file(&s2).unwrap();
+        std::fs::remove_dir(&directory).unwrap();
+        assert_eq!(all, ["t32.format.s2", "base.binary"]);
+        assert_eq!(duckdb, ["base.binary"]);
+    }
 }

@@ -547,12 +547,18 @@ fn every_statement_rust_host_ran_on_sqlite_is_a_golden() {
 
 fn sqlite() -> ProviderChoice {
     ProviderChoice::Sql {
+        timestamp_encoding: None,
         dialect: Dialect::new(DATABASE),
+        namespace: Vec::new(),
+        view: None,
     }
 }
 
 fn relation(parts: &[&str]) -> Relation {
     Relation {
+        columns: Vec::new(),
+        filter: None,
+        found: false,
         source: parts.iter().map(|p| (*p).to_owned()).collect(),
     }
 }

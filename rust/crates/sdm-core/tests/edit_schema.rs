@@ -6,19 +6,18 @@
 //! schema the core described is checked and made by `sdm-schema` over the
 //! schema the host holds, answered as the schema with the edit made and
 //! the column whose meaning it chose, or refused at the start of nothing
-//! but the run; a schema changed past its description is refused by name
-//! (`schema_edited`) on `edit_schema` and on `materialize` alike, before
-//! anything is fetched; and the edit's attachments, which a caller's
+//! but the run; the schema is the host's alone, as plain data, each
+//! column with its facts (T3.16); and the edit's attachments, which a caller's
 //! values fill, are refused by name, never a crash, however deep or wide
 //! (E49's probe).
 
 use std::sync::Arc;
 
-use sdm_contract::data::{AttachmentId, Dialect, ProviderChoice};
+use sdm_contract::data::AttachmentId;
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::ops::{
     ColumnRef, DescribedColumn, DescribedTable, Dtype, EditSchema, Given, HeldColumn, HeldSchema,
-    HeldTable, Materialize, Operation, OperationResult, SchemaEdit, SourceDescription, Stype,
+    HeldTable, Operation, OperationResult, SchemaEdit, SourceDescription, SourceFacts, Stype,
 };
 use sdm_contract::run::StartRun;
 use sdm_contract::{
@@ -120,10 +119,20 @@ fn held(description: &SourceDescription) -> HeldSchema {
                         dtype: c.dtype.wire_name().into(),
                         stype: c.stype,
                         stype_before_key: c.stype_before_key,
+                        source: Some(SourceFacts {
+                            relation: t.source.clone(),
+                            dtype: c.dtype,
+                            received: c.received.clone(),
+                            nullable: c.nullable,
+                            unique: c.unique,
+                            declared_type: c.declared_type.clone(),
+                            exact_number: c.exact_number,
+                        }),
                     })
                     .collect(),
                 primary_key: t.primary_key.clone(),
                 time_column: t.time_column.clone(),
+                duplicate_keys: t.duplicate_keys.clone(),
             })
             .collect(),
         links: description.links.clone(),
@@ -133,17 +142,12 @@ fn held(description: &SourceDescription) -> HeldSchema {
 fn edit_op() -> Operation {
     Operation::EditSchema(EditSchema {
         schema: AttachmentId(1),
-        held: Some(AttachmentId(2)),
-        edit: AttachmentId(3),
+        edit: AttachmentId(2),
     })
 }
 
 fn edit_with(held: Attachment, edit: Attachment) -> Result<Step, CoreError> {
-    let attachments = Attachments::from([
-        (AttachmentId(1), json(&described())),
-        (AttachmentId(2), held),
-        (AttachmentId(3), edit),
-    ]);
+    let attachments = Attachments::from([(AttachmentId(1), held), (AttachmentId(2), edit)]);
     start(edit_op(), attachments)?.next()
 }
 
@@ -160,9 +164,8 @@ fn an_edit_is_made_and_answered_as_the_schema_with_it() {
     let mut run = start(
         edit_op(),
         Attachments::from([
-            (AttachmentId(1), json(&described())),
-            (AttachmentId(2), json(&held(&described()))),
-            (AttachmentId(3), json(&stype("categorical"))),
+            (AttachmentId(1), json(&held(&described()))),
+            (AttachmentId(2), json(&stype("categorical"))),
         ]),
     )
     .unwrap();
@@ -182,22 +185,14 @@ fn an_edit_is_made_and_answered_as_the_schema_with_it() {
     let Attachment::Bytes(bytes) = run.take_attachment(edited.schema).unwrap() else {
         panic!("the schema edited is not attached");
     };
-    let answer: SourceDescription = serde_json::from_slice(&bytes).unwrap();
+    let answer: HeldSchema = serde_json::from_slice(&bytes).unwrap();
     assert_eq!(answer.tables[0].columns[1].stype, Stype::Categorical);
-    // Left out, the host holds the description as it is.
-    let mut run = start(
-        Operation::EditSchema(EditSchema {
-            schema: AttachmentId(1),
-            held: None,
-            edit: AttachmentId(3),
-        }),
-        Attachments::from([
-            (AttachmentId(1), json(&described())),
-            (AttachmentId(3), json(&stype("categorical"))),
-        ]),
-    )
-    .unwrap();
-    assert!(matches!(run.next().unwrap(), Step::Done { .. }));
+    // What the source said of each column comes back as it was handed.
+    assert_eq!(answer.tables[0].columns, {
+        let mut columns = held(&described()).tables[0].columns.clone();
+        columns[1].stype = Stype::Categorical;
+        columns
+    });
 }
 
 #[test]
@@ -208,62 +203,15 @@ fn a_refused_edit_ends_the_run_with_the_reference_s_refusal() {
 }
 
 #[test]
-fn a_schema_changed_past_its_description_is_refused_by_name() {
+fn a_column_the_host_retyped_is_edited_by_what_its_source_holds() {
+    // T3.16: no description to be changed past; a data type written by
+    // hand is no edit, as the reference reads a table in place.
     let mut retyped = held(&described());
     retyped.tables[0].columns[1].dtype = "float64".into();
-    let error = edit_with(json(&retyped), json(&stype("categorical"))).unwrap_err();
-    assert_eq!(error.code, ErrorCode::UnsupportedRequest);
-    assert_eq!(
-        error.fields.get("rule"),
-        Some(&Detail::text("schema_edited"))
-    );
-    assert_eq!(
-        error.fields.get("operation"),
-        Some(&Detail::text("edit_schema"))
-    );
-    // materialize refuses it before its run exists, so before anything is
-    // fetched, as the host's bridge refused it until T1.24b.
-    let refused = start(
-        Operation::Materialize(Materialize {
-            provider: ProviderChoice::Sql {
-                dialect: Dialect::new("duckdb"),
-            },
-            schema: AttachmentId(1),
-            held: Some(AttachmentId(4)),
-            query: AttachmentId(2),
-            indices: None,
-            anchor_time: None,
-            seed: None,
-            unseeded: false,
-            anchor_entity: false,
-            values: None,
-            options: vec![],
-            most_parts: None,
-            most_entities: None,
-            most_calls: None,
-            candidates: None,
-            sampler_state: None,
-        }),
-        Attachments::from([
-            (AttachmentId(1), json(&described())),
-            (AttachmentId(4), json(&retyped)),
-            (
-                AttachmentId(2),
-                json(&"PREDICT users.age FOR EACH users.user_id"),
-            ),
-        ]),
-    )
-    .err()
-    .expect("materialize refuses a schema edited past its description");
-    assert_eq!(refused.code, ErrorCode::UnsupportedRequest);
-    assert_eq!(
-        refused.fields.get("rule"),
-        Some(&Detail::text("schema_edited"))
-    );
-    assert_eq!(
-        refused.fields.get("operation"),
-        Some(&Detail::text("materialize"))
-    );
+    assert!(matches!(
+        edit_with(json(&retyped), json(&stype("categorical"))).unwrap(),
+        Step::Done { .. }
+    ));
 }
 
 fn attachment_named(err: &CoreError) -> u32 {
@@ -286,7 +234,7 @@ fn an_edit_s_attachments_deep_wide_or_retyped_are_refused_by_name() {
     for depth in [200, 5_000, 100_000] {
         let error = edit_with(json(&held(&described())), deep(depth)).unwrap_err();
         assert_eq!(error.code, ErrorCode::InvalidMessage, "{depth}");
-        assert_eq!(attachment_named(&error), 3);
+        assert_eq!(attachment_named(&error), 2);
         let mut text = String::from("{\"tables\":");
         text.push_str(&"[".repeat(depth));
         text.push_str(&"]".repeat(depth));
@@ -294,7 +242,7 @@ fn an_edit_s_attachments_deep_wide_or_retyped_are_refused_by_name() {
         let error =
             edit_with(Attachment::Bytes(text.into_bytes()), json(&stype("ID"))).unwrap_err();
         assert_eq!(error.code, ErrorCode::InvalidMessage, "{depth}");
-        assert_eq!(attachment_named(&error), 2);
+        assert_eq!(attachment_named(&error), 1);
     }
     // Very wide: a hundred thousand relationships, each naming a column the
     // schema lacks, read and refused by the edit's rule; a hundred thousand
@@ -332,7 +280,7 @@ fn an_edit_s_attachments_deep_wide_or_retyped_are_refused_by_name() {
     )
     .unwrap_err();
     assert_eq!(error.code, ErrorCode::InvalidMessage);
-    assert_eq!(attachment_named(&error), 3);
+    assert_eq!(attachment_named(&error), 2);
     // Retyped, missing or empty: refused naming the attachment, no text.
     for edit in [
         Attachment::Bytes(
@@ -344,6 +292,6 @@ fn an_edit_s_attachments_deep_wide_or_retyped_are_refused_by_name() {
     ] {
         let error = edit_with(json(&held(&described())), edit).unwrap_err();
         assert_eq!(error.code, ErrorCode::InvalidMessage);
-        assert_eq!(attachment_named(&error), 3);
+        assert_eq!(attachment_named(&error), 2);
     }
 }

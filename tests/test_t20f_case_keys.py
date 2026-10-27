@@ -97,6 +97,9 @@ from typing import Any
 import pytest
 import yaml
 
+# Gate tooling (T3.0): CI runs it in the tooling jobs, not in every matrix job.
+pytestmark = pytest.mark.tooling
+
 ROOT = Path(__file__).resolve().parents[1]
 
 # --- the interface assumed (the implementer matches it, or asks) ---------------
@@ -246,8 +249,8 @@ def _hold_database_baselines(tree: Path) -> None:
 
 
 @pytest.fixture(scope='module')
-def origin(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
-    repo, _ = helpers.build(tmp_path_factory.mktemp('origin'))
+def origin(owned_module_dir: Callable[[str], Path]) -> dict[str, Any]:
+    repo, _ = helpers.build(owned_module_dir('origin'))
     recorded = land(
         repo, 'T2.1a', _record_database_lines, protected='contract/**'
     )
@@ -256,9 +259,7 @@ def origin(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
 
 
 def _worktree(origin: dict[str, Any], tmp_path: Path, at: str) -> Path:
-    tree = tmp_path / 'tree'
-    git(origin['repo'], 'worktree', 'add', '-q', '--detach', str(tree), at)
-    return tree
+    return helpers.repo.__wrapped__((origin['repo'], at), tmp_path)
 
 
 @pytest.fixture

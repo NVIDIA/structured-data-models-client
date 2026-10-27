@@ -56,7 +56,7 @@
           "required": ["statements", "bindings", "events", "incomplete", "passed_through", "cursors"],
           "properties": {
             "statements": {
-              "description": "Each statement the driver ran, in order: the handle it ran on (0 the connection the source was given, then each derived cursor in the order made), the public call it ran in (stage; on rust-host, from_source for describe_source), its SQL text, its typed parameters, every result read from it and the class of any error it raised.",
+              "description": "Each statement the driver ran, in order: the handle it ran on (0 the connection the source was given, then each derived cursor in the order made), the public call it ran in (stage; on rust-host, from_source for describe_source), its SQL text, its typed parameters, every result read from it, its terminal error class, and failed fetch attempts retained separately when an admitted fallback succeeds.",
               "type": "array",
               "items": {
                 "type": "object",
@@ -68,7 +68,21 @@
                   "sql": {"type": ["string", "null"]},
                   "parameters": {"type": ["array", "null"], "items": {"$ref": "#/$defs/parameter"}},
                   "results": {"type": "array", "items": {"$ref": "#/$defs/result"}},
-                  "error": {"type": ["string", "null"]}
+                  "error": {"type": ["string", "null"]},
+                  "fetch_errors": {
+                    "description": "Failed fetch attempts in order, retained when a supported row fallback later completes the same execution; error above is the terminal statement status.",
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["method", "error"],
+                      "properties": {
+                        "method": {"enum": ["fetch_arrow_all", "fetch_pandas_all", "fetchall", "fetchmany", "fetchone", "to_arrow_table", "fetch_arrow_table"]},
+                        "error": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"}
+                      }
+                    }
+                  },
+                  "purpose": {"description": "The purpose of the core's fetch the statement answers, where the core gave one (FetchStep.purpose): locate, plan B's read of a table as it stands (T3.4).", "enum": ["locate"]}
                 }
               }
             },
@@ -130,6 +144,7 @@
       "additionalProperties": false,
       "required": ["schema", "payloads", "result"],
       "properties": {
+        "result_text": {"description": "The SHA-256 of the public result's rows with each value as its text, in order (T3.2, P2-T2.21-1), beside the result so every projection of result is as before: what a more_exact excuse of result.digest, which hashes each value's type, still holds equal; absent on a line recorded before it.", "$ref": "#/$defs/sha256"},
         "schema": {"type": ["object", "null"]},
         "payloads": {
           "type": "array",
@@ -160,7 +175,8 @@
               }
             },
             "rows": {"type": "integer", "minimum": 0},
-            "digest": {"$ref": "#/$defs/sha256"}
+            "digest": {"$ref": "#/$defs/sha256"},
+            "text_digest": {"description": "The SHA-256 of the rows with each value as its text (str), in order (T3.2, P2-T2.21-1): what a more_exact excuse of digest, which hashes each value's type, still holds equal; absent on a line recorded before it.", "$ref": "#/$defs/sha256"}
           }
         }
       }
@@ -240,7 +256,7 @@
             "type": "object",
             "additionalProperties": false,
             "required": ["request", "plan"],
-            "properties": {"request": {"type": "object"}, "plan": {"type": "object"}}
+            "properties": {"request": {"type": "object"}, "plan": {"type": "object"}, "purpose": {"enum": ["locate"]}}
           }
         },
         "accepted": {"type": ["boolean", "null"]},
@@ -292,7 +308,7 @@
           }
         },
         "edits": {
-          "description": "From T1.24b, beside inputs, whose shape a gate's checkpoint fixes: each edit_schema's start (the description the core last answered, the schema as the host holds it, the edit) and materialize's held schema, in order. A runner of an earlier checkpoint records none.",
+          "description": "From T1.24b, beside inputs, whose shape a gate's checkpoint fixes: each edit_schema's start (the description the core last answered, the schema as the host holds it, the edit) and materialize's held schema, in order; from T3.16 each edit_schema's start is the schema as the host holds it, as plain data, and the edit, and materialize's schema is its input's. A runner of an earlier checkpoint records none.",
           "type": "array",
           "minItems": 1,
           "items": {
@@ -305,6 +321,16 @@
                   "op": {"const": "edit_schema"},
                   "schema": {"description": "The contract's SourceDescription.", "type": "object"},
                   "held": {"description": "The contract's HeldSchema.", "type": "object"},
+                  "edit": {"description": "The contract's SchemaEdit.", "type": "object"}
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["op", "schema", "edit"],
+                "properties": {
+                  "op": {"const": "edit_schema"},
+                  "schema": {"description": "The contract's HeldSchema (T3.16).", "type": "object"},
                   "edit": {"description": "The contract's SchemaEdit.", "type": "object"}
                 }
               },
@@ -325,9 +351,9 @@
   },
   "$defs": {
     "key": {
-      "description": "The case a line is of, and the database it ran on (design choice 2, T2.0f): a DuckDB line is keyed by the bare case ID (case.schema.json's id), a SQLite or Postgres line by <case>@sqlite or <case>@postgres. Observations, reference lines and baselines use the same keys.",
+      "description": "The case a line is of, and the database or warehouse leg it ran on (design choice 2, T2.0f; Phase 3 design choice 1): a DuckDB line is keyed by the bare case ID (case.schema.json's id), a SQLite or Postgres line by <case>@sqlite or <case>@postgres, and a warehouse leg's by <case>@<leg> (databricks-sql, databricks-spark, snowflake, lakebase). Observations, reference lines, captures and baselines use the same keys.",
       "type": "string",
-      "pattern": "^[a-z0-9][a-z0-9._-]*(@(sqlite|postgres))?$"
+      "pattern": "^[a-z0-9][a-z0-9._-]*(@(sqlite|postgres|databricks-sql|databricks-spark|snowflake|lakebase))?$"
     },
     "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "typed": {
@@ -392,8 +418,10 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["runner", "cell", "platform", "commit", "reference", "native", "native_loaded", "operations", "contract", "versions", "inputs"],
+      "if": {"properties": {"runner": {"not": {"const": "java"}}}},
+      "then": {"properties": {"versions": {"required": ["duckdb"]}}},
       "properties": {
-        "runner": {"enum": ["python-ref", "python-core", "python-old", "rust-host"]},
+        "runner": {"description": "The runner: the reference, the candidate on the core or its old route, the pure-Rust host, or the Java host (Phase 3 design choice 10, T3.11's contract/runners/run_java.py).", "enum": ["python-ref", "python-core", "python-old", "rust-host", "java"]},
         "cell": {
           "description": "The runtime cell (design, Runtime cells) whose versions the runner's environment has exactly, or null when it has none's.",
           "enum": ["ref-pandas3", "dbr17-pandas2", "floor-pandas2.2", null]
@@ -438,14 +466,15 @@
         "contract": {"description": "The contract version of the core it ran, or null.", "type": ["integer", "null"]},
         "versions": {
           "type": "object",
+          "description": "The versions the runner ran with: DuckDB's, required of every runner but Java's, whose S0 leg opens no database; Java's host names its runtime's (java), and DuckDB's where its leg opens DuckDB (T3.2).",
           "additionalProperties": false,
-          "required": ["duckdb"],
           "properties": {
             "python": {"type": "string"},
             "pandas": {"type": "string"},
             "pyarrow": {"type": "string"},
             "numpy": {"type": "string"},
-            "duckdb": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+"}
+            "duckdb": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+"},
+            "java": {"type": "string", "minLength": 1}
           }
         },
         "inputs": {

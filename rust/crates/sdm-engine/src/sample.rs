@@ -18,7 +18,7 @@ use sdm_contract::data::{
     DataRequest, KeySet, MARKED, NullOrder, SEED_BATCH, SEED_COUNT_UNREAD, SEED_KEY, SEED_KEY_TYPE,
     SEED_KEY_UNIQUE, SeedBound, TieBreak, TieTerm,
 };
-use sdm_contract::{ColumnType, CoreError, Detail, ErrorCode, ErrorKind};
+use sdm_contract::{ColumnType, CoreError, Detail, Sentence};
 
 use crate::graph::Table;
 use crate::random::Pcg64;
@@ -40,8 +40,7 @@ pub const SEED_END: &str = "end";
 /// reference's pandas times cannot hold either.
 pub fn out_of_range(field: &str) -> CoreError {
     CoreError::new(
-        ErrorKind::Unsupported,
-        ErrorCode::ValueOutOfRange,
+        Sentence::TimePastNanoseconds,
         "a time is outside what nanoseconds since the epoch hold",
     )
     .with_field("field", Detail::text(field))
@@ -336,13 +335,8 @@ pub fn seeds(keys: ArrayRef, times: Vec<(&str, Vec<i64>)>) -> Result<RecordBatch
                 .map(|v| (v != MISSING_ANCHOR).then_some(v)),
         )));
     }
-    RecordBatch::try_new(Arc::new(Schema::new(fields)), columns).map_err(|_| {
-        CoreError::new(
-            ErrorKind::Internal,
-            ErrorCode::InternalError,
-            "the seeds do not make one batch",
-        )
-    })
+    RecordBatch::try_new(Arc::new(Schema::new(fields)), columns)
+        .map_err(|_| CoreError::new(Sentence::Internal, "the seeds do not make one batch"))
 }
 
 /// The order `_by_fkey` keeps a table's neighbors in (design, "Data
@@ -419,6 +413,18 @@ pub fn by_fkey(
     per_seed: u64,
     nulls: NullOrder,
 ) -> Result<DataRequest, CoreError> {
+    by_fkey_limit(table, fkey, columns, seeds, per_seed.into(), nulls)
+}
+
+/// A neighbor request with the caller's explicit signed or SQL bound.
+pub fn by_fkey_limit(
+    table: &Table,
+    fkey: &str,
+    columns: Vec<String>,
+    seeds: KeySet,
+    per_seed: sdm_contract::data::NeighborLimit,
+    nulls: NullOrder,
+) -> Result<DataRequest, CoreError> {
     Ok(DataRequest::Neighbors {
         table: table.source.clone(),
         key: vec![fkey.to_owned()],
@@ -429,6 +435,7 @@ pub fn by_fkey(
             .as_ref()
             .map(|time| sdm_contract::data::Window {
                 column: time.clone(),
+                source_type: table.column(time).and_then(|c| c.declared_type.clone()),
                 lower: None,
                 upper: Some(SeedBound {
                     seed_column: SEED_TIME.into(),
@@ -453,8 +460,7 @@ pub fn by_time(
 ) -> Result<DataRequest, CoreError> {
     let time = table.time_column.clone().ok_or_else(|| {
         CoreError::new(
-            ErrorKind::Internal,
-            ErrorCode::InternalError,
+            Sentence::Internal,
             "a windowed read names a table without a time column",
         )
     })?;
@@ -464,6 +470,7 @@ pub fn by_time(
         columns,
         seeds: typed(seeds, table, fkey),
         window: Some(sdm_contract::data::Window {
+            source_type: table.column(&time).and_then(|c| c.declared_type.clone()),
             column: time,
             lower: start.then(|| SeedBound {
                 seed_column: SEED_START.into(),
@@ -492,11 +499,7 @@ pub fn by_pkey(
     counted: bool,
 ) -> Result<DataRequest, CoreError> {
     let key = table.primary_key.clone().ok_or_else(|| {
-        CoreError::new(
-            ErrorKind::Internal,
-            ErrorCode::InternalError,
-            "a lookup names a table without a key",
-        )
+        CoreError::new(Sentence::Internal, "a lookup names a table without a key")
     })?;
     let mut seeds = typed(seeds, table, &key);
     let unique = table.column(&key).is_some_and(|c| c.unique);
@@ -516,23 +519,26 @@ pub fn by_pkey(
     })
 }
 
-/// `seeds`, their key column naming the declared type of `table`'s `key`
-/// ([`SEED_KEY_TYPE`]) where the described schema keeps one (a big-integer
-/// key the host layer read and marked, `DescribedColumn::declared_type`) and
-/// the seed key is of that type: the data layer joins such a seed in the
-/// key's own type (register P1B-43), from what `describe_source` read, so
-/// `materialize` asks the source nothing more.
+/// `seeds`, their key column naming the destination key's catalog declaration
+/// ([`SEED_KEY_TYPE`]) when the destination retains one and the seed is floating
+/// or a wide decimal.
+/// Only the data layer interprets that opaque declaration: a floating seed
+/// must retain the destination's float coercion without rounding integer keys,
+/// and a wide decimal must compare exactly with an opaque big integer.
 fn typed(mut seeds: KeySet, table: &Table, key: &str) -> KeySet {
-    let wide = ColumnType::Decimal128 {
-        precision: 38,
-        scale: 0,
-    };
     if let Some(declared) = table.column(key).and_then(|c| c.declared_type.as_ref()) {
-        for column in seeds
-            .columns
-            .iter_mut()
-            .filter(|c| c.name == SEED_KEY && c.column_type == wide)
-        {
+        for column in seeds.columns.iter_mut().filter(|c| {
+            c.name == SEED_KEY
+                && matches!(
+                    c.column_type,
+                    ColumnType::Float32
+                        | ColumnType::Float64
+                        | ColumnType::Decimal128 {
+                            precision: 38,
+                            scale: 0
+                        }
+                )
+        }) {
             column
                 .metadata
                 .insert(SEED_KEY_TYPE.to_owned(), declared.clone());

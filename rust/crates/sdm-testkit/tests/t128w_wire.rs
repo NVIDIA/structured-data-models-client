@@ -36,7 +36,7 @@ fn contract() -> PathBuf {
 
 fn loaded() -> (Vec<case::Loaded>, bases::Bases) {
     (
-        case::load(&[contract().join("cases")]).unwrap(),
+        case::load_for(&[contract().join("cases")], case::Database::Duckdb).unwrap(),
         bases::load(&contract().join("bases.yaml")).unwrap(),
     )
 }

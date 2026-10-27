@@ -460,7 +460,15 @@ fn an_accepted_query_is_handed_on_in_the_validated_query_format() {
     )
     .unwrap();
     assert!(validation.diagnostics.is_empty());
-    assert!(validation.to_result().accepted);
+    let result = validation.to_result(&shop());
+    assert!(result.accepted);
+    // The facts and the text the core writes back travel with it (T3.8).
+    let facts = result.query.expect("an accepted query's facts");
+    assert_eq!(
+        facts.text.as_deref(),
+        Some("PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id")
+    );
+    assert_eq!(facts.num_forecasts, 1);
     let query = validation.query.unwrap();
     assert_eq!(query.entity_clause, EntityClause::ForEach);
     assert_eq!(query.mode, QueryMode::Inference);

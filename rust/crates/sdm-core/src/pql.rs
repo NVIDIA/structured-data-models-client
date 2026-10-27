@@ -33,7 +33,9 @@ use sdm_contract::pql::{
     Aggregation, ConditionOp, EntityClause, LogicalOp, NodeKind, NodeType, PqlLiteral, PqlNode,
     ProblemType, QueryMode, TimeUnit, ValidatedQuery, Window,
 };
-use sdm_contract::{CoreError, CoreWarning, Detail, ErrorCode, ErrorKind, HostFacts, Scalar, Unit};
+use sdm_contract::{
+    CoreError, CoreWarning, Detail, HostFacts, Scalar, Sentence, Unit, WarningCode,
+};
 use sdm_engine::time::{Instant, Zones};
 use sdm_pql as parser;
 use sdm_pql::ast::{self, ConstValue, Kind, NodeRef};
@@ -44,13 +46,8 @@ use crate::profiles::{
     Mode, Profile, QueryFeatures, check_capabilities, check_parsed_capabilities,
 };
 
-/// D4's warning: a date literal read day first, whose format, as `strftime`
-/// writes it, is the `format` field, and whose place in the query is
-/// `start_row`, `start_col`, `end_row` and `end_col`.
-pub const DATE_LITERAL_DAY_FIRST: &str = "DATE_LITERAL_DAY_FIRST";
-
-/// Every warning the adapter gives, with its variants (none).
-pub const WARNINGS: &[(&str, &[&str])] = &[(DATE_LITERAL_DAY_FIRST, &[])];
+/// D4's warning's code: a date literal read day first.
+pub const DATE_LITERAL_DAY_FIRST: &str = WarningCode::DateLiteralDayFirst.as_str();
 
 /// A query's validation, with the validated query when it was accepted.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -62,8 +59,7 @@ pub struct Validation {
     /// The query, when it has no errors, written back as the reference's
     /// `ValidatedPredictiveQuery.to_string()` writes it.
     pub text: Option<String>,
-    /// D4's warning for each day-first date literal read, in the order
-    /// read, accepted or not.
+    /// The warnings of the literals read, in order, accepted or not.
     pub warnings: Vec<CoreWarning>,
     /// A forecast's plan, when it has no errors: how many steps it asks,
     /// and what each step's regression is written from ([`per_step`]),
@@ -93,11 +89,16 @@ impl Validation {
         }
     }
 
-    /// The answer `validate_query` gives.
-    pub fn to_result(&self) -> QueryValidation {
+    /// The answer `validate_query` gives over `schema`: an accepted
+    /// query's facts and its text as written back with it (T3.8).
+    pub fn to_result(&self, schema: &QuerySchema) -> QueryValidation {
         QueryValidation {
             accepted: self.query.is_some(),
             diagnostics: self.diagnostics.clone(),
+            query: self.facts(schema).map(|facts| QueryFacts {
+                text: self.text.clone(),
+                ..facts
+            }),
         }
     }
 
@@ -111,6 +112,7 @@ impl Validation {
             problem_type: query.problem_type,
             windowed: features.temporal_target,
             num_forecasts: query.num_forecasts,
+            text: None,
         })
     }
 }
@@ -147,7 +149,7 @@ pub fn validate_warned(
     on_adapter_stack(|| {
         let resolved = resolve_here(query, schema, profile, facts, zones);
         match resolved {
-            Ok(validation) => (Ok(validation.to_result()), validation.warnings),
+            Ok(validation) => (Ok(validation.to_result(schema)), validation.warnings),
             Err(Halted { error, warnings }) => (Err(*error), warnings),
         }
     })
@@ -239,7 +241,7 @@ fn resolve_here(
         max_ns: range.max_ns,
     });
     let parse = parser::parse_held(query, mode, reader, held);
-    let warnings: Vec<CoreWarning> = parse.warnings.iter().map(day_first_warning).collect();
+    let warnings: Vec<CoreWarning> = parse.warnings.iter().map(literal_warning).collect();
     // An error after a literal was read keeps the literal's warning (U1).
     let halted = |error: CoreError| Halted {
         error: Box::new(error),
@@ -449,12 +451,10 @@ fn is_error(diagnostic: &PqlDiagnostic) -> bool {
 /// (KO2-86, narrowing decision E79: a value of the caller's own call).
 fn packed(query: &str, location: Option<ast::Location>, literal: &str) -> CoreError {
     let mut error = CoreError::new(
-        ErrorKind::InvalidRequest,
-        ErrorCode::InvalidRequest,
+        Sentence::DateLiteralPacked,
         "a date literal with a run of five digits or more is refused",
     )
     .with_field("operation", Detail::text("validate_query"))
-    .with_field("rule", Detail::text("date_literal_packed"))
     .with_field("field", Detail::text("query"))
     .with_field("query", Detail::text(query))
     .with_field("literal", Detail::text(literal));
@@ -474,10 +474,29 @@ fn count(n: usize) -> Detail {
 }
 
 fn internal(message: impl Into<String>) -> CoreError {
-    CoreError::new(ErrorKind::Internal, ErrorCode::InternalError, message)
+    CoreError::new(Sentence::Internal, message)
 }
 
 // --- Host facts --------------------------------------------------------------
+
+/// Reading a deprecated string escape preserves its first diagnostic;
+/// validation's warning channel, not the materializer, presents it.
+fn literal_warning(warning: &parser::LiteralWarning) -> CoreWarning {
+    match warning {
+        parser::LiteralWarning::DayFirst(warning) => day_first_warning(warning),
+        parser::LiteralWarning::InvalidStringEscape { location } => {
+            let mut warning = CoreWarning::new(
+                Sentence::InvalidStringEscape,
+                "a string literal uses a deprecated escape",
+            );
+            warning
+                .fields
+                .insert("escape".to_owned(), Detail::text("\\/"));
+            literal_location(&mut warning.fields, *location);
+            warning
+        }
+    }
+}
 
 /// D4's warning for one literal, as the run gives it: the format and where
 /// the literal is, never its text.
@@ -487,17 +506,28 @@ fn day_first_warning(warning: &parser::DateWarning) -> CoreWarning {
         "format".to_owned(),
         Detail::text(warning.day_first.format()),
     );
-    if let Some(at) = warning.location.and_then(parser::Span::at) {
+    literal_location(&mut fields, warning.location);
+    // D4's warning: a date literal read day first, whose format, as
+    // `strftime` writes it, is the `format` field, and whose place in the
+    // query is `start_row`, `start_col`, `end_row` and `end_col`.
+    let mut warning = CoreWarning::new(
+        Sentence::DateLiteralDayFirst,
+        "a date literal was read day first",
+    );
+    warning.fields = fields;
+    warning
+}
+
+fn literal_location(
+    fields: &mut std::collections::BTreeMap<String, Detail>,
+    location: Option<parser::ast::Location>,
+) {
+    if let Some(at) = location.and_then(parser::Span::at) {
         let count = |n: usize| Detail::Scalar(Scalar::UInt64(u64::try_from(n).unwrap_or(u64::MAX)));
         fields.insert("start_row".to_owned(), count(at.start_row));
         fields.insert("start_col".to_owned(), count(at.start_col));
         fields.insert("end_row".to_owned(), count(at.end_row));
         fields.insert("end_col".to_owned(), count(at.end_col));
-    }
-    CoreWarning {
-        code: DATE_LITERAL_DAY_FIRST.to_owned(),
-        message: "a date literal was read day first".to_owned(),
-        fields,
     }
 }
 
@@ -518,8 +548,7 @@ pub fn local_year(facts: &HostFacts, zones: &dyn Zones) -> Result<i16, CoreError
     let now = Instant::from_count(*value, unit);
     let unread = || {
         CoreError::new(
-            ErrorKind::InvalidRequest,
-            ErrorCode::InvalidRequest,
+            Sentence::LocalZoneUnread,
             "the host's local zone is not one this run can read",
         )
         .with_field("field", Detail::text("facts.local_zone"))
@@ -537,8 +566,7 @@ pub fn local_year(facts: &HostFacts, zones: &dyn Zones) -> Result<i16, CoreError
     };
     i16::try_from(year).map_err(|_| {
         CoreError::new(
-            ErrorKind::InvalidRequest,
-            ErrorCode::InvalidRequest,
+            Sentence::ClockPastYears,
             "the host's clock is past the years a date literal can be read in",
         )
         .with_field("field", Detail::text("facts.now"))
@@ -1016,13 +1044,196 @@ pub(crate) fn quote_name(name: &str) -> String {
 /// parser's float text, the shortest digits that read back to the double
 /// ([`sdm_pql::float_repr`]). The payload and the answer's layout take it
 /// from here, the one module that names the parser.
-pub(crate) fn float_text(x: f64) -> String {
+pub fn float_text(x: f64) -> String {
     parser::float_repr::float_repr(x)
+}
+
+/// A view definition's value too large to quote: its text would pass
+/// [`sdm_pql::conversions::LONGEST_TEXT`], or its nesting, through the
+/// aliases of collections inside themselves, the depth a quote follows.
+/// Python wrote such a text or ran out of memory; it is refused by name
+/// (register P3J-10).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TooLarge;
+
+/// How deep a quote follows a value: twice the nesting a definition may
+/// have, for the collections met again inside themselves.
+const QUOTE_DEPTH: usize = 2 * sdm_schema::view::yaml::MAX_DEPTH;
+
+/// What a quote may still spend, and the nodes it is inside. Each value
+/// spends the fewest characters it can be written in (a text its own,
+/// a date ten), so a quote that runs out would be longer than the bound;
+/// the text itself is then written up to the bound exactly
+/// ([`parser::float_repr::Shown::repr_within`]).
+struct Quote {
+    budget: usize,
+    open: Vec<sdm_schema::view::yaml::NodeId>,
+    on_path: BTreeSet<sdm_schema::view::yaml::NodeId>,
+}
+
+impl Quote {
+    fn new() -> Quote {
+        Quote {
+            budget: parser::conversions::LONGEST_TEXT,
+            open: Vec::new(),
+            on_path: BTreeSet::new(),
+        }
+    }
+
+    fn spend(&mut self, cost: usize) -> Result<(), TooLarge> {
+        self.budget = self.budget.checked_sub(cost).ok_or(TooLarge)?;
+        Ok(())
+    }
+}
+
+/// A node of a view definition, as the parser's text helpers take it: a
+/// collection met again inside itself is Python's `[...]` or `{...}`.
+fn shown(
+    document: &sdm_schema::view::yaml::Document,
+    node: sdm_schema::view::yaml::NodeId,
+    quote: &mut Quote,
+) -> Result<parser::float_repr::Shown, TooLarge> {
+    use parser::float_repr::Shown;
+    use sdm_schema::view::yaml::Value;
+    let value = document.value(node);
+    if quote.on_path.contains(&node) {
+        quote.spend(1)?;
+        return Ok(Shown::Recursive(!matches!(value, Value::Map(_))));
+    }
+    if quote.open.len() >= QUOTE_DEPTH {
+        return Err(TooLarge);
+    }
+    quote.spend(match value {
+        Value::Str(text) => text.chars().count(),
+        Value::Int(n) => n.text().len(),
+        Value::Date(_) => 10,
+        Value::Timestamp(_) => 19,
+        _ => 1,
+    })?;
+    quote.open.push(node);
+    quote.on_path.insert(node);
+    let shown = match value {
+        Value::Null => Shown::None,
+        Value::Bool(flag) => Shown::Bool(*flag),
+        Value::Int(n) => Shown::Int(n.text().to_owned()),
+        Value::Float(x) => Shown::Float(*x),
+        Value::Str(text) => Shown::Text(text.clone()),
+        Value::Date(date) => Shown::Date {
+            year: date.year,
+            month: date.month,
+            day: date.day,
+        },
+        Value::Timestamp(moment) => Shown::DateTime {
+            year: moment.date.year,
+            month: moment.date.month,
+            day: moment.date.day,
+            hour: moment.hour,
+            minute: moment.minute,
+            second: moment.second,
+            microsecond: moment.microsecond,
+            offset: moment.offset,
+        },
+        Value::Seq(items) => Shown::List(
+            items
+                .iter()
+                .map(|n| shown(document, *n, quote))
+                .collect::<Result<_, _>>()?,
+        ),
+        Value::Map(pairs) => Shown::Dict(
+            pairs
+                .iter()
+                .map(|(k, v)| Ok((shown(document, *k, quote)?, shown(document, *v, quote)?)))
+                .collect::<Result<_, _>>()?,
+        ),
+    };
+    quote.open.pop();
+    quote.on_path.remove(&node);
+    Ok(shown)
+}
+
+/// The text the old client's messages quote a view definition's value by,
+/// Python's `repr` of what PyYAML made of it ([`sdm_pql::float_repr`]),
+/// from here, the one module that names the parser (T3.5).
+pub(crate) fn value_repr(
+    document: &sdm_schema::view::yaml::Document,
+    node: sdm_schema::view::yaml::NodeId,
+) -> Result<String, TooLarge> {
+    shown(document, node, &mut Quote::new())?
+        .repr_within(parser::conversions::LONGEST_TEXT)
+        .ok_or(TooLarge)
+}
+
+/// Python's `str` of a view definition's value, as the old client wrote
+/// it into a message or a parameter's default (T3.5).
+pub(crate) fn value_text(
+    document: &sdm_schema::view::yaml::Document,
+    node: sdm_schema::view::yaml::NodeId,
+) -> Result<String, TooLarge> {
+    shown(document, node, &mut Quote::new())?
+        .text_within(parser::conversions::LONGEST_TEXT)
+        .ok_or(TooLarge)
+}
+
+/// Python's `repr` of a text, as the old client quotes a piece of an
+/// expression or a name (T3.5).
+pub(crate) fn text_repr(text: &str) -> String {
+    parser::float_repr::text_repr(text)
+}
+
+/// How a view definition's YAML is read: Python's limit on an integer's
+/// digits, from the parser (T3.5).
+pub fn yaml_rules() -> sdm_schema::view::yaml::Rules {
+    sdm_schema::view::yaml::Rules {
+        most_digits: parser::conversions::MAX_STR_DIGITS,
+        day_ordinal: parser::conversions::day_ordinal,
+    }
+}
+
+/// Python's white space (`str.isspace`), from the parser's one rule of
+/// it, as the data layer's view checks take it, with the class its
+/// patterns are compiled with derived from it once (T3.5).
+pub fn spaces() -> &'static sdm_data::view_expr::Spaces {
+    static SPACES: std::sync::LazyLock<sdm_data::view_expr::Spaces> =
+        std::sync::LazyLock::new(|| sdm_data::view_expr::Spaces::new(parser::syntax::is_space));
+    &SPACES
+}
+
+/// `date.isoformat()` of a view definition's date, from the parser's one
+/// writer of it (T3.5).
+pub(crate) fn date_iso(date: &sdm_schema::view::yaml::Date) -> String {
+    parser::conversions::date_iso(date.year, date.month, date.day)
+}
+
+/// `datetime.isoformat(separator)` of a view definition's date and time,
+/// from the parser's one writer of it (T3.5).
+pub(crate) fn datetime_iso(moment: &sdm_schema::view::yaml::Timestamp, separator: char) -> String {
+    parser::conversions::datetime_iso(
+        (moment.date.year, moment.date.month, moment.date.day),
+        parser::conversions::Clock {
+            hour: moment.hour,
+            minute: moment.minute,
+            second: moment.second,
+            microsecond: moment.microsecond,
+        },
+        moment.offset.map(|seconds| i64::from(seconds) * 1_000_000),
+        separator,
+    )
+}
+
+/// The conversions of a parameter's default, as the old client's Python
+/// made them ([`sdm_pql::conversions`]): `text.strip()`, `str(int(text))`,
+/// `format(Decimal(text), 'f')`, and the ISO readers and writers.
+pub(crate) mod conversions {
+    pub(crate) use sdm_pql::conversions::{
+        Unconverted, date_text, datetime_text, decimal_text, int_text, not_an_integer_text, strip,
+        too_many_digits_text,
+    };
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sdm_contract::ErrorCode;
     use sdm_contract::facts::PlatformFacts;
     use sdm_engine::time::UnknownZone;
 

@@ -143,6 +143,8 @@ impl Sqlite {
         log: &mut DriverLog,
     ) -> Result<Fetched, ProviderError> {
         let failed = || ProviderError {
+            error_class: None,
+            driver_message: None,
             kind: ErrorKind::DataSource,
             retryable: false,
             sqlstate: None,
@@ -553,7 +555,10 @@ mod tests {
         )
         .unwrap();
         let sqlite = ProviderChoice::Sql {
+            timestamp_encoding: None,
             dialect: Dialect::new("sqlite"),
+            namespace: Vec::new(),
+            view: None,
         };
         let plan = sdm_host::default_root()
             .data_access(&sqlite)
@@ -572,6 +577,7 @@ mod tests {
             request,
             plan,
             continuation: None,
+            purpose: None,
         };
         let schema = Arc::new(Schema::new(vec![
             Field::new("key", DataType::Int64, true),

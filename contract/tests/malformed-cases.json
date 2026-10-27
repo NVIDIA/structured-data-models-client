@@ -1,5 +1,5 @@
 {
-  "about": "Changes to base.adventureworks's case that both case loaders must refuse, and ones both must take: contract/runners/run_python.py's validator (tests/test_contract_cases.py) and sdm-testkit's case::load (tests/s0_cases.rs). Each refused or accepted change sets the value at path, and each omitted one removes the key at path (which both must take), a list of keys and positions into the case (T1.21b; from T1.21c the schema's minProperties, minItems and minLength, core.materialize.seed required, and expect's if/then/else; from T1.21d core.materialize naming a schema, refused; from T1.24b the edits set_primary_key, set_time_column, set_stype and set_relationships; from T2.1a materialize's candidates and top_k; from T2.8c's test author materialize's rows_per_call, any JSON scalar but null, and input.fail_call, a whole number from 0 to 2**64 - 1, from T2.1j input.probabilities, a boolean, and from T2.9's test author input.quantiles, a boolean, input.outputs, a list of texts, and materialize's lag_timesteps, any JSON scalar but null, from T2.13's test author input.explanation and input.item_metadata, each a boolean, and from T2.11's test author input.embeddings, a boolean, materialize's context_anchor_time, written as anchor_time is, anchor_time's literal entity, and the sampling options random_seed, num_hops, num_neighbors, max_pq_iterations, use_prediction_time, return_embeddings and exclude_cols_dict, any JSON value, null included, while a databases or exclusion change, which needs its partner, is held in tests/test_t21a_case_format.py through both keys).",
+  "about": "Changes to base.adventureworks's case that both case loaders must refuse, and ones both must take: contract/runners/run_python.py's validator (tests/test_contract_cases.py) and sdm-testkit's case::load (tests/s0_cases.rs). Each refused or accepted change sets the value at path, and each omitted one removes the key at path (which both must take), a list of keys and positions into the case (T1.21b; from T1.21c the schema's minProperties, minItems and minLength, core.materialize.seed required, and expect's if/then/else; from T1.21d core.materialize naming a schema, refused; from T1.24b the edits set_primary_key, set_time_column, set_stype and set_relationships; from T2.1a materialize's candidates and top_k; from T2.8c's test author materialize's rows_per_call, any JSON scalar but null, and input.fail_call, a whole number from 0 to 2**64 - 1, from T2.1j input.probabilities, a boolean, and from T2.9's test author input.quantiles, a boolean, input.outputs, a list of texts, and materialize's lag_timesteps, any JSON scalar but null, from T2.13's test author input.explanation and input.item_metadata, each a boolean, and from T2.11's test author input.embeddings, a boolean, materialize's context_anchor_time, written as anchor_time is, anchor_time's literal entity, and the sampling options random_seed, num_hops, num_neighbors, max_pq_iterations, use_prediction_time, return_embeddings and exclude_cols_dict, any JSON value, null included, while a databases or exclusion change, which needs its partner, is held in tests/test_t21a_case_format.py through both keys). From T3.2 (P2-T2.1i-1), refused_texts holds what JSON cannot hold as a value of this file, each written as its text in place of the value at path: a fail_call of -0 and a rows_per_call of NaN, Infinity or -Infinity, which the Python loader took and the Rust loader refused; both refuse them, since -0 is no whole number as the format writes one and the others are not JSON (tests/test_t32_case_format.py, rust/crates/sdm-testkit/tests/t32_case_format.rs).",
   "case": "contract/cases/s1/base.adventureworks.json",
   "refused": [
     {
@@ -1994,6 +1994,43 @@
         "from_source",
         "time_columns"
       ]
+    }
+  ],
+  "refused_texts": [
+    {
+      "why": "fail_call written as -0",
+      "path": [
+        "input",
+        "fail_call"
+      ],
+      "text": "-0"
+    },
+    {
+      "why": "rows_per_call NaN, not JSON",
+      "path": [
+        "input",
+        "materialize",
+        "rows_per_call"
+      ],
+      "text": "NaN"
+    },
+    {
+      "why": "rows_per_call Infinity, not JSON",
+      "path": [
+        "input",
+        "materialize",
+        "rows_per_call"
+      ],
+      "text": "Infinity"
+    },
+    {
+      "why": "rows_per_call -Infinity, not JSON",
+      "path": [
+        "input",
+        "materialize",
+        "rows_per_call"
+      ],
+      "text": "-Infinity"
     }
   ]
 }

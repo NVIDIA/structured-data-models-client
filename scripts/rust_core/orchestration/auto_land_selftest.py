@@ -6,7 +6,7 @@
 """Self-test for auto_land.py's automatic clean rebase. No network, no real repo.
 
 Each case builds a fresh bare "origin" in a temp dir under /tmp, a lane worktree cloned from
-it, a fake `gh` (reports a green run on the candidate) and a fake scripts/rust_core/land.py
+it, a fake `gh` (serving runs to cancel_superseded.sh) and a fake scripts/rust_core/land.py
 (refuses with land.py's "does not descend" message when the candidate is behind the phase
 head), then runs auto_land.py as a subprocess with SDM_LAND_QUEUE pointing at a temp queue.
 
@@ -616,8 +616,8 @@ def topic_entry_checks(c, s, new):
     gl = [a for a in logged(s['gh_log']) if a[:2] == ['run', 'list']]
     check(
         c,
-        gl and all(opt(a, '--branch') == TOPIC_BR for a in gl),
-        'CI looked up on the topic branch',
+        not gl,
+        'no CI run looked up (the owner, 2026-10-22: CI off the landing path)',
     )
 
 
@@ -720,7 +720,7 @@ def case_moved(root):
         c,
         out.startswith('LANDED Land T9.99: self-test')
         and (s['q'] / f'{PKG}.landed').exists(),
-        "LANDED on X's green run though the new tip's run is unfinished",
+        "LANDED on X's evidence though the new tip's run is unfinished",
     )
     check(
         c,
@@ -793,32 +793,26 @@ def case_moved_twice(root):
 
 
 def case_moved_ci(root):
-    c = "moved: X's run decides"
+    c = 'moved: no CI run is waited on'
     print(c)
     s = setup_moved(root)
     new = move_once(c, s)
     n = len(logged(s['land_log']))
-    set_runs(s, [ci(12, new), ci(11, s['cand'], status='in_progress')])
-    out = auto_land(s)
-    show(out)
-    check(
-        c,
-        not out.strip()
-        and s['qf'].exists()
-        and len(logged(s['land_log'])) == n,
-        "X's run unfinished: waits (the new tip's green run does not count)",
-    )
+    # The owner's "CI off the landing path" (2026-10-22): an unfinished or
+    # red run on X holds nothing back; land.py lands on X's stamp.
     set_runs(s, [ci(12, new), ci(11, s['cand'], conclusion='failure')])
     out = auto_land(s)
     show(out)
+    called = logged(s['land_log'])
     check(
         c,
-        out.startswith(
-            f'FAILED Land T9.99: self-test: CI run 11 failure on the moved-from commit {s["cand"][:12]}'
-        )
-        and (s['q'] / f'{PKG}.failed').exists()
-        and len(logged(s['land_log'])) == n,
-        "X's run failed: FAILED, .failed, land.py not called",
+        len(called) == n + 1 and opt(called[-1], '--moved-from') == s['cand'],
+        "X's red run: land.py called at once with --moved-from X",
+    )
+    check(
+        c,
+        not any(a[:2] == ['run', 'list'] for a in logged(s['gh_log'])),
+        'gh asked for no run',
     )
 
 
@@ -856,10 +850,9 @@ def case_moved_refused(root):
     )
     check(
         c,
-        ['run', 'rerun', '12', '-R', 'NVIDIA/structured-data-models-client']
-        in logged(s['gh_log'])
-        and d.get('ci_rerun') == 12,
-        "the new tip's cancelled run is rerun",
+        not any(a[:2] == ['run', 'rerun'] for a in logged(s['gh_log']))
+        and 'ci_rerun' not in d,
+        'no CI run is rerun: the new tip needs its own stamp',
     )
     check(
         c,
@@ -875,7 +868,7 @@ def case_moved_other(root):
     move_once(c, s)
     out = auto_land(
         s,
-        FAKE_LAND_REFUSE='the newest CI run on the moved-from commit is not green',
+        FAKE_LAND_REFUSE='the moved-from commit has no passing handoff stamp',
     )
     show(out)
     f = s['q'] / f'{PKG}.failed'
@@ -1040,8 +1033,7 @@ def case_malformed(root):
         c,
         any(ln.startswith('FAILED a-bad.json: JSONDecodeError') for ln in lines)
         and any(
-            ln.startswith("FAILED b-nokey.json: KeyError: 'candidate'")
-            for ln in lines
+            ln.startswith('FAILED b-nokey.json: KeyError: ') for ln in lines
         )
         and 'Traceback' not in out,
         'FAILED <file>: <error> for bad JSON and a missing key, no traceback',

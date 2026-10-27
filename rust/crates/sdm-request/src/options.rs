@@ -12,7 +12,8 @@
 //! Each refusal is a code and fields naming the option and why, never the
 //! value given; the host words it.
 
-use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
+use sdm_contract::data::NegativeNeighborBound;
+use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 use sdm_wire::json::{Value, is_integer_token, whole};
 use sdm_wire::payload::{ClassificationConfig, InferenceConfig};
 
@@ -99,25 +100,28 @@ impl AskedLag {
     /// as lagged features, which are none for a static one.
     pub fn refusal(self, temporal: bool) -> Result<u64, CoreError> {
         let refused = |message: &str, reason: &'static str| {
-            CoreError::new(
-                ErrorKind::InvalidRequest,
-                ErrorCode::InvalidRequest,
-                message,
-            )
-            .with_field("field", Detail::text("lag_timesteps"))
-            .with_field("reason", Detail::text(reason))
+            CoreError::new(Sentence::LagNegative, message)
+                .with_field("field", Detail::text("lag_timesteps"))
+                .with_field("reason", Detail::text(reason))
         };
         match self {
-            AskedLag::Unordered => Err(mistyped("lag_timesteps", "not_a_number")),
+            AskedLag::Unordered => Err(mistyped(
+                Sentence::LagNotANumber,
+                "lag_timesteps",
+                "not_a_number",
+            )),
             AskedLag::Negative => Err(refused(
                 "the past steps added as features cannot be negative",
                 "negative",
             )),
             _ if !temporal => Ok(0),
-            AskedLag::NotWhole => Err(mistyped("lag_timesteps", "not_a_whole_number")),
+            AskedLag::NotWhole => Err(mistyped(
+                Sentence::LagNotWhole,
+                "lag_timesteps",
+                "not_a_whole_number",
+            )),
             AskedLag::TooLarge => Err(CoreError::new(
-                ErrorKind::Unsupported,
-                ErrorCode::ValueOutOfRange,
+                Sentence::LagPastTimes,
                 "a time is outside what nanoseconds since the epoch hold",
             )
             .with_field("field", Detail::text("lag_timesteps"))),
@@ -143,6 +147,9 @@ pub enum AskedAnchor {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Asked {
     pub num_context_samples: Option<Integer>,
+    /// `num_context_samples` as the JSON text the host wrote it in, which
+    /// its refusals name as the caller gave it (`given`).
+    pub num_context_samples_given: Option<String>,
     pub num_hops: Option<Integer>,
     /// Whether `num_hops` was named as none, which the engine cannot
     /// compare with its bounds unless `num_neighbors` stands in for it.
@@ -183,14 +190,26 @@ pub struct Asked {
 
 /// A value of the wrong type for its option, refused as the client
 /// refuses it (`INVALID_REQUEST`), naming the option and the type it takes.
-fn mistyped(field: &str, reason: &'static str) -> CoreError {
+fn mistyped(sentence: Sentence, field: &str, reason: &'static str) -> CoreError {
     CoreError::new(
-        ErrorKind::InvalidRequest,
-        ErrorCode::InvalidRequest,
+        sentence,
         "an option of the call is of a type it does not take",
     )
     .with_field("field", Detail::text(field))
     .with_field("reason", Detail::text(reason))
+}
+
+/// The sentence of an option that is not a whole number, by the option.
+fn not_whole(field: &str) -> Sentence {
+    match field {
+        "num_context_samples" => Sentence::NumContextSamplesNotWhole,
+        "num_hops" => Sentence::NumHopsNotWhole,
+        "random_seed" => Sentence::RandomSeedNotWhole,
+        "top_k" => Sentence::TopKNotWhole,
+        "rows_per_call" => Sentence::RowsPerCall,
+        "max_pq_iterations" => Sentence::MaxPqIterationsNotAWholeNumber,
+        _ => Sentence::OptionNotWhole,
+    }
 }
 
 /// A value the caller gave, as the JSON text the host wrote it in, which a
@@ -213,7 +232,8 @@ fn integer(field: &str, value: &Value) -> Result<(bool, String), CoreError> {
         // A boolean, a float or anything else: not a whole number, as the
         // client's check (`numbers.Integral`, a bool excluded) refuses it,
         // naming the value given, for the host's words.
-        _ => Err(mistyped(field, "not_a_whole_number").with_field("given", given_text(value))),
+        _ => Err(mistyped(not_whole(field), field, "not_a_whole_number")
+            .with_field("given", given_text(value))),
     }
 }
 
@@ -263,6 +283,7 @@ pub fn values(given: Option<&Value>) -> Result<Asked, CoreError> {
         num_hops: None,
         num_hops_none: false,
         num_hops_text: None,
+        num_context_samples_given: None,
         num_neighbors: None,
         neighbors: None,
         max_pq_iterations: None,
@@ -281,8 +302,29 @@ pub fn values(given: Option<&Value>) -> Result<Asked, CoreError> {
         return Ok(asked);
     };
     let Value::Object(members) = given else {
-        return Err(mistyped("values", "not_an_object"));
+        return Err(mistyped(
+            Sentence::OptionValuesUnread,
+            "values",
+            "not_an_object",
+        ));
     };
+    // Hosts preserve nonfinite numeric values in this one attachment.
+    // KO3-44 admits the reference's NaN lag. Inference config objects
+    // go to their task-aware validator, which consumes every member and
+    // refuses nonfinite values before an ordinary request is built.
+    // Other fields and malformed config shapes retain this JSON guard.
+    for (name, value) in members {
+        let nan_lag =
+            name == "lag_timesteps" && matches!(value, Value::Number(token) if token == "NaN");
+        let inference = name == "inference_config" && matches!(value, Value::Object(_));
+        if !nan_lag && !inference && !value.all_json_numbers() {
+            return Err(CoreError::new(
+                Sentence::OptionValueNotFinite,
+                format!("{name} carries a value that cannot be sent as JSON (a NaN, an infinity, or a type JSON has no form for)"),
+            )
+            .with_field("field", Detail::text(name)));
+        }
+    }
     for (name, value) in members {
         match (name.as_str(), value) {
             // A size or a list of hops left as none is no size asked; a
@@ -290,7 +332,11 @@ pub fn values(given: Option<&Value>) -> Result<Asked, CoreError> {
             // ([`neighbors`]).
             ("num_context_samples" | "num_neighbors", Value::Null) => {}
             ("num_hops", Value::Null) => asked.num_hops_none = true,
-            ("num_context_samples", v) => asked.num_context_samples = Some(magnitude(name, v)?),
+            ("num_context_samples", v) => {
+                asked.num_context_samples = Some(magnitude(name, v)?);
+                asked.num_context_samples_given =
+                    Some(String::from_utf8_lossy(&v.to_bytes()).into_owned());
+            }
             ("num_hops", v) => {
                 asked.num_hops = Some(magnitude(name, v)?);
                 let (negative, digits) = integer(name, v)?;
@@ -308,7 +354,10 @@ pub fn values(given: Option<&Value>) -> Result<Asked, CoreError> {
                 asked.neighbors = Some(hops.clone());
             }
             ("num_neighbors", v) => {
-                return Err(mistyped(name, "not_a_sequence").with_field("given", given_text(v)));
+                return Err(
+                    mistyped(Sentence::NeighborsNotASequence, name, "not_a_sequence")
+                        .with_field("given", given_text(v)),
+                );
             }
             ("max_pq_iterations", v) => asked.max_pq_iterations = Some(v.clone()),
             ("context_anchor_time", v) => asked.context_anchor_time = Some(v.clone()),
@@ -318,10 +367,19 @@ pub fn values(given: Option<&Value>) -> Result<Asked, CoreError> {
             ("prediction_statistic", Value::Text(text)) => {
                 asked.prediction_statistic = Some(text.clone());
             }
-            ("prediction_statistic", _) => return Err(mistyped(name, "not_text")),
+            ("prediction_statistic", v) => {
+                return Err(mistyped(Sentence::StatisticUnknown, name, "not_text")
+                    .with_field("given", given_text(v)));
+            }
             ("inference_config", Value::Null) => {}
             ("inference_config", v @ Value::Object(_)) => asked.inference_config = Some(v.clone()),
-            ("inference_config", _) => return Err(mistyped(name, "not_a_mapping")),
+            ("inference_config", _) => {
+                return Err(mistyped(
+                    Sentence::InferenceConfigNotAnObject,
+                    name,
+                    "not_a_mapping",
+                ));
+            }
             ("rows_per_call", v) => asked.rows_per_call = rows_per_call(v)?,
             ("random_seed", Value::Null) => asked.seed = AskedSeed::Unseeded,
             ("random_seed", v) => {
@@ -333,7 +391,7 @@ pub fn values(given: Option<&Value>) -> Result<Asked, CoreError> {
             // Any value, refused only where the engine refuses it, after the
             // context is labelled (T2.9).
             ("lag_timesteps", v) => asked.lag_timesteps = Some(AskedLag::of(v)),
-            _ => return Err(mistyped(name, "not_an_option")),
+            _ => return Err(mistyped(Sentence::OptionUnknown, name, "not_an_option")),
         }
     }
     Ok(asked)
@@ -351,11 +409,11 @@ pub fn top_k(given: &Value) -> Result<u32, CoreError> {
     match digits.parse::<u32>() {
         Ok(k) if !negative && (1..=MAX_TOP_K).contains(&k) => Ok(k),
         _ => Err(CoreError::new(
-            ErrorKind::InvalidRequest,
-            ErrorCode::InvalidRequest,
+            Sentence::TopKOutOfRange,
             "top_k is not a number of candidates this model ranks",
         )
         .with_field("field", Detail::text("top_k"))
+        .with_field("given", given_text(given))
         .with_field("reason", Detail::text("out_of_range"))
         .with_field("limit", Detail::Scalar(Scalar::UInt32(MAX_TOP_K)))),
     }
@@ -370,7 +428,7 @@ pub fn top_k(given: &Value) -> Result<u32, CoreError> {
 fn lax_boolean(field: &str, value: &Value) -> Result<bool, CoreError> {
     const FALSE: [&str; 6] = ["0", "off", "f", "false", "n", "no"];
     const TRUE: [&str; 6] = ["1", "on", "t", "true", "y", "yes"];
-    let refused = || mistyped(field, "not_a_boolean");
+    let refused = || mistyped(Sentence::OptionNotABoolean, field, "not_a_boolean");
     match value {
         Value::Bool(b) => Ok(*b),
         Value::Number(token) => match token.parse::<f64>() {
@@ -413,12 +471,17 @@ pub fn excluded(asked: &Asked) -> Result<Vec<(String, Vec<Value>)>, CoreError> {
             .iter()
             .map(|(table, columns)| match columns {
                 Value::Array(columns) => Ok((table.clone(), columns.clone())),
-                _ => Err(mistyped(NAME, "not_a_sequence")
-                    .with_field("table", Detail::text(table))
-                    .with_field("given", given_text(columns))),
+                _ => Err(
+                    mistyped(Sentence::ExcludedNotASequence, NAME, "not_a_sequence")
+                        .with_field("table", Detail::text(table))
+                        .with_field("given", given_text(columns)),
+                ),
             })
             .collect(),
-        Some(other) => Err(mistyped(NAME, "not_a_mapping").with_field("given", given_text(other))),
+        Some(other) => Err(
+            mistyped(Sentence::ExcludedNotAMapping, NAME, "not_a_mapping")
+                .with_field("given", given_text(other)),
+        ),
     }
 }
 
@@ -486,19 +549,30 @@ fn iterations(given: &Value) -> Result<Iterations, CoreError> {
             magnitude: Some(u128::from(*b)),
         },
         Value::Number(token) if !is_integer_token(token) => {
-            let f: f64 = token
-                .parse()
-                .map_err(|_| mistyped("max_pq_iterations", "not_a_whole_number"))?;
+            let f: f64 = token.parse().map_err(|_| {
+                mistyped(
+                    Sentence::MaxPqIterationsNotAWholeNumber,
+                    "max_pq_iterations",
+                    "not_a_whole_number",
+                )
+            })?;
             if f.is_nan() || f < 1.0 {
-                return Err(invalid("max_pq_iterations", "below_one"));
+                return Err(invalid(
+                    Sentence::IterationsBelowOne,
+                    "max_pq_iterations",
+                    "below_one",
+                ));
             }
             return Ok(Iterations::Float(f));
         }
         v => magnitude("max_pq_iterations", v)?,
     };
     match magnitude {
-        _ if negative => Err(invalid("max_pq_iterations", "below_one")),
-        Some(0) => Err(invalid("max_pq_iterations", "below_one")),
+        _ if negative || magnitude == Some(0) => Err(invalid(
+            Sentence::IterationsBelowOne,
+            "max_pq_iterations",
+            "below_one",
+        )),
         Some(n) => Ok(Iterations::Whole(u64::try_from(n).unwrap_or(u64::MAX))),
         None => Ok(Iterations::Whole(u64::MAX)),
     }
@@ -506,12 +580,18 @@ fn iterations(given: &Value) -> Result<Iterations, CoreError> {
 
 /// What one hop of the walk keeps of the rows referring to each row it
 /// visits ([`neighbors`]).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Hop {
     /// At most this many of each row's referring rows, latest first; none
     /// for a size between zero and one, as `ROW_NUMBER() <= 0.5` keeps none
     /// while the hop's lookups still run.
     Keep(u64),
+    /// A negative bound reaches the provider; its native predicate or
+    /// limit semantics decide the result (KO3-44).
+    Negative(NegativeNeighborBound),
+    /// Caller-authored provider expression, kept opaque in the original
+    /// neighbor-bound position, not a parsed or normalized row count.
+    Expression(String),
     /// A size of zero: the walk ends before this hop (`neighbors == 0`).
     Stop,
 }
@@ -526,7 +606,11 @@ pub enum Hop {
 pub fn neighbors(asked: &Asked, mode: RunMode) -> Result<Vec<Hop>, CoreError> {
     let Some(given) = &asked.neighbors else {
         if asked.num_hops_none {
-            return Err(mistyped("num_hops", "not_a_whole_number"));
+            return Err(mistyped(
+                Sentence::NumHopsNone,
+                "num_hops",
+                "not_a_whole_number",
+            ));
         }
         let hops = asked
             .num_hops
@@ -555,13 +639,12 @@ pub fn neighbors(asked: &Asked, mode: RunMode) -> Result<Vec<Hop>, CoreError> {
 /// that number); equal to zero
 /// (as a number, never as text) ending the walk (`neighbors == 0`), below
 /// one keeping no rows, else keeping its whole part, any past `u64` read
-/// as `u64::MAX`. Other text, a list or none is refused as mistyped
-/// (`not_a_whole_number`), where the reference's SQL fails (register
-/// P2I-1). A size below zero is refused, `INVALID_REQUEST` (`negative`),
-/// where the reference's three samplers disagree (register P2I-4, KO2-82).
+/// as `u64::MAX`. Other text is caller-authored SQL expression code and
+/// reaches the provider unchanged, where the reference writes it. A
+/// negative numeric bound keeps its sign and value for native provider
+/// semantics (KO3-44); a list or none remains mistyped.
 fn hop(given: &Value) -> Result<Hop, CoreError> {
-    let refused = || mistyped("num_neighbors", "not_a_whole_number");
-    let negative = || invalid("num_neighbors", "negative");
+    let refused = || mistyped(Sentence::HopNotWhole, "num_neighbors", "not_a_whole_number");
     let size = match given {
         Value::Bool(b) => f64::from(u8::from(*b)),
         Value::Text(text) => {
@@ -572,13 +655,18 @@ fn hop(given: &Value) -> Result<Hop, CoreError> {
                 && number
                     .bytes()
                     .all(|b| b.is_ascii_digit() || matches!(b, b'+' | b'-' | b'.' | b'e' | b'E'));
-            let size: f64 = number
-                .parse()
+            let Some(size) = number
+                .parse::<f64>()
                 .ok()
-                .filter(|size: &f64| plain && size.is_finite())
-                .ok_or_else(refused)?;
+                .filter(|size| plain && size.is_finite())
+            else {
+                return Ok(Hop::Expression(text.clone()));
+            };
             if size < 0.0 {
-                return Err(negative());
+                // Preserve the caller's text origin: warehouse sizing
+                // arithmetic refuses text before SQL, while SQL-only
+                // providers evaluate the original expression in place.
+                return Ok(Hop::Expression(text.clone()));
             }
             // `'0' == 0` is false: a zero spelled as text ends nothing.
             return Ok(if size >= 1.0 {
@@ -595,7 +683,11 @@ fn hop(given: &Value) -> Result<Hop, CoreError> {
             {
                 return Ok(match magnitude {
                     Some(0) => Hop::Stop,
-                    _ if negative => return Err(invalid("num_neighbors", "negative")),
+                    _ if negative => {
+                        return NegativeNeighborBound::new(token.clone())
+                            .map(Hop::Negative)
+                            .ok_or_else(refused);
+                    }
                     Some(n) => Hop::Keep(u64::try_from(n).unwrap_or(u64::MAX)),
                     None => Hop::Keep(u64::MAX),
                 });
@@ -608,7 +700,12 @@ fn hop(given: &Value) -> Result<Hop, CoreError> {
         return Err(refused());
     }
     if size < 0.0 {
-        return Err(negative());
+        let Value::Number(token) = given else {
+            return Err(refused());
+        };
+        return NegativeNeighborBound::new(token.clone())
+            .map(Hop::Negative)
+            .ok_or_else(refused);
     }
     Ok(if size == 0.0 {
         Hop::Stop
@@ -640,7 +737,13 @@ pub fn hops_ignored(asked: &Asked) -> Option<String> {
 /// (`to_naive_utc`); a value of another form is refused as mistyped
 /// (`not_a_time`), which no host that holds to the contract sends.
 fn context_anchor(given: &Value) -> Result<AskedAnchor, CoreError> {
-    let refused = || mistyped("context_anchor_time", "not_a_time");
+    let refused = || {
+        mistyped(
+            Sentence::ContextAnchorNotATime,
+            "context_anchor_time",
+            "not_a_time",
+        )
+    };
     match given {
         Value::Null => Ok(AskedAnchor::Absent),
         Value::Text(text) if text == "entity" => Ok(AskedAnchor::Entity),
@@ -684,8 +787,9 @@ pub fn rows_per_call(given: &Value) -> Result<Option<u64>, CoreError> {
         magnitude,
     } = magnitude("rows_per_call", given)?;
     match magnitude {
-        _ if negative => Err(invalid("rows_per_call", "below_one")),
-        Some(0) => Err(invalid("rows_per_call", "below_one")),
+        _ if negative || magnitude == Some(0) => {
+            Err(invalid(Sentence::RowsPerCall, "rows_per_call", "below_one"))
+        }
         Some(n) => Ok(Some(u64::try_from(n).unwrap_or(u64::MAX))),
         None => Ok(Some(u64::MAX)),
     }
@@ -768,7 +872,12 @@ impl RunMode {
 /// fast run; up to a best run's, a best one. Below 1 is `INVALID_REQUEST`;
 /// past a best run's examples, `UNSUPPORTED_REQUEST`, as the endpoint takes
 /// no more.
-pub fn run_mode(asked: Option<Integer>) -> Result<RunMode, CoreError> {
+pub fn run_mode(asked: Option<Integer>, given: Option<&str>) -> Result<RunMode, CoreError> {
+    // A refusal names the size as the caller gave it, its JSON text.
+    let named = |refused: CoreError| match given {
+        Some(given) => refused.with_field("given", Detail::text(given)),
+        None => refused,
+    };
     let Some(Integer {
         negative,
         magnitude: value,
@@ -777,25 +886,27 @@ pub fn run_mode(asked: Option<Integer>) -> Result<RunMode, CoreError> {
         return Ok(RunMode::Fast);
     };
     if negative || value == Some(0) {
-        return Err(CoreError::new(
-            ErrorKind::InvalidRequest,
-            ErrorCode::InvalidRequest,
-            "num_context_samples is at least 1",
-        )
-        .with_field("field", Detail::text("num_context_samples")));
+        return Err(named(
+            CoreError::new(
+                Sentence::NumContextSamplesBelowOne,
+                "num_context_samples is at least 1",
+            )
+            .with_field("field", Detail::text("num_context_samples")),
+        ));
     }
     match value {
         Some(n) if n <= RunMode::Fast.context_examples() as u128 => Ok(RunMode::Fast),
         Some(n) if n <= RunMode::Best.context_examples() as u128 => Ok(RunMode::Best),
-        _ => Err(CoreError::new(
-            ErrorKind::Unsupported,
-            ErrorCode::UnsupportedRequest,
-            "num_context_samples is past the most context the endpoint takes",
-        )
-        .with_field("field", Detail::text("num_context_samples"))
-        .with_field(
-            "limit",
-            Detail::Scalar(Scalar::UInt64(RunMode::Best.context_examples() as u64)),
+        _ => Err(named(
+            CoreError::new(
+                Sentence::NumContextSamplesPastMost,
+                "num_context_samples is past the most context the endpoint takes",
+            )
+            .with_field("field", Detail::text("num_context_samples"))
+            .with_field(
+                "limit",
+                Detail::Scalar(Scalar::UInt64(RunMode::Best.context_examples() as u64)),
+            ),
         )),
     }
 }
@@ -827,14 +938,22 @@ pub fn hops(num_hops: Option<Integer>, num_neighbors: Option<Integer>) -> Result
         None => error,
     };
     if negative || value == Some(0) {
-        return Err(named(invalid(field, "no_hop"))
+        let sentence = if field == "num_hops" {
+            Sentence::NoHopNumHops
+        } else {
+            Sentence::NoHopNumNeighbors
+        };
+        return Err(named(invalid(sentence, field, "no_hop"))
             .with_field("limit", Detail::Scalar(Scalar::UInt64(HOPS_MAX as u64))));
     }
     if value.is_none_or(|n| n > HOPS_MAX) {
         return Err(named(
             CoreError::new(
-                ErrorKind::Unsupported,
-                ErrorCode::UnsupportedRequest,
+                if asked.is_some() {
+                    Sentence::HopsPastEndpoint
+                } else {
+                    Sentence::HopsPastEndpointUncounted
+                },
                 "the sampling options ask more hops than the endpoint reads",
             )
             .with_field("field", Detail::text(field))
@@ -848,10 +967,9 @@ pub fn hops(num_hops: Option<Integer>, num_neighbors: Option<Integer>) -> Result
 /// (`PREDICTION_STATISTICS`).
 pub const STATISTICS: [&str; 2] = ["mean", "median"];
 
-fn invalid(field: &'static str, reason: &'static str) -> CoreError {
+fn invalid(sentence: Sentence, field: &'static str, reason: &'static str) -> CoreError {
     CoreError::new(
-        ErrorKind::InvalidRequest,
-        ErrorCode::InvalidRequest,
+        sentence,
         "an option of the call is not one the engine reads",
     )
     .with_field("field", Detail::text(field))
@@ -864,7 +982,12 @@ pub fn statistic(given: Option<&str>) -> Result<Option<String>, CoreError> {
     match given {
         None => Ok(None),
         Some(name) if STATISTICS.contains(&name) => Ok(Some(name.to_owned())),
-        Some(_) => Err(invalid("prediction_statistic", "not_a_statistic")),
+        Some(name) => Err(invalid(
+            Sentence::StatisticUnknown,
+            "prediction_statistic",
+            "not_a_statistic",
+        )
+        .with_field("given", given_text(&Value::Text(name.to_owned())))),
     }
 }
 
@@ -872,8 +995,12 @@ pub fn statistic(given: Option<&str>) -> Result<Option<String>, CoreError> {
 /// (`_record_the_statistic`): refused, as the reference refuses it.
 pub fn statistic_for(kind: Kind, statistic: Option<&String>) -> Result<(), CoreError> {
     if statistic.is_some() && kind != Kind::Regression {
-        return Err(invalid("prediction_statistic", "not_a_regression")
-            .with_field("task", Detail::text(kind.wire_name())));
+        return Err(invalid(
+            Sentence::StatisticNotARegression,
+            "prediction_statistic",
+            "not_a_regression",
+        )
+        .with_field("task", Detail::text(kind.wire_name())));
     }
     Ok(())
 }
@@ -913,7 +1040,14 @@ const OUTPUT_TYPES: [&str; 3] = ["mean", "median", "quantiles"];
 /// A refusal of the inference option `key`: `INVALID_REQUEST`, as the
 /// engine's validation error is the caller's (a `ValueError`).
 fn option_refused(key: &str, reason: &'static str) -> CoreError {
-    invalid("inference_config", reason).with_field("key", Detail::text(key))
+    let sentence = match reason {
+        "not_a_boolean" => Sentence::InferenceOptionNotABoolean,
+        "not_a_whole_number" | "out_of_range" => Sentence::InferenceOptionNotOneToFour,
+        "not_a_list" | "not_a_transform" => Sentence::InferenceOptionNotTransforms,
+        "not_an_output_type" => Sentence::InferenceOptionNotAnOutputType,
+        _ => Sentence::InferenceOptionUnknown,
+    };
+    invalid(sentence, "inference_config", reason).with_field("key", Detail::text(key))
 }
 
 /// A boolean option given as text, read as the engine's validation
@@ -1079,11 +1213,33 @@ pub fn options(kind: Kind, given: Option<&Value>) -> Result<Options, CoreError> 
         return Ok(options);
     };
     let Value::Object(members) = given else {
-        return Err(invalid("inference_config", "not_an_object"));
+        return Err(invalid(
+            Sentence::InferenceConfigNotAnObject,
+            "inference_config",
+            "not_an_object",
+        ));
     };
     for (key, value) in members {
         match key.as_str() {
-            "num_estimators" => options.num_estimators = estimators(key, value)?,
+            "num_estimators" => {
+                let nonfinite = match value {
+                    Value::Number(token) if token == "NaN" => Some(f64::NAN),
+                    Value::Number(token) if token == "Infinity" => Some(f64::INFINITY),
+                    Value::Number(token) if token == "-Infinity" => Some(f64::NEG_INFINITY),
+                    _ => None,
+                };
+                if let Some(given) = nonfinite {
+                    return Err(invalid(
+                        Sentence::InferenceOptionNotFinite,
+                        "inference_config",
+                        "not_finite",
+                    )
+                    .with_field("key", Detail::text(key))
+                    .with_field("task", Detail::text(kind.wire_name()))
+                    .with_field("given", Detail::Scalar(Scalar::Float64(given))));
+                }
+                options.num_estimators = estimators(key, value)?;
+            }
             "column_shuffle" => options.column_shuffle = boolean(key, value)?,
             "category_shuffle" => options.category_shuffle = boolean(key, value)?,
             "hop_shuffle" => options.hop_shuffle = boolean(key, value)?,
@@ -1150,6 +1306,7 @@ impl Options {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sdm_contract::ErrorCode;
 
     fn read(text: &str) -> Value {
         sdm_wire::json::read(text.as_bytes()).unwrap()
@@ -1168,18 +1325,27 @@ mod tests {
 
     #[test]
     fn the_run_mode_is_the_client_s() {
-        assert_eq!(run_mode(None).unwrap(), RunMode::Fast);
-        assert_eq!(run_mode(int(false, Some(1))).unwrap(), RunMode::Fast);
-        assert_eq!(run_mode(int(false, Some(1_000))).unwrap(), RunMode::Fast);
-        assert_eq!(run_mode(int(false, Some(1_001))).unwrap(), RunMode::Best);
-        assert_eq!(run_mode(int(false, Some(10_000))).unwrap(), RunMode::Best);
+        assert_eq!(run_mode(None, None).unwrap(), RunMode::Fast);
+        assert_eq!(run_mode(int(false, Some(1)), None).unwrap(), RunMode::Fast);
+        assert_eq!(
+            run_mode(int(false, Some(1_000)), None).unwrap(),
+            RunMode::Fast
+        );
+        assert_eq!(
+            run_mode(int(false, Some(1_001)), None).unwrap(),
+            RunMode::Best
+        );
+        assert_eq!(
+            run_mode(int(false, Some(10_000)), None).unwrap(),
+            RunMode::Best
+        );
         for (asked, code) in [
             (int(false, Some(0)), ErrorCode::InvalidRequest),
             (int(true, Some(5)), ErrorCode::InvalidRequest),
             (int(false, Some(10_001)), ErrorCode::UnsupportedRequest),
             (int(false, None), ErrorCode::UnsupportedRequest),
         ] {
-            assert_eq!(run_mode(asked).unwrap_err().code, code, "{asked:?}");
+            assert_eq!(run_mode(asked, None).unwrap_err().code, code, "{asked:?}");
         }
     }
 
@@ -1562,10 +1728,85 @@ mod tests {
         }
     }
 
+    #[test]
+    fn nonfinite_estimators_reach_the_task_validator_without_leaking_into_payloads() {
+        for kind in [Kind::Regression, Kind::Binary, Kind::Multiclass] {
+            for token in ["NaN", "Infinity", "-Infinity"] {
+                let raw = format!(r#"{{"inference_config":{{"num_estimators":{token}}}}}"#);
+                let value = sdm_wire::json::read_options(raw.as_bytes()).unwrap();
+                let asked = values(Some(&value)).unwrap();
+                let error = options(kind, asked.inference_config.as_ref()).unwrap_err();
+                assert_eq!(error.sentence, Sentence::InferenceOptionNotFinite);
+                assert_eq!(error.fields["task"], Detail::text(kind.wire_name()));
+                assert_eq!(error.fields["key"], Detail::text("num_estimators"));
+                let given = match token {
+                    "NaN" => f64::NAN,
+                    "Infinity" => f64::INFINITY,
+                    _ => f64::NEG_INFINITY,
+                };
+                assert_eq!(
+                    error.fields["given"],
+                    Detail::Scalar(Scalar::Float64(given))
+                );
+            }
+        }
+        for (raw, sentence) in [
+            (
+                r#"{"column_shuffle":Infinity}"#,
+                Sentence::InferenceOptionNotABoolean,
+            ),
+            (
+                r#"{"target_transforms":[NaN]}"#,
+                Sentence::InferenceOptionNotTransforms,
+            ),
+            (r#"{"class_shuffle":NaN}"#, Sentence::InferenceOptionUnknown),
+            (
+                r#"{"num_estimators":"NaN"}"#,
+                Sentence::InferenceOptionNotOneToFour,
+            ),
+            (
+                r#"{"num_estimators":1e400}"#,
+                Sentence::InferenceOptionNotOneToFour,
+            ),
+        ] {
+            let value = sdm_wire::json::read_options(raw.as_bytes()).unwrap();
+            assert_eq!(
+                options(Kind::Regression, Some(&value))
+                    .unwrap_err()
+                    .sentence,
+                sentence
+            );
+        }
+    }
+
     /// `lag_timesteps` read as the engine meets each value (T2.9): refused
     /// for any query where it is negative or not ordered against zero, for
     /// a temporal one where it is not whole or past `u64`, and otherwise
     /// the steps a temporal query adds, none for a static one.
+    #[test]
+    fn only_the_legacy_nan_lag_is_admitted_from_nonfinite_option_tokens() {
+        let given = sdm_wire::json::read_options(br#"{"lag_timesteps":NaN}"#).unwrap();
+        assert_eq!(
+            values(Some(&given)).unwrap().lag_timesteps,
+            Some(AskedLag::Steps(0))
+        );
+        for (text, field) in [
+            (br#"{"num_hops":NaN}"#.as_slice(), "num_hops"),
+            (br#"{"lag_timesteps":Infinity}"#.as_slice(), "lag_timesteps"),
+            (
+                br#"{"inference_config":[NaN]}"#.as_slice(),
+                "inference_config",
+            ),
+        ] {
+            let given = sdm_wire::json::read_options(text).unwrap();
+            let error = values(Some(&given)).unwrap_err();
+            assert_eq!(error.code, ErrorCode::InvalidRequest);
+            assert_eq!(error.fields["field"], Detail::text(field));
+        }
+        let text = asked(r#"{"lag_timesteps":"NaN"}"#);
+        assert!(text.lag_timesteps.unwrap().refusal(true).is_err());
+    }
+
     #[test]
     fn lag_timesteps_is_refused_where_the_engine_refuses_it() {
         let lag = |text: &str| {
@@ -1680,18 +1921,29 @@ mod tests {
             neighbors(&given, RunMode::Fast).unwrap(),
             vec![Hop::Keep(5), Hop::Keep(1), Hop::Stop, Hop::Keep(3)]
         );
-        // A size below zero, which the reference's samplers read three
-        // ways, refused naming the hop (P2I-4, KO2-82).
-        for sizes in ["[4, -1]", "[4, -0.5]", r#"[4, "-2"]"#] {
-            let e = neighbors(
-                &asked(&format!(r#"{{"num_neighbors": {sizes}}}"#)),
-                RunMode::Fast,
-            )
-            .unwrap_err();
-            assert_eq!(e.code, ErrorCode::InvalidRequest, "{sizes}");
-            assert_eq!(e.fields["field"], Detail::text("num_neighbors"));
-            assert_eq!(reason(&e), Detail::text("negative"), "{sizes}");
-            assert_eq!(e.fields["hop"], Detail::Scalar(Scalar::UInt64(1)));
+        // Numeric bounds keep their sign; caller text retains its origin
+        // for capability-driven warehouse lookback arithmetic.
+        for (sizes, wanted) in [
+            (
+                "[4, -1]",
+                Hop::Negative(sdm_contract::data::NegativeNeighborBound::new("-1".into()).unwrap()),
+            ),
+            (
+                "[4, -0.5]",
+                Hop::Negative(
+                    sdm_contract::data::NegativeNeighborBound::new("-0.5".into()).unwrap(),
+                ),
+            ),
+            (r#"[4, "-2"]"#, Hop::Expression("-2".into())),
+        ] {
+            assert_eq!(
+                neighbors(
+                    &asked(&format!(r#"{{"num_neighbors": {sizes}}}"#)),
+                    RunMode::Fast
+                )
+                .unwrap(),
+                vec![Hop::Keep(4), wanted],
+            );
         }
         assert_eq!(hops_ignored(&given), None);
         let wide = asked(r#"{"num_neighbors": [100000000000000000000000000000]}"#);
@@ -1723,14 +1975,7 @@ mod tests {
             neighbors(&spaced, RunMode::Fast).unwrap(),
             vec![Hop::Keep(3), Hop::Keep(10), Hop::Keep(0)]
         );
-        for size in [
-            r#""x""#,
-            r#""3 OR TRUE""#,
-            r#""inf""#,
-            r#""""#,
-            "null",
-            "[1]",
-        ] {
+        for size in ["null", "[1]"] {
             let e = neighbors(
                 &asked(&format!(r#"{{"num_neighbors": [{size}]}}"#)),
                 RunMode::Fast,
@@ -1739,6 +1984,26 @@ mod tests {
             assert_eq!(e.fields["field"], Detail::text("num_neighbors"), "{size}");
             assert_eq!(reason(&e), Detail::text("not_a_whole_number"), "{size}");
         }
+    }
+
+    #[test]
+    fn owner_admitted_neighbor_values_keep_their_distinct_meanings() {
+        let values = asked(
+            r#"{"num_neighbors": [-1, -0.5, "-2", "3 OR TRUE", "nonsense", 18446744073709551615]}"#,
+        );
+        assert_eq!(
+            neighbors(&values, RunMode::Fast).unwrap(),
+            vec![
+                Hop::Negative(sdm_contract::data::NegativeNeighborBound::new("-1".into()).unwrap()),
+                Hop::Negative(
+                    sdm_contract::data::NegativeNeighborBound::new("-0.5".into()).unwrap()
+                ),
+                Hop::Expression("-2".into()),
+                Hop::Expression("3 OR TRUE".into()),
+                Hop::Expression("nonsense".into()),
+                Hop::Keep(u64::MAX),
+            ]
+        );
     }
 
     #[test]

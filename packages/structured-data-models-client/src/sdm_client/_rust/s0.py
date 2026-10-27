@@ -19,79 +19,58 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from sdm_client._rust import errors
+from sdm_client._rust import errors, results
 from sdm_client._rust.run import run
 from sdm_client.errors import StructuredDataError
 
 #: The core's warnings the old validator gives on this route in the
 #: reference's own words when the core accepts the query: a day-first date
 #: literal (D4), which the shadow check's validator reads with
-#: ``pd.to_datetime``. They are held while the core validates and shown
+#: ``pd.to_datetime``, and the decoder's deprecated string escape. They are
+#: held while the core validates and shown
 #: only when it refuses, since a refused query meets no shadow check.
 #: Bridge code: it goes with the shadow check in Phase 5, and the core's
 #: warning is shown then.
-SHADOWED = frozenset({'DATE_LITERAL_DAY_FIRST'})
+SHADOWED = frozenset({'DATE_LITERAL_DAY_FIRST', 'INVALID_STRING_ESCAPE'})
 
 if TYPE_CHECKING:
-    from predictive_query import Profile, ValidatedPredictiveQuery
+    from predictive_query import ValidatedPredictiveQuery
+
+    from sdm_client._rust.results import QueryFacts
 
 
-def _profile(profile: Profile) -> dict[str, Any]:
-    r"""A profile as the contract's ``ProfileSpec``: one of the named five."""
-    import predictive_query.profiles as named
+#: The language's named profiles, which the core validates a query for.
+PROFILES = ('FINE_TUNING', 'RELATIONAL', 'TABULAR', 'TIMESERIES', 'ANOMALY')
 
-    for name in (
-        'FINE_TUNING',
-        'RELATIONAL',
-        'TABULAR',
-        'TIMESERIES',
-        'ANOMALY',
-    ):
-        if getattr(named, name) == profile:
-            return {'name': name, 'model': None}
+
+def _profile(profile: str) -> dict[str, Any]:
+    r"""A profile, named, as the contract's ``ProfileSpec``: one of the
+    named five, with no object of the old PQL package (T3.16, rule 11)."""
+    if profile in PROFILES:
+        return {'name': profile, 'model': None}
     raise StructuredDataError(
         'the core validates a query for one of the named profiles only',
         code='INTERNAL_ERROR',
     )
 
 
-def _schema(definition: Any) -> dict[str, Any]:
-    r"""A PQL schema definition as the contract's ``QuerySchema``."""
-    tables = [
-        {
-            'name': name,
-            'columns': [
-                {
-                    'name': column.name,
-                    'dtype': column.dtype.value,
-                    'stype': column.stype.value,
-                }
-                for column in table.cols
-            ],
-            'primary_key': table.pkey,
-            'time_column': table.time_col,
-            'end_time_column': table.end_time_col,
-        }
-        for name, table in definition.tables.items()
-    ]
-    links = [
-        [
-            {'table': key.table_name, 'column': key.col_name}
-            for key in group.columns
-        ]
-        for group in definition.col_groups
-    ]
-    return {'tables': tables, 'links': links}
-
-
 def validate(
-    text: str, definition: Any, profile: Profile
-) -> tuple[bool, list[str]]:
-    r"""The core's answer: whether it accepts ``text``, and its reasons if not.
+    text: str, schema: dict[str, Any], profile: str
+) -> tuple[bool, list[str], list[dict[str, Any]], QueryFacts | None]:
+    r"""The core's answer over ``schema``, the contract's ``QuerySchema``
+    (:func:`~sdm_client._rust.spec.query_schema`, written with no object of
+    the old PQL package, T3.16): whether it accepts ``text``, its reasons if
+    not, the warnings it held of an accepted query (:data:`SHADOWED`), and
+    what it resolved of an accepted one (``validate_query``'s ``query``,
+    contract v28: its text as the core writes it back, its forecast's
+    steps).
 
     The query text and the schema travel as attachments, so neither the
     query's length nor the schema's width meets the control cap
-    (decision H5).
+    (decision H5). The shadow check's validator says an accepted query's
+    literal warnings itself; a caller that runs no shadow check (a query
+    the core gathers alone, T3.8) shows the held warnings
+    (``errors.warn_held``).
     """
     from sdm_client._rust import codec
 
@@ -103,31 +82,35 @@ def validate(
     }
     attachments = {
         1: codec.attachment(text),
-        2: codec.attachment(_schema(definition)),
+        2: codec.attachment(schema),
     }
     kept: list[dict[str, Any]] = []
     try:
-        result = run(operation, attachments, quiet=SHADOWED, kept=kept).result
+        result = results.expect(
+            run(operation, attachments, quiet=SHADOWED, kept=kept).result,
+            results.Validated,
+        )
     except StructuredDataError:
         # A run that ends with an error after reading a day-first literal
         # (a packed literal after it, say) meets no shadow check either:
         # the literal's warning is shown before the error (carried row U1).
         errors.warn_held(kept)
         raise
-    if not result['accepted']:
+    if not result.accepted:
         # No shadow check follows a refusal: the core's warnings are the
         # only ones the caller gets.
         errors.warn_held(kept)
+        kept = []
     reasons = [
-        diagnostic['message']
-        for diagnostic in result['diagnostics']
-        if diagnostic['severity'] == 'error'
+        diagnostic.message
+        for diagnostic in result.diagnostics
+        if diagnostic.severity == 'error'
     ]
-    return bool(result['accepted']), reasons
+    return result.accepted, reasons, kept, result.query
 
 
 def shadow(
-    text: str, definition: Any, profile: Profile
+    text: str, definition: Any, profile: str
 ) -> ValidatedPredictiveQuery:
     r"""The old validator's resolved query for a query the core accepted.
 
@@ -136,7 +119,9 @@ def shadow(
     """
     from predictive_query import validate as old
 
-    resolved, response = old(text, definition, profile)
+    from sdm_client.base import language_profile
+
+    resolved, response = old(text, definition, language_profile(profile))
     if resolved is None or not response.ok:
         raise StructuredDataError(
             'the core accepted a query the old validator refuses; this is a '

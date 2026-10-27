@@ -119,6 +119,14 @@ EXPECTED: dict[str, tuple[str, ...]] = {
     'test_arrow_lifetimes.py': (
         'test_the_canonical_set_is_every_type_of_the_closed_set',
         'test_canonical_inputs_cross_sharing_their_buffers',
+        'test_unaligned_offsets_are_refused_before_the_importer_reads_them[utf8-offsets]',
+        'test_unaligned_offsets_are_refused_before_the_importer_reads_them[dictionary-values]',
+        'test_valid_unaligned_values_are_copied_before_typed_construction[primitive]',
+        'test_valid_unaligned_values_are_copied_before_typed_construction[nested]',
+        'test_valid_unaligned_values_are_copied_before_typed_construction[dictionary-indices]',
+        'test_valid_unaligned_decimal_keeps_exact_values_metadata_and_nulls[12]',
+        'test_valid_unaligned_decimal_keeps_exact_values_metadata_and_nulls[12345678901234567890123456789]',
+        'test_empty_primitive_dangling_buffer_remains_admissible',
         'test_the_run_holds_the_producer_s_memory_and_releases_it_exactly',
         'test_an_output_stays_valid_after_its_input_its_run_s_error_and_its_run',
         'test_admitted_types_match_the_expected_canonical_schema',
@@ -145,6 +153,20 @@ EXPECTED: dict[str, tuple[str, ...]] = {
         'test_a_null_in_the_first_page_is_refused',
         'test_a_null_in_a_middle_page_is_refused',
         'test_a_valid_paged_answer_reads_whole',
+    ),
+    'test_results.py': (
+        'test_every_result_variant_has_a_sample',
+        'test_a_validation_decodes_typed',
+        'test_a_description_and_an_edit_decode_typed',
+        'test_a_materialized_request_decodes_typed',
+        'test_a_prediction_decodes_typed',
+        'test_source_facts_read_and_write_as_the_contract_spells_them',
+        'test_a_result_of_another_shape_is_refused_by_name[describe_source]',
+        'test_a_result_of_another_shape_is_refused_by_name[edit_schema]',
+        'test_a_result_of_another_shape_is_refused_by_name[materialize]',
+        'test_a_result_of_another_shape_is_refused_by_name[predict]',
+        'test_a_result_of_another_shape_is_refused_by_name[validate_query]',
+        'test_an_operation_the_host_does_not_know_is_refused_by_name',
     ),
     'test_test_ops.py': (
         'test_another_thread_runs_and_logs_while_the_core_holds_a_call',
@@ -314,7 +336,7 @@ def suite(
     builder = tests / 'messages.py'
     text = builder.read_text() if builder.is_file() else ''
     staged, count = re.subn(
-        r'^CONTRACT = \d+$',
+        r'^CONTRACT = (?:\d+|_crate_version\(\))$',
         f'CONTRACT = {int(declared[0])}',
         text,
         flags=re.MULTILINE,

@@ -20,8 +20,8 @@ use std::collections::BTreeSet;
 use arrow_array::RecordBatch;
 use arrow_schema::{DataType, Field, Schema};
 use sdm_contract::data::{EXACT_NUMBER_MARKED, EXACT_NUMBER_MARKER, Relation};
-use sdm_contract::ops::{Dtype, ExactNumber, Stype};
-use sdm_contract::{ColumnType, CoreError, Detail, ErrorCode, ErrorKind, Scalar, Unit};
+use sdm_contract::ops::{Dtype, ExactNumber, SourceFacts, Stype};
+use sdm_contract::{ColumnType, CoreError, Detail, Scalar, Sentence, Unit};
 
 use crate::names;
 use crate::not_yet;
@@ -168,6 +168,8 @@ pub enum Taken {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct TimeChoice {
     pub column: Option<String>,
+    /// The view dimensions that truncate or cast the chosen raw column.
+    pub instead_of: Vec<String>,
     pub how: Option<Taken>,
     /// The columns it was chosen from, itself included.
     pub among: Vec<String>,
@@ -194,6 +196,11 @@ impl TimeChoice {
         };
         TimeChoice {
             column: (!linked).then(|| fallback.clone()),
+            instead_of: if !linked && self.column.as_ref() == Some(fallback) {
+                self.instead_of.clone()
+            } else {
+                vec![]
+            },
             how: (!linked).then_some(Taken::EditStamp),
             among: if linked {
                 vec![]
@@ -262,24 +269,35 @@ pub struct InferredTable {
     /// The table's time column: inference's choice until the caller names
     /// one (`crate::assemble::apply_keys_and_times`).
     pub time_column: Option<String>,
-    /// The column sets the catalog declares a primary or unique key over,
-    /// which the source refuses to repeat.
+    /// The column sets the catalog declares a primary or unique key over
+    /// that the source enforces, refusing to repeat them
+    /// ([`CatalogKey::enforced`]).
     pub unique: Vec<BTreeSet<String>>,
+    /// The columns the catalog declares a primary or unique key of alone,
+    /// enforced or not (a Databricks key is declared and not enforced): a
+    /// key over one of them is the catalog's, held to its count as a
+    /// declared key is (`crate::keys::hold`).
+    pub declared: BTreeSet<String>,
 }
 
 impl InferredTable {
     /// Whether the source refuses both a repeated value of `key` and a row
     /// missing part of it, which leaves nothing to count.
     pub fn enforces(&self, key: &[String]) -> bool {
-        let names: BTreeSet<&String> = key.iter().collect();
-        let unique = self
-            .unique
-            .iter()
-            .any(|set| set.iter().all(|column| names.contains(column)));
+        let unique = self.keeps_unique(key);
         let never_null = key
             .iter()
             .all(|name| self.columns.iter().any(|c| &c.name == name && !c.nullable));
         unique && never_null
+    }
+
+    /// Whether the source keeps `key` unique: a declared primary or unique
+    /// key within it, whether or not its columns may hold a null.
+    pub fn keeps_unique(&self, key: &[String]) -> bool {
+        let names: BTreeSet<&String> = key.iter().collect();
+        self.unique
+            .iter()
+            .any(|set| set.iter().all(|column| names.contains(column)))
     }
 
     /// The column `name`, if the table has it.
@@ -290,14 +308,17 @@ impl InferredTable {
 
 /// The owner's switch of P1B-11 (2026-10-13): an empty table is refused as
 /// an invalid request, which the reference's unnamed error says it is, not
-/// as a rule the core lacks; the operation and rule stay named.
-fn invalid_request(refusal: CoreError) -> CoreError {
-    CoreError {
-        kind: ErrorKind::InvalidRequest,
-        code: ErrorCode::InvalidRequest,
-        message: "a table of the source holds no rows".to_owned(),
-        ..refusal
-    }
+/// as a rule the core lacks; the operation and rule stay named, and the
+/// table is named by its source, as the reference's error names it.
+pub fn empty_table(source: &Relation) -> CoreError {
+    let refused = not_yet("empty_table");
+    CoreError::new(Sentence::EmptyTable, "a table of the source holds no rows")
+        .with_field("operation", refused.fields["operation"].clone())
+        .with_field("rule", refused.fields["rule"].clone())
+        .with_field(
+            "source",
+            Detail::List(source.source.iter().cloned().map(Scalar::Utf8).collect()),
+        )
 }
 
 /// Infers table `name`, read as `source` in the source, from its catalog
@@ -371,6 +392,65 @@ impl Previewed {
     }
 }
 
+impl Previewed {
+    /// The columns of `among` the time column's choice reads over every
+    /// row of the table ([`Previewed::whole_table_columns`]), for a choice
+    /// among them alone ([`choose_among`]).
+    pub fn whole_table_columns_among(&self, among: &[String]) -> Vec<String> {
+        if (self.rows as u64) < PREVIEW_ROWS {
+            return vec![];
+        }
+        among
+            .iter()
+            .filter(|name| {
+                self.table
+                    .columns
+                    .iter()
+                    .any(|c| c.name == **name && c.stype == Stype::Timestamp)
+                    && !self.table.primary_key.contains(*name)
+                    && !names::is_load_stamp(name)
+                    && !names::is_birth_date(name)
+            })
+            .cloned()
+            .collect()
+    }
+}
+
+/// The time column of a semantic model's table chosen among `among` alone,
+/// as the old client's `_infer_time_column_among` chooses it
+/// (`RE/base/table.py:859-893`): the choice of [`finish`] over those
+/// columns, `whole` the whole table's reading of
+/// [`Previewed::whole_table_columns_among`] where one was asked, `failed`
+/// where asking it failed. A column of `among` that holds no timestamp is
+/// no candidate.
+pub fn choose_among(
+    previewed: &Previewed,
+    among: &[String],
+    whole: Option<&WholeTable>,
+    failed: bool,
+) -> Result<TimeChoice, CoreError> {
+    let table = &previewed.table;
+    let mut columns = table.columns.clone();
+    for column in &mut columns {
+        if !among.contains(&column.name) && column.stype == Stype::Timestamp {
+            // Not offered: read as no timestamp, so never a candidate.
+            column.stype = Stype::Numerical;
+        }
+    }
+    choose_time_column(
+        &columns,
+        &Read {
+            instants: &previewed.instants,
+            presence: &previewed.presence,
+            firsts: &previewed.firsts,
+        },
+        previewed.rows,
+        &table.primary_key,
+        whole,
+        failed,
+    )
+}
+
 /// Chooses the time column of a table inferred from its preview
 /// ([`choose_time_column`]), reading `whole`, the answer to the source
 /// about [`Previewed::whole_table_columns`], where those are not empty. A
@@ -409,8 +489,7 @@ fn choose(
         }
         _ => {
             return Err(CoreError::new(
-                ErrorKind::Internal,
-                ErrorCode::InternalError,
+                Sentence::Internal,
                 "the time column's choice was given another reading of the whole table than it asks",
             ));
         }
@@ -460,29 +539,234 @@ pub fn preview(
     times: &dyn TextTimes,
     floats: Floats,
 ) -> Result<Previewed, CoreError> {
+    preview_keyed(
+        name,
+        source,
+        catalog,
+        constraints,
+        schema,
+        batches,
+        times,
+        floats,
+        false,
+    )
+}
+
+/// The single-column keys a table's catalog declares, as inference reads
+/// them: its primary key's, and the columns the source keeps unique.
+struct Keyed {
+    /// The one column of each declared primary key of one column.
+    primary: BTreeSet<String>,
+    /// The one column of each primary, unique or partial unique key of one
+    /// column, enforced or not, and each column the source keeps unique by
+    /// itself: the columns the catalog makes a key of.
+    declared: BTreeSet<String>,
+    /// The one column of each primary, unique or partial unique key of one
+    /// column, and each column the source keeps unique by itself.
+    unique: BTreeSet<String>,
+}
+
+impl Keyed {
+    fn of(catalog: &[CatalogColumn], constraints: &[CatalogKey]) -> Keyed {
+        let single = |kinds: &[KeyKind], enforced: bool| -> BTreeSet<String> {
+            constraints
+                .iter()
+                .filter(|c| kinds.contains(&c.kind) && c.columns.len() == 1)
+                .filter(|c| c.enforced || !enforced)
+                .map(|c| c.columns[0].clone())
+                .collect()
+        };
+        // A column the source keeps unique by itself (a SQLite rowid alias)
+        // is unique as a key of its own is; a partial unique index keeps its
+        // one column unique as the reference reads it (SQLite's
+        // `unique_keys`), but makes no key of several. A key the source
+        // declares and does not enforce (Databricks') keeps nothing unique.
+        let mut unique = single(
+            &[KeyKind::Primary, KeyKind::Unique, KeyKind::PartialUnique],
+            true,
+        );
+        unique.extend(catalog.iter().filter(|c| c.unique).map(|c| c.name.clone()));
+        let mut declared = single(
+            &[KeyKind::Primary, KeyKind::Unique, KeyKind::PartialUnique],
+            false,
+        );
+        declared.extend(catalog.iter().filter(|c| c.unique).map(|c| c.name.clone()));
+        Keyed {
+            primary: single(&[KeyKind::Primary], false),
+            declared,
+            unique,
+        }
+    }
+
+    /// What the source says of `declared`, whose preview returned `field`
+    /// (T3.16: one reading for `describe_source` and `materialize`): the type
+    /// its declaration fixes, where the catalog reads one (SQLite's, as the
+    /// reference types a column by it first, whatever its values), else its
+    /// values' type; the type admitted; whether it may hold no value (a
+    /// primary key holds none, but where the source lets one, SQLite's not
+    /// its rowid alias, as its catalog says); whether a key of it alone
+    /// keeps it unique; and whether it is a column of exact numbers.
+    fn facts(
+        &self,
+        relation: &Relation,
+        declared: &CatalogColumn,
+        field: &Field,
+        constraints: &[CatalogKey],
+    ) -> Result<SourceFacts, CoreError> {
+        let dtype = match declared.dtype {
+            // A declaration the reference reads as unsupported (Databricks'
+            // struct, map or interval, `_to_dtype`) is refused by name, as
+            // a struct or map the values give is (register P1B-10).
+            Some(Dtype::Unsupported) => return Err(not_yet("column_type")),
+            Some(declared) => declared,
+            None => dtype_of(field.data_type())?,
+        };
+        let is_primary = declared.primary_key || self.primary.contains(&declared.name);
+        Ok(SourceFacts {
+            relation: relation.clone(),
+            dtype,
+            received: ColumnType::from_arrow(&declared.name, field.data_type())?,
+            nullable: !declared.not_null && (!is_primary || declared.key_nullable),
+            unique: self.unique.contains(&declared.name),
+            declared_type: None,
+            exact_number: exact_number(field, constraints),
+        })
+    }
+}
+
+/// What the source says of each column of a table whose catalog declares
+/// `catalog` and `constraints` and whose preview returned `schema`, in the
+/// catalog's order, as [`preview_keyed`] reads it, with no inference: the
+/// facts `materialize` reads of a column the host's schema holds none of
+/// (T3.16). The declared type of a big integer is the caller's to set.
+pub fn source_facts(
+    relation: &Relation,
+    catalog: &[CatalogColumn],
+    constraints: &[CatalogKey],
+    schema: &Schema,
+) -> Result<Vec<(String, SourceFacts)>, CoreError> {
+    if schema.fields().len() != catalog.len() {
+        return Err(CoreError::new(
+            Sentence::Internal,
+            "a preview holds another number of columns than its catalog",
+        ));
+    }
+    let keyed = Keyed::of(catalog, constraints);
+    catalog
+        .iter()
+        .zip(schema.fields())
+        .map(|(declared, field)| {
+            Ok((
+                declared.name.clone(),
+                keyed.facts(relation, declared, field, constraints)?,
+            ))
+        })
+        .collect()
+}
+
+/// [`preview`], where `key_stated` says whether the caller names the
+/// table's key (`primary_keys=`, or a schema's own key): the key inference
+/// would take then never decides anything, so one of a type no key takes is
+/// left unset rather than refused (T3.8 fix 3), and the caller's key is
+/// applied after, as the reference applies a named key over any it read.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the table, its catalog, its preview and the source's two readings"
+)]
+pub fn preview_keyed(
+    name: &str,
+    source: &Relation,
+    catalog: &[CatalogColumn],
+    constraints: &[CatalogKey],
+    schema: &Schema,
+    batches: &[RecordBatch],
+    times: &dyn TextTimes,
+    floats: Floats,
+    key_stated: bool,
+) -> Result<Previewed, CoreError> {
+    preview_with(
+        name,
+        source,
+        catalog,
+        constraints,
+        schema,
+        batches,
+        times,
+        floats,
+        Keying::Inferred { stated: key_stated },
+    )
+}
+
+/// How a preview's table is keyed.
+#[derive(Clone, Copy)]
+enum Keying {
+    /// By the catalog's key, else its one unique column, else a guess;
+    /// `stated` where the caller names the key.
+    Inferred { stated: bool },
+    /// By nothing the preview reads: a semantic model's table, which its
+    /// view keys (`RE/graph.py:1820-1925`, `:2083-2096`).
+    Never,
+}
+
+/// The columns of a semantic model's table inferred from its rows, as the
+/// old client's `Table.add_columns` infers each (`RE/base/table.py:225-318`):
+/// `columns` the columns the conversion adds, each with the data type the
+/// source's catalog or the view declares where either does
+/// ([`CatalogColumn::dtype`]), else its values', and its meaning by its name
+/// and values; `schema` and `batches` the rows sampled of them, in that
+/// order. No key is read or guessed: the view's joins and keys set it.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the table, its columns, its rows and the source's two readings"
+)]
+pub fn view_table(
+    name: &str,
+    source: &Relation,
+    columns: &[CatalogColumn],
+    schema: &Schema,
+    batches: &[RecordBatch],
+    times: &dyn TextTimes,
+    floats: Floats,
+) -> Result<Previewed, CoreError> {
+    preview_with(
+        name,
+        source,
+        columns,
+        &[],
+        schema,
+        batches,
+        times,
+        floats,
+        Keying::Never,
+    )
+}
+
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the table, its catalog, its preview, the source's two readings and its keying"
+)]
+fn preview_with(
+    name: &str,
+    source: &Relation,
+    catalog: &[CatalogColumn],
+    constraints: &[CatalogKey],
+    schema: &Schema,
+    batches: &[RecordBatch],
+    times: &dyn TextTimes,
+    floats: Floats,
+    keying: Keying,
+) -> Result<Previewed, CoreError> {
     let rows: usize = batches.iter().map(RecordBatch::num_rows).sum();
     if rows == 0 {
         // The reference refuses an empty table as a RuntimeError.
-        return Err(invalid_request(not_yet("empty_table")));
+        return Err(empty_table(source));
     }
-    let single = |kinds: &[KeyKind]| -> BTreeSet<String> {
-        constraints
-            .iter()
-            .filter(|c| kinds.contains(&c.kind) && c.columns.len() == 1)
-            .map(|c| c.columns[0].clone())
-            .collect()
-    };
-    let declared_primary = single(&[KeyKind::Primary]);
-    // A column the source keeps unique by itself (a SQLite rowid alias) is
-    // unique as a key of its own is.
+    let keyed = Keyed::of(catalog, constraints);
+    let declared_primary = &keyed.primary;
     let kept_unique = catalog.iter().filter(|c| c.unique).map(|c| c.name.clone());
-    // A partial unique index keeps its one column unique as the reference
-    // reads it (SQLite's `unique_keys`), but makes no key of several.
-    let mut declared_unique = single(&[KeyKind::Primary, KeyKind::Unique, KeyKind::PartialUnique]);
-    declared_unique.extend(kept_unique.clone());
     let unique = constraints
         .iter()
-        .filter(|c| matches!(c.kind, KeyKind::Primary | KeyKind::Unique))
+        .filter(|c| matches!(c.kind, KeyKind::Primary | KeyKind::Unique) && c.enforced)
         .map(|c| c.columns.iter().cloned().collect::<BTreeSet<_>>())
         .chain(kept_unique.map(|name| BTreeSet::from([name])))
         .collect::<Vec<_>>();
@@ -498,13 +782,8 @@ pub fn preview(
     let mut primary = Vec::new();
     for (index, declared) in catalog.iter().enumerate() {
         let field = schema.field(index);
-        // The type the column's declaration fixes, where the catalog reads
-        // one (SQLite's, as the reference types a column by it first,
-        // whatever its values); any other, its values' type.
-        let dtype = match declared.dtype {
-            Some(declared) => declared,
-            None => dtype_of(field.data_type())?,
-        };
+        let facts = keyed.facts(source, declared, field, constraints)?;
+        let dtype = facts.dtype;
         if matches!(
             dtype,
             Dtype::Intlist
@@ -549,12 +828,10 @@ pub fn preview(
             dtype,
             stype,
             stype_before_key: None,
-            received: ColumnType::from_arrow(&declared.name, field.data_type())?,
-            // A primary key holds no null, but where the source lets one
-            // (SQLite's, not its rowid alias): its catalog says.
-            nullable: !declared.not_null && (!is_primary || declared.key_nullable),
-            unique: declared_unique.contains(&declared.name),
-            exact_number: exact_number(field, constraints),
+            received: facts.received,
+            nullable: facts.nullable,
+            unique: facts.unique,
+            exact_number: facts.exact_number,
         });
         let text_time = dtype == Dtype::String && stype == Stype::Timestamp;
         instants.push(if dtype == Dtype::Time {
@@ -604,27 +881,38 @@ pub fn preview(
     let unique_columns: Vec<&String> = catalog
         .iter()
         .map(|c| &c.name)
-        .filter(|n| declared_unique.contains(*n))
+        .filter(|n| keyed.declared.contains(*n))
         .filter(held)
         .collect();
-    let (key, tied_keys) = match (primary.as_slice(), unique_columns.as_slice()) {
-        ([one], _) => (Some(one.clone()), Vec::new()),
-        (_, [one]) => (Some((*one).clone()), Vec::new()),
+    let key_stated = match keying {
+        Keying::Inferred { stated } => stated,
+        Keying::Never => true,
+    };
+    let (key, tied_keys) = match (keying, primary.as_slice(), unique_columns.as_slice()) {
+        (Keying::Never, _, _) => (None, Vec::new()),
+        (_, [one], _) => (Some(one.clone()), Vec::new()),
+        (_, _, [one]) => (Some((*one).clone()), Vec::new()),
         _ => match guess_key(name, &columns, &samples) {
             Guess::Key(key) => (Some(key), Vec::new()),
             Guess::None => (None, Vec::new()),
             Guess::Tied(tied) => (None, tied),
         },
     };
-    if let Some(key) = &key {
+    let mut key = key;
+    if let Some(found) = key.clone() {
         let column = columns
             .iter_mut()
-            .find(|c| &c.name == key)
+            .find(|c| c.name == found)
             .expect("the key is a column of the table");
         if !matches!(column.dtype, Dtype::Int | Dtype::Float | Dtype::String) {
-            return Err(not_yet("key_type"));
+            if !key_stated {
+                return Err(not_yet("key_type"));
+            }
+            // The caller's key replaces it: none is inferred.
+            key = None;
+        } else {
+            column.stype = Stype::Id;
         }
-        column.stype = Stype::Id;
     }
 
     Ok(Previewed {
@@ -640,6 +928,7 @@ pub fn preview(
             time: TimeChoice::default(),
             time_column: None,
             unique,
+            declared: keyed.declared.clone(),
         },
         rows,
         instants,
@@ -1125,8 +1414,7 @@ pub fn first_values_past_the_years(
         let years = i128::from(DATETIME_MIN_US)..=i128::from(DATETIME_MAX_US);
         if !years.contains(&i128::from(*value)) || !years.contains(&wall) {
             return Err(CoreError::new(
-                ErrorKind::Unsupported,
-                ErrorCode::ValueOutOfRange,
+                Sentence::TimeOutsideYears,
                 "the first time a time column's choice reads is outside the years 1 to 9999",
             )
             .with_field("table", Detail::text(table.name.clone()))
@@ -1189,9 +1477,7 @@ pub fn whole_table(
     batches: &[RecordBatch],
     times: &dyn TextTimes,
 ) -> Result<WholeTable, CoreError> {
-    let internal = |message: &'static str| {
-        CoreError::new(ErrorKind::Internal, ErrorCode::InternalError, message)
-    };
+    let internal = |message: &'static str| CoreError::new(Sentence::Internal, message);
     let batch = batches
         .iter()
         .find(|b| b.num_rows() > 0)
@@ -1349,6 +1635,7 @@ fn choose_time_column(
     }
     let chosen = |column: Option<String>, how: Option<Taken>, among: Vec<String>| TimeChoice {
         column,
+        instead_of: vec![],
         how,
         among,
         refused: refused.clone(),

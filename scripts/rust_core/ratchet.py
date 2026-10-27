@@ -16,6 +16,7 @@ H19 and A6). ``gate.sh`` runs the checkpoint's copy of this file.
     ratchet.py effective [--repo DIR] (--base REV | --phase-push BEFORE)
         [--epic] [--epic-ref REF] --out FILE
     ratchet.py where [--repo DIR]
+    ratchet.py push-base [--repo DIR]
 
 ``checkpoint`` resolves the checkpoint of the candidate, ``--repo``'s
 ``HEAD``: ``git merge-base CANDIDATE BASE``, never read from evidence.
@@ -28,8 +29,13 @@ commit but a package the candidate is stacked on, landed on a head that
 is a landing commit, the checkpoint is the merge base with that head, so
 every job of a run judges against the same commit (decision E131).
 ``--phase-push`` is a push to the phase branch, ``BEFORE`` its previous
-tip: the push must land exactly one package, the candidate being that
-landing commit with ``Base-SHA`` ``BEFORE``, as a fast-forward. It refuses
+tip: the push must land one package, the candidate being that landing
+commit with ``Base-SHA`` ``BEFORE``, as a fast-forward, or a stack of up to
+``SDM_STACK_MAX`` (default 4) packages (T3.0, ``land.py stack-land``), each
+landing commit's ``Base-SHA`` the landing before it and the first's
+``BEFORE``, so each landing's checkpoint stays the landing before it; the
+candidate, the stack's top landing, is judged against its own
+``Base-SHA``. It refuses
 a candidate that is its own checkpoint (self-comparison: the base already
 holds the candidate) and a checkpoint that is not a landing commit, so
 advancing the phase branch to an unreviewed commit cannot make that commit
@@ -142,7 +148,8 @@ baselines, and so no expectations.
 it is in, from GitHub's environment, or nothing outside the phase branches
 and the epic branch (:func:`ci_base`): on a push to a phase branch
 (``rust-core-phase-N``, any N) ``--phase-push``, on a branch under one
-``--base origin/<that phase branch>``, and on a push to ``rust-core``
+``--base`` the phase head recorded when the run started (``push-base``,
+T3.0), else ``origin/<that phase branch>``, and on a push to ``rust-core``
 ``--base`` the merged phase's last landing and ``--epic``, so the epic
 branch is judged like a moved landing of that phase's head, with rule
 ``epic`` (T2.0). The landing is the second parent of a phase merge on the
@@ -151,6 +158,11 @@ its record must carry Reviewed-by (:func:`epic_merge`). ``--epic`` takes
 the base as given, never the head's own trailers, and refuses any base but
 that landing; a harness that predates it refuses the flag, so ``rust-core``
 holding T2.0 but judged by an older landing fails closed.
+Nightly and phase-end ``workflow_dispatch`` runs use these same checkpoints:
+an exact phase branch names ``--base HEAD``, whose landing record resolves
+to its previous reviewed checkpoint; an unlanded phase head fails the
+self-comparison guard. A dispatched topic uses its phase's remote base,
+and a dispatched epic uses the merged phase's last landing.
 
 A new reference commit (T2.0e): a candidate that adds a reference file
 passes only when a row of the checkpoint's decisions approves its name
@@ -231,10 +243,13 @@ KNOWN_DIFFERING = 'rust/crates/sdm-core/tests/pql/known-differing.json'
 #: "Runtime cells"). Their projection is platform-independent, so every cell
 #: is held to them.
 CELL = 'ref-pandas3'
-RUNNERS = ('python-ref', 'python-core', 'python-old', 'rust-host')
-#: The runners a SQLite or Postgres line is observed on: the core's
-#: (python-old, the old route, runs on DuckDB only; T2.1a fix 4).
-DATABASE_RUNNERS = ('python-core', 'rust-host')
+RUNNERS = ('python-ref', 'python-core', 'python-old', 'rust-host', 'java')
+#: The runners a SQLite, Postgres or warehouse line is observed on: the
+#: core's hosts (python-old, the old route, runs on DuckDB only; T2.1a fix
+#: 4), Java's among them (Phase 3 design choice 10), each leg admitted where
+#: its host reports the provider and then held by the no-removal rule
+#: ("baselined, and not observed").
+DATABASE_RUNNERS = ('python-core', 'rust-host', 'java')
 PYTHON = ('python-ref', 'python-core', 'python-old')
 #: The core operations that read data, whose case has a driver record on
 #: rust-host.
@@ -279,12 +294,110 @@ OUTCOME_FIELDS = (
 )
 
 
+#: The approval's date, after which its own qualifier starts.
+APPROVAL_DATE = re.compile(r'approved by owner \d{4}-\d{2}-\d{2}')
+#: A qualifier that says the owner has not approved yet (U4): declined,
+#: pending, proposed, not yet answered.
+NOT_YET = re.compile(
+    r'declin|pending|propos|not yet|unanswered|awaiting', re.IGNORECASE
+)
+
+
+#: What each clause of an owner's approval's own qualifier may say, read
+#: by allowlist, the whole clause (U4, T3.2; Claude r1 P2-5): where the
+#: approval was given or relayed, or what it covers, in the forms the
+#: decisions files write: a package or task ID ("T1.7b check-in",
+#: "recorded at T1.16"), a decision row it came with ("with KO3-17"),
+#: "relayed by the orchestrator", a checkpoint, a round, an answer, items
+#: or lettered parts ("(a) to (c)"), the rows it covers ("P2G-4, P2G-5 and
+#: KO2-89 only"), "including ...", or the owner's own words ("the owner
+#: chose ..."). Any other clause is no approval, whatever it says.
+APPROVAL_CLAUSE = re.compile(
+    r'T\d+\.\d+[a-z]?(?: check-in)?'
+    r'|recorded at T\d+\.\d+[a-z]?(?: fix \d+| part \d+[a-z]?)?'
+    r'|with [A-Z][A-Z0-9]*-\d+'
+    r'|relayed by the orchestrator'
+    r"|never the implementer's approval"
+    r'|checkpoint \d+'
+    r'|(?:round \d+ )?answers? \d+(?: and \d+)*'
+    r'|revised by round \d+ answers? \d+'
+    r'|items? \d+(?:\([a-z]\))?(?: (?:and|to) \d+)*'
+    r'|\d+(?: (?:and|to) \d+)*'
+    r'|option [A-Z]'
+    r'|\([a-z]\)(?: (?:and|to) \([a-z]\))?'
+    r"|\([a-z]\) and \([a-z]\) are CI\d+'s under them"
+    r'|[A-Z][A-Z0-9]*-?\d+[a-z]?(?:\([a-z]\))?'
+    r'(?: and [A-Z][A-Z0-9]*-?\d+[a-z]?)*(?: only)?'
+    r'|including [^;,()]+'
+    r'|the owner chose [^;()]+'
+    r'|the request\b[^;()]*'
+    r"|the tiers the orchestrator's"
+    r'|and the publishing of the four images'
+)
+
+
+def _groups(text: str) -> list[str] | None:
+    r"""The parenthesized groups ``text`` starts with, one after another
+    (" (a) (b)"), each its balanced content; None when one does not close."""
+    found: list[str] = []
+    n = 0
+    while text.startswith(' (', n):
+        depth, start = 0, n + 1
+        for end in range(start, len(text)):
+            depth += {'(': 1, ')': -1}.get(text[end], 0)
+            if depth == 0:
+                found.append(text[start + 1 : end])
+                n = end + 1
+                break
+        else:
+            return None
+    return found
+
+
+def approval_qualifier(status: str) -> list[str] | None:
+    r"""The clauses of the approval's own qualifier: every parenthesized
+    group right after its date ("(with KO3-17) (declined)" is two), each
+    split at ``; `` and ``, ``, else the one clause after ``; `` or ``, ``;
+    None when a group does not close."""
+    date = APPROVAL_DATE.match(status)
+    rest = status[date.end() :] if date else ''
+    if rest.startswith(' ('):
+        groups = _groups(rest)
+        if groups is None:
+            return None
+    elif rest[:2] in ('; ', ', '):
+        groups = [rest[2:].split(';', 1)[0]]
+    else:
+        groups = []
+    return [
+        clause.strip()
+        for group in groups
+        for clause in re.split(r'; |, ', group)
+        if clause.strip()
+    ]
+
+
 def owner_approved(status: str) -> bool:
     r"""The status is the owner's approval, read from its start, never a
     substring of another status ("not approved by owner ..."); shared with
-    ``coverage.py``'s rule 8 (T1.15)."""
+    ``coverage.py``'s rule 8 (T1.15). The approval's own qualifier is read
+    by allowlist (U4), the whole of it: each clause of each group after the
+    date must be one of :data:`APPROVAL_CLAUSE`'s forms, so
+    "approved by owner D (declined)", "(with KO3-17) (declined)",
+    "(T3.4, on hold until the review)", "(recorded at T1.16; the owner said
+    no)", "..., pending" and "(proposed ..., not yet answered)" are no
+    approvals, nor is any clause the list does not name; a note anywhere
+    withdrawing it (:data:`WITHDRAWN`) or a qualifier saying it is not yet
+    given (:data:`NOT_YET`) voids it too."""
     status = status.strip()
-    return bool(OWNER.fullmatch(status)) and not WITHDRAWN.search(status)
+    if not OWNER.fullmatch(status) or WITHDRAWN.search(status):
+        return False
+    clauses = approval_qualifier(status)
+    if clauses is None:
+        return False
+    if any(NOT_YET.search(clause) for clause in clauses):
+        return False
+    return all(APPROVAL_CLAUSE.fullmatch(clause) for clause in clauses)
 
 
 class Unreadable(Exception):
@@ -605,19 +718,38 @@ def resolve(
             problems.append(
                 'the push is not a fast-forward of the previous tip'
             )
-        if landings != [candidate]:
+        limit = stack_limit()
+        if not landings or landings[0] != candidate:
             problems.append(
-                'a push to the phase branch lands exactly one package, as '
-                f'its tip: it holds {len(landings)} landing commits'
-                + ('' if candidate in landings else ', and its tip is none')
+                'a push to the phase branch lands packages, its tip a landing '
+                f'commit: it holds {len(landings)} landing commits, and its '
+                'tip is none'
             )
-        elif trailers(repo, candidate).get('Base-SHA') != before:
+        elif len(landings) > limit:
             problems.append(
-                "the landing's Base-SHA is not the phase branch's previous tip"
+                f'a push to the phase branch lands at most {limit} packages '
+                f'(a stack, T3.0): it holds {len(landings)} landing commits'
             )
+        else:
+            # A stack (T3.0): each landing's Base-SHA is the landing before
+            # it, the first's the previous tip, so each landing's checkpoint
+            # is the landing before it.
+            below = before
+            for sha in reversed(landings):
+                if trailers(repo, sha).get('Base-SHA') != below:
+                    problems.append(
+                        "the landing's Base-SHA is not the phase branch's "
+                        'previous tip'
+                        if below == before
+                        else f'the landing {sha[:12]} does not stack on the '
+                        f'landing before it, {below[:12]}: its Base-SHA is '
+                        'not that landing'
+                    )
+                    break
+                below = sha
         if problems:
             return None, problems
-        base = before
+        base = trailers(repo, candidate)['Base-SHA']
     elif is_landing(repo, candidate):
         recorded = trailers(repo, candidate)['Base-SHA']
         notes.append(
@@ -683,6 +815,13 @@ def resolve(
         )
     bootstrap = Tree(repo, found).read('scripts/rust_core/ratchet.py') is None
     return Checkpoint(found, base, candidate, bootstrap, notes), []
+
+
+def stack_limit() -> int:
+    r"""The most landings one phase push may hold: ``SDM_STACK_MAX``, as
+    land.py reads it, else 4 (T3.0, the owner's "every N packages")."""
+    raw = os.environ.get('SDM_STACK_MAX', '')
+    return int(raw) if raw.isdigit() and int(raw) > 0 else 4
 
 
 # --- reading -------------------------------------------------------------------
@@ -760,7 +899,15 @@ def observations(paths: Iterable[Path]) -> dict[str, dict[str, Any]]:
     r"""Observations by runner and case, from their files."""
     found: dict[str, dict[str, Any]] = {}
     for path in paths:
-        lines = jsonl(path.read_text(encoding='utf-8'), path.name)
+        try:
+            text = path.read_text(encoding='utf-8')
+        except FileNotFoundError:
+            # A runner that failed wrote none (the gate's observations
+            # step names why); named here, never a traceback (T3.2).
+            raise Unreadable(
+                f'{path.name}: no observations written; the runner failed'
+            ) from None
+        lines = jsonl(text, path.name)
         if not lines:
             raise Unreadable(f'{path.name}: no observations')
         for line in lines:
@@ -1131,7 +1278,10 @@ MOVED = '@moved'
 STAGES = ('from_source', 'materialize', 'predict')
 #: The outcome fields a runner does not observe (``availability.yaml``):
 #: an entry's old outcome is not held to the reference's there.
-UNOBSERVED = {'rust-host': ('outcome.stage', 'outcome.error')}
+UNOBSERVED = {
+    'rust-host': ('outcome.stage', 'outcome.error'),
+    'java': ('outcome.stage', 'outcome.error'),
+}
 
 
 def _stated(text: Any, like: dict[str, Any]) -> dict[str, Any] | None:
@@ -1890,6 +2040,15 @@ def policy_relaxations(old: Any, new: Any) -> list[str]:
     for name in old.get('baseline') or []:
         if name not in fields:
             found.append(f'baseline field {name} removed')
+    # The sampled case's section (T3.2 fix 4, option C): a case added or
+    # its statement moved holds that case to less than every rule.
+    theirs_sampled = old.get('sampled')
+    if isinstance(theirs_sampled, dict):
+        for case, entry in (new.get('sampled') or {}).items():
+            if case not in theirs_sampled:
+                found.append(f'sampled {case} added')
+            elif theirs_sampled[case] != entry:
+                found.append(f'sampled {case} changed')
     return found
 
 
@@ -2571,15 +2730,25 @@ def write_effective(repo: Path, checkpoint: str, out: Path) -> list[str]:
     return []
 
 
+#: The variable the landing job hands each judging job: the phase head the
+#: run's candidate was pushed on, as :func:`push_base` found it (T3.0).
+PUSH_BASE = 'SDM_PUSH_BASE'
+
+
 def ci_base(environ: dict[str, str], repo: Path = Path('.')) -> str:
     r"""The gate's base for a CI run, from GitHub's environment: on a push
     to a phase branch (``rust-core-phase-N``, any N), ``--phase-push`` and
     the push's previous tip (from the event file); on a push to a lane or
-    another branch under one, ``--base`` that phase branch's remote tip; on
+    another branch under one, ``--base`` the phase head the landing job
+    recorded as the run started (:data:`PUSH_BASE`, :func:`push_base`;
+    T3.0), else that phase branch's remote tip; on
     a push to the epic branch, ``--base`` the merged phase's last landing
     ``repo``'s ``HEAD`` holds and ``--epic`` (:func:`epic_merge`; T2.0), so the epic
     branch is judged like a moved landing of that phase's head, and with
-    none it fails; with no CI environment (a local replay), ``--base`` the
+    none it fails. A workflow dispatch uses the same topic and epic bases;
+    an exact phase branch uses ``--base HEAD``, resolved by the landed
+    candidate's recorded base, never a self-comparison of an unlanded head.
+    With no CI environment (a local replay), ``--base`` the
     remote tip of the phase branch ``phases.phase_branch`` names for the
     branch checked out; elsewhere nothing, since there is no ratchet to
     run."""
@@ -2592,7 +2761,8 @@ def ci_base(environ: dict[str, str], repo: Path = Path('.')) -> str:
         except PHASES.PhaseError as error:
             raise Unreadable(str(error)) from None
         return f'--base origin/{phase}'
-    if environ.get('GITHUB_EVENT_NAME') != 'push':
+    event_name = environ.get('GITHUB_EVENT_NAME')
+    if event_name not in ('push', 'workflow_dispatch'):
         return ''
     if ref == PHASES.EPIC:
         head = git(repo, 'rev-parse', 'HEAD^{commit}').strip()
@@ -2606,6 +2776,18 @@ def ci_base(environ: dict[str, str], repo: Path = Path('.')) -> str:
     phase = PHASES.phase_of(ref)
     if phase is None:
         return ''
+    if ref == phase and event_name == 'workflow_dispatch':
+        return '--base HEAD'
+    if ref != phase:
+        recorded = environ.get(PUSH_BASE, '')
+        if re.fullmatch(r'[0-9a-f]{40}', recorded):
+            return f'--base {recorded}'
+        if recorded:
+            raise Unreadable(
+                f'{PUSH_BASE} is {recorded!r}, not the 40-hex SHA the '
+                'landing job records'
+            )
+        return f'--base origin/{phase}'
     if ref == phase:
         event = _json(
             Path(environ['GITHUB_EVENT_PATH']).read_text(encoding='utf-8'),
@@ -2618,6 +2800,87 @@ def ci_base(environ: dict[str, str], repo: Path = Path('.')) -> str:
             raise Unreadable('the push event names no previous tip')
         return f'--phase-push {before}'
     return f'--base origin/{phase}'
+
+
+def push_base(
+    environ: dict[str, str], repo: Path = Path('.'), stack: bool = True
+) -> str:
+    r"""The phase head a CI run's candidate was pushed on (T3.0): what the
+    landing job records once, as the run starts, and hands every job that
+    judges as :data:`PUSH_BASE`, so ``where`` names the same base in every
+    job however late it starts. A landing made while the run goes on, the
+    candidate's own above all, then cannot turn a job into a
+    self-comparison.
+
+    On a push to a branch under a phase branch, the remote phase head
+    (``refs/remotes/origin/<phase>``, fetched by the caller), or, for a
+    candidate stacked on unlanded landings, the last of them
+    (:func:`stack_tail`), unless that
+    head already holds the candidate (a rerun of every job after the
+    candidate landed): then the ``Base-SHA`` of the oldest landing commit
+    above the candidate, the head it landed on. Elsewhere, on the phase
+    branch itself, and with no CI environment, nothing: ``where`` decides
+    as before."""
+    ref = environ.get('GITHUB_REF_NAME')
+    if ref is None or environ.get('GITHUB_EVENT_NAME') != 'push':
+        return ''
+    phase = PHASES.phase_of(ref)
+    if phase is None or ref == phase:
+        return ''
+    tip = git(
+        repo, 'rev-parse', f'refs/remotes/origin/{phase}^{{commit}}'
+    ).strip()
+    head = git(repo, 'rev-parse', 'HEAD^{commit}').strip()
+    if head == tip or git(repo, 'merge-base', head, tip).strip() != head:
+        # The judging checkpoint is the stack's tail; the base of what the
+        # whole stack changes (stack=False, CI's tooling filter) is the
+        # phase head (Codex r2).
+        return stack_tail(repo, tip, head) if stack else tip
+    out = git(
+        repo, 'log', '--reverse', '--ancestry-path', '--format=%H%x00%s',
+        f'{head}..{tip}',
+    )  # fmt: skip
+    for line in out.splitlines():
+        commit, _, title = line.partition('\0')
+        if not (LANDING.match(title) and is_landing(repo, commit)):
+            continue
+        recorded = git(
+            repo,
+            'rev-parse',
+            f'{trailers(repo, commit)["Base-SHA"]}^{{commit}}',
+        ).strip()
+        if (
+            recorded != head
+            and git(repo, 'merge-base', recorded, head).strip() == recorded
+        ):
+            return recorded
+    return tip
+
+
+def stack_tail(repo: Path, tip: str, head: str) -> str:
+    r"""The landing a candidate is stacked on (T3.0, ``land.py --stack``):
+    walking the first-parent history from the phase head ``tip`` to
+    ``head``, each landing commit whose ``Base-SHA`` is the landing before
+    it (``tip`` for the first) extends the stack; the last one is the
+    candidate's checkpoint, so a package above a landing that changed the
+    judging tools is judged with them, each landing's checkpoint the
+    landing before it. With no such landing, or a ``head`` not above ``tip``, ``tip``."""
+    if git(repo, 'merge-base', tip, head).strip() != tip:
+        return tip
+    out = git(
+        repo, 'log', '--first-parent', '--reverse', '--format=%H%x00%s',
+        f'{tip}..{head}',
+    )  # fmt: skip
+    below = tip
+    for line in out.splitlines():
+        commit, _, title = line.partition('\0')
+        if commit == head or not (
+            LANDING.match(title) and is_landing(repo, commit)
+        ):
+            continue
+        if trailers(repo, commit).get('Base-SHA') == below:
+            below = commit
+    return below
 
 
 def _checked_out(repo: Path) -> str | None:
@@ -2650,6 +2913,13 @@ def main(argv: list[str] | None = None) -> int:
     judge.add_argument('--locked', action='store_true')
     spot = commands.add_parser('where')
     spot.add_argument('--repo', type=Path, default=Path('.'))
+    pushed = commands.add_parser('push-base')
+    pushed.add_argument('--repo', type=Path, default=Path('.'))
+    pushed.add_argument(
+        '--stack-base',
+        action='store_true',
+        help='the phase head the whole stack is based on, not its tail',
+    )
     expect = commands.add_parser('effective')
     expect.add_argument('--repo', type=Path, default=Path('.'))
     among = expect.add_mutually_exclusive_group(required=True)
@@ -2668,6 +2938,13 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if arguments.command == 'where':
             print(ci_base(dict(os.environ), arguments.repo))
+            return 0
+        if arguments.command == 'push-base':
+            print(
+                push_base(
+                    dict(os.environ), arguments.repo, not arguments.stack_base
+                )
+            )
             return 0
         if arguments.command == 'checkpoint':
             found, problems = resolve(

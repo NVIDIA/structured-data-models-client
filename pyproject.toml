@@ -188,9 +188,11 @@ exclude_also = [
 # from the repository root neither warns about unknown marks nor silently
 # selects a test that opens a socket.
 [tool.pytest.ini_options]
+tmp_path_retention_policy = "failed"
 markers = [
     "live_nim: needs a running NIM",
     "live_warehouse: needs a real Snowflake or Databricks warehouse",
     "socket: binds a local socket; deselect where that is not permitted",
     "gpu: needs a CUDA GPU",
+    "tooling: a test of the checking tools that copies the checkout for the gate; CI runs it in the tooling jobs only (scripts/rust_core/tooling_tests.py)",
 ]

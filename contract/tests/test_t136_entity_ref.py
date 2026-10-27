@@ -210,7 +210,7 @@ QUERIES: dict[str, tuple[Callable[[], list[str]], str, list[Any]]] = {
 
 @pytest.fixture(autouse=True)
 def _old(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
 
 
 def _materialized(monkeypatch: pytest.MonkeyPatch, query: str) -> Request:
@@ -225,7 +225,7 @@ def _materialized(monkeypatch: pytest.MonkeyPatch, query: str) -> Request:
         request = PredictiveQuery(text, schema).materialize(
             indices=list(indices), anchor_time=ANCHOR
         )
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     assert request.payloads is not None and len(request.payloads) == 1
     return request
 
@@ -407,7 +407,7 @@ def _observed(
         endpoint.answer = _answering(ANSWERS[answer])
     with endpoint.serve() as (url, received):
         if routes is None:
-            monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+            monkeypatch.setenv(_routing.ENVIRONMENT, '')
         else:
             monkeypatch.setenv(_routing.ENVIRONMENT, routes)
         try:
@@ -446,7 +446,7 @@ def _observed(
                 'frame': frame,
             }
         finally:
-            monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+            monkeypatch.setenv(_routing.ENVIRONMENT, '')
             endpoint.answer = rule
     outcome['sent'] = [_masked(body) for _, _, body in received.requests]
     return outcome

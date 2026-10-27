@@ -48,7 +48,9 @@ from sdm_client._rust import materialize as _rust_materialize
 from sdm_client._rust import run as _rust_run
 from sdm_client._rust import schema as _rust_schema
 from sdm_client._rust.run import run
+from sdm_client._rust.spec import held_schema
 from sdm_client.errors import MissingExtraError
+from sdm_client.schema import _described_on_the_core
 
 ROOT = Path(__file__).resolve().parents[3]
 CORE = ','.join(_routing.FROM_SOURCE_DUCKDB + _routing.MATERIALIZE_DUCKDB)
@@ -59,7 +61,7 @@ ANCHOR = pd.Timestamp('2024-03-01')
 
 @pytest.fixture(autouse=True)
 def _old(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
 
 
 def _shop() -> list[str]:
@@ -114,7 +116,7 @@ def _both_routes(
     where it is not, the old route's refusal is held instead."""
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     core = _materialize(*setup, **arguments)._payloads[0]
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     if importlib.util.find_spec('sdm_relational_engine') is None:
         with pytest.raises(MissingExtraError):
             _materialize(*setup, **arguments)
@@ -273,7 +275,7 @@ def test_an_average_s_lag_is_each_row_s_own_window(
     query = 'PREDICT AVG(orders.price, 0, 30, days) FOR EACH users.user_id'
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     core = _materialize(query=query, lag_timesteps=2)._payloads[0]
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     table = core['predict']['instance_table']
     at = table['columns'].index('__kumo_arl0__')
     connection = _connection()
@@ -390,33 +392,78 @@ def test_a_decimal_seed_is_said_as_the_reference_says_it(
     assert 'random_seed must be a whole number' in str(refused.value)
 
 
-@pytest.mark.parametrize('value', [float('nan'), float('inf'), -float('inf')])
-def test_a_nan_lag_is_refused_on_the_core_route_only(
+@pytest.mark.parametrize('value', [float('inf'), -float('inf')])
+def test_an_infinite_lag_is_refused_on_the_core_route(
     monkeypatch: pytest.MonkeyPatch, value: float
 ) -> None:
-    # Register P2B-19 (approved, KO2-70): the reference adds no lag for a
-    # NaN and refuses an infinity after labelling (a TypeError, or as
-    # negative); the core route cannot send either as the JSON the call's
-    # values travel in, and refuses each before anything is read, naming
-    # lag_timesteps.
+    # KO3-44 admits a NaN lag, which the reference treats as no lag.
+    # It does not admit infinities, which the reference refuses.
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     with pytest.raises(StructuredDataError) as refused:
         _materialize(lag_timesteps=value)
     assert refused.value.code == 'INVALID_REQUEST'
-    assert refused.value.details == {'field': 'lag_timesteps'}
+    assert refused.value.details == {
+        'field': 'lag_timesteps',
+        'kind': 'invalid_request',
+        'retryable': False,
+    }
     assert str(refused.value).startswith(
         '[INVALID_REQUEST] lag_timesteps carries a value'
     )
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     if value == value and not _old_route_needs_the_engine():
         with pytest.raises(StructuredDataError) as old:
             _materialize(lag_timesteps=value)
         assert old.value.code == 'INVALID_REQUEST'
-    elif not _old_route_needs_the_engine():
-        columns = _materialize(lag_timesteps=float('nan'))._payloads[0][
-            'context'
-        ]['instance_table']['columns']
-        assert not [c for c in columns if c.startswith('__kumo_arl')]
+
+
+@pytest.mark.parametrize(
+    'options',
+    [
+        {'lag_timesteps': float('nan')},
+        {'lag_timesteps': np.longdouble('nan')},
+        {'num_neighbors': [-1]},
+        {'num_neighbors': [2, -1]},
+        {'num_neighbors': ['3 OR TRUE']},
+    ],
+    ids=[
+        'nan-lag',
+        'numpy-wide-nan-lag',
+        'negative-neighbor',
+        'negative-second-hop',
+        'neighbor-sql-expression',
+    ],
+)
+def test_owner_admitted_sampling_values_match_the_frozen_client(
+    monkeypatch: pytest.MonkeyPatch, options: dict[str, Any]
+) -> None:
+    # KO3-44 supersedes the three earlier Phase 2 refusals.
+    # These public calls all succeed in genuine frozen43e.
+    # Comparing complete payloads also catches a tempting but incorrect
+    # conversion of SQL expressions or negative bounds to a common limit.
+    payload = _both_routes(monkeypatch, **options)
+    if 'lag_timesteps' in options:
+        columns = payload['context']['instance_table']['columns']
+        assert not any(c.startswith('__kumo_arl') for c in columns)
+
+
+@pytest.mark.parametrize(
+    'scalar', [float, np.float32, np.float64, np.longdouble]
+)
+def test_numeric_nan_is_only_encoded_on_the_option_attachment(scalar) -> None:
+    # The extended NumPy scalar must reach the same Rust admission as a
+    # Python NaN, without changing ordinary request JSON's strictness.
+    value = scalar('nan')
+    assert (
+        codec.attachment(
+            {'lag_timesteps': value}, named=True, option_values=True
+        )
+        == b'{"lag_timesteps": NaN}'
+    )
+    with pytest.raises(StructuredDataError) as refused:
+        codec.attachment({'lag_timesteps': value}, named=True)
+    assert refused.value.code == 'INVALID_REQUEST'
+    assert refused.value.details == {'field': 'lag_timesteps'}
 
 
 @pytest.mark.parametrize(
@@ -466,7 +513,7 @@ def test_the_sampling_options_are_taken_as_the_old_route_takes_them(
                 .materialize(indices=[0, 1], **arguments)
                 ._payloads[0]
             )
-        monkeypatch.delenv(_routing.ENVIRONMENT)
+        monkeypatch.setenv(_routing.ENVIRONMENT, '')
         if importlib.util.find_spec('sdm_relational_engine') is not None:
             with warnings.catch_warnings():
                 warnings.simplefilter('ignore')
@@ -490,10 +537,6 @@ def test_the_sampling_options_are_taken_as_the_old_route_takes_them(
     ('options', 'field'),
     [
         ({'num_hops': None}, 'num_hops'),
-        ({'num_neighbors': ['x']}, 'num_neighbors'),
-        # A negative size, which the reference's databases read three ways
-        # (P2I-4, KO2-82).
-        ({'num_neighbors': [2, -1]}, 'num_neighbors'),
         ({'max_pq_iterations': 0}, 'max_pq_iterations'),
         ({'use_prediction_time': None}, 'use_prediction_time'),
         ({'exclude_cols_dict': {'orders': ['order_id']}}, 'exclude_cols_dict'),
@@ -514,6 +557,24 @@ def test_a_sampling_option_the_engine_refuses_is_the_caller_s_error(
         _materialize(**options)
     assert refused.value.code == 'INVALID_REQUEST'
     assert refused.value.details.get('field') == field
+
+
+@pytest.mark.parametrize('expression', ['x', 'nonsense'])
+def test_an_invalid_neighbor_expression_is_refused_by_its_provider(
+    monkeypatch: pytest.MonkeyPatch, expression: str
+) -> None:
+    # KO3-44 permits caller expressions to reach their provider, while
+    # unknown identifiers still fail there, as in the frozen client.
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    with pytest.raises(StructuredDataError) as refused:
+        _materialize(num_neighbors=[expression])
+    assert refused.value.code == 'PROVIDER_ERROR'
+    assert refused.value.details == {
+        'request': 'neighbors',
+        'kind': 'data_source',
+        'retryable': False,
+        'driver_class': '_duckdb.BinderException',
+    }
 
 
 def test_an_unseeded_sample_is_a_new_sample_of_the_entities_asked(
@@ -546,6 +607,71 @@ def test_inference_options_not_a_mapping_are_refused(
     with pytest.raises(StructuredDataError) as refused:
         _materialize(inference_config=given)
     assert refused.value.code == 'INVALID_REQUEST'
+
+
+@pytest.mark.parametrize(
+    'query, title',
+    [
+        (QUERY, 'RegressionInferenceConfig'),
+        (BINARY, 'ClassificationInferenceConfig'),
+    ],
+)
+@pytest.mark.parametrize(
+    'given',
+    [
+        float('inf'),
+        float('-inf'),
+        float('nan'),
+        np.float32('inf'),
+        np.float64('inf'),
+        np.longdouble('inf'),
+    ],
+)
+def test_nonfinite_estimators_keep_the_task_validators_public_message(
+    monkeypatch: pytest.MonkeyPatch, query: str, title: str, given: float
+) -> None:
+    from pydantic import ValidationError
+
+    expected = ValidationError.from_exception_data(
+        title,
+        [{'type': 'finite_number', 'loc': ('num_estimators',), 'input': given}],
+    )
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    with pytest.raises(StructuredDataError) as refused:
+        _materialize(query=query, inference_config={'num_estimators': given})
+    assert refused.value.code == 'INVALID_REQUEST'
+    assert str(refused.value) == f'[INVALID_REQUEST] {expected}'
+    assert refused.value.details['field'] == 'inference_config'
+    assert refused.value.details['key'] == 'num_estimators'
+
+
+def test_invalid_statistic_keeps_its_approved_early_precedence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    with pytest.raises(StructuredDataError) as refused:
+        _materialize(
+            prediction_statistic='unknown',
+            inference_config={'num_estimators': float('inf')},
+        )
+    assert refused.value.code == 'INVALID_REQUEST'
+    assert refused.value.details['field'] == 'prediction_statistic'
+
+
+@pytest.mark.parametrize('given', [float('inf'), float('nan')])
+def test_other_nonfinite_inference_fields_are_still_refused(
+    monkeypatch: pytest.MonkeyPatch, given: float
+) -> None:
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    for config, message in [
+        ({'column_shuffle': given}, 'is true or false'),
+        ({'target_transforms': [given]}, 'target_transforms'),
+        ({'class_shuffle': given}, 'not an inference option'),
+    ]:
+        with pytest.raises(StructuredDataError) as refused:
+            _materialize(inference_config=config)
+        assert refused.value.code == 'INVALID_REQUEST'
+        assert message in str(refused.value)
 
 
 @pytest.mark.parametrize(
@@ -602,15 +728,16 @@ def test_tables_named_are_sampled_as_the_old_route_samples_them(
         ),
     )
     core, schema = _named()
-    assert schema._core_description is not None
-    # Each source a relation of one part, its name whole (contract v26).
-    assert {
-        t['name']: t['source'] for t in schema._core_description['tables']
-    } == {name: {'source': [source]} for name, source in NAMED.items()}
+    assert _described_on_the_core(schema)
+    # Each source a relation of one part, its name whole (contract v26), as
+    # the schema is handed to the core (T3.16).
+    assert {t['name']: t['source'] for t in held_schema(schema)['tables']} == {
+        name: {'source': [source]} for name, source in NAMED.items()
+    }
     payload = core._payloads[0]
     assert set(payload['context']['related_tables']) == {'buyers', 'purchases'}
     assert core.entity_table == 'buyers'
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     if _old_route_needs_the_engine():
         return
     old, _ = _named()
@@ -620,19 +747,64 @@ def test_tables_named_are_sampled_as_the_old_route_samples_them(
     assert core.task == old.task
 
 
-def test_a_schema_not_described_on_the_core_has_no_core_route(
+def test_a_schema_not_described_on_the_core_is_described_and_materialized(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # The reference materializes any Schema (T3.8, P2-T2.16-11): a schema
+    # whose columns hold no facts of the source has them read by the core
+    # (T3.16), and asks what the same schema described on the core asks.
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
+        described = Schema.from_source(DuckDBSource(_connection()))
+        schema = described.snapshot()
+        # As a schema the old route described: no facts of the source.
+        for table in schema.tables.values():
+            for column in table.columns.values():
+                object.__setattr__(column, '_source', None)
+        asked = [
+            PredictiveQuery(QUERY, held)
+            .materialize(indices=[0, 1], anchor_time=ANCHOR, random_seed=7)
+            ._payloads
+            for held in (schema, described)
+        ]
+    assert asked[0] == asked[1]
+    # The facts read for the call are not kept: the schema is as built.
+    assert not _described_on_the_core(schema)
+
+
+def test_on_the_core_route_the_core_chooses_the_validator(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # P2-MID2-1 (T3.8, design choice 9): with S0 and materialize on the
+    # core, the core validates a query and resolves it as it gathers it;
+    # the old validator is never asked, for a query accepted or refused.
+    import predictive_query
+
+    monkeypatch.setenv(_routing.ENVIRONMENT, ','.join([CORE, *_routing.S0]))
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
         schema = Schema.from_source(DuckDBSource(_connection()))
-    # As a schema the old route described: no description of the core's.
-    schema._core_description = None
-    with pytest.raises(_routing.RouteError):
-        PredictiveQuery(QUERY, schema).materialize(
-            indices=[0, 1], anchor_time=ANCHOR
+        control = PredictiveQuery(QUERY, schema).materialize(
+            indices=[0, 1], anchor_time=ANCHOR, random_seed=7
         )
+
+    def unreachable(*_: object) -> Any:
+        raise AssertionError('the old validator was asked on the core route')
+
+    monkeypatch.setattr(predictive_query, 'validate', unreachable)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        asked = PredictiveQuery(QUERY, schema).materialize(
+            indices=[0, 1], anchor_time=ANCHOR, random_seed=7
+        )
+        with pytest.raises(StructuredDataError) as refused:
+            PredictiveQuery(
+                'PREDICT SUM(orders.nope, 0, 30, days) FOR EACH users.user_id',
+                schema,
+            ).materialize(indices=[0, 1], anchor_time=ANCHOR)
+    assert asked._payloads == control._payloads
+    assert refused.value.code == 'INVALID_REQUEST'
 
 
 def test_the_largest_declared_seed_reaches_the_core_exactly() -> None:
@@ -716,6 +888,42 @@ def test_the_largest_declared_seed_reaches_the_core_exactly() -> None:
             ]
         ],
     }
+    # The schema as the host holds it (T3.16): each column with what the
+    # source said of it.
+    wire = {'int': 'int64', 'float': 'float64', 'date': 'timestamp[us]'}
+    held = {
+        'tables': [
+            {
+                **{
+                    key: table[key]
+                    for key in ('name', 'source', 'primary_key', 'time_column')
+                },
+                'columns': [
+                    {
+                        'name': column['name'],
+                        'dtype': wire[column['dtype']],
+                        'stype': column['stype'],
+                        'stype_before_key': None,
+                        'source': {
+                            'relation': table['source'],
+                            **{
+                                key: column[key]
+                                for key in (
+                                    'dtype',
+                                    'received',
+                                    'nullable',
+                                    'unique',
+                                )
+                            },
+                        },
+                    }
+                    for column in table['columns']
+                ],
+            }
+            for table in description['tables']
+        ],
+        'links': description['links'],
+    }
     import pyarrow as pa
 
     asked: list[dict[str, Any]] = []
@@ -765,7 +973,7 @@ def test_the_largest_declared_seed_reaches_the_core_exactly() -> None:
         run(
             operation,
             {
-                1: codec.attachment(description),
+                1: codec.attachment(held),
                 2: codec.attachment(QUERY),
                 3: pa.table({'indices': pa.array([0, 1], pa.int64())}),
             },
@@ -871,25 +1079,36 @@ def test_a_nan_in_a_label_s_window_is_skipped_as_the_reference_skips_it(
     assert _context_row(mixed, 22)[3] == 5.0
 
 
-def test_a_table_mapped_to_another_source_table_is_refused_by_name(
+def test_a_table_mapped_to_another_source_table_samples_that_table(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
-        connection = _connection()
-        schema = Schema.from_source(DuckDBSource(connection))
-        connection.execute(
-            'CREATE TABLE other_orders AS SELECT order_id, user_id, '
-            'price * 2 AS price, ts FROM orders'
-        )
-        schema.tables['orders'].source_name = 'other_orders'
-        with pytest.raises(StructuredDataError) as refused:
-            PredictiveQuery(QUERY, schema).materialize(
-                indices=[0, 1], anchor_time=ANCHOR
+    # T3.16: the schema is plain data, so a table pointed at another source
+    # table is sampled from it, as the reference samples a table by its
+    # source name, where until T3.16 the core refused it (`schema_edited`).
+    def sampled() -> Any:
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            connection = _connection()
+            schema = Schema.from_source(DuckDBSource(connection))
+            connection.execute(
+                'CREATE TABLE other_orders AS SELECT order_id, user_id, '
+                'price * 2 AS price, ts FROM orders'
             )
-    assert refused.value.code == 'UNSUPPORTED_REQUEST'
-    assert refused.value.details['rule'] == 'schema_edited'
+            schema.tables['orders'].source_name = 'other_orders'
+            return (
+                PredictiveQuery(QUERY, schema)
+                .materialize(indices=[0, 1], anchor_time=ANCHOR)
+                ._payloads[0]
+            )
+
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    core = sampled()
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
+    if _old_route_needs_the_engine():
+        return
+    assert json.loads(json.dumps(core)) == json.loads(
+        json.dumps(sampled(), default=str)
+    )
 
 
 def test_a_table_named_as_the_core_s_seeds_is_read(
@@ -1002,7 +1221,7 @@ def test_entities_that_do_not_cast_are_the_caller_s_error_on_the_core(
     assert refused.value.code == 'INVALID_REQUEST'
     assert refused.value.details['field'] == 'indices'
     assert refused.value.details['position'] == 0
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     if importlib.util.find_spec('sdm_relational_engine') is not None:
         with pytest.raises(StructuredDataError) as old:
             _materialize(indices=indices)
@@ -1044,7 +1263,7 @@ def test_a_refused_call_does_not_lose_the_index_warning(
         if route == 'core':
             monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
         else:
-            monkeypatch.delenv(_routing.ENVIRONMENT)
+            monkeypatch.setenv(_routing.ENVIRONMENT, '')
             if importlib.util.find_spec('sdm_relational_engine') is None:
                 break
         with warnings.catch_warnings():
@@ -1116,7 +1335,7 @@ def test_a_numpy_context_size_reaches_the_core(
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     core = _materialize(num_context_samples=count)
     assert core._payloads[0]['metadata']['num_context_examples'] == 4
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     if _old_route_needs_the_engine():
         return
     if isinstance(count, np.uint64) and int(np.__version__.split('.')[0]) < 2:
@@ -1175,7 +1394,7 @@ def test_a_key_of_one_column_as_a_sequence_is_pinned_on_both_routes(
     assert schema['users'].primary_key == 'user_id'
     assert len(schema.relationships) == 1
     assert outcome == 'success'
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     if importlib.util.find_spec('sdm_relational_engine') is None:
         return
     schema, outcome = built()
@@ -1237,7 +1456,7 @@ def test_a_zoned_anchor_time_is_read_at_its_utc_instant(
     core = _anchored(zoned)
     assert core == _anchored(pd.Timestamp('2024-03-01 10:00'))
     assert codec.timestamp(1, 'ns', 'UTC')['zone'] == 'UTC'
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     if importlib.util.find_spec('sdm_relational_engine') is not None:
         assert core == _anchored(zoned)
 
@@ -1287,7 +1506,7 @@ def test_a_time_past_nanoseconds_is_refused_on_both_routes_under_its_code(
     with pytest.raises(StructuredDataError) as core:
         _materialize(setup)
     assert core.value.code == 'VALUE_OUT_OF_RANGE'
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     if importlib.util.find_spec('sdm_relational_engine') is not None:
         with pytest.raises(StructuredDataError) as old:
             _materialize(setup)
@@ -1297,13 +1516,82 @@ def test_a_time_past_nanoseconds_is_refused_on_both_routes_under_its_code(
 # --- T1.26b: the sampler's walk and its state ----------------------------------
 
 
-def _logged(connection: Any) -> int:
-    r"""How many statements DuckDB logged since its query log was turned
-    on, the log's own reads left out."""
+def _logged_texts(connection: Any) -> list[str]:
+    r"""The statements DuckDB logged since its query log was turned on, in
+    order, the log's own reads left out."""
     rows = connection.execute(
         "SELECT message FROM duckdb_logs WHERE type = 'QueryLog'"
     ).fetchall()
-    return sum(1 for (text,) in rows if text and 'duckdb_logs' not in text)
+    return [text for (text,) in rows if text and 'duckdb_logs' not in text]
+
+
+def _logged(connection: Any) -> int:
+    r"""How many statements DuckDB logged since its query log was turned
+    on, the log's own reads left out."""
+    return len(_logged_texts(connection))
+
+
+class _Located:
+    r"""Counts the statements of each fetch the core marks as plan B's read
+    of a table as it stands (``FetchStep.purpose``, ``locate``, register
+    P3A-1): the one rule by which a core run's statements are compared with
+    the old client's, the core's own mark, never the statements' text."""
+
+    def __init__(self) -> None:
+        self.statements = 0
+        self.requests: list[dict[str, Any]] = []
+
+    def __enter__(self) -> _Located:
+        from sdm_client._rust import codec, run
+
+        located = self
+        self._native = run.native
+
+        class _Handle:
+            def __init__(self, handle: Any) -> None:
+                self._handle = handle
+
+            def next(self) -> Any:
+                control, sent = self._handle.next()
+                step = codec.read(control, sent)
+                if step.get('step') == 'fetch':
+                    located.requests.extend(step['requests'])
+                    for asked in step['requests']:
+                        if asked.get('purpose') == 'locate':
+                            located.statements += len(
+                                asked['plan'].get('statements', [])
+                            )
+                return control, sent
+
+            def __getattr__(self, name: str) -> Any:
+                return getattr(self._handle, name)
+
+        class _Run:
+            def __init__(self, real: Any) -> None:
+                self._real = real
+
+            def start(self, *arguments: Any) -> Any:
+                return _Handle(self._real.start(*arguments))
+
+            def __getattr__(self, name: str) -> Any:
+                return getattr(self._real, name)
+
+        class _Native:
+            def __init__(self, real: Any) -> None:
+                self._real = real
+                self.Run = _Run(real.Run)
+
+            def __getattr__(self, name: str) -> Any:
+                return getattr(self._real, name)
+
+        imported = self._native
+        run.native = lambda: _Native(imported())  # type: ignore[assignment]
+        return self
+
+    def __exit__(self, *_: Any) -> None:
+        from sdm_client._rust import run
+
+        run.native = self._native  # type: ignore[assignment]
 
 
 def _calls(
@@ -1314,14 +1602,17 @@ def _calls(
     made = []
     for query in queries:
         before = _logged(connection)
-        with warnings.catch_warnings(record=True) as caught:
+        with (
+            warnings.catch_warnings(record=True) as caught,
+            _Located() as located,
+        ):
             warnings.simplefilter('always')
             try:
                 query.materialize(anchor_time=ANCHOR, **arguments)
             except StructuredDataError:
                 pass
         warned = sum('Missing' in str(w.message) for w in caught)
-        made.append((_logged(connection) - before, warned))
+        made.append((_logged(connection) - before - located.statements, warned))
     return made
 
 
@@ -1333,7 +1624,7 @@ def _on_both_routes(
     route's refusal is held instead."""
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     found = [made()]
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     if importlib.util.find_spec('sdm_relational_engine') is None:
         with pytest.raises(MissingExtraError):
             made()
@@ -1346,25 +1637,54 @@ def _shop_logged() -> tuple[Any, Schema]:
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         connection = _connection()
+        connection.execute("CALL enable_logging('QueryLog')")
         schema = Schema.from_source(DuckDBSource(connection))
-    connection.execute("CALL enable_logging('QueryLog')")
     return connection, schema
 
 
 def test_a_second_call_runs_the_reference_s_statements(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # H9's counts on a repeated call (decision E52): the reference checks
-    # the indexes once, building its sampler, and keeps the time bounds it
-    # read, so its second call runs 4 statements where its first ran 6; the
-    # core is handed the state its first run left and skips the same two.
+    # The reference keeps indexes and time bounds (E52). P3A-5 refreshes
+    # SQL-source time bounds on the core, preserving its index lifetime:
+    # after the first six statements, the core runs five and the old four.
     def made() -> list[tuple[int, int]]:
         connection, schema = _shop_logged()
         query = PredictiveQuery(QUERY, schema)
         return _calls([query] * 3, connection, indices=[0, 1])
 
-    for found in _on_both_routes(monkeypatch, made):
-        assert found == [(6, 1), (4, 0), (4, 0)]
+    found = _on_both_routes(monkeypatch, made)
+    assert found[0] == [(6, 1), (5, 0), (5, 0)]
+    assert all(each == [(6, 1), (4, 0), (4, 0)] for each in found[1:])
+
+
+def test_source_refresh_reads_time_bounds_without_repeating_index_checks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # P3A-5 expires data-derived bounds even when the preview is unchanged.
+    # Their real fetch remains unmarked: only P3A-1's locate reads are
+    # subtracted when comparing statements with the old route.
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    connection, schema = _shop_logged()
+    query = PredictiveQuery(QUERY, schema)
+    for call in range(3):
+        with warnings.catch_warnings(), _Located() as located:
+            warnings.simplefilter('ignore')
+            query.materialize(anchor_time=ANCHOR, indices=[0, 1])
+        bounds = [
+            asked
+            for asked in located.requests
+            if asked['request'].get('request') == 'time_bounds'
+        ]
+        assert len(bounds) == 1
+        assert bounds[0].get('purpose') is None
+        indexes = [
+            asked
+            for asked in located.requests
+            if asked['request'].get('request') == 'describe'
+            and asked['request'].get('part') == 'indexes'
+        ]
+        assert len(indexes) == int(call == 0)
 
 
 def test_two_materializers_each_check_their_source_once(
@@ -1378,8 +1698,9 @@ def test_two_materializers_each_check_their_source_once(
         two = PredictiveQuery(QUERY, schema)
         return _calls([one, two, one, two], connection, indices=[0, 1])
 
-    for found in _on_both_routes(monkeypatch, made):
-        assert found == [(6, 1), (6, 1), (4, 0), (4, 0)]
+    found = _on_both_routes(monkeypatch, made)
+    assert found[0] == [(6, 1), (6, 1), (5, 0), (5, 0)]
+    assert all(each == [(6, 1), (6, 1), (4, 0), (4, 0)] for each in found[1:])
 
 
 def test_a_call_the_core_refuses_before_its_check_leaves_it_to_the_next(
@@ -1445,7 +1766,7 @@ def test_a_second_hop_and_a_text_feature_are_sampled_as_the_old_route_samples_th
         'dtype': 'stringlist',
         'stype': 'text',
     }
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     if importlib.util.find_spec('sdm_relational_engine') is not None:
         old = _deeper()._payloads[0]
         assert json.loads(json.dumps(core)) == json.loads(
@@ -1524,7 +1845,7 @@ def test_a_null_key_the_walk_reaches_links_nothing(
     core = _deeper(*setup, edit=False)._payloads[0]
     assert _crossing(core) == 0
     assert _unreferenced(core) == 0
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     if importlib.util.find_spec('sdm_relational_engine') is not None:
         old = _deeper(*setup, edit=False)._payloads[0]
         assert _crossing(old) > 0
@@ -1533,15 +1854,15 @@ def test_a_null_key_the_walk_reaches_links_nothing(
 def test_every_foreign_key_looked_up_null_is_the_reference_s_request(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Where the reference is clean, the core is it: every item key null,
-    # the reference looks up no key (one statement, no row) and sends each
-    # null; so does the core, statement for statement.
+    # Every item key null, both routes look up no key and send each null.
+    # The core also refreshes the source's time bounds on reuse (P3A-5).
     def made() -> list[tuple[int, int]]:
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
             connection = _connection(
                 *_DEEPER, 'UPDATE orders SET item_id = NULL'
             )
+            connection.execute("CALL enable_logging('QueryLog')")
             schema = Schema.from_source(
                 DuckDBSource(connection),
                 primary_keys={
@@ -1550,16 +1871,15 @@ def test_every_foreign_key_looked_up_null_is_the_reference_s_request(
                     'items': 'item_id',
                 },
             )
-        connection.execute("CALL enable_logging('QueryLog')")
-        query = PredictiveQuery(QUERY, schema)
+            query = PredictiveQuery(QUERY, schema)
         return _calls([query, query], connection, indices=[0, 1])
 
     found = _on_both_routes(monkeypatch, made)
-    assert found[0] == [(7, 1), (5, 0)]
-    assert all(each == found[0] for each in found)
+    assert found[0] == [(7, 1), (6, 0)]
+    assert all(each == [(7, 1), (5, 0)] for each in found[1:])
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     core = _deeper('UPDATE orders SET item_id = NULL', edit=False)._payloads[0]
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     assert 'items' not in core['context']['related_tables']
     if importlib.util.find_spec('sdm_relational_engine') is not None:
         old = _deeper('UPDATE orders SET item_id = NULL', edit=False)._payloads[
@@ -1601,6 +1921,7 @@ def _editable() -> tuple[Any, Schema]:
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         connection = _connection(*_EDITABLE)
+        connection.execute("CALL enable_logging('QueryLog')")
         schema = Schema.from_source(
             DuckDBSource(connection),
             primary_keys={
@@ -1614,7 +1935,6 @@ def _editable() -> tuple[Any, Schema]:
                 Relationship('extra', 'user_id', 'users', 'user_id'),
             ],
         )
-    connection.execute("CALL enable_logging('QueryLog')")
     return connection, schema
 
 
@@ -1628,14 +1948,17 @@ def _edited_between_calls(edit: str) -> list[tuple[int, int, str]]:
         if call == 1:
             _edit(schema, edit)
         before = _logged(connection)
-        with warnings.catch_warnings(record=True) as caught:
+        with (
+            warnings.catch_warnings(record=True) as caught,
+            _Located() as located,
+        ):
             warnings.simplefilter('always')
             payload = query.materialize(
                 indices=[0, 1], anchor_time=ANCHOR
             )._payloads[0]
         made.append(
             (
-                _logged(connection) - before,
+                _logged(connection) - before - located.statements,
                 sum('Missing' in str(w.message) for w in caught),
                 json.dumps(payload, sort_keys=True, default=str),
             )
@@ -1662,7 +1985,7 @@ def test_a_schema_edited_between_two_calls_is_sampled_as_edited(
         (6, 1) if edit == 'link' else (7, 1),
     ]
     assert core[0][2] != core[1][2]
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     if importlib.util.find_spec('sdm_relational_engine') is None:
         with pytest.raises(MissingExtraError):
             _edited_between_calls(edit)
@@ -1706,7 +2029,7 @@ def test_a_state_the_core_refuses_is_not_handed_back_again(
     assert 'held' not in query._relational_materializer._core_sampler_state
     assert _calls([query, query], connection, indices=[0, 1]) == [
         (6, 1),
-        (4, 0),
+        (5, 0),
     ]
 
 
@@ -1987,7 +2310,7 @@ def test_the_notices_of_what_the_request_leaves_out_are_the_old_route_s(
     assert core, 'a notice was given'
     if text is not None:
         assert any('users.bio is typed text' in n for n in core), core
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     if _old_route_needs_the_engine():
         return
     assert core == _notices(*setup, text=text)
@@ -2030,7 +2353,7 @@ def test_the_default_mode_s_cap_is_noticed_as_on_the_old_route(
         'context examples were gathered' in n
         for n in notices(num_context_samples=1_000)
     )
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     if _old_route_needs_the_engine():
         return
     assert core == notices()
@@ -2074,7 +2397,7 @@ def test_a_limit_is_raised_as_the_subclass_on_the_core_register_p1b_20(
     # (register P2B-3, retired).
     core = _refusal_of(indices=list(range(1_001)))
     assert (type(core), core.code) == (StructuredDataError, 'INVALID_REQUEST')
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     if _old_route_needs_the_engine():
         return
     old = _refusal_of(num_hops=7)
@@ -2100,7 +2423,7 @@ def test_an_average_compared_with_null_is_refused_by_name_register_p1b_21(
         'UNSUPPORTED_REQUEST',
         'average_null',
     )
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     if _old_route_needs_the_engine():
         return
     assert _refusal_of(query=query).code == 'INTERNAL_ERROR'
@@ -2129,7 +2452,7 @@ def test_a_time_of_day_as_the_time_column_is_the_source_s_failure_register_dt_18
 
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     assert refused().code == 'PROVIDER_ERROR'
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     if _old_route_needs_the_engine():
         return
     assert refused().code == 'INTERNAL_ERROR'
@@ -2162,7 +2485,7 @@ def test_numpy_inference_options_are_read_as_on_the_old_route(
     # core reads the options as the engine's validation reads them.
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     core = _materialize(query=query, inference_config=config)
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     if _old_route_needs_the_engine():
         return
     old = _materialize(query=query, inference_config=config)

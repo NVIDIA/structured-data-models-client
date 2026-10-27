@@ -48,7 +48,7 @@ use arrow_array::types::{
 use arrow_array::{Array, ArrayRef};
 use arrow_schema::{DataType, TimeUnit};
 use sdm_contract::ops::Stype;
-use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
+use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 use sdm_engine::labels::Labels;
 use sdm_wire::json::Value;
 use sdm_wire::payload::{
@@ -122,8 +122,9 @@ pub struct SampledTable {
 /// A foreign key between two sampled tables: for each row of `src`, the
 /// row of `dst` it refers to, if any. The links of one foreign key may come
 /// more than once, as the reference's sampled edge types of both
-/// directions; the first that gives a row a key is written, as the
-/// reference's payload writes it (`_populate_relationship_columns`).
+/// directions. Their partial maps are consolidated by sampled source-row
+/// position: the first partial map with a valid mapping supplies its key.
+/// Within one partial map, the last valid pair retains precedence.
 #[derive(Debug, Clone)]
 pub struct SampledLink {
     pub src: String,
@@ -241,13 +242,8 @@ pub struct Built {
     pub answering: usize,
 }
 
-fn invalid(message: &str, column: &str) -> CoreError {
-    CoreError::new(
-        ErrorKind::InvalidRequest,
-        ErrorCode::InvalidRequest,
-        message,
-    )
-    .with_field("column", Detail::text(column))
+fn invalid(sentence: Sentence, message: &str, column: &str) -> CoreError {
+    CoreError::new(sentence, message).with_field("column", Detail::text(column))
 }
 
 /// A value no request holds, with the value as Python writes a float
@@ -261,6 +257,7 @@ fn not_finite(column: &str, value: f64) -> CoreError {
         "-inf"
     };
     invalid(
+        Sentence::NotFinite,
         "a value is not finite, and a request holds finite numbers or nulls",
         column,
     )
@@ -274,7 +271,7 @@ fn count(n: usize) -> Detail {
 }
 
 fn internal(message: &str) -> CoreError {
-    CoreError::new(ErrorKind::Internal, ErrorCode::InternalError, message)
+    CoreError::new(Sentence::Internal, message)
 }
 
 /// The wire dtype of a column of `data_type`, or a refusal naming the rule:
@@ -379,10 +376,14 @@ fn int_cell(value: i128, column: &str) -> Result<Value, CoreError> {
         // The range, for the host's words (the reference's
         // `_cell_json_value`), never the value (decision H17); the table and
         // row are its caller's.
-        return Err(invalid("a value is outside the range int64 holds", column)
-            .with_field("field", Detail::text("request"))
-            .with_field("reason", Detail::text("past_int64"))
-            .with_field("dtype", Detail::text("int64")));
+        return Err(invalid(
+            Sentence::PastInt64,
+            "a value is outside the range int64 holds",
+            column,
+        )
+        .with_field("field", Detail::text("request"))
+        .with_field("reason", Detail::text("past_int64"))
+        .with_field("dtype", Detail::text("int64")));
     }
     if value.abs() > JSON_SAFE {
         return Ok(Value::Text(value.to_string()));
@@ -447,8 +448,7 @@ fn to_ns(value: i64, unit: TimeUnit, column: &str) -> Result<i64, CoreError> {
     };
     value.checked_mul(per).ok_or_else(|| {
         CoreError::new(
-            ErrorKind::Unsupported,
-            ErrorCode::ValueOutOfRange,
+            Sentence::ColumnTimePastNanoseconds,
             "a time is outside what nanoseconds since the epoch hold",
         )
         .with_field("column", Detail::text(column))
@@ -989,8 +989,10 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
             target_columns: vec![target_column.clone()],
         });
     }
-    // Each foreign key once, from the first of its links that gives a row
-    // a key; a row given none is null, and an integer key column holding a
+    // Each foreign key once, merging every partial link row by row. The
+    // first partial map supplying a sampled source row gives its key,
+    // preserving last-valid-pair precedence within each map. Only a row
+    // no link supplies is null. An integer key column holding a
     // null, or a float32 key's column, is written as float64, as pandas
     // types such a column.
     let mut written: Vec<(&str, &str, &str)> = Vec::new();
@@ -1018,9 +1020,13 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
         };
         let src_rows = frames[src].1.rows;
         let mut values = vec![None; src_rows];
-        for &(row, at) in &link.pairs {
-            if row < src_rows && at < dst_rows {
-                values[row] = Some(key_cells[at].clone());
+        for partial in sampled.links.iter().filter(|partial| {
+            partial.src == link.src && partial.fkey == link.fkey && partial.dst == link.dst
+        }) {
+            for &(row, at) in partial.pairs.iter().rev() {
+                if row < src_rows && at < dst_rows && values[row].is_none() {
+                    values[row] = Some(key_cells[at].clone());
+                }
             }
         }
         if values.iter().all(Option::is_none) {
@@ -1219,8 +1225,11 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
     if bytes.len() > PAYLOAD_BYTES {
         let count = |n: usize| Detail::Scalar(sdm_contract::Scalar::UInt64(n as u64));
         return Err(CoreError::new(
-            ErrorKind::InvalidRequest,
-            ErrorCode::InvalidRequest,
+            if sampled.num_test > 1 {
+                Sentence::PayloadSmallerCalls
+            } else {
+                Sentence::PayloadNoSmallerCall
+            },
             "the request is larger than the endpoint takes",
         )
         .with_field("field", Detail::text("payload"))

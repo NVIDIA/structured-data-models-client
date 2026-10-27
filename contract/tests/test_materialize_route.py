@@ -76,6 +76,32 @@ run_python = _module('run_python')
 capture_check = _module('capture_check')
 
 
+def _without_plan_b_reads(observation: dict[str, Any]) -> dict[str, Any]:
+    r"""``observation``'s projection (``capture_check.py``), its query log's
+    statements counted without those the core marked as plan B's reads of
+    a table as it stands (``compare.py``'s ``LOCATE``, the one rule,
+    register P3A-1)."""
+    path = ROOT / 'scripts/rust_core/compare.py'
+    if 'compare' not in sys.modules:
+        spec = importlib.util.spec_from_file_location('compare', path)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        sys.modules['compare'] = module
+        spec.loader.exec_module(module)
+    locate = sys.modules['compare'].LOCATE
+    reads = sum(
+        1
+        for statement in observation['driver']['capture']['statements']
+        if statement.get('purpose') == locate
+    )
+    projection = capture_check.projection(observation)
+    logged = projection['query_log']
+    return {
+        **projection,
+        'query_log': {**logged, 'statements': logged['statements'] - reads},
+    }
+
+
 def _reference() -> dict[str, Any]:
     for line in REFERENCE.read_text().splitlines():
         observation = json.loads(line)
@@ -129,7 +155,7 @@ def test_base_regression_reaches_the_reference_s_payload_on_the_core(
     assert (
         'request_id' in reference['public']['payloads'][0]['parsed']['metadata']
     )
-    assert capture_check.projection(core) == capture_check.projection(reference)
+    assert _without_plan_b_reads(core) == capture_check.projection(reference)
     # The request the endpoint received is the core's payload, with what
     # predict adds: the model, the outputs, a request id, and only the
     # inference options the model reads.
@@ -214,11 +240,15 @@ def test_the_core_s_sql_for_materialize_returns_the_reference_s_results(
 ) -> None:
     reference = _reference()['driver']['capture']
     recorded = _materialize_recording(monkeypatch)
-    # Ten fetches for the schema (test_schema_route.py), then
-    # materialize's six, as the reference's sixteen statements.
-    assert len(recorded) == 16
+    # Ten fetches for the schema (test_schema_route.py), then the reads
+    # the core marks as plan B's (purpose `locate`, the one rule, register
+    # P3A-1), then materialize's six, as the reference's sixteen statements.
+    fresh = sum(1 for step, _, _ in recorded if step.get('purpose') == 'locate')
+    assert len(recorded) == 16 + fresh
     assert len(reference['statements']) == 16
-    ours = recorded[10:]
+    ours = [
+        entry for entry in recorded[10:] if entry[0].get('purpose') != 'locate'
+    ]
     theirs = reference['statements'][10:]
     bindings = iter(reference['bindings'])
     requests = [step['request']['request'] for step, _, _ in ours]

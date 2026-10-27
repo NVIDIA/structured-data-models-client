@@ -11,7 +11,7 @@
 use std::collections::BTreeSet;
 
 use sdm_contract::ops::{ColumnRef, DescribedColumn, SourceDescription, Stype};
-use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
+use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 
 /// One table of the graph.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -113,7 +113,13 @@ pub fn with_reserved(error: CoreError, description: &SourceDescription) -> CoreE
     } else {
         "reserved_name"
     };
+    let sentence = if reserved.len() > 1 {
+        Sentence::ReservedNames
+    } else {
+        Sentence::ReservedName
+    };
     error
+        .saying(sentence)
         .with_field("reason", Detail::text(reason))
         .with_field("prefix", Detail::text(RESERVED_PREFIX))
         .with_field(
@@ -123,12 +129,7 @@ pub fn with_reserved(error: CoreError, description: &SourceDescription) -> CoreE
 }
 
 fn invalid(message: &str, field: &str) -> CoreError {
-    CoreError::new(
-        ErrorKind::InvalidRequest,
-        ErrorCode::InvalidRequest,
-        message,
-    )
-    .with_field("field", Detail::text(field))
+    CoreError::new(Sentence::SchemaLinkUnread, message).with_field("field", Detail::text(field))
 }
 
 impl Graph {

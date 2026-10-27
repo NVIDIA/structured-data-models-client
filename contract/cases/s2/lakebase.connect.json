@@ -1,0 +1,56 @@
+{
+  "format": "sdm-case/1",
+  "id": "lakebase.connect",
+  "status": "acceptance",
+  "slice": "S2",
+  "warehouses": [
+    "lakebase"
+  ],
+  "paths": [
+    "source.connect-databricks/lakebase/lakebase",
+    "source.open/auto/lakebase",
+    "schema.from-source/all-tables/lakebase",
+    "query.materialize/indices-binary/lakebase",
+    "client.predict/binary/lakebase"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/lakebase",
+    "schema.from-source/catalog-keys/lakebase",
+    "query.materialize/indices-binary/lakebase",
+    "query.materialize/indices-multiclass/lakebase",
+    "query.materialize/indices-regression/lakebase",
+    "query.materialize/indices-link-prediction/lakebase",
+    "query.materialize/indices-ranking/lakebase",
+    "query.materialize/indices-forecast/lakebase",
+    "client.predict/binary/lakebase",
+    "client.predict/multiclass/lakebase",
+    "client.predict/regression/lakebase",
+    "client.predict/link-prediction/lakebase",
+    "client.predict/ranking/lakebase",
+    "client.predict/forecast/lakebase"
+  ],
+  "cells": [
+    "int64/primary-key",
+    "timestamp-us/time-column"
+  ],
+  "input": {
+    "base": "shop",
+    "connect": "lakebase",
+    "pql": "PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2024-03-01"
+    }
+  },
+  "until": "predict",
+  "expect": {
+    "outcome": "success",
+    "stage": "predict",
+    "today": "lakebase() looks up the endpoint's host, mints a database credential and opens psycopg with sslmode=require and autocommit (CN/databricks.py:178-262); Source(connection) detects psycopg as postgres (CN/source.py:51-58, :97-107), so the source is a PostgresSource"
+  },
+  "why": "The source opened by sdm_connectors.databricks.lakebase() and found by auto detection, Source(connection); the endpoint and database come from the environment.",
+  "source": "written by T3.7's test author from the reference at 43e55f4f"
+}

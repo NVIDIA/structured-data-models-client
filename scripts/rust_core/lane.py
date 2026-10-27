@@ -16,6 +16,7 @@ returns to the phase head when ``land.py`` lands them.
     lane.py [--phase-branch rust-core-phase-N] start --lane X --package ID
         --worktree PATH [--wait] [--dry-run]
     lane.py [--phase-branch rust-core-phase-N] status [--lane X]
+    lane.py [--phase-branch rust-core-phase-N] pause --lane X [--resume]
     lane.py check [--pushed-refs FILE]
 
 The phase branch is ``--phase-branch``, else ``SDM_PHASE_BRANCH``, else the
@@ -48,7 +49,17 @@ letters and digits (``1b``), the package an ID such as ``T1.11e`` or
 - the local lane branch holds commits the phase branch lacks, the worktree
   holding it has uncommitted changes or untracked files that are not
   ignored (they would carry into the next package), or the worktree path
-  is taken.
+  is taken;
+- ``MAX_LANES`` lanes are active already (the owner's rule, 2026-10-22: at
+  most three packages run at once on this machine; ``MAX_LANES`` in
+  ``orchestration/heavy.conf``, or ``$SDM_HEAVY_CONFIG``, default 3). An
+  active lane is a worktree on another lane of the phase whose recorded
+  package has no landing (``Land <ID>: ...``) in the phase head's history
+  and that is not paused. The refusal names them.
+
+``pause --lane X`` marks the lane's worktree paused (``sdm.paused`` in its
+own configuration, beside ``sdm.package``), which frees its slot;
+``--resume`` takes the mark away. ``start`` clears it for the next package.
 
 Otherwise it creates the remote lane at the phase head, or fast-forwards
 it there, each with a normal push (none when it is there already); makes
@@ -89,6 +100,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from collections import Counter
@@ -114,6 +126,7 @@ from land import (  # noqa: E402
     repo_of,
 )
 from phases import (  # noqa: E402
+    EPIC,
     LANE_NAME,
     Phase,
     PhaseError,
@@ -132,6 +145,12 @@ WAIT_ROUNDS = 10
 WAIT_SECONDS = 30
 WAIT_CAP = 600
 ZERO_SHA = '0' * 40
+#: The owner's rule (2026-10-22): at most this many packages run at once on
+#: this machine. heavy.conf's ``MAX_LANES`` sets it (T3.2 fix 4).
+HEAVY_CONF = Path(__file__).resolve().parent / 'orchestration' / 'heavy.conf'
+MAX_LANES = 3
+#: A lane's worktree marked paused frees its slot (``lane.py pause``).
+PAUSED_KEY = 'sdm.paused'
 
 Out = Callable[[str], None]
 
@@ -148,12 +167,107 @@ def lane_branch(name: str, phase: Phase) -> str:
     return phase.lane_prefix + name
 
 
-def package_id(package: str) -> str:
+#: A package ID from Phase 3 on: an integer within its phase, no letter
+#: (T3.1's rule, learnings.md: few big packages; T2.14a1 broke landings).
+WHOLE_PACKAGE_ID = re.compile(r'T[0-9]+\.[0-9]+|CI[0-9]+')
+#: The first phase whose package IDs are whole and whose briefs are checked
+#: before a lane starts (T3.2).
+WHOLE_FROM = 3
+
+
+def package_id(package: str, phase: int | None = None) -> str:
     if not PACKAGE_ID.fullmatch(package):
         raise Refusal(
             f'the package {package!r} is not a package ID such as T1.11e or CI3'
         )
+    if (
+        phase is not None
+        and phase >= WHOLE_FROM
+        and not WHOLE_PACKAGE_ID.fullmatch(package)
+    ):
+        raise Refusal(
+            f'the package {package!r} has a letter: from Phase {WHOLE_FROM} '
+            'on a package ID is a whole number within its phase, such as '
+            'T3.4 (fewer, bigger packages)'
+        )
     return package
+
+
+def brief_problems(brief: str | None) -> list[str]:
+    r"""Why the package's brief may not start a lane (T3.2; learnings.md,
+    lesson 16): ``brief_check.py`` finds a heading of the brief template
+    missing from it, each named."""
+    if brief is None:
+        return []
+    import brief_check
+
+    try:
+        headings = brief_check.required(brief_check.TEMPLATE)
+        lacking = brief_check.missing(Path(brief), headings)
+    except brief_check.Unreadable as error:
+        return [f'the brief cannot be read: {error}']
+    return [
+        f'the brief {brief} lacks the heading {heading[3:]} '
+        '(briefs/package.md; brief_check.py)'
+        for heading in lacking
+    ]
+
+
+# --- the number of lanes ------------------------------------------------------
+
+
+def max_lanes(environ: dict[str, str] | None = None) -> int:
+    r"""``MAX_LANES`` from heavy.conf (``$SDM_HEAVY_CONFIG``, else the one
+    beside ``heavy``), else :data:`MAX_LANES`."""
+    environ = dict(os.environ) if environ is None else environ
+    path = Path(environ.get('SDM_HEAVY_CONFIG') or HEAVY_CONF)
+    try:
+        text = path.read_text(encoding='utf-8')
+    except OSError:
+        return MAX_LANES
+    for line in text.splitlines():
+        key, sep, value = line.partition('=')
+        if sep and key.strip() == 'MAX_LANES':
+            if not value.strip().isdigit() or int(value) < 1:
+                raise Refusal(
+                    f'{path}: MAX_LANES={value.strip()!r} is not a whole number '
+                    'of at least 1'
+                )
+            return int(value)
+    return MAX_LANES
+
+
+def paused(tools: Tools, path: str) -> bool:
+    done = tools.attempt(
+        'git', '-C', path, 'config', '--worktree', '--bool', '--get',
+        PAUSED_KEY,
+    )  # fmt: skip
+    return done.returncode == 0 and done.stdout.strip() == 'true'
+
+
+def active_lanes(
+    tools: Tools, phase: Phase, head: str, starting: str
+) -> list[tuple[str, str]]:
+    r"""The lanes of ``phase`` other than ``starting`` whose worktree records
+    a package not landed by ``head`` and is not paused, as (lane, package)."""
+    landed = tools.git('log', '--first-parent', '--format=%s', head)
+    subjects = landed.splitlines()
+    found = []
+    for tree in worktrees(tools):
+        branch = tree.branch.removeprefix('refs/heads/')
+        name = phase.lane_of(branch)
+        if name is None or branch == starting or tree.prunable:
+            continue
+        package = recorded_package(tools, tree.path)
+        if package is None or paused(tools, tree.path):
+            continue
+        if any(
+            s.startswith((f'Land {package}:', f'Land {package} '))
+            for s in subjects
+        ):
+            continue
+        found.append((name, package))
+    return found
 
 
 # --- the remote ---------------------------------------------------------------
@@ -443,6 +557,42 @@ def plan_start(
     remote_lane = tips.get(branch)
     fetch_objects(tools, args.remote, *tips)
     out(f'ok   {phase_name} is at {phase}')
+    # From Phase 3 on (T3.2): whole package IDs, and the package's brief
+    # holding every heading of the template.
+    number = phase_of_tools(tools).number
+    package_id(package, number)
+    problems = brief_problems(getattr(args, 'brief', None))
+    if problems:
+        raise Refusal('\n'.join(problems))
+    # A phase the epic branch holds is finished: no lane starts on it
+    # (T3.2; T3.8's run made a Phase 2 lane from the rust-core checkout).
+    # A phase just cut from the epic, its head the epic's own tip and no
+    # landing of its own, is not.
+    epic = remote_tips(tools, args.remote, EPIC).get(EPIC)
+    if epic is not None:
+        fetch_objects(tools, args.remote, EPIC)
+        subject = tools.git('log', '-1', '--format=%s', phase).strip()
+        own = subject.startswith(f'Land T{number}.') or subject.startswith(
+            'Land CI'
+        )
+        if is_ancestor(tools, phase, epic) and (epic != phase or own):
+            raise Refusal(
+                f'{phase_name} is finished: {EPIC} already holds its head '
+                f'{phase[:12]}; start the lane on the phase in progress '
+                '(--phase-branch or SDM_PHASE_BRANCH)'
+            )
+
+    # The owner's rule (2026-10-22): at most MAX_LANES packages at once.
+    limit = max_lanes()
+    busy = active_lanes(tools, phase_of_tools(tools), phase, branch)
+    if len(busy) >= limit:
+        raise Refusal(
+            f'{len(busy)} lane(s) are active, and at most {limit} packages run '
+            'at once on this machine (the owner, 2026-10-22; MAX_LANES in '
+            'heavy.conf): '
+            + ', '.join(f'lane {name} ({pkg})' for name, pkg in busy)
+            + '; land one, or free a slot with `lane.py pause --lane <x>`'
+        )
 
     if remote_lane is not None:
         active = [
@@ -651,6 +801,11 @@ def execute(
     tools.git(
         '-C', plan.path, 'config', '--worktree', PACKAGE_KEY, plan.package
     )
+    if paused(tools, plan.path):
+        # A new package runs: the pause was the previous one's.
+        tools.git(
+            '-C', plan.path, 'config', '--worktree', '--unset', PAUSED_KEY
+        )
     # Read back, as land.py and prepush.sh will read it.
     head = tools.git('-C', plan.path, 'rev-parse', 'HEAD').strip()
     on = tools.git('-C', plan.path, 'symbolic-ref', '--short', 'HEAD').strip()
@@ -700,12 +855,15 @@ def next_steps(plan: Plan, remote: str) -> list[str]:
         f"'{plan.package}: ...' or '{plan.package} tracker: ...' "
         '(prepush.sh and land.py refuse any other); squash fixup! and '
         'squash! commits (git rebase --autosquash) before pushing',
-        '  scripts/rust_core/prepush.sh before each push, --full before the '
-        'last',
+        '  scripts/rust_core/handoff.py run --package '
+        f'{plan.package} before reporting ready (reviews refuse a SHA '
+        'without its stamp); scripts/rust_core/prepush.sh (the cheap tier, '
+        'never --full) before each push',
         f'  git push {remote} HEAD:{plan.branch}',
-        '  land with scripts/rust_core/land.py --topic-branch '
+        '  land with scripts/rust_core/land.py --stack --topic-branch '
         f"{plan.branch} --title 'Land {plan.package}: ...' (it checks the "
-        'package), then land.py verify and prune_caches.py --delete',
+        'package), then land.py stack-land --tip <landing>, land.py verify '
+        'and prune_caches.py --delete',
         f"  the lane's next package: lane.py start --lane {plan.lane} "
         '--package <ID>',
     ]
@@ -739,6 +897,31 @@ def start(args: argparse.Namespace, tools: Tools, out: Out) -> int:
     execute(plan, args, tools, out)
     out(f'STARTED {plan.package} on {plan.branch} at {plan.phase}')
     out('\n'.join(next_steps(plan, args.remote)))
+    return 0
+
+
+# --- pause --------------------------------------------------------------------
+
+
+def pause(args: argparse.Namespace, tools: Tools, out: Out) -> int:
+    assert tools.phase is not None
+    branch = lane_branch(args.lane, tools.phase)
+    holder = next(
+        (t for t in worktrees(tools) if t.branch == f'refs/heads/{branch}'),
+        None,
+    )
+    if holder is None or recorded_package(tools, holder.path) is None:
+        raise Refusal(f'no worktree here holds {branch} with a package')
+    if args.resume:
+        if paused(tools, holder.path):
+            tools.git(
+                '-C', holder.path, 'config', '--worktree', '--unset',
+                PAUSED_KEY,
+            )  # fmt: skip
+        out(f'RESUMED lane {args.lane} ({holder.path})')
+    else:
+        tools.git('-C', holder.path, 'config', '--worktree', PAUSED_KEY, 'true')
+        out(f'PAUSED lane {args.lane} ({holder.path}): its slot is free')
     return 0
 
 
@@ -808,7 +991,11 @@ def check_lane_range(
     ).stdout.strip()
     if not base:
         raise Refusal(f'no {base_ref}; fetch {remote} first')
-    stray = commits_not_owned(tools, base, head, package, remote=remote)
+    # A package stacked on approved packages' landing commits (land.py
+    # --stack, T3.0) carries the stack below it: checked as a stack.
+    stray = commits_not_owned(
+        tools, base, head, package, remote=remote, stacked=True
+    )
     if stray:
         raise Refusal(
             f'{branch} carries {package}, and these commits since '
@@ -858,6 +1045,31 @@ def check(args: argparse.Namespace, tools: Tools, out: Out) -> int:
     return 0
 
 
+#: The branches only the owner's merge pushes (the owner, Q14, 2026-10-22).
+PROTECTED_REFS = {
+    f'refs/heads/{name}'
+    for name in ('rust-core', 'main', 'rust-core-reference')
+}
+
+
+def protected_push(branch: str) -> None:
+    """Refuses a push that updates or deletes a protected branch, unless
+    ``SDM_APPROVED`` names an owner-answers section (guard_cmd.py's tokens),
+    which is logged."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent / 'orchestration'))
+    import guard_cmd  # noqa: PLC0415
+
+    token = os.environ.get(guard_cmd.TOKEN_VAR, '')
+    if token and token in guard_cmd.valid_tokens():
+        guard_cmd.log('approved-commands.log', f'pre-push {token} {branch}')
+        return
+    raise Refusal(
+        f"the push updates {branch}, which only the owner's merge pushes; "
+        f'run it as {guard_cmd.TOKEN_VAR}=<owner-answers id> git push ... '
+        'when the owner approved it'
+    )
+
+
 def check_pushed(
     args: argparse.Namespace, tools: Tools, out: Out, current: str
 ) -> int:
@@ -871,6 +1083,8 @@ def check_pushed(
             continue
         _, sha, remote_ref, _ = fields
         branch = remote_ref.removeprefix('refs/heads/')
+        if remote_ref in PROTECTED_REFS:
+            protected_push(branch)
         under = (
             phase_of(branch) if remote_ref.startswith('refs/heads/') else None
         )
@@ -920,10 +1134,21 @@ def parser() -> argparse.ArgumentParser:
     )
     begin.add_argument('--wait', action='store_true')
     begin.add_argument(
+        '--brief',
+        help="the package's brief, which brief_check.py must pass",
+    )
+    begin.add_argument(
         '--wait-seconds', type=float, default=WAIT_SECONDS,
         help=argparse.SUPPRESS,
     )  # fmt: skip
     begin.add_argument('--dry-run', action='store_true')
+    hold = sub.add_parser(
+        'pause', help="mark a lane's worktree paused, freeing its slot"
+    )
+    hold.add_argument('--lane', required=True)
+    hold.add_argument(
+        '--resume', action='store_true', help='take the mark away'
+    )
     show = sub.add_parser('status', help='show the lanes')
     show.add_argument('--lane')
     inspect = sub.add_parser(
@@ -943,7 +1168,12 @@ def main(
 ) -> int:
     args = parser().parse_args(list(sys.argv[1:] if argv is None else argv))
     tools = tools or Tools()
-    command = {'start': start, 'status': status, 'check': check}[args.command]
+    command = {
+        'start': start,
+        'status': status,
+        'check': check,
+        'pause': pause,
+    }[args.command]
     try:
         # Names first, before gh is asked anything: the phase branch (the
         # branch checked out read from git), then the lane and package.
@@ -966,9 +1196,9 @@ def main(
         if args.command == 'start':
             lane_branch(args.lane, tools.phase)
             package_id(args.package)
-        elif args.command == 'status' and args.lane:
+        elif args.command in ('status', 'pause') and args.lane:
             lane_branch(args.lane, tools.phase)
-        if args.command != 'check':
+        if args.command not in ('check', 'pause'):
             tools.repo = args.repo or tools.repo or repo_of(tools, args.remote)
         return command(args, tools, out)
     except Refusal as why:

@@ -325,15 +325,13 @@ def test_a_handle_carrying_an_unregistered_spec_is_refused():
     way to describe a new one. Its spec decides the route and the limits the
     request is checked against, and the id it names is a closed enum on the
     wire, so an unregistered one would gather work that cannot be sent."""
-    from predictive_query import RELATIONAL as RELATIONAL_PROFILE
-
     from sdm_client.base import ModelSpec, RuntimeContract
     from sdm_client.models import Model
 
     class Invented(Model):
         _spec = ModelSpec(
             model_id='not-a-real-model',
-            profile=RELATIONAL_PROFILE,
+            profile='RELATIONAL',
             runtime=RuntimeContract(
                 tasks=frozenset({'classification'}),
                 outputs=frozenset({'prediction'}),

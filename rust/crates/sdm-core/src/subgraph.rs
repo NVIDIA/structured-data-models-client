@@ -41,10 +41,10 @@ use std::sync::Arc;
 
 use arrow_array::{ArrayRef, RecordBatch, UInt32Array};
 use arrow_schema::{Field, Schema};
-use sdm_contract::data::NullOrder;
+use sdm_contract::data::{DataRequest, NullOrder};
 use sdm_contract::ops::Stype;
 use sdm_contract::types::ColumnType;
-use sdm_contract::{CoreError, CoreWarning, Detail, Scalar};
+use sdm_contract::{CoreError, CoreWarning, Detail, Scalar, Sentence};
 use sdm_engine::graph::{Graph, Table};
 use sdm_engine::keys::{self, Key};
 use sdm_engine::sample::{self, SEED_TIME};
@@ -125,6 +125,79 @@ pub(crate) struct Walk<'a> {
     /// the reference's sampler neither reads nor sends
     /// (`get_exclude_cols_dict`, `exclude_cols_dict`).
     pub excluded: &'a [(String, String)],
+    /// The look-back rate of each table referring to another, where the
+    /// provider's neighbor reads look back as the reference's warehouse
+    /// samplers do (`ProviderCapabilities::neighbor_lookback`); empty for
+    /// any other provider.
+    pub lookback: &'a [Lookback],
+}
+
+/// A table's rows per row of the table it refers to and second of its
+/// time column's span, which sizes how far back a neighbor read by its
+/// foreign key looks (`_by_fkey`'s `freq`).
+pub(crate) struct Lookback {
+    pub src: String,
+    pub dst: String,
+    pub rate: f64,
+}
+
+/// The most a neighbor read looks back, five years of seconds, as the
+/// reference bounds it.
+const LOOKBACK_MOST: f64 = 5.0 * 365.0 * 24.0 * 60.0 * 60.0;
+
+/// The seconds a neighbor read keeping `neighbors` rows per seed looks
+/// back over a table of `rate` (`_by_fkey`): five times the rows over the
+/// rate, rounded up, at most five years.
+#[allow(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    reason = "the reference's float arithmetic and its whole seconds"
+)]
+pub(crate) fn lookback_seconds(neighbors: u64, rate: f64) -> i64 {
+    let seconds = ((5 * u128::from(neighbors)) as f64 / rate).ceil();
+    if seconds.is_nan() || seconds >= LOOKBACK_MOST {
+        LOOKBACK_MOST as i64
+    } else {
+        seconds as i64
+    }
+}
+
+/// The provider's lookback capability requires numeric arithmetic before
+/// it renders SQL, as the reference's warehouse samplers do.
+#[allow(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    reason = "the reference's signed float arithmetic and whole seconds"
+)]
+fn limit_lookback_seconds(
+    limit: &sdm_contract::data::NeighborLimit,
+    rate: f64,
+) -> Result<i64, CoreError> {
+    use sdm_contract::data::NeighborLimit;
+    match limit {
+        NeighborLimit::Unsigned(value) => Ok(lookback_seconds(*value, rate)),
+        NeighborLimit::Negative { value } => {
+            let value = value
+                .as_str()
+                .parse::<f64>()
+                .map_err(|_| internal("a negative neighbor bound is not numeric"))?;
+            let seconds = (5.0 * value / rate).ceil();
+            if !seconds.is_finite() || seconds < i64::MIN as f64 {
+                return Err(CoreError::new(
+                    Sentence::NeighborLookbackRange,
+                    "a neighbor lookback is outside the supported time range",
+                )
+                .with_field("field", Detail::text("num_neighbors")));
+            }
+            Ok(seconds.min(LOOKBACK_MOST) as i64)
+        }
+        NeighborLimit::Expression { .. } => Err(CoreError::new(
+            Sentence::NeighborLookbackNotNumeric,
+            "a neighbor bound used to size a time window is not numeric",
+        )
+        .with_field("field", Detail::text("num_neighbors"))
+        .with_field("reason", Detail::text("not_a_whole_number"))),
+    }
 }
 
 /// The features of `table` the walk reads and sends: those `excluded`
@@ -238,10 +311,17 @@ impl Walk<'_> {
             entity.batches.push((0..examples).collect());
             entity.counts[0] = examples;
         }
-        for (hop, &neighbors) in self.neighbors.iter().enumerate() {
+        for (hop, neighbors) in self.neighbors.iter().enumerate() {
             // A hop of size zero ends the walk (`neighbors == 0`).
-            let Hop::Keep(neighbors) = neighbors else {
-                break;
+            let neighbors = match neighbors {
+                Hop::Stop => break,
+                Hop::Keep(value) => sdm_contract::data::NeighborLimit::Unsigned(*value),
+                Hop::Negative(value) => sdm_contract::data::NeighborLimit::Negative {
+                    value: value.clone(),
+                },
+                Hop::Expression(text) => {
+                    sdm_contract::data::NeighborLimit::Expression { text: text.clone() }
+                }
             };
             // The frames each table held when this hop began. A table
             // reached by two paths gains frames for the next hop while this
@@ -253,7 +333,7 @@ impl Walk<'_> {
                 .map(|v| (v.name.clone(), v.frames.len()))
                 .collect();
             for (name, end) in visiting {
-                self.visit(&mut visits, &mut edges, &name, end, hop, neighbors)
+                self.visit(&mut visits, &mut edges, &name, end, hop, &neighbors)
                     .await?;
             }
         }
@@ -267,7 +347,7 @@ impl Walk<'_> {
         name: &str,
         end: usize,
         hop: usize,
-        neighbors: u64,
+        neighbors: &sdm_contract::data::NeighborLimit,
     ) -> Result<(), CoreError> {
         let at = position(visits, name)?;
         if visits[at].counts[hop] == 0 {
@@ -438,22 +518,68 @@ impl Walk<'_> {
         let mut requests = Vec::with_capacity(referring.len());
         for (src, fkey) in &referring {
             let src_table = table_named(self.graph, src)?;
-            let seeds = sample::seeds(
-                Arc::clone(named(&frame, pkey_column)?),
-                if src_table.time_column.is_some() {
-                    vec![(SEED_TIME, times.clone())]
-                } else {
-                    vec![]
-                },
-            )?;
-            requests.push(sample::by_fkey(
+            // Where the provider looks back as the reference's warehouse
+            // samplers do, each seed's window starts that far before its
+            // anchor, exclusive (`_by_fkey`'s `start_time`); a missing
+            // anchor stays missing, and a start before the earliest time
+            // the reference holds is that time.
+            let lookback = src_table
+                .time_column
+                .as_ref()
+                .and_then(|_| {
+                    self.lookback
+                        .iter()
+                        .find(|l| l.src == *src && l.dst == name)
+                        .map(|l| limit_lookback_seconds(neighbors, l.rate))
+                })
+                .transpose()?;
+            let mut seed_times = Vec::new();
+            if src_table.time_column.is_some() {
+                seed_times.push((SEED_TIME, times.clone()));
+            }
+            if let Some(seconds) = lookback {
+                let span = i128::from(seconds) * 1_000_000_000;
+                let starts = times
+                    .iter()
+                    .map(|&t| {
+                        if t == sample::MISSING_ANCHOR {
+                            Ok(t)
+                        } else {
+                            match i64::try_from(i128::from(t) - span) {
+                                Ok(start) => Ok(start.max(-i64::MAX)),
+                                Err(_) if span >= 0 => Ok(-i64::MAX),
+                                Err(_) => Err(CoreError::new(
+                                    Sentence::NeighborLookbackRange,
+                                    "a neighbor lookback is outside the supported time range",
+                                )
+                                .with_field("field", Detail::text("num_neighbors"))),
+                            }
+                        }
+                    })
+                    .collect::<Result<Vec<_>, CoreError>>()?;
+                seed_times.push((sample::SEED_START, starts));
+            }
+            let seeds = sample::seeds(Arc::clone(named(&frame, pkey_column)?), seed_times)?;
+            let mut request = sample::by_fkey_limit(
                 src_table,
                 fkey,
                 sample_columns(self.graph, src_table, self.excluded),
                 key_set(self.asker, seeds)?,
-                neighbors,
+                neighbors.clone(),
                 self.nulls,
-            )?);
+            )?;
+            if lookback.is_some()
+                && let DataRequest::Neighbors {
+                    window: Some(window),
+                    ..
+                } = &mut request
+            {
+                window.lower = Some(sdm_contract::data::SeedBound {
+                    seed_column: sample::SEED_START.into(),
+                    inclusive: false,
+                });
+            }
+            requests.push(request);
         }
         // A source comparing a window's bounds with its stored text reads
         // one stored value of a table before its first windowed read, as
@@ -552,21 +678,18 @@ impl Walk<'_> {
                             })
                             .collect(),
                     );
-                    self.asker.warn(CoreWarning {
-                        code: NULL_KEYS_LEFT_OUT.to_owned(),
-                        message: "rows reached with no value for their table's key were left out"
-                            .to_owned(),
-                        fields: [
-                            ("table".to_owned(), Detail::text(&table.name)),
-                            ("column".to_owned(), Detail::text(key)),
-                            (
-                                "rows".to_owned(),
-                                Detail::Scalar(Scalar::UInt64(left_out as u64)),
-                            ),
-                        ]
-                        .into_iter()
-                        .collect(),
-                    });
+                    // Rows a walk reached left out for a null key beside
+                    // keys that are not null (register P1B-40, the owner's
+                    // option (b) of 2026-10-13).
+                    self.asker.warn(
+                        CoreWarning::new(
+                            Sentence::NullKeysLeftOut,
+                            "rows reached with no value for their table's key were left out",
+                        )
+                        .with_field("table", Detail::text(&table.name))
+                        .with_field("column", Detail::text(key))
+                        .with_field("rows", Detail::Scalar(Scalar::UInt64(left_out as u64))),
+                    );
                 }
                 frame = first_of_each_key(frame, table, key)?;
             }
@@ -727,11 +850,6 @@ fn take_array(array: &ArrayRef, rows: &[usize]) -> Result<ArrayRef, CoreError> {
         .map_err(|_| internal("rows could not be taken"))
 }
 
-/// The warning that rows a walk reached were left out for a null key
-/// beside keys that are not null (register P1B-40, the owner's option (b)
-/// of 2026-10-13).
-pub const NULL_KEYS_LEFT_OUT: &str = "NULL_KEYS_LEFT_OUT";
-
 /// Which rows of a keyed table's rows reached to keep, where they hold a
 /// null text key beside a key that is not null: the reference sorts every
 /// keyed table's keys reached (`np.unique` in `_sample_subgraph`), which
@@ -851,5 +969,61 @@ mod null_key_tests {
         );
         let ints = frame(Arc::new(Int64Array::from(vec![Some(1), None])));
         assert_eq!(null_keys_beside_values(&ints, "k").unwrap(), None);
+    }
+}
+
+#[cfg(test)]
+mod lookback_tests {
+    use super::{limit_lookback_seconds, lookback_seconds};
+    use sdm_contract::data::NeighborLimit;
+
+    #[test]
+    fn the_look_back_is_the_reference_arithmetic() {
+        // `min(math.ceil(5 * n / freq), 5 years)`, `freq` the rows per
+        // referenced row over the span's seconds, at least one, as the
+        // reference's `_by_fkey` computes them.
+        assert_eq!(lookback_seconds(32, 1_000_000.0 / 10.0 / 86_400.0), 139);
+        assert_eq!(
+            lookback_seconds(32, 100.0 / 10.0 / (365.0 * 86_400.0)),
+            157_680_000
+        );
+        assert_eq!(lookback_seconds(5, 7.0 / 3.0 / 1.0), 11);
+        assert_eq!(lookback_seconds(u64::MAX, 1.0), 157_680_000);
+    }
+
+    #[test]
+    fn signed_lookback_and_expression_arithmetic_keep_their_meaning() {
+        assert_eq!(
+            limit_lookback_seconds(
+                &NeighborLimit::Negative {
+                    value: sdm_contract::data::NegativeNeighborBound::new("-1".into()).unwrap()
+                },
+                2.0
+            )
+            .unwrap(),
+            -2
+        );
+        assert_eq!(
+            limit_lookback_seconds(
+                &NeighborLimit::Negative {
+                    value: sdm_contract::data::NegativeNeighborBound::new("-0.5".into()).unwrap()
+                },
+                2.0
+            )
+            .unwrap(),
+            -1
+        );
+        let error = limit_lookback_seconds(
+            &NeighborLimit::Expression {
+                text: "3 OR TRUE".into(),
+            },
+            2.0,
+        )
+        .unwrap_err();
+        assert_eq!(error.code, sdm_contract::ErrorCode::InvalidRequest);
+        assert_eq!(
+            error.fields["field"],
+            sdm_contract::Detail::text("num_neighbors")
+        );
     }
 }

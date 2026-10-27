@@ -15,9 +15,111 @@ use std::collections::BTreeSet;
 use sdm_contract::ops::{
     ColumnRef, DescribedColumn, DescribedTable, Dtype, Given as Written, SourceDescription, Stype,
 };
-use sdm_contract::{ColumnType, CoreWarning, Detail, ErrorCode, Scalar};
+use sdm_contract::{
+    Code, ColumnType, CoreWarning, Detail, ErrorCode, Scalar, Sentence, WarningCode,
+};
 use sdm_schema::assemble::{self, Given, Link};
 use sdm_schema::infer::{InferredColumn, InferredTable, PassedOver, Taken, TimeChoice};
+
+fn converted_date(instead_of: &[&str]) -> InferredTable {
+    let mut source = table(
+        "orders",
+        vec![
+            column("order_id", Dtype::Int, Stype::Id),
+            column("raw", Dtype::Date, Stype::Timestamp),
+            column("month", Dtype::Date, Stype::Timestamp),
+            column("day", Dtype::Date, Stype::Timestamp),
+        ],
+        Some("order_id"),
+    );
+    source.time = TimeChoice {
+        column: Some("raw".into()),
+        instead_of: instead_of.iter().map(|name| (*name).into()).collect(),
+        ..TimeChoice::default()
+    };
+    source.time_column = Some("raw".into());
+    source
+}
+
+#[test]
+fn a_converted_raw_time_keeps_each_dimension_it_replaces() {
+    for (instead_of, sentence) in [
+        (vec!["month"], Sentence::TimeColumnsTakenInsteadOf),
+        (
+            vec!["month", "day"],
+            Sentence::TimeColumnsTakenInsteadOfMany,
+        ),
+    ] {
+        let made = made_of(vec![converted_date(&instead_of), users()], vec![]);
+        let warnings: Vec<_> = made
+            .warnings
+            .iter()
+            .filter(|w| w.code == WarningCode::TimeColumnsGuessed.as_str())
+            .collect();
+        assert_eq!(warnings.len(), 1, "{:?}", made.warnings);
+        assert_eq!(warnings[0].sentence, sentence);
+        assert_eq!(said(warnings[0], "table"), "orders");
+        assert_eq!(said(warnings[0], "column"), "raw");
+        assert_eq!(said(warnings[0], "other"), "month");
+        assert_eq!(
+            warnings[0].fields["instead_of"],
+            Detail::List(
+                instead_of
+                    .iter()
+                    .map(|name| Scalar::Utf8((*name).into()))
+                    .collect()
+            )
+        );
+    }
+}
+
+#[test]
+fn the_converted_time_warning_respects_the_final_choice_and_window_scope() {
+    let source = converted_date(&["month"]);
+    let mut changed = source.clone();
+    changed.time_column = Some("month".into());
+    let explicitly_named = BTreeSet::from(["orders".to_owned()]);
+    let cases = [
+        made_of(vec![source.clone()], vec![]),
+        made_of(vec![changed, users()], vec![]),
+        assemble::assemble(
+            vec![source, users()],
+            vec![],
+            Given {
+                time_columns: Some(&explicitly_named),
+                relationships: None,
+            },
+            None,
+        )
+        .unwrap(),
+    ];
+    for made in cases {
+        assert!(
+            !made
+                .warnings
+                .iter()
+                .any(|w| w.code == WarningCode::TimeColumnsGuessed.as_str()),
+            "{:?}",
+            made.warnings
+        );
+    }
+}
+
+#[test]
+fn a_different_link_fallback_does_not_inherit_a_raw_columns_reason() {
+    let mut source = converted_date(&["month"]);
+    source.time.fallback = Some("day".into());
+    let settled = source.time.for_links(false);
+    assert_eq!(settled.column.as_deref(), Some("day"));
+    assert!(settled.instead_of.is_empty());
+    source.time = settled;
+    source.time_column = Some("day".into());
+    let made = made_of(vec![source, users()], vec![]);
+    assert!(!made.warnings.iter().any(|w| matches!(
+        w.sentence,
+        Sentence::TimeColumnsTakenInsteadOf | Sentence::TimeColumnsTakenInsteadOfMany
+    )));
+}
 
 fn column(name: &str, dtype: Dtype, stype: Stype) -> InferredColumn {
     InferredColumn {
@@ -41,6 +143,12 @@ fn column(name: &str, dtype: Dtype, stype: Stype) -> InferredColumn {
 }
 
 fn table(name: &str, columns: Vec<InferredColumn>, key: Option<&str>) -> InferredTable {
+    // The columns a catalog declares a key of alone: each kept unique.
+    let declared = columns
+        .iter()
+        .filter(|c| c.unique)
+        .map(|c| c.name.clone())
+        .collect();
     InferredTable {
         name: name.into(),
         source: name.into(),
@@ -53,6 +161,7 @@ fn table(name: &str, columns: Vec<InferredColumn>, key: Option<&str>) -> Inferre
         time: TimeChoice::default(),
         time_column: None,
         unique: Vec::new(),
+        declared,
     }
 }
 
@@ -301,6 +410,7 @@ fn plans() -> InferredTable {
     );
     plans.time = TimeChoice {
         column: None,
+        instead_of: vec![],
         how: None,
         among: vec![],
         refused: vec![
@@ -453,11 +563,11 @@ fn the_columns_joined_on_are_marked_again_from_what_the_host_holds() {
 
 #[test]
 fn a_link_that_cannot_join_is_refused_by_the_consistency_check() {
-    assert!(assemble::check_links(&description()).is_ok());
+    assert!(assemble::check_links(&description(), &assemble::HostTypes::default()).is_ok());
     let refused = |change: &dyn Fn(&mut SourceDescription)| {
         let mut schema = description();
         change(&mut schema);
-        let err = assemble::check_links(&schema).unwrap_err();
+        let err = assemble::check_links(&schema, &assemble::HostTypes::default()).unwrap_err();
         assert_eq!(err.code, ErrorCode::InvalidRequest);
         assert_eq!(err.fields["field"], Detail::text("relationships"));
         // Named, when the link has both ends.
@@ -483,10 +593,12 @@ fn a_link_that_cannot_join_is_refused_by_the_consistency_check() {
     // A number joins a number.
     let mut widened = description();
     widened.tables[0].columns[1].dtype = Dtype::Float;
-    assert!(assemble::check_links(&widened).is_ok());
+    assert!(assemble::check_links(&widened, &assemble::HostTypes::default()).is_ok());
     // A link whose foreign key is its own table's primary key, which the
     // reference's engine refuses (`Graph._edge_error`), is refused naming
-    // the link (T1.24b); the same key on another column of it is not.
+    // the link (T1.24b) once the tables are read (`check_edges`, T3.4 fix
+    // 11); the same key on another column of it is not.
+    assert!(assemble::check_edges(&description()).is_ok());
     let mut keyed = description();
     let foreign = keyed.links[0][0].clone();
     let table = keyed
@@ -495,7 +607,8 @@ fn a_link_that_cannot_join_is_refused_by_the_consistency_check() {
         .find(|t| t.name == foreign.table)
         .unwrap();
     table.primary_key = vec![foreign.column.clone()];
-    let err = assemble::check_links(&keyed).unwrap_err();
+    assert!(assemble::check_links(&keyed, &assemble::HostTypes::default()).is_ok());
+    let err = assemble::check_edges(&keyed).unwrap_err();
     assert_eq!(err.code, ErrorCode::InvalidRequest);
     assert_eq!(err.fields["field"], Detail::text("relationships"));
     assert_eq!(err.fields["source_column"], Detail::text(&foreign.column));
@@ -857,6 +970,7 @@ fn every_warning_given_is_listed_and_every_listed_one_is_given() {
     );
     earliest.time = TimeChoice {
         column: Some("x".into()),
+        instead_of: vec![],
         how: Some(Taken::Earliest),
         among: vec!["x".into(), "y".into()],
         refused: vec![],
@@ -880,6 +994,7 @@ fn every_warning_given_is_listed_and_every_listed_one_is_given() {
     };
     unchecked.time = TimeChoice {
         column: Some("x".into()),
+        instead_of: vec![],
         how: Some(Taken::Only),
         among: vec!["x".into()],
         refused: vec![],
@@ -940,6 +1055,8 @@ fn every_warning_given_is_listed_and_every_listed_one_is_given() {
     );
     let mut given = Vec::new();
     for made in [
+        made_of(vec![converted_date(&["month"]), users()], vec![]),
+        made_of(vec![converted_date(&["month", "day"]), users()], vec![]),
         made_of(vec![refused.clone(), earliest, plans(), users()], vec![]),
         made_of(vec![unchecked, users()], vec![]),
         made_of(
@@ -995,34 +1112,27 @@ fn every_warning_given_is_listed_and_every_listed_one_is_given() {
     );
     assert!(assemble::key_tied(&refused).is_empty());
     given.extend(said);
-    let mut seen: BTreeSet<(String, Option<String>)> = BTreeSet::new();
+    // Every sentence of the schema's warnings is given, each of its code
+    // (T3.17: the sentences take the place of the codes' variants).
+    let codes = [
+        WarningCode::TimeColumnsGuessed,
+        WarningCode::LinkCannotJoin,
+        WarningCode::TablesNameEachOther,
+        WarningCode::TwoWaysToATable,
+        WarningCode::ColumnsLeftOut,
+        WarningCode::TimeValuesUnread,
+        WarningCode::DatesReadDayFirst,
+        WarningCode::KeyCandidatesTied,
+    ];
+    let mut seen: BTreeSet<&str> = BTreeSet::new();
     for warning in &given {
-        let variant = warning.fields.get("variant").map(|v| match v {
-            Detail::Scalar(Scalar::Utf8(text)) => text.clone(),
-            other => panic!("{other:?}"),
-        });
-        let listed = assemble::WARNINGS
-            .iter()
-            .find(|(code, _)| *code == warning.code)
-            .unwrap_or_else(|| panic!("{} is not listed", warning.code));
-        match &variant {
-            Some(v) => assert!(listed.1.contains(&v.as_str()), "{}/{v}", warning.code),
-            None => assert!(listed.1.is_empty(), "{} gives no variant", warning.code),
-        }
-        seen.insert((warning.code.clone(), variant));
+        assert!(warning.holds_to_table(), "{warning:?}");
+        seen.insert(warning.sentence.as_str());
     }
-    let listed: BTreeSet<(String, Option<String>)> = assemble::WARNINGS
+    let listed: BTreeSet<&str> = Sentence::ALL
         .iter()
-        .flat_map(|(code, variants)| {
-            if variants.is_empty() {
-                vec![((*code).to_owned(), None)]
-            } else {
-                variants
-                    .iter()
-                    .map(|v| ((*code).to_owned(), Some((*v).to_owned())))
-                    .collect()
-            }
-        })
+        .filter(|s| matches!(s.code(), Code::Warning(code) if codes.contains(&code)))
+        .map(|s| s.as_str())
         .collect();
     assert_eq!(seen, listed);
 }
@@ -1067,16 +1177,10 @@ fn tied_keys_are_said_after_every_table_is_read_and_before_left_out_columns() {
     assert_eq!(
         said,
         [
-            (
-                assemble::KEY_CANDIDATES_TIED.to_owned(),
-                Detail::text("aaa")
-            ),
-            (
-                assemble::KEY_CANDIDATES_TIED.to_owned(),
-                Detail::text("zzz")
-            ),
-            (assemble::COLUMNS_LEFT_OUT.to_owned(), Detail::text("aaa")),
-            (assemble::COLUMNS_LEFT_OUT.to_owned(), Detail::text("zzz")),
+            ("KEY_CANDIDATES_TIED".to_owned(), Detail::text("aaa")),
+            ("KEY_CANDIDATES_TIED".to_owned(), Detail::text("zzz")),
+            ("COLUMNS_LEFT_OUT".to_owned(), Detail::text("aaa")),
+            ("COLUMNS_LEFT_OUT".to_owned(), Detail::text("zzz")),
         ]
     );
 }

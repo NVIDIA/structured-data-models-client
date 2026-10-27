@@ -12,77 +12,78 @@
 //! `PostgresTable` reads them), the preview, the key counts, the column
 //! ranges, the repeated key, the time bounds (`MIN` and `MAX` in the
 //! column's own type, which the core reads after) and the entity sample are
-//! the reference's text but for the relation, which is the core's (design
-//! choice 12): the reference binds the schema it read with
-//! `current_schema()`, a read whose result the core never needs (KO2-58),
-//! and qualifies its `FROM` with it, where the core names the schema in
-//! place. A key lookup and a neighbor read return the reference's columns
-//! (the seed's batch position, the row's columns, its number among its
-//! seed's, `__kumo_row__`, and for a lookup the count of rows holding the
-//! key), their seeds unpacked as below.
+//! the reference's text but for the schema and table of a catalog read,
+//! which the reference binds and the core writes in place. A key lookup and
+//! a neighbor read return the reference's columns (the seed's batch
+//! position, the row's columns, its number among its seed's,
+//! `__kumo_row__`, and for a lookup the count of rows holding the key),
+//! their seeds unpacked as below.
 //!
 //! The catalog answers are the reference's, read by [`read`] into the
-//! contract's catalog answer. A relation is found as the reference finds a
-//! table: a one-part name in `current_schema()` alone, two parts by schema
-//! and table, a view included; a name the source does not hold there
-//! answers no columns, which the core refuses as the reference refuses a
-//! table it cannot find. A one-part `FROM` reads that table unless the
-//! search path finds a temporary or `pg_catalog` relation of the name
-//! first; such a name also answers no columns ([`regclass`]), so every
-//! statement of a run reads the relation the reference reads, or none.
+//! contract's catalog answer. Every relation is read in two parts, a schema
+//! and a table, as the reference names every table it reads
+//! (`"schema"."table"`, T3.7): a source given its schema (the provider's
+//! namespace, contract v28) has each one-part name read under it; a source
+//! given none has the session's current schema read once per run
+//! (`describe` of its namespace, [`SqlDialect::settles_namespace`]) and
+//! every relation named under that, as the reference reads
+//! `current_schema()` once and names it in every statement. A relation of
+//! one part reaching a plan was read under no schema, since the session
+//! has none, and is refused as the reference refuses it ([`unqualified`]).
+//! A name the source does not hold under its schema answers no columns,
+//! which the core refuses as the reference refuses a table it cannot find.
 //!
 //! A key set is bound as the reference's Postgres sampler binds one: JSON
 //! text in the statement's one parameter, `$1`, unpacked by a common table
 //! expression named as the plan's relation ([`SEEDS`]; `P1 d:131`). The
-//! provider writes the key set's rows as a JSON array of rows, each row an
-//! array of its cells' texts in the key set's column order (null for a
-//! null), which Postgres's own input functions read ([`seed_cte`]): an
-//! integer or decimal key as `bigint` or `numeric`, so the join compares
-//! the two keys by value, exactly (an integer and a `numeric` meet when
-//! their values are equal, whatever their scales, and two `numeric` values
-//! float64 would merge stay apart; design choice 5, lesson 19, KO2-35);
-//! any other key (a float, a text) in the joined column's own declared
-//! type, put in place of that column in one row of the table
-//! (`jsonb_populate_record`), so a `real` key compares as a `real` and a
-//! `uuid`, an enum or a `varchar` key as itself (the reference casts to
-//! the type it read from the catalog);
+//! dialect writes it as the reference writes it (`pg_values::key_rows`,
+//! T3.28): each seed its key alone, or an object of `id` and the window's
+//! bounds `e` and `s`, its batch its position (`WITH ORDINALITY`), split
+//! past the reference's budget as it splits one ([`crate::key_text`]),
+//! each later chunk's statement counting its batches from the seeds before
+//! it; the provider binds the text it is handed. Postgres's own input
+//! functions read each value ([`seed_cte`]): an integer or decimal key as
+//! `bigint` or `numeric`, so the join compares the two keys by value,
+//! exactly (an integer and a `numeric` meet when their values are equal,
+//! whatever their scales, and two `numeric` values float64 would merge
+//! stay apart; design choice 5, lesson 19, KO2-35).
+//! Floating seeds use `numeric` only when the destination catalog declaration
+//! names an integer or numeric column; any other key (a float destined for
+//! REAL/DOUBLE PRECISION, a text) uses the joined column's declared type, put in place
+//! of that column in one row of the table (`jsonb_populate_record`), so a
+//! `real` key compares as a `real` and a `uuid`, an enum or a `varchar` key
+//! as itself (the reference casts to the type it read from the catalog);
 //! the batch as `bigint`; a seed time in the window column's own type, the
 //! column compared in that type and ordered by it, as the reference does
 //! (a text time column by its text, the seed's time in the text pandas
-//! writes it, which the provider writes).
+//! writes it).
+//!
+//! The statements are built once, by the shared builder ([`crate::sql`]),
+//! through [`Postgres`]'s hooks (T3.18): only what is Postgres's own is
+//! here.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use arrow_array::cast::AsArray;
 use arrow_array::types::Int32Type;
-use arrow_array::{Array, Int32Array, StringArray};
+use arrow_array::{Array, Int32Array, RecordBatch, StringArray};
 use sdm_contract::catalog::{CatalogAnswer, CatalogColumn, CatalogForeignKey, CatalogKey, KeyKind};
 use sdm_contract::data::{
-    BATCH_COLUMN, DataRequest, DescribePart, Determinism, Dialect, ExpectedSchema, FetchPlan,
-    Filter, KeySet, MATCHES_COLUMN, NullOrder, OptionalRequest, ProviderCapabilities, Relation,
-    SEED_BATCH, SqlParam, SqlStatement, TableColumn, TableKey, TextTimes, TieBreak, TieTerm,
-    Window, catalog_columns as c, field, seed_key_columns,
+    BATCH_COLUMN, DataRequest, DescribePart, Determinism, ExpectedSchema, MATCHES_COLUMN,
+    NullOrder, ProviderCapabilities, Relation, SEED_BATCH, TextTimes, TieTerm,
+    catalog_columns as c, field, seed_integer, seed_key_columns, views_unread,
 };
 use sdm_contract::types::ColumnType;
-use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
+use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 
-use arrow_array::RecordBatch;
+use crate::key_text;
+use crate::pg_values;
+use crate::quote::identifier;
+use crate::sql::{self, Sample, SeedRead, SqlDialect};
+use sdm_contract::data::SqlParam;
 
 /// The dialect's name on the wire.
 pub(crate) const NAME: &str = "postgres";
-
-/// The optional requests this dialect renders.
-const RENDERED: &[OptionalRequest] = &[
-    OptionalRequest::CountRows,
-    OptionalRequest::Preview,
-    OptionalRequest::KeyCounts,
-    OptionalRequest::TimeBounds,
-    OptionalRequest::ColumnRanges,
-    OptionalRequest::RepeatedKey,
-    OptionalRequest::SampleEntities,
-    OptionalRequest::Neighbors,
-    OptionalRequest::Lookup,
-];
 
 /// The name a statement reads its seeds by: the common table expression
 /// the key set's JSON is unpacked into. A CTE's name shadows a table of
@@ -90,7 +91,7 @@ const RENDERED: &[OptionalRequest] = &[
 /// joined table is always named by its relation, so no name is lengthened
 /// here; [`seeds_for`] still steps past a one-part relation of that name,
 /// which would otherwise read the seeds.
-pub(crate) const SEEDS: &str = "__sdm_seeds__";
+const SEEDS: &str = "__sdm_seeds__";
 
 /// The column of a neighbor read with a limit per seed, and of a key
 /// lookup, numbering each row among its seed's: the reference's own name
@@ -114,245 +115,318 @@ fn seeds_for(table: &Relation) -> String {
 /// (design choice 12).
 const MOST_PARTS: usize = 2;
 
-/// The `FROM` target of `relation`, through the data layer's one rendering
-/// of a relation ([`crate::relation`]): each part quoted alone, never split
-/// on a dot. One of no part, or of more than [`MOST_PARTS`], is refused by
-/// name (rule `relation`).
-fn from(request: &DataRequest, field: &str, relation: &Relation) -> Result<String, CoreError> {
-    crate::relation(request, field, relation, MOST_PARTS, identifier)
-}
+/// The Postgres dialect.
+pub(crate) struct Postgres;
 
-/// The catalog's object id of `relation`, found as the reference finds a
-/// table (`PostgresTable`, its catalog read by schema and table name): a
-/// one-part name in `current_schema()` alone, two parts the schema and the
-/// table so named, each compared as written. Null where the source holds no
-/// such relation, and where the relation the same name reads in a `FROM`
-/// (`to_regclass` over the quoted parts) is another: a temporary or
-/// `pg_catalog` relation of a one-part name, which the search path finds
-/// first, so no statement of the run reads a relation the reference does
-/// not.
-fn regclass(request: &DataRequest, field: &str, relation: &Relation) -> Result<String, CoreError> {
-    let read = text(&from(request, field, relation)?);
-    let (schema, table) = match relation.source.as_slice() {
-        [table] => ("current_schema()".to_owned(), text(table)),
-        [schema, table] => (text(schema), text(table)),
-        _ => {
-            return Err(CoreError::new(
-                ErrorKind::Internal,
-                ErrorCode::InternalError,
-                "a relation past the parts the dialect takes reached its catalog read",
+impl SqlDialect for Postgres {
+    fn name(&self) -> &'static str {
+        NAME
+    }
+
+    /// What a Postgres source answers through this layer.
+    fn capabilities(&self) -> ProviderCapabilities {
+        ProviderCapabilities {
+            compares_stored_times: false,
+            opaque_vendor: None,
+            samples_by_key_dtype: false,
+            derived_relations: false,
+            neighbor_lookback: false,
+            keys_optional: false,
+            key_enforcement: false,
+            sample_rows: false,
+            optional: sql::rendered(),
+            max_keys_per_request: None,
+            // `setseed` before `ORDER BY random()` repeats the draw on one
+            // server (register entry RS-6, KO2-24).
+            sampling: Determinism::SeededStable,
+            // The reference hashes the seed's text into `setseed`'s range, so
+            // it takes any integer seed (`_postgres_seed`).
+            max_seed: u64::MAX,
+            // The reference's engine reads a SQL source's text times one by
+            // one (register DT-7).
+            text_times: Some(TextTimes::ValueByValue),
+            // Postgres orders a null after every value ascending, the order
+            // every term the core asks with nulls among its values has: the
+            // reference's neighbor order is the time column descending, then
+            // the key (or each other column) ascending, and the time column's
+            // nulls never reach the order, since the window that comes with a
+            // time column leaves them out (register ORD-2). Each term is still
+            // rendered with the null order the core writes into it.
+            null_order: Some(NullOrder::Last),
+            // The reference's Postgres sampler neither reads the indexes nor
+            // warns of missing ones.
+            index_advice: None,
+            // Every optional request is rendered: none falls back.
+            fallback: None,
+            // Postgres's driver reads a NaN as missing.
+            reads_nan_as_missing: true,
+        }
+    }
+
+    /// A schema and a table, each quoted alone, never split on a dot.
+    fn most_parts(&self) -> usize {
+        MOST_PARTS
+    }
+
+    /// A Postgres source given its schema is read under it (contract v28):
+    /// one part (design fix C).
+    fn namespace_depth(&self) -> usize {
+        1
+    }
+
+    /// A source given no schema has the session's current one read once
+    /// per run, and every relation named under it, as the reference reads
+    /// `current_schema()` once and names it in every statement (T3.7).
+    fn settles_namespace(&self) -> bool {
+        true
+    }
+
+    fn unqualified(&self, relation: &Relation) -> Option<CoreError> {
+        unqualified(relation)
+    }
+
+    fn seeds_for(&self, _request: &DataRequest, table: &Relation) -> String {
+        seeds_for(table)
+    }
+
+    /// The common table expression the key set's JSON is unpacked into
+    /// ([`seed_cte`]).
+    fn seeds_prelude(&self, read: &SeedRead<'_>) -> Result<String, CoreError> {
+        seed_cte(read)
+    }
+
+    /// `MIN` and `MAX` of the column in its own type, as the reference's
+    /// `_get_min_max_time_dict` writes them; the core reads each bound of
+    /// whatever time type as the reference's host reads it (a `timestamptz`
+    /// at its UTC instant, a date at its midnight, a text by the provider's
+    /// reading), so the plan expects whatever schema the source answers
+    /// ([`expected`]).
+    fn time_bounds_select(&self, position: usize, time: &str, table: &str) -> String {
+        format!(
+            "SELECT {position} AS table_index, MIN({time}) AS min_date, MAX({time}) AS max_date\nFROM {table}"
+        )
+    }
+
+    /// Any integer: the reference hashes its text (`_postgres_seed`).
+    fn sample_seed(&self, request: &DataRequest, seed: &Scalar) -> Result<i128, CoreError> {
+        seed_integer(seed).ok_or_else(|| {
+            sdm_contract::data::refused(request, "seed", "a sample's seed is an integer")
+        })
+    }
+
+    /// The reference's sample of an entity table on Postgres
+    /// (`_sample_entity_table`): `setseed` with the seed's place in its
+    /// range ([`seed_value`]), then the columns asked for, from the rows that
+    /// meet each not-null filter, in `random()` order, the first `n`, in its
+    /// text (register entry RS-6, KO2-24).
+    fn sample(&self, sample: &Sample<'_>) -> Vec<String> {
+        vec![
+            format!("SELECT setseed({})", float_text(seed_value(sample.seed))),
+            format!(
+                "SELECT {}\nFROM {}{}\nORDER BY random()\nLIMIT {}",
+                sample.projected, sample.table, sample.filtered, sample.n
+            ),
+        ]
+    }
+
+    /// The reference's `_by_time`: complete windows ordered by seed and
+    /// time column. The order matters for float32 label aggregation.
+    fn neighbors_all(&self, read: &SeedRead<'_>) -> String {
+        let mut text = read.joined();
+        if let Some(window) = read.window {
+            text.push_str(&format!(
+                "\nORDER BY s.{}, t.{}",
+                identifier(SEED_BATCH),
+                identifier(&window.column),
             ));
         }
-    };
-    Ok(format!(
-        "(SELECT c.oid FROM pg_catalog.pg_class c\n         JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace\n         WHERE n.nspname = {schema} AND c.relname = {table}\n           AND c.oid = to_regclass({read}))"
-    ))
+        text
+    }
+
+    /// The reference's `_by_fkey` on Postgres with a limit per seed:
+    /// the first rows of each seed in
+    /// `order`, read for each seed (`JOIN LATERAL`, as the reference reads
+    /// them), the result in `(batch, order)`. The window's column is
+    /// compared in its own type with the seed's time read in that type
+    /// ([`seed_cte`]), as the reference compares them.
+    fn neighbors_per_seed(
+        &self,
+        read: &SeedRead<'_>,
+        limit: &sdm_contract::data::NeighborLimit,
+        terms: &[TieTerm],
+    ) -> String {
+        let limit = crate::sql::neighbor_limit(limit);
+        let positioned = positioned(read.columns);
+        let order = terms
+            .iter()
+            .map(|t| self.order_term(t, "t.", None))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let inner = positioned
+            .iter()
+            .map(|(alias, column)| format!("t.{} AS {alias}", identifier(column)))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let outer = positioned
+            .iter()
+            .map(|(alias, column)| format!("n.{alias} AS {}", identifier(column)))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!(
+            "SELECT {batch}, {outer}, n.r AS {row}\nFROM {seeds} s\nCROSS JOIN LATERAL (\n  SELECT {inner}, ROW_NUMBER() OVER (ORDER BY {order}) AS r\n  FROM {table} t\n  WHERE {within}\n  ORDER BY {order}\n  LIMIT {limit}\n) AS n\nORDER BY s.{batch_column}, n.r",
+            batch = read.batch(),
+            seeds = read.seeds(),
+            table = read.table,
+            within = read.within("t.").join("\n    AND "),
+            batch_column = identifier(SEED_BATCH),
+            row = identifier(ROW_COLUMN),
+        )
+    }
+
+    /// A limit per seed comes with an order, and an order with a limit.
+    fn neighbors_unpaired(&self, read: &SeedRead<'_>) -> Result<String, CoreError> {
+        Err(sdm_contract::data::refused(
+            read.request,
+            "order",
+            "a limit per seed comes with an order, and an order with a limit",
+        ))
+    }
+
+    /// The reference's key lookup (`_by_pkey` on Postgres): one row of the
+    /// table per seed whose key it holds, its columns as the reference's
+    /// result has them, the seed's batch position, the row's columns, its
+    /// number among the rows holding the key (1) and their count, the result
+    /// in batch order.
+    fn lookup(&self, read: &SeedRead<'_>) -> String {
+        let positioned = positioned(read.columns);
+        let batch = identifier(SEED_BATCH);
+        let inner = positioned
+            .iter()
+            .map(|(alias, column)| format!("t.{} AS {alias}", identifier(column)))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let outer = positioned
+            .iter()
+            .map(|(alias, column)| format!("l.{alias} AS {}", identifier(column)))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!(
+            "SELECT l.b AS {helper}, {outer}, l.r AS {row}, l.m AS {matches}\nFROM (\n  SELECT s.{batch} AS b, {inner},\n         ROW_NUMBER() OVER (PARTITION BY s.{batch}\n           ORDER BY {keyed}) AS r,\n         COUNT(*) OVER (PARTITION BY s.{batch}) AS m\n  FROM {seeds} s\n  JOIN {table} t\n    ON {on}\n) AS l\nWHERE l.r = 1\nORDER BY l.b",
+            helper = identifier(BATCH_COLUMN),
+            matches = identifier(MATCHES_COLUMN),
+            row = identifier(ROW_COLUMN),
+            keyed = read
+                .key
+                .iter()
+                .map(|k| format!("t.{}", identifier(k)))
+                .collect::<Vec<_>>()
+                .join(", "),
+            seeds = read.seeds(),
+            table = read.table,
+            on = read.seed_join("t.", "="),
+        )
+    }
+
+    fn describe(
+        &self,
+        request: &DataRequest,
+        tables: &[Relation],
+        part: DescribePart,
+        namespace: &[String],
+    ) -> Result<(String, Vec<SqlParam>), CoreError> {
+        Ok((describe(request, tables, part, namespace)?, vec![]))
+    }
+
+    fn expected(&self, request: &DataRequest) -> ExpectedSchema {
+        expected(request)
+    }
+
+    fn read(
+        &self,
+        _request: &DataRequest,
+        part: DescribePart,
+        batches: &[RecordBatch],
+    ) -> Result<CatalogAnswer, CoreError> {
+        read(part, batches)
+    }
+
+    fn conform(
+        &self,
+        schema: &arrow_schema::SchemaRef,
+        batches: &[RecordBatch],
+        float_text: fn(f64) -> String,
+    ) -> Result<Option<sql::Batches>, CoreError> {
+        pg_values::conform(schema, batches, float_text)
+    }
+
+    fn key_rows(
+        &self,
+        request: &DataRequest,
+        schema: &arrow_schema::SchemaRef,
+        batches: &[RecordBatch],
+        float_text: fn(f64) -> String,
+    ) -> Result<Option<Vec<String>>, CoreError> {
+        pg_values::key_rows(request, schema, batches, float_text).map(Some)
+    }
+
+    /// The reference's budget of a key set's JSON text (`_chunk_rows`,
+    /// `PG/sampler.py:125-182`).
+    fn key_budget(&self) -> Option<usize> {
+        Some(key_text::BUDGET)
+    }
+}
+
+/// The refusal of a relation of one part: every relation is read under a
+/// schema, the source's or the session's current one, so one of one part
+/// reaching a plan was read under none, which the reference refuses before
+/// it reads a table (`Graph.from_postgres`).
+fn unqualified(relation: &Relation) -> Option<CoreError> {
+    (relation.source.len() < MOST_PARTS).then(no_current_schema)
+}
+
+/// The reference's refusal of a source given no schema whose session has
+/// none (`current_schema()` null): `No current 'schema' set. Please
+/// specify the PostgreSQL schema manually`.
+fn no_current_schema() -> CoreError {
+    CoreError::new(
+        Sentence::NoCurrentSchema,
+        "the source names no schema and the session has no current one",
+    )
+    .with_field("database", Detail::text(NAME))
+}
+
+/// The schema a source's tables are listed in: the provider's namespace,
+/// the source's schema or the session's current one the core read (a
+/// namespace deeper than the schema is refused before, by `deeper`), as a
+/// literal; refused where the session has none.
+fn listed_in(namespace: &[String]) -> Result<String, CoreError> {
+    namespace
+        .first()
+        .map(|schema| text(schema))
+        .ok_or_else(no_current_schema)
 }
 
 /// The schema and table a relation names, each a literal for a catalog
-/// read by name, as the reference binds them: a one-part name's schema
-/// `current_schema()`, which the reference reads and binds (KO2-58).
-fn schema_and_name(
-    request: &DataRequest,
-    relation: &Relation,
-) -> Result<(String, String), CoreError> {
-    from(request, "tables", relation)?;
+/// read by name, as the reference binds them.
+fn schema_and_name(relation: &Relation) -> Result<(String, String), CoreError> {
     match relation.source.as_slice() {
-        [table] => Ok(("current_schema()".to_owned(), text(table))),
         [schema, table] => Ok((text(schema), text(table))),
-        _ => Err(CoreError::new(
-            ErrorKind::Internal,
-            ErrorCode::InternalError,
-            "a relation past the parts the dialect takes reached its catalog read",
-        )),
-    }
-}
-
-/// What a Postgres source answers through this layer.
-pub(crate) fn capabilities() -> ProviderCapabilities {
-    ProviderCapabilities {
-        optional: RENDERED.iter().copied().collect::<BTreeSet<_>>(),
-        max_keys_per_request: None,
-        // `setseed` before `ORDER BY random()` repeats the draw on one
-        // server (register entry RS-6, KO2-24).
-        sampling: Determinism::SeededStable,
-        // The reference hashes the seed's text into `setseed`'s range, so
-        // it takes any integer seed (`_postgres_seed`).
-        max_seed: u64::MAX,
-        // The reference's engine reads a SQL source's text times one by
-        // one (register DT-7).
-        text_times: Some(TextTimes::ValueByValue),
-        // Postgres orders a null after every value ascending, the order
-        // every term the core asks with nulls among its values has: the
-        // reference's neighbor order is the time column descending, then
-        // the key (or each other column) ascending, and the time column's
-        // nulls never reach the order, since the window that comes with a
-        // time column leaves them out (register ORD-2). Each term is still
-        // rendered with the null order the core writes into it.
-        null_order: Some(NullOrder::Last),
-        // The reference's Postgres sampler neither reads the indexes nor
-        // warns of missing ones.
-        index_advice: None,
-        // Every optional request is rendered: none falls back.
-        fallback: None,
-    }
-}
-
-/// The statements answering `request` on Postgres, with the schema the
-/// contract fixes for its answer (`DataRequest::expected`): the catalog's
-/// answers are in the contract's own shape.
-pub(crate) fn plan(request: &DataRequest) -> Result<FetchPlan, CoreError> {
-    let mut texts = vec![];
-    let mut params = vec![];
-    let text = match request {
-        DataRequest::Describe { tables, part } => describe(request, tables, *part)?,
-        DataRequest::Preview {
-            table,
-            columns,
-            limit,
-        } => {
-            let table = from(request, "table", table)?;
-            if columns.is_empty() {
-                return Err(sdm_contract::data::refused(
-                    request,
-                    "columns",
-                    "a preview names no columns",
-                ));
-            }
-            format!("SELECT {} FROM {table} LIMIT {limit}", identifiers(columns))
-        }
-        DataRequest::KeyCounts { keys } => key_counts(request, keys)?,
-        DataRequest::TimeBounds { columns } => time_bounds(request, columns)?,
-        DataRequest::ColumnRanges { table, columns } => {
-            let table = from(request, "table", table)?;
-            if columns.is_empty() {
-                return Err(sdm_contract::data::refused(
-                    request,
-                    "columns",
-                    "the column ranges name no columns",
-                ));
-            }
-            column_ranges(&table, columns)
-        }
-        DataRequest::RepeatedKey { table, key } => {
-            let table = from(request, "table", table)?;
-            if key.is_empty() {
-                return Err(sdm_contract::data::refused(
-                    request,
-                    "key",
-                    "a repeated key names no columns",
-                ));
-            }
-            repeated_key(&table, key)
-        }
-        DataRequest::SampleEntities {
-            table,
-            key,
-            n,
-            seed,
-            columns,
-            filters,
-            // Given only to a layer sampling by the key's type (SQLite's,
-            // `samples_by_key_dtype`), which this one is not.
-            key_dtype: _,
-        } => {
-            let table = from(request, "table", table)?;
-            let (seeded, text) = sample_entities(request, &table, key, *n, seed, columns, filters)?;
-            texts.push(seeded);
-            text
-        }
-        DataRequest::Neighbors {
-            table,
-            key,
-            columns,
-            seeds,
-            window,
-            per_seed,
-            order,
-        } => {
-            let seeds_name = seeds_for(table);
-            let cte = seed_cte(request, table, &seeds_name, key, seeds, window.as_ref())?;
-            let table = from(request, "table", table)?;
-            params.push(SqlParam::KeySet {
-                keys: seeds.clone(),
-                relation: seeds_name.clone(),
-            });
-            let body = neighbors(
-                request,
-                &table,
-                &seeds_name,
-                key,
-                columns,
-                window.as_ref(),
-                *per_seed,
-                order.as_ref(),
-            )?;
-            format!("{cte}{body}")
-        }
-        DataRequest::Lookup {
-            table,
-            key,
-            columns,
-            seeds,
-        } => {
-            let seeds_name = seeds_for(table);
-            let cte = seed_cte(request, table, &seeds_name, key, seeds, None)?;
-            let table = from(request, "table", table)?;
-            params.push(SqlParam::KeySet {
-                keys: seeds.clone(),
-                relation: seeds_name.clone(),
-            });
-            format!(
-                "{cte}{}",
-                lookup(request, &table, &seeds_name, key, columns)?
+        _ => Err(unqualified(relation).unwrap_or_else(|| {
+            CoreError::new(
+                Sentence::Internal,
+                "a relation past the parts the dialect takes reached its catalog read",
             )
-        }
-        DataRequest::Scan {
-            table,
-            columns,
-            filters,
-            limit,
-        } => {
-            let table = from(request, "table", table)?;
-            if columns.is_empty() {
-                return Err(sdm_contract::data::refused(
-                    request,
-                    "columns",
-                    "a scan names no columns",
-                ));
-            }
-            let mut text = format!(
-                "SELECT {} FROM {table}{}",
-                identifiers(columns),
-                conditions(request, filters, "")?
-            );
-            if let Some(limit) = limit {
-                text.push_str(&format!(" LIMIT {limit}"));
-            }
-            text
-        }
-        DataRequest::CountRows { table, filters } => format!(
-            "SELECT COUNT(*) AS {} FROM {}{}",
-            identifier("rows"),
-            from(request, "table", table)?,
-            conditions(request, filters, "")?
-        ),
-    };
-    let statement = |text: String, params: Vec<SqlParam>| SqlStatement {
-        dialect: Dialect::new(NAME),
-        text,
-        params,
-    };
-    let mut statements: Vec<SqlStatement> = texts
-        .into_iter()
-        .flatten()
-        .map(|text| statement(text, vec![]))
-        .collect();
-    statements.push(statement(text, params));
-    Ok(FetchPlan::Sql {
-        statements,
-        expect: expected(request),
-    })
+        })),
+    }
+}
+
+/// The catalog's object id of the relation `schema` and `table` name, each
+/// compared as written, as the reference finds a table; null where the
+/// source holds none.
+fn oid(schema: &str, table: &str) -> String {
+    format!(
+        "(SELECT c.oid FROM pg_catalog.pg_class c\n         JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace\n         WHERE n.nspname = {schema} AND c.relname = {table})"
+    )
 }
 
 /// The reference's catalog answers' columns, by name.
@@ -368,13 +442,14 @@ mod catalog {
     pub const CONSTRAINT_TYPE: &str = "constraint_type";
     pub const CONSTRAINT_NAME: &str = "constraint_name";
     pub const ORDINAL_POSITION: &str = "ordinal_position";
+    pub const CURRENT_SCHEMA: &str = "current_schema";
 }
 
 /// The schema a Postgres answer to `request` has: the reference's catalog
 /// reads' own for the table list, a table's columns, keys and foreign keys
 /// ([`describe`]), what the contract fixes for every other request
 /// (`DataRequest::expected`).
-pub(crate) fn expected(request: &DataRequest) -> ExpectedSchema {
+fn expected(request: &DataRequest) -> ExpectedSchema {
     use ColumnType::{Int32, Utf8};
     use catalog as k;
     let part = match request {
@@ -384,6 +459,10 @@ pub(crate) fn expected(request: &DataRequest) -> ExpectedSchema {
         _ => return request.expected(),
     };
     let fields = match part {
+        // No view is read here (T3.27): only a dialect that reads views answers it.
+        DescribePart::KeyEnforcement | DescribePart::ViewDefinition => {
+            return ExpectedSchema::Discover {};
+        }
         DescribePart::Tables => vec![field(k::TABLE_NAME, Utf8, false)],
         DescribePart::Columns => vec![
             field(k::COLUMN_NAME, Utf8, false),
@@ -409,7 +488,12 @@ pub(crate) fn expected(request: &DataRequest) -> ExpectedSchema {
             field(k::COLUMN_NAME, Utf8, false),
             field(k::ORDINAL_POSITION, Int32, false),
         ],
-        DescribePart::Indexes | DescribePart::IndexColumns => return request.expected(),
+        // The old client's read of the session's schema, null where the
+        // search path holds none.
+        DescribePart::Namespace => vec![field(k::CURRENT_SCHEMA, Utf8, true)],
+        DescribePart::Indexes | DescribePart::IndexColumns => {
+            return request.expected();
+        }
     };
     ExpectedSchema::Schema { fields }
 }
@@ -422,12 +506,11 @@ pub(crate) fn expected(request: &DataRequest) -> ExpectedSchema {
 /// columns and the columns it refers to the same way, numbered by name.
 /// The indexes, which the reference never reads, are in the contract's own
 /// shape ([`crate::read::host`]).
-pub(crate) fn read(
-    part: DescribePart,
-    batches: &[RecordBatch],
-) -> Result<CatalogAnswer, CoreError> {
+fn read(part: DescribePart, batches: &[RecordBatch]) -> Result<CatalogAnswer, CoreError> {
     use catalog as k;
     match part {
+        // No view is read here (T3.27): only a dialect that reads views answers it.
+        DescribePart::KeyEnforcement | DescribePart::ViewDefinition => Err(views_unread()),
         DescribePart::Tables => crate::read::tables(batches, k::TABLE_NAME),
         DescribePart::Columns => {
             let mut found = Vec::new();
@@ -481,6 +564,7 @@ pub(crate) fn read(
                         },
                         columns: columns.into_iter().map(|(_, c)| c).collect(),
                         index: None,
+                        enforced: true,
                     }
                 })
                 .collect();
@@ -531,6 +615,8 @@ pub(crate) fn read(
                     .collect(),
             ))
         }
+        // The schema, none where the session has none.
+        DescribePart::Namespace => crate::read::namespace(batches, k::CURRENT_SCHEMA),
         DescribePart::Indexes | DescribePart::IndexColumns => crate::read::host(part, batches),
     }
 }
@@ -540,8 +626,7 @@ pub(crate) fn read(
 type ColumnPair = (i32, String, String);
 
 fn unread(at: usize, message: &str) -> CoreError {
-    CoreError::new(ErrorKind::Internal, ErrorCode::InternalError, message)
-        .with_field("position", Detail::text(at.to_string()))
+    CoreError::new(Sentence::Internal, message).with_field("position", Detail::text(at.to_string()))
 }
 
 /// The text column at `at` of `batch`.
@@ -563,17 +648,6 @@ fn int32s(batch: &RecordBatch, at: usize) -> Result<&Int32Array, CoreError> {
         .ok_or_else(|| unread(at, "a catalog answer's column is not of its checked type"))
 }
 
-/// A request field this rendering does not take, refused by name.
-fn not_taken(request: &DataRequest, field: &str, message: &str) -> CoreError {
-    CoreError::new(
-        ErrorKind::Unsupported,
-        ErrorCode::UnsupportedRequest,
-        message,
-    )
-    .with_field("request", Detail::text(request.name()))
-    .with_field("field", Detail::text(field))
-}
-
 /// One part of the catalog, in the contract's shape. The table list and
 /// the indexes are read whole, as the reference reads the table list, and
 /// a table list naming tables answers each the source holds (asked when a
@@ -583,99 +657,83 @@ fn describe(
     request: &DataRequest,
     tables: &[Relation],
     part: DescribePart,
+    namespace: &[String],
 ) -> Result<String, CoreError> {
-    for table in tables {
-        from(request, "tables", table)?;
-    }
-    let refused = |message: &str| {
-        CoreError::new(
-            ErrorKind::Unsupported,
-            ErrorCode::UnsupportedRequest,
-            message,
-        )
-        .with_field("request", Detail::text(request.name()))
-        .with_field("field", Detail::text("tables"))
-    };
-    let one = || match tables {
-        [table] => regclass(request, "tables", table),
-        _ => Err(refused(
-            "this part of the catalog is read for one table at a time",
-        )),
-    };
+    let one = || schema_and_name(sql::one_table(request, tables)?);
     Ok(match part {
-        // The reference's listing (`PostgresTable`'s, `information_schema`
-        // the base tables of the current schema, by name), as it writes it
-        // but for the schema, which it binds after reading
-        // `current_schema()` and the core names in place (KO2-58).
+        // No view is read here (T3.27): only a dialect that reads views answers it.
+        DescribePart::KeyEnforcement | DescribePart::ViewDefinition => return Err(views_unread()),
+        // The reference's listing (`Graph.from_postgres`'s,
+        // `information_schema` the base tables of the schema, by name), as
+        // it writes it but for the schema, which it binds and the core
+        // writes in place.
         DescribePart::Tables if tables.is_empty() => {
-            "SELECT table_name\nFROM information_schema.tables\nWHERE table_schema = current_schema()\n  AND table_type = 'BASE TABLE'\nORDER BY table_name".to_owned()
+            format!(
+                "SELECT table_name\nFROM information_schema.tables\nWHERE table_schema = {}\n  AND table_type = 'BASE TABLE'\nORDER BY table_name",
+                listed_in(namespace)?,
+            )
         }
+        // Each named relation the source holds under its schema.
         DescribePart::Tables => {
             let mut selects = Vec::with_capacity(tables.len());
             for table in tables {
-                let found = regclass(request, "tables", table)?;
+                let (schema, name) = schema_and_name(table)?;
                 selects.push(format!(
-                    "SELECT relname AS table_name\nFROM pg_catalog.pg_class\nWHERE oid = {found}"
+                    "SELECT relname AS table_name\nFROM pg_catalog.pg_class\nWHERE oid = {}",
+                    oid(&schema, &name)
                 ));
             }
             selects.join("\nUNION ALL\n")
         }
         // The reference's three reads of one table (`_get_source_columns`
         // and `_get_source_foreign_keys`), as it writes them but for the
-        // schema and table, which it binds and the core writes in place;
-        // the columns read only where the name reads the relation so found
-        // in a `FROM` ([`regclass`]), so a shadowed name answers none.
+        // schema and table, which it binds and the core writes in place.
         DescribePart::Columns => {
-            let [table] = tables else {
-                return Err(refused(
-                    "this part of the catalog is read for one table at a time",
-                ));
-            };
-            let (schema, name) = schema_and_name(request, table)?;
+            let (schema, name) = one()?;
             format!(
-                "SELECT c.column_name, c.data_type, c.udt_name,\n       c.numeric_scale, c.is_nullable, c.table_schema,\n       c.table_name,\n       pg_catalog.format_type(a.atttypid, a.atttypmod)\nFROM information_schema.columns c\nJOIN pg_catalog.pg_namespace n\n  ON n.nspname = c.table_schema\nJOIN pg_catalog.pg_class rel\n  ON rel.relnamespace = n.oid AND rel.relname = c.table_name\nJOIN pg_catalog.pg_attribute a\n  ON a.attrelid = rel.oid AND a.attname = c.column_name\n AND a.attnum > 0 AND NOT a.attisdropped\nWHERE c.table_schema = {schema} AND c.table_name = {name}\n  AND rel.oid = {found}\nORDER BY c.ordinal_position",
-                found = one()?,
+                "SELECT c.column_name, c.data_type, c.udt_name,\n       c.numeric_scale, c.is_nullable, c.table_schema,\n       c.table_name,\n       pg_catalog.format_type(a.atttypid, a.atttypmod)\nFROM information_schema.columns c\nJOIN pg_catalog.pg_namespace n\n  ON n.nspname = c.table_schema\nJOIN pg_catalog.pg_class rel\n  ON rel.relnamespace = n.oid AND rel.relname = c.table_name\nJOIN pg_catalog.pg_attribute a\n  ON a.attrelid = rel.oid AND a.attname = c.column_name\n AND a.attnum > 0 AND NOT a.attisdropped\nWHERE c.table_schema = {schema} AND c.table_name = {name}\nORDER BY c.ordinal_position",
             )
         }
         DescribePart::Keys => {
-            let [table] = tables else {
-                return Err(refused(
-                    "this part of the catalog is read for one table at a time",
-                ));
-            };
-            let (schema, name) = schema_and_name(request, table)?;
+            let (schema, name) = one()?;
             format!(
                 "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = {schema} AND tc.table_name = {name}\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE', 'FOREIGN KEY')"
             )
         }
         DescribePart::ForeignKeys => {
-            let [table] = tables else {
-                return Err(refused(
-                    "this part of the catalog is read for one table at a time",
-                ));
-            };
-            let (schema, name) = schema_and_name(request, table)?;
+            let (schema, name) = one()?;
             format!(
                 "SELECT tc.constraint_name, kcu.column_name,\n       target_kcu.table_schema, target_kcu.table_name,\n       target_kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN information_schema.key_column_usage target_kcu\n  ON rc.unique_constraint_catalog = target_kcu.constraint_catalog\n AND rc.unique_constraint_schema = target_kcu.constraint_schema\n AND rc.unique_constraint_name = target_kcu.constraint_name\n AND target_kcu.ordinal_position = kcu.position_in_unique_constraint\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = {schema} AND tc.table_name = {name}\nORDER BY tc.constraint_name, kcu.ordinal_position"
             )
         }
+        // The schema every relation of one part is read in: the source's,
+        // else the session's current one, which the core reads once per run
+        // with the old client's statement (`Graph.from_postgres`), null
+        // where the search path holds no schema.
+        DescribePart::Namespace => match namespace.first() {
+            Some(schema) => format!("SELECT {} AS current_schema", text(schema)),
+            None => "SELECT current_schema()".to_owned(),
+        },
         // Never asked (no index advice is declared), and rendered: the
         // index's columns in order, an expression's position a null name.
         DescribePart::IndexColumns => {
-            let index = one()?;
+            let (schema, name) = one()?;
+            let index = oid(&schema, &name);
             format!(
                 "SELECT a.attname::text AS {name}\nFROM pg_catalog.pg_index i\nCROSS JOIN LATERAL unnest(i.indkey::int2[]) WITH ORDINALITY AS n(attnum, position)\nLEFT JOIN pg_catalog.pg_attribute a\n  ON a.attrelid = i.indrelid AND a.attnum = n.attnum\nWHERE i.indexrelid = {index}\nORDER BY n.position",
                 name = identifier(c::NAME),
             )
         }
         DescribePart::Indexes => {
-            if !tables.is_empty() {
-                return Err(refused("this part of the catalog is read whole"));
-            }
-            // Each index of a table of the current schema, its columns in
+            sql::whole(request, tables)?;
+            // Each index of a table of the source's schema, its columns in
             // order, an expression's position a null name (unresolved).
+            let within = format!(
+                "(SELECT n.oid FROM pg_catalog.pg_namespace n WHERE n.nspname = {})",
+                listed_in(namespace)?
+            );
             format!(
-                "SELECT t.relname::text AS {table},\n       {columns} AS {names}\nFROM pg_catalog.pg_index i\nJOIN pg_catalog.pg_class t ON t.oid = i.indrelid\nWHERE t.relnamespace = current_schema()::regnamespace\nORDER BY t.relname, i.indexrelid",
+                "SELECT t.relname::text AS {table},\n       {columns} AS {names}\nFROM pg_catalog.pg_index i\nJOIN pg_catalog.pg_class t ON t.oid = i.indrelid\nWHERE t.relnamespace = {within}\nORDER BY t.relname, i.indexrelid",
                 table = identifier(c::TABLE),
                 columns = attribute_names("i.indrelid", "i.indkey::int2[]"),
                 names = identifier(c::COLUMNS),
@@ -691,152 +749,6 @@ fn attribute_names(relation: &str, numbers: &str) -> String {
     format!(
         "ARRAY(SELECT a.attname::text\n             FROM unnest({numbers}) WITH ORDINALITY AS n(attnum, position)\n             LEFT JOIN pg_catalog.pg_attribute a\n               ON a.attrelid = {relation} AND a.attnum = n.attnum\n             ORDER BY n.position)"
     )
-}
-
-/// One `SELECT` per key, in order, labelled by its position: the table's
-/// rows, the key's distinct values among the rows holding all of it, and
-/// the rows missing part of it, as the reference counts them
-/// (`_count_distinct` of its Postgres table: a row of several values is
-/// counted as not null when only part of it is, so those rows are left out
-/// by hand).
-fn key_counts(request: &DataRequest, keys: &[TableKey]) -> Result<String, CoreError> {
-    let tables = keys
-        .iter()
-        .map(|key| from(request, "keys", &key.table))
-        .collect::<Result<Vec<_>, _>>()?;
-    Ok(keys
-        .iter()
-        .zip(tables)
-        .enumerate()
-        .map(|(position, (key, table))| {
-            let position = key.label_at(position);
-            let quoted: Vec<String> = key.columns.iter().map(|c| identifier(c)).collect();
-            let missing = quoted
-                .iter()
-                .map(|c| format!("{c} IS NULL"))
-                .collect::<Vec<_>>()
-                .join(" OR ");
-            let distinct = match quoted.as_slice() {
-                [one] => format!("COUNT(DISTINCT {one})"),
-                several => format!(
-                    "COUNT(DISTINCT ({})) FILTER (WHERE {})",
-                    several.join(", "),
-                    several
-                        .iter()
-                        .map(|c| format!("{c} IS NOT NULL"))
-                        .collect::<Vec<_>>()
-                        .join(" AND ")
-                ),
-            };
-            format!(
-                "SELECT {position} AS k, COUNT(*) AS n, {distinct} AS d, COUNT(CASE WHEN {missing} THEN 1 END) AS z\nFROM {table}"
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("\nUNION ALL\n"))
-}
-
-/// One `SELECT` per time column, in order, labelled by its position: the
-/// smallest and largest values, `MIN` and `MAX` of the column in its own
-/// type, as the reference's `_get_min_max_time_dict` writes them; the core
-/// reads each bound of whatever time type as the reference's host reads it
-/// (a `timestamptz` at its UTC instant, a date at its midnight, a text by
-/// the provider's reading), so the plan expects whatever schema the source
-/// answers ([`expected`]).
-fn time_bounds(request: &DataRequest, columns: &[TableColumn]) -> Result<String, CoreError> {
-    let mut selects = Vec::with_capacity(columns.len());
-    for (position, at) in columns.iter().enumerate() {
-        let table = from(request, "columns", &at.table)?;
-        let time = identifier(&at.column);
-        selects.push(format!(
-            "SELECT {position} AS table_index, MIN({time}) AS min_date, MAX({time}) AS max_date\nFROM {table}"
-        ));
-    }
-    Ok(selects.join("\nUNION ALL\n"))
-}
-
-/// The reference's one query over every row of a table for its time
-/// column's choice (`Table._full_range`): `COUNT(*)`, then each column's
-/// `MIN`, `MAX` and `COUNT`, in its text; `table` its rendered relation.
-fn column_ranges(table: &str, columns: &[String]) -> String {
-    let mut selects = vec!["COUNT(*)".to_owned()];
-    for column in columns {
-        let quoted = identifier(column);
-        selects.push(format!("MIN({quoted}), MAX({quoted}), COUNT({quoted})"));
-    }
-    format!("SELECT {}\nFROM {table}", selects.join(", "))
-}
-
-/// The reference's read of one value of a key that several rows hold
-/// (`Table._repeated_key_sql`), in its text; `table` its rendered relation.
-fn repeated_key(table: &str, key: &[String]) -> String {
-    let quoted = identifiers(key);
-    let present = key
-        .iter()
-        .map(|c| format!("{} IS NOT NULL", identifier(c)))
-        .collect::<Vec<_>>()
-        .join(" AND ");
-    format!(
-        "SELECT {quoted}\nFROM {table}\nWHERE {present}\nGROUP BY {quoted}\nHAVING COUNT(*) > 1\nLIMIT 1"
-    )
-}
-
-/// A seed's integer value, if the scalar is an integer.
-fn integer(seed: &Scalar) -> Option<i128> {
-    Some(match seed {
-        Scalar::Int32(v) => i128::from(*v),
-        Scalar::Int64(v) => i128::from(*v),
-        Scalar::UInt32(v) => i128::from(*v),
-        Scalar::UInt64(v) => i128::from(*v),
-        Scalar::Decimal128 {
-            scale: 0, value, ..
-        } => *value,
-        _ => return None,
-    })
-}
-
-/// The reference's sample of an entity table on Postgres
-/// (`_sample_entity_table`), `table` its rendered relation: `setseed` with
-/// the seed's place in its range ([`seed_value`]), then the columns asked
-/// for, from the rows that meet each not-null filter, in `random()` order,
-/// the first `n`, in its text (register entry RS-6, KO2-24). The first item
-/// is the statement before the sample, the second the sample.
-fn sample_entities(
-    request: &DataRequest,
-    table: &str,
-    key: &[String],
-    n: u64,
-    seed: &Scalar,
-    columns: &[String],
-    filters: &[Filter],
-) -> Result<(Option<String>, String), CoreError> {
-    if columns.is_empty() {
-        return Err(sdm_contract::data::refused(
-            request,
-            "columns",
-            "a sample names no columns",
-        ));
-    }
-    if key.is_empty() || key.iter().any(|k| !columns.contains(k)) {
-        return Err(sdm_contract::data::refused(
-            request,
-            "key",
-            "a sample's key is not among the columns it projects",
-        ));
-    }
-    let Some(seed) = integer(seed) else {
-        return Err(sdm_contract::data::refused(
-            request,
-            "seed",
-            "a sample's seed is an integer",
-        ));
-    };
-    let seeded = format!("SELECT setseed({})", float_text(seed_value(seed)));
-    let mut text = format!("SELECT {}\nFROM {table}", identifiers(columns));
-    let filtered = conditions(request, filters, "\n")?;
-    text.push_str(&filtered);
-    text.push_str(&format!("\nORDER BY random()\nLIMIT {n}"));
-    Ok((Some(seeded), text))
 }
 
 /// The reference's map of an integer seed into `setseed`'s `[-1, 1]`
@@ -865,90 +777,18 @@ fn float_text(value: f64) -> String {
     }
 }
 
-/// The `WHERE` clause of `filters`, opened by `lead` (a space or a line
-/// break), or nothing for none: each a not-null filter, as the reference's
-/// sampler writes one, joined by `AND`; another kind of filter is not
-/// taken.
-fn conditions(request: &DataRequest, filters: &[Filter], lead: &str) -> Result<String, CoreError> {
-    let mut conditions = Vec::with_capacity(filters.len());
-    for filter in filters {
-        let Filter::NotNull { column } = filter else {
-            return Err(not_taken(
-                request,
-                "filters",
-                "this rendering takes not-null filters only",
-            ));
-        };
-        conditions.push(format!("{} IS NOT NULL", identifier(column)));
-    }
-    if conditions.is_empty() {
-        return Ok(String::new());
-    }
-    let lead = if lead.is_empty() { " " } else { lead };
-    Ok(format!("{lead}WHERE {}", conditions.join(" AND ")))
-}
-
-/// The common table expression `name` that unpacks the key set bound as
-/// `$1` (the module's binding): one row per JSON row, each key column read
-/// as [`key_type`] says, else in the type `table` declares for the key
-/// column it joins, put in place of that column in one row of the table
-/// (`jsonb_populate_record` over it); a seed time a bound of `window` names
-/// in the type `table` declares for the window's column, the same way, as
-/// the reference casts its seeds to the column's type; the batch as
-/// `bigint`; with its trailing line break.
-fn seed_cte(
-    request: &DataRequest,
-    table: &Relation,
-    name: &str,
-    key: &[String],
-    seeds: &KeySet,
-    window: Option<&Window>,
-) -> Result<String, CoreError> {
-    let row_type = from(request, "table", table)?;
+/// The common table expression, named as `read`'s key set, that unpacks
+/// the key set bound as `$1` (the module's binding): one row per JSON row,
+/// each key column read as [`key_type`] says, else in the type the table
+/// declares for the key column it joins, put in place of that column in one
+/// row of the table (`jsonb_populate_record` over it); a seed time a bound
+/// of the window names in the type the table declares for the window's
+/// column, the same way, as the reference casts its seeds to the column's
+/// type; the batch as `bigint`; with its trailing line break.
+fn seed_cte(read: &SeedRead<'_>) -> Result<String, CoreError> {
+    let (request, key, seeds, window) = (read.request, read.key, read.seeds, read.window);
+    let row_type = &read.table;
     let seed_keys = seed_key_columns(key.len());
-    let mut selects = Vec::with_capacity(seeds.columns.len());
-    let mut built = Vec::with_capacity(key.len());
-    let mut timed = Vec::new();
-    for (position, column) in seeds.columns.iter().enumerate() {
-        let cell = format!("r.value->>{position}");
-        let read = if let Some(at) = seed_keys.iter().position(|k| *k == column.name) {
-            match key_type(&column.column_type) {
-                Some(kind) => format!("({cell})::{kind}"),
-                None => {
-                    built.push(format!("{}, r.value->{position}", text(&key[at])));
-                    format!("k.{}", identifier(&key[at]))
-                }
-            }
-        } else if column.name == SEED_BATCH {
-            format!("({cell})::bigint")
-        } else if let Some(window) = window.filter(|w| {
-            [&w.lower, &w.upper]
-                .into_iter()
-                .flatten()
-                .any(|bound| bound.seed_column == column.name)
-        }) {
-            let alias = format!("w{position}");
-            timed.push(format!(
-                "\n  CROSS JOIN LATERAL jsonb_populate_record(b.base, jsonb_build_object({}, r.value->{position})) AS {alias}",
-                text(&window.column)
-            ));
-            format!("{alias}.{}", identifier(&window.column))
-        } else {
-            match &column.column_type {
-                sdm_contract::ColumnType::Timestamp { zone: None, .. } => {
-                    format!("({cell})::timestamp")
-                }
-                _ => {
-                    return Err(not_taken(
-                        request,
-                        "seeds",
-                        "a seed column past the key, the batch and zone-less times",
-                    ));
-                }
-            }
-        };
-        selects.push(format!("{read} AS {}", identifier(&column.name)));
-    }
     let carried = seeds
         .columns
         .iter()
@@ -960,6 +800,73 @@ fn seed_cte(
             "seeds",
             "the seeds do not carry every key column",
         ));
+    }
+    // Each seed as the old client writes it (`pg_values::key_rows`): its
+    // key alone, or an object of `id` and the window's bounds.
+    let others: Vec<&str> = seeds
+        .columns
+        .iter()
+        .map(|c| c.name.as_str())
+        .filter(|name| !seed_keys.iter().any(|k| k == name) && *name != SEED_BATCH)
+        .collect();
+    let fields: BTreeMap<&str, String> = key_text::fields(others.iter().copied(), request)
+        .into_iter()
+        .collect();
+    let id = if others.is_empty() {
+        Path::root()
+    } else {
+        Path::root().field("id")
+    };
+    let mut selects = Vec::with_capacity(seeds.columns.len());
+    let mut built = Vec::with_capacity(key.len());
+    let mut timed = Vec::new();
+    for (position, column) in seeds.columns.iter().enumerate() {
+        let read = if let Some(at) = seed_keys.iter().position(|k| *k == column.name) {
+            let path = if key.len() == 1 {
+                id.clone()
+            } else {
+                id.at(at)
+            };
+            match key_type(column) {
+                Some(kind) => format!("({})::{kind}", path.text),
+                None => {
+                    built.push(format!("{}, {}", text(&key[at]), path.json));
+                    format!("k.{}", identifier(&key[at]))
+                }
+            }
+        } else if column.name == SEED_BATCH {
+            batch_select(read.offset)
+        } else {
+            let path = Path::root().field(&fields[column.name.as_str()]);
+            if let Some(window) = window.filter(|w| {
+                [&w.lower, &w.upper]
+                    .into_iter()
+                    .flatten()
+                    .any(|bound| bound.seed_column == column.name)
+            }) {
+                let alias = format!("w{position}");
+                timed.push(format!(
+                    "\n  CROSS JOIN LATERAL jsonb_populate_record(b.base, jsonb_build_object({}, {})) AS {alias}",
+                    text(&window.column),
+                    path.json
+                ));
+                format!("{alias}.{}", identifier(&window.column))
+            } else {
+                match &column.column_type {
+                    sdm_contract::ColumnType::Timestamp { zone: None, .. } => {
+                        format!("({})::timestamp", path.text)
+                    }
+                    _ => {
+                        return Err(sql::not_taken(
+                            request,
+                            "seeds",
+                            "a seed column past the key, the batch and zone-less times",
+                        ));
+                    }
+                }
+            }
+        };
+        selects.push(format!("{read} AS {}", identifier(&column.name)));
     }
     // A value is read in its column's own type by putting it in place of
     // that column in one row of the table (`b.base`, the row built from the
@@ -981,202 +888,105 @@ fn seed_cte(
     }
     typed.push_str(&timed.concat());
     Ok(format!(
-        "WITH {name} AS (\n  SELECT {selects}\n  FROM jsonb_array_elements($1::jsonb) AS r(value){typed}\n)\n",
-        name = identifier(name),
+        "WITH {name} AS (\n  SELECT {selects}\n  FROM jsonb_array_elements($1::jsonb) WITH ORDINALITY AS r(value, ordinality){typed}\n)\n",
+        name = identifier(&read.seeds_name),
         selects = selects.join(", "),
     ))
 }
 
-/// The Postgres type a seed key of `column_type` is read as, for an
-/// integer or a decimal: `bigint` or `numeric`, which Postgres compares
-/// with the joined key's integers and decimals by value, so equal values
-/// of any scale join; `None` for any other (a float, a text, a time), read
-/// in the joined column's declared type ([`seed_cte`]), so a `real` key
-/// compares as a `real` and a `uuid` as a `uuid`, as the reference casts its
-/// seeds to the column's type.
-fn key_type(column_type: &sdm_contract::ColumnType) -> Option<&'static str> {
+/// The seed's batch, its position in the JSON array (from 1, as `WITH
+/// ORDINALITY` counts) moved to count from `offset`, the seeds of the
+/// chunks before its own, as the reference's `_json_cte` and `_flatten`
+/// number it.
+fn batch_select(offset: usize) -> String {
+    if offset == 0 {
+        "(r.ordinality - 1)::bigint".to_owned()
+    } else {
+        format!("(r.ordinality - 1 + {offset})::bigint")
+    }
+}
+
+/// Where a seed's value is in its JSON row, as `jsonb` and as text.
+#[derive(Clone)]
+struct Path {
+    json: String,
+    text: String,
+}
+
+impl Path {
+    /// The row itself, a bare value.
+    fn root() -> Path {
+        Path {
+            json: "r.value".to_owned(),
+            text: "r.value #>> '{}'".to_owned(),
+        }
+    }
+
+    /// The field `name` of an object.
+    fn field(&self, name: &str) -> Path {
+        Path {
+            json: format!("{}->{}", self.json, text(name)),
+            text: format!("{}->>{}", self.json, text(name)),
+        }
+    }
+
+    /// The element `at` of an array.
+    fn at(&self, at: usize) -> Path {
+        Path {
+            json: format!("{}->{at}", self.json),
+            text: format!("{}->>{at}", self.json),
+        }
+    }
+}
+
+/// The Postgres type a seed key is read as, or `None` to use the destination
+/// column's own input function (`jsonb_populate_record` in [`seed_cte`]).
+/// Integer/decimal seeds compare exactly as `bigint`/`numeric`.
+/// Floating seeds use `numeric` only for integer/numeric destinations, whose
+/// catalog declaration the core carries opaquely via [`sdm_contract::data::SEED_KEY_TYPE`].
+/// This avoids truncating fractions or rounding nearby large integer keys.
+/// REAL/DOUBLE PRECISION destinations and legacy callers with no declaration
+/// retain their original declared-type coercion, so REAL 0.1 finds itself.
+fn key_type(column: &sdm_contract::Field) -> Option<&'static str> {
     use sdm_contract::ColumnType as T;
-    Some(match column_type {
+    Some(match column.column_type {
         T::Int8 | T::Int16 | T::Int32 | T::Int64 | T::Uint8 | T::Uint16 | T::Uint32 => "bigint",
         T::Uint64 | T::Decimal128 { .. } | T::Decimal256 { .. } => "numeric",
+        T::Float32 | T::Float64
+            if column
+                .metadata
+                .get(sdm_contract::data::SEED_KEY_TYPE)
+                .is_some_and(|declared| exact_numeric_type(declared)) =>
+        {
+            "numeric"
+        }
         _ => return None,
     })
 }
 
-/// The condition joining the seeds to `table`'s `key`, each key column to
-/// its seed column, both in the key's declared type ([`seed_cte`]).
-fn seed_join(key: &[String]) -> String {
-    key.iter()
-        .zip(seed_key_columns(key.len()))
-        .map(|(column, seed)| format!("t.{} = s.{}", identifier(column), identifier(&seed)))
-        .collect::<Vec<_>>()
-        .join(" AND ")
+/// Whether the catalog declaration names a built-in exact numeric type.
+/// Only this dialect reads the declaration; no catalog text is pasted into SQL.
+/// A domain or any unrecognized declaration retains native record conversion.
+fn exact_numeric_type(declared: &str) -> bool {
+    let declared = declared.trim();
+    let name = declared
+        .split_once('(')
+        .map_or(declared, |(name, _)| name)
+        .trim();
+    ["smallint", "integer", "bigint", "numeric", "decimal"]
+        .iter()
+        .any(|kind| name.eq_ignore_ascii_case(kind))
 }
 
 /// The table's columns asked for, each read from its alias and renamed to a
 /// position of its own (`c0`, `c1`, ...), so no source column's name meets
 /// a helper's inside the statement; the outer select names them back.
-fn positioned(
-    request: &DataRequest,
-    columns: &[String],
-) -> Result<Vec<(String, String)>, CoreError> {
-    if columns.is_empty() {
-        return Err(sdm_contract::data::refused(
-            request,
-            "columns",
-            "the request names no columns",
-        ));
-    }
-    Ok(columns
+fn positioned(columns: &[String]) -> Vec<(String, String)> {
+    columns
         .iter()
         .enumerate()
         .map(|(i, c)| (format!("c{i}"), c.clone()))
-        .collect())
-}
-
-/// One term of a neighbor order, as Postgres orders it, each term's null
-/// order written out. A time term (`as_timestamp`) orders the column in its
-/// own type, as the reference's Postgres sampler orders it
-/// (`_neighbor_order_by`): a timestamp, a `timestamptz` and a date in time,
-/// a text by its text.
-fn order_term(term: &TieTerm) -> String {
-    let value = format!("t.{}", identifier(&term.column));
-    format!(
-        "{value} {} {}",
-        if term.descending { "DESC" } else { "ASC" },
-        if term.nulls_last {
-            "NULLS LAST"
-        } else {
-            "NULLS FIRST"
-        }
-    )
-}
-
-/// The reference's neighbor reads (`_by_time` and `_by_fkey` on Postgres):
-/// the rows of `table` whose `key` is a seed's key, within the seed's
-/// window, the column compared in its own type with the seed's time read in
-/// that type ([`seed_cte`]) as the reference compares them, and,
-/// with a limit per seed, the first rows of each seed in `order`, read
-/// for each seed (`JOIN LATERAL`, as the reference reads them), the result
-/// in `(batch, order)`.
-#[allow(clippy::too_many_arguments, reason = "the request's fields, rendered")]
-fn neighbors(
-    request: &DataRequest,
-    table: &str,
-    seeds: &str,
-    key: &[String],
-    columns: &[String],
-    window: Option<&Window>,
-    per_seed: Option<u64>,
-    order: Option<&TieBreak>,
-) -> Result<String, CoreError> {
-    let positioned = positioned(request, columns)?;
-    let mut within = vec![seed_join(key)];
-    if let Some(window) = window {
-        let time = format!("t.{}", identifier(&window.column));
-        if let Some(upper) = &window.upper {
-            let op = if upper.inclusive { "<=" } else { "<" };
-            within.push(format!("{time} {op} s.{}", identifier(&upper.seed_column)));
-        }
-        if let Some(lower) = &window.lower {
-            let op = if lower.inclusive { ">=" } else { ">" };
-            within.push(format!("{time} {op} s.{}", identifier(&lower.seed_column)));
-        }
-    }
-    let batch = format!(
-        "s.{} AS {}",
-        identifier(SEED_BATCH),
-        identifier(BATCH_COLUMN)
-    );
-    let seeds = identifier(seeds);
-    match (per_seed, order) {
-        (Some(limit), Some(TieBreak(terms))) => {
-            let order = terms.iter().map(order_term).collect::<Vec<_>>().join(", ");
-            let inner = positioned
-                .iter()
-                .map(|(alias, column)| format!("t.{} AS {alias}", identifier(column)))
-                .collect::<Vec<_>>()
-                .join(", ");
-            let outer = positioned
-                .iter()
-                .map(|(alias, column)| format!("n.{alias} AS {}", identifier(column)))
-                .collect::<Vec<_>>()
-                .join(", ");
-            Ok(format!(
-                "SELECT {batch}, {outer}, n.r AS {row}\nFROM {seeds} s\nCROSS JOIN LATERAL (\n  SELECT {inner}, ROW_NUMBER() OVER (ORDER BY {order}) AS r\n  FROM {table} t\n  WHERE {within}\n  ORDER BY {order}\n  LIMIT {limit}\n) AS n\nORDER BY s.{batch_column}, n.r",
-                within = within.join("\n    AND "),
-                batch_column = identifier(SEED_BATCH),
-                row = identifier(ROW_COLUMN),
-            ))
-        }
-        (None, None) => {
-            let projected = positioned
-                .iter()
-                .map(|(_, column)| format!("t.{}", identifier(column)))
-                .collect::<Vec<_>>()
-                .join(", ");
-            Ok(format!(
-                "SELECT {batch}, {projected}\nFROM {seeds} s\nJOIN {table} t\n  ON {}",
-                within.join("\n AND ")
-            ))
-        }
-        _ => Err(sdm_contract::data::refused(
-            request,
-            "order",
-            "a limit per seed comes with an order, and an order with a limit",
-        )),
-    }
-}
-
-/// The reference's key lookup (`_by_pkey` on Postgres): one row of `table`
-/// per seed whose key it holds, its columns as the reference's result has
-/// them, the seed's batch position, the row's columns, its number among the
-/// rows holding the key (1) and their count, the result in batch order.
-fn lookup(
-    request: &DataRequest,
-    table: &str,
-    seeds: &str,
-    key: &[String],
-    columns: &[String],
-) -> Result<String, CoreError> {
-    let positioned = positioned(request, columns)?;
-    let batch = identifier(SEED_BATCH);
-    let inner = positioned
-        .iter()
-        .map(|(alias, column)| format!("t.{} AS {alias}", identifier(column)))
-        .collect::<Vec<_>>()
-        .join(", ");
-    let outer = positioned
-        .iter()
-        .map(|(alias, column)| format!("l.{alias} AS {}", identifier(column)))
-        .collect::<Vec<_>>()
-        .join(", ");
-    Ok(format!(
-        "SELECT l.b AS {helper}, {outer}, l.r AS {row}, l.m AS {matches}\nFROM (\n  SELECT s.{batch} AS b, {inner},\n         ROW_NUMBER() OVER (PARTITION BY s.{batch}\n           ORDER BY {keyed}) AS r,\n         COUNT(*) OVER (PARTITION BY s.{batch}) AS m\n  FROM {seeds} s\n  JOIN {table} t\n    ON {on}\n) AS l\nWHERE l.r = 1\nORDER BY l.b",
-        helper = identifier(BATCH_COLUMN),
-        matches = identifier(MATCHES_COLUMN),
-        row = identifier(ROW_COLUMN),
-        keyed = key
-            .iter()
-            .map(|k| format!("t.{}", identifier(k)))
-            .collect::<Vec<_>>()
-            .join(", "),
-        seeds = identifier(seeds),
-        on = seed_join(key),
-    ))
-}
-
-/// `name` as an identifier: in double quotes, each one in it doubled.
-fn identifier(name: &str) -> String {
-    format!("\"{}\"", name.replace('"', "\"\""))
-}
-
-fn identifiers(names: &[String]) -> String {
-    names
-        .iter()
-        .map(|n| identifier(n))
-        .collect::<Vec<_>>()
-        .join(", ")
+        .collect()
 }
 
 /// `value` as a text literal: in single quotes, each one in it doubled,

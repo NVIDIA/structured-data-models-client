@@ -41,6 +41,9 @@ from typing import Any
 
 import pytest
 
+# Gate tooling (T3.0): CI runs it in the tooling jobs, not in every matrix job.
+pytestmark = pytest.mark.tooling
+
 ROOT = Path(__file__).resolve().parents[1]
 
 # --- the interface assumed ----------------------------------------------------------
@@ -88,13 +91,14 @@ def row(ident: str, names: str, status: str = APPROVED) -> str:
 
 
 def phase2(*rows: str, malformed: bool = False) -> Callable[[Path], None]:
-    r"""Writes ``phase-2/decisions.md`` holding ``rows``; malformed, its
+    r"""Adds ``rows`` beside existing Phase 2 approvals; malformed, its
     text is not UTF-8."""
 
     def edit(repo: Path) -> None:
         path = repo / PHASE2_DECISIONS
         path.parent.mkdir(parents=True, exist_ok=True)
-        text = (HEADER + ''.join(rows)).encode('utf-8')
+        before = path.read_bytes() if path.exists() else HEADER.encode('utf-8')
+        text = before.rstrip(b'\n') + b'\n' + ''.join(rows).encode('utf-8')
         path.write_bytes(NOT_UTF8 + text if malformed else text)
 
     return edit
@@ -121,6 +125,18 @@ def both(*edits: Callable[[Path], None]) -> Callable[[Path], None]:
     return edit
 
 
+def test_seeding_a_phase_2_decision_preserves_existing_owner_rows(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / PHASE2_DECISIONS
+    path.parent.mkdir(parents=True)
+    original = HEADER + row('KO2-existing', '`register.yaml`')
+    path.write_text(original, encoding='utf-8')
+    seeded = row('P2-900', '`compare-policy.yaml`')
+    phase2(seeded)(tmp_path)
+    assert path.read_text(encoding='utf-8') == original + seeded
+
+
 # --- ratchet.py: policy and availability relaxations ---------------------------------
 
 POLICY = 'contract/compare-policy.yaml'
@@ -137,17 +153,14 @@ def relaxed(decision: str) -> Callable[[Path], None]:
 
 @pytest.fixture(scope='module')
 def ratchet_origin(
-    tmp_path_factory: pytest.TempPathFactory,
+    owned_module_dir: Callable[[str], Path],
 ) -> tuple[Path, str]:
-    return helpers.build(tmp_path_factory.mktemp('origin'))  # type: ignore[no-any-return]
+    return helpers.build(owned_module_dir('origin'))  # type: ignore[no-any-return]
 
 
 @pytest.fixture
 def repo(ratchet_origin: tuple[Path, str], tmp_path: Path) -> Path:
-    source, landed = ratchet_origin
-    tree = tmp_path / 'tree'
-    git(source, 'worktree', 'add', '-q', '--detach', str(tree), landed)
-    return tree
+    return helpers.repo.__wrapped__(ratchet_origin, tmp_path)
 
 
 def ratchet_check(
@@ -292,17 +305,14 @@ def test_ratchet_phase_1_s_file_missing_fails_by_name(repo: Path) -> None:
 
 @pytest.fixture(scope='module')
 def coverage_origin(
-    tmp_path_factory: pytest.TempPathFactory,
+    owned_module_dir: Callable[[str], Path],
 ) -> tuple[Path, str]:
-    return coverage.build(tmp_path_factory.mktemp('coverage'))  # type: ignore[no-any-return]
+    return coverage.build(owned_module_dir('coverage'))  # type: ignore[no-any-return]
 
 
 @pytest.fixture
 def manifests(coverage_origin: tuple[Path, str], tmp_path: Path) -> Path:
-    source, landed = coverage_origin
-    tree = tmp_path / 'tree'
-    git(source, 'worktree', 'add', '-q', '--detach', str(tree), landed)
-    return tree
+    return helpers.repo.__wrapped__(coverage_origin, tmp_path)
 
 
 def dropped(repo: Path) -> None:
@@ -367,6 +377,7 @@ def capture_tree(tmp_path: Path) -> tuple[Path, str]:
     tree = tmp_path / 'copy'
     for name in (
         'contract/runners/capture_check.py',
+        'contract/runners/captures.py',
         'contract/compare-policy.yaml',
         PHASE1_DECISIONS,
     ):
@@ -382,13 +393,28 @@ def capture_tree(tmp_path: Path) -> tuple[Path, str]:
 
 def capture_policy(tree: Path) -> subprocess.CompletedProcess[str]:
     r"""The copy's ``policy()``, with its defaults, as the comparator calls
-    it, in a process of its own."""
+    it, in a process of its own.
+
+    Loading also evaluates policy, so retain the module before executing it.
+    Only its PolicyError is a policy refusal; other failures keep a traceback.
+    """
     return subprocess.run(
         [
             sys.executable,
             '-c',
-            'import sys; sys.path.insert(0, sys.argv[1]); '
-            'import capture_check; capture_check.policy(); print("policy ok")',
+            'import importlib.util, sys\n'
+            'sys.path.insert(0, sys.argv[1])\n'
+            'spec = importlib.util.spec_from_file_location(\n'
+            '    "capture_check", sys.argv[1] + "/capture_check.py")\n'
+            'module = importlib.util.module_from_spec(spec)\n'
+            'sys.modules[spec.name] = module\n'
+            'try:\n'
+            '    spec.loader.exec_module(module)\n'
+            '    module.policy()\n'
+            'except getattr(module, "PolicyError", ()) as error:\n'
+            '    print(error, file=sys.stderr)\n'
+            '    raise SystemExit(2)\n'
+            'print("policy ok")\n',
             str(tree / 'contract/runners'),
         ],
         capture_output=True,
@@ -405,7 +431,8 @@ def test_capture_check_the_control_without_the_row_is_refused(
     refused (passes on the base too: the copy is sound)."""
     tree, _ = capture_tree(tmp_path)
     done = capture_policy(tree)
-    assert done.returncode != 0, done.stdout
+    assert done.returncode == 2, done.stdout + done.stderr
+    assert 'Traceback' not in done.stderr, done.stderr
     assert 'exclusion request-id' in done.stderr, done.stderr
 
 
@@ -429,5 +456,31 @@ def test_capture_check_an_exclusion_approved_only_in_a_malformed_file_fails_by_n
     tree, e35 = capture_tree(tmp_path)
     phase2(e35, malformed=True)(tree)
     done = capture_policy(tree)
-    assert done.returncode != 0, done.stdout
+    assert done.returncode == 2, done.stdout + done.stderr
+    assert 'Traceback' not in done.stderr, done.stderr
     assert NAMED[PHASE2_DECISIONS] in done.stderr, done.stderr
+
+
+@pytest.mark.parametrize('fault', ['missing-import', 'runtime-error'])
+def test_capture_policy_does_not_mistake_unexpected_failures_for_policy_refusals(
+    tmp_path: Path,
+    fault: str,
+) -> None:
+    tree, e35 = capture_tree(tmp_path)
+    phase2(e35)(tree)
+    sibling = tree / 'contract/runners/captures.py'
+    if fault == 'missing-import':
+        sibling.unlink()
+        diagnostic = 'FileNotFoundError'
+    else:
+        sibling.write_text(
+            sibling.read_text(encoding='utf-8')
+            + '\nraise RuntimeError("unexpected fixture failure")\n',
+            encoding='utf-8',
+        )
+        diagnostic = 'RuntimeError: unexpected fixture failure'
+    done = capture_policy(tree)
+    assert done.returncode == 1, done.stdout + done.stderr
+    assert 'Traceback' in done.stderr, done.stderr
+    assert diagnostic in done.stderr, done.stderr
+    assert 'policy ok' not in done.stdout, done.stdout

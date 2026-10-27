@@ -18,26 +18,20 @@
 //! [`Given::Unreadable`], which is refused as the reference refuses a
 //! value it cannot read.
 //!
-//! [`read_held`] reads the schema as a host holds it, beside the
-//! description the core last answered of it, for `edit_schema` and
-//! `materialize` alike: the host's tables, columns, meanings, keys, time
-//! columns and links, and what the source said of each column; a table or
-//! column the description lacks, a column retyped, or a table mapped to
-//! another source table, is refused by name (`schema_edited`), never
-//! followed.
-
-use std::collections::BTreeSet;
+//! The schema edited is the one the host holds, as plain data
+//! ([`crate::held`], T3.16): a column the source was never asked of is
+//! edited by its data type, as the reference's setters edit any column.
 
 use sdm_contract::ops::{
-    ColumnRef, DescribedColumn, DescribedTable, Dtype, Given, HeldSchema, SchemaEdit,
-    SourceDescription, Stype,
+    ColumnRef, DescribedTable, Dtype, Given, SchemaEdit, SourceDescription, Stype,
 };
-use sdm_contract::{CoreError, CoreWarning, Detail, ErrorCode, ErrorKind, Scalar};
+use sdm_contract::{CoreError, CoreWarning, Detail, Scalar, Sentence};
 
 use crate::assemble::{
-    Link, can_identify, checked, empty_key, invalid, key_cannot_identify, key_is_time_column,
-    key_not_names, mark_keys, meaning_not_carried, name_each_other, no_column, no_table, once,
-    read_exact_numbers, sorted_names, time_column_not_a_name, time_is_key, two_ways, with_given,
+    HostTypes, Link, can_identify, checked, empty_key, invalid, key_cannot_identify,
+    key_is_time_column, key_not_names, mark_keys, meaning_not_carried, name_each_other, no_column,
+    no_table, once, read_exact_numbers, sorted_names, time_column_not_a_name, time_is_key,
+    two_ways, with_given,
 };
 
 /// The meanings a caller may assign a column, by the text it gives
@@ -66,107 +60,37 @@ pub struct Edited {
     pub warnings: Vec<CoreWarning>,
 }
 
-/// The refusal of a schema the host changed in a way no edit the core
-/// takes says: `UNSUPPORTED_REQUEST` naming the operation and the rule
-/// (`schema_edited`), never a name the schema holds (decision H17).
-pub fn edited_past(operation: &'static str) -> CoreError {
-    CoreError::new(
-        ErrorKind::Unsupported,
-        ErrorCode::UnsupportedRequest,
-        "the schema was changed in a way the core does not follow yet",
-    )
-    .with_field("operation", Detail::text(operation))
-    .with_field("rule", Detail::text("schema_edited"))
-}
-
-/// The schema as the host holds it (`held`), beside the description the
-/// core last answered of it (`described`), as `operation` reads it: each
-/// table the host holds, in its order, with the source and the columns the
-/// description gives it, each column's meaning and what it meant before
-/// the schema joined on it the host's, the key and time column the host's,
-/// the links the host's. A table the description lacks or the host maps
-/// to another source table, or a column the description lacks or the host
-/// holds as another data type, is refused by name (`schema_edited`); a
-/// table or column the host holds twice is the host's fault,
-/// `INVALID_REQUEST`. Left out (`None`), the host holds the description
-/// as it is.
-pub fn read_held(
-    described: SourceDescription,
-    held: Option<HeldSchema>,
-    operation: &'static str,
-) -> Result<SourceDescription, CoreError> {
-    let Some(held) = held else {
-        return Ok(described);
-    };
-    let mut seen = BTreeSet::new();
-    let mut tables = Vec::with_capacity(held.tables.len());
-    for table in held.tables {
-        if !seen.insert(table.name.clone()) {
-            return Err(invalid("the schema holds a table twice", "held"));
-        }
-        let Some(at) = described.tables.iter().find(|t| t.name == table.name) else {
-            return Err(edited_past(operation));
-        };
-        if at.source != table.source {
-            return Err(edited_past(operation));
-        }
-        let mut names = BTreeSet::new();
-        let mut columns = Vec::with_capacity(table.columns.len());
-        for column in table.columns {
-            if !names.insert(column.name.clone()) {
-                return Err(invalid("a table holds a column twice", "held"));
-            }
-            let Some(read) = at.columns.iter().find(|c| c.name == column.name) else {
-                return Err(edited_past(operation));
-            };
-            if read.dtype.wire_name() != column.dtype {
-                return Err(edited_past(operation));
-            }
-            columns.push(DescribedColumn {
-                stype: column.stype,
-                stype_before_key: column.stype_before_key,
-                ..read.clone()
-            });
-        }
-        tables.push(DescribedTable {
-            name: table.name,
-            source: table.source,
-            columns,
-            primary_key: table.primary_key,
-            time_column: table.time_column,
-            time_column_inferred: at.time_column_inferred.clone(),
-            duplicate_keys: at.duplicate_keys.clone(),
-        });
-    }
-    Ok(SourceDescription {
-        tables,
-        links: held.links,
-    })
-}
-
 /// `description` with `edit` made, as the reference's setters make it, or
 /// the reference's refusal of it at the assignment (`INVALID_REQUEST`,
 /// naming the field, and the table and column where it names them).
+/// `description` with `edit` made, as the reference's setters make it, or
+/// the reference's refusal of it at the assignment (`INVALID_REQUEST`,
+/// naming the field, and the table and column where it names them); each
+/// column's data type read by the name the host gave it (`types`, T3.16),
+/// as the setters read a column's `dtype`: a meaning or key checked against
+/// it, a name no data type has let through, a link's two columns joined by
+/// their names' families, and a refusal quoting the name.
 pub fn edit(
     mut description: SourceDescription,
     edit: &SchemaEdit,
     supports: Supports<'_>,
+    types: &HostTypes,
 ) -> Result<Edited, CoreError> {
     let mut declared = None;
     let mut warnings = Vec::new();
     match edit {
         SchemaEdit::PrimaryKey { table, key } => {
-            primary_key(&mut description, table, key)?;
+            primary_key(&mut description, table, key, types)?;
         }
         SchemaEdit::TimeColumn { table, column } => {
-            declared = time_column(&mut description, table, column, supports)?;
+            declared = time_column(&mut description, table, column, supports, types)?;
         }
         SchemaEdit::Stype {
             table,
             column,
             stype,
         } => {
-            stype_of(&mut description, table, column, stype, supports)?;
+            stype_of(&mut description, table, column, stype, supports, types)?;
             declared = Some(ColumnRef {
                 table: table.clone(),
                 column: column.clone(),
@@ -174,7 +98,7 @@ pub fn edit(
         }
         SchemaEdit::LeaveOut { table, column } => leave_out(&mut description, table, column)?,
         SchemaEdit::Relationships { links } => {
-            warnings = relationships(&mut description, links)?;
+            warnings = relationships(&mut description, links, types)?;
         }
     }
     Ok(Edited {
@@ -232,6 +156,7 @@ fn primary_key(
     description: &mut SourceDescription,
     table: &str,
     key: &Given<Option<Vec<String>>>,
+    types: &HostTypes,
 ) -> Result<(), CoreError> {
     let at = table_at(description, table, "primary_key")?;
     let names = match key {
@@ -253,11 +178,13 @@ fn primary_key(
     }
     for name in names {
         let column = &shape.columns[column_at(shape, name, "primary_key")?];
-        if !can_identify(column.dtype) {
+        // A column named by no data type the old client knows, which its
+        // checks let through (`supports_dtype`, T3.16).
+        if !types.is_unknown(table, name) && !can_identify(column.dtype) {
             return Err(key_cannot_identify(
                 table,
                 name,
-                column.dtype,
+                types.name(table, name, column.dtype),
                 "primary_key",
             ));
         }
@@ -284,6 +211,7 @@ fn time_column(
     table: &str,
     column: &Given<Option<String>>,
     supports: Supports<'_>,
+    types: &HostTypes,
 ) -> Result<Option<ColumnRef>, CoreError> {
     let at = table_at(description, table, "time_column")?;
     let name = match column {
@@ -313,6 +241,7 @@ fn time_column(
         Stype::Timestamp,
         supports,
         "time_column",
+        types,
     )?;
     description.tables[at].time_column = Some(name.clone());
     Ok(Some(ColumnRef {
@@ -330,6 +259,7 @@ fn stype_of(
     column: &str,
     stype: &Given<String>,
     supports: Supports<'_>,
+    types: &HostTypes,
 ) -> Result<(), CoreError> {
     let at = table_at(description, table, "stype")?;
     column_at(&description.tables[at], column, "stype")?;
@@ -342,25 +272,33 @@ fn stype_of(
     let Some(meaning) = meaning else {
         // Not a semantic type (`_check_stype`): the text given, or the
         // host's text of another value, and the types a caller may name.
-        let refused = named(
-            invalid("a column's meaning given is not a semantic type", "stype"),
-            table,
-            column,
-        )
-        .with_field(
-            "stypes",
-            sorted_names(SEMANTIC_TYPES.iter().map(|(n, _)| *n)),
-        );
+        let refused = |sentence| {
+            named(
+                invalid(
+                    sentence,
+                    "a column's meaning given is not a semantic type",
+                    "stype",
+                ),
+                table,
+                column,
+            )
+            .with_field(
+                "stypes",
+                sorted_names(SEMANTIC_TYPES.iter().map(|(n, _)| *n)),
+            )
+        };
         return Err(match stype {
-            Given::Value(text) => refused
+            Given::Value(text) => refused(Sentence::NotASemanticType)
                 .with_field("reason", Detail::text("not_a_semantic_type"))
                 .with_field("given_text", Detail::text(text)),
-            Given::Spelled(text) => with_given(refused, Some(text))
-                .with_field("reason", Detail::text("not_a_semantic_type_spelled")),
-            Given::Unreadable => refused,
+            Given::Spelled(text) => {
+                with_given(refused(Sentence::NotASemanticTypeGiven), Some(text))
+                    .with_field("reason", Detail::text("not_a_semantic_type_spelled"))
+            }
+            Given::Unreadable => refused(Sentence::NotASemanticTypeUnread),
         });
     };
-    assign(description, at, column, meaning, supports, "stype")
+    assign(description, at, column, meaning, supports, "stype", types)
 }
 
 /// A meaning assigned to a column of the table at `at`
@@ -377,10 +315,13 @@ fn assign(
     meaning: Stype,
     supports: Supports<'_>,
     field: &str,
+    types: &HostTypes,
 ) -> Result<(), CoreError> {
     let shape = &mut description.tables[at];
     let index = column_at(shape, column, field)?;
-    if !supports(meaning, shape.columns[index].dtype) {
+    // A column named by no data type the old client knows, which its checks
+    // let through (`supports_dtype`, T3.16); any other by its type.
+    if !types.is_unknown(&shape.name, column) && !supports(meaning, shape.columns[index].dtype) {
         let said = SEMANTIC_TYPES
             .iter()
             .find(|(_, stype)| *stype == meaning)
@@ -388,7 +329,7 @@ fn assign(
         return Err(meaning_not_carried(
             &shape.name,
             column,
-            shape.columns[index].dtype,
+            types.name(&shape.name, column, shape.columns[index].dtype),
             said,
             field,
         ));
@@ -418,20 +359,26 @@ fn leave_out(
 ) -> Result<(), CoreError> {
     let at = table_at(description, table, "column")?;
     let Given::Value(name) = column else {
-        let refused = invalid("a column named is not its table's", "column")
-            .with_field("table", Detail::text(table));
+        let refused = |sentence| {
+            invalid(sentence, "a column named is not its table's", "column")
+                .with_field("table", Detail::text(table))
+        };
         return Err(match column.spelled() {
-            Some(_) => with_given(refused, column.spelled())
+            Some(_) => with_given(refused(Sentence::ColumnNotANameGiven), column.spelled())
                 .with_field("reason", Detail::text("column_not_a_name"))
                 .with_field("columns", sorted_names(columns_of(&description.tables[at]))),
-            None => refused,
+            None => refused(Sentence::ColumnNotAName),
         });
     };
     let shape = &mut description.tables[at];
     let index = column_at(shape, name, "column")?;
     if shape.primary_key.contains(name) {
         return Err(named(
-            invalid("a column left out is its table's primary key", "column"),
+            invalid(
+                Sentence::LeftOutKey,
+                "a column left out is its table's primary key",
+                "column",
+            ),
             table,
             name,
         )
@@ -439,7 +386,11 @@ fn leave_out(
     }
     if shape.time_column.as_deref() == Some(name.as_str()) {
         return Err(named(
-            invalid("a column left out is its table's time column", "column"),
+            invalid(
+                Sentence::LeftOutTimeColumn,
+                "a column left out is its table's time column",
+                "column",
+            ),
             table,
             name,
         )
@@ -458,6 +409,7 @@ fn leave_out(
 fn relationships(
     description: &mut SourceDescription,
     links: &[Given<Vec<ColumnRef>>],
+    types: &HostTypes,
 ) -> Result<Vec<CoreWarning>, CoreError> {
     // Each column of exact numbers read as the links given read it, before
     // they are checked (T2.21); a refusal leaves the schema as it was.
@@ -469,17 +421,20 @@ fn relationships(
     let mut given = Vec::with_capacity(links.len());
     for link in links {
         let Given::Value(link) = link else {
-            let refused = invalid(
-                "a relationship given is not a relationship",
-                "relationships",
-            );
+            let refused = |sentence| {
+                invalid(
+                    sentence,
+                    "a relationship given is not a relationship",
+                    "relationships",
+                )
+            };
             return Err(match link.spelled() {
-                Some(_) => with_given(refused, link.spelled())
+                Some(_) => with_given(refused(Sentence::NotARelationshipGiven), link.spelled())
                     .with_field("reason", Detail::text("not_a_relationship")),
-                None => refused,
+                None => refused(Sentence::NotARelationship),
             });
         };
-        checked(&description.tables, link)?;
+        checked(&description.tables, link, types)?;
         given.push(link.clone());
     }
     let settled = once(given);

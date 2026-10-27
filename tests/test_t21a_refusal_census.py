@@ -194,6 +194,7 @@ def test_every_site_has_a_probe() -> None:
     assert done.returncode == 0, done.stdout + done.stderr
 
 
+@pytest.mark.tooling
 @pytest.mark.parametrize(
     ('relative', 'code', 'named'),
     [
@@ -244,3 +245,53 @@ def test_the_first_duckdb_run_probed_every_site_on_both_routes() -> None:
         assert hit.get('rule') or hit.get('code'), hit
         assert isinstance(hit['sources'], int) and hit['sources'] >= 0, hit
     assert sorted(evidence['unmeasured']) == ['postgres', 'sqlite']
+
+
+def test_a_case_naming_a_route_the_core_lacks_leaves_the_duckdb_refusals(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # T3.20 r3: the census forces onto the core only the routes this
+    # build's core has. A case in the tree naming a warehouse route the
+    # core has no route for yet (a Lakebase predict) leaves the census's
+    # DuckDB probes refusing as they do, never a route error.
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location('census_t320', TOOL)
+    assert spec is not None and spec.loader is not None
+    census = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = census
+    spec.loader.exec_module(census)
+    runner = census._runner()
+    loaded = runner.load_cases
+    lacking = 'client.predict/binary/lakebase'
+
+    def with_a_warehouse_case(paths: Any) -> Any:
+        found = list(loaded(paths))
+        case, where = found[0]
+        found.append(({**case, 'routes': [lacking]}, where))
+        return found
+
+    monkeypatch.setattr(runner, 'load_cases', with_a_warehouse_case)
+    routes = census._routes()
+    assert lacking not in routes and routes
+    probes = [
+        probe
+        for probe in census.probes(ROOT)
+        if 'duckdb' in probe.get('databases', census.DATABASES)
+    ][:8]
+    cases = tmp_path / 'cases'
+    cases.mkdir()
+    for number, probe in enumerate(probes):
+        (cases / f'{number}.json').write_text(
+            json.dumps(
+                {
+                    'case': census._case(probe, number, routes),
+                    'options': probe.get('options', {}),
+                    'model': probe.get('model', 'KumoRelational'),
+                }
+            )
+        )
+    census.route(cases, tmp_path / 'out.json', 'duckdb', core=True)
+    outcomes = json.loads((tmp_path / 'out.json').read_text())
+    assert not [o for o in outcomes if o['result'] == 'route_error'], outcomes
+    assert any(o['result'] == 'refusal' for o in outcomes), outcomes

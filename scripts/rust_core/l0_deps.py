@@ -78,7 +78,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import tomllib
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import bridge_freeze  # noqa: E402
@@ -104,8 +107,14 @@ CLASSES: dict[str, str] = {
     'sdm-request': DOMAIN,
     'sdm-host': HOST,
     'sdm-py': BINDING,
+    # Java's binding (Phase 3 design choice 10, T3.11), classified before it
+    # exists so its first commit is held from the start (T3.2).
+    'sdm-jni': BINDING,
     'sdm-testkit': DEV,
 }
+#: The crates classified ahead of their first commit: absent from the
+#: workspace until they exist, and held to their class once they do.
+PLANNED = frozenset({'sdm-jni'})
 
 PARSER = 'sdm-pql'
 # The first-party crates each crate may depend on, directly, by any kind of
@@ -138,12 +147,14 @@ ALLOWED: dict[str, frozenset[str]] = {
     # sdm-engine's Zones through sdm-core's re-export, never directly.
     'sdm-host': frozenset({'sdm-core', 'sdm-data', 'sdm-contract'}),
     'sdm-py': frozenset({'sdm-host', 'sdm-contract'}),
+    'sdm-jni': frozenset({'sdm-host', 'sdm-contract'}),
     'sdm-testkit': frozenset({'sdm-host', 'sdm-contract'}),
 }
 # Edges that must be there (E21): the binding reaches the core through
 # sdm-host alone, and takes sdm-contract's types.
 REQUIRED: dict[str, frozenset[str]] = {
     'sdm-py': frozenset({'sdm-host', 'sdm-contract'}),
+    'sdm-jni': frozenset({'sdm-host', 'sdm-contract'}),
 }
 # The Rust database drivers, of DuckDB and of the dialects that may follow
 # it (T1.21c): SQLite, Postgres, ODBC (which Databricks and others are
@@ -339,7 +350,7 @@ def check_classes(graph: Graph, crates: Crates) -> list[str]:
     problems += [
         f'{crate}: classified, but not a workspace crate'
         for crate in crates.classes
-        if crate not in graph.members
+        if crate not in graph.members and crate not in PLANNED
     ]
     return problems
 

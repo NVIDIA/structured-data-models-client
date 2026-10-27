@@ -1,0 +1,26 @@
+{
+ "about": "T3.0's independent tests in tests/test_t30_process.py and tests/test_ci_workflow.py (test_t30_*), written before the implementation against the interfaces the first implementer gave and, for the CI split, the timing guard, the lane environment, heavy, the dry run and the slip report, against assumed names (the ASSUMED and T30_ constants beside them). Each test named in 'pending' failed when written; the two files hold it to failing (xfail, strict) until it passes, and then it fails, naming itself, until the implementer takes it out of 'pending'. The implementer changes nothing else: 'pending' stays within 'authored', the test author's list. Names are function names: a parametrized test is pending as a whole.",
+ "pending": [],
+ "authored": [
+  "test_t30_affected_maps_every_path_under_contract_scripts_and_crates",
+  "test_t30_an_approval_token_lets_a_one_off_through_and_is_logged",
+  "test_t30_comparison_jobs_take_the_base_recorded_at_push_time",
+  "test_t30_every_gate_copying_test_carries_the_marker",
+  "test_t30_heavy_refuses_or_queues_below_its_thresholds",
+  "test_t30_heavy_runs_a_job_when_cpu_memory_and_disk_allow",
+  "test_t30_no_stamp_for_a_fix_whose_new_tests_all_pass_on_the_previous_sha",
+  "test_t30_no_stamp_when_a_seeded_case_differs_from_the_old_client",
+  "test_t30_the_commit_msg_check_wants_a_rule_on_a_product_fix",
+  "test_t30_the_dry_run_lists_a_case_kind_the_tools_cannot_judge",
+  "test_t30_the_guard_denies_each_banned_command_with_its_alternative",
+  "test_t30_the_guard_is_the_repository_s_pretooluse_hook_for_bash",
+  "test_t30_the_guard_lets_rm_r_through_in_the_listed_scratch",
+  "test_t30_the_guard_lets_the_allowed_forms_through",
+  "test_t30_the_judging_tool_job_runs_only_when_its_paths_change",
+  "test_t30_the_judging_tool_tests_run_once_in_their_own_job",
+  "test_t30_the_lane_environment_is_reused_while_its_hash_holds",
+  "test_t30_the_runner_refuses_the_shared_venv",
+  "test_t30_the_slip_report_computes_the_slip_from_a_forecast",
+  "test_t30_the_timing_guard_fails_a_job_over_80_percent_twice_in_three"
+ ]
+}

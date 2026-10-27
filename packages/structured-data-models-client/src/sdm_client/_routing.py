@@ -6,12 +6,15 @@
 r"""The routing seam: which public paths run on the old code or the core.
 
 Private, and not API. Every core path of ``scope-python.yaml`` (operation,
-mode and backend) is routed ``'old'`` or ``'core'``, and every default is
-``'old'`` until the Phase 3 switch, which a test holds. A test forces paths
-onto the core with the ``SDM_CORE_ROUTES`` environment variable, path IDs
-separated by commas, read at every call, so a change takes effect at the
-next call. A forced path that is unknown, or that has no core route in this
-build, fails the call with :class:`RouteError`; nothing falls back.
+mode and backend) is routed ``'old'`` or ``'core'``. Covered S0, S1 and S2
+entrypoints default to the core after the Phase 3 switch.
+A test selects routes with ``SDM_CORE_ROUTES``: comma-separated path IDs
+select those paths on the core and the others on the old route; an explicitly
+empty value selects the old route.
+With the variable absent, the build's defaults apply.
+The setting is read at every call, so a change takes effect at the next call.
+A selected path that is unknown, or that has no core route in this build,
+fails the call with :class:`RouteError`; nothing falls back.
 
 A call that may end on several paths, such as validation, which accepts or
 refuses, routes them together: forcing some of them and not the others
@@ -265,9 +268,6 @@ PATHS = (
     'result.merge/merge/any',
 )
 
-#: Where each path runs by default: the old code, until Phase 3.
-ROUTES: dict[str, str] = dict.fromkeys(PATHS, 'old')
-
 #: S0: validation in ``PredictiveQuery.materialize``, accepting or refusing.
 S0 = ('query.validate/accept/any', 'query.validate/refuse/any')
 
@@ -288,8 +288,7 @@ FROM_SOURCE_DUCKDB_TABLES = (
 
 #: ``PredictiveQuery.materialize`` with ``indices`` over a schema of a DuckDB
 #: source: one call ends on the path of the task kind the query resolves to,
-#: so its six paths are routed together (T1.11c). The core materializes a
-#: regression and refuses the other kinds by name (register entry P1B-3).
+#: so its six paths are routed together (T1.11c).
 MATERIALIZE_DUCKDB = (
     'query.materialize/indices-binary/duckdb',
     'query.materialize/indices-multiclass/duckdb',
@@ -301,10 +300,8 @@ MATERIALIZE_DUCKDB = (
 
 #: ``SDMClient.predict`` of a request materialized over a DuckDB source: one
 #: call ends on the path of its task kind, so its six paths are routed
-#: together (T1.11d). On the core route a request materialize built on the
-#: core is sent and its answer read there; the core predicts a regression
-#: and refuses the other kinds by name (register entry P1B-4), and a
-#: request not materialized on the core has no core route.
+#: together (T1.11d). Requests materialized by the core and older requests
+#: are sent and their answers interpreted there (T3.26).
 PREDICT_DUCKDB = (
     'client.predict/binary/duckdb',
     'client.predict/multiclass/duckdb',
@@ -333,33 +330,104 @@ FROM_SOURCE_POSTGRES_TABLES = _on(FROM_SOURCE_DUCKDB_TABLES, 'postgres')
 MATERIALIZE_POSTGRES = _on(MATERIALIZE_DUCKDB, 'postgres')
 PREDICT_POSTGRES = _on(PREDICT_DUCKDB, 'postgres')
 
-#: The backends whose sources the core reads, and each call's paths over
-#: each: ``Schema.from_source`` with no tables named and with tables
-#: named, ``PredictiveQuery.materialize`` and ``SDMClient.predict``.
+#: The same calls over a Databricks source (T3.4), routed as DuckDB's are:
+#: through a SQL warehouse connection, and through a notebook's Spark
+#: session, each its own paths (``Source.kind`` tells them apart).
+FROM_SOURCE_DATABRICKS_SQL = _on(FROM_SOURCE_DUCKDB, 'databricks-sql')
+FROM_SOURCE_DATABRICKS_SQL_TABLES = _on(
+    FROM_SOURCE_DUCKDB_TABLES, 'databricks-sql'
+)
+MATERIALIZE_DATABRICKS_SQL = _on(MATERIALIZE_DUCKDB, 'databricks-sql')
+PREDICT_DATABRICKS_SQL = _on(PREDICT_DUCKDB, 'databricks-sql')
+FROM_SOURCE_DATABRICKS_SPARK = _on(FROM_SOURCE_DUCKDB, 'databricks-spark')
+FROM_SOURCE_DATABRICKS_SPARK_TABLES = _on(
+    FROM_SOURCE_DUCKDB_TABLES, 'databricks-spark'
+)
+MATERIALIZE_DATABRICKS_SPARK = _on(MATERIALIZE_DUCKDB, 'databricks-spark')
+PREDICT_DATABRICKS_SPARK = _on(PREDICT_DUCKDB, 'databricks-spark')
+
+#: The same calls over a Databricks metric view (T3.5), a semantic model of
+#: its own kind (``Source.kind``) on either Databricks connection:
+#: ``Schema.from_source`` of the model, with tables named or none, is one
+#: path, and materialize and predict of a schema built from it are routed
+#: as DuckDB's are. The core reads the view afresh at each call (the
+#: owner's plan B). Snowflake semantic views use the same conversion port
+#: through the Snowflake dialect and provider below.
+FROM_SOURCE_DATABRICKS_METRIC_VIEW = (
+    'schema.from-source/semantic-model/databricks-metric-view',
+)
+MATERIALIZE_DATABRICKS_METRIC_VIEW = _on(
+    MATERIALIZE_DUCKDB, 'databricks-metric-view'
+)
+PREDICT_DATABRICKS_METRIC_VIEW = _on(PREDICT_DUCKDB, 'databricks-metric-view')
+#: The same calls over a Snowflake source (T3.6), routed as DuckDB's are:
+#: through a connector connection or a Snowpark session's own, one kind.
+FROM_SOURCE_SNOWFLAKE = _on(FROM_SOURCE_DUCKDB, 'snowflake')
+FROM_SOURCE_SNOWFLAKE_TABLES = _on(FROM_SOURCE_DUCKDB_TABLES, 'snowflake')
+MATERIALIZE_SNOWFLAKE = _on(MATERIALIZE_DUCKDB, 'snowflake')
+PREDICT_SNOWFLAKE = _on(PREDICT_DUCKDB, 'snowflake')
+
+#: Semantic models use their own paths, on the Snowflake source's provider.
+FROM_SOURCE_SNOWFLAKE_SEMANTIC_VIEW = (
+    'schema.from-source/semantic-model/snowflake-semantic-view',
+)
+MATERIALIZE_SNOWFLAKE_SEMANTIC_VIEW = _on(
+    MATERIALIZE_DUCKDB, 'snowflake-semantic-view'
+)
+PREDICT_SNOWFLAKE_SEMANTIC_VIEW = _on(PREDICT_DUCKDB, 'snowflake-semantic-view')
+
+#: The kinds of source the core reads (:func:`kind_of`), and each call's
+#: paths over each: ``Schema.from_source`` with no tables named and with
+#: tables named, ``PredictiveQuery.materialize`` and ``SDMClient.predict``.
 FROM_SOURCE = {
     'duckdb': FROM_SOURCE_DUCKDB,
     'sqlite': FROM_SOURCE_SQLITE,
     'postgres': FROM_SOURCE_POSTGRES,
+    'databricks-sql': FROM_SOURCE_DATABRICKS_SQL,
+    'databricks-spark': FROM_SOURCE_DATABRICKS_SPARK,
+    'databricks-metric-view': FROM_SOURCE_DATABRICKS_METRIC_VIEW,
+    'snowflake': FROM_SOURCE_SNOWFLAKE,
+    'snowflake-semantic-view': FROM_SOURCE_SNOWFLAKE_SEMANTIC_VIEW,
 }
 FROM_SOURCE_TABLES = {
     'duckdb': FROM_SOURCE_DUCKDB_TABLES,
     'sqlite': FROM_SOURCE_SQLITE_TABLES,
     'postgres': FROM_SOURCE_POSTGRES_TABLES,
+    'databricks-sql': FROM_SOURCE_DATABRICKS_SQL_TABLES,
+    'databricks-spark': FROM_SOURCE_DATABRICKS_SPARK_TABLES,
+    'databricks-metric-view': FROM_SOURCE_DATABRICKS_METRIC_VIEW,
+    'snowflake': FROM_SOURCE_SNOWFLAKE_TABLES,
+    'snowflake-semantic-view': FROM_SOURCE_SNOWFLAKE_SEMANTIC_VIEW,
 }
 MATERIALIZE = {
     'duckdb': MATERIALIZE_DUCKDB,
     'sqlite': MATERIALIZE_SQLITE,
     'postgres': MATERIALIZE_POSTGRES,
+    'databricks-sql': MATERIALIZE_DATABRICKS_SQL,
+    'databricks-spark': MATERIALIZE_DATABRICKS_SPARK,
+    'databricks-metric-view': MATERIALIZE_DATABRICKS_METRIC_VIEW,
+    'snowflake': MATERIALIZE_SNOWFLAKE,
+    'snowflake-semantic-view': MATERIALIZE_SNOWFLAKE_SEMANTIC_VIEW,
 }
 PREDICT = {
     'duckdb': PREDICT_DUCKDB,
     'sqlite': PREDICT_SQLITE,
     'postgres': PREDICT_POSTGRES,
+    'databricks-sql': PREDICT_DATABRICKS_SQL,
+    'databricks-spark': PREDICT_DATABRICKS_SPARK,
+    'databricks-metric-view': PREDICT_DATABRICKS_METRIC_VIEW,
+    'snowflake': PREDICT_SNOWFLAKE,
+    'snowflake-semantic-view': PREDICT_SNOWFLAKE_SEMANTIC_VIEW,
 }
+
+#: ``SDMClient.capabilities``: each model described from the core's table
+#: (T3.12).
+CAPABILITIES = ('client.capabilities/capabilities/any',)
 
 #: The paths this build can run on the core.
 CORE_ROUTED = frozenset(
     S0
+    + CAPABILITIES
     + FROM_SOURCE_DUCKDB
     + FROM_SOURCE_DUCKDB_TABLES
     + MATERIALIZE_DUCKDB
@@ -372,7 +440,33 @@ CORE_ROUTED = frozenset(
     + FROM_SOURCE_POSTGRES_TABLES
     + MATERIALIZE_POSTGRES
     + PREDICT_POSTGRES
+    + FROM_SOURCE_DATABRICKS_SQL
+    + FROM_SOURCE_DATABRICKS_SQL_TABLES
+    + MATERIALIZE_DATABRICKS_SQL
+    + PREDICT_DATABRICKS_SQL
+    + FROM_SOURCE_DATABRICKS_SPARK
+    + FROM_SOURCE_DATABRICKS_SPARK_TABLES
+    + MATERIALIZE_DATABRICKS_SPARK
+    + PREDICT_DATABRICKS_SPARK
+    + FROM_SOURCE_DATABRICKS_METRIC_VIEW
+    + MATERIALIZE_DATABRICKS_METRIC_VIEW
+    + PREDICT_DATABRICKS_METRIC_VIEW
+    + FROM_SOURCE_SNOWFLAKE
+    + FROM_SOURCE_SNOWFLAKE_TABLES
+    + MATERIALIZE_SNOWFLAKE
+    + PREDICT_SNOWFLAKE
+    + FROM_SOURCE_SNOWFLAKE_SEMANTIC_VIEW
+    + MATERIALIZE_SNOWFLAKE_SEMANTIC_VIEW
+    + PREDICT_SNOWFLAKE_SEMANTIC_VIEW
 )
+
+
+#: The Phase 3 defaults. Other paths retain their route until their slice
+#: is implemented; edits and inspection of a core-held schema inherit its
+#: source route rather than choosing another route at each accessor.
+ROUTES: dict[str, str] = {
+    path: 'core' if path in CORE_ROUTED else 'old' for path in PATHS
+}
 
 
 class RouteError(RuntimeError):
@@ -408,7 +502,10 @@ def route(paths: tuple[str, ...]) -> str:
             no core route, or forces some of ``paths`` and not the others.
     """
     onto = forced()
-    taken = {'core' if path in onto else ROUTES[path] for path in paths}
+    if ENVIRONMENT in os.environ:
+        taken = {'core' if path in onto else 'old' for path in paths}
+    else:
+        taken = {ROUTES[path] for path in paths}
     if len(taken) != 1:
         raise RouteError(
             f'{ENVIRONMENT} forces some of {list(paths)} onto the core and '
@@ -417,14 +514,27 @@ def route(paths: tuple[str, ...]) -> str:
     return taken.pop()
 
 
+def kind_of(source: object) -> str | None:
+    r"""The kind of source ``source`` is, as its paths name it: its
+    ``kind`` (``Source.kind``, design fix F: a Databricks source is
+    ``'databricks-sql'`` or ``'databricks-spark'``), else its ``backend``,
+    or ``None`` with neither."""
+    for name in ('kind', 'backend'):
+        found = getattr(source, name, None)
+        if isinstance(found, str):
+            return found
+    return None
+
+
 def on_the_core(source: object, paths: dict[str, tuple[str, ...]]) -> bool:
-    r"""Whether a call over ``source`` that may end on ``paths[backend]``
-    runs on the core: a source of a backend the core reads, routed there.
+    r"""Whether a call over ``source`` that may end on ``paths[kind]``
+    runs on the core: a kind of source the core reads (:func:`kind_of`),
+    routed there.
 
     Raises:
         RouteError: As :func:`route` does.
     """
-    backend = getattr(source, 'backend', None)
-    if not isinstance(backend, str) or backend not in paths:
+    kind = kind_of(source)
+    if kind is None or kind not in paths:
         return False
-    return route(paths[backend]) == 'core'
+    return route(paths[kind]) == 'core'

@@ -665,9 +665,11 @@ fn statements(observed: &Observed) -> (Value, bool) {
         .as_array()
         .cloned()
         .unwrap_or_default();
+    // The reads plan B adds taken out (register P3A-1).
+    let compared = sdm_testkit::plan_b::as_the_old_client_ran(&recorded);
     let mut counted = Map::new();
     for stage in COUNTED {
-        let n = recorded.iter().filter(|s| s["stage"] == stage).count();
+        let n = compared.iter().filter(|s| s["stage"] == stage).count();
         counted.insert(stage.to_owned(), json!(n));
     }
     let logged = &driver["query_log"];
@@ -898,7 +900,7 @@ fn kind(prefix: &str) {
         .collect();
     let question = all["question"].as_str().unwrap();
     let contract = root().join("contract");
-    let loaded = case::load(&[contract.join("cases")]).unwrap();
+    let loaded = case::load_for(&[contract.join("cases")], case::Database::Duckdb).unwrap();
     let template = loaded
         .iter()
         .find(|l| l.case.id == "decimal.feature-38-0-wide")

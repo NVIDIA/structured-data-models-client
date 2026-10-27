@@ -12,7 +12,7 @@ every check.
 |---|---|---|
 | `SDM_ORCH_STATE` | State directory: `land-queue/`, `logs/`, `lanes_done`, `rule_watch.ignore`, the lander's lock | `~/.local/share/sdm-orchestration` |
 | `SDM_LAND_QUEUE` | The landing queue | `$SDM_ORCH_STATE/land-queue` |
-| `SDM_PHASE_BRANCH` | The phase branch, e.g. `rust-core-phase-2`. Lanes are `<phase>-lane-<x>`, topic branches `<phase>-<name>`, archives `<phase>-archive-...` | none; required by `auto_land.py`, `land_chain.sh`, `cancel_superseded.sh` and `lane_idle.py`, which exit 2 when it is unset (the two Python tools also take `--phase`). The tools beside them read it too (`../phases.py`, T2.0): `land.py` and `lane.py` (whose `--phase-branch` overrides it), `ratchet.py`, `prepush.sh`, `prune_caches.py`, `replay_jobs.py` and `bridge_freeze.py`; unset, they take the phase of the branch they work on, else `phases.py`'s `CURRENT` |
+| `SDM_PHASE_BRANCH` | The phase branch, e.g. `rust-core-phase-3`. Lanes are `<phase>-lane-<x>`, topic branches `<phase>-<name>`, archives `<phase>-archive-...` | none; required by `auto_land.py`, `land_chain.sh`, `cancel_superseded.sh` and `lane_idle.py`, which exit 2 when it is unset (the two Python tools also take `--phase`). The tools beside them read it too (`../phases.py`, T2.0): `land.py` and `lane.py` (whose `--phase-branch` overrides it), `ratchet.py`, `prepush.sh`, `prune_caches.py`, `replay_jobs.py` and `bridge_freeze.py`; unset, they take the phase of the branch they work on, else `phases.py`'s `CURRENT` |
 | `SDM_REPO` | The local clone | the git toplevel of this directory |
 | `SDM_TASKS_DIR` | The agents' task-output directory (`a*.output` transcripts) | none; required by the transcript tools |
 
@@ -99,6 +99,9 @@ every check.
   directories (`SDM_LANE_WORKTREE_PREFIX` overrides the prefix). Lanes named
   in `$SDM_ORCH_STATE/lanes_done` are skipped. Example:
   `python3 lane_idle.py "$SDM_TASKS_DIR" 25`.
+- **`watchdog.py`**: the heartbeat's 15-minute check (T3.2 fix 4).
+  It prints one line per problem and nothing when all is well: `IDLE` for a lane worktree with no commit for 45 minutes and no process working in it, `RED CI` for a branch under the phase whose newest finished run failed (naming the failed jobs), and `SLIP` for a forecast package more than 2 hours past its forecast and not landed.
+  Example: `python3 watchdog.py --phase rust-core-phase-3`.
 - **`clean_tmp.sh`**: removes stale agent scratch from `/tmp`, from
   `$SDM_SCRATCH` (if set), and Cargo `target/` directories. It is a **dry run
   unless you pass `--apply`**. It never removes tracked files, a git
@@ -107,7 +110,30 @@ every check.
   which a worktree that `git -C "$SDM_REPO" worktree list` names lies (so a
   reviewer's throwaway worktree in its scratch directory is safe).
   Examples: `./clean_tmp.sh` to see what would go, and
-  `./clean_tmp.sh --apply` to remove it.
+  `./clean_tmp.sh --apply` to remove it. It also sweeps the agents'
+  `/mnt/localssd/{target,tmp}/<name>` and each lane's older environment
+  under `/mnt/localssd/cells/<lane>`, and `--release <name>` removes a
+  finished lane's or agent's directories (T3.0).
+- **`heavy`**: runs a heavy command when a CPU slot, free memory and free
+  disk all allow it (thresholds in `heavy.conf` or `$SDM_HEAVY_CONFIG`),
+  running `clean_tmp.sh --apply` first when the disk is short, and queues
+  otherwise; `$SDM_ORCH_STATE/bin/heavy` calls it. Its exit status is the
+  command's.
+- **`ci_timing.py`**: CI's timing guard (`--run ID` in the `timing guard`
+  job, `--durations FILE` for given times): names a job over 80% of its
+  `timeout-minutes` on two of its last three runs and writes a fix item.
+  `--pull` brings the newest run's items to
+  `$SDM_ORCH_STATE/fix-items/ci-timing.md` for the heartbeat.
+
+- **`guard_cmd.py`** (T3.0): the Claude Code PreToolUse hook the
+  repository's `.claude/settings.json` runs before every Bash call. It
+  denies the banned commands with the rule and the alternative, and lets
+  an owner-approved one-off through as `SDM_APPROVED=<id> <command>`
+  (logged; `--tokens` lists the ids). The handbook's "The command
+  hook" section has the list. `rule_watch.py` still watches Codex panes.
+- **`auto_land.py`'s stack entries** (T3.0): `"stack": true` stacks an
+  approved package with `land.py --stack`; `{"stack_tip": SHA, ...}` lands
+  the stack with `land.py stack-land` once its top's run is green.
 
 ## Phase-end, review and housekeeping tools
 
@@ -118,9 +144,9 @@ Each has `--help`; anything that changes state is a dry run unless told otherwis
 - **`packet_checks.sh PHASE`**: read-only go or no-go checks: landings without gate evidence, plan markers against decisions, rows awaiting the owner, proposed register entries.
 - **`register_tools.py`**: `proposed` lists proposed register entries and rows awaiting the owner; `resolve` merges `register.yaml` by entry and pending JSON files by group, usable as a git merge driver (setup lines in `--help`).
 - **`branch_cleanup.py`**: end-of-phase branch and worktree cleanup: `audit`, `plan` (with a keep-list), `execute` (dry run unless `--apply`; writes and verifies a backup bundle and a restore manifest first, re-checks each item before deleting, stops at the first failure, never deletes anything not merged into the base).
-- **`phase_stats.py`**: read-only retrospective numbers: landings per day, package stage times, CI per day with failures split into infrastructure and real, and review verdicts with same-SHA pairing of the two reviewers.
+- **`phase_stats.py`**: read-only retrospective numbers: landings per day, package stage times, CI per day with failures split into infrastructure and real, and review verdicts with same-SHA pairing of the two reviewers. With `--forecast FILE [--now TIME]` it prints only the slip report against the design's forecast (T3.0).
 
-Outside this folder: `../cells.sh` builds warm, non-editable cell venvs keyed by tree hash; `../heldout.py` and `../heldout_run.sh` validate, freeze, run and count a held-out set; `scripts/live/dbx_runs.py` and `scripts/live/dbr_install_check*` run one-time Databricks checks, with every workspace-specific value from the environment.
+Outside this folder: `../cells.sh` builds a lane's warm, non-editable cell venvs, keyed by what they install (`--print-key`); `../gate_dryrun.sh` runs the checking tools over stub cases of planned kinds and lists their gaps; `../tooling_tests.py` finds the tests that must carry the `tooling` marker; `../heldout.py` and `../heldout_run.sh` validate, freeze, run and count a held-out set; `scripts/live/dbx_runs.py` and `scripts/live/dbr_install_check*` run one-time Databricks checks, with every workspace-specific value from the environment.
 
 ## Rules these tools follow, and probes should too
 

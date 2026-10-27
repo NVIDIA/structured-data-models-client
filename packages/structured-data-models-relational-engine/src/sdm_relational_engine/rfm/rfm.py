@@ -2233,7 +2233,9 @@ class KumoRelational:
         if anchor_time is None:
             anchor_time = self._get_default_anchor_time(query)
             if num_test_examples > 0:
-                anchor_time = anchor_time - step_offset * query.num_forecasts
+                anchor_time = _before(
+                    anchor_time, step_offset * query.num_forecasts
+                )
 
             if logger is not None:
                 assert isinstance(anchor_time, pd.Timestamp)
@@ -2256,7 +2258,7 @@ class KumoRelational:
                     'for context and prediction examples'
                 )
             if context_anchor_time is None:
-                context_anchor_time = anchor_time - step_offset
+                context_anchor_time = _before(anchor_time, step_offset)
             self._validate_time(
                 query,
                 anchor_time,
@@ -2580,6 +2582,21 @@ class KumoRelational:
             step_size=task.step_size,
             num_forecasts=task.num_forecasts,
         )
+
+
+def _before(moment: Timestamp, offset: pd.DateOffset) -> Timestamp:
+    r"""``moment - offset``, and ``moment`` itself for an offset of nothing.
+
+    A static question has no window: its offset is ``pd.DateOffset(0)`` and
+    its anchor ``pd.Timestamp.min``. pandas 3.0 gives that anchor back
+    unchanged when the empty offset is taken from it; pandas 3.1 raises
+    ``OutOfBoundsDatetime``, since it steps through microseconds below the
+    smallest timestamp nanoseconds hold. Taking nothing from a time is that
+    time on every pandas.
+    """
+    if offset == pd.DateOffset(0):
+        return moment
+    return moment - offset
 
 
 def _date_offset_to_ns(offset: pd.DateOffset) -> int | None:

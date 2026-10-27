@@ -23,14 +23,19 @@ import importlib.util
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import textwrap
+from collections.abc import Iterator
 from pathlib import Path
 from types import ModuleType
 from typing import Any
 
 import pytest
+
+# Gate tooling (T3.0): CI runs it in the tooling jobs, not in every matrix job.
+pytestmark = pytest.mark.tooling
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / 'contract/runners/run_python.py'
@@ -176,12 +181,11 @@ def test_the_s0_cases_agree_with_the_reference_on_both_python_runners(
         # and from T1.11d its predict.
         'S1': ['describe_source', 'materialize', 'predict'],
     }
+    cases_by_id = {
+        case['id']: case for case, _ in run_python.load_cases([CASES])
+    }
     for observation in _observations(core):
-        case = next(
-            case
-            for case, _ in run_python.load_cases([CASES])
-            if case['id'] == observation['case']
-        )
+        case = cases_by_id[observation['case']]
         # A case that forces no route (base.adventureworks, whose journey
         # had no core route at T1.21b, E51(c); from T1.24 its refusal map's
         # probes force it and the case is unchanged, so its reference line
@@ -403,20 +407,26 @@ def test_python_ref_stops_when_the_guard_fails_after_the_last_case(
 
 
 @pytest.fixture(scope='module')
-def accepted_runs(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Path]:
+def accepted_runs(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Iterator[dict[str, Path]]:
     r"""The accepted S0 case on both Python runners."""
-    where = tmp_path_factory.mktemp('accepted')
-    cases = where / 'cases'
-    cases.mkdir()
-    (cases / ACCEPTED.name).write_bytes(ACCEPTED.read_bytes())
-    found = {}
-    for mode in ('python-core', 'python-old'):
-        out = where / f'{mode}.jsonl'
-        run = _run(mode, out, cases)
-        assert run.returncode == 0, run.stderr
-        found[mode] = out
-    found['cases'] = cases
-    return found
+    owned = tmp_path_factory.mktemp('accepted')
+    try:
+        where = owned
+        cases = where / 'cases'
+        cases.mkdir()
+        (cases / ACCEPTED.name).write_bytes(ACCEPTED.read_bytes())
+        found = {}
+        for mode in ('python-core', 'python-old'):
+            out = where / f'{mode}.jsonl'
+            run = _run(mode, out, cases)
+            assert run.returncode == 0, run.stderr
+            found[mode] = out
+        found['cases'] = cases
+        yield found
+    finally:
+        shutil.rmtree(owned)
 
 
 @pytest.mark.parametrize(

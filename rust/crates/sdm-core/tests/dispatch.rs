@@ -89,6 +89,7 @@ fn attachments_of(operation: &Operation) -> Attachments {
                 tables: vec![NamedTable {
                     name: "t".into(),
                     source: "t".into(),
+                    columns: None,
                 }],
                 primary_keys: BTreeMap::new(),
                 time_columns: BTreeMap::new(),
@@ -210,6 +211,15 @@ fn every_operation_dispatches_to_a_run() {
 
     let host = ProviderChoice::Host {
         capabilities: ProviderCapabilities {
+            opaque_vendor: None,
+            compares_stored_times: false,
+            samples_by_key_dtype: false,
+            reads_nan_as_missing: false,
+            derived_relations: false,
+            neighbor_lookback: false,
+            keys_optional: false,
+            key_enforcement: false,
+            sample_rows: false,
             optional: BTreeSet::new(),
             max_keys_per_request: None,
             max_seed: u64::MAX,
@@ -252,6 +262,7 @@ impl DataLayer for Fake {
 
     fn plan(&self, _: &DataRequest, _: &ProviderChoice) -> Result<FetchPlan, CoreError> {
         Ok(FetchPlan::Sql {
+            result_conversions: Vec::new(),
             statements: vec![SqlStatement {
                 dialect: Dialect::new("duckdb"),
                 text: "SELECT 1".into(),
@@ -275,6 +286,15 @@ impl DataLayer for Fake {
 
 fn capabilities(optional: &[OptionalRequest]) -> ProviderCapabilities {
     ProviderCapabilities {
+        opaque_vendor: None,
+        compares_stored_times: false,
+        samples_by_key_dtype: false,
+        reads_nan_as_missing: false,
+        derived_relations: false,
+        neighbor_lookback: false,
+        keys_optional: false,
+        key_enforcement: false,
+        sample_rows: false,
         optional: optional.iter().copied().collect(),
         max_keys_per_request: None,
         max_seed: u64::MAX,
@@ -313,7 +333,10 @@ fn named(err: &CoreError, field: &str) -> String {
 fn the_root_s_data_layer_serves_a_built_in_dialect_or_a_host_provider() {
     let root = root();
     let duckdb = ProviderChoice::Sql {
+        timestamp_encoding: None,
         dialect: Dialect::new("duckdb"),
+        namespace: Vec::new(),
+        view: None,
     };
     let access = root.data_access(&duckdb).unwrap();
     // The dialect declares what sdm-data renders for it: every request
@@ -347,7 +370,10 @@ fn the_root_s_data_layer_serves_a_built_in_dialect_or_a_host_provider() {
         tables: vec![],
         part: DescribePart::Tables,
     };
-    let FetchPlan::Sql { statements, expect } = access.plan(&tables).unwrap() else {
+    let FetchPlan::Sql {
+        statements, expect, ..
+    } = access.plan(&tables).unwrap()
+    else {
         panic!("DuckDB answers with SQL");
     };
     assert_eq!(statements.len(), 1);
@@ -356,22 +382,22 @@ fn the_root_s_data_layer_serves_a_built_in_dialect_or_a_host_provider() {
     assert!(matches!(expect, ExpectedSchema::Schema { .. }));
     assert_ne!(expect, tables.expected());
 
-    // A dialect this build knows but renders nothing for (Snowflake's;
-    // SQLite's and Postgres's are served from T2.2 and T2.3).
+    // Every dialect this build knows by name it renders (Snowflake's from
+    // T3.6).
     let snowflake = ProviderChoice::Sql {
+        timestamp_encoding: None,
         dialect: Dialect::new("snowflake"),
+        namespace: Vec::new(),
+        view: None,
     };
-    let err = root.data_access(&snowflake).err().unwrap();
-    assert_eq!(
-        (err.kind, err.code),
-        (ErrorKind::Unsupported, ErrorCode::UnsupportedRequest)
-    );
-    assert_eq!(named(&err, "dialect"), "snowflake");
-    assert!(run_of(&root, describe(snowflake)).is_err());
+    assert!(root.data_access(&snowflake).is_ok());
     // A name the data layer does not know is refused the same way, and
     // not repeated: the contract names no dialect, so it lets any through.
     let unknown = ProviderChoice::Sql {
+        timestamp_encoding: None,
         dialect: Dialect::new("a dialect\nof no name"),
+        namespace: Vec::new(),
+        view: None,
     };
     let err = root.data_access(&unknown).err().unwrap();
     assert_eq!(
@@ -613,6 +639,15 @@ fn materialize(seed: Option<Seed>) -> Operation {
     Operation::Materialize(Materialize {
         provider: ProviderChoice::Host {
             capabilities: ProviderCapabilities {
+                opaque_vendor: None,
+                compares_stored_times: false,
+                samples_by_key_dtype: false,
+                reads_nan_as_missing: false,
+                derived_relations: false,
+                neighbor_lookback: false,
+                keys_optional: false,
+                key_enforcement: false,
+                sample_rows: false,
                 optional: BTreeSet::new(),
                 max_keys_per_request: None,
                 max_seed: u64::MAX,
@@ -624,7 +659,6 @@ fn materialize(seed: Option<Seed>) -> Operation {
             },
         },
         schema: AttachmentId(1),
-        held: None,
         query: AttachmentId(2),
         indices: None,
         anchor_time: None,
@@ -671,7 +705,10 @@ fn a_negative_seed_is_refused_by_the_core_and_a_seed_of_any_size_is_taken() {
 /// A start of `describe_source` naming `tables` (`[name, source]`).
 fn describe_named(tables: &[(&str, &str)]) -> Result<sdm_core::Run, CoreError> {
     let operation = describe(ProviderChoice::Sql {
+        timestamp_encoding: None,
         dialect: Dialect::new("duckdb"),
+        namespace: Vec::new(),
+        view: None,
     });
     let spec = SourceSpec {
         tables: tables
@@ -679,6 +716,7 @@ fn describe_named(tables: &[(&str, &str)]) -> Result<sdm_core::Run, CoreError> {
             .map(|(name, source)| NamedTable {
                 name: (*name).into(),
                 source: (*source).into(),
+                columns: None,
             })
             .collect(),
         primary_keys: BTreeMap::new(),
@@ -778,7 +816,10 @@ fn a_day_first_date_literal_warns_on_the_run_s_warnings_channel() {
         warnings[0].fields["format"],
         sdm_contract::Detail::text("%d/%m/%Y")
     );
-    assert!(sdm_core::warning_codes().contains(&("DATE_LITERAL_DAY_FIRST", &[][..])));
+    assert_eq!(
+        warnings[0].sentence,
+        sdm_contract::Sentence::DateLiteralDayFirst
+    );
 }
 
 /// T1.6c: a packed date (D8) is refused by name, not read, so it never

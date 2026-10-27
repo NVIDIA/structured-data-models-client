@@ -19,7 +19,7 @@ use arrow_array::cast::AsArray;
 use arrow_array::types::{Decimal128Type, Int64Type};
 use arrow_array::{Array, ArrayRef, Decimal128Array, RecordBatch, StringArray};
 use arrow_schema::{DataType, Field, Schema};
-use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind};
+use sdm_contract::{CoreError, Detail, Sentence};
 
 use crate::ArrowData;
 
@@ -49,7 +49,7 @@ pub fn wider(a: &DataType, b: &DataType) -> Option<DataType> {
 }
 
 fn internal(message: &str) -> CoreError {
-    CoreError::new(ErrorKind::Internal, ErrorCode::InternalError, message)
+    CoreError::new(Sentence::Internal, message)
 }
 
 /// `array`, of a tier, in the tier `to`, no narrower; `None` where `to` is
@@ -153,8 +153,7 @@ pub fn conform(
     match widen(array, described) {
         Some(widened) => Ok(Some((retyped(field, described), widened))),
         None => Err(CoreError::new(
-            ErrorKind::Unsupported,
-            ErrorCode::ValueOutOfRange,
+            Sentence::BigIntegerPastType,
             format!(
                 "column {:?} holds a value that the type it was described as, {described}, \
                  cannot hold",
@@ -173,9 +172,27 @@ pub fn tier(field: &Field) -> Option<DataType> {
     (is_marked(field) && rank(field.data_type()).is_some()).then(|| field.data_type().clone())
 }
 
+/// Keep a held column's accepted big-integer tier during a source refresh.
+/// Other source facts remain current, and ordinary numeric columns keep
+/// their existing compatible-width behavior. The current Arrow marker and
+/// the held declaration distinguish a previously described big integer
+/// from an ordinary integer column that only now became a big integer.
+pub(crate) fn preserve_tier(
+    held: &sdm_contract::ops::SourceFacts,
+    current: &mut sdm_contract::ops::SourceFacts,
+    field: &Field,
+) {
+    if held.declared_type.is_some() && is_marked(field) && rank(&held.received.to_arrow()).is_some()
+    {
+        current.received = held.received.clone();
+        current.dtype = held.dtype;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use arrow_array::Int64Array;
+    use sdm_contract::ErrorCode;
 
     use super::*;
 
@@ -185,6 +202,52 @@ mod tests {
         let mut metadata = Field::new(name, DataType::Null, true).metadata().clone();
         metadata.insert(MARKER.to_owned(), MARKED.to_owned());
         Field::new(name, data_type, true).with_metadata(metadata)
+    }
+
+    #[test]
+    fn a_refreshed_big_integer_keeps_the_tier_its_held_schema_accepted() {
+        use sdm_contract::ColumnType;
+        use sdm_contract::ops::{Dtype, SourceFacts};
+        let old = SourceFacts {
+            relation: serde_json::from_str(r#"{"source":["t"]}"#).unwrap(),
+            dtype: Dtype::Int,
+            received: ColumnType::Int64,
+            nullable: true,
+            unique: false,
+            declared_type: Some("HUGEINT".into()),
+            exact_number: None,
+        };
+        let mut refreshed = old.clone();
+        refreshed.received = ColumnType::Decimal128 {
+            precision: 38,
+            scale: 0,
+        };
+        refreshed.nullable = false;
+        refreshed.unique = true;
+        preserve_tier(&old, &mut refreshed, &marked("n", DECIMAL));
+        assert_eq!(refreshed.received, ColumnType::Int64);
+        assert!(!refreshed.nullable);
+        assert!(refreshed.unique);
+
+        let mut ordinary_old = old.clone();
+        ordinary_old.declared_type = None;
+        let mut ordinary_new = refreshed.clone();
+        ordinary_new.received = ColumnType::Decimal128 {
+            precision: 38,
+            scale: 0,
+        };
+        preserve_tier(&ordinary_old, &mut ordinary_new, &marked("n", DECIMAL));
+        assert_eq!(
+            ordinary_new.received,
+            ColumnType::Decimal128 {
+                precision: 38,
+                scale: 0
+            }
+        );
+
+        let mut unmarked = ordinary_new.clone();
+        preserve_tier(&old, &mut unmarked, &Field::new("n", DECIMAL, true));
+        assert_eq!(unmarked, ordinary_new);
     }
 
     #[test]

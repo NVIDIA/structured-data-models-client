@@ -96,21 +96,9 @@ def key(case_id: str, database: str) -> str:
 
 
 KEYS_ALL = tuple(key(c, d) for d in DATABASES for c in CASE_IDS)
-#: The cases whose answer the orchestrator decided apart from the
-#: reference's, by decision row, with the reference's recorded outcome on
-#: each database: num_neighbors=[-1] reaches no neighbour on DuckDB, every
-#: neighbour on SQLite (its LIMIT -1) and fails INTERNAL_ERROR on
-#: Postgres, so the core refuses a negative neighbour count by name,
-#: INVALID_REQUEST naming num_neighbors, on all three (KO2-82; register
-#: entry P2I-4, the implementer's). The case's expect stays the
-#: reference's DuckDB outcome, as every case's does; the core is held to
-#: the register's answer: by case, its result, stage and code.
-DECIDED = {
-    'sample.num-neighbors.minus-one': (
-        'P2I-4',
-        ('refusal', 'materialize', 'INVALID_REQUEST'),
-    ),
-}
+# KO3-44 lifts the old negative-neighbor refusal. Its original case
+# remains diagnostic metadata; its answers now follow each native source.
+DIAGNOSTIC_CASES = {'sample.num-neighbors.minus-one'}
 DECIDED_REFERENCE = {
     'sample.num-neighbors.minus-one': ('success', None, None),
     'sample.num-neighbors.minus-one@sqlite': ('success', None, None),
@@ -226,14 +214,14 @@ def test_each_case_is_small_and_runs_on_all_three_databases(
     an S1 acceptance case through predict on the shop base, on DuckDB,
     SQLite and Postgres, asking about a few entities."""
     case, _ = cases()[case_id]
-    # The one decided case is diagnostic (DECIDED): its register entry's
-    # refusal is checked here, not by the gate.
+    # The original negative-neighbor case retains its diagnostic status;
+    # its actual native outcome and full payload are checked here.
     assert case['status'] == (
-        'diagnostic' if case_id in DECIDED else 'acceptance'
+        'diagnostic' if case_id in DIAGNOSTIC_CASES else 'acceptance'
     )
     assert case['slice'] == 'S1'
-    if case_id in DECIDED:
-        assert case['register'] == DECIDED[case_id][0]
+    if case_id in DIAGNOSTIC_CASES:
+        assert case['register'] == 'P2I-4'
     assert case['until'] == 'predict'
     assert case['input']['base'] == 'shop'
     assert runner().case_databases(case) == DATABASES
@@ -287,8 +275,7 @@ def test_python_ref_s_line_is_at_its_case_file_and_ends_as_expected(
     expect = case['expect']
     if case_key in DECIDED_REFERENCE:
         # The reference's answer on each database, recorded as it is; the
-        # case expects its DuckDB one, and the core is held to the
-        # register's (DECIDED).
+        # case expects its DuckDB one; KO3-44 restores native behavior.
         result, error, code = DECIDED_REFERENCE[case_key]
         outcome = _outcome(line)
         assert (outcome[0], outcome[2], outcome[3]) == (result, error, code)
@@ -576,31 +563,33 @@ def test_python_core_answers_each_case_as_the_reference_does(
         case, _ = cases()[case_key.split('@')[0]]
         identity = line['identity']
         assert identity['native_loaded'] and line['core'] is not None
-        # A decided case is refused at materialize (its register entry's
-        # answer), so predict does not run.
+        # Postgres rejects the negative native LIMIT during materialize;
+        # DuckDB and SQLite must now reach predict under KO3-44.
+        native_limit_refusal = (
+            case['id'] == 'sample.num-neighbors.minus-one'
+            and database == 'postgres'
+        )
         named = set(case['core']) - (
-            {'predict'} if case['id'] in DECIDED else set()
+            {'predict'} if native_limit_refusal else set()
         )
         missing = sorted(named - set(identity['operations']))
         assert not missing, f'{case_key}: core operations not run: {missing}'
-        if case['id'] in DECIDED:
-            # The register's answer, not the reference's: the named
-            # refusal (its result, stage and code), no request sent.
-            entry, wanted = DECIDED[case['id']]
-            outcome = _outcome(line)
-            assert (outcome[0], outcome[1], outcome[3]) == wanted, (
-                f'{case_key}: {outcome} where {entry} has {wanted}'
-            )
-            assert line['public']['payloads'] == [], case_key
-            return
         want = reference_lines()[case_key]
-        assert _outcome(line) == _outcome(want), (
-            f'{case_key}: {_outcome(line)} where python-ref has {_outcome(want)}'
+        expected = _outcome(want)
+        if native_limit_refusal:
+            # The same source LIMIT error retains its stage/class; the
+            # shared provider mapping names it instead of INTERNAL_ERROR.
+            expected = (*expected[:-1], 'PROVIDER_ERROR')
+        assert _outcome(line) == expected, (
+            f'{case_key}: {_outcome(line)} where the native source has {expected}'
         )
-        found = differences(payloads(want), payloads(line))
-        assert not found, f'{case_key}: the payload differs: ' + '; '.join(
-            found
+        # P3F-2 alone permits scalar FK fills and their numeric dtype effect.
+        # The shared check retains all other fields and validates reached keys.
+        approved = _module(
+            'p3f2_payload', Path(__file__).with_name('_p3f2_payload.py')
         )
+        found = approved.payload_problem(want, line, case_key)
+        assert found is None, f'{case_key}: the payload differs: {found}'
         assert line['public']['result'] == want['public']['result'], (
             f'{case_key}: the result differs'
         )

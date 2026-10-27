@@ -35,6 +35,13 @@ from sdm_client import (  # noqa: E402
     StructuredDataError,
 )
 
+
+@pytest.fixture(autouse=True)
+def _legacy_sampler(monkeypatch: pytest.MonkeyPatch) -> None:
+    """These driver fakes answer the legacy sampler's SQL shapes."""
+    monkeypatch.setenv('SDM_CORE_ROUTES', '')
+
+
 _FILTER = "source.status = 'VALID'"
 _FACT = '`cat`.`sch`.`order_lines`'
 _FILTERED = f'(SELECT * FROM {_FACT} AS source WHERE ({_FILTER}))'

@@ -18,7 +18,7 @@ use sdm_contract::data::{
 };
 use sdm_contract::ops::{OperationResult, QueryValidation};
 use sdm_contract::run::{Endpoint, ReplyId};
-use sdm_contract::{CoreError, CoreWarning, ErrorCode, ErrorKind, Step};
+use sdm_contract::{CoreError, CoreWarning, ErrorCode, ErrorKind, Sentence, Step};
 use sdm_core::{
     ArrowData, Asker, Attachment, CompositionRoot, FetchResult, ModelResult, Reply, Run, RunState,
 };
@@ -44,6 +44,15 @@ where
     let root = CompositionRoot::new(Arc::new(sdm_data::Data::new()));
     let host = ProviderChoice::Host {
         capabilities: ProviderCapabilities {
+            opaque_vendor: None,
+            compares_stored_times: false,
+            samples_by_key_dtype: false,
+            reads_nan_as_missing: false,
+            derived_relations: false,
+            neighbor_lookback: false,
+            keys_optional: false,
+            key_enforcement: false,
+            sample_rows: false,
             optional: BTreeSet::new(),
             max_keys_per_request: None,
             max_seed: u64::MAX,
@@ -70,6 +79,8 @@ fn rows(n: usize) -> FetchResult {
 
 fn failed() -> FetchResult {
     FetchResult::Error(ProviderError {
+        error_class: None,
+        driver_message: None,
         kind: ErrorKind::DataSource,
         retryable: false,
         sqlstate: Some("42P01".into()),
@@ -92,12 +103,9 @@ fn row_count(reply: &Reply) -> usize {
     }
 }
 
-fn warning(code: &str) -> CoreWarning {
-    CoreWarning {
-        code: code.into(),
-        message: String::new(),
-        fields: Default::default(),
-    }
+/// A warning named by its message, which the order checks read.
+fn warning(name: &str) -> CoreWarning {
+    CoreWarning::new(Sentence::ContextCapped, name)
 }
 
 /// A result carrying what the body saw, as diagnostic codes.
@@ -113,6 +121,7 @@ fn done(seen: Vec<String>) -> OperationResult {
                 span: None,
             })
             .collect(),
+        query: None,
     })
 }
 
@@ -133,11 +142,7 @@ fn scripted() -> Run {
             .await;
         asker.warn(warning("THIRD"));
         let Reply::Model(ModelResult::Response { status, body, .. }) = answer else {
-            return Err(CoreError::new(
-                ErrorKind::ModelEndpoint,
-                ErrorCode::TransportError,
-                "no answer",
-            ));
+            return Err(CoreError::new(Sentence::TransportFailed, "no answer"));
         };
         Ok(done(vec![
             status.to_string(),
@@ -170,7 +175,7 @@ async fn join<A: Future + Unpin, B: Future + Unpin>(mut a: A, mut b: B) -> (A::O
 }
 
 fn codes_of(warnings: Vec<CoreWarning>) -> Vec<String> {
-    warnings.into_iter().map(|w| w.code).collect()
+    warnings.into_iter().map(|w| w.message).collect()
 }
 
 fn fetch_ids(step: &Step) -> Vec<ReplyId> {
@@ -224,6 +229,7 @@ fn a_finished_run_refuses_every_call() {
         Ok(OperationResult::ValidateQuery(QueryValidation {
             accepted: true,
             diagnostics: vec![],
+            query: None,
         }))
     });
     assert!(matches!(run.next().unwrap(), Step::Done { .. }));

@@ -36,7 +36,10 @@ const REFERENCE: [&str; 12] = [
 
 fn duckdb() -> ProviderChoice {
     ProviderChoice::Sql {
+        timestamp_encoding: None,
         dialect: Dialect::new("duckdb"),
+        namespace: Vec::new(),
+        view: None,
     }
 }
 
@@ -56,13 +59,21 @@ fn catalog_columns(part: DescribePart) -> &'static [&'static str] {
         DescribePart::Indexes => &["table_name", "expressions"],
         // DuckDB lists an index's columns with the index; never planned.
         DescribePart::IndexColumns => &[],
+        // The contract's own shape: DuckDB names a table alone (T3.8).
+        DescribePart::Namespace => &["name"],
+        // DuckDB reads no view's definition; never planned (T3.27).
+        DescribePart::ViewDefinition => &[],
+        // Key-enforcement listings are Snowflake-only; never planned for DuckDB.
+        DescribePart::KeyEnforcement => &[],
     }
 }
 
 /// The one statement `request` renders to, its expected schema checked.
 fn rendered(request: &DataRequest) -> String {
     match Data::new().plan(request, &duckdb()).unwrap() {
-        FetchPlan::Sql { statements, expect } => {
+        FetchPlan::Sql {
+            statements, expect, ..
+        } => {
             match request {
                 DataRequest::Describe { part, .. } => {
                     let ExpectedSchema::Schema { fields } = &expect else {
@@ -112,11 +123,13 @@ fn each_catalog_request_renders_the_reference_statement() {
         DataRequest::KeyCounts {
             keys: vec![
                 TableKey {
+                    unique: false,
                     table: "orders".into(),
                     columns: vec!["order_id".into()],
                     label: None,
                 },
                 TableKey {
+                    unique: false,
                     table: "users".into(),
                     columns: vec!["user_id".into()],
                     label: None,
@@ -163,6 +176,7 @@ fn names_are_quoted_with_their_quotes_doubled() {
 fn a_composite_key_counts_only_rows_holding_all_of_it() {
     let text = rendered(&DataRequest::KeyCounts {
         keys: vec![TableKey {
+            unique: false,
             table: "t".into(),
             columns: vec!["a".into(), "b".into()],
             label: None,
@@ -334,6 +348,7 @@ fn a_host_provider_is_held_to_the_contract_s_shapes() {
         describe(&["t"], DescribePart::Columns),
         DataRequest::KeyCounts {
             keys: vec![TableKey {
+                unique: false,
                 table: "t".into(),
                 columns: vec!["k".into()],
                 label: None,

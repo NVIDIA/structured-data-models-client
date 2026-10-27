@@ -3,8 +3,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """The private routing seam, and S0 on the core route (design, "Routing seam").
 
-Every core path of the Python scope manifest is routed, and every default is
-the old code until the Phase 3 switch. ``SDM_CORE_ROUTES`` forces paths onto
+Every core path of the Python scope manifest is routed, and covered S0, S1
+and S2 entrypoints default to the core after the Phase 3 switch. ``SDM_CORE_ROUTES`` forces paths onto
 the core for tests, read at every call; a path it names that is unknown or
 has no core route fails the call, and nothing falls back. Under the core
 route, validation in ``materialize()`` is the core's ``validate_query``, and
@@ -23,7 +23,6 @@ from typing import Any
 
 import pandas as pd
 import pytest
-from predictive_query import RELATIONAL, TABULAR
 
 from sdm_client import (
     MissingExtraError,
@@ -34,6 +33,7 @@ from sdm_client import (
     _routing,
 )
 from sdm_client._rust import s0
+from sdm_client.query import RELATIONAL, TABULAR
 
 ROOT = Path(__file__).resolve().parents[3]
 MANIFEST = ROOT / 'docs/design/rust-core/phase-0/scope-python.yaml'
@@ -57,7 +57,7 @@ def core(monkeypatch: pytest.MonkeyPatch) -> list[str]:
 
 @pytest.fixture(autouse=True)
 def _old(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
 
 
 def _users() -> pd.DataFrame:
@@ -68,9 +68,10 @@ ACCEPTED = 'PREDICT users.age FOR EACH users.id'
 REFUSED = 'PREDICT users.nope FOR EACH users.id'
 
 
-def test_every_core_path_of_the_manifest_is_routed_and_every_default_is_old() -> (
-    None
-):
+def test_every_core_path_of_the_manifest_is_routed_and_covered_defaults_are_core(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
     # Read without a YAML library, which the installed-wheel job lacks:
     # each operation's `- id:` line is followed by its `layer:`, and a
     # path's ID is operation/mode/backend.
@@ -88,15 +89,22 @@ def test_every_core_path_of_the_manifest_is_routed_and_every_default_is_old() ->
     core = [path for path in ids if layer[path.split('/')[0]] == 'core']
     assert list(_routing.PATHS) == core
     assert set(_routing.ROUTES) == set(core)
-    # Every default is the old code until the Phase 3 switch.
-    assert set(_routing.ROUTES.values()) == {'old'}
+    assert {
+        path for path, route in _routing.ROUTES.items() if route == 'core'
+    } == set(_routing.CORE_ROUTED)
     # S0 and, from T1.11b, a DuckDB source's Schema.from_source with no
     # tables named (with tables named from T1.24), from T1.11c, materialize
     # with indices over a DuckDB source's schema, and from T1.11d, predict
     # of a request materialized over one, have core routes; from T2.2 the
-    # same calls over a SQLite source, and from T2.3 over a Postgres one.
+    # same calls over a SQLite source, from T2.3 over a Postgres one, and
+    # from T3.4 over a Databricks SQL warehouse and a Spark session, and
+    # from T3.5 over a Databricks metric view.
+    # from T3.4 over a Databricks SQL warehouse and a Spark session, and from
+    # T3.6 over a Snowflake source.
     assert _routing.CORE_ROUTED == set(
         _routing.S0
+        # From T3.12, a model's capabilities, from the core's table.
+        + _routing.CAPABILITIES
         + _routing.FROM_SOURCE_DUCKDB
         + _routing.FROM_SOURCE_DUCKDB_TABLES
         + _routing.MATERIALIZE_DUCKDB
@@ -109,12 +117,32 @@ def test_every_core_path_of_the_manifest_is_routed_and_every_default_is_old() ->
         + _routing.FROM_SOURCE_POSTGRES_TABLES
         + _routing.MATERIALIZE_POSTGRES
         + _routing.PREDICT_POSTGRES
+        + _routing.FROM_SOURCE_DATABRICKS_SQL
+        + _routing.FROM_SOURCE_DATABRICKS_SQL_TABLES
+        + _routing.MATERIALIZE_DATABRICKS_SQL
+        + _routing.PREDICT_DATABRICKS_SQL
+        + _routing.FROM_SOURCE_DATABRICKS_SPARK
+        + _routing.FROM_SOURCE_DATABRICKS_SPARK_TABLES
+        + _routing.MATERIALIZE_DATABRICKS_SPARK
+        + _routing.PREDICT_DATABRICKS_SPARK
+        # From T3.5, a Databricks metric view's, on either connection.
+        + _routing.FROM_SOURCE_DATABRICKS_METRIC_VIEW
+        + _routing.MATERIALIZE_DATABRICKS_METRIC_VIEW
+        + _routing.PREDICT_DATABRICKS_METRIC_VIEW
+        + _routing.FROM_SOURCE_SNOWFLAKE_SEMANTIC_VIEW
+        + _routing.MATERIALIZE_SNOWFLAKE_SEMANTIC_VIEW
+        + _routing.PREDICT_SNOWFLAKE_SEMANTIC_VIEW
+        # From T3.6, over a Snowflake connection or a Snowpark session.
+        + _routing.FROM_SOURCE_SNOWFLAKE
+        + _routing.FROM_SOURCE_SNOWFLAKE_TABLES
+        + _routing.MATERIALIZE_SNOWFLAKE
+        + _routing.PREDICT_SNOWFLAKE
     )
     assert set(_routing.CORE_ROUTED) <= set(core)
-    assert _routing.route(_routing.S0) == 'old'
-    assert _routing.route(_routing.FROM_SOURCE_DUCKDB) == 'old'
-    assert _routing.route(_routing.MATERIALIZE_DUCKDB) == 'old'
-    assert _routing.route(_routing.PREDICT_DUCKDB) == 'old'
+    assert _routing.route(_routing.S0) == 'core'
+    assert _routing.route(_routing.FROM_SOURCE_DUCKDB) == 'core'
+    assert _routing.route(_routing.MATERIALIZE_DUCKDB) == 'core'
+    assert _routing.route(_routing.PREDICT_DUCKDB) == 'core'
 
 
 def test_a_refused_and_an_accepted_query_give_the_old_outcome_on_the_core(
@@ -158,7 +186,7 @@ def test_the_route_is_read_at_every_call(
 ) -> None:
     query = PredictiveQuery(ACCEPTED, {'users': _users()})
     query._resolve(TABULAR)
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     query._resolve(TABULAR)
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     query._resolve(TABULAR)
@@ -172,19 +200,20 @@ def test_the_route_is_read_at_every_call(
         (f'{CORE},nope', 'nope'),
         # A host path is never routed.
         ('source.open/explicit/duckdb', 'source.open/explicit/duckdb'),
-        # A core path with no core route in this build (SQLite's has one
-        # from T2.2, Postgres's from T2.3).
+        # Trained models remain a known core path without an implementation
+        # in Phase 3; warehouse and semantic-view prediction now have routes.
         (
-            'client.predict/regression/snowflake',
-            'client.predict/regression/snowflake',
+            'client.fit/regression/duckdb',
+            'client.fit/regression/duckdb',
         ),
     ],
 )
 def test_an_unknown_or_unrouted_forced_path_fails_the_call(
     monkeypatch: pytest.MonkeyPatch, setting: str, named: str
 ) -> None:
-    if named.startswith('client.predict'):
+    if named.startswith('client.'):
         assert named in _routing.ROUTES
+        assert named not in _routing.CORE_ROUTED
     monkeypatch.setenv(_routing.ENVIRONMENT, setting)
     query = PredictiveQuery(ACCEPTED, {'users': _users()})
     with pytest.raises(_routing.RouteError, match=named):
@@ -253,12 +282,15 @@ def test_old_paths_never_import_the_native_module() -> None:
     print('sdm_client._native' in sys.modules, 'sdm_client._rust' in sys.modules)
     """
     )
-    result = _subprocess(script)
+    result = _subprocess(script, **{_routing.ENVIRONMENT: ''})
     assert result.returncode == 0, result.stderr
     assert result.stdout.split() == ['False', 'False']
 
 
-def test_a_core_route_without_the_native_module_fails_naming_it() -> None:
+@pytest.mark.parametrize('forced', [False, True], ids=['default', 'forced'])
+def test_a_core_route_without_the_native_module_fails_naming_it(
+    forced: bool,
+) -> None:
     script = (
         _BLOCK_NATIVE
         + """
@@ -276,7 +308,8 @@ def test_a_core_route_without_the_native_module_fails_naming_it() -> None:
         print(missing)
     """
     )
-    result = _subprocess(script, **{_routing.ENVIRONMENT: CORE})
+    settings = {_routing.ENVIRONMENT: CORE} if forced else {}
+    result = _subprocess(script, **settings)
     assert result.returncode == 0, result.stderr
     assert 'sdm_client._native' in result.stdout
 
@@ -511,7 +544,7 @@ def test_a_literal_with_no_run_of_five_digits_answers_as_on_the_old_route(
     answers = []
     for route in ('core', 'old'):
         if route == 'old':
-            monkeypatch.delenv(_routing.ENVIRONMENT)
+            monkeypatch.setenv(_routing.ENVIRONMENT, '')
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
             try:
@@ -596,7 +629,7 @@ def test_a_day_first_literal_warns_on_the_core_as_on_the_old_route(
     schema = _orders_schema()
     on_core = {text: _shown(text, schema) for text in [accepted, *refused]}
     assert core == [accepted, *refused]
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     on_old = {text: _shown(text, schema) for text in [accepted, *refused]}
     said = (
         'UserWarning: Parsing dates in %d/%m/%Y format when dayfirst=False '

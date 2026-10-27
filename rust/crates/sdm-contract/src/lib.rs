@@ -33,8 +33,13 @@ pub mod schema_check;
 #[cfg(feature = "test-ops")]
 pub mod test_ops;
 pub mod types;
+pub mod view;
+pub mod wording;
 
-pub use error::{AnsweredParts, CoreError, CoreWarning, Detail, ErrorCode, ErrorKind, HeldState};
+pub use error::{
+    AnsweredParts, Code, CoreError, CoreWarning, Detail, ErrorCode, ErrorKind, HeldState, Sentence,
+    WarningCode,
+};
 pub use facts::HostFacts;
 pub use pql::{VALIDATED_QUERY_VERSION, ValidatedQuery, validated_query_schema_json};
 pub use run::{ControlMessage, Step};
@@ -42,7 +47,7 @@ pub use scalar::Scalar;
 pub use types::{ColumnType, Field, Unit};
 
 /// The contract version this build speaks.
-pub const CONTRACT_VERSION: u32 = 27;
+pub const CONTRACT_VERSION: u32 = 30;
 
 /// The JSON Schema of [`ControlMessage`], as committed: pretty-printed, with
 /// a trailing newline. Its `$defs` hold [`ops::Attachments`] too, the JSON

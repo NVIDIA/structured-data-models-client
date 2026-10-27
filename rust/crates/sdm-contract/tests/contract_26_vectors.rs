@@ -14,7 +14,7 @@
     reason = "test code: reads the committed vectors"
 )]
 
-use sdm_contract::data::{DataRequest, Relation};
+use sdm_contract::data::{DataRequest, ProviderCapabilities, Relation};
 use sdm_contract::ops::{DescribedTable, HeldTable, NamedTable, SourceSpec};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -44,6 +44,7 @@ fn load(name: &str, value: &Value) -> Result<Value, String> {
     match name {
         "DataRequest" => round_trip::<DataRequest>(value),
         "Relation" => round_trip::<Relation>(value),
+        "ProviderCapabilities" => round_trip::<ProviderCapabilities>(value),
         "NamedTable" => round_trip::<NamedTable>(value),
         "SourceSpec" => round_trip::<SourceSpec>(value),
         "DescribedTable" => round_trip::<DescribedTable>(value),
@@ -71,6 +72,14 @@ fn each_refused_vector_is_refused() {
     assert!(!refused.is_empty());
     for vector in refused {
         let (name, value) = (vector["definition"].as_str().unwrap(), &vector["value"]);
+        // A shape a later version adds (contract v28's derived relation) is
+        // refused through the version the vector names, and read after it.
+        if let Some(through) = vector["refused_through"].as_u64()
+            && u64::from(sdm_contract::CONTRACT_VERSION) > through
+        {
+            assert!(load(name, value).is_ok(), "{} was refused", vector["name"]);
+            continue;
+        }
         assert!(load(name, value).is_err(), "{} was read", vector["name"]);
     }
 }

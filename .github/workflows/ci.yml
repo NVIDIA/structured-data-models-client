@@ -10,19 +10,33 @@
 # copy fails the build it ships in.
 name: CI
 
+# CI is off the landing path (the owner's "2026-10-22 evening: CI off the
+# landing path"): a package lands on its handoff stamp and two reviews, so
+# no push to a phase branch, lane or topic runs this workflow. main and the
+# epic branch rust-core still run it on every push, as before. Each phase
+# head runs the full matrix nightly, with fresh dependencies: the
+# `nightly` job below, on the schedule (which GitHub runs from the default
+# branch's copy of this file), dispatches this workflow on the head of
+# every rust-core-phase-N branch; until this file reaches the default
+# branch the orchestrator's watchdog (watchdog.py --dispatch) dispatches it
+# the same way. A dispatch (workflow_dispatch) runs every job on the ref
+# it names, and nothing waits on it: a red nightly is a fix item the
+# watchdog writes. The full matrix stays the phase-end gate. Every phase
+# alike (T2.0): no phase is named here.
 on:
   pull_request:
   push:
-    # The Rust core migration's epic branch and its phase branches run the
-    # same gates as main; the reference and archive branches deliberately
-    # do not, including a lane package's archive branch,
-    # rust-core-phase-N-archive-*, which keeps an abandoned tip (E43, CI2).
-    # Every phase alike (T2.0): no phase is named here.
     branches:
       - main
       - rust-core
-      - 'rust-core-phase-*'
-      - '!rust-core-phase-*-archive-*'
+  schedule:
+    - cron: '17 2 * * *'
+  workflow_dispatch:
+    inputs:
+      fresh:
+        description: 'Resolve dependencies fresh (the nightly): cargo update before the Rust jobs build'
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -32,23 +46,28 @@ permissions:
   # (E131).
   actions: read
 
-# A newer push cancels a topic branch's run in progress. On the phase
-# branch and the lane branches a run in progress is not cancelled (E43): a
-# candidate's run on its lane is the evidence its landing stands on (E131),
-# so the next push there must not cancel it. A run still queued there can
-# be: GitHub keeps one pending run per group, and a newer push supersedes
-# it. land.py refuses a candidate whose newest run was cancelled, and
-# land.py verify asks for a rerun rather than a revert. Every phase alike
-# (T2.0), with no phase named: an expression has no pattern match, so a
-# phase branch is a name under rust-core-phase- that ends in a digit and
-# holds no digit followed by "-" (the prefix holds no digit, and every
-# branch under a phase, rust-core-phase-N-<name>, holds one), and a lane
-# is one holding "-lane-". The phase check's condition reads the phase
-# branch alike, and fails by name on a name this lets through that is no
-# phase branch (a letter before its last digit, or a leading zero).
+# A newer push cancels the run in progress on the same branch, a topic's
+# or a lane's (T3.0): a lane carries one package at a time (lane.py), so
+# its newer push is that package's newer candidate, and the run of the
+# commit it replaced is evidence for nothing; Phase 2 left 4,208 minutes
+# of runs superseded this way running. On the phase branch a run in
+# progress is not cancelled: each push there lands one package, and the
+# phase check must judge every one. A run still queued there can be:
+# GitHub keeps one pending run per group, and a newer push supersedes it.
+# land.py refuses a candidate whose newest run was cancelled, and land.py
+# verify asks for a rerun rather than a revert. Every phase alike (T2.0),
+# with no phase named: an expression has no pattern match, so a phase
+# branch is a name under rust-core-phase- whose rest is a number with no
+# leading zero, read as: not empty; no "phase-0" but at its end; no
+# character that the prefix lacks and a number never holds (b, d, ..., z,
+# a dot, "_", "/"); and no character the prefix holds (a letter of it, or
+# "-") first after it or after a digit (OF-7). Actions compares names
+# ignoring case, so a name in capitals is let through; the phase check's
+# condition reads the phase branch alike, and fails by name on a name
+# this lets through that is no phase branch.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: ${{ !((startsWith(github.ref_name, 'rust-core-phase-') && (endsWith(github.ref_name, '0') || endsWith(github.ref_name, '1') || endsWith(github.ref_name, '2') || endsWith(github.ref_name, '3') || endsWith(github.ref_name, '4') || endsWith(github.ref_name, '5') || endsWith(github.ref_name, '6') || endsWith(github.ref_name, '7') || endsWith(github.ref_name, '8') || endsWith(github.ref_name, '9')) && !(contains(github.ref_name, '0-') || contains(github.ref_name, '1-') || contains(github.ref_name, '2-') || contains(github.ref_name, '3-') || contains(github.ref_name, '4-') || contains(github.ref_name, '5-') || contains(github.ref_name, '6-') || contains(github.ref_name, '7-') || contains(github.ref_name, '8-') || contains(github.ref_name, '9-'))) || (startsWith(github.ref_name, 'rust-core-phase-') && contains(github.ref_name, '-lane-'))) }}
+  cancel-in-progress: ${{ !(startsWith(github.ref_name, 'rust-core-phase-') && !endsWith(github.ref_name, 'core-phase-') && !(contains(github.ref_name, 'phase-0') && !endsWith(github.ref_name, 'core-phase-0')) && !(contains(github.ref_name, 'b') || contains(github.ref_name, 'd') || contains(github.ref_name, 'f') || contains(github.ref_name, 'g') || contains(github.ref_name, 'i') || contains(github.ref_name, 'j') || contains(github.ref_name, 'k') || contains(github.ref_name, 'l') || contains(github.ref_name, 'm') || contains(github.ref_name, 'n') || contains(github.ref_name, 'q') || contains(github.ref_name, 'v') || contains(github.ref_name, 'w') || contains(github.ref_name, 'x') || contains(github.ref_name, 'y') || contains(github.ref_name, 'z') || contains(github.ref_name, '.') || contains(github.ref_name, '_') || contains(github.ref_name, '/') || startsWith(github.ref_name, 'rust-core-phase--') || startsWith(github.ref_name, 'rust-core-phase-a') || startsWith(github.ref_name, 'rust-core-phase-c') || startsWith(github.ref_name, 'rust-core-phase-e') || startsWith(github.ref_name, 'rust-core-phase-h') || startsWith(github.ref_name, 'rust-core-phase-o') || startsWith(github.ref_name, 'rust-core-phase-p') || startsWith(github.ref_name, 'rust-core-phase-r') || startsWith(github.ref_name, 'rust-core-phase-s') || startsWith(github.ref_name, 'rust-core-phase-t') || startsWith(github.ref_name, 'rust-core-phase-u') || contains(github.ref_name, '0-') || contains(github.ref_name, '0a') || contains(github.ref_name, '0c') || contains(github.ref_name, '0e') || contains(github.ref_name, '0h') || contains(github.ref_name, '0o') || contains(github.ref_name, '0p') || contains(github.ref_name, '0r') || contains(github.ref_name, '0s') || contains(github.ref_name, '0t') || contains(github.ref_name, '0u') || contains(github.ref_name, '1-') || contains(github.ref_name, '1a') || contains(github.ref_name, '1c') || contains(github.ref_name, '1e') || contains(github.ref_name, '1h') || contains(github.ref_name, '1o') || contains(github.ref_name, '1p') || contains(github.ref_name, '1r') || contains(github.ref_name, '1s') || contains(github.ref_name, '1t') || contains(github.ref_name, '1u') || contains(github.ref_name, '2-') || contains(github.ref_name, '2a') || contains(github.ref_name, '2c') || contains(github.ref_name, '2e') || contains(github.ref_name, '2h') || contains(github.ref_name, '2o') || contains(github.ref_name, '2p') || contains(github.ref_name, '2r') || contains(github.ref_name, '2s') || contains(github.ref_name, '2t') || contains(github.ref_name, '2u') || contains(github.ref_name, '3-') || contains(github.ref_name, '3a') || contains(github.ref_name, '3c') || contains(github.ref_name, '3e') || contains(github.ref_name, '3h') || contains(github.ref_name, '3o') || contains(github.ref_name, '3p') || contains(github.ref_name, '3r') || contains(github.ref_name, '3s') || contains(github.ref_name, '3t') || contains(github.ref_name, '3u') || contains(github.ref_name, '4-') || contains(github.ref_name, '4a') || contains(github.ref_name, '4c') || contains(github.ref_name, '4e') || contains(github.ref_name, '4h') || contains(github.ref_name, '4o') || contains(github.ref_name, '4p') || contains(github.ref_name, '4r') || contains(github.ref_name, '4s') || contains(github.ref_name, '4t') || contains(github.ref_name, '4u') || contains(github.ref_name, '5-') || contains(github.ref_name, '5a') || contains(github.ref_name, '5c') || contains(github.ref_name, '5e') || contains(github.ref_name, '5h') || contains(github.ref_name, '5o') || contains(github.ref_name, '5p') || contains(github.ref_name, '5r') || contains(github.ref_name, '5s') || contains(github.ref_name, '5t') || contains(github.ref_name, '5u') || contains(github.ref_name, '6-') || contains(github.ref_name, '6a') || contains(github.ref_name, '6c') || contains(github.ref_name, '6e') || contains(github.ref_name, '6h') || contains(github.ref_name, '6o') || contains(github.ref_name, '6p') || contains(github.ref_name, '6r') || contains(github.ref_name, '6s') || contains(github.ref_name, '6t') || contains(github.ref_name, '6u') || contains(github.ref_name, '7-') || contains(github.ref_name, '7a') || contains(github.ref_name, '7c') || contains(github.ref_name, '7e') || contains(github.ref_name, '7h') || contains(github.ref_name, '7o') || contains(github.ref_name, '7p') || contains(github.ref_name, '7r') || contains(github.ref_name, '7s') || contains(github.ref_name, '7t') || contains(github.ref_name, '7u') || contains(github.ref_name, '8-') || contains(github.ref_name, '8a') || contains(github.ref_name, '8c') || contains(github.ref_name, '8e') || contains(github.ref_name, '8h') || contains(github.ref_name, '8o') || contains(github.ref_name, '8p') || contains(github.ref_name, '8r') || contains(github.ref_name, '8s') || contains(github.ref_name, '8t') || contains(github.ref_name, '8u') || contains(github.ref_name, '9-') || contains(github.ref_name, '9a') || contains(github.ref_name, '9c') || contains(github.ref_name, '9e') || contains(github.ref_name, '9h') || contains(github.ref_name, '9o') || contains(github.ref_name, '9p') || contains(github.ref_name, '9r') || contains(github.ref_name, '9s') || contains(github.ref_name, '9t') || contains(github.ref_name, '9u'))) }}
 
 env:
   # Whether this run saves its caches: the Rust builds and the DuckDB
@@ -67,6 +86,17 @@ env:
   # builds, which cost far more to redo. Every branch restores main's.
   SAVE_CACHES: ${{ github.event_name == 'push' && (contains(fromJSON('["main", "rust-core"]'), github.ref_name) || (startsWith(github.ref_name, 'rust-core-phase-') && contains(github.ref_name, '-lane-'))) }}
   SAVE_PIP_CACHES: ${{ github.event_name == 'push' && github.ref_name == 'main' }}
+  # The nightly's fresh dependencies: on a dispatch asking for them (the
+  # nightly's), the Rust jobs take each crate's latest compatible version
+  # (cargo update before they build), so a RustSec advisory or a crate's
+  # break shows within a day. The Python jobs that install unpinned resolve
+  # the latest release on every run already; a cell's pins are its
+  # definition and stay.
+  FRESH: ${{ github.event_name == 'workflow_dispatch' && inputs.fresh }}
+  # The process's time zone, named for every job (M5): a test that sets
+  # only DuckDB's session zone, or reads the process's, reads this one,
+  # never the runner image's default, which may change under it.
+  TZ: UTC
   # The images CI pulls, each named here once and pinned by digest (E131),
   # but wheel-smoke's, which scripts/rust_core/wheel_smoke.py names. A pull
   # from ghcr.io logs in with GITHUB_TOKEN; any other is anonymous.
@@ -84,6 +114,30 @@ env:
   BINDING_FLOOR: pyarrow==14.0.1 pandas==2.2.2 numpy==1.23.5 duckdb==1.5.6
 
 jobs:
+  # The nightly (the schedule): dispatch this workflow, fresh, on the head
+  # of every phase branch, rust-core-phase-N for any N; every other job
+  # leaves itself out on the schedule (the landing job says skip).
+  nightly:
+    name: nightly dispatch
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Dispatch the full matrix on each phase head
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          heads=$(gh api "repos/$GITHUB_REPOSITORY/branches?per_page=100" --paginate --jq '.[].name' \
+            | grep -E '^rust-core-phase-(0|[1-9][0-9]*)$' || true)
+          [ -n "$heads" ] || { echo 'no phase branch'; exit 0; }
+          for head in $heads; do
+            gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$head" -f fresh=true
+            echo "dispatched on $head"
+          done
+
   # Decision E131 (the owner's of 2026-10-14): CI does not test an empty
   # landing commit again. land.py makes one per landing (one parent, no
   # file changed, a subject starting `Land `) and pushes it to the topic
@@ -105,6 +159,14 @@ jobs:
     outputs:
       skip: ${{ steps.landing.outputs.skip }}
       postgres-image: ${{ env.POSTGRES_IMAGE }}
+      # The run's plan (T3.0), from the step below: the phase head the
+      # candidate was pushed on, which every judging job reads as
+      # SDM_PUSH_BASE; whether the tooling jobs run; and the Pythons the
+      # client matrix runs on.
+      base: ${{ steps.plan.outputs.base }}
+      tooling: ${{ steps.plan.outputs.tooling }}
+      full: ${{ steps.plan.outputs.full }}
+      pythons: ${{ steps.plan.outputs.pythons }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -115,8 +177,9 @@ jobs:
       # job leaves out, so they are never evidence), has for its newest run
       # of this workflow on a push to the phase branch or a branch under it
       # (never an archive branch) one that completed with success, read
-      # with gh. No such run (none, failed, cancelled, unfinished, or the
-      # API unreadable) runs every job. The phase branch is the one the
+      # with gh, a push's run alone, as land.py reads one (C28). No such run
+      # (none, failed, cancelled, unfinished, or the API unreadable) runs
+      # every job. The phase branch is the one the
       # push is to or under, rust-core-phase-N for any N (T2.0).
       - id: landing
         name: An empty landing commit is not tested again
@@ -131,6 +194,13 @@ jobs:
           skip=false
           why='not a push of an empty landing commit under a phase branch'
           phase=''
+          if [ "${GITHUB_EVENT_NAME:-}" = schedule ]; then
+            # The schedule only dispatches (the nightly job): the matrix
+            # runs on each phase head, not on the default branch here.
+            echo 'skip=true' >> "$GITHUB_OUTPUT"
+            echo 'every other job left out: true; the schedule dispatches each phase head instead'
+            exit 0
+          fi
           if [ "${GITHUB_EVENT_NAME:-}" = push ] &&
             [[ "${GITHUB_REF_NAME:-}" =~ ^(rust-core-phase-(0|[1-9][0-9]*))(-.+)?$ ]]; then
             phase=${BASH_REMATCH[1]}
@@ -143,7 +213,7 @@ jobs:
                 tested=$(git rev-parse HEAD^)
                 while empty_landing "$tested"; do tested=$(git rev-parse "$tested^"); done
                 newest=$(gh api "repos/${GITHUB_REPOSITORY:-}/actions/workflows/ci.yml/runs?head_sha=$tested&event=push&per_page=100" \
-                  --jq '[.workflow_runs[] | select(.head_branch == "'"$phase"'" or ((.head_branch | startswith("'"$phase"'-")) and (.head_branch | startswith("'"$phase"'-archive-") | not)))]
+                  --jq '[.workflow_runs[] | select(.event == "push" and (.head_branch == "'"$phase"'" or ((.head_branch | startswith("'"$phase"'-")) and (.head_branch | startswith("'"$phase"'-archive-") | not))))]
                     | sort_by(.created_at) | last | if . == null then "none" else "\(.id) \(.status) \(.conclusion)" end') || newest=unreadable
                 case "$newest" in
                   *' completed success') skip=true; why="its tree is green in run ${newest%% *} at $tested" ;;
@@ -153,6 +223,48 @@ jobs:
           esac
           echo "skip=$skip" >> "$GITHUB_OUTPUT"
           echo "every other job left out: $skip; $why"
+      # The run's plan (T3.0), decided once, as the run starts, so a job
+      # that starts an hour later decides alike. On a push to a branch under
+      # a phase branch:
+      # - base: the phase head now (ratchet.py push-base), or, for a
+      #   candidate stacked on unlanded landings, the last of them, the base
+      #   every comparison of this run takes, so a landing while it runs,
+      #   its own candidate's included, cannot make one a self-comparison; a
+      #   rerun of failed jobs keeps it, and a rerun of every job after the
+      #   candidate landed takes the head it landed on;
+      # - tooling: whether the tests of the checking tools (the
+      #   tooling marker) run, which they do when the change touches a
+      #   judging path or such a test (tooling_tests.py must-run), the
+      #   change being the whole stack's, from the phase head
+      #   (push-base --stack-base), so a train below the top counts;
+      # - full: false on a test author's branch (<topic>-tests, or
+      #   <topic>-tests-<suffix>), whose tests fail by design until the
+      #   code exists: the client tests on one Python, and no wheels for
+      #   other platforms.
+      # Anywhere else every job runs, on every Python.
+      - id: plan
+        name: The run's base and the jobs it runs
+        if: steps.landing.outputs.skip != 'true'
+        run: |
+          base=''
+          tooling=true
+          why='not a push under a phase branch'
+          full=true
+          if [ "${GITHUB_EVENT_NAME:-}" = push ] &&
+            [[ "${GITHUB_REF_NAME:-}" =~ ^(rust-core-phase-(0|[1-9][0-9]*))-.+$ ]]; then
+            phase=${BASH_REMATCH[1]}
+            if [ "$(git rev-parse --is-shallow-repository)" = true ]; then git fetch --quiet --unshallow origin; fi
+            git fetch --quiet origin "refs/heads/$phase:refs/remotes/origin/$phase" || exit 1
+            base=$(python3 scripts/rust_core/ratchet.py push-base) || exit 1
+            stacked=$(python3 scripts/rust_core/ratchet.py push-base --stack-base) || exit 1
+            plan=$(python3 scripts/rust_core/tooling_tests.py must-run --base "$stacked") || exit 1
+            tooling=${plan%%$'\n'*}
+            why=${plan#*$'\n'}
+            if [[ "$GITHUB_REF_NAME" =~ -tests(-[^-]+)*$ ]]; then full=false; fi
+          fi
+          if [ "$full" = true ]; then pythons='["3.10", "3.11", "3.12", "3.13", "3.14"]'; else pythons='["3.12"]'; fi
+          { echo "base=$base"; echo "tooling=$tooling"; echo "full=$full"; echo "pythons=$pythons"; } >> "$GITHUB_OUTPUT"
+          echo "base: ${base:-none}; tooling jobs: $tooling ($why); full matrix: $full"
       # On the phase branch, every push, a landing's included, lands one
       # package as a fast-forward, its landing commit's Base-SHA the
       # previous tip: ratchet.py's --phase-push check, which the gate makes
@@ -162,7 +274,7 @@ jobs:
       # without it a fork point is refused, by name. A phase branch as the
       # concurrency reads it, any N.
       - name: A push to the phase branch lands one package
-        if: github.event_name == 'push' && (startsWith(github.ref_name, 'rust-core-phase-') && (endsWith(github.ref_name, '0') || endsWith(github.ref_name, '1') || endsWith(github.ref_name, '2') || endsWith(github.ref_name, '3') || endsWith(github.ref_name, '4') || endsWith(github.ref_name, '5') || endsWith(github.ref_name, '6') || endsWith(github.ref_name, '7') || endsWith(github.ref_name, '8') || endsWith(github.ref_name, '9')) && !(contains(github.ref_name, '0-') || contains(github.ref_name, '1-') || contains(github.ref_name, '2-') || contains(github.ref_name, '3-') || contains(github.ref_name, '4-') || contains(github.ref_name, '5-') || contains(github.ref_name, '6-') || contains(github.ref_name, '7-') || contains(github.ref_name, '8-') || contains(github.ref_name, '9-')))
+        if: github.event_name == 'push' && (startsWith(github.ref_name, 'rust-core-phase-') && !endsWith(github.ref_name, 'core-phase-') && !(contains(github.ref_name, 'phase-0') && !endsWith(github.ref_name, 'core-phase-0')) && !(contains(github.ref_name, 'b') || contains(github.ref_name, 'd') || contains(github.ref_name, 'f') || contains(github.ref_name, 'g') || contains(github.ref_name, 'i') || contains(github.ref_name, 'j') || contains(github.ref_name, 'k') || contains(github.ref_name, 'l') || contains(github.ref_name, 'm') || contains(github.ref_name, 'n') || contains(github.ref_name, 'q') || contains(github.ref_name, 'v') || contains(github.ref_name, 'w') || contains(github.ref_name, 'x') || contains(github.ref_name, 'y') || contains(github.ref_name, 'z') || contains(github.ref_name, '.') || contains(github.ref_name, '_') || contains(github.ref_name, '/') || startsWith(github.ref_name, 'rust-core-phase--') || startsWith(github.ref_name, 'rust-core-phase-a') || startsWith(github.ref_name, 'rust-core-phase-c') || startsWith(github.ref_name, 'rust-core-phase-e') || startsWith(github.ref_name, 'rust-core-phase-h') || startsWith(github.ref_name, 'rust-core-phase-o') || startsWith(github.ref_name, 'rust-core-phase-p') || startsWith(github.ref_name, 'rust-core-phase-r') || startsWith(github.ref_name, 'rust-core-phase-s') || startsWith(github.ref_name, 'rust-core-phase-t') || startsWith(github.ref_name, 'rust-core-phase-u') || contains(github.ref_name, '0-') || contains(github.ref_name, '0a') || contains(github.ref_name, '0c') || contains(github.ref_name, '0e') || contains(github.ref_name, '0h') || contains(github.ref_name, '0o') || contains(github.ref_name, '0p') || contains(github.ref_name, '0r') || contains(github.ref_name, '0s') || contains(github.ref_name, '0t') || contains(github.ref_name, '0u') || contains(github.ref_name, '1-') || contains(github.ref_name, '1a') || contains(github.ref_name, '1c') || contains(github.ref_name, '1e') || contains(github.ref_name, '1h') || contains(github.ref_name, '1o') || contains(github.ref_name, '1p') || contains(github.ref_name, '1r') || contains(github.ref_name, '1s') || contains(github.ref_name, '1t') || contains(github.ref_name, '1u') || contains(github.ref_name, '2-') || contains(github.ref_name, '2a') || contains(github.ref_name, '2c') || contains(github.ref_name, '2e') || contains(github.ref_name, '2h') || contains(github.ref_name, '2o') || contains(github.ref_name, '2p') || contains(github.ref_name, '2r') || contains(github.ref_name, '2s') || contains(github.ref_name, '2t') || contains(github.ref_name, '2u') || contains(github.ref_name, '3-') || contains(github.ref_name, '3a') || contains(github.ref_name, '3c') || contains(github.ref_name, '3e') || contains(github.ref_name, '3h') || contains(github.ref_name, '3o') || contains(github.ref_name, '3p') || contains(github.ref_name, '3r') || contains(github.ref_name, '3s') || contains(github.ref_name, '3t') || contains(github.ref_name, '3u') || contains(github.ref_name, '4-') || contains(github.ref_name, '4a') || contains(github.ref_name, '4c') || contains(github.ref_name, '4e') || contains(github.ref_name, '4h') || contains(github.ref_name, '4o') || contains(github.ref_name, '4p') || contains(github.ref_name, '4r') || contains(github.ref_name, '4s') || contains(github.ref_name, '4t') || contains(github.ref_name, '4u') || contains(github.ref_name, '5-') || contains(github.ref_name, '5a') || contains(github.ref_name, '5c') || contains(github.ref_name, '5e') || contains(github.ref_name, '5h') || contains(github.ref_name, '5o') || contains(github.ref_name, '5p') || contains(github.ref_name, '5r') || contains(github.ref_name, '5s') || contains(github.ref_name, '5t') || contains(github.ref_name, '5u') || contains(github.ref_name, '6-') || contains(github.ref_name, '6a') || contains(github.ref_name, '6c') || contains(github.ref_name, '6e') || contains(github.ref_name, '6h') || contains(github.ref_name, '6o') || contains(github.ref_name, '6p') || contains(github.ref_name, '6r') || contains(github.ref_name, '6s') || contains(github.ref_name, '6t') || contains(github.ref_name, '6u') || contains(github.ref_name, '7-') || contains(github.ref_name, '7a') || contains(github.ref_name, '7c') || contains(github.ref_name, '7e') || contains(github.ref_name, '7h') || contains(github.ref_name, '7o') || contains(github.ref_name, '7p') || contains(github.ref_name, '7r') || contains(github.ref_name, '7s') || contains(github.ref_name, '7t') || contains(github.ref_name, '7u') || contains(github.ref_name, '8-') || contains(github.ref_name, '8a') || contains(github.ref_name, '8c') || contains(github.ref_name, '8e') || contains(github.ref_name, '8h') || contains(github.ref_name, '8o') || contains(github.ref_name, '8p') || contains(github.ref_name, '8r') || contains(github.ref_name, '8s') || contains(github.ref_name, '8t') || contains(github.ref_name, '8u') || contains(github.ref_name, '9-') || contains(github.ref_name, '9a') || contains(github.ref_name, '9c') || contains(github.ref_name, '9e') || contains(github.ref_name, '9h') || contains(github.ref_name, '9o') || contains(github.ref_name, '9p') || contains(github.ref_name, '9r') || contains(github.ref_name, '9s') || contains(github.ref_name, '9t') || contains(github.ref_name, '9u')))
         run: |
           if [ "$(git rev-parse --is-shallow-repository)" = true ]; then git fetch --quiet --unshallow origin; fi
           if git ls-remote --exit-code --heads origin rust-core >/dev/null; then
@@ -210,6 +322,8 @@ jobs:
     defaults:
       run:
         working-directory: rust
+    env:
+      SDM_PUSH_BASE: ${{ needs.landing.outputs.base }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -228,14 +342,16 @@ jobs:
       - run: cargo clippy -p sdm-py --features test-ops --locked -- -D warnings
       # The L0 guards (T1.10c): the crate graph (l0_deps.py), with the
       # bridge freeze (bridge_freeze.py, E50), whose baseline ratchets
-      # against the merge base with origin/<the phase branch> (phases.py:
-      # the phase this branch is under, else the phase in progress), which
-      # the full checkout above fetches; and the vocabulary, SQL-fragment, skip and
+      # against the merge base with the phase head the run was pushed on
+      # (SDM_PUSH_BASE, T3.0), else with origin/<the phase branch>
+      # (phases.py: the phase this branch is under, else the phase in
+      # progress), which the full checkout above fetches; and the vocabulary, SQL-fragment, skip and
       # ignore, clippy-ban and step-variant scans (l0_scan.py). The bans
       # themselves are enforced by the clippy runs above, from
       # rust/clippy.toml.
       - name: L0 graph, bans and scans
         run: |
+          if [ -n "${SDM_PUSH_BASE:-}" ]; then export SDM_FREEZE_BASE=$SDM_PUSH_BASE; fi
           python3 scripts/rust_core/l0_deps.py
           python3 scripts/rust_core/l0_scan.py
         working-directory: .
@@ -292,6 +408,8 @@ jobs:
       - uses: taiki-e/install-action@9114bf4d891761788c546334fd37538eae1bf8b3 # v2.87.16
         with:
           tool: cargo-deny
+      - if: env.FRESH == 'true'
+        run: cargo update
       - run: cargo deny --locked check
 
   rust-test:
@@ -329,6 +447,7 @@ jobs:
           --health-cmd pg_isready --health-interval 5s
           --health-timeout 5s --health-retries 10
     env:
+      SDM_PUSH_BASE: ${{ needs.landing.outputs.base }}
       CARGO_PROFILE_DEV_DEBUG: line-tables-only
       CARGO_PROFILE_TEST_DEBUG: line-tables-only
       SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
@@ -365,6 +484,8 @@ jobs:
           path: ~/.duckdb/extensions/v1.5.6
           key: duckdb-extensions-v1.5.6-icu-json-${{ runner.os }}-${{ runner.arch }}
       # The test kit's clippy, here on the DuckDB build this job makes (H3).
+      - if: env.FRESH == 'true'
+        run: cargo update
       - run: cargo clippy -p sdm-testkit --all-targets --locked -- -D warnings
       # Python, for the contract loader (contract/runners/databases.py),
       # which loads a case's tables into SQLite for sdm-contract-run
@@ -379,6 +500,45 @@ jobs:
       - run: cargo test --workspace --locked
         env:
           SDM_PYTHON: python
+      # Fresh dependency tests deliberately changed the lock, not the
+      # committed source the following observations and gate must judge.
+      # Preserve that experiment before restoring only its known change.
+      - name: Preserve fresh Cargo evidence and restore the committed lock
+        if: ${{ !cancelled() && env.FRESH == 'true' }}
+        working-directory: .
+        run: |
+          evidence="${RUNNER_TEMP:?}/fresh-cargo-lock"
+          mkdir -p "$evidence"
+          git rev-parse HEAD 'HEAD^{tree}' > "$evidence/source.txt"
+          git status --porcelain --untracked-files=no > "$evidence/status-before.txt"
+          git diff --binary HEAD > "$evidence/diff-before.patch"
+          git show HEAD:rust/Cargo.lock > "$evidence/committed-Cargo.lock"
+          cp rust/Cargo.lock "$evidence/fresh-Cargo.lock"
+          (cd "$evidence" && sha256sum committed-Cargo.lock fresh-Cargo.lock > lock-sha256.txt)
+          status=$(cat "$evidence/status-before.txt")
+          if { [ -n "$status" ] && [ "$status" != ' M rust/Cargo.lock' ]; } ||
+             ! git diff --cached --quiet ||
+             [ -n "$(git diff --summary HEAD -- rust/Cargo.lock)" ]; then
+            cat "$evidence/status-before.txt"
+            echo 'unexpected tracked changes after fresh Cargo; no source restored' >&2
+            exit 1
+          fi
+          git restore --source=HEAD --worktree -- rust/Cargo.lock
+          git status --porcelain --untracked-files=no > "$evidence/status-after.txt"
+          if [ -s "$evidence/status-after.txt" ]; then
+            cat "$evidence/status-after.txt"
+            git diff --binary HEAD > "$evidence/diff-after.patch"
+            echo 'unexpected tracked changes after restoring only Cargo.lock' >&2
+            exit 1
+          fi
+          cmp rust/Cargo.lock "$evidence/committed-Cargo.lock"
+      - name: Preserve fresh Cargo dependency provenance
+        if: ${{ !cancelled() && env.FRESH == 'true' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fresh-cargo-lock-rust-test
+          path: ${{ runner.temp }}/fresh-cargo-lock
+          if-no-files-found: error
       # The pure-Rust host over the contract cases, its observations compared
       # with the cases' expectations and reference observations (T1.10;
       # T1.18 moves this to the checkpoint's comparator), from T1.11e under
@@ -466,13 +626,10 @@ jobs:
           SDM_PYTHON: python
         run: |
           set -o pipefail
-          # A checkpoint's gate.sh before T2.16a builds the test kit, its
-          # observation writer overlaid, into this target directory, and
-          # Cargo, judging freshness by modification times, then takes that
-          # build as this tree's: the test kit's sources are marked newer,
-          # so this tree's host is built again (T2.16a; from T2.16a gate.sh
-          # builds the overlay into a target directory of its own).
-          find rust/crates/sdm-testkit/src -name '*.rs' -exec touch {} +
+          # Every checkpoint's gate.sh builds the test kit's overlay into a
+          # target directory of its own (T2.16a), so this tree's host is
+          # built here as Cargo judges it; no source is marked newer, which
+          # rebuilt the test kit on every run (P2-T2.16a-1).
           out=rust-host-sqlite
           mkdir -p "$out"
           reference=$(ls contract/reference/*.jsonl)
@@ -526,11 +683,12 @@ jobs:
   # and the binding's tests run beside it, in native-test-ops and binding.
   native-wheel:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     needs: landing
     if: needs.landing.outputs.skip != 'true'
     env:
       NATIVE_ARGS: --out native
+      JAVA_NATIVE: shipped
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: rustup toolchain install
@@ -556,7 +714,7 @@ jobs:
           mkdir -p "$HOME/.cargo/registry" "$HOME/.cargo/git" "$home/.cargo/registry" "$home/.cargo/git"
           docker run --rm --user "$(id -u):$(id -g)" \
             -e HOME=/tmp/home -e CARGO_HOME=/tmp/home/.cargo -e RUSTUP_HOME=/tmp/home/.rustup \
-            -e NATIVE_ARGS \
+            -e NATIVE_ARGS -e JAVA_NATIVE \
             -v "$home:/tmp/home" -v "$PWD:/io" -w /io \
             -v "$HOME/.cargo/registry:/tmp/home/.cargo/registry" \
             -v "$HOME/.cargo/git:/tmp/home/.cargo/git" \
@@ -580,11 +738,26 @@ jobs:
               /tmp/home/maturin/bin/pip install --quiet maturin==1.15.0
               export PATH="/tmp/home/maturin/bin:$PATH"
               python scripts/rust_core/native_wheel.py $NATIVE_ARGS --manylinux
+              # The Java binding from the same build (T3.11): JAVA_NATIVE
+              # says which, and none when it is unset.
+              case "${JAVA_NATIVE:-}" in
+                shipped) (cd rust && cargo build --release --locked -p sdm-jni) ;;
+                test-ops) (cd rust && cargo build --release --locked -p sdm-jni --features test-ops) ;;
+              esac
             '
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: native-wheel
           path: native/
+      # The Java binding the JAR ships for this platform (T3.11).
+      - name: The Java binding, by platform
+        run: |
+          mkdir -p java-natives/linux-x86_64
+          cp rust/target/release/libsdm_jni.so java-natives/linux-x86_64/
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: java-native-linux-x86_64
+          path: java-natives/
 
   # The binding with its test-only operations, built beside native-wheel by
   # the same step and tested at the E16 floor: every file of the binding's
@@ -594,7 +767,7 @@ jobs:
   # builds or ships takes (E23).
   native-test-ops:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     needs: landing
     if: needs.landing.outputs.skip != 'true'
     # The pinned PostgreSQL service, required (H26), for the Postgres
@@ -606,6 +779,7 @@ jobs:
       postgres: *postgres-service
     env:
       NATIVE_ARGS: --out native-test-ops --test-ops
+      JAVA_NATIVE: test-ops
       SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
       SDM_REQUIRE_POSTGRES: '1'
     steps:
@@ -640,6 +814,12 @@ jobs:
         with:
           name: native-wheel-test-ops
           path: native-test-ops/
+      # The Java binding with the test-only operations, which java-test
+      # loads (T3.11).
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: java-test-ops-native
+          path: rust/target/release/libsdm_jni.so
 
   # The client wheel for aarch64 Linux (decision KO2-40), built natively on
   # an Arm runner by native-wheel's own steps, in PyPA's
@@ -652,9 +832,11 @@ jobs:
   native-wheel-aarch64:
     name: native-wheel (aarch64, ${{ matrix.build }})
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 30
+    timeout-minutes: 40
     needs: landing
-    if: needs.landing.outputs.skip != 'true'
+    # Not on a test author's branch (the landing job's plan, T3.0), nor
+    # its smoke after it.
+    if: needs.landing.outputs.skip != 'true' && needs.landing.outputs.full != 'false'
     strategy:
       fail-fast: false
       matrix:
@@ -662,12 +844,15 @@ jobs:
           - build: shipped
             args: --out native
             artifact: native-wheel-aarch64
+            java: shipped
           - build: test-ops
             args: --out native --test-ops
             artifact: native-wheel-test-ops-aarch64
+            java: ''
     env:
       MANYLINUX: ghcr.io/nvidia/structured-data-models-client/manylinux2014_aarch64:2026.09.14-1@sha256:d4c40df238d6ec0ee91213f4797ad26f05d7d82947bcb61c40d1fdc13d0e16d5
       NATIVE_ARGS: ${{ matrix.args }}
+      JAVA_NATIVE: ${{ matrix.java }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: rustup toolchain install
@@ -683,6 +868,16 @@ jobs:
         with:
           name: ${{ matrix.artifact }}
           path: native/
+      - name: The Java binding, by platform
+        if: matrix.java == 'shipped'
+        run: |
+          mkdir -p java-natives/linux-aarch64
+          cp rust/target/release/libsdm_jni.so java-natives/linux-aarch64/
+      - if: matrix.java == 'shipped'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: java-native-linux-aarch64
+          path: java-natives/
 
   # The binding's tests on the wheel that ships, at the E16 floor: the file
   # any build passes.
@@ -846,12 +1041,14 @@ jobs:
     runs-on: ubuntu-latest
     # 90, not 60: the job reached 58 minutes on GitHub's runners as Phase 2's
     # three-database corpus grew (T2.1o); the cause is being cut separately.
-    timeout-minutes: 90
+    timeout-minutes: 60
     needs: [landing, native-wheel]
     strategy:
       fail-fast: false
+      # Every Python, but on a test author's branch (the landing job's
+      # plan, T3.0).
       matrix:
-        python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
+        python-version: ${{ fromJSON(needs.landing.outputs.pythons || '["3.10", "3.11", "3.12", "3.13", "3.14"]') }}
     # A real server for the PostgreSQL reads and the PostgreSQL sampler, which
     # only a PostgreSQL can say it accepts. SDM_REQUIRE_POSTGRES turns a
     # missing DSN or driver into a failure, where a skip would read as a pass.
@@ -894,21 +1091,25 @@ jobs:
       # ordinary connection keyword reached main reading as a pass. The
       # client is the native wheel's, the one abi3 build every interpreter
       # here installs; its test extra carries pytest-xdist, and
-      # pytest-timeout is for the run's --timeout.
-      - run: |
-          pip install --upgrade pip 'ruff==0.16.*' pytest-timeout "tomli; python_version < '3.11'"
+      # pytest-timeout==2.4.0 is for the run's --timeout.
+      - env:
+          CMAKE_BUILD_PARALLEL_LEVEL: '2'
+        run: |
+          pip install --upgrade pip 'ruff==0.16.*' pytest-timeout==2.4.0 "tomli; python_version < '3.11'"
           pip install -e './packages/structured-data-models-api[test]' -e './packages/structured-data-models-pql[test]' \
-            "$(ls native/*.whl)[test]" \
+            "$(ls native/*.whl)[test,relational]" \
+            './packages/structured-data-models-relational-engine' \
             -e './packages/structured-data-models-connectors[sqlite,duckdb,postgres,databricks,snowflake,s3,test]'
       # In parallel, as contract/tests runs: each test file on one worker,
-      # so its module fixtures are built once. Serial, the gate's tooling
-      # tests in tests/ outgrew the job's hour. A test past 10 minutes
+      # so its module fixtures are built once. The gate's tooling tests
+      # (the tooling marker) run once, in tooling (root), not on five
+      # Pythons and again in engine (T3.0). A test past 10 minutes
       # fails with its stack, and a worker that dies ends the run rather
       # than leaving xdist waiting on it.
       - run: |
           python -m pytest packages/structured-data-models-api/tests packages/structured-data-models-pql/tests \
             packages/structured-data-models-client/tests packages/structured-data-models-connectors/tests tests -q \
-            -m 'not live_nim and not live_warehouse' \
+            -m 'not live_nim and not live_warehouse and not tooling' \
             -n auto --dist loadfile --timeout=600 --max-worker-restart=0
       - if: ${{ !cancelled() && env.SAVE_PIP_CACHES == 'true' && steps.pip-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -918,10 +1119,10 @@ jobs:
 
   engine:
     runs-on: ubuntu-latest
-    # 90, not 60: its pytest step alone takes 40 minutes or more, and the job
-    # reached its 60-minute limit on three runs (T2.11); the real cut is the
-    # planned CI speed-up package.
-    timeout-minutes: 90
+    # 60 again (P2-T2.16-14, P2-T2.1o-1): it reached its 60-minute limit on
+    # two runs in Phase 2 (T2.11), and since T3.0's split, which runs the
+    # checking tools' tests apart, it takes about 16 minutes.
+    timeout-minutes: 60
     needs: [landing, native-wheel]
     # A real server for the PostgreSQL reads and the PostgreSQL sampler, which
     # only a PostgreSQL can say it accepts. SDM_REQUIRE_POSTGRES turns a
@@ -967,11 +1168,11 @@ jobs:
       # backends, which skip whole modules without them; pyyaml reads the
       # semantic-view fixtures, and `explain` carries the SDK the explanation
       # tests fake around. jsonschema validates the contract's cases and
-      # observations, which the root suite checks. pytest-timeout is for
+      # observations, which the root suite checks. pytest-timeout==2.4.0 is for
       # the root suite's --timeout; the client's test extra, installed
       # below, carries pytest-xdist.
       - run: |
-          pip install --upgrade pip 'ruff==0.16.*' pytest-timeout
+          pip install --upgrade pip 'ruff==0.16.*' pytest-timeout==2.4.0
           pip install -e './packages/structured-data-models-api' -e './packages/structured-data-models-pql' \
             -e './packages/structured-data-models-connectors[sqlite,duckdb,databricks,snowflake,postgres]' \
             pyyaml jsonschema
@@ -994,7 +1195,8 @@ jobs:
       # the test job would prove nothing.
       # The contract cases and the runner's controls (contract/tests) run
       # in contract-python, from T1.18. In parallel, as in the test job.
-      - run: python -m pytest tests -q -n auto --dist loadfile --timeout=600 --max-worker-restart=0
+      # The checking tools' own tests run in tooling (root) (T3.0).
+      - run: python -m pytest tests -q -m 'not tooling' -n auto --dist loadfile --timeout=600 --max-worker-restart=0
       - if: ${{ !cancelled() && env.SAVE_PIP_CACHES == 'true' && steps.pip-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -1019,9 +1221,10 @@ jobs:
     # 120: the job took 80 to 90 minutes on Phase 2's last candidates and
     # one run on T2.16's ran past 90 (T2.1o first raised it from 60); the
     # cause is carried into Phase 3 (P2-T2.16-14).
-    timeout-minutes: 120
-    needs: [native-wheel, native-test-ops]
+    timeout-minutes: 60
+    needs: [landing, native-wheel, native-test-ops]
     env:
+      SDM_PUSH_BASE: ${{ needs.landing.outputs.base }}
       CELL: ref-pandas3
       CELL_PINS: pandas==3.0.6 pyarrow==25.0.1 numpy==2.5.3
     steps:
@@ -1048,7 +1251,7 @@ jobs:
         run: |
           printf '%s\n' $CELL_PINS duckdb==1.5.6 > "$RUNNER_TEMP/cell.txt"
           pip install --upgrade pip
-          pip install -c "$RUNNER_TEMP/cell.txt" $CELL_PINS duckdb==1.5.6 pyyaml jsonschema pytest pytest-xdist pytest-timeout \
+          pip install -c "$RUNNER_TEMP/cell.txt" $CELL_PINS duckdb==1.5.6 pyyaml jsonschema pytest pytest-xdist pytest-timeout==2.4.0 \
             ./packages/structured-data-models-api ./packages/structured-data-models-pql \
             './packages/structured-data-models-connectors[duckdb,sqlite,postgres]' \
             ./packages/structured-data-models-relational-engine "$(ls native/*.whl)[test]"
@@ -1078,8 +1281,9 @@ jobs:
       # runner's memory holds one at a time. A test past 10 minutes fails
       # with its stack, and a worker that dies ends the run rather than
       # leaving xdist waiting on it.
+      # The checking tools' own tests run in tooling (contract) (T3.0).
       - name: The runner's controls and the route tests
-        run: python -m pytest contract/tests -q -n auto --dist loadfile --timeout=600 --max-worker-restart=0
+        run: python -m pytest contract/tests -q -m 'not tooling' -n auto --dist loadfile --timeout=600 --max-worker-restart=0
       # As in rust-test, whether the gate runs fails closed (T1.18); off
       # the phase branch, the candidate's own runners and comparator run.
       # Every cell gates, the floor's too (T1.18's own run alone reported
@@ -1142,6 +1346,78 @@ jobs:
           path: cross-host/python-core.jsonl
           if-no-files-found: error
 
+  # The checking tools' own tests (T3.0): every test carrying the
+  # tooling marker, the ones that copy the checkout into a temporary
+  # repository and rerun the gate, the ratchet or the comparator over the
+  # corpus, minutes a test (scripts/rust_core/tooling_tests.py, which
+  # fails on such a test without the marker). They run here once, on CI's
+  # one Python, and only when the landing job's plan says the change can
+  # reach them: a judging path (scripts/rust_core/judging-paths.txt), this
+  # workflow, or such a test or a module one loads. Every other test of
+  # contract/tests runs in contract-python (ref-pandas3), every other test
+  # of the root suite in test and engine. One job per suite, each in the
+  # environment the suite ran in before: contract-python's cell, and
+  # engine's (the engine, the native wheel, a PostgreSQL server).
+  tooling-contract:
+    name: tooling (contract)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    needs: [landing, native-wheel, native-test-ops]
+    if: needs.landing.outputs.skip != 'true' && needs.landing.outputs.tooling != 'false'
+    env:
+      CELL: ref-pandas3
+      CELL_PINS: pandas==3.0.6 pyarrow==25.0.1 numpy==2.5.3
+    steps:
+      - *contract-checkout
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - *contract-wheel
+      - *contract-install
+      - *contract-kit-wheel
+      - *contract-kit-python
+      - name: The checking tools' tests in contract/tests
+        run: python -m pytest contract/tests -q -m tooling -n auto --dist loadfile --timeout=600 --max-worker-restart=0
+
+  tooling-root:
+    name: tooling (root)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    needs: [landing, native-wheel]
+    if: needs.landing.outputs.skip != 'true' && needs.landing.outputs.tooling != 'false'
+    services:
+      postgres: *postgres-service
+    env:
+      SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
+      SDM_REQUIRE_POSTGRES: '1'
+    steps:
+      # Every branch, for the gate's real bootstrap on the real history
+      # (tests/test_t20_bootstrap.py).
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: native-wheel
+          path: native
+      # engine's install, with the native wheel's test extra.
+      - run: |
+          pip install --upgrade pip 'ruff==0.16.*' pytest-timeout==2.4.0
+          pip install -e './packages/structured-data-models-api' -e './packages/structured-data-models-pql' \
+            -e './packages/structured-data-models-connectors[sqlite,duckdb,databricks,snowflake,postgres]' \
+            pyyaml jsonschema
+          pip install -e './packages/structured-data-models-relational-engine[test,explain]'
+          pip install "$(ls native/*.whl)[test]"
+          echo "SDM_TEST_CORE_PYTHON=$(command -v python)" >> "$GITHUB_ENV"
+      # SDM_TEST_CORE_PYTHON: the interpreter holding the candidate's
+      # client, which the handoff's tests run the cases on
+      # (tests/test_t30_process.py).
+      - name: The checking tools' tests in tests/
+        run: python -m pytest tests -q -m tooling -n auto --dist loadfile --timeout=600 --max-worker-restart=0
+
   # The two core hosts on core fields (design, "Observations and
   # comparator"; T1.29): python-core's observations from
   # contract-python (ref-pandas3) and rust-host's from rust-test, compared
@@ -1163,6 +1439,8 @@ jobs:
     # are left out (E131), so it says so itself.
     needs: [landing, rust-test, contract-python-ref-pandas3]
     if: ${{ !cancelled() && needs.landing.outputs.skip != 'true' }}
+    env:
+      SDM_PUSH_BASE: ${{ needs.landing.outputs.base }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -1210,8 +1488,9 @@ jobs:
     name: contract-python (dbr17-pandas2, duckdb)
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    needs: native-wheel
+    needs: [landing, native-wheel]
     env:
+      SDM_PUSH_BASE: ${{ needs.landing.outputs.base }}
       CELL: dbr17-pandas2
       CELL_PINS: pandas==2.2.3 pyarrow==19.0.1 numpy==2.1.3
     steps:
@@ -1227,8 +1506,9 @@ jobs:
     name: contract-python (floor-pandas2.2, duckdb)
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    needs: native-wheel
+    needs: [landing, native-wheel]
     env:
+      SDM_PUSH_BASE: ${{ needs.landing.outputs.base }}
       CELL: floor-pandas2.2
       CELL_PINS: pandas==2.2.2 pyarrow==14.0.1 numpy==1.23.5
     steps:
@@ -1263,8 +1543,9 @@ jobs:
     name: contract-python (ref-pandas3, sqlite)
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    needs: [native-wheel, native-test-ops]
+    needs: [landing, native-wheel, native-test-ops]
     env:
+      SDM_PUSH_BASE: ${{ needs.landing.outputs.base }}
       CELL: ref-pandas3
       CELL_PINS: pandas==3.0.6 pyarrow==25.0.1 numpy==2.5.3
       DATABASE: sqlite
@@ -1351,6 +1632,7 @@ jobs:
     services:
       postgres: *postgres-service
     env:
+      SDM_PUSH_BASE: ${{ needs.landing.outputs.base }}
       CELL: ref-pandas3
       CELL_PINS: pandas==3.0.6 pyarrow==25.0.1 numpy==2.5.3
       DATABASE: postgres
@@ -1374,10 +1656,12 @@ jobs:
       # statement and joined row to the reference cell's. The provider's own
       # test needs the test-ops build, and runs in native-test-ops. T2.21's
       # exact-key vectors too: an unconstrained numeric keyed or linked by
-      # the caller, held to python-ref's catalog control on the service.
+      # the caller, held to python-ref's catalog control on the service; and
+      # T2.14c's numeric spellings, one number spelled two ways being one
+      # key (P2-T2.14c-1).
       - &contract-postgres-vectors
-        name: T2.3's Postgres regression and key vectors, and T2.21's exact-key vectors, on the service
-        run: python -m pytest contract/tests/test_t23_postgres_regressions.py contract/tests/test_t23_postgres_keys.py contract/tests/test_t221_exact_keys.py -q
+        name: T2.3's Postgres regression and key vectors, T2.21's exact-key vectors and T2.14c's numeric spellings, on the service
+        run: python -m pytest contract/tests/test_t23_postgres_regressions.py contract/tests/test_t23_postgres_keys.py contract/tests/test_t221_exact_keys.py contract/tests/test_t214c_numeric_spelling.py -q
       # T2.14b's Postgres JSON regressions (a document escaping a lone
       # surrogate kept as the reference keeps it), on the service, in the
       # reference cell (T2.14b fix 7).
@@ -1400,8 +1684,9 @@ jobs:
     name: contract-python (dbr17-pandas2, sqlite)
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: native-wheel
+    needs: [landing, native-wheel]
     env:
+      SDM_PUSH_BASE: ${{ needs.landing.outputs.base }}
       CELL: dbr17-pandas2
       CELL_PINS: pandas==2.2.3 pyarrow==19.0.1 numpy==2.1.3
       DATABASE: sqlite
@@ -1422,6 +1707,7 @@ jobs:
     services:
       postgres: *postgres-service
     env:
+      SDM_PUSH_BASE: ${{ needs.landing.outputs.base }}
       CELL: dbr17-pandas2
       CELL_PINS: pandas==2.2.3 pyarrow==19.0.1 numpy==2.1.3
       DATABASE: postgres
@@ -1442,8 +1728,9 @@ jobs:
     name: contract-python (floor-pandas2.2, sqlite)
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: native-wheel
+    needs: [landing, native-wheel]
     env:
+      SDM_PUSH_BASE: ${{ needs.landing.outputs.base }}
       CELL: floor-pandas2.2
       CELL_PINS: pandas==2.2.2 pyarrow==14.0.1 numpy==1.23.5
       DATABASE: sqlite
@@ -1464,6 +1751,7 @@ jobs:
     services:
       postgres: *postgres-service
     env:
+      SDM_PUSH_BASE: ${{ needs.landing.outputs.base }}
       CELL: floor-pandas2.2
       CELL_PINS: pandas==2.2.2 pyarrow==14.0.1 numpy==1.23.5
       DATABASE: postgres
@@ -1501,6 +1789,7 @@ jobs:
     needs: [landing, rust-test, contract-python-ref-pandas3-sqlite]
     if: ${{ !cancelled() && needs.landing.outputs.skip != 'true' }}
     env:
+      SDM_PUSH_BASE: ${{ needs.landing.outputs.base }}
       DATABASE: sqlite
     steps:
       - *contract-checkout
@@ -1562,6 +1851,7 @@ jobs:
     needs: [landing, rust-test, contract-python-ref-pandas3-postgres]
     if: ${{ !cancelled() && needs.landing.outputs.skip != 'true' }}
     env:
+      SDM_PUSH_BASE: ${{ needs.landing.outputs.base }}
       DATABASE: postgres
     steps:
       - *contract-checkout
@@ -1769,9 +2059,11 @@ jobs:
   engine-wheels:
     # Every job has a ceiling (tests/test_ci_workflow.py); main's job had
     # none. One engine build per interpreter, each platform and arch on its
-    # own runner.
+    # own runner. Not on a test author's branch (the landing job's plan,
+    # T3.0), nor the runtime cells after it.
     timeout-minutes: 60
-    needs: build
+    needs: [landing, build]
+    if: needs.landing.outputs.skip != 'true' && needs.landing.outputs.full != 'false'
     strategy:
       fail-fast: false
       matrix:
@@ -1874,12 +2166,16 @@ jobs:
       # published distribution of the same version from the index instead
       # (it took the published connectors, whose duckdb extra admits 2.0;
       # T2.16), so the job would test that rather than the candidate.
-      - run: |
+      - &legacy-client-install
+        env:
+          CMAKE_BUILD_PARALLEL_LEVEL: '2'
+        run: |
           pip install --upgrade pip pytest requests-mock
           VERSION=$(cat dist/VERSION)
           pip install --no-deps "$GITHUB_WORKSPACE"/dist/*.whl
           pip install --find-links "$GITHUB_WORKSPACE/dist" \
-            "structured-data-models-client[sqlite,duckdb]==$VERSION"
+            "$GITHUB_WORKSPACE/packages/structured-data-models-relational-engine" \
+            "structured-data-models-client[test,relational,sqlite,duckdb,snowflake]==$VERSION"
       - name: The installed distribution is what gets imported, and it is typed
         working-directory: /tmp
         run: |
@@ -1910,6 +2206,33 @@ jobs:
       - working-directory: /tmp
         run: |
           python -m pytest "$GITHUB_WORKSPACE/packages/structured-data-models-client/tests" -q \
+            -m 'not live_nim and not live_warehouse' -p no:cacheprovider
+
+  # The client's suite with every route forced onto the core (the Phase 2
+  # flip dry run), nightly only: the owner's "2026-10-23 early: nightly
+  # forced-route run". SDM_CORE_ROUTES names every path the build routes
+  # onto the core (_routing.CORE_ROUTED); the watchdog names its failing
+  # tests in a fix item.
+  forced-routes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: build
+    if: github.event_name == 'workflow_dispatch' && inputs.fresh
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: wheels
+          path: dist
+      - *legacy-client-install
+      - working-directory: /tmp
+        run: |
+          SDM_CORE_ROUTES=$(python -c 'from sdm_client._routing import CORE_ROUTED; print(",".join(sorted(CORE_ROUTED)))')
+          export SDM_CORE_ROUTES
+          python -m pytest "$GITHUB_WORKSPACE/packages/structured-data-models-client/tests" -q -rf \
             -m 'not live_nim and not live_warehouse' -p no:cacheprovider
 
   # The install on each promised Databricks runtime's own packages
@@ -2027,8 +2350,8 @@ jobs:
           # What the client's tests read their tables through, as
           # installed-wheel has it, NumPy kept.
           keep_numpy="numpy==$(python -c 'import numpy; print(numpy.__version__)')"
-          pip install --quiet --only-binary=:all: pytest requests-mock \
-            "structured-data-models-client[sqlite,duckdb]" $keep_numpy
+          pip install --quiet --only-binary=:all: pytest requests-mock jsonschema \
+            "structured-data-models-client[sqlite,duckdb,snowflake]" $keep_numpy
           python -m pytest rust/bindings/sdm-py/tests/test_binding.py -q \
             -p no:cacheprovider --native-build production
           cd /tmp
@@ -2065,3 +2388,477 @@ jobs:
         with:
           name: sbom
           path: dist/sbom.cyclonedx.json
+
+  # The timing guard (T3.0): every job's time in this run, recorded in the
+  # ci-timing artifact, and each job held to its time limit over its last
+  # three runs on the Rust core's branches: a job over 80% of its
+  # timeout-minutes on two of them is named, as an error annotation and in
+  # a fix item the orchestrator's heartbeat pulls
+  # (scripts/rust_core/orchestration/ci_timing.py, run there to fetch the
+  # newest items); no issue is
+  # opened. It needs every other job, so it runs last
+  # (tests/test_ci_workflow.py holds it to that). A named job does not fail
+  # the run, so no candidate is refused for a time limit (the owner: no
+  # hard budgets); the guard's own failure (status 2) does, and an API that
+  # does not answer judges nothing.
+  # The Java library (T3.11, design choice 10). Its macOS natives: sdm-jni
+  # on the runners the engine wheels use; Linux's are built beside the
+  # client's wheels, in native-wheel and native-wheel-aarch64. Not on a
+  # test author's branch (the landing job's plan, T3.0).
+  java-native:
+    name: java-native (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    needs: landing
+    if: needs.landing.outputs.skip != 'true' && needs.landing.outputs.full != 'false'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-aarch64
+            runner: macos-15
+          # x86_64 macOS ends with the macOS 15 image in autumn 2027, as the
+          # engine wheels' row does.
+          - platform: macos-x86_64
+            runner: macos-15-intel
+    # A Java job: the Java tests fail rather than pass without what they
+    # need (T3.11's gate).
+    env:
+      SDM_REQUIRE_JAVA: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: rustup toolchain install
+        working-directory: rust
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: rust
+          key: java-${{ matrix.platform }}
+          save-if: ${{ env.SAVE_CACHES == 'true' }}
+      - name: Build sdm-jni
+        working-directory: rust
+        run: cargo build --release --locked -p sdm-jni
+      - name: The Java binding, by platform
+        run: |
+          mkdir -p "java-natives/${{ matrix.platform }}"
+          cp rust/target/release/libsdm_jni.dylib "java-natives/${{ matrix.platform }}/"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: java-native-${{ matrix.platform }}
+          path: java-natives/
+
+  # The one JAR, with every platform's native (the all-natives profile
+  # refuses a JAR missing one), and its runtime dependencies beside it.
+  java-jar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [landing, native-wheel, native-wheel-aarch64, java-native]
+    if: needs.landing.outputs.skip != 'true' && needs.landing.outputs.full != 'false'
+    env:
+      SDM_REQUIRE_JAVA: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: java-native-*
+          path: java/target/natives
+          merge-multiple: true
+      - name: Build the JAR
+        run: mvn -B -f java/pom.xml -Pall-natives -DskipTests package
+      - name: The JAR holds every platform's native
+        run: |
+          listed=$(unzip -Z1 java/target/structured-data-models-client-1.0.0.jar)
+          for native in linux-x86_64/libsdm_jni.so linux-aarch64/libsdm_jni.so \
+                        macos-aarch64/libsdm_jni.dylib macos-x86_64/libsdm_jni.dylib; do
+            grep -qx "com/nvidia/sdm/native/$native" <<<"$listed" \
+              || { echo "::error::the JAR holds no $native"; exit 1; }
+          done
+      # The JAR, its runtime dependencies, the JDBC drivers the Java legs
+      # open their databases with (T3.12), and the JAR-load test's program,
+      # so the load jobs need no checkout.
+      - name: The JAR's artifact
+        run: |
+          mkdir -p java-jar
+          cp java/target/structured-data-models-client-1.0.0.jar java/jar-load/JarLoad.java java-jar/
+          cp -R java/target/lib java-jar/lib
+          cp -R java/target/jdbc java-jar/jdbc
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: java-jar
+          path: java-jar/
+
+  # Every Java test (mvn verify, with the runtime flags) on JDK 17 and 21,
+  # loading the native with the test-only operations: the binding's
+  # lifetimes, Arrow both ways, the panic test in a subprocess JVM; from
+  # T3.12 the S1 API on DuckDB, SQLite and the pinned Postgres service,
+  # required (H26).
+  java-test:
+    name: java-test (${{ matrix.jdk }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [landing, native-test-ops]
+    if: needs.landing.outputs.skip != 'true' && needs.landing.outputs.full != 'false'
+    services:
+      postgres: *postgres-service
+    strategy:
+      fail-fast: false
+      matrix:
+        jdk: ['17', '21']
+    env:
+      SDM_REQUIRE_JAVA: '1'
+      SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
+      SDM_REQUIRE_POSTGRES: '1'
+      # The coverage check's own tests run real Maven, offline, from the
+      # local repository the Java tests' build filled.
+      SDM_MAVEN: mvn
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.jdk }}
+          cache: maven
+      # Packaged as the JAR packages its natives, so the tests' own JVMs
+      # load it as a user's would.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: java-test-ops-native
+          path: java/target/natives/linux-x86_64
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      # The Java tests, run by the coverage check, which owns the run: it
+      # empties the Surefire reports directory, runs Maven's verify, and
+      # holds each JUnit test the Java manifest names as a path's (tests:) to
+      # the reports that run left, run and not skipped (coverage rule 4's
+      # Java half).
+      - name: The Java tests, and the Java manifest's tests held to their run
+        run: |
+          pip install --quiet pyyaml pytest
+          python scripts/rust_core/coverage.py --junit-run
+      - name: The coverage check's own Java run, tested
+        run: python -m pytest -q -p no:cacheprovider tests/test_t312_junit_coverage.py
+
+  # The JAR-load test (exit 4 of T3.11, locked check 14): the JAR and its
+  # runtime dependencies alone, on each JDK and platform the JAR promises,
+  # where no Rust toolchain is: in a clean JDK container on Linux
+  # (Microsoft's build of OpenJDK, pinned by digest, pulled anonymously
+  # from MCR, which sets no anonymous pull limit), and on the runner on
+  # macOS, which runs no containers, with no Rust step.
+  java-load:
+    name: java-load (${{ matrix.jdk }}, ${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    needs: [landing, java-jar]
+    if: needs.landing.outputs.skip != 'true' && needs.landing.outputs.full != 'false'
+    container: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - jdk: '17'
+            platform: linux-x86_64
+            runner: ubuntu-latest
+            image: mcr.microsoft.com/openjdk/jdk:17-ubuntu@sha256:fadd15520f396beb223d4d2951fff9199b019f1b1304edfb9feca603f0f3f7ee
+          - jdk: '21'
+            platform: linux-x86_64
+            runner: ubuntu-latest
+            image: mcr.microsoft.com/openjdk/jdk:21-ubuntu@sha256:08c68d2c69d56f1e8096c66136799d33c19bcb5a3b285be9055cd9a432a922c1
+          # The same image index: the runner pulls its arm64 image.
+          - jdk: '21'
+            platform: linux-aarch64
+            runner: ubuntu-24.04-arm
+            image: mcr.microsoft.com/openjdk/jdk:21-ubuntu@sha256:08c68d2c69d56f1e8096c66136799d33c19bcb5a3b285be9055cd9a432a922c1
+          - jdk: '21'
+            platform: macos-arm64
+            runner: macos-15
+            image: ''
+          - jdk: '21'
+            platform: macos-x86_64
+            runner: macos-15-intel
+            image: ''
+    env:
+      FLAGS: --enable-native-access=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED
+      SDM_REQUIRE_JAVA: '1'
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: java-jar
+          path: jar
+      - if: runner.os == 'macOS'
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.jdk }}
+      - name: The JAR loads
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = Linux ] && command -v rustc >/dev/null; then
+            echo "::error::a Rust toolchain is in the container"; exit 1
+          fi
+          java -version
+          java $FLAGS -cp "jar/structured-data-models-client-1.0.0.jar:jar/lib/*" jar/JarLoad.java
+
+  # Java's legs of the contract cases, on each JDK and platform the JAR
+  # promises (locked check 14): every S0 case on the Java host, judged
+  # against the old client's recorded answers, then T3.11's acceptance
+  # tests. No S1 or S2 Java leg runs yet: the Java host has no provider
+  # (run_java.py).
+  java:
+    name: java (${{ matrix.jdk }}, ${{ matrix.platform }}, s0)
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    needs: [landing, java-jar]
+    if: needs.landing.outputs.skip != 'true' && needs.landing.outputs.full != 'false'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - jdk: '17'
+            platform: linux-x86_64
+            runner: ubuntu-latest
+          - jdk: '21'
+            platform: linux-x86_64
+            runner: ubuntu-latest
+          - jdk: '21'
+            platform: linux-aarch64
+            runner: ubuntu-24.04-arm
+          - jdk: '21'
+            platform: macos-arm64
+            runner: macos-15
+          - jdk: '21'
+            platform: macos-x86_64
+            runner: macos-15-intel
+    env:
+      SDM_PUSH_BASE: ${{ needs.landing.outputs.base }}
+      FLAGS: --enable-native-access=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED
+      SDM_REQUIRE_JAVA: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: java-jar
+          path: jar
+          # The pinned action's REST client retries failed network requests
+          # up to five times, without retrying the Java steps below.
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ github.run_id }}
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.jdk }}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - name: The S0 cases on the Java host
+        run: |
+          pip install pytest pyyaml jsonschema
+          python contract/runners/run_java.py --jar jar/structured-data-models-client-1.0.0.jar \
+            --classpath jar/lib --out java.jsonl contract/cases/s0
+      - name: compare (java)
+        run: |
+          where=$(python scripts/rust_core/ratchet.py where) || { echo 'java: ratchet.py where failed'; exit 1; }
+          expect=()
+          if [ -n "$where" ]; then
+            python scripts/rust_core/ratchet.py effective $where --out effective.json || exit 1
+            expect=(--expect effective.json)
+          fi
+          # The reference's lines of the cases Java ran: the Java lines are judged
+          # on their own, so a difference only Java shows fails this job (exit 2).
+          python - <<'EOF'
+          import glob, json
+          ran = {json.loads(line)['case'] for line in open('java.jsonl')}
+          (reference,) = glob.glob('contract/reference/*.jsonl')
+          with open('java-reference.jsonl', 'w') as out:
+              out.writelines(
+                  line for line in open(reference) if json.loads(line)['case'] in ran
+              )
+          EOF
+          python scripts/rust_core/compare.py --cases contract/cases/s0 \
+            --reference java-reference.jsonl ${expect[@]+"${expect[@]}"} \
+            --register docs/design/rust-core/register.yaml java.jsonl
+      # T3.11's acceptance tests on this JDK and platform: the S0 cases, the
+      # JAR on this JDK in a clean environment, Java 17 bytecode, and every
+      # platform's native in the JAR.
+      - name: The Java host's acceptance tests
+        env:
+          SDM_JAVA_JAR: jar/structured-data-models-client-1.0.0.jar
+          SDM_JAVA_JAR_PLATFORMS: linux-x86_64,linux-aarch64,macos-arm64,macos-x86_64
+        run: python -m pytest -q -p no:cacheprovider contract/tests/test_t311_java.py
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: observations-java-${{ matrix.jdk }}-${{ matrix.platform }}
+          path: java.jsonl
+          if-no-files-found: warn
+
+  # Java S1 (T3.12): every S1 case on Java's paths through the Java host's
+  # JDBC providers on DuckDB, SQLite and the pinned Postgres service, on
+  # Linux, where the client wheel the runner's capture reads with is built;
+  # its lines judged on their own against the reference with the effective
+  # expectations, so a difference only Java shows fails the job. The
+  # Postgres legs run L5 for Java beside it (x86_64 has the test-ops build
+  # the test-only fetch needs).
+  java-db:
+    name: java (${{ matrix.jdk }}, ${{ matrix.platform }}, ${{ matrix.database }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    needs: [landing, java-jar, native-wheel, native-wheel-aarch64, native-test-ops]
+    if: needs.landing.outputs.skip != 'true' && needs.landing.outputs.full != 'false'
+    services:
+      postgres: *postgres-service
+    strategy:
+      fail-fast: false
+      matrix:
+        jdk: ['17', '21']
+        platform: [linux-x86_64]
+        runner: [ubuntu-latest]
+        wheel: [native-wheel]
+        database: [duckdb, sqlite, postgres]
+        include:
+          - jdk: '21'
+            platform: linux-aarch64
+            runner: ubuntu-24.04-arm
+            wheel: native-wheel-aarch64
+            database: duckdb
+          - jdk: '21'
+            platform: linux-aarch64
+            runner: ubuntu-24.04-arm
+            wheel: native-wheel-aarch64
+            database: sqlite
+          - jdk: '21'
+            platform: linux-aarch64
+            runner: ubuntu-24.04-arm
+            wheel: native-wheel-aarch64
+            database: postgres
+    env:
+      SDM_PUSH_BASE: ${{ needs.landing.outputs.base }}
+      CELL_PINS: pandas==3.0.6 pyarrow==25.0.1 numpy==2.5.3
+      DATABASE: ${{ matrix.database }}
+      SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
+      SDM_REQUIRE_JAVA: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: java-jar
+          path: jar
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ matrix.wheel }}
+          path: native
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.jdk }}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      # The reference cell's pins, DuckDB at the reference's version and
+      # the drivers the contract loader writes SQLite and Postgres with:
+      # what the runner's capture and the loader read with, never what the
+      # Java host reads with (its JDBC drivers, in the JAR's artifact).
+      - name: Install the runner's environment
+        run: |
+          printf '%s\n' $CELL_PINS duckdb==1.5.6 > "$RUNNER_TEMP/cell.txt"
+          pip install --upgrade pip
+          pip install -c "$RUNNER_TEMP/cell.txt" $CELL_PINS duckdb==1.5.6 pyyaml jsonschema pytest \
+            ./packages/structured-data-models-api ./packages/structured-data-models-pql \
+            './packages/structured-data-models-connectors[duckdb,sqlite,postgres]' "$(ls native/*.whl)"
+      - name: The S1 cases on the Java host
+        run: |
+          python contract/runners/run_java.py --database "$DATABASE" \
+            --jar jar/structured-data-models-client-1.0.0.jar --classpath jar/lib --drivers jar/jdbc \
+            --out java.jsonl contract/cases/s1
+      - name: compare (java)
+        run: |
+          where=$(python scripts/rust_core/ratchet.py where) || { echo 'java: ratchet.py where failed'; exit 1; }
+          expect=()
+          if [ -n "$where" ]; then
+            python scripts/rust_core/ratchet.py effective $where --out effective.json || exit 1
+            expect=(--expect effective.json)
+          fi
+          # The reference's lines, and the case files, of the cases Java ran
+          # on this database (a case off Java's paths has no Java leg).
+          python - <<'EOF'
+          import glob, json, os, shutil
+          ran = {json.loads(line)['case'] for line in open('java.jsonl')}
+          (reference,) = glob.glob('contract/reference/*.jsonl')
+          with open('java-reference.jsonl', 'w') as out:
+              out.writelines(
+                  line for line in open(reference) if json.loads(line)['case'] in ran
+              )
+          os.makedirs('java-cases')
+          database = os.environ['DATABASE']
+          for path in glob.glob('contract/cases/s1/*.json'):
+              case = json.load(open(path))['id']
+              if (case if database == 'duckdb' else f'{case}@{database}') in ran:
+                  shutil.copy(path, 'java-cases/')
+          EOF
+          python scripts/rust_core/compare.py --cases java-cases --database "$DATABASE" \
+            --reference java-reference.jsonl ${expect[@]+"${expect[@]}"} \
+            --register docs/design/rust-core/register.yaml java.jsonl
+      - if: matrix.database == 'postgres' && matrix.platform == 'linux-x86_64'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: native-wheel-test-ops
+          path: native-test-ops
+      - if: matrix.database == 'postgres' && matrix.platform == 'linux-x86_64'
+        name: L5 for Java and the drivers' parity with Python's, on the service
+        env:
+          SDM_REQUIRE_POSTGRES: '1'
+          SDM_REQUIRE_JAVA: '1'
+          # Absolute: the step runs pytest from the package's directory.
+          SDM_JAVA_JAR: ${{ github.workspace }}/jar/structured-data-models-client-1.0.0.jar
+        run: |
+          python -m venv --system-site-packages "$RUNNER_TEMP/kit"
+          "$RUNNER_TEMP/kit/bin/pip" install --quiet --no-deps --ignore-installed "$(ls native-test-ops/*.whl)"
+          cd packages/structured-data-models-client
+          "$RUNNER_TEMP/kit/bin/python" -m pytest -q -p no:cacheprovider tests_test_ops/test_l5_java.py tests_test_ops/test_t312_driver_parity.py
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: observations-java-${{ matrix.jdk }}-${{ matrix.platform }}-${{ matrix.database }}
+          path: java.jsonl
+          if-no-files-found: warn
+
+  timing-guard:
+    name: timing guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [landing, lint, hygiene, rust-lint, rust-deny, rust-test, native-wheel, native-test-ops, native-wheel-aarch64, binding, wheel-smoke, wheel-smoke-aarch64, typecheck, test, engine, contract-python-ref-pandas3, tooling-contract, tooling-root, cross-host, contract-python-dbr17-pandas2, contract-python-floor-pandas2-2, contract-python-ref-pandas3-sqlite, contract-python-ref-pandas3-postgres, contract-python-dbr17-pandas2-sqlite, contract-python-dbr17-pandas2-postgres, contract-python-floor-pandas2-2-sqlite, contract-python-floor-pandas2-2-postgres, cross-host-sqlite, cross-host-postgres, l4-goldens, l5-conversion, build, engine-wheels, installed-wheel, runtime-install, sbom, java-native, java-jar, java-test, java-load, java, java-db]
+    if: ${{ !cancelled() && needs.landing.outputs.skip != 'true' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - name: Every job within its time limit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          pip install pyyaml
+          status=0
+          python scripts/rust_core/orchestration/ci_timing.py --run "$GITHUB_RUN_ID" --out ci-timing || status=$?
+          if [ "$status" = 1 ]; then
+            cat ci-timing/ci-timing-*.md >> "$GITHUB_STEP_SUMMARY"
+            echo 'timing guard: a job is near its limit, named above and in the fix item; the run is not failed for it'
+          elif [ "$status" != 0 ]; then
+            exit "$status"
+          fi
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ci-timing
+          path: ci-timing
+          if-no-files-found: warn
+          retention-days: 30

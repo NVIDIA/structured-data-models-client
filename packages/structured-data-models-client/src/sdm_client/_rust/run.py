@@ -12,7 +12,7 @@ cache, so a change to the ``logging`` configuration takes effect
 (decision H8).
 
 A provider's failure reaches the core as the contract's ``ProviderError``:
-kind, ``retryable``, SQLSTATE and vendor code, never the driver's text; the
+kind, ``retryable``, SQLSTATE, vendor code and an internal driver diagnostic; the
 exception the run then ends with names the driver's class and is raised
 ``from None`` (decision H17). A failure is retryable when the provider's
 exception says so, by a ``retryable`` attribute that is ``True``, and not
@@ -31,24 +31,34 @@ the client's transport failed (the endpoint could not be reached, or its
 answer could not be read), which the core is told as the contract's
 transport error (kind and ``retryable`` only, never the transport's text);
 anything else it raises (the endpoint's refusal, which the caller has made
-safe to show) cancels the run and is raised as it is.
+safe to show) cancels the run and is raised as it is. A serving endpoint's
+transport raises :class:`~sdm_client.core.transport.EndpointFailed` for a
+failure with no answer, which the core is told as it is (the contract's
+failed outcome: the status, the SDK's message as an attachment, its code
+and class), and names (T3.13).
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from types import ModuleType
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    # Named for annotations only: the warehouse package is an optional
+    # dependency, and a core route over frames needs none of it.
+    from sdm_connectors.providers import Provider
 
 from sdm_client._routing import RouteError
 from sdm_client._rust import codec, errors, facts
+from sdm_client.core.transport import EndpointFailed
 from sdm_client.errors import StructuredDataError
 
-#: A provider: answers one fetch, the ``FetchStep`` as the contract writes
-#: it, with an object that exports Arrow through ``__arrow_c_stream__``, or
-#: with a :class:`Page` of it; the key sets its plan names are handed over
-#: with it, by attachment id, each an object exporting Arrow the same way.
-Provider = Callable[[dict[str, Any], Mapping[int, Any]], Any]
+# A provider (``sdm_connectors.providers.Provider``) answers one fetch, the
+# ``FetchStep`` as the contract writes it, with an object that exports Arrow
+# through ``__arrow_c_stream__``, or with a :class:`Page` of it; the key
+# sets its plan names are handed over with it, by attachment id, each an
+# object exporting Arrow the same way.
 
 #: A model: answers one call, given its body's bytes, with the bytes of the
 #: endpoint's answer.
@@ -108,11 +118,18 @@ def native() -> ModuleType:
     return _native
 
 
-def _driver(error: Exception) -> tuple[dict[str, Any], str]:
+def _driver(
+    error: Exception, provider: Any = None
+) -> tuple[dict[str, Any], str]:
     r"""A driver's exception as the contract's ``ProviderError``, and its class.
 
     Only the SQLSTATE and the vendor code are kept, as text, from the
-    attributes drivers put them in; the driver's message is not.
+    attributes drivers put them in, and what ``provider`` reads of the
+    failure where it reads one (its ``error_fields``, the
+    :class:`~sdm_connectors.providers.Provider` protocol's hook: a
+    Databricks failure's SQLSTATE its message writes and its error class);
+    the driver's message is passed through unread as an internal diagnostic;
+    only the core interprets it, and never echoes it into public errors.
     """
     sqlstate = next(
         (
@@ -137,7 +154,15 @@ def _driver(error: Exception) -> tuple[dict[str, Any], str]:
         'retryable': getattr(error, 'retryable', False) is True,
         'sqlstate': sqlstate,
         'vendor_code': vendor,
+        'driver_message': str(error),
     }
+    # What the provider reads of its driver's failure beyond the attributes
+    # above (a Databricks failure's SQLSTATE in its message, T3.4, and its
+    # error class, T3.27), as the reference reads them.
+    read = getattr(provider, 'error_fields', None)
+    said = read(error) if callable(read) else None
+    if said is not None:
+        provided.update(said)
     return provided, f'{kind.__module__}.{kind.__qualname__}'
 
 
@@ -163,17 +188,14 @@ def run(
     given: set[str] | None = None,
     kept: list[dict[str, Any]] | None = None,
     state: dict[str, Any] | None = None,
-    words: Mapping[str, Callable[[dict[str, Any]], str]] | None = None,
 ) -> Finished:
     r"""Runs ``operation`` to its result, with the attachments its fields name.
+
 
     A warning whose code ``quiet`` names is not shown: the caller has shown
     it already, or decides once the run ends whether to show it, from
     ``kept``, which then receives it (``errors.warn_held``). ``given``
     collects the code of every warning the run gave, shown or not.
-    ``words`` says the warnings of the codes it names, from their fields,
-    in place of :mod:`.errors`' table: the caller's words for a warning
-    naming what only it holds, as a ranking's candidates by position (T2.8).
 
     ``state``, for a ``materialize``, is where its materializer keeps the
     sampler state (decision E52): the state held there (``'held'``) is
@@ -199,7 +221,7 @@ def run(
         {
             'message': 'start',
             'contract': core.CONTRACT_VERSION,
-            'facts': facts.host_facts(core.is_posix_zone),
+            'facts': facts.host_facts(core),
             'operation': operation,
         }
     )
@@ -212,7 +234,7 @@ def run(
             state.pop('held', None)
         errors.raise_from_core(refused.control, refused.attachments)
     try:
-        return _steps(core, handle, provider, model, quiet, given, kept, words)
+        return _steps(core, handle, provider, model, quiet, given, kept)
     finally:
         if state is not None:
             _keep(core, handle, state)
@@ -257,7 +279,6 @@ def _steps(
     quiet: frozenset[str],
     given: set[str] | None,
     kept: list[dict[str, Any]] | None = None,
-    words: Mapping[str, Callable[[dict[str, Any]], str]] | None = None,
 ) -> Finished:
     r"""The run's steps, each answered, to its result."""
     driver_class: str | None = None
@@ -267,7 +288,7 @@ def _steps(
         try:
             control, sent = handle.next()
         except core.CoreError as failed:
-            _warn(handle, quiet, given, kept, words)
+            _warn(handle, quiet, given, kept)
             error = errors.error_from_core(
                 failed.control, failed.attachments, driver_class=driver_class
             )
@@ -281,7 +302,7 @@ def _steps(
                 _of_the_part(error, refused.raised)
                 raise refused.raised
             raise error from None
-        _warn(handle, quiet, given, kept, words)
+        _warn(handle, quiet, given, kept)
         step = codec.read(control, sent)
         if step['message'] != 'step':
             raise StructuredDataError(
@@ -327,7 +348,7 @@ def _steps(
                 handle.cancel()
                 raise
             except Exception as failure:  # noqa: BLE001 - the provider's
-                provided, driver_class = _driver(failure)
+                provided, driver_class = _driver(failure, provider)
                 outcome = {'outcome': 'error', 'error': provided}
             reply = codec.encode(
                 {
@@ -366,6 +387,15 @@ def _call(
         answer = model(body)
     except TransportFailed:
         outcome: dict[str, Any] = transport_error
+    except EndpointFailed as failed:
+        said: dict[str, Any] = {'status': failed.status}
+        if failed.detail:
+            attached[1] = failed.detail.encode('utf-8', 'surrogatepass')
+            said['detail'] = 1
+        if failed.provider_code is not None:
+            said['provider_code'] = failed.provider_code
+        said['provider_error'] = failed.provider_error
+        outcome = {'outcome': 'failed', 'answer': said}
     except Refused as failed:
         refused = failed
         status = failed.status
@@ -467,15 +497,20 @@ def _of_the_part(error: StructuredDataError, raised: Exception) -> None:
 
 def _key_sets(handle: Any, request: dict[str, Any]) -> dict[int, Any]:
     r"""The key sets ``request``'s plan names, taken from the run by id: the
-    attachments the core sent with the step (decision Q1)."""
+    attachments the core sent with the step (decision Q1), each a key set's
+    Arrow or the one text its dialect wrote of it (T3.28)."""
     plan = request['plan']
     taken: dict[int, Any] = {}
     for statement in plan.get('statements', ()):
         for param in statement['params']:
             if param['param'] == 'key_set':
                 attachment = param['keys']['attachment']
-                if attachment not in taken:
-                    taken[attachment] = handle.take_attachment(attachment)
+            elif param['param'] == 'text':
+                attachment = param['attachment']
+            else:
+                continue
+            if attachment not in taken:
+                taken[attachment] = handle.take_attachment(attachment)
     return taken
 
 
@@ -484,11 +519,10 @@ def _warn(
     quiet: frozenset[str],
     given: set[str] | None,
     kept: list[dict[str, Any]] | None = None,
-    words: Mapping[str, Callable[[dict[str, Any]], str]] | None = None,
 ) -> None:
     taken = handle.take_warnings()
     if taken is not None:
         control, sent = taken
         errors.warn_from_core(
-            control, sent, quiet=quiet, given=given, held=kept, words=words
+            control, sent, quiet=quiet, given=given, held=kept
         )

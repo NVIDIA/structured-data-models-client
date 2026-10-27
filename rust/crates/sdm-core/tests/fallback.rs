@@ -85,6 +85,15 @@ fn limits(max_rows: u64, max_bytes: u64) -> FallbackLimits {
 fn host(optional: &[OptionalRequest], fallback: Option<FallbackLimits>) -> ProviderChoice {
     ProviderChoice::Host {
         capabilities: ProviderCapabilities {
+            opaque_vendor: None,
+            compares_stored_times: false,
+            samples_by_key_dtype: false,
+            reads_nan_as_missing: false,
+            derived_relations: false,
+            neighbor_lookback: false,
+            keys_optional: false,
+            key_enforcement: false,
+            sample_rows: false,
             optional: optional.iter().copied().collect::<BTreeSet<_>>(),
             max_keys_per_request: None,
             max_seed: u64::MAX,
@@ -136,6 +145,7 @@ fn run_with(
                     Ok(OperationResult::ValidateQuery(QueryValidation {
                         accepted: true,
                         diagnostics: vec![],
+                        query: None,
                     }))
                 }
                 Reply::Fetch(FetchResult::Error(error)) => Err(CoreError::provider(&error)),
@@ -289,6 +299,7 @@ fn neighbors(window: bool, per_seed: Option<u64>, seeds: &RecordBatch) -> DataRe
         columns: vec!["v".into(), "at".into()],
         seeds: key_set(seeds),
         window: window.then(|| Window {
+            source_type: None,
             column: "at".into(),
             lower: None,
             upper: Some(SeedBound {
@@ -296,7 +307,7 @@ fn neighbors(window: bool, per_seed: Option<u64>, seeds: &RecordBatch) -> DataRe
                 inclusive: true,
             }),
         }),
-        per_seed,
+        per_seed: per_seed.map(Into::into),
         order: per_seed.map(|_| {
             TieBreak(vec![TieTerm {
                 column: "at".into(),
@@ -426,11 +437,13 @@ fn key_counts_count_rows_distinct_keys_and_rows_missing_one() {
     let request = DataRequest::KeyCounts {
         keys: vec![
             TableKey {
+                unique: false,
                 table: "events".into(),
                 columns: vec!["user".into()],
                 label: None,
             },
             TableKey {
+                unique: false,
                 table: "events".into(),
                 columns: vec!["user".into(), "v".into()],
                 label: None,
@@ -550,6 +563,7 @@ fn a_count_reads_the_rows_its_filters_keep() {
 
 fn sample(n: u64, seed: u64) -> DataRequest {
     DataRequest::SampleEntities {
+        rows: None,
         table: "events".into(),
         key: vec!["user".into()],
         n,
@@ -677,6 +691,8 @@ fn a_scan_the_provider_fails_is_the_requests_failure() {
         None,
         |_| {
             FetchResult::Error(ProviderError {
+                error_class: None,
+                driver_message: None,
                 kind: ErrorKind::DataSource,
                 retryable: true,
                 sqlstate: Some("08006".into()),
@@ -722,4 +738,37 @@ fn a_declared_request_is_the_providers_and_none_undeclared_without_limits() {
     assert_eq!(error.code, ErrorCode::UnsupportedRequest);
     assert_eq!(field(error, "rule"), None);
     assert!(ran.asked.is_empty());
+}
+
+#[test]
+fn portable_neighbors_keep_signed_bounds_and_refuse_sql_code_explicitly() {
+    use sdm_contract::data::NeighborLimit;
+    let seeds = seeds(&[Some(1)], &[100]);
+    let mut request = neighbors(true, Some(1), &seeds);
+    let DataRequest::Neighbors { per_seed, .. } = &mut request else {
+        unreachable!()
+    };
+    *per_seed = Some(NeighborLimit::Negative {
+        value: sdm_contract::data::NegativeNeighborBound::new("-1".into()).unwrap(),
+    });
+    let negative = fallback(request, Some(seeds.clone()));
+    assert_eq!(negative.answer.unwrap().num_rows(), 0);
+    assert_eq!(negative.asked.len(), 1, "the ordinary scan still runs");
+    let mut request = neighbors(true, Some(1), &seeds);
+    let DataRequest::Neighbors { per_seed, .. } = &mut request else {
+        unreachable!()
+    };
+    *per_seed = Some(NeighborLimit::Expression {
+        text: "3 OR TRUE".into(),
+    });
+    let expression = fallback(request, Some(seeds));
+    assert_eq!(refusal(&expression).code, ErrorCode::UnsupportedRequest);
+    assert_eq!(
+        field(refusal(&expression), "field"),
+        Some(&Detail::text("per_seed"))
+    );
+    assert!(
+        expression.asked.is_empty(),
+        "SQL code is not guessed from source rows"
+    );
 }

@@ -40,6 +40,11 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
+import pytest
+
+# Gate tooling (T3.0): CI runs it in the tooling jobs, not in every matrix job.
+pytestmark = pytest.mark.tooling
+
 ROOT = Path(__file__).resolve().parents[1]
 
 

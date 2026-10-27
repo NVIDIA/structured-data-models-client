@@ -499,7 +499,10 @@ def test_every_job_is_left_out_when_the_landing_job_says_skip() -> None:
     jobs = _workflow()['jobs']
     assert 'landing' in jobs and not _needs(jobs['landing'])
     left_out: set[str] = set()
-    pending = [name for name in jobs if name != 'landing']
+    # The nightly dispatch runs on the schedule alone, whose landing job
+    # says skip (the owner's "2026-10-22 evening: CI off the landing path").
+    assert jobs['nightly']['if'] == "github.event_name == 'schedule'"
+    pending = [name for name in jobs if name not in ('landing', 'nightly')]
     while pending:
         progressed = False
         for name in list(pending):
@@ -522,16 +525,22 @@ def test_every_job_is_left_out_when_the_landing_job_says_skip() -> None:
 
 
 #: The longest a job may run, in minutes: rust-test took 80.7 at most
-#: (fix round 1, P2-5); the landing job, which every other job waits on,
-#: does no more than read a few commits; the client test matrix and the
-#: ref-pandas3 DuckDB route tests reached 57 to 60 minutes as Phase 2's
-#: corpus grew (T2.1o).
+#: (fix round 1, P2-5), about 31 now that its dependencies build at
+#: opt-level 1 (a cold build more), and the timing guard's own test holds
+#: its 120; the landing job, which every other job waits on,
+#: does no more than read a few commits; the client test matrix, the
+#: ref-pandas3 DuckDB route tests and the engine job (whose pytest step
+#: took 40 minutes and reached its 60-minute limit on two runs, T2.11) take
+#: 14 to 17 minutes since T3.0's split, so 60 (P2-T2.16-14, P2-T2.1o-1);
+#: the checking tools' tests, split out of those (T3.0), take about 43.
 TIMEOUT_CEILINGS = {
     'landing': 10,
     'rust-test': 120,
-    'test': 90,
-    'contract-python-ref-pandas3': 120,
-    'engine': 90,
+    'test': 60,
+    'contract-python-ref-pandas3': 60,
+    'engine': 60,
+    'tooling-contract': 90,
+    'tooling-root': 90,
 }
 TIMEOUT_CEILING = 60
 
@@ -845,7 +854,6 @@ def test_ci4_the_step_decides_alike_in_a_clone_of_depth_two(
         'pull_request_target',
         'workflow_dispatch',
         'merge_group',
-        'schedule',
         '',
     ],
 )
@@ -922,7 +930,16 @@ def test_ci4_a_skip_condition_cannot_be_overridden(
     request: pytest.FixtureRequest,
 ) -> None:
     r"""A job's own condition on the landing job's answer is one conjunct
-    of its condition: nothing joined with ``||`` can run it anyway."""
+    of its condition: nothing joined with ``||`` can run it anyway. The
+    other conjuncts may only leave a job out more often: ``!cancelled()``,
+    and the landing job's plan (T3.0) saying the tooling jobs or the full
+    matrix are not wanted."""
+    allowed = (
+        SKIP,
+        '!cancelled()',
+        "needs.landing.outputs.tooling != 'false'",
+        "needs.landing.outputs.full != 'false'",
+    )
 
     def check() -> None:
         for name, job in _workflow()['jobs'].items():
@@ -932,7 +949,7 @@ def test_ci4_a_skip_condition_cannot_be_overridden(
             assert '||' not in condition, (name, condition)
             parts = [p.strip() for p in condition.split('&&')]
             assert SKIP in parts, (name, condition)
-            assert all(p in (SKIP, '!cancelled()') for p in parts), (
+            assert all(p in allowed for p in parts), (
                 name,
                 condition,
             )
@@ -941,13 +958,19 @@ def test_ci4_a_skip_condition_cannot_be_overridden(
 
 
 def _images() -> list[str]:
-    r"""Every registry image reference written in the workflow."""
+    r"""Every registry image reference written in the workflow; a Java
+    module path in a JVM flag (``--add-opens=java.base/java.nio=...``, the
+    Java jobs', T3.11) has an image's shape and is none."""
     text = CI.read_text(encoding='utf-8')
-    return re.findall(
-        r'(?<![\w./-])(?:[a-z0-9-]+\.)+[a-z]{2,}(?::\d+)?/[a-z0-9._/-]+'
-        r'(?::[\w.-]+)?(?:@sha256:[0-9a-f]+)?',
-        text,
-    )
+    return [
+        image
+        for image in re.findall(
+            r'(?<![\w./-])(?:[a-z0-9-]+\.)+[a-z]{2,}(?::\d+)?/[a-z0-9._/-]+'
+            r'(?::[\w.-]+)?(?:@sha256:[0-9a-f]+)?',
+            text,
+        )
+        if not image.startswith('java.base/')
+    ]
 
 
 def test_ci4_every_image_ci_names_is_pinned_by_digest(
@@ -965,10 +988,21 @@ def test_ci4_every_image_ci_names_is_pinned_by_digest(
             assert DIGEST.search(image), image
         env = workflow['env']
         aarch64 = workflow['jobs']['native-wheel-aarch64']['env']['MANYLINUX']
-        named = {env['POSTGRES_IMAGE'], env['MANYLINUX'], aarch64}
+        # The JAR-load jobs' clean JDK containers (T3.11), the only job
+        # containers: the runner pulls them, anonymously, from MCR.
+        load = workflow['jobs']['java-load']
+        jdks = {
+            entry['image']
+            for entry in load['strategy']['matrix']['include']
+            if entry['image']
+        }
+        assert load['container'] == '${{ matrix.image }}'
+        for image in jdks:
+            assert image.startswith('mcr.microsoft.com/openjdk/jdk:'), image
+        named = {env['POSTGRES_IMAGE'], env['MANYLINUX'], aarch64, *jdks}
         assert set(images) == named, set(images) ^ named
         for name, job in workflow['jobs'].items():
-            assert 'container' not in job, name
+            assert name == 'java-load' or 'container' not in job, name
             for service in (job.get('services') or {}).values():
                 assert service['image'] == (
                     '${{ needs.landing.outputs.postgres-image }}'
@@ -1085,7 +1119,8 @@ def test_ci4_the_token_goes_only_to_ghcr_io(
     which are exactly ``github.actor`` and ``secrets.GITHUB_TOKEN``; a
     service whose image is elsewhere has no credentials; and the landing
     job's skip step, which reads the candidate's runs from the GitHub API
-    (round 4) and runs no container. No other secret is used, and nothing
+    (round 4) and runs no container, and the pinned Java artifact action
+    reading this repository's current run. No other secret is used, and nothing
     wider than reading packages and Actions runs is granted."""
 
     def check() -> None:
@@ -1095,18 +1130,48 @@ def test_ci4_the_token_goes_only_to_ghcr_io(
             {'contents': 'read', 'packages': 'read', 'actions': 'read'},
         )
         assert not re.search(TOKEN, str(workflow.get('env')))
-        steps = services = 0
+        steps = services = artifact_downloads = 0
         for name, job in workflow['jobs'].items():
             assert not re.search(TOKEN, str(job.get('env'))), name
-            assert 'permissions' not in job, name
-            assert 'container' not in job, name
+            # Only the nightly dispatch writes: it starts runs (Actions).
+            assert job.get('permissions') == (
+                {'actions': 'write', 'contents': 'read'}
+                if name == 'nightly'
+                else None
+            ), name
+            # The JAR-load jobs' JDK containers (T3.11) are pulled
+            # anonymously: a container named with no credentials.
+            assert name == 'java-load' or 'container' not in job, name
+            if 'container' in job:
+                assert isinstance(job['container'], str), name
             for step in job.get('steps', []):
-                assert not re.search(TOKEN, str(step.get('with'))), (name, step)
+                if re.search(TOKEN, str(step.get('with'))):
+                    assert name == 'java', (name, step)
+                    assert step == {
+                        'uses': (
+                            'actions/download-artifact@'
+                            '9000827ccba6bdab643e8b6fd33ac0654aef8333'
+                        ),
+                        'with': {
+                            'name': 'java-jar',
+                            'path': 'jar',
+                            'github-token': '${{ github.token }}',
+                            'repository': '${{ github.repository }}',
+                            'run-id': '${{ github.run_id }}',
+                        },
+                    }, (name, step)
+                    assert workflow['permissions'].get('actions') == 'read'
+                    artifact_downloads += 1
                 assert not re.search(TOKEN, str(step.get('run'))), (name, step)
                 for key, value in (step.get('env') or {}).items():
                     if not re.search(TOKEN, str(value)):
                         continue
                     if name == 'landing' and step.get('id') == 'landing':
+                        _api_only(key, value, str(step['run']))
+                        continue
+                    # The timing guard reads the runs' jobs (T3.0), and the
+                    # nightly dispatches the workflow on each phase head.
+                    if name in ('timing-guard', 'nightly'):
                         _api_only(key, value, str(step['run']))
                         continue
                     steps += 1
@@ -1135,9 +1200,19 @@ def test_ci4_the_token_goes_only_to_ghcr_io(
             'GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}',
             'password: ${{ secrets.GITHUB_TOKEN }}',
         } | {f'{key}: {value}' for key, value in API_TOKENS}
+        artifact_token_lines = 0
         for line in CI.read_text(encoding='utf-8').splitlines():
             if re.search(TOKEN, line) and not line.strip().startswith('#'):
-                assert line.strip() in allowed, line
+                if line.strip() == 'github-token: ${{ github.token }}':
+                    artifact_token_lines += 1
+                else:
+                    assert line.strip() in allowed, line
+        # The one new textual token occurrence must belong to the exact
+        # structurally checked action, never another key or duplicate step.
+        assert artifact_token_lines == artifact_downloads == 1, (
+            artifact_token_lines,
+            artifact_downloads,
+        )
 
     _held(request, check)
 
@@ -1481,11 +1556,14 @@ def _phase_scenario(phase: _Phase, scenario: str) -> str:
         p = phase.package('T1.15')
         base = {'sound': before, 'moved': before, 'wrong-base': p}[scenario]
         phase.landing('T1.15', base, 'a' * 40 if scenario == 'moved' else None)
-    elif scenario == 'two-landings':
+    elif scenario in ('two-landings', 'unstacked'):
+        # A stack (T3.0) lands each package on the one before it.
         phase.package('T1.15')
         first = phase.landing('T1.15', before)
         phase.package('T1.16')
-        phase.landing('T1.16', first)
+        phase.landing('T1.16', first if scenario == 'two-landings' else before)
+        # The stack's top is judged against the landing below it.
+        phase.judged_against = first
     elif scenario == 'not-a-landing':
         phase.package('T1.15')
     elif scenario == 'not-a-fast-forward':
@@ -1511,7 +1589,8 @@ def _phase_scenario(phase: _Phase, scenario: str) -> str:
             'wrong-base',
             "the landing's Base-SHA is not the phase branch's previous tip",
         ),
-        ('two-landings', 'it holds 2 landing commits'),
+        ('two-landings', None),
+        ('unstacked', 'does not stack on the landing before it'),
         ('not-a-landing', 'its tip is none'),
         ('not-a-fast-forward', 'not a fast-forward of the previous tip'),
     ],
@@ -1532,9 +1611,13 @@ def test_ci4_the_phase_check_in_a_clone_of_depth_two(
             assert done.returncode == 0, message
             # Every other job is left out of a sound landing's run, and
             # the check still ran: its output names the checkpoint.
-            assert done.stdout.split()[:2] == [before, before], message
+            checkpoint = getattr(phase, 'judged_against', before)
+            assert done.stdout.split()[:2] == [checkpoint, checkpoint], message
             skip = _skip(clone, tmp_path, 'push', PHASE)
-            assert skip == ('true' if scenario == 'sound' else 'false')
+            # A sound stack (T3.0) is left out like one landing.
+            assert skip == (
+                'true' if scenario in ('sound', 'two-landings') else 'false'
+            )
         else:
             assert done.returncode != 0, message
             # A previous tip the push dropped is on no branch the clone
@@ -1788,9 +1871,48 @@ LANE_2 = f'{PHASE_2}-lane-a'
 def test_t20_the_workflow_names_no_one_phase() -> None:
     text = CI.read_text(encoding='utf-8')
     assert not re.search(r'rust-core-phase-[0-9]', text)
-    branches = _workflow()[True]['push']['branches']
-    assert 'rust-core-phase-*' in branches
-    assert '!rust-core-phase-*-archive-*' in branches
+    # The nightly finds every phase head by its pattern, for any N.
+    run = str(_workflow()['jobs']['nightly']['steps'][0]['run'])
+    assert "'^rust-core-phase-(0|[1-9][0-9]*)$'" in run, run
+
+
+def test_t32_ci_runs_nightly_on_each_phase_head_not_on_each_push(
+    tmp_path: Path,
+) -> None:
+    r"""CI off the landing path (the owner, 2026-10-22): a push runs the
+    workflow on main and rust-core only, never on a phase branch, a lane or
+    a topic; the schedule dispatches it, fresh, on each phase head and runs
+    nothing itself; a dispatch runs every job, and asks for fresh
+    dependencies by default."""
+    triggers = _workflow()[True]
+    assert triggers['push']['branches'] == ['main', 'rust-core']
+    assert set(triggers) == {
+        'pull_request',
+        'push',
+        'schedule',
+        'workflow_dispatch',
+    }
+    assert triggers['schedule'] and triggers['workflow_dispatch']['inputs'][
+        'fresh'
+    ] == {
+        'description': triggers['workflow_dispatch']['inputs']['fresh'][
+            'description'
+        ],
+        'type': 'boolean',
+        'default': True,
+    }
+    run = str(_workflow()['jobs']['nightly']['steps'][0]['run'])
+    assert 'gh workflow run ci.yml' in run and '-f fresh=true' in run, run
+    repo = _repo(tmp_path)
+    _landing(repo)
+    for ref in (PHASE, LANE, 'main'):
+        assert _skip(repo, tmp_path, 'schedule', ref) == 'true', ref
+        assert _skip(repo, tmp_path, 'workflow_dispatch', ref) == 'false', ref
+    # The fresh switch reaches the Rust jobs that resolve crates.
+    text = CI.read_text(encoding='utf-8')
+    assert (
+        text.count("- if: env.FRESH == 'true'\n        run: cargo update") == 2
+    )
 
 
 @pytest.mark.parametrize(
@@ -1798,13 +1920,14 @@ def test_t20_the_workflow_names_no_one_phase() -> None:
     [
         (PHASE, False, False),
         (PHASE_2, False, False),
-        (LANE, False, True),
-        (LANE_2, False, True),
-        ('rust-core-phase-7-lane-b', False, True),
+        # A lane's newer push supersedes its run (T3.0).
+        (LANE, True, True),
+        (LANE_2, True, True),
+        ('rust-core-phase-7-lane-b', True, True),
         (f'{PHASE_2}-t2.3', True, False),
         # Multi-digit phases (T2.0 fix 1): no cap.
         ('rust-core-phase-10', False, False),
-        ('rust-core-phase-10-lane-b', False, True),
+        ('rust-core-phase-10-lane-b', True, True),
         ('rust-core-phase-10-t10.2', True, False),
         ('rust-core-phase-123', False, False),
         # No phase branch, so cancelled like any branch (fix 2).
@@ -1882,13 +2005,15 @@ def test_t20_a_multi_digit_phase_s_landing_skips_on_its_green_run(
     assert found == 'false'
 
 
-@pytest.mark.parametrize('ref', ['rust-core-phase-02', 'rust-core-phase-x1'])
+@pytest.mark.parametrize('ref', ['RUST-CORE-PHASE-3', 'Rust-Core-Phase-12'])
 def test_t20_a_name_the_expression_lets_through_fails_the_phase_check_by_name(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, ref: str
 ) -> None:
-    r"""Fix 2: a name under the prefix that ends in a digit but is no phase
-    branch passes the step's condition; the step itself then fails, naming
-    it, rather than on a missing argument."""
+    r"""Fix 2: a name the step's condition lets through but is no phase
+    branch (one in capitals, as Actions compares names ignoring case; since
+    OF-7 a letter, a dot or a leading zero in the number is not let
+    through) makes the step itself fail, naming it, rather than on a
+    missing argument."""
     _, step = _phase_check_step()
     context = {
         'github.event_name': 'push',
@@ -2319,3 +2444,512 @@ def test_t20i_every_engine_artifact_downloaded_is_one_engine_wheels_uploads() ->
     assert set(downloaded) <= uploaded, (sorted(downloaded), sorted(uploaded))
     aarch64 = jobs['native-wheel-aarch64']['env']['MANYLINUX']
     assert aarch64.startswith('ghcr.io/'), aarch64
+
+
+# --- T3.0: the judging-tool tests in a job of their own, the timing guard,
+# and the comparison base taken at push time ---------------------------------
+#
+# The names assumed until T3.0's second implementer's are relayed: the
+# pytest marker ``T30_MARKER``; a job of its own whose pytest runs select it
+# (``-m <marker>``), run only when an output of a job it needs, computed by
+# a ``run:`` step, says a path under scripts/rust_core/, contract/tools/,
+# contract/runners/ or the gate files changed; every other pytest run over
+# tests/ or contract/tests leaves it out (``not <marker>``). The timing
+# guard ``T30_TIMING`` (``--workflow FILE --durations FILE``, the durations
+# a list of runs, newest first, each ``{"run": id, "jobs": [{"name",
+# "minutes"}]}``), named by a step of the workflow. The comparison base: a
+# step that runs ``ratchet.py where`` reads the base from an output of a job
+# it needs, through its env. Listed in tests/t30-pending.json until done.
+
+T30_MARKER = 'tooling'
+T30_TIMING = ROOT / 'scripts/rust_core/orchestration/ci_timing.py'
+T30_PHASE = 'rust-core-phase-3'
+T30_LANE = f'{T30_PHASE}-lane-a'
+T30_PENDING = ROOT / 'tests/t30-pending.json'
+T30_SPLIT = ROOT / 'scripts/rust_core/tooling_tests.py'
+
+
+def _t30_pending(test: Any) -> Any:
+    names = set(json.loads(T30_PENDING.read_text(encoding='utf-8'))['pending'])
+    if test.__name__ in names:
+        return pytest.mark.xfail(
+            strict=True,
+            reason='T3.0: failing until implemented; once it passes, take '
+            'it out of tests/t30-pending.json pending',
+        )(test)
+    return test
+
+
+#: A test file that copies the contract into a temporary git repository
+#: and runs the ratchet there, as the judging-tool tests do. Its copy and
+#: init are filled in when it is written, so this file holds no builder of
+#: its own and stays unmarked.
+T30_COPYING = """\
+import shutil
+import subprocess
+from pathlib import Path
+{mark}
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_the_ratchet_on_a_copy(tmp_path):
+    shutil.{copy}(ROOT / 'contract', tmp_path / 'contract')
+    subprocess.run(['git', '{init}', '-q', str(tmp_path)], check=True)
+    subprocess.run(
+        ['python', str(ROOT / 'scripts/rust_core/ratchet.py'), 'check'],
+        cwd=tmp_path,
+    )
+"""
+
+
+def _t30_split(*args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(T30_SPLIT), *args],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+
+
+@_t30_pending
+def test_t30_every_gate_copying_test_carries_the_marker(tmp_path: Path) -> None:
+    r"""tooling_tests.py check passes on this tree, finds the families the
+    test-speed investigation names, and fails, naming it, on a copying
+    test file without the marker."""
+    pyproject = (ROOT / 'pyproject.toml').read_text(encoding='utf-8')
+    markers = pyproject.partition('[tool.pytest.ini_options]')[2]
+    assert re.search(rf'^\s*"{T30_MARKER}:', markers, re.M), 'not registered'
+    done = _t30_split('check')
+    assert done.returncode == 0, done.stdout + done.stderr
+    listed = _t30_split('list')
+    assert listed.returncode == 0, listed.stdout + listed.stderr
+    for name in ('test_gate_modes.py', 'test_contract_ratchet.py'):
+        assert name in listed.stdout, listed.stdout
+    root = tmp_path / 'root'
+    for suite in ('tests', 'contract/tests'):
+        (root / suite).mkdir(parents=True)
+    (root / 'tests/test_t30_unmarked_copy.py').write_text(
+        T30_COPYING.format(mark='', copy='copytree', init='init')
+    )
+    (root / 'tests/test_t30_marked_copy.py').write_text(
+        T30_COPYING.format(
+            mark='import pytest\n\npytestmark = pytest.mark.tooling\n',
+            copy='copytree',
+            init='init',
+        )
+    )
+    seeded = _t30_split('--root', str(root), 'check')
+    said = seeded.stdout + seeded.stderr
+    assert seeded.returncode == 1, said
+    assert 'test_t30_unmarked_copy.py' in said, said
+    assert 'test_t30_marked_copy.py' not in said, said
+
+
+def _t30_pytest_steps() -> list[tuple[str, str]]:
+    """Each pytest run over the root suite (``tests``) or contract/tests:
+    a run in a package's own directory (``cd packages/...``, the engine's
+    own ``tests``) or over a package's or binding's tests is neither."""
+    found = []
+    for name, job in _workflow()['jobs'].items():
+        for step in job.get('steps', []):
+            run = str(step.get('run', ''))
+            if 'pytest' not in run or re.search(r'(?m)^\s*cd\s', run):
+                continue
+            if _t30_suites(run):
+                found.append((name, run))
+    return found
+
+
+def _t30_selects(run: str) -> bool:
+    """Whether a pytest run selects the marker: ``-m <marker>``, quoted or
+    not, or an expression holding it but not as ``not <marker>``."""
+    expressions = [
+        quoted or bare
+        for _, quoted, bare in re.findall(
+            r"-m\s+(?:(['\"])(.*?)\1|([^\s'\"]+))", run
+        )
+    ]
+    return any(
+        re.search(rf'\b{T30_MARKER}\b', expr)
+        and not re.search(rf'not {T30_MARKER}\b', expr)
+        for expr in expressions
+    )
+
+
+def _t30_suites(run: str) -> set[str]:
+    """The suites a pytest run names: ``tests``, ``contract/tests``."""
+    return set(re.findall(r'(?<![\w/$-])((?:contract/)?tests)(?![\w/-])', run))
+
+
+def _t30_tooling_jobs() -> dict[str, dict[str, Any]]:
+    """The jobs whose pytest runs select the marker: the judging-tool
+    jobs (one per suite, when one job would outrun its limit)."""
+    jobs = _workflow()['jobs']
+    names = sorted(
+        {name for name, run in _t30_pytest_steps() if _t30_selects(run)}
+    )
+    assert names, f'no job selects -m {T30_MARKER}'
+    return {name: jobs[name] for name in names}
+
+
+@_t30_pending
+def test_t30_the_judging_tool_tests_run_once_in_their_own_job() -> None:
+    tooling = _t30_tooling_jobs()
+    for name, job in tooling.items():
+        matrix = job.get('strategy', {}).get('matrix', {})
+        assert not matrix, f'{name} runs in a matrix: {matrix}'
+    runs = [
+        r for n, r in _t30_pytest_steps() if n in tooling and _t30_selects(r)
+    ]
+    covered = [suite for run in runs for suite in sorted(_t30_suites(run))]
+    # Both suites, each once.
+    assert sorted(covered) == ['contract/tests', 'tests'], (covered, runs)
+    for other, run in _t30_pytest_steps():
+        if other not in tooling:
+            assert f'not {T30_MARKER}' in run, f'{other} runs them: {run}'
+
+
+def _t30_substitute(text: str, values: dict[str, str]) -> str:
+    def one(match: re.Match[str]) -> str:
+        return values.get(match.group(1).strip(), '')
+
+    return re.sub(r'\$\{\{\s*(.*?)\s*\}\}', one, text)
+
+
+def _t30_output(
+    job_name: str,
+    output: str,
+    repo: Path,
+    tmp_path: Path,
+    values: dict[str, str],
+) -> str:
+    """A job's output, its producing step's text run in ``repo`` as CI
+    runs it, with GitHub's environment for a push of the lane."""
+    job = _workflow()['jobs'][job_name]
+    source = str(job.get('outputs', {}).get(output, ''))
+    found = re.search(r'steps\.([\w-]+)\.outputs\.([\w-]+)', source)
+    assert found, f'{job_name}.outputs.{output} is {source!r}, no step output'
+    step = next(s for s in job['steps'] if s.get('id') == found.group(1))
+    assert 'run' in step, f'{job_name}: step {found.group(1)} is no run: step'
+    out = tmp_path / f'output-{job_name}-{output}'
+    out.write_text('')
+    event = tmp_path / 'event.json'
+    event.write_text(json.dumps({'before': values['github.event.before']}))
+    env = {
+        **os.environ,
+        **GIT_ENV,
+        **{
+            k: _t30_substitute(str(v), values)
+            for k, v in {**job.get('env', {}), **step.get('env', {})}.items()
+        },
+        'GITHUB_OUTPUT': str(out),
+        'GITHUB_EVENT_NAME': 'push',
+        'GITHUB_REF_NAME': T30_LANE,
+        'GITHUB_REF': f'refs/heads/{T30_LANE}',
+        'GITHUB_EVENT_PATH': str(event),
+        'GITHUB_SHA': values['github.sha'],
+        'GITHUB_REPOSITORY': 'o/r',
+    }
+    done = subprocess.run(
+        ['bash', '--noprofile', '--norc', '-e', '-c',
+         _t30_substitute(step['run'], values)],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )  # fmt: skip
+    assert done.returncode == 0, done.stdout + done.stderr
+    lines = dict(
+        line.partition('=')[::2]
+        for line in out.read_text().splitlines()
+        if '=' in line
+    )
+    return lines.get(found.group(2), '')
+
+
+@_t30_pending
+@pytest.mark.parametrize(
+    ('path', 'runs'),
+    [
+        ('scripts/rust_core/ratchet.py', True),
+        ('scripts/rust_core/gate.sh', True),
+        ('contract/tools/differential.py', True),
+        ('contract/runners/run_python.py', True),
+        ('.github/workflows/ci.yml', True),
+        ('docs/design/rust-core/migration-plan.md', False),
+        ('rust/crates/sdm-core/src/lib.rs', False),
+        ('packages/structured-data-models-client/README.md', False),
+    ],
+)
+def test_t30_the_judging_tool_job_runs_only_when_its_paths_change(
+    tmp_path: Path, path: str, runs: bool
+) -> None:
+    tooling = _t30_tooling_jobs()
+    conditions = {name: str(job.get('if', '')) for name, job in tooling.items()}
+    condition = ' && '.join(f'({c})' for c in conditions.values())
+    name = ', '.join(tooling)
+    referenced = sorted(
+        set(re.findall(r'needs\.([\w-]+)\.outputs\.([\w-]+)', condition))
+    )
+    assert any(o != 'skip' for _, o in referenced), f'{name} if: {condition!r}'
+    origin, repo = tmp_path / 'origin.git', tmp_path / 'repo'
+    subprocess.run(
+        ['git', 'clone', '-q', '--bare', '--shared', str(ROOT), str(origin)],
+        env={**os.environ, **GIT_ENV}, check=True, capture_output=True,
+    )  # fmt: skip
+    _git(tmp_path, 'clone', '-q', '--shared', str(origin), str(repo))
+    # -B: run from lane a's own worktree, the clone already has that branch.
+    _git(
+        repo, 'checkout', '-q', '-B', T30_LANE, _git(ROOT, 'rev-parse', 'HEAD')
+    )
+    base = _git(repo, 'rev-parse', 'HEAD')
+    _git(repo, 'push', '-q', 'origin', f'{base}:refs/heads/{T30_PHASE}')
+    _git(repo, 'fetch', '-q', 'origin')
+    target = repo / path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open('a', encoding='utf-8') as handle:
+        handle.write('\n')
+    _git(repo, 'add', path)
+    _git(repo, 'commit', '-q', '-m', 'T3.99: one path')
+    head = _git(repo, 'rev-parse', 'HEAD')
+    values = {
+        'github.event.before': base,
+        'github.sha': head,
+        'github.ref_name': T30_LANE,
+        'github.ref': f'refs/heads/{T30_LANE}',
+        'github.event_name': 'push',
+        'github.repository': 'o/r',
+    }
+    context = dict(values)
+    for job_name, output in referenced:
+        key = f'needs.{job_name}.outputs.{output}'
+        context[key] = (
+            'false'
+            if output == 'skip'
+            else _t30_output(job_name, output, repo, tmp_path, values)
+        )
+    for job_name, each in conditions.items():
+        assert _evaluate(each, context) is runs, (job_name, each, context)
+
+
+def test_t30_a_train_below_the_top_runs_the_tooling_jobs_and_judges_the_top(
+    tmp_path: Path,
+) -> None:
+    # T3.0 fix 2 (Codex r2): the stack's top is pushed while the phase
+    # branch holds H; below it, a tooling train changed the comparator and
+    # was stacked (its landing L, not landed). The run judges the top
+    # against L (base) and runs the tooling jobs for the whole stack's
+    # change from H (tooling).
+    origin, repo = tmp_path / 'origin.git', tmp_path / 'repo'
+    subprocess.run(
+        ['git', 'clone', '-q', '--bare', '--shared', str(ROOT), str(origin)],
+        env={**os.environ, **GIT_ENV}, check=True, capture_output=True,
+    )  # fmt: skip
+    _git(tmp_path, 'clone', '-q', '--shared', str(origin), str(repo))
+    _git(
+        repo, 'checkout', '-q', '-B', T30_LANE, _git(ROOT, 'rev-parse', 'HEAD')
+    )
+    head = _git(repo, 'rev-parse', 'HEAD')
+    _git(repo, 'push', '-q', 'origin', f'{head}:refs/heads/{T30_PHASE}')
+    _git(repo, 'fetch', '-q', 'origin')
+    with (repo / 'scripts/rust_core/compare.py').open('a') as handle:
+        handle.write('\n')
+    _git(repo, 'commit', '-q', '-am', 'T3.98: the train')
+    _git(
+        repo, 'commit', '-q', '--allow-empty', '-m',
+        'Land T3.98: the train\n\nReviewed-by: r\nProtected-paths: none\n'
+        f'Base-SHA: {head}\nCheckpoint-SHA: {head}\nTrain: yes',
+    )  # fmt: skip
+    train = _git(repo, 'rev-parse', 'HEAD')
+    (repo / 'docs/t399.md').write_text('the product\n')
+    _git(repo, 'add', 'docs/t399.md')
+    _git(repo, 'commit', '-q', '-m', 'T3.99: the product above it')
+    values = {
+        'github.event.before': head,
+        'github.sha': _git(repo, 'rev-parse', 'HEAD'),
+        'github.ref_name': T30_LANE,
+        'github.ref': f'refs/heads/{T30_LANE}',
+        'github.event_name': 'push',
+        'github.repository': 'o/r',
+    }
+    assert _t30_output('landing', 'base', repo, tmp_path, values) == train
+    assert _t30_output('landing', 'tooling', repo, tmp_path, values) == 'true'
+
+
+def _t30_durations(tmp_path: Path, minutes: list[float]) -> Path:
+    """Runs newest first: rust-test (timeout 120, 80% is 96 minutes) at
+    these minutes, every other job at one minute."""
+    path = tmp_path / 'durations.json'
+    path.write_text(
+        json.dumps(
+            [
+                {
+                    'run': 1000 - n,
+                    'jobs': [
+                        {'name': 'rust-test', 'minutes': m},
+                        {'name': 'lint', 'minutes': 1.0},
+                    ],
+                }
+                for n, m in enumerate(minutes)
+            ]
+        )
+    )
+    return path
+
+
+@_t30_pending
+@pytest.mark.parametrize(
+    ('minutes', 'fails'),
+    [
+        ([100.0, 50.0, 97.0], True),
+        ([100.0, 97.0, 50.0], True),
+        ([100.0, 50.0, 50.0, 100.0], False),
+        ([95.0, 95.0, 95.0], False),
+    ],
+    ids=['two-of-three', 'the-last-two', 'once-in-three', 'under-80'],
+)
+def test_t30_the_timing_guard_fails_a_job_over_80_percent_twice_in_three(
+    tmp_path: Path, minutes: list[float], fails: bool
+) -> None:
+    named = [
+        step
+        for job in _workflow()['jobs'].values()
+        for step in job.get('steps', [])
+        if T30_TIMING.name in str(step.get('run', ''))
+    ]
+    assert named, f'no step of ci.yml runs {T30_TIMING.name}'
+    state = tmp_path / 'state'
+    done = subprocess.run(
+        [sys.executable, str(T30_TIMING), '--workflow', str(CI),
+         '--durations', str(_t30_durations(tmp_path, minutes))],
+        env={**os.environ, 'SDM_ORCH_STATE': str(state)},
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )  # fmt: skip
+    said = done.stdout + done.stderr
+    written = (
+        [
+            p
+            for p in state.rglob('*')
+            if p.is_file() and 'rust-test' in p.read_text()
+        ]
+        if state.exists()
+        else []
+    )
+    if fails:
+        assert done.returncode != 0, said
+        assert 'rust-test' in said and 'lint' not in said.replace(
+            'rust-test', ''
+        ), said
+        assert written, 'no fix item for the heartbeat'
+    else:
+        assert done.returncode == 0, said
+        assert not written
+
+
+def _t30_landing(repo: Path, package: str, base: str) -> str:
+    _git(
+        repo, 'commit', '-q', '--allow-empty', '-m',
+        f'Land {package}: a package\n\nBoth reviews approve it.\n\n'
+        f'Reviewed-by: two reviewers\nProtected-paths: none\n'
+        f'Base-SHA: {base}\nCheckpoint-SHA: {base}',
+    )  # fmt: skip
+    return _git(repo, 'rev-parse', 'HEAD')
+
+
+@_t30_pending
+def test_t30_comparison_jobs_take_the_base_recorded_at_push_time(
+    tmp_path: Path,
+) -> None:
+    r"""The candidate lands while its run is still going: the phase branch
+    now holds the candidate, so a base read from its tip at run time makes
+    the candidate its own checkpoint. Each step that runs ``ratchet.py
+    where`` takes the base recorded when the run started, from an output of
+    a job it needs, and judges against the head the candidate was pushed
+    on."""
+    jobs = _workflow()['jobs']
+    steps = [
+        (name, job, step)
+        for name, job in jobs.items()
+        for step in job.get('steps', [])
+        if 'ratchet.py where' in str(step.get('run', ''))
+        # The phase check judges a push to the phase branch on the push's
+        # own previous tip, already the base at push time.
+        and 'ratchet.py checkpoint' not in str(step.get('run', ''))
+    ]
+    assert steps, 'no step runs ratchet.py where'
+    origin, repo = tmp_path / 'origin.git', tmp_path / 'repo'
+    _git(tmp_path, 'init', '-q', '--bare', str(origin))
+    _git(tmp_path, 'clone', '-q', str(origin), str(repo))
+    _git(repo, 'checkout', '-q', '-b', 'start')
+    (repo / 'a.txt').write_text('a\n')
+    _git(repo, 'add', 'a.txt')
+    _git(repo, 'commit', '-q', '-m', 'Merge Phase 2 into rust-core')
+    epic = _git(repo, 'rev-parse', 'HEAD')
+    pushed_on = _t30_landing(repo, 'T3.98', epic)
+    (repo / 'b.txt').write_text('b\n')
+    _git(repo, 'add', 'b.txt')
+    _git(repo, 'commit', '-q', '-m', 'T3.99: the candidate')
+    candidate = _git(repo, 'rev-parse', 'HEAD')
+    landed = _t30_landing(repo, 'T3.99', pushed_on)
+    _git(
+        repo, 'push', '-q', 'origin', f'{epic}:refs/heads/rust-core',
+        f'{landed}:refs/heads/{T30_PHASE}', f'{candidate}:refs/heads/{T30_LANE}',
+    )  # fmt: skip
+    _git(repo, 'checkout', '-q', '-B', T30_LANE, candidate)
+    _git(repo, 'fetch', '-q', 'origin')
+    event = tmp_path / 'event.json'
+    event.write_text(json.dumps({'before': '0' * 40}))
+    for name, job, step in steps:
+        env_text = {**job.get('env', {}), **step.get('env', {})}
+        recorded = {
+            k: v
+            for k, v in env_text.items()
+            if re.search(r'needs\.[\w-]+\.outputs\.', str(v))
+        }
+        assert recorded, f'{name}: the base is read from the branch at run time'
+        env = {
+            **os.environ,
+            **GIT_ENV,
+            **{k: _t30_substitute(str(v), {}) for k, v in env_text.items()},
+            **{
+                k: re.sub(r'\$\{\{.*?\}\}', pushed_on, str(v))
+                for k, v in recorded.items()
+            },
+            'GITHUB_EVENT_NAME': 'push',
+            'GITHUB_REF_NAME': T30_LANE,
+            'GITHUB_EVENT_PATH': str(event),
+            'SDM_PHASE_BRANCH': T30_PHASE,
+        }
+        where = subprocess.run(
+            [sys.executable, str(ROOT / 'scripts/rust_core/ratchet.py'), 'where',
+             '--repo', str(repo)],
+            env=env, capture_output=True, text=True, timeout=120,
+        )  # fmt: skip
+        assert where.returncode == 0, where.stdout + where.stderr
+        point = subprocess.run(
+            [sys.executable, str(ROOT / 'scripts/rust_core/ratchet.py'),
+             'checkpoint', '--repo', str(repo), *where.stdout.split()],
+            env=env, capture_output=True, text=True, timeout=120,
+        )  # fmt: skip
+        said = point.stdout + point.stderr
+        assert point.returncode == 0, f'{name}: {where.stdout} {said}'
+        assert point.stdout.split()[0] == pushed_on, f'{name}: {said}'
+
+
+def test_t32_the_nightly_runs_the_client_suite_with_every_route_forced() -> (
+    None
+):
+    # The owner's "2026-10-23 early: nightly forced-route run": the Phase 2
+    # flip dry run, every path the build routes onto the core forced there.
+    job = _workflow()['jobs']['forced-routes']
+    assert (
+        job['if'] == "github.event_name == 'workflow_dispatch' && inputs.fresh"
+    )
+    script = '\n'.join(step.get('run', '') for step in job['steps'])
+    assert 'CORE_ROUTED' in script and 'export SDM_CORE_ROUTES' in script
+    assert 'packages/structured-data-models-client/tests' in script
+    assert '-rf' in script, 'the watchdog names failing tests from FAILED lines'

@@ -18,13 +18,13 @@
 //! table, each answered from the same rows.
 //!
 //! It answers `describe` and `scan`, which every provider answers, and
-//! declares every optional request but `column_ranges`
-//! ([`Memory::capabilities`]): the kit's (`preview`, `count_rows`,
-//! `key_counts`, `repeated_key`, `neighbors`, `lookup`) and the two the
-//! core's sampler requires of a provider before it reads anything
-//! (`time_bounds`, `sample_entities`). Without `column_ranges` the core
-//! chooses a time column from the preview, as it does for a source that
-//! cannot ask. Its only filter is the not-null filter the core writes.
+//! declares every optional request ([`Memory::capabilities`]): the kit's
+//! (`preview`, `count_rows`, `key_counts`, `repeated_key`, `neighbors`,
+//! `lookup`), the two the core's sampler requires of a provider before it
+//! reads anything (`time_bounds`, `sample_entities`), and `column_ranges`,
+//! over every row, so the core chooses a time column on a table bigger
+//! than its preview from the whole table, as on a SQL source (P2-T2.7-2).
+//! Its only filter is the not-null filter the core writes.
 //! A sample keeps the table's order: every row where `n` covers them, else
 //! its own seeded draw ([`drawn`]). Values are compared
 //! as the SQL pushdowns compare them: a key's parts must all be present to
@@ -41,7 +41,7 @@
 //! the provider itself never runs a statement.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result, anyhow};
 use arrow_array::builder::{ListBuilder, StringBuilder};
@@ -111,10 +111,14 @@ pub struct Table {
     pub foreign_keys: Vec<ForeignKey>,
 }
 
-/// The source: its tables, in the order its catalog lists them.
+/// The source: its tables, in the order its catalog lists them; what the
+/// provider declares where not [`Memory::capabilities`]; and each request
+/// it was asked, in order (a clone shares the log).
 #[derive(Debug, Clone, Default)]
 pub struct Memory {
     pub tables: Vec<Table>,
+    pub declared: Option<ProviderCapabilities>,
+    pub asked: Arc<Mutex<Vec<DataRequest>>>,
 }
 
 /// The requests this provider answers itself, beside `describe` and
@@ -124,6 +128,7 @@ pub const DECLARED: &[OptionalRequest] = &[
     OptionalRequest::CountRows,
     OptionalRequest::KeyCounts,
     OptionalRequest::TimeBounds,
+    OptionalRequest::ColumnRanges,
     OptionalRequest::RepeatedKey,
     OptionalRequest::SampleEntities,
     OptionalRequest::Neighbors,
@@ -143,6 +148,8 @@ fn not_read() -> ProviderError {
 
 fn failed(kind: ErrorKind) -> ProviderError {
     ProviderError {
+        error_class: None,
+        driver_message: None,
         kind,
         retryable: false,
         sqlstate: None,
@@ -163,6 +170,15 @@ impl Memory {
     /// advice (it has no index) and no fallback.
     pub fn capabilities() -> ProviderCapabilities {
         ProviderCapabilities {
+            opaque_vendor: None,
+            compares_stored_times: false,
+            samples_by_key_dtype: false,
+            reads_nan_as_missing: false,
+            derived_relations: false,
+            neighbor_lookback: false,
+            keys_optional: false,
+            key_enforcement: false,
+            sample_rows: false,
             optional: DECLARED.iter().copied().collect(),
             max_keys_per_request: None,
             sampling: Determinism::SeededStable,
@@ -202,6 +218,9 @@ impl Memory {
         request: &DataRequest,
         keys: &BTreeMap<AttachmentId, RecordBatch>,
     ) -> Result<RecordBatch, ProviderError> {
+        if let Ok(mut asked) = self.asked.lock() {
+            asked.push(request.clone());
+        }
         let key_set = |set: &KeySet| keys.get(&set.attachment).ok_or_else(not_held);
         match request {
             DataRequest::Describe { tables, part } => self.describe(tables, *part),
@@ -298,7 +317,16 @@ impl Memory {
                     pairs = within(rows, seeds, window, pairs)?;
                 }
                 if let (Some(limit), Some(order)) = (per_seed, order) {
-                    pairs = first_per_seed(rows, seeds, &order.0, *limit, pairs)?;
+                    let limit = match limit {
+                        sdm_contract::data::NeighborLimit::Unsigned(value) => *value,
+                        // The non-SQL provider's row-position predicate
+                        // keeps no row for a negative numeric bound.
+                        sdm_contract::data::NeighborLimit::Negative { .. } => 0,
+                        sdm_contract::data::NeighborLimit::Expression { .. } => {
+                            return Err(not_read());
+                        }
+                    };
+                    pairs = first_per_seed(rows, seeds, &order.0, limit, pairs)?;
                 }
                 answered(rows, seeds, columns, &pairs, None)
             }
@@ -369,7 +397,49 @@ impl Memory {
                 let n = usize::try_from(*n).unwrap_or(usize::MAX);
                 taken(&rows, &drawn(rows.num_rows(), n, seed)?)
             }
-            DataRequest::ColumnRanges { .. } => Err(not_read()),
+            DataRequest::ColumnRanges { table, columns } => {
+                // One row over every row of the table, as the reference's
+                // `_full_range` reads it: the table's rows, then each
+                // column's smallest and largest value, of its own type, and
+                // the rows holding one (P2-T2.7-2).
+                let rows = &self.table(table)?.rows;
+                let mut fields = vec![Field::new("count", DataType::Int64, false)];
+                let mut arrays: Vec<ArrayRef> =
+                    vec![Arc::new(Int64Array::from(vec![count(rows.num_rows())]))];
+                for (at, column) in named(rows, columns)?.into_iter().enumerate() {
+                    let converter =
+                        RowConverter::new(vec![SortField::new(column.data_type().clone())])
+                            .map_err(|_| not_read())?;
+                    let ordered = converter
+                        .convert_columns(std::slice::from_ref(&column))
+                        .map_err(|_| not_read())?;
+                    let held: Vec<usize> =
+                        (0..column.len()).filter(|&i| column.is_valid(i)).collect();
+                    let least = held
+                        .iter()
+                        .copied()
+                        .min_by(|&a, &b| ordered.row(a).cmp(&ordered.row(b)));
+                    let most = held
+                        .iter()
+                        .copied()
+                        .max_by(|&a, &b| ordered.row(a).cmp(&ordered.row(b)));
+                    for (label, pick) in [("min", least), ("max", most)] {
+                        let pick = pick.map(position).transpose()?;
+                        fields.push(Field::new(
+                            format!("{label}_{at}"),
+                            column.data_type().clone(),
+                            true,
+                        ));
+                        arrays.push(
+                            take(&column, &UInt32Array::from(vec![pick]), None)
+                                .map_err(arrow_failed)?,
+                        );
+                    }
+                    fields.push(Field::new(format!("count_{at}"), DataType::Int64, false));
+                    arrays.push(Arc::new(Int64Array::from(vec![count(held.len())])));
+                }
+                RecordBatch::try_new(Arc::new(Schema::new(fields)), arrays).map_err(arrow_failed)
+            }
         }
     }
 
@@ -397,6 +467,9 @@ impl Memory {
             )
         };
         let columns = match part {
+            // A host provider is never asked for a view's definition
+            // (T3.27): the layer refuses it before it is asked.
+            DescribePart::KeyEnforcement | DescribePart::ViewDefinition => return Err(not_read()),
             DescribePart::Tables => {
                 // Every table, or each one named that the source holds.
                 let held = self
@@ -460,6 +533,8 @@ impl Memory {
                 Field::new(c::NAME, DataType::Utf8, true),
                 Arc::new(StringArray::from(Vec::<Option<String>>::new())) as ArrayRef,
             )],
+            // A source in memory names its tables alone.
+            DescribePart::Namespace => vec![text(c::NAME, vec![])],
         };
         let (fields, arrays): (Vec<Field>, Vec<ArrayRef>) = columns.into_iter().unzip();
         RecordBatch::try_new(Arc::new(Schema::new(fields)), arrays).map_err(arrow_failed)
@@ -563,7 +638,10 @@ impl Memory {
                 foreign_keys,
             });
         }
-        Ok(Memory { tables })
+        Ok(Memory {
+            tables,
+            ..Memory::default()
+        })
     }
 }
 

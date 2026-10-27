@@ -21,6 +21,8 @@ from __future__ import annotations
 import copy
 import importlib.util
 import json
+import os
+import re
 import shutil
 import subprocess
 import sys
@@ -31,6 +33,9 @@ from typing import Any
 
 import pytest
 import yaml
+
+# Gate tooling (T3.0): CI runs it in the tooling jobs, not in every matrix job.
+pytestmark = pytest.mark.tooling
 
 ROOT = Path(__file__).resolve().parents[1]
 #: What the temporary repository copies: the harness and everything it
@@ -44,6 +49,13 @@ COPIED = (
     'scripts/rust_core',
     'packages/structured-data-models-client/src/sdm_client/_routing.py',
     'packages/structured-data-models-client/src/sdm_client/query.py',
+)
+# Ratchet-only histories do not read the bulk warehouse captures. The real
+# gate fixtures opt into their exact metadata and the sample Arrow blobs
+# coverage reads, while leaving all other replay payloads out.
+UNCOPIED_PAYLOADS = (
+    'capture.json',
+    '*.arrows',
 )
 IDENTITY = ['-c', 'user.name=Gate Test', '-c', 'user.email=gate@example.com']
 CELL = 'ref-pandas3'
@@ -65,12 +77,16 @@ CI4 = _module(ROOT / 'contract/tests/ci4_gate.py', 'ci4_gate')
 
 
 def git(repo: Path, *args: str) -> str:
-    done = subprocess.run(
-        ['git', '-C', str(repo), *IDENTITY, *args],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
+    try:
+        done = subprocess.run(
+            ['git', '-C', str(repo), *IDENTITY, *args],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError as error:
+        print(error.stderr.strip(), file=sys.stderr)
+        raise
     return done.stdout.strip()
 
 
@@ -113,7 +129,12 @@ def land(
     )
 
 
-def build(repo: Path) -> tuple[Path, str]:
+def build(
+    repo: Path,
+    *,
+    coverage_inputs: bool = False,
+    sparse_captures: bool = False,
+) -> tuple[Path, str]:
     r"""The temporary repository, in ``repo``: a first landing with the
     harness's files but ``ratchet.py``, then a landing adding it, the
     checkpoint; with that landing's SHA."""
@@ -123,11 +144,52 @@ def build(repo: Path) -> tuple[Path, str]:
         capture_output=True,
         check=True,
     ).stdout.split(b'\0')
+    coverage_payloads: set[str] = set()
+    if coverage_inputs:
+        coverage = _module(
+            ROOT / 'scripts/rust_core/coverage.py', 'coverage_for_gate_fixture'
+        )
+        for raw in filter(None, listed):
+            name = raw.decode()
+            if (
+                name.startswith('contract/captures/')
+                and Path(name).name == 'capture.json'
+            ):
+                capture = json.loads((ROOT / name).read_text(encoding='utf-8'))
+                coverage_payloads.add(name)
+                # Use the real coverage reader's requested paths, retaining
+                # the complete committed blobs rather than inventing schemas.
+                coverage.row_schemas(
+                    capture,
+                    capture['reference'],
+                    lambda path, base=Path(name).parent: coverage_payloads.add(
+                        (base / path).as_posix()
+                    ),
+                )
     for name in filter(None, (item.decode() for item in listed)):
+        if (
+            name.startswith('contract/captures/')
+            and any(Path(name).match(pattern) for pattern in UNCOPIED_PAYLOADS)
+            and name not in coverage_payloads
+        ):
+            continue
         source = ROOT / name
         if source.is_file():
             (repo / name).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, repo / name)
+    # The Python and Java tests the scope manifests cite (``tests``,
+    # coverage's rule 4) must be defined in the copy's tree as in the source.
+    for manifest in sorted(
+        repo.glob('docs/design/rust-core/phase-*/scope-*.yaml')
+    ):
+        text = manifest.read_text(encoding='utf-8')
+        claimed = re.findall(r'([\w./-]+\.py)::', text) + re.findall(
+            r'(java/src/test/java/[\w./-]+\.java)#', text
+        )
+        for name in sorted(set(claimed)):
+            if (ROOT / name).is_file():
+                (repo / name).parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(ROOT / name, repo / name)
     ratchet_file = repo / 'scripts/rust_core/ratchet.py'
     kept = ratchet_file.read_bytes()
     ratchet_file.unlink()
@@ -146,12 +208,26 @@ def build(repo: Path) -> tuple[Path, str]:
         lambda r: ratchet_file.write_bytes(kept),
         protected='scripts/rust_core/ratchet.py (new)',
     )
+    if sparse_captures:
+        # Coverage reads bulk capture JSON/Arrow through Git, but locked
+        # admission discovers physical manifests. Keep those original
+        # manifests and every committed blob in all judging worktrees.
+        git(repo, 'sparse-checkout', 'init', '--no-cone')
+        git(
+            repo,
+            'sparse-checkout',
+            'set',
+            '--no-cone',
+            '/*',
+            '!/contract/captures/**/capture.json',
+            '!/contract/captures/**/*.arrows',
+        )
     return repo, landed
 
 
 @pytest.fixture(scope='module')
-def origin(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, str]:
-    return build(tmp_path_factory.mktemp('origin'))
+def origin(owned_module_dir: Callable[[str], Path]) -> tuple[Path, str]:
+    return build(owned_module_dir('origin'))
 
 
 @pytest.fixture
@@ -159,8 +235,247 @@ def repo(origin: tuple[Path, str], tmp_path: Path) -> Path:
     r"""A worktree at the checkpoint, for one test's candidate."""
     source, landed = origin
     tree = tmp_path / 'tree'
+    # Passed test tmp_path retention may remove a directory while its Git
+    # registration remains. This origin belongs only to this module's unit
+    # fixtures; pruning missing registrations keeps extant failed evidence.
+    git(source, 'worktree', 'prune', '--expire', 'now')
     git(source, 'worktree', 'add', '-q', '--detach', str(tree), landed)
     return tree
+
+
+@pytest.mark.parametrize(
+    'factory',
+    [
+        'ratchet',
+        'coverage',
+        'gate_controls',
+        'gate_modes',
+        'reference_change',
+        'decisions_repo',
+        'decisions_manifests',
+        'case_keys',
+        'temporary_approval',
+        'reference_internal_error',
+    ],
+)
+def test_the_fixture_reuses_a_removed_worktree_without_pruning_failed_evidence(
+    tmp_path: Path,
+    factory: str,
+) -> None:
+    source = tmp_path / 'origin'
+    source.mkdir()
+    git(source, 'init', '-q', '-b', 'fixture')
+    if factory == 'ratchet':
+        create = repo.__wrapped__
+    elif factory == 'coverage':
+        coverage_tests = _module(
+            ROOT / 'tests/test_contract_coverage.py', 'coverage_worktree_reuse'
+        )
+        create = coverage_tests.repo.__wrapped__
+    elif factory in (
+        'reference_change',
+        'decisions_repo',
+        'decisions_manifests',
+        'temporary_approval',
+    ):
+        filename, fixture = {
+            'reference_change': ('test_t20e_reference_change', 'repo'),
+            'decisions_repo': ('test_t20_decisions', 'repo'),
+            'decisions_manifests': ('test_t20_decisions', 'manifests'),
+            'temporary_approval': ('test_t21a_temporary_approval', 'tree'),
+        }[factory]
+        owner_tests = _module(
+            ROOT / f'tests/{filename}.py', f'{factory}_worktree_reuse'
+        )
+        create = getattr(owner_tests, fixture).__wrapped__
+    elif factory == 'case_keys':
+        case_keys_tests = _module(
+            ROOT / 'tests/test_t20f_case_keys.py', 'case_keys_worktree_reuse'
+        )
+
+        def create(origin, path):
+            return case_keys_tests._worktree(
+                {'repo': origin[0]}, path, origin[1]
+            )
+
+    elif factory == 'reference_internal_error':
+        crash_tests = _module(
+            ROOT / 'tests/test_t132g_reference_internal_error.py',
+            'internal_error_worktree_reuse',
+        )
+        fixture_cases = sorted((crash_tests.FIXTURES / 'cases').glob('*.json'))
+        assert fixture_cases
+        for fixture_case in fixture_cases:
+            spec = json.loads(fixture_case.read_text())
+            directory = source / 'contract/cases' / spec['slice'].lower()
+            directory.mkdir(parents=True, exist_ok=True)
+            (directory / '.keep').touch()
+        reference = source / 'contract/reference/fixture.jsonl'
+        reference.parent.mkdir(parents=True)
+        reference.write_text('')
+
+        def create(origin, path):
+            tree = crash_tests.repo.__wrapped__(origin, path)
+            assert git(tree, 'rev-parse', 'HEAD~2') == origin[1]
+            assert (tree / reference.relative_to(source)).read_text() == (
+                crash_tests.FIXTURES / 'python-ref.jsonl'
+            ).read_text()
+            for fixture_case in fixture_cases:
+                spec = json.loads(fixture_case.read_text())
+                added = (
+                    tree
+                    / 'contract/cases'
+                    / spec['slice'].lower()
+                    / fixture_case.name
+                )
+                assert added.read_bytes() == fixture_case.read_bytes()
+            return tree
+
+    else:
+        gate_tests = _module(
+            ROOT / f'contract/tests/test_{factory}.py',
+            f'{factory}_worktree_reuse',
+        )
+        if factory == 'gate_controls':
+            create = gate_tests.repo.__wrapped__
+        else:
+
+            def create(origin, path):
+                return gate_tests.worktree({'repo': origin[0]}, path, origin[1])
+
+    landed = commit(source, 'fixture origin')
+    original = create((source, landed), tmp_path / 'reused')
+    failed = create((source, landed), tmp_path / 'failed')
+    evidence = failed / 'failure.txt'
+    evidence.write_text('preserve this failed test evidence')
+    # pytest's passed-only tmp_path cleanup removes the directory without
+    # knowing that Git still has a worktree registration for this path.
+    shutil.rmtree(original)
+    replacement = create((source, landed), tmp_path / 'reused')
+    assert replacement == original and replacement.is_dir()
+    assert evidence.read_text() == 'preserve this failed test evidence'
+    if factory == 'reference_internal_error':
+        assert git(replacement, 'log', '-1', '--format=%s') == (
+            'Land T1.32e: the package'
+        )
+        assert git(failed, 'log', '-1', '--format=%s') == (
+            'Land T1.32e: the package'
+        )
+    else:
+        assert git(replacement, 'rev-parse', 'HEAD') == landed
+        assert git(failed, 'log', '-1', '--format=%s') == 'fixture origin'
+    registrations = git(source, 'worktree', 'list', '--porcelain')
+    assert f'worktree {replacement}' in registrations
+    assert f'worktree {failed}' in registrations
+
+
+def test_the_synthetic_fixture_omits_only_bulk_warehouse_capture_inputs(
+    origin: tuple[Path, str],
+) -> None:
+    source, _ = origin
+    originals = ROOT / 'contract/captures'
+    copied = source / 'contract/captures'
+    expected = sorted(originals.rglob('manifest.json'))
+    assert expected
+    assert {path.relative_to(originals).parts[0] for path in expected} >= {
+        'r2',
+        'snowflake',
+        'lakebase',
+        's2',
+        'databricks-sql',
+    }
+    for path in expected:
+        assert (
+            source / path.relative_to(ROOT)
+        ).read_bytes() == path.read_bytes()
+    assert not list(copied.rglob('capture.json'))
+    assert not list(copied.rglob('*.arrows'))
+    assert (source / 'contract/protected-paths.txt').read_bytes() == (
+        ROOT / 'contract/protected-paths.txt'
+    ).read_bytes()
+    assert (
+        source / 'contract/cases/s2/databricks.name.three-part.json'
+    ).read_bytes() == (
+        ROOT / 'contract/cases/s2/databricks.name.three-part.json'
+    ).read_bytes()
+
+
+def test_the_gate_fixture_keeps_real_coverage_inputs_across_capture_layouts(
+    owned_module_dir: Callable[[str], Path],
+) -> None:
+    source, _ = build(owned_module_dir('coverage-origin'), coverage_inputs=True)
+    coverage = _module(
+        ROOT / 'scripts/rust_core/coverage.py', 'coverage_projection_control'
+    )
+    expected_blobs: set[Path] = set()
+    originals = sorted((ROOT / 'contract/captures').rglob('capture.json'))
+    assert {
+        path.relative_to(ROOT / 'contract/captures').parts[0]
+        for path in originals
+    } == {'r2', 'snowflake', 'lakebase', 's2', 'databricks-sql'}
+    for path in originals:
+        relative = path.relative_to(ROOT)
+        assert (source / relative).read_bytes() == path.read_bytes()
+        capture = json.loads(path.read_text())
+        original_line = copy.deepcopy(capture['reference'])
+
+        def read_original(name: str, base: Path = path.parent) -> bytes:
+            blob = (base / name).relative_to(ROOT)
+            expected_blobs.add(blob)
+            return (ROOT / blob).read_bytes()
+
+        coverage.row_schemas(capture, original_line, read_original)
+        projected_line = copy.deepcopy(capture['reference'])
+        coverage.row_schemas(
+            capture,
+            projected_line,
+            lambda name, base=source / relative.parent: (
+                base / name
+            ).read_bytes(),
+        )
+        assert projected_line == original_line
+    assert expected_blobs
+    actual_blobs = {
+        path.relative_to(source)
+        for path in (source / 'contract/captures').rglob('*.arrows')
+    }
+    assert actual_blobs == expected_blobs
+    for blob in expected_blobs:
+        assert (source / blob).read_bytes() == (ROOT / blob).read_bytes()
+    assert len(actual_blobs) < len(
+        list((ROOT / 'contract/captures').rglob('*.arrows'))
+    )
+    for path in (ROOT / 'contract/captures').rglob('manifest.json'):
+        assert (
+            source / path.relative_to(ROOT)
+        ).read_bytes() == path.read_bytes()
+
+
+def test_an_omitted_capture_path_still_requires_protected_edit_review(
+    repo: Path,
+) -> None:
+    # Use an actual payload path with tiny synthetic bytes. These unit
+    # checks exercise Git protection, never the real capture validator.
+    original = next((ROOT / 'contract/captures/r2').glob('*/*/tables/*.arrows'))
+    path = original.relative_to(ROOT).as_posix()
+
+    def write_capture(text: bytes) -> Callable[[Path], None]:
+        def write(tree: Path) -> None:
+            target = tree / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(text)
+
+        return write
+
+    landed = land(
+        repo, 'T1.15', write_capture(b'synthetic baseline'), protected=path
+    )
+    commit(repo, edit=write_capture(b'synthetic changed capture'))
+    assert check(repo, landed, protected='docs only') == [
+        f'protected: {path}: changed, and the Reviewed-by and Protected-paths '
+        'trailers do not name it'
+    ]
+    assert check(repo, landed, protected=path) == []
 
 
 def checkpoint_of(repo: Path) -> str:
@@ -268,7 +583,15 @@ def append_entry(repo: Path, entry: dict[str, Any]) -> None:
         'decision_ref': None,
         'notes': 'Seeded by the ratchet tests.',
     }
-    text = yaml.safe_dump([{**defaults, **entry}], sort_keys=False)
+    seeded = {**defaults, **entry}
+    if seeded['approved_by'] == 'owner' and seeded['decision_ref'] is None:
+        # An owner's entry names the row holding the owner's approval
+        # (register.py, T3.2): a seed of one names an owner-approved row.
+        seeded['decision_ref'] = {
+            'file': 'docs/design/rust-core/phase-1/decisions.md',
+            'row': 'E1',
+        }
+    text = yaml.safe_dump([seeded], sort_keys=False)
     path.write_text(path.read_text() + '\n' + text)
 
 
@@ -1275,9 +1598,7 @@ def test_advancing_the_phase_ref_cannot_erase_a_changed_outcome_or_a_protected_e
     assert found is None and any('not a landing commit' in p for p in problems)
     # Nor can a phase push carrying it land.
     found, problems = resolve(repo, phase_push=landed)
-    assert found is None and any(
-        'lands exactly one package' in p for p in problems
-    )
+    assert found is None and any('its tip is none' in p for p in problems)
 
 
 def test_a_rebased_package_is_judged_against_the_new_tip(repo: Path) -> None:
@@ -1297,23 +1618,96 @@ def test_a_rebased_package_is_judged_against_the_new_tip(repo: Path) -> None:
     assert problems == [] and found.sha == other and found.notes == []
 
 
-def test_a_push_that_lands_two_packages_fails(repo: Path) -> None:
+def test_a_push_that_lands_a_stack_is_judged_against_the_landing_below(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # T3.0: a push may land a stack of up to SDM_STACK_MAX packages, each
+    # landing on the one before it; the top is judged against its own
+    # Base-SHA, the landing below it.
+    monkeypatch.delenv('SDM_STACK_MAX', raising=False)
     landed = checkpoint_of(repo)
     first = land(repo, 'T1.15')
     found, problems = resolve(repo, phase_push=landed)
     assert problems == [] and found.sha == landed
     land(repo, 'T1.16')
     found, problems = resolve(repo, phase_push=landed)
+    assert problems == [] and found.sha == first
+    monkeypatch.setenv('SDM_STACK_MAX', '1')
+    found, problems = resolve(repo, phase_push=landed)
     assert found is None
     assert problems == [
-        'a push to the phase branch lands exactly one package, as its tip: '
-        'it holds 2 landing commits'
+        'a push to the phase branch lands at most 1 packages (a stack, '
+        'T3.0): it holds 2 landing commits'
     ]
     # One landing whose recorded base is not the previous tip fails too.
     found, problems = resolve(repo, phase_push=first)
     assert problems == [] and found.sha == first
     found, problems = resolve(repo, phase_push=landed + '~1')
     assert found is None
+
+
+@pytest.mark.parametrize(
+    ('status', 'approved'),
+    [
+        ('approved by owner 2026-10-12', True),
+        ('approved by owner 2026-10-12 (T1.7b check-in)', True),
+        (
+            'approved by owner 2026-10-12 (T1.7b check-in), no longer marked pending',
+            True,
+        ),
+        ('approved by owner 2026-10-12 (declined)', False),
+        ('approved by owner 2026-10-12, pending', False),
+        (
+            'approved by owner 2026-10-12 (proposed 2026-10-13, not yet answered)',
+            False,
+        ),
+    ],
+)
+def test_u4_an_approval_its_own_qualifier_takes_back_is_none(
+    status: str, approved: bool
+) -> None:
+    # U4 (carried into Phase 3): the qualifier right after the owner's date
+    # decides; a declined, pending or unanswered one is no approval.
+    assert ratchet.owner_approved(status) is approved
+
+
+def test_a_package_above_an_unlanded_train_is_judged_by_the_train(
+    repo: Path,
+) -> None:
+    # T3.0 (Codex r1 P2): before a stack lands, its top's run is pushed
+    # while the phase branch still holds H. The base recorded at push time
+    # is the stack's tail, the train's landing L, so the top is judged with
+    # the train's harness, each landing's checkpoint the one below it.
+    head = checkpoint_of(repo)
+    train = land(repo, 'T1.15')
+    candidate = commit(repo, 'T1.16: a case the train reads')
+    git(
+        repo, 'push', '-q', '.', f'{head}:refs/remotes/origin/rust-core-phase-1'
+    )
+    env = {
+        'GITHUB_REF_NAME': 'rust-core-phase-1-lane-a',
+        'GITHUB_EVENT_NAME': 'push',
+    }
+    assert ratchet.stack_tail(repo, head, candidate) == train
+    assert ratchet.push_base(env, repo) == train
+    found, problems = resolve(repo, base=train)
+    assert problems == [] and found.sha == train
+    # A landing that does not stack on the one below it is no tail.
+    git(repo, 'checkout', '-q', '--detach', head)
+    commit(repo, 'T1.15: the train again')
+    stray = commit(
+        repo,
+        'Land T1.15: the train',
+        trailers={
+            'Reviewed-by': 'r',
+            'Protected-paths': 'none',
+            'Base-SHA': candidate,
+            'Checkpoint-SHA': candidate,
+        },
+    )
+    above = commit(repo, 'T1.16: above it')
+    assert ratchet.stack_tail(repo, head, above) == head
+    assert stray != head
 
 
 def test_a_landing_commit_is_judged_against_its_recorded_base(
@@ -1772,6 +2166,86 @@ def test_ci_judges_a_phase_push_from_its_previous_tip_and_a_lane_from_the_phase_
         event.write_text(broken)
         with pytest.raises(ratchet.Unreadable):
             ratchet.ci_base({**push, 'GITHUB_REF_NAME': 'rust-core-phase-1'})
+
+
+@pytest.mark.parametrize('phase', ['1', '3', '10'])
+def test_a_dispatched_phase_uses_its_landing_checkpoint_and_rejects_an_unlanded_head(
+    tmp_path: Path, phase: str
+) -> None:
+    repo = tmp_path / 'dispatch'
+    repo.mkdir()
+    branch = f'rust-core-phase-{phase}'
+    git(repo, 'init', '-q', '-b', branch)
+    baseline = commit(
+        repo,
+        f'Land T{phase}.0: the previous reviewed landing',
+        trailers={
+            'Reviewed-by': 'independent reviewers',
+            'Base-SHA': 'f' * 40,
+            'Checkpoint-SHA': 'f' * 40,
+        },
+    )
+    land(repo, f'T{phase}.1')
+    env = {
+        **os.environ,
+        'GITHUB_EVENT_NAME': 'workflow_dispatch',
+        'GITHUB_REF_NAME': branch,
+        'SDM_PHASE_BRANCH': branch,
+    }
+    command = [sys.executable, str(ROOT / 'scripts/rust_core/ratchet.py')]
+    where = subprocess.run(
+        [*command, 'where', '--repo', str(repo)],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert where.stdout.strip() == '--base HEAD'
+
+    def checkpoint() -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [
+                *command,
+                'checkpoint',
+                '--repo',
+                str(repo),
+                *where.stdout.split(),
+            ],
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+
+    found = checkpoint()
+    assert found.returncode == 0, found.stdout + found.stderr
+    assert found.stdout.split()[:2] == [baseline, baseline]
+    # A nightly must not turn an ordinary unlanded phase head into its own
+    # checkpoint, even though dispatch has no push-event previous tip.
+    commit(repo, f'T{phase}.2: unlanded work')
+    refused = checkpoint()
+    assert refused.returncode == 1
+    assert 'self-comparison' in refused.stderr
+
+
+def test_dispatch_retains_lane_bases_and_keeps_unrelated_events_out() -> None:
+    dispatch = {'GITHUB_EVENT_NAME': 'workflow_dispatch'}
+    assert (
+        ratchet.ci_base(
+            {**dispatch, 'GITHUB_REF_NAME': 'rust-core-phase-3-topic-T3.9'}
+        )
+        == '--base origin/rust-core-phase-3'
+    )
+    for event, ref in [
+        ('workflow_dispatch', 'main'),
+        ('pull_request', 'rust-core-phase-3'),
+        ('schedule', 'main'),
+    ]:
+        assert (
+            ratchet.ci_base(
+                {'GITHUB_EVENT_NAME': event, 'GITHUB_REF_NAME': ref}
+            )
+            == ''
+        )
 
 
 compare = _module(ROOT / 'scripts/rust_core/compare.py', 'compare_for_ratchet')

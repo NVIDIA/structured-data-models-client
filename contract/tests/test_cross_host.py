@@ -44,12 +44,15 @@ import shutil
 import stat
 import subprocess
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
 import pytest
 import yaml
+
+# Gate tooling (T3.0): CI runs it in the tooling jobs, not in every matrix job.
+pytestmark = pytest.mark.tooling
 
 ROOT = Path(__file__).resolve().parents[2]
 CI = ROOT / '.github/workflows/ci.yml'
@@ -115,28 +118,34 @@ def test_the_job_takes_both_hosts_observations_by_name() -> None:
 
 
 @pytest.fixture(scope='module')
-def observed(tmp_path_factory: pytest.TempPathFactory) -> dict[str, list[Any]]:
+def observed(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Iterator[dict[str, list[Any]]]:
     r"""python-core's observations of every case, and the rust-host
     stand-in made from them."""
-    out = tmp_path_factory.mktemp('observed') / 'python-core.jsonl'
-    done = subprocess.run(
-        [
-            sys.executable,
-            '-I',
-            str(ROOT / 'contract/runners/run_python.py'),
-            '--mode',
-            'python-core',
-            '--out',
-            str(out),
-            str(ROOT / 'contract/cases'),
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert done.returncode == 0, done.stderr
-    core = [json.loads(line) for line in out.read_text().splitlines()]
-    return {'python-core': core, 'rust-host': _rust_host(core)}
+    owned = tmp_path_factory.mktemp('observed')
+    try:
+        out = owned / 'python-core.jsonl'
+        done = subprocess.run(
+            [
+                sys.executable,
+                '-I',
+                str(ROOT / 'contract/runners/run_python.py'),
+                '--mode',
+                'python-core',
+                '--out',
+                str(out),
+                str(ROOT / 'contract/cases'),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert done.returncode == 0, done.stderr
+        core = [json.loads(line) for line in out.read_text().splitlines()]
+        yield {'python-core': core, 'rust-host': _rust_host(core)}
+    finally:
+        shutil.rmtree(owned)
 
 
 def _rust_host(lines: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -190,8 +199,19 @@ def _executable(path: Path, text: str) -> None:
     path.chmod(path.stat().st_mode | stat.S_IXUSR)
 
 
+def _lane_base() -> str:
+    """What ``ratchet.py where`` prints on a lane of the phase branch this
+    checkout is on: a phase branch the remote still holds, since the real
+    ``effective`` reads it (Phase 1's was deleted once merged)."""
+    sys.path.insert(0, str(ROOT / 'scripts/rust_core'))
+    import phases  # noqa: PLC0415
+
+    branch = os.environ.get('GITHUB_REF_NAME') or phases.checked_out()
+    return f'--base origin/{phases.phase_branch(branch=branch)}'
+
+
 #: What ``ratchet.py where`` prints on a lane of the phase branch.
-LANE = '--base origin/rust-core-phase-1'
+LANE = _lane_base()
 
 
 def _run(

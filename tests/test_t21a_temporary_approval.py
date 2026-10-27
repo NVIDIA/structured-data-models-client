@@ -37,6 +37,9 @@ from typing import Any
 
 import pytest
 
+# Gate tooling (T3.0): CI runs it in the tooling jobs, not in every matrix job.
+pytestmark = pytest.mark.tooling
+
 ROOT = Path(__file__).resolve().parents[1]
 REGISTER = ROOT / 'docs/design/rust-core/register.yaml'
 DECISIONS = 'docs/design/rust-core/phase-2/decisions.md'
@@ -72,17 +75,14 @@ SEED = 'T21A-1'
 
 
 @pytest.fixture(scope='module')
-def origin(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, str]:
-    repo, landed = helpers.build(tmp_path_factory.mktemp('origin'))
+def origin(owned_module_dir: Callable[[str], Path]) -> tuple[Path, str]:
+    repo, landed = helpers.build(owned_module_dir('origin'))
     return repo, landed
 
 
 @pytest.fixture
 def tree(origin: tuple[Path, str], tmp_path: Path) -> Path:
-    repo, landed = origin
-    tree = tmp_path / 'tree'
-    git(repo, 'worktree', 'add', '-q', '--detach', str(tree), landed)
-    return tree
+    return helpers.repo.__wrapped__(origin, tmp_path)
 
 
 def _entry(row: str, status: str = 'approved') -> Callable[[Path], None]:

@@ -1,229 +1,277 @@
 # Running a phase of the Rust core migration
 
-This folder is the handbook for whoever orchestrates the remaining phases, person or agent.
-It records how Phase 1 was run, what slowed it down and how to avoid it.
-It's process material only and is deleted at the end of the migration, together with `scripts/rust_core/orchestration/`.
+This is the operating handbook for the remaining migration work.
+Updated 2026-10-24 from the owner's current instructions and the October 22–24 decisions.
+It replaces the older process descriptions in this folder where they disagree.
+The owner's latest instruction takes precedence over this handbook, older briefs and scripts.
+A script that still implements an older policy is a defect to reconcile, not authority to restore that policy.
+This migration-only material is removed when the migration ends.
 
-- [setup.md](setup.md): getting a new machine ready.
-- [prompts.md](prompts.md): the prompts that start an orchestrator session.
-- [phase-2-prep.md](phase-2-prep.md): Phase 2's work breakdown, schedule and the owner questions to settle at kickoff.
-- [later-phases-prep.md](later-phases-prep.md): the same for Phases 3 to 5, plus the proposed changes to the plan's checks and the Java track.
-- [phase-1-log.md](phase-1-log.md): a short log of Phase 1.
-- [briefs/](briefs/): the standing rules appended to every design reviewer, implementer, test author and reviewer brief.
-- [`scripts/rust_core/orchestration/`](../../../../scripts/rust_core/orchestration/): the watchdog and landing helpers.
+## Current rules at a glance
 
-## Where everything else lives
+- Write the package's tests before its implementation.
+- Push the candidate and start both independent code reviews immediately.
+- Run package tests, lint and cheap pre-push checks only after both reviewers approve the same SHA.
+- If those checks fail, fix the cause, obtain both approvals on the new SHA, then run the checks again.
+- Do not run full suites or full CI within a topic package.
+- Full CI runs nightly on the phase head and at phase end.
+- P0 and P1 findings block; P2 and P3 do not automatically block.
+- Up to three product packages may run at once, subject to the machine's resource limits.
+- Use short itemized designs and the existing tools; do not add process machinery or prose without a concrete need or the owner's request.
 
-| What | Where |
+These rules supersede the old pre-review stamp, pre-review package tests, affected-suite checks, separate test-author requirement, tooling train, P1/P2 blocking bar and one- or two-package limits.
+Writing tests first and executing the package checks after review are separate requirements.
+
+## Where everything lives
+
+| Material | Location |
 |---|---|
-| The plan, its standing decisions and process rules | [migration-plan.md](../migration-plan.md) (sections 2, 8 and 9) |
-| What went wrong in the first attempt | [learnings.md](../learnings.md); design checkpoints review against it |
-| A phase's design, decisions, tracker and as-built notes | `phase-N/` (Phase 1: [phase-1/](../phase-1/)) |
-| Every measured difference from the reference | [register.yaml](../register.yaml), checked by `scripts/rust_core/register.py` |
-| Phase 1's leftovers for Phase 2 | migration-plan.md section 8, "Carried into Phase 2" |
-| Landing, lanes, the gate, the ratchet | `scripts/rust_core/` (`land.py`, `lane.py`, `gate.sh`, `ratchet.py`, `prepush.sh`) |
+| Architecture, phases and inherited decisions | [migration-plan.md](../migration-plan.md) |
+| Product and process lessons | [learnings.md](../learnings.md) |
+| Scope and approved phase decisions | `phase-N/` |
+| Every measured difference from the reference | [register.yaml](../register.yaml) |
+| Product and crate boundaries | [repository README](../../../../README.md), [Rust README](../../../../rust/README.md) |
+| Landing, lanes, stamps and comparison tools | `scripts/rust_core/` |
+| Agent and resource helpers | [orchestration tools](../../../../scripts/rust_core/orchestration/) |
+| Machine setup | [setup.md](setup.md) |
+| Historical Phase 1 account | [phase-1-log.md](phase-1-log.md) |
+| Historical preparation and prompts | [phase-2-prep.md](phase-2-prep.md), [later-phases-prep.md](later-phases-prep.md), [prompts.md](prompts.md) |
 
-Branches: `rust-core` is the epic branch. Each phase works on `rust-core-phase-N`, cut from `rust-core`, with lane branches `rust-core-phase-N-lane-<x>` and topic branches `rust-core-phase-N-<name>`.
-`rust-core-reference` holds the reference (the old Python client with determinism fixes), checked out at `~/code/sdmc-reference`.
-Nothing merges into `main`; the owner decides on the epic merge at the end of Phase 5.
+Branch ancestry, current review reports and actual worktree changes establish what has landed or remains unfinished.
+A tracker or old preparation document is not proof that work is still pending.
+Keep account-specific settings, credentials and private run artifacts outside the repository under the configured state directory.
+The private owner-answer record preserves the original words behind decisions; an agent summary or automated notification is not an owner answer.
 
-## Roles
+## Branches and roles
 
-- **Orchestrator**: the main session. It plans, writes briefs, starts agents, reads reports and lands packages. It never writes product code itself.
-- **Test author**: a fresh agent per package. It writes the acceptance tests and reference-recorded vectors first, in `<ID> tests: ...` commits. Owner rule: the agent that writes the code never writes its own acceptance tests.
-- **Implementer**: a fresh agent per package. It makes the tests pass without editing them, pushes and reports its SHA. It never watches CI.
-- **Two reviewers on every round**, confirmations and docs included, and a round passes only when both approve the same SHA (Phase 2 decision KO2-9, the owner's rule): a fresh Claude subagent and Codex (in a herdr pane, or headless `codex exec`). Both get the same brief and review the exact SHA.
-  Codex in a herdr pane doesn't notify the orchestrator when it finishes, so every prompt gets a background waiter in the same turn:
-  `herdr --session <s> agent prompt <pane> "<brief, naming the report file>"`, then, run in the background, `sleep 5; herdr --session <s> agent wait <pane> --timeout 3000000 >/dev/null 2>&1; ls -la <report file>`.
-  If the wait returns with no report (it can return before Codex starts working), check `herdr --session <s> pane list` and re-arm it. Re-prompt after a capacity error.
-- **The owner**: answers product questions, approves register entries reviewers can't, and merges each phase into `rust-core`.
+`rust-core` is the final migration branch.
+Package topics and lanes land into `rust-core-phase-N` through `land.py`.
+The owner decides when a verified phase merges into `rust-core` and when the finished migration merges into `main`.
+`rust-core-reference` is the separately installed Python comparison baseline; do not substitute moving `main` for it.
+No pull requests, direct epic commits, tags or protected-branch pushes are part of ordinary package work.
 
-## Every phase starts with its design
+The orchestrator coordinates scope, agents, reviews, resources, decisions and landings.
+An implementer writes tests first, then the implementation, and reports a fixed candidate SHA for review.
+A separate test author is optional under the current process; already independent acceptance tests and recorded reference values must not be weakened to make a change pass.
+Two fresh Codex reviewers use `gpt-6.1-sol` with high reasoning and inspect the same fixed SHA independently.
+One reviews the whole change, prioritizing design, contracts, duplication, boundaries and general correctness.
+The other starts from the package's particular failure risks and relevant existing evidence.
+These are different starting points, not limits on what either reviewer may flag.
+Both receive the approved requirements and decisions, and neither sees the other's report before writing its own initial findings.
+Do not prime either reviewer with the implementer's conclusions or a desired verdict.
+The shared restrictions on test execution, live work and review scope still apply to both.
+They use throwaway worktrees or `git show`, never the changing implementation worktree.
+The owner answers user-visible behavior questions and gives the phase's go or no-go and merge decision.
 
-No package starts until the phase has a reviewed design and locked acceptance checks (migration-plan.md section 9). Phase 1 did this as its first task, T1.1 ("Phase documents and locked checks"), and so does every later phase.
+## Design and repeated findings
 
-**0. Bring learnings.md up to date first.** It is what every design and design checkpoint is judged against. It holds the first attempt's lessons (1 to 11) and Phase 1's up to checkpoint 8 (12 to 16). Before writing the next design, add what the finished phase taught that isn't there yet: for Phase 2, from Phase 1's final whole-phase reviews ([phase-1/tracker.md](../phase-1/tracker.md)'s T1.36 section, [as-built.md](../phase-1/as-built.md)'s T1.36 notes and [evidence/reviews.md](../phase-1/evidence/reviews.md)), the FR and FR2 rows of migration-plan.md section 8, the held-out run ([evidence/heldout.md](../phase-1/evidence/heldout.md) and [h11-classification.md](../phase-1/evidence/heldout/h11-classification.md)), [fix-round-history.md](../phase-1/fix-round-history.md), [phase-1-log.md](phase-1-log.md) and this handbook. (Phase 1 had no design checkpoint after 8.) Same format as lessons 12 to 16: what happened, what it cost, the rule that prevents it. Product and design lessons go there; process lessons stay in this handbook. Both reviewers review it.
+Before a new phase, read the plan, current learnings, prior phase's as-built evidence and unresolved carried items.
+Update lessons from completed work before designing the next phase.
+Use helper digests for large historical documents instead of repeatedly copying them into every brief.
+Keep the plan itemized, and each package design about a page: behavior, crate/module ownership, interfaces, tests, dependencies and unresolved owner choices.
+Do not recreate the former large Phase 3 design or new tracker/decision prose unless requested.
 
-**1. Read what the phase inherits.** The design is written from these, not from memory. Phase 1's design, decisions and as-built notes are 220 to 330 KB each, too much for the orchestrator to read whole: give each big source to a helper agent that returns a one-page digest of what the new phase inherits from it (rules in force, mechanisms to reuse, open items, traps), citing section or row numbers, and write the design from the digests. Read the plan and learnings.md in full yourself.
+Review designs independently against the language-neutral contract, DRY, separation of concerns, modularity and interfaces.
+For the remaining Phase 3 work, a reviewed short design is sufficient to proceed under the owner's overnight delegation.
+User-visible changes stay proposed until their authorized approver decides.
+Locked acceptance changes and comparison relaxations remain owner decisions.
 
-| Source | What to take from it |
-|---|---|
-| [migration-plan.md](../migration-plan.md) | The phase's row and exit (section 8), the slice it delivers (section 4), the gate (section 7), the standing decisions (section 2), the architecture (section 3), the process and stop rules (section 9) |
-| [learnings.md](../learnings.md) | The first attempt's failure modes. Each risk in the design names the lesson it guards against, and design checkpoints review against this file |
-| [phase-1/design.md](../phase-1/design.md) | The mechanisms the phase reuses (contract, runners, comparator, ratchet, gate, lanes, landing): cite them, don't restate them. Its "Explicitly out" list names what Phase 1 handed to later phases, and its "Host-held semantics" ledger lists the rules still to move into the core |
-| [phase-1/decisions.md](../phase-1/decisions.md) | The standing rows the phase runs under (for example E25 and E29 on reviews, E43 on lanes, E49 on tooling, E92 on the named refusals to lift, E130 and E131 on landing and CI). Rows marked approved or confirmed by the owner stay in force unless the owner changes them |
-| [phase-1/as-built.md](../phase-1/as-built.md) | What actually exists, and where it differs from the Phase 1 design |
-| [register.yaml](../register.yaml) | One register for the whole migration. Phase 1's entries stay in force; the phase adds its own and never re-approves old ones |
-| [phase-1/not-yet-refusals.md](../phase-1/not-yet-refusals.md) | Every named "not yet" refusal and which phase owns it |
-| migration-plan.md section 8, "Carried into Phase 2" | Phase 1's deferred review findings and the owner's follow-ups (FX rows) |
-| [phase-1/evidence/](../phase-1/evidence/) | The shape of the go or no-go evidence pack |
-| This folder | The process lessons, [phase-1-log.md](phase-1-log.md), and the phase's prep file (for Phase 2, [phase-2-prep.md](phase-2-prep.md)) |
-
-**2. Write the phase's documents** in `phase-N/`, on a topic branch (for Phase 2, `rust-core-phase-2-design`), never directly on the phase branch: every commit on the phase branch must be a landing, or the ratchet refuses later gates. Push the topic branch after each review round; its CI may be red until the phase's tooling package (T2.0) lands, and the review doesn't wait on it. The design is a package with an ID in land.py's pattern (`T<n>.<n>[a-z]`; for Phase 2, `T2.0a`), and its commit subjects start with that ID: the ratchet recognises a landing only by `Land T<n>.<n>...:` or `Land CI<n>:`, and a phase-branch landing under any other title breaks every later gate and can't be undone without a force push. Once the design is approved and locked: rebase it onto the phase head (T2.0 will have landed under it), get two APPROVEs on that exact SHA (`mech_confirm.py` for the clean rebase, plus a confirmation of the owner's-answers and lock commits), wait for green CI, and land it with `land.py` as a docs package (`--title 'T2.0a: ...'`, `--protected-paths "none (docs and evidence only)"`), together with the learnings.md update.
-- `design.md`, with Phase 1's sections but only what's new: goal; scope and "explicitly out"; architecture choices new in this phase; the task table (each package with its output, exit check, dependencies, lane, and whether it changes a judging path); owner check-ins; the evidence pack; gates (merge rules, locked acceptance checks, process rules that differ from Phase 1); risks, each with the learnings lesson it guards. Phase 1's design grew to 220 KB; aim for a few pages that point at Phase 1 for everything unchanged.
-- `decisions.md`, empty except for the owner's kickoff answers. New rows only; cite Phase 1's rows instead of copying them.
-- `tracker.md`, one row per package, plus the stop-rule counters.
-
-**3. Review it, and iterate until it's right.** Getting the design right matters more than any other step: Phase 1's design needed three review rounds and a closure check, and the first attempt's failures were mostly in its approach (learnings.md), not in individual lines of code. Each round, a fresh Claude subagent and Codex review independently with [briefs/design-reviewer.md](briefs/design-reviewer.md), which walks the design against the plan, every learnings.md lesson one by one, Phase 1 as built, and the locked checks. Fix every P1 and P2, then run another full round with both. Stop only when both approve the same SHA with no P1 or P2; then one closure check confirms the last round's findings are applied. Keep a short table of rounds and findings in the tracker. Don't shortcut these rounds to save time: a wrong design costs days, a review round costs an hour.
-
-**4. Settle the owner's questions and lock the checks.** Send the open questions all at once, with a recommendation each. The owner's answers go into `decisions.md`. If an answer changes the design, run another review round on the change. Then the locked acceptance checks are marked locked, and any later change to them goes to the owner.
-
-Work that doesn't depend on the design's scope may run while it's in review and while the owner answers: for Phase 2, T2.0, the update from `main` and the reference rerun, and the speed-ups. Anything that depends on the locked scope waits: for Phase 2, the test-author batch and the new held-out set.
+After two rounds on the same theme, or by round four, stop patching that theme and reassess its design.
+Write down the old client's actual behavior, identify the missing rule or state assumption, choose a simpler design and resume.
+The owner delegated that reassessment to the orchestrator on October 24.
+Do not discard real findings merely to reduce the round count.
 
 ## A package, start to finish
 
-1. **Brief.** One file per package: scope, exits, the design row, decision rows, known findings to skip, and the standing rules from [briefs/implementer.md](briefs/implementer.md). Name every judging-path file it touches (see Landing).
-2. **Tests first.** Start the test author with [briefs/test-author.md](briefs/test-author.md). The implementer may start from the brief in parallel; it must not read the test author's work in progress, and the tests arrive before its first push.
-3. **Lane.** `scripts/rust_core/lane.py start --lane <x> --package <ID> --worktree <path> --wait`. Every commit subject starts with the package ID (`<ID>: ...`, `<ID> fix <n>: ...`, `<ID> tracker: ...`); `prepush.sh` and `land.py` refuse others.
-4. **Push.** The implementer runs `scripts/rust_core/prepush.sh` (the cheap tier only, never `--full`), pushes, reports the SHA and ends its turn.
-5. **Review and CI in parallel.** At push, start both reviewers with [briefs/reviewer.md](briefs/reviewer.md) and a background check of the exact SHA's CI run. Don't wait for CI before reviewing. Run `cancel_superseded.sh` after each push, since lane CI doesn't cancel superseded runs.
-6. **Fix rounds** until both reviewers approve the same SHA. Reviews block only on P1 and P2; P3s go to a carry-forward list. Later rounds review only the fix commits plus the earlier repros.
-7. **Land** with `land.py` (or queue it for `auto_land.py`), only on two `APPROVE` reports naming the SHA and a green exact-SHA CI run.
-8. **Start the lane's next package** on a local branch stacked on the approved candidate as soon as both approvals are in. Never sit idle on CI.
+1. **Brief and lane.** Name the package, its bounded scope, dependencies, approved design and known findings.
+   Reserve its lane with `lane.py start`; every commit subject starts with that package ID.
+2. **Tests first.** Commit the new tests before product implementation.
+   Tests exercise public behavior, use both routes where applicable, and retain authentic reference observations.
+   Reviewers verify the tests-first history.
+3. **Implement and push.** Finish the code, push its candidate topic and report the exact SHA.
+   Do not run package tests, lint or cheap pre-push checks before the reviewers approve it.
+   Keep protected-branch and ownership enforcement active; reconcile an outdated hook rather than bypassing it with `--no-verify`.
+4. **Review immediately.** Start both independent reviewers as soon as the SHA is available, with no stamp or CI prerequisite.
+   Reviewers read the code, including tests, design boundaries and judging changes.
+   A targeted investigation of a specific suspected defect is not a reason to launch package or broad suites during review.
+5. **Fix and re-review.** Resolve P0/P1 findings and have both reviewers approve the same final SHA.
+   Later rounds inspect the fixes and the earlier findings, rather than restarting the whole review.
+   Address useful P2/P3 findings where practical and carry unresolved ones explicitly.
+6. **Check once after approval.** Coordinate the cheap pre-push checks and `handoff.py run` as one bounded check of the approved SHA, restricted to lint and this package's own tests.
+   Do not run overlapping checks twice or let the current pre-push script expand this into tool self-tests or broad clippy runs.
+   Do not add affected suites, the full contract corpus, workspace tests, a reference rerun, a wheel build or full CI to the package check.
+   If a check fails, fix it, return to both reviewers, and only then test the newly approved SHA.
+7. **Land.** A clean approved SHA with its passing stamp lands through `land.py`, alone or in a stack.
+   `handoff.py wait SHA` reports success or failure; the orchestrator consumes that result promptly.
+8. **Continue.** Start the next package on the actual landing commit, preserving work still needed by dependent packages.
 
-## Ending a phase
+The automatic pre-push hook may still implement both older timing and wider scope, including tool self-tests and broad clippy checks.
+Some standing briefs may also retain older severity rules.
+Check their behavior before use and make a narrow reviewed correction when necessary.
+Do not claim this handbook change alone changed those tools.
 
-Three scripts in `scripts/rust_core/orchestration/` carry the mechanical part. Each prints `--help`, and the two that change anything are dry runs unless given `--execute`.
+## Reviews and behavior differences
 
-- `packet_checks.sh N`: read-only. It lists landings with no local gate evidence for their exact SHA, migration-plan.md markers that disagree with `phase-N/decisions.md`, rows still "owner to confirm", the register's statuses (proposed entries by id) and the owner approvals since the last check-in. Run it when the phase-end work starts and again on the final head.
-- `phase_end.sh --phase N --sha SHA`: the evidence runs from one final SHA. In order: preflight (read-only), build (the local client wheel into every runtime cell, plus CI's native wheel), evidence (`gate.sh --locked` with `--out`, the other cells' runs, `cargo tree`, `tokei`, and `evidence.py` without the held-out bundle, so a refused input shows up before the one shot), held-out (`scripts/rust_core/heldout_run.sh`, once), an optional live install check (the command in `SDM_LIVE_CHECK_CMD`, skipped when unset), and pack (staged for `phase-N/evidence/`). Each step is stamped when done, so a rerun resumes at the failed step. A one-shot step that started and didn't finish stops every rerun: a person decides. Cells, tools, the held-out bundle and anything account-specific come from environment variables, never from the script.
-- `final_gate.sh WORKTREE PYTHON CI_RUN HALF...`: fetches the exact-SHA CI wheels, runs `gate.sh --locked` for each half named, and checks that the one evidence file (`<git-common-dir>/sdm-gate-evidence/gate/<sha>.json`) shows them all passed.
+P0/P1 cover serious defects and normal-use failures, including wrong answers, crashes, lost support, misleading errors and checks that accept invalid evidence.
+Rare sequences can be P2 under the owner's October 24 guidance; severity follows realistic use and impact.
+Reviewers also inspect the contract, duplication, module ownership and language-neutral interfaces.
 
-1. **Close the open work**: every package landed or explicitly dropped, and dropped items closed out (pending entries retired, the decision recorded). `scripts/rust_core/lane.py status` shows no lane holding an unlanded package. The tracker's stop-rule counters are current, and any counter at 2 has gone to the owner. Send the phase's check-in reports that are still drafts, or fold them into the packet, so the owner doesn't see them for the first time at the decision.
-2. **Reconcile the register**: every measured difference has an entry, none is left proposed (unless the owner accepted a parked list at kickoff, as Phase 2's question G6(d) proposes), and `scripts/rust_core/register.py validate` passes. `packet_checks.sh N` section D must show 0 proposed: the held-out run counts only entries approved before it starts.
-3. **Run the locked checks and the held-out set** on the exact final SHA, and write the evidence pack to `phase-N/evidence/`:
-   - `phase_end.sh --phase N --sha SHA` (dry) until preflight is clean, then `--execute --until 2`: everything before the one shot.
-   - Then `--execute` again for the held-out run, the live check and the pack. If preflight says the gate's runner files differ from the checkpoint's, land an empty commit E on SHA and run on E with `--base SHA --landing SHA`.
-   - By hand afterwards: fill the held-out report's "approved before the run" column only from the register snapshot taken at run start; write `evidence/README.md`, naming the command that made each item; copy the staged pack into `phase-N/evidence/` in the phase-end package. The gate's evidence JSON stays outside the tree, and the pack cites it by SHA.
-   - Check every pack item against the design's evidence list, one at a time. Each must be generated by the branch's own runs, not written by hand. Anything not run (an architecture with no CI wheel, a runtime not tried, a column not measured) goes on the "not done" list.
-4. **A fresh whole-phase review** by both reviewers (`origin/rust-core..HEAD`, emphasis on the work since the last design checkpoint). Its P1 and P2 findings are fixed, and its P3s are carried forward. Both briefs cover:
-   - each locked check mapped to evidence on the merge SHA;
-   - the held-out verdict computed as the design wrote it;
-   - every register entry approved, rejected or owner-pending with a named question, with no implementer approving its own entry and every `approved_by: owner` citing the owner's written answer;
-   - the boundary (L0 report clean, no `pyo3` in the pure-Rust host's `cargo tree`, emulation allowlist changed only through owner rows);
-   - landing commits trailer-only, with `Protected-paths` naming every protected change;
-   - test-author files untouched by implementers;
-   - docs whose statuses are true.
-5. **Carry forward what's left**: unfixed P3s and owner follow-ups become named rows for the next phase in migration-plan.md section 8, as "Carried into Phase 2" does; `as-built.md` records what differs from the design; process lessons go into this handbook. Fix stale "pending owner confirmation" markers in migration-plan.md that `packet_checks.sh` section B flags.
-6. **The go or no-go packet**: a plain-language summary for the owner, with the evidence and anything that needs their decision. Keep it to one page plus links:
-   - the decision asked for (go, no-go, or re-plan);
-   - the executor's recommendation, labelled as such;
-   - each no-go criterion with its result;
-   - the held-out counts against the threshold;
-   - the per-case table summary;
-   - the register totals and what the owner approved;
-   - what wasn't done or isn't proven;
-   - the rows confirmed by default, with at most five flagged where the owner might choose differently;
-   - landings with no local gate evidence (`packet_checks.sh` section A);
-   - how to merge.
+The new core should match successful old-client behavior or improve it.
+A clearer error instead of an internal crash, or support for an input the old client rejects, can be an improvement.
+Every measured difference still needs a register entry with its exact scope and approval source.
+An agent must not silently approve its own change to accepted answers, model inputs, exclusions or comparison rules.
+A recommendation, silence, a background event or a proposal marked "owner to confirm" is not approval.
 
-   The owner's go or no-go goes into `phase-N/decisions.md` in their own words, as a docs commit before the final candidate. Then:
-   - Push the candidate and wait for green CI on every job. Rerun a registry rate-limit failure; never skip it.
-   - Run `final_gate.sh <clean worktree at the candidate> <python with this SHA's local build> <candidate's run> --base <phase tip at start> --execute <halves>`.
-   - Land with `land.py` once both reviewers confirm.
-   - Run `final_gate.sh` again on a clean worktree at the landing commit, with the candidate's run (same tree). That evidence file is the merge-SHA evidence the packet cites.
-   - Check CI's runtime-cell jobs on the landing's tree.
+Each review report names its fixed candidate SHA, verdict, findings and observed differences.
+Do not wait for CI to begin or finish a package review.
+A reviewer does not rerun suites as a routine review step.
+When code suggests a defect, investigate only enough to establish that finding and explain why it was investigated.
 
-   Then stop and report "ready to merge" with the SHA, both evidence files and the CI run IDs. Agents never merge, push `rust-core` or tag. The owner decides, and the merge into `rust-core` is a `--no-ff` merge with a DCO sign-off.
-7. **After the merge, check CI on `rust-core`** and the next phase's first run. Phase 1's merge left `rust-core` red, noticed only hours later while preparing Phase 2 (see [phase-2-prep.md](phase-2-prep.md), T2.0).
+## The handoff stamp
+
+`handoff.py run --package <ID> --python <lane python>` runs after both approvals, in a clean worktree at that exact SHA.
+Its intended scope is lint and the package's own added or changed test files, nothing broader.
+Separate Python test roots as CI does; the engine suite cannot be collected with the other packages.
+Use a named Rust test target rather than workspace-wide tests.
+The stamp is valid only while the candidate and tree remain unchanged.
+`handoff.py check SHA` reads it; `handoff.py wait SHA` reports completion.
+
+A failed check leads to a fix and renewed review before the next check run.
+Do not repeat checks between review rounds, or broaden testing merely because the candidate is waiting.
+On an unchanged candidate already approved by both reviewers, continue only required groups that have not executed to collect remaining failures before editing.
+Preserve their outputs, do not repeat groups that passed during collection, and never use a failed run as `--previous` stamp evidence.
+After fixes receive both exact-SHA approvals, confirm the fast targets that failed before running the normal package handoff.
+This changes neither the required checks nor the passing-stamp requirement.
+The general setup and test commands in [CONTRIBUTING.md](../../../../CONTRIBUTING.md) describe available suites, not permission to run them all within a topic.
+
+### Owner-approved T3.10 fixture repair scope
+
+The default remains whole changed test files.
+On 2026-10-25 the owner approved the one-time `--fixture-repair-scope t310-fixtures-7ab261a6d` exception for the exact T3.10 fixture sources pinned in `handoff.py`.
+Decision row `T310-OWNER-2026-10-25-FIXTURE-SCOPE-1` records the actual approval of that scope and its source commit, which the tool requires before use.
+Both exact-source reviews and required controls still precede execution.
+The exception keeps the ten real factory controls, four lifecycle outcomes and two actual gate fixture consumers instead of repeating unchanged semantic scenarios in the pinned fixture-only files.
+The complete changed coverage-checker tests, all other substantive own tests, normal lint and every final-source CI scenario remain required.
+The flag is explicit, limited to T3.10, refuses any changed pinned source and records its exact suites, source hashes and approval-row digest in the log and passing stamp.
+This exception supplies no failed-stamp reuse, automatic fixture classification, global pytest filter or change to full phase-end evidence.
 
 ## Landing
 
-- **land.py does all landings.** It makes an empty `Land <ID>: ...` commit with `Reviewed-by`, `Protected-paths`, `Base-SHA` and `Checkpoint-SHA` trailers and fast-forwards the phase branch in one atomic push. It refuses an empty `--protected-paths`; pass `"none (docs and evidence only)"` when nothing protected changed.
-- **CI skips the landing commit** when the candidate's tree has green exact-SHA evidence (decision E131). `land.py verify <landing SHA>` stands on the candidate's run.
-- **Moved landings (`--moved-from X`)**: an approved, green X rebased over landing commits only (same tree, the same patches one to one) lands on X's reviews and run, with no re-review. A move over another package's product commits is not a moved landing: it needs its own CI run and a confirmation.
-- **Stack on the landing commit**, never on a landed candidate. Phase 1 lost a cycle when the ratchet refused a merge base that wasn't a landing commit.
-- **Clean rebases are confirmed by script** (`mech_confirm.py`; decision E130). Reviewers look again only when the move changed something.
-- **`land_chain.sh` queues one package at a time** and lands each only after the run of the package below it has completed.
-- **Judging-path changes land alone, first.** If a package changes a file `gate.sh` takes from the checkpoint (`compare.py`, `run_python.py`, `ratchet.py`, `coverage.py`, `gate.sh`, `wheel_smoke.py`, the guards `bridge_freeze.py` and `l0_*.py`, `ci.yml`) and relies on that change for its own gate, it lands in two parts: the judging change alone, then the rest. A judging part that only adds judgement over product already landed, which nothing it judges relies on, lands alone right after that product (Phase 2's T2.12 retirement, T2.2b, T2.3b). Every guard or gate change must also pass in its post-landing state.
+`land.py` owns phase-branch landings and their review, protected-path, base and checkpoint trailers.
+It requires two approvals and the candidate's handoff stamp, not an exact-candidate CI run.
+Judging changes land with the package that needs them and receive both reviews.
+The separate tooling train and its train-only machinery were removed at the owner's request.
 
-## CI
+Up to four approved packages may stack, each with its own stamp, using `land.py --stack` and `land.py stack-land`.
+This stack limit is distinct from the three active product-package limit.
+Start dependent work on a landing commit, not on the unlanded candidate below it.
+Use the existing mechanical confirmation tools only when they prove a move preserves the approved changes.
+A conflict, changed patch or substantive merge needs the appropriate review and stamp on its final candidate.
+Preserve recording provenance when integrating branches; do not rewrite evidence to conceal a changed source tree.
 
-- **The four container images are private copies on ghcr.io** (`ghcr.io/nvidia/structured-data-models-client/...`, same digests), pulled with the workflow token. Anonymous registry pulls caused about 57% of Phase 1's failed runs before the move.
-- **Every job has `timeout-minutes`.** A hung `rust-test` once ran 2h24m.
-- **Dependencies build at opt-level 1**, so a cold `rust-test` takes about 34 minutes (it was over 2 hours).
-- **Caches are branch-scoped.** A push restores caches only from its own branch and `main`, so a new topic branch starts cold. Prefer lanes. The Actions cache holds 10 GiB; `scripts/rust_core/prune_caches.py` prunes it, and pip caches save only on `main`.
-- **External dependencies drift.** snowflake-connector-python 5.0.0 turned CI red mid-phase. When an unrelated job fails, check the dependency versions first.
-- **Watch CI from the orchestrator only**, in the background: poll `gh run view <id> --json status,conclusion` under a timeout. Never `gh run watch`; it has hung agents.
-- **The binding tests hard-code the contract version** in `rust/bindings/sdm-py/tests/messages.py`. Phase 1 missed it at two contract bumps (Phase 2 row FX-6 derives it). Until FX-6 lands, every contract bump updates it.
+## Environments and resource limits
 
-## Watchdogs and stalls
+Use one isolated environment per lane through `cells.sh`; do not substitute the shared `.venv` for a recorded-build environment.
+Export the current `SDM_PHASE_BRANCH`, `SDM_LANE_ENV` and kit interpreter explicitly.
+A shell profile left on an old phase is not a reliable default.
+Reuse environments while their installed sources and dependency key remain unchanged.
 
-Phase 1 lost more time to stalled agents than to any single bug. The stall patterns and their fixes:
+Heavy commands go through the existing `heavy` wrapper and its CPU, memory and disk admission checks.
+Three product packages may run at once under the October 24 authorization.
+The separate recording campaign does not create another product lane, but still consumes the same machine resources.
+Do not raise concurrency or resource thresholds silently to get around a queue.
 
-| Stall | Cost in Phase 1 | Fix |
-|---|---|---|
-| An approval prompt on `rm -rf`, `--force` or `sudo` | 9.5 h and 9 h | Briefs ban them; `rule_watch.py` flags them; the only cleanup allowed is `git worktree prune` |
-| A turn that ended "waiting for CI" | 10.6 h overnight | Implementers report and end their turn; the orchestrator owns CI waits |
-| A probe or fake `gh` that never returned | 17 min | Every probe runs `perl -e 'alarm shift; exec @ARGV' 600 <cmd> </dev/null` with `GH_PROMPT_DISABLED=1 GIT_TERMINAL_PROMPT=0` |
-| A finished build that was never continued | hours | `stuck_agents.py` flags a tool call with no result after N minutes |
-| A legitimately long build or gate | none, but false alarms | Treat `gate.sh`, `until` and `sleep` as expected, with a 60–90 minute ceiling |
-| Codex finished and nobody noticed | 30 min+ | Every Codex prompt gets a background waiter in the same turn |
-| The laptop slept | about 1 h per agent | Keep the machine awake (see setup.md) |
-| Disk full, then a cleanup deleted a reviewer's scratch directory | a lost review | `clean_tmp.sh` is dry-run by default and never touches worktrees in use |
+Rust builds share sccache but need distinct target directories for concurrent package/review work.
+Two worktrees reusing incremental output can falsely reuse another worktree's binary.
+A reviewer or package must use its assigned target and installed build.
+Refresh the tools checkout only when it is clean; never overwrite another agent's pending edits or merge.
 
-Run `stuck_agents.py` as a silent background loop that notifies only when something is blocked. A frequent cron that reports "all fine" just floods the orchestrator's context. When an agent is flagged, stop it and resume it with the blocking command named and an alternative.
+## Live work and reference recordings
 
-`rule_watch.py` matches command text, so commands that merely mention `sudo` or `-D` (a grep, a brief) raise false alarms. Add acknowledged events to its ignore file rather than to the script.
+The owner selected B-lite: no offline warehouse stand-in or new local warehouse emulation.
+Provider tests use fakes fed recorded results; the real warehouse runs establish actual behavior.
+Databricks, Snowflake and Lakebase comparisons use each leg's own reference observations.
+Do not copy a DuckDB expectation over a different genuine warehouse outcome.
 
-Never edit a bash script while it's running. Bash reads scripts incrementally, so the running copy executes the edit half-way. Stop it, edit, restart.
+Live setup writes are limited to the authorized test area.
+The client's actual query logic is read-only.
+The write guard protects against accidental writes from our code, not arbitrary attack-style SQL; crafted bypasses outside plausible client behavior are not automatic P0 findings.
+Restricted warehouse roles provide protection independently of the text guard.
+Keep connection settings, private schema names and credentials outside committed artifacts.
 
-## What the data says about reviews
+A successful statement execution does not prove its results were recorded.
+Capture fetch-time failures as well as execution failures, and reject result-producing queries with neither results nor an error.
+Validate each new recording with the full `capture_check.py recording --locked` check before committing it; manifest-only validation does not establish query completeness.
+State-changing reads such as `setseed` need an explicit narrow rule, not a broad unread-query exemption.
+Do not save connection, capacity or other environment failures as the expected product answer.
+Record clean source trees or preserve the explicitly permitted provenance explanation consistently.
+Never edit recorded results or verified outputs by hand.
 
-- **Two reviewers catch real bugs.** In 111 rounds where both reviewed the same SHA, 40 had a blocker, and in 31 of those 40 (78%) one reviewer alone would have approved a P1 or P2. Codex alone would have missed 17; the subagent alone 22. Keep both on round 1 and on every fix round touching product or judging-path code.
-- **Confirmation rounds almost never find anything.** All 20 paired confirmation, stack and tiny-fix rounds were approved by both. Use the script for clean moves; since Phase 2 (decision KO2-9), confirmations still have both reviewers, because the owner wants both to sign off.
-- **One Codex pane is a bottleneck.** It served three lanes and was queued 26 times. Run one per lane, or headless.
-- **Fix rounds introduce new bugs.** The forecast move (T1.36 fixes 21 to 28) took four rounds. Review each fix round's own diff and rerun the earlier repros.
-- **A check that fails twice the same way changes method**; it goes to the owner rather than getting a third patch.
+For Databricks, upload only to the authorized volume, use one-time jobs, and leave existing notebooks and clusters alone.
+Run the scripted model endpoint where the job can actually reach it.
+Verify access before leaving a long recording unattended.
+The owner approved keeping Lakebase and the model endpoint running until the phase finishes.
 
-## Where Phase 1's time went
+## CI and phase-end evidence
 
-82 landings over about a week, 6 to 14 a day. A package's median first-commit-to-landing time was about 4.5 hours; the tail was 8 to 11.
-Implementers spent about 2 of their 3.3 active hours in local pytest, cargo and gate runs.
-The day-killers were the tails: rebases across other lanes' product commits (about 0.6 per landing, 45 to 120 minutes each), red or cancelled CI (on 2026-10-14 only 35 of 106 runs were green), owner waits (one 6.7 hours, two overnight) and stalls.
+Full CI runs nightly on the phase head with fresh dependencies, and at phase end.
+It does not run on topic pushes and is not a package landing prerequisite.
+The forced-core client suite belongs in that nightly matrix.
+The orchestrator watches nightly results and turns failures into concrete fix items; a missing nightly also needs investigation.
+Do not report a nightly as running or green without checking it.
+Watch in the background with bounded `gh run list` or `gh run view`, never `gh run watch`.
 
-The fixes, best first. Items 1, 3, 5 and 6 aren't built yet; they are Phase 2 prep (see [phase-2-prep.md](phase-2-prep.md)):
+At phase end:
 
-1. **A merge-queue flow.** Stack each approved, green package on the queue at approval time, so every later move is over landing commits only and lands without new CI. `land_chain.sh` reads its queue from a file.
-2. **The CI fixes above** (private images, timeouts, opt-level 1, no CI on landing commits). Done.
-3. **Split the slow CI jobs**: a separate `rust-host` job so `cross-host` stops waiting for `cargo test`, and shard `cargo test` and the contract tests, each shard checking that the shards add up to the whole. Target: a push in about 20 to 25 minutes instead of 43 to 88.
-4. **Settle owner questions at kickoff**, all at once, plus two fixed check-ins a day. New questions found mid-phase are marked owner-pending and work continues around them (the owner's rule from Phase 1).
-5. **A fast local loop**: keep each lane's Cargo target across landings, a shared sccache, one prebuilt wheel per phase head, warm venvs, `pytest -n auto`.
-6. **One Codex per lane**, re-prompted automatically after capacity errors.
-7. **Fewer, bigger landings.** One early judging-path landing, case families admitted in one landing when the reference observations are committed first. Splits cost 7 to 12% of lane time and caught nothing.
+1. Close or explicitly drop remaining packages and reconcile the register against actual owner and reviewer decisions.
+2. Run `packet_checks.sh N` and inspect its findings; do not treat an obsolete per-package CI expectation as a new landing rule.
+3. Build and run the final phase's required evidence from one named SHA using `phase_end.sh`, the locked gates and the runtime cells.
+   This is the phase-end exception to the no-full-suites-in-topics rule, not another check on every package.
+4. Cover the full applicable contract corpus, differential generator, SQL/provider checks, conversion tables, platform packaging and performance.
+   For S2 and the switch, include live warehouses, the Databricks job matrix and required live timing.
+5. Use a fresh held-out set once, after the ordinary evidence is ready.
+   Implementers never open it, and a partially started one-shot run is not silently restarted.
+6. Have both independent reviewers review the whole phase, map locked checks to actual evidence, and resolve blocking findings.
+7. Give the owner a concise go/no-go packet: evidence, differences, limitations, remaining questions and the exact merge candidate.
+8. Complete the final exact-tree CI and `final_gate.sh` evidence required by the phase's locked exit, then report ready to merge.
+   Only the owner decides the phase merge into `rust-core`; do not push it on ordinary package authority.
+9. After the owner's merge, inspect CI on `rust-core` and carry genuine remaining items into the next phase.
 
-One day per phase holds about 15 to 20 landings on 3 to 6 lanes. Phase 1's size (70) doesn't fit in a day under any of these changes.
+Record commands and artifact SHAs for evidence rather than hand-written claims of success.
+If a required check was not run, say so plainly.
+The old Phase 1 and Phase 2 held-out sets are spent.
 
-## The owner
+## Watchdogs, approvals and cleanup
 
-How the owner works:
-- **Plain language.** Start with a short summary that assumes no context. Explain internal IDs or leave them out, and give concrete examples. ID-heavy lists were hard to follow.
-- **Process is never the blocker.** If a rule makes the right thing awkward, propose the lightest compliant route or a rule change, and say so plainly.
-- **Honest, small estimates**, sized from the actual diff. "4–5 hours" for a small change drew "ridiculously long".
-- **Parallelize, and never sit idle waiting on CI.**
-- **Match the old client by default when it succeeds.** Be better than it where it crashes or errors: a named error beats an internal error. Every measured difference still gets a register entry, and changes to accepted answers or model inputs go to the owner one by one, with a recommendation.
-- **One day per phase is the goal.** "We CANNOT take a full month for this migration."
-- **Deletions only after a dry run**, with a backup and the owner's explicit approval. The one standing exception: `clean_tmp.sh`'s removal of stale agent scratch and build output, which the owner approved in Phase 1 (2026-10-12 and 13), may run with `--apply` after a dry run shows nothing still needed.
-- **Close out dropped items** (retire pending entries, record the decision) so they make no noise later.
+Subagents must not wait unattended on user approval prompts.
+The orchestrator coordinates a permitted command form or surfaces the actual decision promptly.
+Claude's existing permission hook rejects subagent prompts immediately and tells the agent to rewrite or report the command; a stall watcher catches commands with no active process.
+Those session-specific hooks are not assumed to apply to another agent runtime.
+Verify active processes and pending tool results before saying an agent is still working.
 
-What only the owner decides: a new refusal of input the reference accepts, relaxing a comparison rule, adding an exclusion, a new acceptance capability, register entries the reviewers can't approve, a third change to a phase's locked checks, lifting a stop rule, and each phase's go and merge.
-Never approve your own register entry or exception.
+Use bounded commands with stdin closed and noninteractive Git/GitHub settings for probes.
+A finished build, review or background task needs a continuation or report, not another idle status message.
+Check stalls frequently and investigate a missing command after five minutes.
+Never modify a shell script while it is running.
 
-## Hard rules for every agent
+Cleanup starts with a dry run and preserves active processes, worktrees, recordings and unfinished merges.
+The owner gave standing approval to remove old unused test temp files carefully, and separately approved the listed leftover cleanup.
+Do not ask again for that same authorized scope.
+Unrelated destructive cleanup still needs authorization.
+Use the existing cleanup tooling where applicable and release a lane only after its artifacts are no longer needed.
 
-- Never print, log, store or commit credentials, hostnames, account or workspace names, or usernames. Keep internal infrastructure names out of repo files. This repository is public.
-- DCO sign-off only (`git commit -s`), with no `Co-Authored-By`. Never `git config` in a shared repo.
-- Push only to phase, lane, topic and archive branches. No pull requests. `rust-core` moves only by the owner's merge (or the orchestrator's, on the owner's explicit instruction).
-- No `rm -rf` or `rm -r` outside the session scratchpad, no `--force` or `-D` removals, no `sudo`, no `prepush.sh --full`, no `gh run watch`.
-- Live Databricks work: upload only to the volume the owner authorized, run one-time jobs only, and never touch existing notebooks or clusters. Use only the database instance the owner names.
-- Slack is read-only.
-- Implementers never open held-out data. A held-out set is used once; Phase 1's is spent.
+## Hard rules and communication
 
-## Gotchas from Phase 1
+- Sign off every commit and never add an agent co-author.
+- Regenerate generated files with their generators; never edit them manually.
+- Keep SPDX, repository hygiene, license and observable API/wire snapshot requirements.
+- Preserve protected-branch enforcement and do not bypass hooks or policy with `--no-verify`.
+- No Slack or other outbound messages without explicit authorization.
+- Never expose credentials or private infrastructure in repository files or reports.
+- Respect the existing command guard and owner-authorized exceptions; do not assume another runtime inherits Claude's hooks.
+- Keep each full sentence on its own physical line in long Markdown and use en dashes, never em dashes.
 
-- **The held-out bundle froze in an older case format.** Phase 1 converted it with `--pre-given-specs` (owner item 49). Phase 2 needs a new held-out set, frozen once the scope is locked and T2.1 has settled the case format, with a tested converter and a dry run of the held-out runner on a dummy bundle before the one-shot, and never opened by implementers.
-- **New register and decision IDs collide across lanes.** Give each lane its own ID block (for example P2B-1..19 and E1..9 for lane a) and have lanes write only in their own sub-table or section of shared docs.
-- **Shared docs conflict on rebase** (17 conflicts, mostly `tracker.md` and `decisions.md`). Each package writes only in its pre-created section.
-- **A lane venv that imports the lane checkout** gives false "passes now" results. Use non-editable installs.
-- **Pushes need an SSH key authorized for the organisation's SSO.** A push failing with "has enabled or enforced SAML SSO" means the key needs re-authorizing on GitHub.
-- **The held-out H11 rule has no approved-entry exception for new refusals.** A new refusal found there fails the check, whatever the register says.
+Explain decisions in plain language, with a short example and recommendation when needed.
+Carry forward existing authorization instead of asking the same question again.
+Separate questions that genuinely need the owner from routine implementation choices and delegated design fixes.
+Give estimates from remaining work and known review/recording risks, not from stale tracker dates.

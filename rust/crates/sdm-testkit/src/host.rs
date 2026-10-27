@@ -19,6 +19,10 @@
 //! answered, with the case's edits made ([`crate::edits`]): the case names
 //! no schema for it, and its loader refuses one (decision E50).
 
+#[cfg(test)]
+#[path = "host_replay_validation_tests.rs"]
+mod replay_validation_tests;
+
 use std::collections::BTreeMap;
 use std::collections::btree_map::Entry;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -32,10 +36,10 @@ use duckdb::arrow::datatypes::{Field, Schema};
 use sdm_contract::data::{AttachmentId, Dialect, FetchPlan, KeySet, ProviderChoice, SqlParam};
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::ops::{
-    DescribeSource, Dtype, EditSchema, ForecastStep, GivenCandidate, Materialize, Operation,
-    OperationResult, Predict, ProfileSpec, QueryColumn, QuerySchema, QueryTable, Ranking,
-    RankingPart, RequestBatch, RequestState, SamplerState, Seed, SourceDescription, SourceSpec,
-    ValidateQuery,
+    DescribeSource, Dtype, EditSchema, ForecastStep, GivenCandidate, HeldSchema, Materialize,
+    Operation, OperationResult, Predict, ProfileSpec, QueryColumn, QuerySchema, QueryTable,
+    Ranking, RankingPart, RequestBatch, RequestState, SamplerState, Seed, SourceDescription,
+    SourceSpec, ValidateQuery,
 };
 use sdm_contract::run::{FetchOutcome, FetchReply, ModelOutcome, ModelReply, StartRun};
 use sdm_contract::{
@@ -84,10 +88,11 @@ pub struct Observed {
     /// What the DuckDB provider ran, and DuckDB's query log, for a case
     /// whose operations read data (the observation's `driver`, T1.11e).
     pub driver: Option<Value>,
-    /// What this host passed each `edit_schema` and `materialize`'s held
-    /// schema, in order (T1.24b), as the Python runner records them in
-    /// `core.edits`: apart from `inputs`, whose shape a gate's checkpoint
-    /// fixes, and written by no observation yet.
+    /// What this host passed each `edit_schema`, the schema as it held it
+    /// and the edit, in order (T1.24b; from T3.16 the schema alone), as the
+    /// Python runner records them in `core.edits`: apart from `inputs`,
+    /// whose shape a gate's checkpoint fixes, and written by no observation
+    /// yet.
     pub edits: Vec<Value>,
     /// What a failed `predict` had answered before it failed, as the core
     /// carried it on its error (`CoreError.answered`, T2.1g): the result's
@@ -618,7 +623,10 @@ fn validate(
 enum Source<'a> {
     Duck(&'a duckdb::Connection),
     Sqlite(&'a Sqlite),
-    Replay(&'a Replay<'a>),
+    Replay {
+        answers: &'a Replay<'a>,
+        preserve_provider: bool,
+    },
     /// The non-SQL provider, through the composition root given.
     Memory(&'a Memory, &'a CompositionRoot),
 }
@@ -631,14 +639,24 @@ impl Source<'_> {
         match self {
             Source::Duck(_) => given,
             Source::Sqlite(_) => ProviderChoice::Sql {
+                timestamp_encoding: None,
                 dialect: Dialect::new(Database::Sqlite.name()),
+                namespace: Vec::new(),
+                view: None,
             },
-            Source::Replay(_) => ProviderChoice::Sql {
+            Source::Replay {
+                preserve_provider: true,
+                ..
+            } => given,
+            Source::Replay { .. } => ProviderChoice::Sql {
+                timestamp_encoding: None,
                 dialect: Dialect::new(Database::Postgres.name()),
+                namespace: Vec::new(),
+                view: None,
             },
             // The non-SQL provider, a host provider, as it declares itself.
-            Source::Memory(..) => ProviderChoice::Host {
-                capabilities: Memory::capabilities(),
+            Source::Memory(memory, _) => ProviderChoice::Host {
+                capabilities: memory.declared.clone().unwrap_or_else(Memory::capabilities),
             },
         }
     }
@@ -717,12 +735,53 @@ pub fn run_sqlite(case: &Case, bases: &Bases, repository: &std::path::Path) -> R
 /// the statements the recording names, each with this host's read of the
 /// answer replayed.
 pub fn run_replayed(case: &Case, recording: &Recording) -> Result<Observed> {
+    run_replayed_on(case, recording, Database::Postgres.name())
+}
+
+/// The same strict replay journey on a named warehouse leg. Warehouse
+/// starts carry their exact provider, source arguments and entity scalars;
+/// descriptions, edits and request states are rebuilt by this host.
+pub fn run_replayed_on(case: &Case, recording: &Recording, leg: &str) -> Result<Observed> {
+    let dialect = match leg {
+        "postgres" | "lakebase" => "postgres",
+        "databricks-sql" | "databricks-spark" => "databricks",
+        "snowflake" => "snowflake",
+        _ => bail!("an unsupported replay leg"),
+    };
+    let key = format!("{}@{leg}", case.id);
+    let recorded_core = recording.core(&key)?;
     // Every call the case makes through its until, as python-core makes
-    // them off DuckDB, whose fetches the recording holds (T2.1d).
-    let case = &through_until(case, Database::Postgres.name())?;
+    // them off DuckDB. Existing Postgres recordings keep their derivation.
+    let case = &if let Some(core) = recorded_core {
+        let mut case = case.clone();
+        case.core = Some(core.clone());
+        case
+    } else if leg == Database::Postgres.name() {
+        through_until(case, Database::Postgres.name())?
+    } else {
+        bail!("{key}: the warehouse recording has no describe_source start");
+    };
     let Some(spec) = case.core.as_ref().and_then(|c| c.describe_source.as_ref()) else {
+        if leg != Database::Postgres.name() {
+            bail!("{key}: the warehouse recording has no describe_source start");
+        }
         return run_edited(case, &Bases::default(), &[]);
     };
+    if recorded_core.is_some() {
+        for provider in std::iter::once(&spec.provider).chain(
+            case.core
+                .as_ref()
+                .and_then(|c| c.materialize.as_ref())
+                .map(|s| &s.provider),
+        ) {
+            let provider: ProviderChoice = serde_json::from_value(provider.clone())
+                .map_err(|_| anyhow!("{key}: a recorded provider is not a ProviderChoice"))?;
+            if !matches!(provider, ProviderChoice::Sql { dialect: ref d, .. } if d.name() == dialect)
+            {
+                bail!("{key}: the recorded provider does not match the replay leg");
+            }
+        }
+    }
     let mut edits: Vec<SchemaEdit> = Vec::new();
     for edit in case.input.edits.iter().flatten() {
         let Some(made) = SchemaEdit::from_case(edit) else {
@@ -730,7 +789,6 @@ pub fn run_replayed(case: &Case, recording: &Recording) -> Result<Observed> {
         };
         edits.push(made);
     }
-    let key = format!("{}@{}", case.id, Database::Postgres.name());
     // A diagnostic case's fetch past the recording is answered as the
     // provider's error, so the case is observed (T2.8 fix 4).
     let replay = recording.replay(&key)?;
@@ -740,14 +798,47 @@ pub fn run_replayed(case: &Case, recording: &Recording) -> Result<Observed> {
         replay
     };
     let mut log = DriverLog::default();
-    let mut observed = describe_on(case, spec, Source::Replay(&replay), &mut log, &edits)?;
-    if !replay.finished() {
-        bail!("{key}: the core asked fewer fetches than were recorded: record the case again");
-    }
+    let mut observed = describe_on(
+        case,
+        spec,
+        Source::Replay {
+            answers: &replay,
+            preserve_provider: recorded_core.is_some(),
+        },
+        &mut log,
+        &edits,
+    )?;
+    require_replayed_completion(case, &observed, &key, recorded_core.is_some(), &replay)?;
     // Its query log is the statements the recording names, in the order
     // run, as the Postgres driver's own log gave them to python-core.
     observed.driver = Some(log.record(&replay.ran()));
     Ok(observed)
+}
+
+/// A successful earlier call cannot stand in for the requested operation,
+/// and a genuine refusal does not excuse unconsumed recorded fetches.
+fn require_replayed_completion(
+    case: &Case,
+    observed: &Observed,
+    key: &str,
+    recorded: bool,
+    replay: &Replay<'_>,
+) -> Result<()> {
+    let until = match case.until {
+        Until::FromSource => "describe_source",
+        Until::Materialize => "materialize",
+        Until::Predict => "predict",
+    };
+    if recorded
+        && !observed.operations.iter().any(|op| op == until)
+        && observed.answer.outcome().0 != "refusal"
+    {
+        bail!("{key}: the recording has no {until} start for a successful earlier call");
+    }
+    if !replay.finished() {
+        bail!("{key}: the core asked fewer fetches than were recorded: record the case again");
+    }
+    Ok(())
 }
 
 /// Runs `case` as [`run`] runs it on DuckDB, over its DuckDB base copied
@@ -862,9 +953,14 @@ fn drive(
             ControlMessage::Step(Step::Done { result }) => return Ok(Ok(result)),
             ControlMessage::Step(Step::Fetch { requests }) => {
                 for step in &requests {
-                    observed
-                        .fetches
-                        .push(json!({"request": step.request, "plan": step.plan}));
+                    let mut fetched = json!({"request": step.request, "plan": step.plan});
+                    // Plan B's read of a table as it stands, marked as the
+                    // core marks it (T3.4), on the fetch and its statements.
+                    log.purpose = step.purpose.map(|_| "locate");
+                    if let Some(purpose) = step.purpose {
+                        fetched["purpose"] = json!(purpose);
+                    }
+                    observed.fetches.push(fetched);
                     // The key sets the step names: a SQL plan's parameters,
                     // or, for a host provider, the request's own.
                     let sets: Vec<&KeySet> = match &step.plan {
@@ -873,6 +969,7 @@ fn drive(
                             .flat_map(|s| &s.params)
                             .filter_map(|param| match param {
                                 SqlParam::KeySet { keys, .. } => Some(keys),
+                                SqlParam::Text { .. } => None,
                                 SqlParam::Value { .. } => None,
                             })
                             .collect(),
@@ -897,7 +994,9 @@ fn drive(
                             duck::answer_logged(connection, step, &keys, log)
                         }
                         Source::Sqlite(source) => source.answer_logged(step, &keys, log),
-                        Source::Replay(replay) => {
+                        Source::Replay {
+                            answers: replay, ..
+                        } => {
                             let replayed = replay.answer(step)?;
                             log_replayed(log, &replayed);
                             replayed.answer
@@ -990,7 +1089,7 @@ fn describe_on(
     // Off DuckDB a case runs every call through its `until` (T2.1d).
     let off_duckdb = !matches!(
         &provider,
-        ProviderChoice::Sql { dialect } if dialect.name() == Database::Duckdb.name()
+        ProviderChoice::Sql { dialect, .. } if dialect.name() == Database::Duckdb.name()
     );
     let spec_given: SourceSpec = serde_json::from_value(spec.source.clone()).map_err(|_| {
         anyhow!(
@@ -1081,7 +1180,30 @@ fn describe_on(
     // and the query is validated on the schema this host described, as
     // the Python host builds its query schema from the source's.
     let materializing = case.core.as_ref().and_then(|c| c.materialize.as_ref());
-    if let Some(validating) = case.core.as_ref().and_then(|c| c.validate_query.as_ref()) {
+    let validating = case.core.as_ref().and_then(|c| c.validate_query.as_ref());
+    // A host may validate and refuse before starting native materialize,
+    // leaving only describe in its recording. Validate this host's own
+    // edited schema, after all earlier native calls have succeeded.
+    // Acceptance still needs the later start: the replay completion guard
+    // refuses an otherwise successful partial journey.
+    let replay_validation = if matches!(
+        source,
+        Source::Replay {
+            preserve_provider: true,
+            ..
+        }
+    ) && case.until != Until::FromSource
+        && materializing.is_none()
+        && validating.is_none()
+    {
+        Some(ValidateQueryInput {
+            profile: json!({"name": "RELATIONAL", "model": null}),
+            schema: serde_json::to_value(query_schema(&schema))?,
+        })
+    } else {
+        None
+    };
+    if let Some(validating) = validating.or(replay_validation.as_ref()) {
         let described;
         let given = if off_duckdb {
             described = ValidateQueryInput {
@@ -1132,14 +1254,12 @@ fn edit_schema(
     log: &mut DriverLog,
 ) -> Result<std::result::Result<SourceDescription, Answer>> {
     // What this host sends, as it encodes it, is what it records.
-    let schema_bytes = serde_json::to_vec(schema)?;
     let held_bytes = serde_json::to_vec(&edits::held(schema))?;
     let edit_bytes = serde_json::to_vec(&edit.to_contract())?;
     observed.operations.push("edit_schema".into());
     observed.edits.push(json!({
         "op": "edit_schema",
-        "schema": serde_json::from_slice::<Value>(&schema_bytes)?,
-        "held": serde_json::from_slice::<Value>(&held_bytes)?,
+        "schema": serde_json::from_slice::<Value>(&held_bytes)?,
         "edit": serde_json::from_slice::<Value>(&edit_bytes)?,
     }));
     let start = ControlMessage::Start(Box::new(StartRun {
@@ -1147,15 +1267,13 @@ fn edit_schema(
         facts: facts()?,
         operation: Operation::EditSchema(EditSchema {
             schema: AttachmentId(1),
-            held: Some(AttachmentId(2)),
-            edit: AttachmentId(3),
+            edit: AttachmentId(2),
         }),
     }));
     let message = encode(&start).map_err(|_| anyhow!("{}: its start does not encode", case.id))?;
     let attachments = BTreeMap::from([
-        (AttachmentId(1), Attachment::Bytes(schema_bytes)),
-        (AttachmentId(2), Attachment::Bytes(held_bytes)),
-        (AttachmentId(3), Attachment::Bytes(edit_bytes)),
+        (AttachmentId(1), Attachment::Bytes(held_bytes)),
+        (AttachmentId(2), Attachment::Bytes(edit_bytes)),
     ]);
     let handle = match HostRun::start(&source.root(), &message, attachments) {
         Ok(handle) => handle,
@@ -1167,8 +1285,13 @@ fn edit_schema(
             let Ok(Some(Attachment::Bytes(bytes))) = handle.take_attachment(edited.schema) else {
                 bail!("{}: the schema edited is not attached", case.id);
             };
-            Ok(Ok(serde_json::from_slice(&bytes).map_err(|_| {
-                anyhow!("{}: the schema edited is not a SourceDescription", case.id)
+            let held: HeldSchema = serde_json::from_slice(&bytes)
+                .map_err(|_| anyhow!("{}: the schema edited is not a HeldSchema", case.id))?;
+            Ok(Ok(edits::described(&held).ok_or_else(|| {
+                anyhow!(
+                    "{}: the schema edited holds a column with no facts",
+                    case.id
+                )
             })?))
         }
         Ok(_) => bail!("{}: edit_schema answered another operation", case.id),
@@ -1531,15 +1654,14 @@ fn start_materialize(
     // What this host sends, as it encodes it, is what it records: the
     // description the core last answered, and the schema as this host
     // holds it (decision E67).
-    let schema_bytes = serde_json::to_vec(schema)?;
-    let held_bytes = serde_json::to_vec(&edits::held(schema))?;
+    let schema_bytes = serde_json::to_vec(&edits::held(schema))?;
     // Off DuckDB the call is the Python host's on the core route (T2.1d):
     // it sends the validated query as the PQL library writes it back
     // (`to_string()`), which `sdm-pql` writes the same way; a query it does
     // not parse is sent as the case gives it.
     let off_duckdb = !matches!(
         &provider,
-        ProviderChoice::Sql { dialect } if dialect.name() == Database::Duckdb.name()
+        ProviderChoice::Sql { dialect, .. } if dialect.name() == Database::Duckdb.name()
     );
     let query = if off_duckdb {
         written_back(&case.input.pql)
@@ -1645,10 +1767,6 @@ fn start_materialize(
         values_bytes.extend_from_slice(format!(r#","lag_timesteps":{sent}}}"#).as_bytes());
     }
     observed.operations.push("materialize".into());
-    observed.edits.push(json!({
-        "op": "materialize",
-        "held": serde_json::from_slice::<Value>(&held_bytes)?,
-    }));
     observed.inputs.push(json!({
         "op": "materialize",
         "provider": serde_json::to_value(&provider)?,
@@ -1664,7 +1782,6 @@ fn start_materialize(
         operation: as_op(Materialize {
             provider,
             schema: AttachmentId(1),
-            held: Some(AttachmentId(5)),
             query: AttachmentId(2),
             indices: Some(AttachmentId(3)),
             candidates: candidates.as_ref().map(|_| AttachmentId(7)),
@@ -1689,7 +1806,6 @@ fn start_materialize(
     let message = encode(&start).map_err(|_| anyhow!("{}: its start does not encode", case.id))?;
     let mut attachments = BTreeMap::from([
         (AttachmentId(1), Attachment::Bytes(schema_bytes)),
-        (AttachmentId(5), Attachment::Bytes(held_bytes)),
         (AttachmentId(2), Attachment::Bytes(query_bytes)),
         (AttachmentId(6), Attachment::Bytes(values_bytes)),
         (
@@ -2009,7 +2125,7 @@ fn predict(
         contract: CONTRACT_VERSION,
         facts: facts()?,
         operation: Operation::Predict(Predict {
-            state: RequestState {
+            state: Some(RequestState {
                 version: state.version,
                 payload: AttachmentId(1),
                 query: AttachmentId(2),
@@ -2056,7 +2172,8 @@ fn predict(
                         })
                         .collect(),
                 }),
-            },
+            }),
+            held: None,
             model: spec.model.clone(),
             request_id: REQUEST_ID.into(),
             // The outputs the case's caller named, as the Python host
@@ -2074,6 +2191,7 @@ fn predict(
                 .iter()
                 .flat_map(|options| options.keys().cloned())
                 .collect(),
+            model_endpoint: None,
         }),
     }));
     let message = encode(&start).map_err(|_| anyhow!("{}: its start does not encode", case.id))?;

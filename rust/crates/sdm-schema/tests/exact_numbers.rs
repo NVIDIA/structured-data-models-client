@@ -138,6 +138,7 @@ fn a_key_the_caller_names_is_its_text_and_a_double_again_once_cleared() {
             key: Given::Value(None),
         },
         &supports,
+        &sdm_schema::assemble::HostTypes::default(),
     )
     .unwrap()
     .description;
@@ -149,6 +150,7 @@ fn a_key_the_caller_names_is_its_text_and_a_double_again_once_cleared() {
             key: Given::Value(Some(vec!["user_id".into()])),
         },
         &supports,
+        &sdm_schema::assemble::HostTypes::default(),
     )
     .unwrap()
     .description;
@@ -173,15 +175,21 @@ fn a_link_edited_onto_a_declared_key_joins_both_ends_as_text() {
         schema,
         &links(&[link(("orders", "user_id"), ("users", "user_id"))]),
         &supports,
+        &sdm_schema::assemble::HostTypes::default(),
     )
     .unwrap()
     .description;
     assert_eq!(read(&edited, "orders", "user_id"), TEXT);
     assert_eq!(read(&edited, "users", "user_id"), TEXT);
     // Cleared, the foreign key is a double again.
-    let cleared = edit::edit(edited, &links(&[]), &supports)
-        .unwrap()
-        .description;
+    let cleared = edit::edit(
+        edited,
+        &links(&[]),
+        &supports,
+        &sdm_schema::assemble::HostTypes::default(),
+    )
+    .unwrap()
+    .description;
     assert_eq!(read(&cleared, "orders", "user_id"), DOUBLE);
     assert_eq!(read(&cleared, "users", "user_id"), TEXT);
 }
@@ -204,6 +212,7 @@ fn a_key_joined_to_an_integer_is_read_as_the_reference_reads_it() {
         schema,
         &links(&[link(("orders", "user_id"), ("users", "user_id"))]),
         &supports,
+        &sdm_schema::assemble::HostTypes::default(),
     )
     .unwrap()
     .description;
@@ -240,6 +249,7 @@ fn a_link_still_refused_leaves_the_schema_as_it_was() {
         schema,
         &links(&[link(("orders", "user_id"), ("users", "user_id"))]),
         &supports,
+        &sdm_schema::assemble::HostTypes::default(),
     )
     .unwrap_err();
     assert_eq!(refused.code, ErrorCode::InvalidRequest);

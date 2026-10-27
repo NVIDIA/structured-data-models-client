@@ -25,6 +25,9 @@ from typing import Any
 
 import pytest
 
+# Gate tooling (T3.0): CI runs it in the tooling jobs, not in every matrix job.
+pytestmark = pytest.mark.tooling
+
 HERE = Path(__file__).resolve().parent
 if 'gate_modes_tests' in sys.modules:
     modes = sys.modules['gate_modes_tests']

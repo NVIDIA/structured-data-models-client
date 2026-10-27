@@ -37,6 +37,12 @@ if TYPE_CHECKING:
 MOCK_URL = 'https://nim.test'
 
 
+@pytest.fixture(autouse=True)
+def _legacy_engine_route(monkeypatch: pytest.MonkeyPatch) -> None:
+    """KO3-37: this suite exercises legacy engine internals until Phase 5."""
+    monkeypatch.setenv('SDM_CORE_ROUTES', '')
+
+
 def pytest_addoption(parser):
     parser.addoption(
         '--runintegration',

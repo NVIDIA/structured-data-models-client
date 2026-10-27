@@ -87,6 +87,8 @@ impl Source {
                     let batch =
                         concat_batches(&fetched.schema, &fetched.batches).map_err(|_| {
                             ProviderError {
+                                error_class: None,
+                                driver_message: None,
                                 kind: ErrorKind::Internal,
                                 retryable: false,
                                 sqlstate: None,
@@ -255,6 +257,8 @@ impl ProviderPath<'_> {
             && self.fetched.len() == page
         {
             return failed(ProviderError {
+                error_class: None,
+                driver_message: None,
                 kind: ErrorKind::DataSource,
                 retryable,
                 sqlstate: None,
@@ -442,6 +446,7 @@ fn drive(
                         .flat_map(|s| &s.params)
                         .filter_map(|param| match param {
                             SqlParam::KeySet { keys, .. } => Some(keys),
+                            SqlParam::Text { .. } => None,
                             SqlParam::Value { .. } => None,
                         })
                         .collect(),

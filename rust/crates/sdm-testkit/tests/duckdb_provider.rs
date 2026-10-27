@@ -62,7 +62,10 @@ fn start(request: &Value) -> HostRun {
         request: serde_json::from_value::<DataRequest>(request.clone()).unwrap(),
         plan: None,
         provider: Some(ProviderChoice::Sql {
+            timestamp_encoding: None,
             dialect: Dialect::new("duckdb"),
+            namespace: Vec::new(),
+            view: None,
         }),
         echo: true,
         undeclared: vec![],
@@ -206,8 +209,10 @@ fn base_regression_s_schema_completes_on_the_pure_rust_host() {
     );
     assert!(tables.iter().all(|t| t["duplicate_keys"]["v"] == "0"));
     // One fetch per statement the reference runs: ten in Schema.from_source,
-    // six in materialize (T1.11c).
-    assert_eq!(observed.fetches.len(), 16);
+    // six in materialize (T1.11c); and the six of the two tables' catalogs
+    // and previews each materialize reads again, as the source holds them
+    // at that run (the owner's plan B, T3.4).
+    assert_eq!(observed.fetches.len(), 22);
     // The whole description, the request state with its payload, the
     // inputs and the step trace are the ones python-core records
     // (contract/pinned, which contract/tests holds python-core to), so CI
@@ -499,7 +504,10 @@ fn keyed(connection: &Connection, request: &Value, keys: RecordBatch) -> (Record
         request: serde_json::from_value::<DataRequest>(request).unwrap(),
         plan: None,
         provider: Some(ProviderChoice::Sql {
+            timestamp_encoding: None,
             dialect: Dialect::new("duckdb"),
+            namespace: Vec::new(),
+            view: None,
         }),
         echo: true,
         undeclared: vec![],
@@ -734,6 +742,7 @@ fn two_key_sets_bound_to_one_name_are_refused() {
             part: sdm_contract::data::DescribePart::Tables,
         },
         plan: FetchPlan::Sql {
+            result_conversions: Vec::new(),
             statements: vec![SqlStatement {
                 dialect: Dialect::new("duckdb"),
                 text: "SELECT 1".into(),
@@ -742,6 +751,7 @@ fn two_key_sets_bound_to_one_name_are_refused() {
             expect: sdm_contract::data::ExpectedSchema::Discover {},
         },
         continuation: None,
+        purpose: None,
     };
     let keys = |values: &[&str]| {
         let batch = seeds_of(&serde_json::json!({"type": "int64"}), values);
@@ -827,14 +837,21 @@ fn base_regression_s_statements_return_the_reference_s_results() {
         ("materialize".to_owned(), 6),
         ("predict".to_owned(), 0),
     ];
+    // The reads the core marks as plan B's taken out (register P3A-1): two
+    // tables' catalog, keys and preview; every statement after them is the
+    // reference's.
+    let fresh = ours.len() - sdm_testkit::plan_b::as_the_old_client_ran(&ours).len();
+    assert_eq!(fresh, 6);
+    let ours = sdm_testkit::plan_b::as_the_old_client_ran(&ours);
     assert_eq!(per_stage(&ours), counts);
     assert_eq!(per_stage(&theirs), counts);
     // The record is complete: DuckDB logged the same statements, and the
     // three bindings, and every text it logs as written is the one run.
     let logged = &driver["query_log"];
-    assert_eq!(logged["statements"], 16);
+    assert_eq!(logged["statements"], 16 + fresh as u64);
     assert_eq!(logged["bindings"], 3);
-    assert_eq!(logged["compared"], 14);
+    // Of the six read again, the four whose text DuckDB logs as written.
+    assert_eq!(logged["compared"], 14 + 4);
     assert_eq!(logged["differing"], serde_json::json!([]));
     assert_eq!(driver["capture"]["bindings"].as_array().unwrap().len(), 3);
     for (position, (a, b)) in ours.iter().zip(&theirs).enumerate() {
@@ -887,7 +904,10 @@ fn columns_of(connection: &Connection, table: &str) -> (String, Vec<RecordBatch>
         part: DescribePart::Columns,
     };
     let duckdb = ProviderChoice::Sql {
+        timestamp_encoding: None,
         dialect: Dialect::new("duckdb"),
+        namespace: Vec::new(),
+        view: None,
     };
     let FetchPlan::Sql { statements, .. } =
         default_root().data_layer().plan(&request, &duckdb).unwrap()
@@ -965,7 +985,7 @@ fn every_payload_rust_host_materializes_is_the_locked_definition_s() {
     // T1.22: the request state's payload of each case the pure-Rust host
     // materializes, base.regression and the family cases among them,
     // against the contract's locked definition (`$defs/StatePayload`).
-    let loaded = case::load(&[contract().join("cases")]).unwrap();
+    let loaded = case::load_for(&[contract().join("cases")], case::Database::Duckdb).unwrap();
     let bases = bases::load(&contract().join("bases.yaml")).unwrap();
     let mut held = Vec::new();
     for one in &loaded {
@@ -1369,21 +1389,22 @@ fn a_listed_table_the_schema_may_not_name_is_refused() {
     assert_eq!(fields["field"], "tables");
 }
 
-/// Decision E52 on this host, the parity of the Python host's
-/// `test_a_second_call_runs_the_reference_s_statements`: one materializer's
-/// three calls on `base.regression`, each handed the sampler state the one
-/// before it left, run the reference's statements (6, then 4: the index
-/// read and the time bounds the first made are skipped), warn of the
-/// missing indexes once, and answer the same request each time.
+/// E52's index-check lifetime on the SQL provider, with P3A-5's fresh data
+/// facts: one materializer's three calls on `base.regression`, each handed
+/// the preceding call's sampler state, read time bounds on every run
+/// (6 statements, then 5), warn of missing indexes once, and answer the
+/// same request each time. Host providers without source refresh retain
+/// E52's cross-run data memo; this test uses DuckDB's SQL source.
 #[test]
 fn a_materializer_s_later_calls_skip_what_its_first_read() {
     let loaded = case::load(&[contract().join("cases/s1/base.regression.json")]).unwrap();
     let bases = bases::load(&contract().join("bases.yaml")).unwrap();
     let calls = host::materialize_repeatedly(&loaded[0].case, &bases, 3).unwrap();
+    // The reads plan B adds taken out (register P3A-1).
     let kinds: Vec<Vec<String>> = calls
         .iter()
         .map(|call| {
-            call.fetches
+            sdm_testkit::plan_b::requests_as_the_old_client_made(&call.fetches)
                 .iter()
                 .map(|f| f["request"]["request"].as_str().unwrap().to_owned())
                 .collect()
@@ -1403,7 +1424,13 @@ fn a_materializer_s_later_calls_skip_what_its_first_read() {
     for later in &kinds[1..] {
         assert_eq!(
             later,
-            &["sample_entities", "neighbors", "lookup", "neighbors"]
+            &[
+                "time_bounds",
+                "sample_entities",
+                "neighbors",
+                "lookup",
+                "neighbors"
+            ]
         );
     }
     let warned: Vec<Vec<String>> = calls
@@ -1442,8 +1469,9 @@ fn a_sampler_state_the_core_refuses_is_dropped_on_its_word() {
         };
         assert_eq!(fields["field"], field);
         assert!(calls[0].materialized.is_none(), "{field}");
-        let reads: Vec<&str> = calls[1]
-            .fetches
+        // The reads plan B adds taken out (register P3A-1).
+        let fetches = sdm_testkit::plan_b::requests_as_the_old_client_made(&calls[1].fetches);
+        let reads: Vec<&str> = fetches
             .iter()
             .map(|f| f["request"]["request"].as_str().unwrap())
             .collect();

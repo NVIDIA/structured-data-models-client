@@ -8,22 +8,26 @@
 //! The root holds one `Arc<dyn DataLayer>`, which `sdm_host::default_root`
 //! builds; swapping the data layer replaces that one value. A run takes the
 //! provider its operation names, with the capabilities the layer gives for
-//! it, asks for data only through [`DataAccess::plan`], and reads a
+//! it, asks for data only through [`DataAccess::plan`] (bound as the
+//! provider binds it, [`DataAccess::bind`]), and reads a
 //! catalog answer only through [`DataAccess::read`], into the contract's
 //! dialect-neutral shape (decision E54). Nothing in the core matches on a
 //! backend's name: what a provider takes is what its capabilities say, and
 //! the core refuses by reading them (the requests it declared; from T1.22,
 //! the largest seed it samples with, register entry RS-7).
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use arrow_array::RecordBatch;
 use sdm_contract::catalog::CatalogAnswer;
 use sdm_contract::data::{
-    DataLayer, DataRequest, FallbackLimits, FetchPlan, ProviderCapabilities, ProviderChoice,
-    seed_integer,
+    AttachmentId, BoundRequest, DataLayer, DataRequest, FailureFacts, FallbackLimits, FetchPlan,
+    KeyData, ProviderCapabilities, ProviderChoice, ProviderError, Relation, ViewChoice,
+    refuse_derived, seed_integer,
 };
-use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
+use sdm_contract::view::{ViewTextAnswer, ViewTextAsk};
+use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 
 use crate::ArrowData;
 
@@ -67,36 +71,106 @@ impl CompositionRoot {
 }
 
 impl DataAccess {
+    /// Whether the run's provider leaves a namespace part to the connection
+    /// that must be read before any table (`DataLayer::unsettled`), until
+    /// the source says its current parts
+    /// ([`DataAccess::settled`]).
+    pub fn unsettled(&self) -> bool {
+        self.layer.unsettled(&self.provider)
+    }
+
+    /// The run's data access with its provider's namespace the parts the
+    /// source answered for it (`DataLayer::settled`).
+    pub fn settled(&self, parts: Vec<String>) -> DataAccess {
+        let mut access = self.clone();
+        access.provider = self.layer.settled(&self.provider, parts);
+        access
+    }
+
+    /// Whether the run's provider reads a source of tables, whose tables
+    /// each `materialize` reads as they stand (the owner's plan B, T3.4;
+    /// `DataLayer::reads_tables_as_they_stand`), where a host provider's
+    /// tables are the host's own.
+    pub fn reads_a_source(&self) -> bool {
+        self.layer.reads_tables_as_they_stand(&self.provider)
+    }
+
+    /// The semantic model the run's provider reads the source through,
+    /// if any (`ProviderChoice::Sql.view`, T3.5).
+    pub fn view(&self) -> Option<ViewChoice> {
+        self.provider.view().cloned()
+    }
+
+    /// The kind of model the provider reads, before its definition is fetched.
+    pub fn view_kind(&self) -> Option<sdm_contract::view::ViewKind> {
+        self.layer.view_kind(&self.provider)
+    }
+
+    /// The data layer's answer to a question of a semantic model's text, in
+    /// the run's provider's dialect (`DataLayer::view_text`).
+    pub fn view_text(&self, ask: ViewTextAsk) -> Result<ViewTextAnswer, CoreError> {
+        self.layer.view_text(&self.provider, ask)
+    }
+
+    /// Whether the run's provider's source holds a type per column that a
+    /// caller's type must match (`DataLayer::holds_column_types`).
+    pub fn holds_column_types(&self) -> bool {
+        self.layer.holds_column_types(&self.provider)
+    }
+
     /// What the run's provider answers.
     pub fn capabilities(&self) -> &ProviderCapabilities {
         &self.capabilities
     }
 
     /// The vendor of the opaque Arrow extension types the run's provider
-    /// hands over, as the data layer declares it for the provider
-    /// (`DataLayer::opaque_vendor`).
-    pub fn opaque_vendor(&self) -> Option<&'static str> {
-        self.layer.opaque_vendor(&self.provider)
+    /// hands over, as its capabilities declare it
+    /// (`ProviderCapabilities::opaque_vendor`).
+    pub fn opaque_vendor(&self) -> Option<&str> {
+        self.capabilities.opaque_vendor.as_deref()
     }
 
     /// Whether the run's provider compares a window's bounds with the
-    /// stored text of the window's column, as the data layer says for it
-    /// (`DataLayer::compares_stored_times`).
+    /// stored text of the window's column
+    /// (`ProviderCapabilities::compares_stored_times`).
     pub fn compares_stored_times(&self) -> bool {
-        self.layer.compares_stored_times(&self.provider)
+        self.capabilities.compares_stored_times
     }
 
     /// Whether the run's provider orders a seeded sample by the key's data
-    /// type, as the data layer says for it (`DataLayer::samples_by_key_dtype`).
+    /// type (`ProviderCapabilities::samples_by_key_dtype`).
     pub fn samples_by_key_dtype(&self) -> bool {
-        self.layer.samples_by_key_dtype(&self.provider)
+        self.capabilities.samples_by_key_dtype
     }
 
     /// Whether the reference reads the run's provider's floats with a NaN
-    /// missing and `-0.0` as `0.0`, as the data layer says for it
-    /// (`DataLayer::reads_nan_as_missing`).
+    /// missing and `-0.0` as `0.0`
+    /// (`ProviderCapabilities::reads_nan_as_missing`).
     pub fn reads_nan_as_missing(&self) -> bool {
-        self.layer.reads_nan_as_missing(&self.provider)
+        self.capabilities.reads_nan_as_missing
+    }
+
+    /// The database the run's provider reads, by name
+    /// (`DataLayer::source_database`); `None` for a host provider.
+    pub fn source_database(&self) -> Option<&'static str> {
+        self.layer.source_database(&self.provider)
+    }
+
+    /// `relation` as the run's provider reads it (`DataLayer::read_as`).
+    pub fn read_as(&self, relation: &Relation) -> Relation {
+        self.layer.read_as(&self.provider, relation)
+    }
+
+    /// What the run's provider's failure says (`DataLayer::failure`): the
+    /// facts the step that asked reads the one of that fits it.
+    pub fn failure(&self, error: &ProviderError) -> FailureFacts {
+        self.layer.failure(&self.provider, error)
+    }
+
+    /// The name forms the catalog read of `relation`, as the run's
+    /// provider reads it, tries in order (`DataLayer::spellings`).
+    pub fn spellings(&self, relation: &Relation) -> Vec<Relation> {
+        self.layer.spellings(&self.provider, relation)
     }
 
     /// An admitted answer of the run's provider, its values read as the
@@ -119,13 +193,19 @@ impl DataAccess {
         }
     }
 
-    /// A key set as the run's provider binds it (`DataLayer::bound_keys`,
-    /// T2.14d), or `None` where it binds the key set the core made.
-    pub fn bound_keys(&self, keys: &ArrowData) -> Result<Option<ArrowData>, CoreError> {
-        Ok(self
-            .layer
-            .bound_keys(&self.provider, &keys.schema, &keys.batches)?
-            .map(|(schema, batches)| ArrowData::new(schema, batches)))
+    /// `plan`, the run's provider's answer to `request`, bound as the
+    /// provider binds it with the key sets `keys` it names
+    /// (`DataLayer::bind`, T3.28): one fetch or more, each with the
+    /// batches it binds by local reference, a double written as the
+    /// reference's language writes one ([`crate::pql::float_text`]).
+    pub fn bind(
+        &self,
+        request: &DataRequest,
+        plan: FetchPlan,
+        keys: &BTreeMap<AttachmentId, KeyData>,
+    ) -> Result<BoundRequest, CoreError> {
+        self.layer
+            .bind(&self.provider, request, plan, keys, crate::pql::float_text)
     }
 
     /// How the run's provider answers `request`. A request whose fields
@@ -142,6 +222,24 @@ impl DataAccess {
         }
     }
 
+    pub(crate) fn result_metadata(
+        &self,
+        request: &DataRequest,
+        plan: &FetchPlan,
+    ) -> Result<Option<FetchPlan>, CoreError> {
+        self.layer.result_metadata(&self.provider, request, plan)
+    }
+
+    pub(crate) fn project_result(
+        &self,
+        request: &DataRequest,
+        plan: &FetchPlan,
+        metadata: &ArrowData,
+    ) -> Result<FetchPlan, CoreError> {
+        self.layer
+            .project_result(&self.provider, request, plan, &metadata.batches)
+    }
+
     /// How `request` is answered: the data layer's plan for the run's
     /// provider, as [`DataAccess::plan`] gives it, or, for an optional
     /// request the provider did not declare while it declares the
@@ -151,6 +249,18 @@ impl DataAccess {
     /// request; a request the provider declared is never the fallback's.
     pub fn route(&self, request: &DataRequest) -> Result<Route, CoreError> {
         request.check()?;
+        // A derived relation only of a provider declaring it reads one,
+        // whichever way the request is answered (contract v28).
+        for (field, relation) in request.relations() {
+            if let Some(refusal) = refuse_derived(
+                request,
+                field,
+                relation,
+                self.capabilities.derived_relations,
+            ) {
+                return Err(refusal);
+            }
+        }
         if let Some(optional) = request.optional()
             && !self.capabilities.optional.contains(&optional)
         {
@@ -220,8 +330,7 @@ pub enum Route {
 /// The refusal of an optional request the provider did not declare.
 pub(crate) fn undeclared(request: &str) -> CoreError {
     CoreError::new(
-        ErrorKind::Unsupported,
-        ErrorCode::UnsupportedRequest,
+        Sentence::Undeclared,
         "the provider did not declare this request",
     )
     .with_field("request", Detail::text(request))
@@ -233,8 +342,7 @@ pub(crate) fn undeclared(request: &str) -> CoreError {
 /// a seed past what its scalar carries (`seed_scalar`).
 pub(crate) fn past_seed_range(request: &str, max: u64) -> CoreError {
     CoreError::new(
-        ErrorKind::InvalidRequest,
-        ErrorCode::InvalidRequest,
+        Sentence::SeedPastRange,
         "the provider samples with no seed larger than the largest it declares",
     )
     .with_field("request", Detail::text(request))

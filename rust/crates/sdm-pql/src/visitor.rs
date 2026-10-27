@@ -83,6 +83,17 @@ pub struct DateWarning {
     pub location: Option<crate::ast::Location>,
 }
 
+/// A warning from reading a literal, in the order the literals are read.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LiteralWarning {
+    DayFirst(DateWarning),
+    /// The grammar accepts `\/`, which the reference's decoder deprecates.
+    /// Re-reading it keeps only the first warning (KO2-83).
+    InvalidStringEscape {
+        location: Option<crate::ast::Location>,
+    },
+}
+
 /// `PQLParser(mode).to_parsed_predictive_query(query)`, reading date
 /// literals with `reader`, with the warnings of the literals it read, in
 /// the order it read them, whether or not the query parses.
@@ -90,7 +101,7 @@ pub fn parse_query(
     query: &str,
     mode: Mode,
     reader: Reader,
-) -> (Visited<ParsedQuery>, Vec<DateWarning>) {
+) -> (Visited<ParsedQuery>, Vec<LiteralWarning>) {
     parse_query_held(query, mode, reader, None)
 }
 
@@ -101,7 +112,7 @@ pub fn parse_query_held(
     mode: Mode,
     reader: Reader,
     held: Option<Held>,
-) -> (Visited<ParsedQuery>, Vec<DateWarning>) {
+) -> (Visited<ParsedQuery>, Vec<LiteralWarning>) {
     let warned = RefCell::new(Vec::new());
     let parsed = visit(query, mode, reader, held, &warned);
     (parsed, warned.into_inner())
@@ -112,7 +123,7 @@ fn visit(
     mode: Mode,
     reader: Reader,
     held: Option<Held>,
-    warned: &RefCell<Vec<DateWarning>>,
+    warned: &RefCell<Vec<LiteralWarning>>,
 ) -> Visited<ParsedQuery> {
     // `EXPLAIN` and `EVALUATE` are flags, stripped before the grammar sees
     // the text; locations count from what is left.
@@ -177,7 +188,7 @@ struct Visitor<'a> {
     /// The instants the host can hold a date literal as, if it cannot hold
     /// every one the reader reads.
     held: Option<Held>,
-    warned: &'a RefCell<Vec<DateWarning>>,
+    warned: &'a RefCell<Vec<LiteralWarning>>,
 }
 
 impl Visitor<'_> {
@@ -400,7 +411,15 @@ impl Visitor<'_> {
                     Kind::Int => Some(Dtype::Int),
                     Kind::Decimal => Some(Dtype::Float),
                     Kind::Str => {
-                        check_escapes(&token.text)?;
+                        let deprecated = check_escapes(&token.text)?;
+                        let mut warned = self.warned.borrow_mut();
+                        if deprecated
+                            && !warned.iter().any(|warning| {
+                                matches!(warning, LiteralWarning::InvalidStringEscape { .. })
+                            })
+                        {
+                            warned.push(LiteralWarning::InvalidStringEscape { location });
+                        }
                         Some(Dtype::String)
                     }
                     _ => None,
@@ -446,10 +465,12 @@ impl Visitor<'_> {
                     ..
                 } = node.borrow().kind
                 {
-                    self.warned.borrow_mut().push(DateWarning {
-                        day_first,
-                        location,
-                    });
+                    self.warned
+                        .borrow_mut()
+                        .push(LiteralWarning::DayFirst(DateWarning {
+                            day_first,
+                            location,
+                        }));
                 }
                 Ok(node)
             }
@@ -488,7 +509,9 @@ impl Visitor<'_> {
 
 /// A string's escapes must each be one the grammar names:
 /// `\\ \" \' \/ \b \f \n \r \t \u`.
-fn check_escapes(text: &str) -> Visited<()> {
+/// The result says whether its decoding uses the deprecated `\/` escape;
+/// an escaped backslash followed by a slash does not.
+fn check_escapes(text: &str) -> Visited<bool> {
     let chars: Vec<char> = text.chars().collect();
     let inner = if chars.len() >= 2 {
         &chars[1..chars.len() - 1]
@@ -496,13 +519,15 @@ fn check_escapes(text: &str) -> Visited<()> {
         &[][..]
     };
     let mut escaped = false;
+    let mut deprecated = false;
     for &c in inner {
         if escaped && !"\\\"'/bfnrtu".contains(c) {
             return Err(ParseError::syntax(format!(
                 "\\{c} is not a valid escape pattern."
             )));
         }
+        deprecated |= escaped && c == '/';
         escaped = !escaped && c == '\\';
     }
-    Ok(())
+    Ok(deprecated)
 }

@@ -32,6 +32,13 @@ from sdm_relational_engine.rfm.backend.snow.binding import (  # noqa: E402
 from sdm_client import Relationship, Schema, SourceTable  # noqa: E402
 from sdm_client.materializers import RelationalMaterializer  # noqa: E402
 
+
+@pytest.fixture(autouse=True)
+def _legacy_engine(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Exercise the engine whose constructors and driver SQL are faked here."""
+    monkeypatch.setenv('SDM_CORE_ROUTES', '')
+
+
 _DATABASE = 'DB'
 _SCHEMA = 'SCH'
 

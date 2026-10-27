@@ -28,7 +28,7 @@ test-ops = ["sdm-host/test-ops", "sdm-contract/test-ops"]
 
 [dependencies]
 arrow-array = { workspace = true, features = ["ffi"] }
-arrow-pyarrow.workspace = true
+arrow-data.workspace = true
 arrow-schema = { workspace = true, features = ["ffi"] }
 pyo3.workspace = true
 pyo3-log.workspace = true
@@ -39,7 +39,8 @@ sdm-host = { path = "../../crates/sdm-host" }
 
 # Not the workspace lints: unsafe code is denied rather than forbidden, so a
 # site that needed it could allow it locally, with a reason. The crate has
-# none: Arrow crosses through arrow-pyarrow and the PyCapsule interface.
+# only the documented public capsule ownership and C-stream import sites:
+# raw buffer alignment is checked before Arrow can create typed slices.
 [lints.rust]
 unsafe_code = "deny"
 

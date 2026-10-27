@@ -23,7 +23,9 @@
 //!
 //! A failure prints each missing golden ready to paste, as the run made it.
 
-use sdm_contract::data::{DataLayer, DataRequest, Dialect, FetchPlan, ProviderChoice};
+use sdm_contract::data::{
+    DataLayer, DataRequest, DescribePart, Dialect, FetchPlan, ProviderChoice,
+};
 use sdm_data::Data;
 use serde_json::Value;
 
@@ -50,11 +52,28 @@ fn literal(request: &str, statements: &[String]) -> String {
     format!("(r##\"{request}\"##, &[{}]),", texts.join(", "))
 }
 
+/// The namespace the contract cases' runs on `dialect` plan `request`
+/// under: on Postgres the schema each case's database settles, `public`,
+/// its session's current one, which the core reads once per run (the read
+/// itself planned before, under none) and names in every statement (T3.7);
+/// none for the others.
+fn settled(dialect: &str, request: &DataRequest) -> Vec<Option<String>> {
+    let session = matches!(
+        request,
+        DataRequest::Describe {
+            part: DescribePart::Namespace,
+            ..
+        }
+    );
+    if dialect == "postgres" && !session {
+        vec![Some("public".to_owned())]
+    } else {
+        Vec::new()
+    }
+}
+
 /// The goldens whose request does not render exactly its statements.
 fn misrendered(dialect: &str, goldens: &Owned) -> Vec<String> {
-    let choice = ProviderChoice::Sql {
-        dialect: Dialect::new(dialect),
-    };
     let mut problems = Vec::new();
     for (request, statements) in goldens {
         let parsed: DataRequest = match serde_json::from_str(request) {
@@ -63,6 +82,12 @@ fn misrendered(dialect: &str, goldens: &Owned) -> Vec<String> {
                 problems.push(format!("{request}: not a request: {error}"));
                 continue;
             }
+        };
+        let choice = ProviderChoice::Sql {
+            timestamp_encoding: None,
+            dialect: Dialect::new(dialect),
+            namespace: settled(dialect, &parsed),
+            view: None,
         };
         match Data::new().plan(&parsed, &choice) {
             Ok(FetchPlan::Sql {

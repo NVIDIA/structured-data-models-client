@@ -45,6 +45,7 @@ from __future__ import annotations
 import argparse
 import codecs
 import importlib.util
+import io
 import json
 import os
 import sys
@@ -230,9 +231,27 @@ class _Endpoints:
         }
 
 
+class _ApiClient:
+    r"""The part of the Databricks SDK's ``api_client`` the core route's
+    serving transport calls (T3.13): the envelope the core wrote, answered
+    as ``endpoints`` answers a query, its reply's bytes as the SDK's raw
+    answer gives them."""
+
+    def __init__(self, endpoints: _Endpoints) -> None:
+        self._endpoints = endpoints
+
+    def do(self, method: str, path: str, **named: Any) -> Any:
+        sent = named['data']
+        sent = sent.read() if hasattr(sent, 'read') else sent
+        records = json.loads(sent)['dataframe_records']
+        reply = self._endpoints.query(name=path, dataframe_records=records)
+        return {'contents': io.BytesIO(json.dumps(reply).encode())}
+
+
 class _Workspace:
     def __init__(self, write: Callable[[str], str]) -> None:
         self.serving_endpoints = _Endpoints(write)
+        self.api_client = _ApiClient(self.serving_endpoints)
 
 
 def _served(request: Any, form: str) -> dict[str, Any]:
@@ -295,6 +314,8 @@ def observe(core: bool) -> dict[str, Any]:
             + _routing.MATERIALIZE_DUCKDB
             + _routing.PREDICT_DUCKDB
         )
+    else:
+        os.environ['SDM_CORE_ROUTES'] = ''
     try:
         return {'answers': answers()}
     finally:

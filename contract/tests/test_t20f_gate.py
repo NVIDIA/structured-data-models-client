@@ -77,6 +77,9 @@ from typing import Any
 import pytest
 import yaml
 
+# Gate tooling (T3.0): CI runs it in the tooling jobs, not in every matrix job.
+pytestmark = pytest.mark.tooling
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -333,6 +336,10 @@ def _rekey_reference(sha: str) -> Callable[[Path], None]:
     observations' identities, the vector files)."""
 
     def edit(tree: Path) -> None:
+        # This consumer rewrites every real tracked citation by reading
+        # physical bytes. Materialize this worktree only; the origin and
+        # sibling gate worktrees retain their sparse checkout settings.
+        git(tree, 'sparse-checkout', 'disable')
         env = (tree / 'contract/reference-env.txt').read_text()
         old = re.search(r'^reference: ([0-9a-f]{40})$', env, re.M)
         assert old is not None
@@ -348,6 +355,66 @@ def _rekey_reference(sha: str) -> Callable[[Path], None]:
         reference.rename(reference.with_name(f'{sha}.jsonl'))
 
     return edit
+
+
+def test_reference_rekey_keeps_every_capture_citation_and_parent_blob(
+    repo: Path, origin: dict[str, Any], tmp_path: Path
+) -> None:
+    """The physical citation consumer may not lose sparse capture inputs."""
+    before = git(repo, 'rev-parse', 'HEAD')
+    old = re.search(
+        r'^reference: ([0-9a-f]{40})$',
+        (repo / 'contract/reference-env.txt').read_text(),
+        re.M,
+    )
+    assert old is not None
+    cited = subprocess.check_output(
+        ['git', '-C', str(repo), 'grep', '-l', '-F', old[1], before,
+         '--', 'contract/captures'],
+        text=True,
+    ).splitlines()  # fmt: skip
+    paths = [name.partition(':')[2] for name in cited]
+    assert paths
+    replacement = '7' * 40
+    _rekey_reference(replacement)(repo)
+    git(repo, 'add', '--sparse', '-A')
+    git(repo, 'commit', '-q', '-m', 'T3.10: rekey the original fixture bytes')
+    for name in paths:
+        original = subprocess.check_output(
+            ['git', '-C', str(repo), 'show', f'{before}:{name}']
+        )
+        current = subprocess.check_output(
+            ['git', '-C', str(repo), 'show', f'HEAD:{name}']
+        )
+        assert current == original.replace(
+            old[1].encode(), replacement.encode()
+        )
+    sibling = tmp_path / 'sibling'
+    git(
+        origin['repo'],
+        'worktree',
+        'add',
+        '-q',
+        '--detach',
+        str(sibling),
+        before,
+    )
+    manifests = {
+        name
+        for name in git(repo, 'ls-files', 'contract/captures').splitlines()
+        if name.endswith('/manifest.json')
+    }
+    assert manifests
+    for tree in (sibling, origin['repo']):
+        assert {
+            p.relative_to(tree).as_posix()
+            for p in (tree / 'contract/captures').rglob('*')
+            if p.is_file()
+        } == manifests
+        for name in manifests:
+            assert (tree / name).read_bytes() == (ROOT / name).read_bytes()
+    assert git(repo, 'status', '--porcelain') == ''
+    assert git(sibling, 'status', '--porcelain') == ''
 
 
 def _main_half() -> str:
@@ -379,7 +446,43 @@ def _main_half() -> str:
     )
 
 
+def _upstream(tree: Path) -> Path:
+    r"""The bare repository the tree's ``origin`` remote names, made the
+    first time: the main step fetches ``origin/main`` itself right before
+    it reads it (T3.2, P2-T2.0f-1), so a test sets main there."""
+    common = Path(git(tree, 'rev-parse', '--git-common-dir').strip())
+    if not common.is_absolute():
+        common = (tree / common).resolve()
+    bare = common.parent / 'upstream.git'
+    if not bare.exists():
+        subprocess.run(
+            ['git', 'init', '-q', '--bare', str(bare)],
+            capture_output=True,
+            check=True,
+        )
+    remotes = git(tree, 'remote').split()
+    if 'origin' not in remotes:
+        git(tree, 'remote', 'add', 'origin', str(bare))
+    return bare
+
+
 def _refs(tree: Path, origin_main: str | None, local_main: str | None) -> None:
+    bare = _upstream(tree)
+    if origin_main is None:
+        subprocess.run(
+            ['git', '-C', str(bare), 'update-ref', '-d', 'refs/heads/main'],
+            capture_output=True,
+            check=False,
+        )
+    else:
+        git(
+            tree,
+            'push',
+            '-q',
+            'origin',
+            f'{origin_main}:refs/heads/hold-{origin_main}',
+        )
+        git(bare, 'update-ref', 'refs/heads/main', origin_main)
     for ref, sha in ((ORIGIN_MAIN, origin_main), (LOCAL_MAIN, local_main)):
         if sha is None:
             subprocess.run(
@@ -588,6 +691,20 @@ def _reference_file(tree: Path) -> Path:
 def _keyed(line: dict[str, Any], key: str) -> dict[str, Any]:
     added = copy.deepcopy(line)
     added['case'] = key
+    # These key-parser controls copy DuckDB observations, not live database
+    # runs. Preserve the input-schema facts of the named database too:
+    # SQLite stores the case's timestamp as text, unlike DuckDB/Postgres.
+    database = key.partition('@')[2]
+    core = added.get('core')
+    if core is not None and database in ('sqlite', 'postgres'):
+        compare = _module(ROOT / 'scripts/rust_core/compare.py', 't20f_compare')
+        case = json.loads((ROOT / f'contract/cases/s0/{X}.json').read_text())
+        bases = compare._runner().load_bases()
+        for operation in core['inputs'] or []:
+            if operation['op'] == 'validate_query':
+                operation['schema'] = compare.stored_schema(
+                    operation['schema'], case, bases, database
+                )
     return added
 
 
@@ -635,6 +752,60 @@ def _only_compare(
     )
 
 
+@pytest.fixture
+def database_keys(
+    repo: Path, tmp_path: Path
+) -> tuple[Path, str, dict[str, list[dict[str, Any]]]]:
+    r"""A private single-case checkpoint and its real runner observations.
+
+    A database key makes the gate compare that database's whole catalog.
+    Keep this key-validation scenario's catalog, reference and baselines
+    to X, rather than supplying unrelated database observations.
+    The shared full-catalog fixtures used by the other tests stay intact.
+    """
+
+    def isolate(tree: Path) -> None:
+        case = tree / f'contract/cases/s0/{X}.json'
+        assert case.is_file()
+        for path in (tree / 'contract/cases').rglob('*.json'):
+            if path != case:
+                path.unlink()
+        for path in (
+            _reference_file(tree),
+            *(tree / 'contract/baselines').rglob('*.jsonl'),
+        ):
+            lines = [json.loads(x) for x in path.read_text().splitlines()]
+            path.write_text(
+                ''.join(json.dumps(x) + '\n' for x in lines if x['case'] == X)
+            )
+        # Keep a real task-only entry to satisfy the register's nonempty
+        # schema without importing transitions for unrelated corpus cases.
+        register = tree / 'docs/design/rust-core/register.yaml'
+        entries = yaml.safe_load(register.read_text())
+        entries['entries'] = [
+            entry for entry in entries['entries'] if entry['id'] == 'PK-1'
+        ]
+        assert len(entries['entries']) == 1
+        register.write_text(yaml.safe_dump(entries))
+        policy = tree / 'contract/compare-policy.yaml'
+        rules = yaml.safe_load(policy.read_text())
+        for selector in ('reach', 'ordered', 'sampled'):
+            rules[selector] = {
+                name: value
+                for name, value in rules[selector].items()
+                if name == X
+            }
+        policy.write_text(yaml.safe_dump(rules))
+
+    landed = land(repo, 'T2.1a', isolate)
+    where = tmp_path / 'database-key-observations'
+    where.mkdir()
+    observed = GM.observed.__wrapped__({'repo': repo}, lambda _: where)
+    for runner in ('python-core', 'python-old'):
+        assert [line['case'] for line in observed[runner]] == [X]
+    return repo, landed, observed
+
+
 def test_bare_case_ids_compare_as_before(
     repo: Path, tmp_path: Path, observed: Any
 ) -> None:
@@ -663,7 +834,8 @@ BAD_REFERENCE = 'nocase.reference-only@postgres'
 
 
 def test_compare_takes_database_keys_and_refuses_malformed_ones_by_name(
-    repo: Path, tmp_path: Path, observed: Any
+    database_keys: tuple[Path, str, dict[str, list[dict[str, Any]]]],
+    tmp_path: Path,
 ) -> None:
     r"""Exit 3. Twin: the reference (as recorded, or seeded where it does
     not) and both Python runners hold ``X@sqlite`` and ``X@postgres``:
@@ -671,7 +843,7 @@ def test_compare_takes_database_keys_and_refuses_malformed_ones_by_name(
     python-old's lines for no case, an unknown database, ``@duckdb``, an
     empty part, two suffixes and upper case, and the reference's line for
     no case, each fail it, named by key or by file and line."""
-    landed = git(repo, 'rev-parse', 'HEAD')
+    repo, landed, observed = database_keys
     commit(repo, 'T2.1a: database lines', _with_reference_keys(*DATABASE_KEYS))
     done = _only_compare(
         repo,

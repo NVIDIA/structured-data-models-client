@@ -67,7 +67,7 @@ When it fires on a `WATCHDOG-ERROR` line, the watchdog itself can't see: fix the
 ```text
 [Heartbeat, automated, not from the owner] Phase keep-alive check. Do only what is needed:
 1. If a subagent, Codex review, background waiter or CI watch is still running and you will be notified when it finishes, do nothing more and end your turn with one line saying what you're waiting on.
-2. Otherwise, re-orient: read the tail of <LOG>, check `git log -3 --oneline origin/$SDM_PHASE_BRANCH`, the queue in $SDM_ORCH_STATE/land-queue, idle lanes (scripts/rust_core/orchestration/lane_idle.py) and red CI on the phase and lane branches. Look for finished but unprocessed work: review reports and implementer results. Then continue under the handbook's rules. Don't duplicate work in flight; if a lane is idle, start its next package.
+2. Otherwise, re-orient: read the tail of <LOG>, check `git log -3 --oneline origin/$SDM_PHASE_BRANCH`, the queue in $SDM_ORCH_STATE/land-queue, idle lanes (scripts/rust_core/orchestration/lane_idle.py) and red CI on the phase and lane branches. Run `scripts/rust_core/orchestration/ci_timing.py --pull` and read $SDM_ORCH_STATE/fix-items/ (a CI job near its time limit gets a fix at its cause), and `scripts/rust_core/orchestration/phase_stats.py --phase-branch origin/$SDM_PHASE_BRANCH --no-ci --forecast <the design's forecast>` for the slip and its main cause. Look for finished but unprocessed work: review reports and implementer results. Then continue under the handbook's rules. Don't duplicate work in flight; if a lane is idle, start its next package.
 3. Go to the owner only if a decision is genuinely theirs; otherwise decide and log it.
 Log any action you take in <LOG>.
 ```

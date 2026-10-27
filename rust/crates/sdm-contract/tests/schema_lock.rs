@@ -226,8 +226,11 @@ fn the_committed_schemas_are_the_generated_ones() {
             write(format, &generated);
         }
         let path = schema_dir().join(format.schema_file(format.version));
-        assert!(
-            read(&path) == generated,
+        // JSON object member order is not schema shape. Fresh generator
+        // dependencies may change it; arrays and every value still match.
+        assert_eq!(
+            serde_json::from_str::<Value>(&read(&path)).expect("the committed schema is JSON"),
+            serde_json::from_str::<Value>(&generated).expect("the generated schema is JSON"),
             "{} differs from the schema the types generate; regenerate it with \
              SDM_CONTRACT_WRITE=1 cargo test -p sdm-contract --test schema_lock -- generated",
             path.display()
@@ -439,16 +442,14 @@ fn unaccounted(schema: &Value) -> Result<(), String> {
 
 /// The fields whose attachment is JSON of the contract's, with the entry of
 /// `$defs/Attachments` that locks it.
-const JSON: [(&str, &str); 22] = [
+const JSON: [(&str, &str); 26] = [
     ("Operation/validate_query.query", "ValidateQuery.query"),
     ("Operation/validate_query.schema", "ValidateQuery.schema"),
     ("Operation/describe_source.source", "DescribeSource.source"),
     ("Operation/edit_schema.schema", "EditSchema.schema"),
-    ("Operation/edit_schema.held", "EditSchema.held"),
     ("Operation/edit_schema.edit", "EditSchema.edit"),
     ("OperationResult/edit_schema.schema", "SchemaEdited.schema"),
     ("Operation/materialize.schema", "Materialize.schema"),
-    ("Operation/materialize.held", "Materialize.held"),
     ("Operation/materialize.query", "Materialize.query"),
     ("Operation/materialize.values", "Materialize.values"),
     ("Operation/materialize.candidates", "Materialize.candidates"),
@@ -459,6 +460,12 @@ const JSON: [(&str, &str); 22] = [
     ("RequestBatch.payload", "RequestBatch.payload"),
     ("RankingPart.payload", "RankingPart.payload"),
     ("RankingPart.query", "RankingPart.query"),
+    ("HeldRequest.payload", "HeldRequest.payload"),
+    ("HeldRequest.query", "HeldRequest.query"),
+    ("HeldCall.payload", "HeldCall.payload"),
+    ("HeldPart.payload", "HeldPart.payload"),
+    ("HeldPart.query", "HeldPart.query"),
+    ("HeldRanking.candidates", "HeldRanking.candidates"),
     (
         "OperationResult/describe_source.description",
         "DescribedSource.description",
@@ -468,13 +475,15 @@ const JSON: [(&str, &str); 22] = [
 ];
 
 /// The other fields naming an attachment, and why the lock needs no entry.
-const OTHER: [(&str, &str); 8] = [
+const OTHER: [(&str, &str); 10] = [
     (
         "ControlMessage/attached.attachment",
         "a control message: the root schema",
     ),
     ("ControlMessage/call_model.body", "the endpoint's bytes"),
     ("ModelOutcome/response.body", "the endpoint's bytes"),
+    ("ModelAnswer.detail", "the endpoint's or its SDK's text"),
+    ("SqlParam/text.attachment", "Arrow, with its schema"),
     ("Operation/materialize.indices", "Arrow, with its schema"),
     ("FetchOutcome/data.data", "Arrow, with its schema"),
     ("KeySet.attachment", "Arrow, with its schema"),

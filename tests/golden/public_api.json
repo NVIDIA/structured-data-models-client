@@ -435,9 +435,11 @@
         "public_attributes": [
           "backend",
           "connection",
+          "kind",
           "namespace"
         ],
         "public_methods": {
+          "namespace_parts": "(self) -> 'list[str | None]'",
           "semantic_model": "(self, name: 'str', *, trust_expressions: 'bool' = False) -> 'SemanticModel'"
         },
         "signature": "(connection: 'DatabricksConnection | SparkSession', *, catalog: 'str | None' = None, schema: 'str | None' = None) -> 'None'"
@@ -450,9 +452,12 @@
         "public_attributes": [
           "backend",
           "connection",
+          "kind",
           "namespace"
         ],
-        "public_methods": {},
+        "public_methods": {
+          "namespace_parts": "(self) -> 'list[str | None]'"
+        },
         "signature": "(connection: 'DuckDBConnection') -> 'None'"
       },
       "MissingBackendError": {
@@ -473,9 +478,12 @@
         "public_attributes": [
           "backend",
           "connection",
+          "kind",
           "namespace"
         ],
-        "public_methods": {},
+        "public_methods": {
+          "namespace_parts": "(self) -> 'list[str | None]'"
+        },
         "signature": "(connection: 'PostgresConnection', *, schema: 'str | None' = None) -> 'None'"
       },
       "SQLiteSource": {
@@ -486,9 +494,12 @@
         "public_attributes": [
           "backend",
           "connection",
+          "kind",
           "namespace"
         ],
-        "public_methods": {},
+        "public_methods": {
+          "namespace_parts": "(self) -> 'list[str | None]'"
+        },
         "signature": "(connection: 'SQLiteConnection') -> 'None'"
       },
       "SemanticModel": {
@@ -499,12 +510,15 @@
         "public_attributes": [
           "backend",
           "connection",
+          "kind",
           "name",
           "namespace",
           "source",
           "trust_expressions"
         ],
-        "public_methods": {},
+        "public_methods": {
+          "namespace_parts": "(self) -> 'list[str | None]'"
+        },
         "signature": "(source: 'DatabricksSource | SnowflakeSource', name: 'str', *, trust_expressions: 'bool' = False) -> 'None'"
       },
       "SnowflakeSource": {
@@ -515,9 +529,11 @@
         "public_attributes": [
           "backend",
           "connection",
+          "kind",
           "namespace"
         ],
         "public_methods": {
+          "namespace_parts": "(self) -> 'list[str | None]'",
           "semantic_model": "(self, name: 'str', *, trust_expressions: 'bool' = False) -> 'SemanticModel'"
         },
         "signature": "(connection: 'SnowflakeConnection | SnowparkSession', *, database: 'str | None' = None, schema: 'str | None' = None) -> 'None'"
@@ -528,9 +544,12 @@
         "public_attributes": [
           "backend",
           "connection",
+          "kind",
           "namespace"
         ],
-        "public_methods": {},
+        "public_methods": {
+          "namespace_parts": "(self) -> 'list[str | None]'"
+        },
         "signature": "(connection: 'Any' = None, *args: 'Any', **namespace: 'Any') -> 'Source'"
       },
       "__version__": {
