@@ -248,16 +248,29 @@ pub(crate) fn frame_instants(batches: &[RecordBatch], index: usize) -> Vec<Optio
     let Ok(values) = column(batches, index, Floats::Frame) else {
         return temporal;
     };
+    // Equality deliberately retains the native Float32 bits in Value::Float.
+    // Read numeric instants at each source array's physical width instead.
+    let narrow = batches.iter().flat_map(|batch| {
+        std::iter::repeat_n(
+            matches!(batch.column(index).data_type(), DataType::Float32),
+            batch.num_rows(),
+        )
+    });
     values
         .into_iter()
-        .map(|value| match value {
+        .zip(narrow)
+        .map(|(value, narrow)| match value {
             Some(Value::Int(value))
                 if value > i128::from(i64::MIN) && value <= i128::from(i64::MAX) =>
             {
                 Some(value)
             }
             Some(Value::Float(bits)) => {
-                let value = f64::from_bits(bits);
+                let value = if narrow {
+                    f64::from(f32::from_bits(bits as u32))
+                } else {
+                    f64::from_bits(bits)
+                };
                 (value.is_finite() && value > i64::MIN as f64 && value < -(i64::MIN as f64))
                     .then_some(value as i128)
             }

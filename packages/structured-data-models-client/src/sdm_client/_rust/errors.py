@@ -689,6 +689,20 @@ def error_from_core(
                 fields['diagnostic'] = (
                     fields['before'] + repr(value) + fields['after']
                 )
+            if fields.get('native') == 'float':
+                # The core selected _finite's conversion failure, separately
+                # from bool rejection or nonfinite values after a good cast.
+                # Preserve the actual native exception beneath the generated
+                # wrapper, including its native traceback and caller context.
+                try:
+                    float(value)
+                except (TypeError, ValueError, OverflowError):
+                    try:
+                        raise ResponseContractError(
+                            fields['diagnostic']
+                        ) from None
+                    except ResponseContractError as generated:
+                        response_cause = generated
         details['diagnostic'] = fields['diagnostic']
     said = _said(sentence, fields)
     part = error.get('part')
@@ -737,6 +751,7 @@ def raise_error(
     cause = error.__cause__
     if cause is None:
         raise error from None
+    previous_context = cause.__context__
     try:
         # A normal decoder raises the wrapper inside its cause's handler.
         # Reuse that same exception, including its original native traceback.
@@ -750,7 +765,24 @@ def raise_error(
         ):
             # Remove only our caught core exception, retaining any original
             # caller exception behind it and its native suppression flags.
-            cause.__context__ = internal_context.__context__
+            cause.__context__ = (
+                previous_context
+                if previous_context is not internal_context
+                and previous_context is not None
+                else internal_context.__context__
+            )
+        # A generated wrapper may already hold a native conversion failure.
+        # Remove only our exact internal exception from that retained chain.
+        nested: BaseException | None = cause
+        seen: set[int] = set()
+        while nested is not None and id(nested) not in seen:
+            seen.add(id(nested))
+            if (
+                internal_context is not None
+                and nested.__context__ is internal_context
+            ):
+                nested.__context__ = internal_context.__context__
+            nested = nested.__context__
         raise error from cause
 
 
