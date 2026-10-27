@@ -21,6 +21,7 @@ sdm-contract = { path = "../sdm-contract" }
 sdm-schema = { path = "../sdm-schema" }
 
 [dev-dependencies]
+arrow-ipc.workspace = true
 serde_json.workspace = true
 
 [lints]
