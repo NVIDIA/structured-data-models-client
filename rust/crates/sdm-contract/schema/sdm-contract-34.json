@@ -4433,6 +4433,13 @@
             "null"
           ]
         },
+        "instead_of": {
+          "description": "The view dimensions that truncate or cast the chosen raw column.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "how": {
           "anyOf": [
             {
@@ -4720,6 +4727,7 @@
         "derived_relation_malformed",
         "metric_view_as_table",
         "key_set_type_unbound",
+        "key_set_integer_range",
         "data_request_refused",
         "unsupported_type",
         "not_yet_describe",
@@ -4784,6 +4792,8 @@
         "frame_keyless_shared",
         "frame_key_declined",
         "time_columns_taken_earliest",
+        "time_columns_taken_instead_of",
+        "time_columns_taken_instead_of_many",
         "time_columns_taken_unchecked_empty",
         "time_columns_taken_unchecked_sparse",
         "time_columns_taken_unchecked_constant_where_held",
@@ -4828,6 +4838,7 @@
         "fallback_time_type",
         "fallback_no_column",
         "fallback_seed_types",
+        "fallback_sql_expression",
         "host_clock_not_utc",
         "state_version",
         "state_unread",
@@ -4944,9 +4955,12 @@
         "option_not_whole",
         "option_unknown",
         "option_not_a_boolean",
+        "option_value_not_finite",
         "neighbors_not_a_sequence",
         "hop_not_whole",
         "hop_negative",
+        "neighbor_lookback_range",
+        "neighbor_lookback_not_numeric",
         "context_anchor_not_a_time",
         "excluded_not_a_mapping",
         "excluded_not_a_sequence",
@@ -4960,6 +4974,7 @@
         "inference_option_unknown",
         "inference_option_not_a_boolean",
         "inference_option_not_one_to_four",
+        "inference_option_not_finite",
         "inference_option_not_transforms",
         "inference_option_not_an_output_type",
         "sampler_state_unread",
@@ -5042,6 +5057,7 @@
         "context_answers_static",
         "null_keys_left_out",
         "date_literal_day_first",
+        "invalid_string_escape",
         "entity_uncast",
         "time_past_nanoseconds",
         "time_past_unit",
@@ -7141,7 +7157,7 @@
               "type": "boolean"
             },
             "values": {
-              "description": "A bytes attachment of a JSON object of the call's option values the\ncore reads (T1.28a), each as the caller gave it and the host's JSON\nwrites it, a member only where the call names the option:\n`num_context_samples`, the context size, whose run mode the core\nchooses and bounds; `num_hops` and `num_neighbors`, whose hops it\nbounds before it refuses them by name; `prediction_statistic`, which\nit checks and records; `inference_config`, which it reads by the\nengine's rules and writes into the payload (decision E45(a)); and\n`random_seed`, in place of `seed` and `unseeded` where it is given\n(`null`, an unseeded sample); from contract v26, `rows_per_call`,\nthe most rows one model call scores, which only lowers the profile's\n(`main`'s multi-call `predict`, read from T2.8c); `top_k`, how\nmany candidates a ranking keeps, in place of the query's `TOP k`,\nread from T2.8; from contract v27, `lag_timesteps`, the past steps\nof a temporal target added as features (T2.9), any value, which the\ncore refuses where the reference's engine refuses it, once the\ncontext is labelled; and from contract v27 the sampling options\n(T2.11): `num_hops` and `num_neighbors`, the hops walked and each\none's size; `max_pq_iterations`; `use_prediction_time`;\n`return_embeddings`, which names `embeddings` among the payload's\noutputs; `exclude_cols_dict`, as given; and `context_anchor_time`,\nwritten as `anchor_time` is (a `ts` scalar), or as the text\n`entity`, `null`, or the text `unreadable` for any other value. The core reads it with `sdm-wire`'s\nbounded reader and holds each value's type to what the reference's\nclient takes, so the host checks none of them.",
+              "description": "A bytes attachment of a JSON object of the call's option values the\ncore reads (T1.28a), each as the caller gave it and the host's JSON\nwrites it, a member only where the call names the option:\n`num_context_samples`, the context size, whose run mode the core\nchooses and bounds; `num_hops` and `num_neighbors`, whose hops it\nbounds before it refuses them by name; `prediction_statistic`, which\nit checks and records; `inference_config`, which it reads by the\nengine's rules and writes into the payload (decision E45(a)); and\n`random_seed`, in place of `seed` and `unseeded` where it is given\n(`null`, an unseeded sample); from contract v26, `rows_per_call`,\nthe most rows one model call scores, which only lowers the profile's\n(`main`'s multi-call `predict`, read from T2.8c); `top_k`, how\nmany candidates a ranking keeps, in place of the query's `TOP k`,\nread from T2.8; from contract v27, `lag_timesteps`, the past steps\nof a temporal target added as features (T2.9), any value, which the\ncore refuses where the reference's engine refuses it, once the\ncontext is labelled; and from contract v27 the sampling options\n(T2.11): `num_hops` and `num_neighbors`, the hops walked and each\none's size; `max_pq_iterations`; `use_prediction_time`;\n`return_embeddings`, which names `embeddings` among the payload's\noutputs; `exclude_cols_dict`, as given; and `context_anchor_time`,\nwritten as `anchor_time` is (a `ts` scalar), or as the text\n`entity`, `null`, or the text `unreadable` for any other value. The core reads it with `sdm-wire`'s\nbounded reader and holds each value's type to what the reference's\nclient takes, so the host checks none of them.\nWorking v30's option encoding also preserves bare `NaN`, `Infinity`\nand `-Infinity` numeric tokens in this attachment only. The core\nadmits only a NaN `lag_timesteps` under KO3-44; other nonfinite\noption values remain named refusals. Text tokens and ordinary\nmessage JSON retain their existing strict interpretation.",
               "anyOf": [
                 {
                   "$ref": "#/$defs/AttachmentId"
@@ -8728,12 +8744,14 @@
               ]
             },
             "per_seed": {
-              "type": [
-                "integer",
-                "null"
-              ],
-              "format": "uint64",
-              "minimum": 0
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/NeighborLimit"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "order": {
               "anyOf": [
@@ -9076,6 +9094,45 @@
         "inclusive"
       ]
     },
+    "NeighborLimit": {
+      "description": "The caller's per-seed neighbor bound, interpreted by its provider.\nPositive counts retain their original unsigned JSON representation.\nSQL expressions are caller-authored query code under the same trust\nboundary as derived relation expressions, never identifiers or values.",
+      "anyOf": [
+        {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        {
+          "description": "A negative JSON number's exact text, including fractional bounds.",
+          "type": "object",
+          "properties": {
+            "negative": {
+              "$ref": "#/$defs/NegativeNeighborBound"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "negative"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "sql_expression": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "sql_expression"
+          ]
+        }
+      ]
+    },
+    "NegativeNeighborBound": {
+      "type": "string",
+      "pattern": "^-(?:[1-9][0-9]*(?:\\.[0-9]+)?|0\\.0*[1-9][0-9]*)(?:[eE][+-]?[0-9]+)?$"
+    },
     "TieBreak": {
       "description": "The total order a `neighbors` request keeps per seed, built by the core\nfrom the reference's rule (design, \"Data access\").",
       "type": "array",
@@ -9285,8 +9342,22 @@
       ]
     },
     "SqlResultConversion": {
-      "description": "One output column projected by the SQL data layer for lossless native\ntransfer. Positions are zero-based and names remain exactly the\nwarehouse's original output names, including duplicates.",
+      "description": "A native result conversion selected by the SQL data layer.\nColumn positions are zero-based and names remain exactly the\nwarehouse's original output names, including duplicates.",
       "oneOf": [
+        {
+          "description": "PostgreSQL zoned values read as text, including array elements and\nrange bounds, use canonical UTC without changing the session.\nThis policy applies to the whole result, not one projection.",
+          "type": "object",
+          "properties": {
+            "conversion": {
+              "type": "string",
+              "const": "zoned_text_utc"
+            }
+          },
+          "required": [
+            "conversion"
+          ],
+          "additionalProperties": false
+        },
         {
           "type": "object",
           "properties": {
