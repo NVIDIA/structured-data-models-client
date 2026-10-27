@@ -569,8 +569,14 @@ fn attached_batches(context: &[RecordBatch], scoring: &[RecordBatch]) -> Attachm
 fn native_header(names: &[&str], batches: &[RecordBatch]) -> Value {
     let mut value = header(names, batches.iter().map(RecordBatch::num_rows).sum());
     for (at, field) in batches[0].schema().fields().iter().enumerate() {
-        if field.data_type() == &arrow_schema::DataType::Int64 {
-            value["columns"][at]["physical"] = json!({"type":"int64"});
+        value["columns"][at]["physical"] = serde_json::to_value(
+            sdm_contract::ColumnType::from_arrow(field.name(), field.data_type()).unwrap(),
+        )
+        .unwrap();
+        if !matches!(
+            field.data_type(),
+            arrow_schema::DataType::Float32 | arrow_schema::DataType::Float64
+        ) {
             value["columns"][at]
                 .as_object_mut()
                 .unwrap()
