@@ -504,7 +504,22 @@ fn unaccounted(schema: &Value) -> Result<(), String> {
 
 /// The fields whose attachment is JSON of the contract's, with the entry of
 /// `$defs/Attachments` that locks it.
-const JSON: [(&str, &str); 30] = [
+const JSON: [(&str, &str); 36] = [
+    ("Operation/prepare_request.input", "PrepareRequest.input"),
+    (
+        "OperationResult/prepare_request.value",
+        "PreparedRequest.value",
+    ),
+    ("Operation/predict.direct", "Predict.direct"),
+    (
+        "OperationResult/decoded_direct_response.value",
+        "DecodedDirectResponse.value",
+    ),
+    ("DirectResponseData.rows", "DirectResponseData.rows"),
+    (
+        "Preparation/layout_response.attributed",
+        "LayoutResponse.attributed",
+    ),
     ("ProviderChoice/frames.manifest", "Frames.manifest"),
     // The same provider manifest field has an operation-specific JSON type.
     ("ProviderChoice/frames.manifest", "Materialize.frames"),
@@ -545,7 +560,47 @@ const JSON: [(&str, &str); 30] = [
 ];
 
 /// The other fields naming an attachment, and why the lock needs no entry.
-const OTHER: [(&str, &str); 12] = [
+const OTHER: [(&str, &str); 22] = [
+    (
+        "DirectPrelude.context",
+        "Arrow, with positional header facts",
+    ),
+    (
+        "DirectPrelude.predict",
+        "Arrow, with positional header facts",
+    ),
+    (
+        "DirectEnvelope.context",
+        "Arrow, with positional header facts",
+    ),
+    (
+        "DirectEnvelope.predict",
+        "Arrow, with positional header facts",
+    ),
+    (
+        "Preparation/schema.context",
+        "Arrow, with positional header facts",
+    ),
+    (
+        "Preparation/schema.predict",
+        "Arrow, with positional header facts",
+    ),
+    (
+        "DirectPredict/body.context",
+        "Arrow, with positional header facts",
+    ),
+    (
+        "DirectPredict/body.predict",
+        "Arrow, with positional header facts",
+    ),
+    (
+        "DirectResponseData.payload",
+        "The already encoded model wire payload",
+    ),
+    (
+        "DirectResponseData.response",
+        "The already decoded model wire response",
+    ),
     ("FrameInput.rows", "Arrow, with its schema"),
     (
         "OperationResult/describe_source.frame_rows",
