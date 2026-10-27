@@ -605,9 +605,9 @@ mod tests {
             .expect("misaligned task anchors were accepted");
         assert_eq!(error.code, ErrorCode::InvalidMessage);
         let rows = TaskRows::new(integers(vec![1]), vec![0], integers(vec![7]), 0).unwrap();
-        for range in [2..2, 0..2, 1..0] {
+        for (start, end) in [(2, 2), (0, 2), (1, 0)] {
             let error = rows
-                .batch(range)
+                .batch(start..end)
                 .err()
                 .expect("invalid task range was accepted");
             assert_eq!(error.code, ErrorCode::InvalidMessage);
