@@ -121,7 +121,7 @@ mod tests {
             let ordinary = ordinary.to_owned();
             let mut output = Vec::new();
             write(&UnicodeText::from(ordinary.as_str()), &mut output);
-            assert_eq!(output, Value::Text(ordinary).to_bytes());
+            assert_eq!(output, Value::Text(ordinary.into()).to_bytes());
         }
     }
 }

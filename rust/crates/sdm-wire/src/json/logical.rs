@@ -14,6 +14,7 @@ use serde::ser::{self, SerializeMap, SerializeSeq, SerializeStruct};
 use super::Value;
 
 pub(super) const NUMBER: &str = "sdm.logical.number";
+pub(super) const UNICODE: &str = "sdm.logical.unicode";
 
 /// A typed value that cannot be represented by the existing JSON-like data.
 #[derive(Debug)]
@@ -34,10 +35,10 @@ impl ser::Error for Error {
 }
 
 pub(super) fn capture<T: Serialize + ?Sized>(value: &T) -> Result<Value, Error> {
-    value.serialize(Capture)
+    value.serialize(Capture { native_text: false })
 }
 
-struct Capture;
+struct Capture { native_text: bool }
 
 impl ser::Serializer for Capture {
     type Ok = Value;
@@ -107,6 +108,9 @@ impl ser::Serializer for Capture {
         Ok(Value::text(value))
     }
     fn serialize_bytes(self, value: &[u8]) -> Result<Value, Error> {
+        if self.native_text {
+            return Ok(Value::Text(sdm_contract::scalar::unicode::UnicodeText::from_utf8_surrogatepass(value.to_vec()).map_err(<Error as ser::Error>::custom)?));
+        }
         Ok(Value::Array(
             value
                 .iter()
@@ -139,6 +143,7 @@ impl ser::Serializer for Capture {
         name: &'static str,
         value: &T,
     ) -> Result<Value, Error> {
+        if name == UNICODE { return value.serialize(Capture { native_text: true }); }
         let value = capture(value)?;
         if name == NUMBER {
             let Value::Text(token) = value else {
@@ -146,6 +151,7 @@ impl ser::Serializer for Capture {
                     "a logical number must retain its written token",
                 ));
             };
+            let token = token.into_utf8().map_err(|_| <Error as ser::Error>::custom("a numeric token must be ordinary UTF-8"))?;
             serde_json::value::RawValue::from_string(token.clone())
                 .map_err(<Error as ser::Error>::custom)?;
             Ok(Value::Number(token))
@@ -280,7 +286,7 @@ impl SerializeMap for Object {
                 "a typed payload object key must be text",
             ));
         };
-        self.key = Some(key);
+        self.key = Some(key.into_utf8().map_err(|_| <Error as ser::Error>::custom("a typed payload object name must be ordinary UTF-8"))?);
         Ok(())
     }
     fn serialize_value<T: Serialize + ?Sized>(&mut self, value: &T) -> Result<(), Error> {
@@ -344,6 +350,23 @@ impl ser::SerializeStructVariant for VariantObject {
 mod tests {
     use super::*;
     use serde::Serialize;
+
+    #[test]
+    fn capture_keeps_native_surrogates_distinct_before_any_model_json_read() {
+        use sdm_contract::scalar::unicode::UnicodeText;
+        let original = Value::Array(vec![
+            Value::Text(UnicodeText::from_points([0xd83d, 0xde3a]).unwrap()),
+            Value::Text(UnicodeText::from_points([0x1f63a]).unwrap()),
+            Value::Text(UnicodeText::from_points([0xd800, 0, 0xdfff]).unwrap()),
+        ]);
+        let captured = capture(&original).unwrap();
+        assert_eq!(captured, original);
+        let Value::Array(items) = &captured else { panic!("native values") };
+        assert_ne!(items[0], items[1]);
+        assert_eq!(items[0].as_unicode().unwrap().points().collect::<Vec<_>>(), [0xd83d, 0xde3a]);
+        assert_eq!(items[1].as_unicode().unwrap().points().collect::<Vec<_>>(), [0x1f63a]);
+        assert_eq!(captured.to_bytes(), serde_json::to_vec(&original).unwrap());
+    }
 
     #[derive(Serialize)]
     struct Payload {

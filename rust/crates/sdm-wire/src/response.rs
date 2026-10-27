@@ -240,7 +240,7 @@ impl PredictionResponse {
             Some(Value::Object(members)) if members.is_empty() => vec![],
             Some(Value::Object(values)) => {
                 return Err(refused("prediction", "not_an_object")
-                    .with_value(&Value::Text(values[0].0.clone())));
+                    .with_value(&Value::Text(values[0].0.clone().into())));
             }
             Some(value) => return Err(refused("predictions", "not_a_sequence").with_value(value)),
         };
@@ -482,7 +482,7 @@ pub fn mapping(member: &Value, field: &'static str) -> Result<Value, Refused> {
         let (Some(a), Some(b), None) = (chars.next(), chars.next(), chars.next()) else {
             return None;
         };
-        Some((Value::Text(a.to_string()), Value::Text(b.to_string())))
+        Some((Value::Text(a.to_string().into()), Value::Text(b.to_string().into())))
     };
     match member {
         Value::Object(_) => Ok(member.clone()),
@@ -499,7 +499,7 @@ pub fn mapping(member: &Value, field: &'static str) -> Result<Value, Refused> {
                     Value::Text(text) => pair_of(text).ok_or_else(not)?,
                     Value::Object(two) => match two.as_slice() {
                         [(first, _), (second, _)] => {
-                            (Value::Text(first.clone()), Value::Text(second.clone()))
+                            (Value::Text(first.clone().into()), Value::Text(second.clone().into()))
                         }
                         _ => return Err(not()),
                     },
@@ -552,11 +552,11 @@ pub fn mappings(value: &Value) -> Result<Vec<Value>, Refused> {
             .collect(),
         Value::Text(text) => text
             .chars()
-            .map(|c| one(&Value::Text(c.to_string())))
+            .map(|c| one(&Value::Text(c.to_string().into())))
             .collect(),
         Value::Object(members) => members
             .iter()
-            .map(|(name, _)| one(&Value::Text(name.clone())))
+            .map(|(name, _)| one(&Value::Text(name.clone().into())))
             .collect(),
         _ => Err(refused(FIELD, "not_a_mapping").native(NativeFault::Iter, value)),
     }

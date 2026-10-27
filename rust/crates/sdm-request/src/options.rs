@@ -999,7 +999,7 @@ pub fn statistic(given: Option<&str>) -> Result<Option<String>, CoreError> {
             "prediction_statistic",
             "not_a_statistic",
         )
-        .with_field("given", given_text(&Value::Text(name.to_owned())))),
+        .with_field("given", given_text(&Value::Text(name.to_owned().into())))),
     }
 }
 

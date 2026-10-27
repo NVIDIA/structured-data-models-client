@@ -392,7 +392,7 @@ pub(crate) fn int_cell(value: i128, column: &str) -> Result<Value, CoreError> {
         .with_field("dtype", Detail::text("int64")));
     }
     if value.abs() > JSON_SAFE {
-        return Ok(Value::Text(value.to_string()));
+        return Ok(Value::Text(value.to_string().into()));
     }
     Ok(Value::int(value as i64))
 }
@@ -498,7 +498,7 @@ fn cell(array: &ArrayRef, row: usize, column: &str, dtype: Dtype) -> Result<Valu
                 }
                 TimeUnit::Nanosecond => array.as_primitive::<TimestampNanosecondType>().value(row),
             };
-            Ok(Value::Text(iso_microseconds(to_ns(value, *unit, column)?)))
+            Ok(Value::Text(iso_microseconds(to_ns(value, *unit, column)?).into()))
         }
         // A time of day, which the reference's engine reads as no time.
         DataType::Time32(_) | DataType::Time64(_) => Ok(Value::Null),
@@ -506,7 +506,7 @@ fn cell(array: &ArrayRef, row: usize, column: &str, dtype: Dtype) -> Result<Valu
             let value = array.as_primitive::<Decimal128Type>().value(row);
             match dtype {
                 // A whole decimal's own digits (`_decimal_text`).
-                Dtype::String => Ok(Value::Text(decimal_text(value, *scale))),
+                Dtype::String => Ok(Value::Text(decimal_text(value, *scale).into())),
                 Dtype::Int64 => int_cell(value, column),
                 Dtype::Float64 => decimal_float(value, *scale, column),
                 _ => Err(internal("a decimal's dtype is not one a decimal takes")),
@@ -969,7 +969,7 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
                         if *a == sdm_engine::sample::MISSING_ANCHOR {
                             Value::Null
                         } else {
-                            Value::Text(iso_microseconds(*a))
+                            Value::Text(iso_microseconds(*a).into())
                         }
                     })
                     .collect(),
