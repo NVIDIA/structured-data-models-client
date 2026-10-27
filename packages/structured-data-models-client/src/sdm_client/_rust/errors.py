@@ -629,6 +629,7 @@ def error_from_core(
         'kind': error['kind'],
         'retryable': bool(error.get('retryable', False)),
     }
+    response_cause: Exception | None = None
     if code == 'PROVIDER_ERROR' and driver_class is not None:
         details['driver_class'] = driver_class
     if (code, details.get('rule')) in AS_THE_BASE_CLASS:
@@ -678,13 +679,17 @@ def error_from_core(
             value = json.loads(
                 fields['offending'], parse_int=lambda token: int(Decimal(token))
             )
-            if fields.get('native') == 'dict':
-                # The core has already selected the failed dict conversion.
-                # Invoke only its actual native diagnostic/cause at this point.
-                dict(value)
-            elif fields.get('native') == 'iter':
-                iter(value)
-            elif fields.get('before') or fields.get('after'):
+            try:
+                if fields.get('native') == 'dict':
+                    # The core selected the failed conversion. Preserve its
+                    # actual native wording and cause inside the SDK wrapper.
+                    dict(value)
+                elif fields.get('native') == 'iter':
+                    iter(value)
+            except (TypeError, ValueError) as failed:
+                fields['diagnostic'] = str(failed)
+                response_cause = failed
+            if fields.get('before') or fields.get('after'):
                 fields['diagnostic'] = (
                     fields['before'] + repr(value) + fields['after']
                 )
@@ -701,7 +706,11 @@ def error_from_core(
     made = _instance(cls, said, code, details)
     made._sentence = sentence
     if sentence == 'direct_response_contract':
-        made.__cause__ = ResponseContractError(fields['diagnostic'])
+        made.__cause__ = (
+            response_cause
+            if response_cause is not None
+            else ResponseContractError(fields['diagnostic'])
+        )
     return made
 
 
