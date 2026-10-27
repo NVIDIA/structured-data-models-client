@@ -14,10 +14,17 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pandas as pd
+import numpy as np
 import pytest
 import requests
 
-from sdm_client import KumoRelational, PredictiveQuery, SDMClient, Schema
+from sdm_client import (
+    KumoRelational,
+    PredictiveQuery,
+    SDMClient,
+    Schema,
+    StructuredDataError,
+)
 
 from test_t44_text_frames import (
     Scripted,
@@ -62,6 +69,73 @@ def native_value(value):
         native_value(member['key']): native_value(member['value'])
         for member in value['members']
     }
+
+
+@pytest.mark.parametrize('storage', ['python', 'pyarrow', 'utf8'])
+def test_native_key_conversion_failure_keeps_its_guard_and_untouched_neighbors(
+    core, storage
+):
+    expected = json.loads(
+        Path(__file__)
+        .with_name('t44_native_key_conversion_failures_reference.json')
+        .read_text()
+    )['records'][storage]
+    frames = shop('python')
+    keys = [str(number) for number in range(1, 9)]
+    frames['users']['user_id'] = text(keys, storage)
+    frames['orders']['user_id'] = text(
+        [key for key in keys for _ in range(8)], storage
+    )
+    with (
+        pd.option_context('future.infer_string', False),
+        warnings.catch_warnings(record=True) as caught,
+    ):
+        warnings.simplefilter('always')
+        schema = Schema.from_data(
+            frames,
+            primary_keys={'users': 'user_id', 'orders': 'order_id'},
+            time_columns={},
+        )
+        query = PredictiveQuery(
+            'PREDICT users.age FOR EACH users.user_id', schema
+        )
+        with pytest.raises(StructuredDataError) as failure:
+            query.materialize(
+                indices=['7', '\ud800'],
+                num_context_samples=3,
+                num_neighbors=[3],
+                num_hops=1,
+                random_seed=7,
+            )
+    assert {
+        'stage': 'materialize',
+        'type': type(failure.value).__name__,
+        'code': failure.value.code,
+        'message': str(failure.value),
+    } == expected['error']
+    notices = expected['warnings']
+    if core:
+        notices = p3e2_warning_codes(notices)
+        state = query._relational_materializer._core_sampler_state['held'][
+            'frame_checkpoint'
+        ]
+        neighbors = json.loads(state['metadata'])['neighbors']
+        # Independent native MT initialization: these failures happen before
+        # either a reset to the caller's seed7 or the first neighbor draw.
+        initial = np.random.RandomState(123).get_state()
+        assert neighbors == {
+            'words': initial[1].tolist(),
+            'position': int(initial[2]),
+        }
+    assert [
+        {'type': type(item.message).__name__, 'message': str(item.message)}
+        for item in caught
+    ] == notices
+    assert not [
+        event
+        for event in expected['native_trace']
+        if event['event'] == 'local-sample-enter'
+    ]
 
 
 @pytest.mark.parametrize(
