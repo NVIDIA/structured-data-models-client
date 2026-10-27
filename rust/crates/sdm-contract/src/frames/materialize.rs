@@ -7,10 +7,10 @@
 //! by another package. It adds no Run step or native semantic callback.
 //! Input-sized task data, node maps, sampled rows and links remain attachments.
 
-use crate::Scalar;
 use crate::data::{AttachmentId, Relation};
 use crate::ops::{ColumnRef, Materialized, QueryFacts, Seed, Stype};
 use crate::pql::ValidatedQuery;
+use crate::{ColumnType, Scalar};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -109,6 +109,17 @@ pub struct FrameTaskMeaning {
     pub limits: FrameLimits,
 }
 
+/// Actual prediction input type of the resolved identifying column.
+/// Numeric inputs retain the approved shared core cast rule. A genuine
+/// native string dtype owner describes the new source family's input type,
+/// independently of caller-edited logical dtype metadata.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum FramePredictionType {
+    CoreKey { physical: ColumnType },
+    NativeString { column: ColumnRef },
+}
+
 /// Actual entity/anchor/target Arrow rows before native entity construction.
 /// The local host retains the graph's original native key dtype owner.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -117,6 +128,7 @@ pub struct LabelledFrameTask {
     pub graph: PreparedFrameGraph,
     pub meaning: FrameTaskMeaning,
     pub context: AttachmentId,
+    pub prediction_type: FramePredictionType,
 }
 
 /// Complete narrowed context and native-constructed prediction values.
