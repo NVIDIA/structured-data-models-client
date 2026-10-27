@@ -164,8 +164,12 @@ pub struct LabelledFrameTask {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct CompletedFrameTask {
+    /// Binds the narrowed rows, actual prediction values and selected layout.
+    pub identity: String,
     pub labelled: LabelledFrameTask,
     pub prediction: AttachmentId,
+    /// Present exactly for the native string prediction family.
+    pub prediction_encoding: Option<StringEncoding>,
     pub prediction_rows: u64,
     pub rows_per_call: u64,
     pub calls: u32,
@@ -199,6 +203,7 @@ pub struct FrameRequestPlan {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ResolvedFrameReferences {
+    pub identity: String,
     pub plan: FrameRequestPlan,
     pub nodes: AttachmentId,
 }
@@ -308,6 +313,9 @@ pub enum FramePreparation {
         /// Task-option observations after graph notice/list(indices).
         values: Option<AttachmentId>,
         seed: Option<Seed>,
+        /// Actual fresh OS fact for an unseeded draw, independent of the
+        /// immutable graph checkpoint and its continuing neighbor stream.
+        entropy: Option<u64>,
         anchor_time: Option<Scalar>,
         anchor_entity: bool,
         num_context_samples: Option<u64>,
