@@ -8,11 +8,8 @@
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
-use arrow_array::{
-    ArrayRef, BooleanArray, Float32Array, Int64Array, RecordBatch, StringArray,
-    TimestampNanosecondArray,
-};
-use arrow_schema::{DataType, Field, Schema, TimeUnit};
+use arrow_array::{ArrayRef, RecordBatch};
+use arrow_schema::DataType;
 use sdm_contract::data::{AttachmentId, Relation};
 use sdm_contract::frames::{
     FRAME_CHECKPOINT_VERSION, FrameCheckpoint, FrameCheckpointManifest, FrameCheckpointMetadata,
@@ -102,45 +99,6 @@ impl SampledContext {
         }
         Ok(self.sampled)
     }
-}
-
-/// The useful scalar labelled-context table before native prediction-entity
-/// conversion. Its aligned entity/anchor/target columns are typed Arrow data,
-/// not encoded model rows or an opaque materialization continuation.
-pub(crate) fn labelled_rows(
-    keys: &ArrayRef,
-    anchors: &[i64],
-    labels: &sdm_engine::labels::Labels,
-) -> Result<RecordBatch, CoreError> {
-    use sdm_engine::labels::Labels;
-
-    let target: ArrayRef = match labels {
-        Labels::Float(values) => Arc::new(Float32Array::from(values.clone())),
-        Labels::Int(values) => Arc::new(Int64Array::from(values.clone())),
-        Labels::Bool(values) => Arc::new(BooleanArray::from(values.clone())),
-        Labels::Text(values) => Arc::new(StringArray::from(values.clone())),
-        Labels::Lists(_) => {
-            return Err(internal("the scalar label echo does not carry list labels"));
-        }
-    };
-    let schema = Arc::new(Schema::new(vec![
-        Field::new("entity", keys.data_type().clone(), true),
-        Field::new(
-            "anchor",
-            DataType::Timestamp(TimeUnit::Nanosecond, None),
-            false,
-        ),
-        Field::new("target", target.data_type().clone(), false),
-    ]));
-    RecordBatch::try_new(
-        schema,
-        vec![
-            Arc::clone(keys),
-            Arc::new(TimestampNanosecondArray::from(anchors.to_vec())),
-            target,
-        ],
-    )
-    .map_err(|_| internal("the labels do not make one batch"))
 }
 
 pub(crate) struct FrameRun {
