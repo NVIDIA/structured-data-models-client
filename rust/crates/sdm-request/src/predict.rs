@@ -1246,10 +1246,12 @@ fn as_bool(value: &Value) -> Option<bool> {
 /// of an integer (trimmed), an integer, or a float that is whole.
 fn as_int(value: &Value) -> Option<i64> {
     match value {
-        Value::Text(text) => integer_text(text)?.parse::<i64>().ok(),
+        Value::Text(text) => text.trim().parse::<i64>().ok(),
         Value::Number(token) if is_integer_token(token) => token.parse::<i64>().ok(),
         Value::Number(token) => {
-            sdm_wire::json::whole(token).and_then(|whole| i64::try_from(whole).ok())
+            let float: f64 = token.parse().ok()?;
+            (float.is_finite() && float.fract() == 0.0 && float.abs() < 9.2e18)
+                .then_some(float as i64)
         }
         _ => None,
     }
@@ -1274,12 +1276,21 @@ fn direct_integer_class(value: &Value, decimal_limit: u32) -> Option<String> {
 /// an integer past a double's range not one.
 fn as_float(value: &Value) -> Option<f64> {
     match value {
-        Value::Text(text) => numeric_text(text),
+        Value::Text(text) => text.trim().parse::<f64>().ok(),
         Value::Number(token) => token
             .parse::<f64>()
             .ok()
             .filter(|v| v.is_finite() || !is_integer_token(token)),
         _ => None,
+    }
+}
+
+/// Direct float classes use the native text grammar. Numeric carriers share
+/// the established conversion; gathered text retains its approved Rust parser.
+fn direct_float_class(value: &Value) -> Option<f64> {
+    match value {
+        Value::Text(text) => numeric_text(text),
+        _ => as_float(value),
     }
 }
 
@@ -1318,7 +1329,13 @@ fn answer_of(
         },
         // A float target's class is read back as a double, a non-finite one
         // too, which the target's type holds.
-        AnswerType::FloatClass => Ok(as_float(value).map_or_else(|| written(value), Answer::Float)),
+        AnswerType::FloatClass => {
+            let read = match policy {
+                AnswerPolicy::Gathered => as_float(value),
+                AnswerPolicy::Direct { .. } => direct_float_class(value),
+            };
+            Ok(read.map_or_else(|| written(value), Answer::Float))
+        }
         // A class written as a non-finite number is passed through as the
         // reference passes it (owner decision of 2026-10-12): no target's
         // type holds it, so `as_declared` leaves it as it is.
@@ -1397,7 +1414,14 @@ fn spelled_with_limit(
                     Some(limit) => direct_integer_class(&as_written, limit),
                     None => as_int(&as_written).map(|n| n.to_string()),
                 },
-                AnswerType::FloatClass => as_float(&as_written).map(float_text),
+                AnswerType::FloatClass => {
+                    let read = if decimal_limit.is_some() {
+                        direct_float_class(&as_written)
+                    } else {
+                        as_float(&as_written)
+                    };
+                    read.map(float_text)
+                }
                 _ => None,
             };
             (key.unwrap_or_else(|| class.clone()), *p)

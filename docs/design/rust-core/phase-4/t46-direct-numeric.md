@@ -146,3 +146,15 @@ The R7 source evidence covers immediate missing/repeat advice, fresh time reads,
 Cross-table mutation interactions among final key-declined/keyless notices and earlier link/date advice are not established by this bounded evidence and remain a required Phase 4 follow-up.
 The static compatibility path and its captured final-key notices are not claimed to prove those native timing interactions.
 Broader storage/custom protocols and default activation remain unfinished.
+
+
+## Selected native conversion and gathered compatibility
+
+Fresh numeric values of original timestamp candidates retain their physical Float32 or Float64 width when converted to nanosecond instants.
+The shared equality representation continues to retain native floating bit patterns.
+Core selects a generated finite-number conversion fault separately from Boolean rejection and nonfinite values after successful conversion.
+The host obtains the selected actual native float exception and constructs the generated wrapper inside that handler, retaining its suppression flag, traceback and original caller context.
+The existing common raise boundary preserves that nested chain and removes only the exact internal core exception it introduced.
+Gathered class predictions and probability keys retain the approved parser grammar and existing whole-float conversion range.
+Direct class conversion selects the native numeric text grammar and exact whole-float conversion explicitly through its existing answer policy.
+Frozen native behavior alone does not authorize changing established gathered behavior.
