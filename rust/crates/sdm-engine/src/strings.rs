@@ -187,7 +187,7 @@ mod tests {
                 StringColumn::new(sliced.as_ref(), StringEncoding::Utf8Surrogatepass).unwrap();
             assert_eq!(column.len(), 5);
             assert!(column.get(0).unwrap().is_none());
-            assert_eq!(column.get(1).unwrap().unwrap().as_bytes(), []);
+            assert!(column.get(1).unwrap().unwrap().as_bytes().is_empty());
             let pair = column.get(2).unwrap().unwrap();
             let scalar = column.get(3).unwrap().unwrap();
             assert_eq!(pair.points().collect::<Vec<_>>(), [0xd83d, 0xde3a]);

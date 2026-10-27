@@ -26,9 +26,7 @@ fn facts() -> FrameTimeFacts {
     let batch = rows();
     let (nomination, _) = frames::nominate(
         "rows",
-        &Relation {
-            source: vec!["rows".into()],
-        },
+        &Relation::named("rows"),
         batch.schema().as_ref(),
         std::slice::from_ref(&batch),
     )

@@ -1561,8 +1561,8 @@ mod tests {
         assert_eq!(
             label_classes(&Target::Column(close)).unwrap().labels,
             Labels::Text(vec![
-                "0.000000100000000000".to_owned(),
-                "0.000000100000000001".to_owned(),
+                "0.000000100000000000".into(),
+                "0.000000100000000001".into(),
             ])
         );
     }
@@ -1594,9 +1594,9 @@ mod tests {
         assert_eq!(
             label_classes(&Target::Column(amounts)).unwrap().labels,
             Labels::Text(vec![
-                "1234567.01".to_owned(),
-                "1234567.02".to_owned(),
-                "-1234567.03".to_owned(),
+                "1234567.01".into(),
+                "1234567.02".into(),
+                "-1234567.03".into(),
             ])
         );
         // Rounded once: a hair above a float32 midpoint rounds up.
@@ -1798,7 +1798,7 @@ mod tests {
         Box::new(Target::Column(Column::Text(
             ["US", "DE", "IN", "", "DE", "IN"]
                 .iter()
-                .map(|t| (!t.is_empty()).then(|| (*t).to_owned()))
+                .map(|t| (!t.is_empty()).then(|| (*t).into()))
                 .collect(),
         )))
     }
