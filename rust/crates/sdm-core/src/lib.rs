@@ -59,5 +59,10 @@ pub use sdm_engine::time::{UnknownZone, Zones};
 /// (`capabilities()`), re-exported so a host reaches the request crate's
 /// table through the core (decision E30).
 pub use sdm_request::predict::{Capabilities, capabilities};
+/// A fixed native constructor source traversal, shared by all bindings.
+pub use sdm_schema::frames::object_decimal::{
+    Constructor as ObjectDecimalConstructor, Content as ObjectDecimalContent,
+    Read as ObjectDecimalRead,
+};
 /// Owned logical payload data, before JSON escaping or native presentation.
 pub use sdm_wire::json::Value as LogicalValue;

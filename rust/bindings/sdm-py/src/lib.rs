@@ -44,6 +44,7 @@ use sdm_host::{
 };
 
 mod native_values;
+mod object_decimals;
 
 create_exception!(
     sdm_client._native,
@@ -813,6 +814,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<FrameTask>()?;
     module.add_class::<FrameReferences>()?;
     module.add_class::<FramePayload>()?;
+    module.add_class::<object_decimals::ObjectDecimalConstructor>()?;
     module.add_class::<Run>()?;
     module.add_function(wrap_pyfunction!(reset_log_cache, module)?)?;
     module.add_function(wrap_pyfunction!(templates, module)?)?;
