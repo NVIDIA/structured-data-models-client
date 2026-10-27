@@ -56,11 +56,37 @@ pub enum RelationalTargetRole {
     Other,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum RelationalTaskUse {
+    ClassLimit,
+    Variation,
+    Output,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RelationalTaskFacts {
+    pub purpose: RelationalTaskUse,
+    pub classification: Option<bool>,
+    pub regression_not_equal: Option<bool>,
+    pub summarized: Option<bool>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RelationalTaskVocabulary {
+    pub classification: String,
+    pub regression: String,
+    pub summarized: Vec<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct RelationalTaskMeaning {
     /// Actual reached native str(task.kind), retaining all codepoints.
     pub kind: Vec<u32>,
+    pub facts: RelationalTaskFacts,
     pub role: RelationalTargetRole,
     pub summarized: bool,
 }
@@ -119,6 +145,7 @@ pub struct RelationalConstantTarget {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "data", rename_all = "snake_case", deny_unknown_fields)]
 pub enum RelationalPreparation {
+    TaskVocabulary,
     Payloads {
         call: CallPreparation,
         present: bool,
@@ -147,6 +174,7 @@ pub enum RelationalPreparation {
     },
     TaskMeaning {
         kind: Vec<u32>,
+        facts: RelationalTaskFacts,
     },
     Targets {
         call: CallPreparation,
@@ -167,6 +195,7 @@ pub enum RelationalPreparation {
         call: CallPreparation,
         target: RelationalConstantTarget,
         display: Option<Vec<u32>>,
+        classification: bool,
     },
     ExplanationSize {
         call: CallPreparation,
@@ -188,6 +217,7 @@ pub enum RelationalPreparation {
     deny_unknown_fields
 )]
 pub enum RelationalPrepared {
+    Vocabulary(RelationalTaskVocabulary),
     Empty(bool),
     Fields(RelationalCallFields),
     Starts(Vec<usize>),

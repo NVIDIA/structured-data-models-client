@@ -157,7 +157,7 @@ def envelopes(
     planned = []
     for payload in payloads:
         envelope = dict(payload)
-        meaning = task(payload)
+        meaning, _, _ = task(payload, 'output')
         chosen = None
         truth = None
         if meaning['summarized']:
@@ -225,12 +225,34 @@ def context(call: dict[str, Any], payload: Any) -> None:
     )
 
 
-def task(payload: Any) -> dict[str, Any]:
-    # str() is an actual native observation at each original guard, rather
-    # than a cached spelling captured by an earlier whole-payload encoder.
+def vocabulary() -> dict[str, Any]:
+    return _prepared({'data': 'task_vocabulary'})['value']
+
+
+def task(
+    payload: Any, purpose: str
+) -> tuple[dict[str, Any], Any, dict[str, Any]]:
+    # Native substring/set comparisons can have observable subclass overrides.
+    # Their literal vocabulary is core-owned; the host executes only these
+    # actual comparisons at the original reached guard.
+    words = vocabulary()
     kind = str(payload.get('task', {}).get('kind', ''))
-    result = _prepared({'data': 'task_meaning', 'kind': _points(kind)})
-    return result['value']
+    facts = {
+        'purpose': purpose,
+        'classification': None,
+        'regression_not_equal': None,
+        'summarized': None,
+    }
+    if purpose == 'output':
+        facts['summarized'] = kind in frozenset(set(words['summarized']))
+    else:
+        facts['classification'] = words['classification'] in kind
+        if purpose == 'variation' and not facts['classification']:
+            facts['regression_not_equal'] = bool(kind != words['regression'])
+    result = _prepared(
+        {'data': 'task_meaning', 'kind': _points(kind), 'facts': facts}
+    )
+    return result['value'], kind, words
 
 
 def _equality(payload: Any, column: Any, *, omit_none: bool) -> Any:
@@ -301,7 +323,12 @@ def targets(
 
 
 def constant(
-    call: dict[str, Any], population: dict[str, Any], column: Any, query: Any
+    call: dict[str, Any],
+    population: dict[str, Any],
+    column: Any,
+    query: Any,
+    kind: Any,
+    words: dict[str, Any],
 ) -> None:
     wire_name = ''.join(map(chr, population['wire_target_name']))
     # Preserve the original native inequality before any str(column).
@@ -339,6 +366,7 @@ def constant(
                 'call': call,
                 'target': name,
                 'display': display,
+                'classification': words['classification'] in kind,
             }
         )
 
@@ -349,15 +377,8 @@ def preflight(
     """Observe each useful native domain in the original adapter order."""
     for payload in payloads:
         context(call, payload)
-    for payload in payloads:
-        meaning = task(payload)
-        targets(call, payload, meaning, 'class_limit')
-    for payload in payloads:
-        meaning = task(payload)
-        population, column = targets(call, payload, meaning, 'variation')
-        if population['classes'] == 1:
-            constant(call, population, column, query)
-            break
+    _class_limits(call, payloads)
+    _variation(call, payloads, query)
     if 'explanation' not in call['outputs']:
         return
     counts = [
@@ -398,3 +419,18 @@ def preflight(
             'context_rows': counts,
         }
     )
+
+
+def _class_limits(call: dict[str, Any], payloads: Any) -> None:
+    for payload in payloads:
+        meaning, _kind, _words = task(payload, 'class_limit')
+        targets(call, payload, meaning, 'class_limit')
+
+
+def _variation(call: dict[str, Any], payloads: Any, query: Any) -> None:
+    for payload in payloads:
+        meaning, kind, words = task(payload, 'variation')
+        population, column = targets(call, payload, meaning, 'variation')
+        if population['classes'] == 1:
+            constant(call, population, column, query, kind, words)
+            return

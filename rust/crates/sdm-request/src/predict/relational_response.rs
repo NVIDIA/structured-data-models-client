@@ -367,12 +367,13 @@ pub fn attribute_instance(
     })
 }
 
-pub fn target_meaning(kind: &[u32]) -> Result<RelationalTargetMeaning, CoreError> {
-    let text = text(kind)?;
-    let needle: Vec<u32> = "classification".chars().map(u32::from).collect();
-    let points: Vec<_> = text.points().collect();
+pub fn target_meaning(
+    kind: &[u32],
+    classification: bool,
+) -> Result<RelationalTargetMeaning, CoreError> {
+    text(kind)?;
     Ok(RelationalTargetMeaning {
-        classification: points.windows(needle.len()).any(|part| part == needle),
+        classification,
         numeric_prefixes: ["int", "float", "bool"].map(str::to_owned).to_vec(),
     })
 }
@@ -455,7 +456,7 @@ pub fn layout(
         ));
     }
     coverage(attribution, rows)?;
-    let meaning = target_meaning(&target.kind)?;
+    let meaning = target_meaning(&target.kind, target.classification)?;
     if (meaning.classification && target.dtype_truth.is_none())
         || (!meaning.classification
             && (target.dtype_truth.is_some() || target.numeric_prefix.is_some()))
@@ -467,6 +468,10 @@ pub fn layout(
         ));
     }
     let numeric = meaning.classification && target.numeric_prefix == Some(true);
+    // The established gathered regression admission is separate from the
+    // reached native classification cast. A custom string can skip that cast
+    // without turning a classification response into a regression response.
+    let regression = text(&target.kind)?.utf8() == Some("regression");
     let placed = rows
         .iter()
         .map(|accepted| {
@@ -498,10 +503,10 @@ pub fn layout(
         response,
         placed,
         true,
-        if meaning.classification {
-            AnswerType::Text
-        } else {
+        if regression && !meaning.classification {
             AnswerType::Float
+        } else {
+            AnswerType::Text
         },
         Attribution::GatheredReference,
         AnswerPolicy::Gathered,
@@ -738,6 +743,7 @@ mod tests {
         )];
         let target = RelationalTargetFacts {
             kind: "classification".chars().map(u32::from).collect(),
+            classification: true,
             dtype_truth: Some(true),
             numeric_prefix: Some(true),
         };

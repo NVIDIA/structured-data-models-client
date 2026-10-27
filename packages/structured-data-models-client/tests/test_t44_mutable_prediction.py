@@ -11,6 +11,7 @@ Materialization stays on the original route to isolate prediction ownership.
 
 from __future__ import annotations
 
+import copy
 import json
 import warnings
 from pathlib import Path
@@ -28,6 +29,11 @@ REFERENCE = json.loads(
     .with_name('t44_mutable_prediction_reference.json')
     .read_text()
 )['cases']
+TASK_REFERENCE = json.loads(
+    Path(__file__)
+    .with_name('t44_mutable_prediction_reference.json')
+    .read_text()
+)['task_cases']
 
 
 def _request(*, batched=False):
@@ -219,4 +225,115 @@ def test_live_native_prediction_boundaries(monkeypatch, core, case):
     observed.update(
         wire=wire, iterations=iterations, metadata_items=len(metadata_items)
     )
+    assert observed == expected
+
+
+@pytest.mark.parametrize('core', [False, True], ids=['original', 'core'])
+@pytest.mark.parametrize('case', list(TASK_REFERENCE))
+def test_native_task_string_overrides_remain_at_reached_boundaries(
+    monkeypatch, core, case
+):
+    monkeypatch.setenv(
+        'SDM_CORE_ROUTES', 'client.predict/regression/frames' if core else ''
+    )
+    expected = copy.deepcopy(TASK_REFERENCE[case])
+    events = []
+
+    class Kind(str):
+        contains_calls = 0
+
+        def __str__(self):
+            events.append('kind.str')
+            return self
+
+        def __contains__(self, value):
+            self.contains_calls += 1
+            events.append('kind.contains.' + str(self.contains_calls))
+            if case == 'contains-second-fails' and self.contains_calls == 2:
+                raise RuntimeError('actual second task containment failed')
+            if (
+                case
+                in (
+                    'third-contains-changes-role',
+                    'last-contains-skips-class-cast',
+                )
+                and self.contains_calls == 3
+            ):
+                return False
+            return str.__contains__(self, value)
+
+        def __hash__(self):
+            events.append('kind.hash')
+            if case == 'hash-fails':
+                raise RuntimeError('actual task membership hash failed')
+            return str.__hash__(self)
+
+        def __eq__(self, value):
+            events.append('kind.eq')
+            return str.__eq__(self, value)
+
+        def __ne__(self, value):
+            events.append('kind.ne')
+            return str.__ne__(self, value)
+
+    def post(url, *, data, **kwargs):
+        events.append('http-post')
+        sent = json.loads(data)
+        table = sent['predict']['instance_table']
+        column = table['columns'].index('instance_id')
+        response = requests.Response()
+        response.status_code = 200
+        response._content = json.dumps(
+            {
+                'id': 'kind-reference',
+                'model': 'kumo-relational',
+                'metadata': {},
+                'predictions': [
+                    {'row_index': i, 'id': str(row[column]), 'prediction': 'a'}
+                    for i, row in enumerate(table['rows'])
+                ],
+            }
+        ).encode()
+        response._content_consumed = True
+        return response
+
+    observed = {'case': case}
+    with warnings.catch_warnings(record=True) as notices:
+        warnings.simplefilter('always')
+        try:
+            request = _request()
+            payload = request.payloads[0]
+            payload['task']['kind'] = Kind(payload['task']['kind'])
+            if case == 'third-contains-changes-role':
+                context = payload['context']['instance_table']
+                target = context['columns'].index(
+                    payload['task']['target']['column_name']
+                )
+                for row in context['rows']:
+                    row[target] = 'a'
+            with SDMClient('http://localhost:1', max_retries=0) as client:
+                client._transport._session.post = post
+                result = client.predict(request, model=KumoRelational())
+                observed['result'] = json.loads(
+                    result.to_pandas().to_json(orient='split')
+                )
+            observed['outcome'] = 'success'
+        except Exception as error:
+            observed.update(
+                outcome='error',
+                error={
+                    'type': type(error).__name__,
+                    'message': str(error),
+                    'code': getattr(error, 'code', None),
+                },
+            )
+        observed['warnings'] = [
+            {'type': type(item.message).__name__, 'message': str(item.message)}
+            for item in notices
+        ]
+    observed['events'] = events
+    if core and case == 'third-contains-changes-role':
+        # Existing P3E-2: shared core warnings include their selected code.
+        warning = expected['warnings'][1]
+        warning['message'] = '[CONTEXT_CONSTANT] ' + warning['message']
     assert observed == expected

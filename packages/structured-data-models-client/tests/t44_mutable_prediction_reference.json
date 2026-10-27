@@ -24,6 +24,22 @@
     "r5-312": {
       "receipt_sha256": "0e4e5819e7fe6734663c5d83fcc37754e051e0484fd0cb20c0e60c6a97146a6b",
       "producer_sha256": "b029f7c163dc8eb57f99c453965abff2b8de855677c36c535b027575a21fab64"
+    },
+    "r6-310": {
+      "receipt_sha256": "4cc41f00585c6de39dc5fe1d39f4350b833ff2d911393b41ad2ff880de90c60d",
+      "producer_sha256": "e1ba1862221df9329de5f1b71238ba8be2178e7e01ddb82e62cadda55cd3ef67"
+    },
+    "r6-312": {
+      "receipt_sha256": "cee92b09593214ec6a475f390f529d6bbd8377605241952b8903d027e726f7ee",
+      "producer_sha256": "e1ba1862221df9329de5f1b71238ba8be2178e7e01ddb82e62cadda55cd3ef67"
+    },
+    "r7-310": {
+      "receipt_sha256": "85521d5c828bf65d11bbe70328730d92969191aa91bdf7167f6f8b4c53a03078",
+      "producer_sha256": "cfdb29a6a74c09612c8a67da7a94393a2932f55e8aa5f6b56d6315607520dca7"
+    },
+    "r7-312": {
+      "receipt_sha256": "da1bc9c7a30ae421be7ff5ab54e4557a34649b40e604fd7015a0ee7ae0942986",
+      "producer_sha256": "cfdb29a6a74c09612c8a67da7a94393a2932f55e8aa5f6b56d6315607520dca7"
     }
   },
   "cases": {
@@ -15178,6 +15194,192 @@
       },
       "iterations": [],
       "metadata_items": 0
+    }
+  },
+  "task_cases": {
+    "control": {
+      "case": "control",
+      "result": {
+        "columns": [
+          "row_index",
+          "id",
+          "prediction"
+        ],
+        "index": [
+          0,
+          1
+        ],
+        "data": [
+          [
+            0,
+            0,
+            "a"
+          ],
+          [
+            1,
+            1,
+            "a"
+          ]
+        ]
+      },
+      "outcome": "success",
+      "warnings": [
+        {
+          "type": "SDMWarning",
+          "message": "2 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it."
+        }
+      ],
+      "events": [
+        "kind.str",
+        "kind.contains.1",
+        "kind.str",
+        "kind.contains.2",
+        "kind.str",
+        "kind.hash",
+        "http-post",
+        "kind.eq",
+        "kind.str",
+        "kind.contains.3"
+      ]
+    },
+    "contains-second-fails": {
+      "case": "contains-second-fails",
+      "outcome": "error",
+      "warnings": [
+        {
+          "type": "SDMWarning",
+          "message": "2 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it."
+        }
+      ],
+      "events": [
+        "kind.str",
+        "kind.contains.1",
+        "kind.str",
+        "kind.contains.2"
+      ],
+      "error": {
+        "type": "RuntimeError",
+        "message": "actual second task containment failed",
+        "code": null
+      }
+    },
+    "third-contains-changes-role": {
+      "case": "third-contains-changes-role",
+      "result": {
+        "columns": [
+          "row_index",
+          "id",
+          "prediction"
+        ],
+        "index": [
+          0,
+          1
+        ],
+        "data": [
+          [
+            0,
+            0,
+            "a"
+          ],
+          [
+            1,
+            1,
+            "a"
+          ]
+        ]
+      },
+      "outcome": "success",
+      "warnings": [
+        {
+          "type": "SDMWarning",
+          "message": "2 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it."
+        },
+        {
+          "type": "SDMWarning",
+          "message": "every context row has the same users.label, so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ."
+        }
+      ],
+      "events": [
+        "kind.str",
+        "kind.contains.1",
+        "kind.str",
+        "kind.contains.2",
+        "kind.contains.3",
+        "kind.str",
+        "kind.hash",
+        "http-post",
+        "kind.eq",
+        "kind.str",
+        "kind.contains.4"
+      ]
+    },
+    "hash-fails": {
+      "case": "hash-fails",
+      "outcome": "error",
+      "warnings": [
+        {
+          "type": "SDMWarning",
+          "message": "2 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it."
+        }
+      ],
+      "events": [
+        "kind.str",
+        "kind.contains.1",
+        "kind.str",
+        "kind.contains.2",
+        "kind.str",
+        "kind.hash"
+      ],
+      "error": {
+        "type": "RuntimeError",
+        "message": "actual task membership hash failed",
+        "code": null
+      }
+    },
+    "last-contains-skips-class-cast": {
+      "case": "last-contains-skips-class-cast",
+      "result": {
+        "columns": [
+          "row_index",
+          "id",
+          "prediction"
+        ],
+        "index": [
+          0,
+          1
+        ],
+        "data": [
+          [
+            0,
+            0,
+            "a"
+          ],
+          [
+            1,
+            1,
+            "a"
+          ]
+        ]
+      },
+      "outcome": "success",
+      "warnings": [
+        {
+          "type": "SDMWarning",
+          "message": "2 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it."
+        }
+      ],
+      "events": [
+        "kind.str",
+        "kind.contains.1",
+        "kind.str",
+        "kind.contains.2",
+        "kind.str",
+        "kind.hash",
+        "http-post",
+        "kind.eq",
+        "kind.str",
+        "kind.contains.3"
+      ]
     }
   }
 }

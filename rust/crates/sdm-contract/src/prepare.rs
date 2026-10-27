@@ -8,10 +8,10 @@
 pub mod relational;
 
 pub use relational::{
-    RelationalCallFields, RelationalEncodedCall, RelationalStatistic,
-    NativeTargetEquality, RelationalContextFacts, RelationalPreparation, RelationalPrepared,
-    RelationalConstantTarget, RelationalTargetNaming, RelationalTargetPopulation, RelationalTargetRole,
-    RelationalTargetUse, RelationalTaskMeaning,
+    NativeTargetEquality, RelationalCallFields, RelationalConstantTarget, RelationalContextFacts,
+    RelationalEncodedCall, RelationalPreparation, RelationalPrepared, RelationalStatistic,
+    RelationalTargetNaming, RelationalTargetPopulation, RelationalTargetRole, RelationalTargetUse,
+    RelationalTaskFacts, RelationalTaskMeaning, RelationalTaskUse, RelationalTaskVocabulary,
 };
 
 use crate::data::AttachmentId;
@@ -303,13 +303,20 @@ pub enum Preparation {
     },
     RelationalTargetMeaning {
         kind: Vec<u32>,
+        classification: bool,
     },
     CompleteRelationalResponse {
         part: RelationalResponsePart,
     },
-    FinishRelationalResponse { input: RelationalResultInput },
-    PrepareRelationalRankPopulation { source: RelationalRankingSource },
-    RankRelationalScore { item: RelationalRankItem },
+    FinishRelationalResponse {
+        input: RelationalResultInput,
+    },
+    PrepareRelationalRankPopulation {
+        source: RelationalRankingSource,
+    },
+    RankRelationalScore {
+        item: RelationalRankItem,
+    },
     ValidateRelationalRanking {
         outputs: Option<Vec<String>>,
         total_parts: usize,
@@ -317,7 +324,9 @@ pub enum Preparation {
         #[serde(default)]
         model: Option<String>,
     },
-    DescribeRelationalPart { scope: RelationalPartScope },
+    DescribeRelationalPart {
+        scope: RelationalPartScope,
+    },
     CheckResponseRows {
         scope: ResponseScope,
         rows: Vec<DecodedDirectRow>,

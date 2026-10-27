@@ -141,6 +141,8 @@ pub struct RelationalResponsePart {
 #[serde(deny_unknown_fields)]
 pub struct RelationalTargetFacts {
     pub kind: Vec<u32>,
+    /// Actual reached substring comparison, including native overrides.
+    pub classification: bool,
     pub dtype_truth: Option<bool>,
     pub numeric_prefix: Option<bool>,
 }

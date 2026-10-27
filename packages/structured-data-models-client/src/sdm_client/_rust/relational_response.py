@@ -315,9 +315,25 @@ def present(finished: Finished, envelope: dict[str, Any]) -> CompletedResponse:
         # Target metadata is read only after every entity is attributed and
         # all requested rows are covered. No pre-send task snapshot is used.
         task = (envelope or {}).get('task', {})
-        kind = [ord(point) for point in str(task.get('kind', ''))]
-        meaning = _call({'stage': 'relational_target_meaning', 'kind': kind})
-        target = {'kind': kind, 'dtype_truth': None, 'numeric_prefix': None}
+        from sdm_client._rust.relational_native import _points, vocabulary
+
+        words = vocabulary()
+        native_kind = str(task.get('kind', ''))
+        classification = words['classification'] in native_kind
+        kind = _points(native_kind)
+        meaning = _call(
+            {
+                'stage': 'relational_target_meaning',
+                'kind': kind,
+                'classification': classification,
+            }
+        )
+        target = {
+            'kind': kind,
+            'classification': classification,
+            'dtype_truth': None,
+            'numeric_prefix': None,
+        }
         dtype = None
         if meaning['classification']:
             dtype = task.get('target', {}).get('dtype')

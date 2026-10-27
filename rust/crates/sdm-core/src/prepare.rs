@@ -305,8 +305,8 @@ pub(crate) async fn run(
         Preparation::CheckRelationalCoverage { data, attribution, rows } => serde_json::to_value(
             relational_response::coverage(data, attribution, rows, attached)?,
         ),
-        Preparation::RelationalTargetMeaning { kind } => serde_json::to_value(
-            sdm_request::predict::relational_response::target_meaning(&kind)?,
+        Preparation::RelationalTargetMeaning { kind, classification } => serde_json::to_value(
+            sdm_request::predict::relational_response::target_meaning(&kind, classification)?,
         ),
         Preparation::CompleteRelationalResponse { part } => serde_json::to_value(
             relational_response::complete(&asker, part, attached)?,

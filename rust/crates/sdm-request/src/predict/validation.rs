@@ -7,7 +7,10 @@
 //! reached boundaries; neither source determines limits or warning policy.
 
 use super::*;
-use sdm_contract::prepare::{RelationalCallFields, RelationalStatistic};
+use sdm_contract::prepare::{
+    RelationalCallFields, RelationalStatistic, RelationalTaskFacts, RelationalTaskUse,
+    RelationalTaskVocabulary,
+};
 use sdm_contract::prepare::{RelationalTargetNaming, RelationalTargetRole, RelationalTaskMeaning};
 use sdm_contract::scalar::unicode::UnicodeText;
 
@@ -36,6 +39,12 @@ pub fn call_fields(
     meaning: &RelationalTaskMeaning,
     statistic_chosen: Option<bool>,
 ) -> Result<RelationalCallFields, CoreError> {
+    if meaning.facts.purpose != RelationalTaskUse::Output {
+        return Err(CoreError::protocol(
+            Sentence::InvalidMessage,
+            "native call fields require the reached output task observations",
+        ));
+    }
     let statistic = if meaning.summarized {
         match statistic_chosen {
             Some(true) => RelationalStatistic::Retained,
@@ -128,28 +137,58 @@ pub fn native_inference(
     Err(error)
 }
 
-pub fn task_meaning(kind: Vec<u32>) -> Result<RelationalTaskMeaning, CoreError> {
-    let value = UnicodeText::from_points(kind.iter().copied()).map_err(|_| {
+pub fn task_vocabulary() -> RelationalTaskVocabulary {
+    RelationalTaskVocabulary {
+        classification: "classification".to_owned(),
+        regression: "regression".to_owned(),
+        summarized: ["regression", "forecasting"].map(str::to_owned).to_vec(),
+    }
+}
+
+pub fn task_meaning(
+    kind: Vec<u32>,
+    facts: RelationalTaskFacts,
+) -> Result<RelationalTaskMeaning, CoreError> {
+    UnicodeText::from_points(kind.iter().copied()).map_err(|_| {
         CoreError::protocol(
             Sentence::InvalidMessage,
             "native task has invalid Unicode points",
         )
     })?;
-    let classification = value
-        .as_bytes()
-        .windows(b"classification".len())
-        .any(|window| window == b"classification");
-    let regression = value.utf8() == Some("regression");
+    let valid = match facts.purpose {
+        RelationalTaskUse::ClassLimit => {
+            facts.classification.is_some()
+                && facts.regression_not_equal.is_none()
+                && facts.summarized.is_none()
+        }
+        RelationalTaskUse::Variation => {
+            facts.classification.is_some()
+                && facts.regression_not_equal.is_some() == (facts.classification == Some(false))
+                && facts.summarized.is_none()
+        }
+        RelationalTaskUse::Output => {
+            facts.classification.is_none()
+                && facts.regression_not_equal.is_none()
+                && facts.summarized.is_some()
+        }
+    };
+    if !valid {
+        return Err(CoreError::protocol(
+            Sentence::InvalidMessage,
+            "native task facts do not describe their reached comparison boundary",
+        ));
+    }
     Ok(RelationalTaskMeaning {
         kind,
-        role: if classification {
+        role: if facts.classification == Some(true) {
             RelationalTargetRole::Classification
-        } else if regression {
+        } else if facts.regression_not_equal == Some(false) {
             RelationalTargetRole::Regression
         } else {
             RelationalTargetRole::Other
         },
-        summarized: regression || value.utf8() == Some("forecasting"),
+        summarized: facts.summarized.unwrap_or(false),
+        facts,
     })
 }
 
@@ -234,7 +273,7 @@ pub fn constant(
 }
 
 pub fn native_constant(
-    role: RelationalTargetRole,
+    classification: bool,
     naming: &RelationalTargetNaming,
     display: Option<&UnicodeText>,
     model: &str,
@@ -290,7 +329,7 @@ pub fn native_constant(
         Detail::Scalar(Scalar::Bool(true)),
     ));
     constant(
-        role == RelationalTargetRole::Classification,
+        classification,
         Notice {
             sentence,
             message: "every context row has the same answer",

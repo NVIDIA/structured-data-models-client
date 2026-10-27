@@ -7,8 +7,8 @@
 use super::*;
 use sdm_contract::scalar::unicode::UnicodeText;
 
-fn task(kind: Vec<u32>) -> Result<RelationalTaskMeaning, CoreError> {
-    policy::validation::task_meaning(kind)
+fn task(kind: Vec<u32>, facts: RelationalTaskFacts) -> Result<RelationalTaskMeaning, CoreError> {
+    policy::validation::task_meaning(kind, facts)
 }
 
 fn public_fields(mut error: CoreError, names: &[&str]) -> CoreError {
@@ -59,9 +59,14 @@ fn equality(value: &NativeTargetEquality) -> Result<u64, CoreError> {
 }
 
 fn population(value: &RelationalTargetPopulation) -> Result<(), CoreError> {
-    if task(value.meaning.kind.clone())? != value.meaning
+    if task(value.meaning.kind.clone(), value.meaning.facts.clone())? != value.meaning
         || value.equality.as_ref().map(equality).transpose()? != value.classes
         || value.wire_target_name != policy::validation::wire_target_name()
+        || value.meaning.facts.purpose
+            != match value.purpose {
+                RelationalTargetUse::ClassLimit => RelationalTaskUse::ClassLimit,
+                RelationalTargetUse::Variation => RelationalTaskUse::Variation,
+            }
     {
         return Err(invalid(
             "native target population disagrees with its observed facts",
@@ -134,7 +139,7 @@ pub(super) fn prepare(
             statistic_chosen,
         } => {
             let bound = checked_bound(&call)?;
-            if task(meaning.kind.clone())? != meaning {
+            if task(meaning.kind.clone(), meaning.facts.clone())? != meaning {
                 return Err(invalid("native call task meaning disagrees with its value"));
             }
             RelationalPrepared::Fields(policy::validation::call_fields(
@@ -177,7 +182,12 @@ pub(super) fn prepare(
                 .map_err(|error| public_fields(error, &["model", "context_rows"]))?;
             RelationalPrepared::Call(call)
         }
-        RelationalPreparation::TaskMeaning { kind } => RelationalPrepared::Task(task(kind)?),
+        RelationalPreparation::TaskVocabulary => {
+            RelationalPrepared::Vocabulary(policy::validation::task_vocabulary())
+        }
+        RelationalPreparation::TaskMeaning { kind, facts } => {
+            RelationalPrepared::Task(task(kind, facts)?)
+        }
         RelationalPreparation::Targets {
             call,
             meaning,
@@ -185,8 +195,12 @@ pub(super) fn prepare(
             equality: observed,
         } => {
             let bound = checked_bound(&call)?;
-            let expected = task(meaning.kind.clone())?;
-            if expected != meaning {
+            let expected = task(meaning.kind.clone(), meaning.facts.clone())?;
+            let task_use = match purpose {
+                RelationalTargetUse::ClassLimit => RelationalTaskUse::ClassLimit,
+                RelationalTargetUse::Variation => RelationalTaskUse::Variation,
+            };
+            if expected != meaning || meaning.facts.purpose != task_use {
                 return Err(invalid(
                     "native relational task meaning disagrees with its value",
                 ));
@@ -233,6 +247,7 @@ pub(super) fn prepare(
             call,
             target,
             display,
+            classification,
         } => {
             let bound = checked_bound(&call)?;
             let mut expected = target_name(
@@ -258,7 +273,7 @@ pub(super) fn prepare(
                 .transpose()
                 .map_err(|_| invalid("native target display contains invalid Unicode points"))?;
             let notice = policy::validation::native_constant(
-                target.population.meaning.role,
+                classification,
                 &target.naming,
                 display.as_ref(),
                 bound.model,
