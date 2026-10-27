@@ -38,8 +38,25 @@ pub struct RelationalOptions {
 #[serde(rename_all = "snake_case")]
 pub enum FrameNativeOrigin {
     BuiltinPrimitive,
-    PandasString,
+    PandasString {
+        storage: FrameStringStorage,
+        missing: FrameStringMissing,
+    },
     ArrowDtype,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum FrameStringStorage {
+    Python,
+    Pyarrow,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum FrameStringMissing {
+    PandasNa,
+    FloatingNan,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
