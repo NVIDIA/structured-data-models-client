@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import copy
 import math
+import sys
 import warnings
 
 import pandas as pd
@@ -592,6 +593,242 @@ def comparable(value):
     if isinstance(value, (list, tuple)):
         return [comparable(item) for item in value]
     return value
+
+
+def typed_value(value):
+    if isinstance(value, dict):
+        return (
+            type(value).__name__,
+            [(typed_value(k), typed_value(v)) for k, v in value.items()],
+        )
+    if isinstance(value, (list, tuple)):
+        return (type(value).__name__, [typed_value(v) for v in value])
+    return (type(value).__name__, value)
+
+
+@pytest.mark.parametrize('column', ['target', 'feature'])
+@pytest.mark.parametrize('declared', [False, True])
+def test_direct_text_meaning_precedes_regression_target_override(
+    monkeypatch, column, declared
+):
+    observed = []
+    for core in (False, True):
+        monkeypatch.setenv('SDM_CORE_ROUTES', CORE if core else '')
+        context = pd.DataFrame(
+            {'user_id': [1, 2, 3], 'feature': [1, 2, 3], 'target': [2, 4, 6]}
+        )
+        predict = pd.DataFrame({'user_id': [4, 5], 'feature': [4, 5]})
+        schema = Schema.from_data({'instance': context}, relationships=[])
+        schema['instance'][column].dtype = 'string'
+        if declared:
+            schema['instance'][column].stype = 'text'
+        transport = Scripted()
+        record = {}
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            try:
+                request = Request(
+                    context,
+                    predict,
+                    target='target',
+                    task='regression',
+                    schema=schema,
+                )
+                with SDMClient('http://localhost:1', max_retries=0) as client:
+                    client._transport.close()
+                    client._transport = transport
+                    result = client.predict(request, model=KumoTabular())
+            except Exception as exc:
+                record.update(ok=False, error=error(exc))
+            else:
+                record.update(
+                    ok=True,
+                    predictions=[
+                        typed_value(i.prediction) for i in result.items
+                    ],
+                )
+            record['warnings'] = [(str(w.message), w.category) for w in caught]
+        for body in transport.calls:
+            body['metadata']['request_id'] = '<drawn>'
+        record['bodies'] = transport.calls
+        observed.append(record)
+    assert observed[1] == observed[0]
+    if declared and column == 'target':
+        assert observed[1]['ok']
+        assert len(observed[1]['bodies']) == len(observed[1]['warnings']) == 1
+        body = observed[1]['bodies'][0]
+        assert body['schema']['instance_table']['columns']['target'] == {
+            'dtype': 'string',
+            'stype': 'categorical',
+        }
+        assert body['context']['instance_table']['rows'] == [
+            [1, 1, '2'],
+            [2, 2, '4'],
+            [3, 3, '6'],
+        ]
+    else:
+        assert not observed[1]['ok']
+        assert observed[1]['error']['code'] == 'INVALID_REQUEST'
+        assert not observed[1]['bodies']
+        assert not observed[1]['warnings']
+
+
+@pytest.mark.parametrize(
+    'family',
+    [
+        'metadata',
+        'prediction',
+        'forecast',
+        'item-mappings',
+        'combined',
+        'text-class',
+        'numeric-class',
+        'small',
+    ],
+)
+@pytest.mark.parametrize('effect', ['none', 'warning', 'lower'])
+def test_direct_decoded_result_carriers_survive_later_native_digit_limit(
+    monkeypatch, family, effect
+):
+    wide = 2**2200
+    saved = sys.get_int_max_str_digits()
+    observed = []
+    try:
+        for core in (False, True):
+            sys.set_int_max_str_digits(4300)
+            monkeypatch.setenv('SDM_CORE_ROUTES', CORE if core else '')
+            context = pd.DataFrame(
+                {
+                    'user_id': [1, 2, 3],
+                    'feature': [1, 2, 3],
+                    'target': [2, 4, 6],
+                }
+            )
+            predict = pd.DataFrame({'user_id': [4, 5], 'feature': [4, 5]})
+
+            def edit(answer):
+                first = answer['predictions'][0]
+                if effect != 'none':
+                    first['id'] = r"[4+1, '\q']"
+                if family in ('metadata', 'combined'):
+                    answer['metadata'] = {
+                        'wide': wide,
+                        'nested': [{'wide': -wide}],
+                    }
+                if family in ('prediction', 'numeric-class', 'combined'):
+                    first['prediction'] = wide
+                if family in ('forecast', 'combined'):
+                    first['forecast_step'] = wide
+                if family in ('item-mappings', 'combined'):
+                    first.update(
+                        metadata={'wide': wide},
+                        explanation={'wide': -wide},
+                        rankings=[{'wide': wide}],
+                    )
+                if family == 'text-class':
+                    first.update(
+                        prediction='0' * 650 + '2',
+                        probabilities={'0' * 650 + '2': 0.75, '4': 0.25},
+                    )
+                return answer
+
+            transport = Scripted(edit)
+            record = {'events': []}
+            failure = None
+            result = None
+            with warnings.catch_warnings():
+                warnings.simplefilter('always')
+
+                def show(
+                    message, category, filename, lineno, file=None, line=None
+                ):
+                    record['events'].append(
+                        (str(message), category, sys.get_int_max_str_digits())
+                    )
+                    if effect == 'lower' and category in (
+                        SyntaxWarning,
+                        DeprecationWarning,
+                    ):
+                        sys.set_int_max_str_digits(640)
+
+                warnings.showwarning = show
+                try:
+                    request = Request(
+                        context,
+                        predict,
+                        target='target',
+                        task='classification'
+                        if family in ('text-class', 'numeric-class')
+                        else 'regression',
+                    )
+                    with SDMClient(
+                        'http://localhost:1', max_retries=0
+                    ) as client:
+                        client._transport.close()
+                        client._transport = transport
+                        result = client.predict(request, model=KumoTabular())
+                except Exception as exc:
+                    failure = exc
+                finally:
+                    record['limit_at_end'] = sys.get_int_max_str_digits()
+                    sys.set_int_max_str_digits(4300)
+            # Observation happens outside the SDK exception block and after
+            # restoring the limit. Wide-value formatting cannot fake a failure.
+            record['ok'] = failure is None
+            if failure is not None:
+                record['error'] = error(failure)
+            else:
+                record['metadata'] = typed_value(result.metadata)
+                record['items'] = [
+                    {
+                        name: typed_value(getattr(item, name))
+                        for name in [
+                            'row_index',
+                            'id',
+                            'forecast_step',
+                            'prediction',
+                            'probabilities',
+                            'metadata',
+                            'explanation',
+                            'rankings',
+                        ]
+                    }
+                    for item in result.items
+                ]
+            for body in transport.calls:
+                body['metadata']['request_id'] = '<drawn>'
+            record['bodies'] = transport.calls
+            observed.append(record)
+        assert observed[1] == observed[0]
+        assert observed[1]['ok']
+        assert len(observed[1]['bodies']) == 1
+        assert observed[1]['limit_at_end'] == (
+            640 if effect == 'lower' else 4300
+        )
+        assert len(observed[1]['events']) == (effect != 'none')
+        first = observed[1]['items'][0]
+        if family in ('metadata', 'combined'):
+            assert observed[1]['metadata'] == typed_value(
+                {'wide': wide, 'nested': [{'wide': -wide}]}
+            )
+        if family in ('prediction', 'numeric-class', 'combined'):
+            assert first['prediction'] == ('int', wide)
+        if family in ('forecast', 'combined'):
+            assert first['forecast_step'] == ('int', wide)
+        if family in ('item-mappings', 'combined'):
+            assert first['metadata'] == typed_value({'wide': wide})
+            assert first['explanation'] == typed_value({'wide': -wide})
+            assert first['rankings'] == typed_value(({'wide': wide},))
+        if family == 'text-class':
+            # Fresh text admission catches ValueError and keeps the string;
+            # this is a successful call, unlike a late carrier parse failure.
+            expected = '0' * 650 + '2' if effect == 'lower' else 2
+            assert first['prediction'] == typed_value(expected)
+            assert first['probabilities'] == typed_value(
+                {str(expected): 0.75, '4': 0.25}
+            )
+    finally:
+        sys.set_int_max_str_digits(saved)
 
 
 @pytest.mark.parametrize('api', ['request', 'schema'])
