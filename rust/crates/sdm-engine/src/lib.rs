@@ -23,6 +23,7 @@
 
 pub mod frames;
 pub mod graph;
+pub mod index_sort;
 pub mod keys;
 pub mod labels;
 pub mod random;
