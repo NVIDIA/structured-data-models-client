@@ -7,9 +7,7 @@
 use std::sync::Arc;
 
 use arrow_array::cast::AsArray;
-use arrow_array::{
-    Array, ArrayRef, Int32Array, Int64Array, LargeStringArray, RecordBatch, StringArray,
-};
+use arrow_array::{ArrayRef, Int32Array, Int64Array, LargeStringArray, RecordBatch, StringArray};
 use sdm_contract::data::AttachmentId;
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::ops::{Materialized, Operation, OperationResult};
@@ -519,7 +517,42 @@ fn text_identifying_columns_stay_explicitly_unfinished_for_both_offsets() {
         };
         let mut schema: Value = serde_json::from_slice(raw).unwrap();
         schema["tables"][0]["columns"][0]["dtype"] = json!("string");
+        schema["tables"][1]["columns"][1]["dtype"] = json!("string");
         attached.insert(AttachmentId(1), bytes(schema));
+        let names = ["u1", "u2", "u3", "u4", "u5", "u6", "u7", "u8"];
+        for (id, column) in [(AttachmentId(8), 0), (AttachmentId(9), 1)] {
+            let Attachment::Arrow(data) = &attached[&id] else {
+                panic!("original rows")
+            };
+            let batch = &data.batches[0];
+            let mut columns = batch.columns().to_vec();
+            columns[column] = text(
+                (0..batch.num_rows())
+                    .map(|row| Some(names[if id.0 == 8 { row } else { row / 8 }]))
+                    .collect(),
+                large,
+            );
+            let rows = RecordBatch::try_from_iter(
+                batch
+                    .schema()
+                    .fields()
+                    .iter()
+                    .zip(columns)
+                    .map(|(field, array)| (field.name().clone(), array)),
+            )
+            .unwrap();
+            attached.insert(
+                id,
+                Attachment::Arrow(ArrowData::new(rows.schema(), vec![rows])),
+            );
+        }
+        attached.insert(
+            AttachmentId(3),
+            arrow(
+                vec![("index", text(vec![Some("u7"), Some("u8")], large))],
+                false,
+            ),
+        );
         let failed = HostRun::start(&sdm_host::default_root(), &materialize_message(), attached);
         let error = match failed {
             Ok(run) => terminal(&run).expect_err("text key remains unfinished"),
