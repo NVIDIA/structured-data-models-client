@@ -11,6 +11,8 @@ mod columns;
 mod lags;
 mod native_guard;
 mod owners;
+mod population;
+pub use population::{RetainedFrameLabelBatch, RetainedFramePopulation};
 pub(crate) mod questions;
 pub use owners::{RetainedFramePayload, RetainedFrameReferences, RetainedFrameTask};
 pub use questions::RetainedFrameQuestion;
@@ -45,6 +47,11 @@ pub(crate) enum FrameStageError {
 pub(crate) enum NativeSite {
     Prediction {
         table: String,
+    },
+    LabelReferences,
+    LabelReferenceCast {
+        expected_dtype: String,
+        input_repr: String,
     },
     WholeReferences,
     BatchReferences,
@@ -124,6 +131,10 @@ impl FrameStageError {
                         NativeSite::BatchReferenceCast {
                             expected_dtype,
                             input_repr,
+                        }
+                        | NativeSite::LabelReferenceCast {
+                            expected_dtype,
+                            input_repr,
                         },
                         _,
                     ) => {
@@ -147,6 +158,9 @@ impl FrameStageError {
                 };
                 let (stage, column) = match site {
                     NativeSite::Prediction { .. } => ("prediction", None),
+                    NativeSite::LabelReferences | NativeSite::LabelReferenceCast { .. } => {
+                        ("label_references", None)
+                    }
                     NativeSite::WholeReferences => ("whole_references", None),
                     NativeSite::BatchReferences | NativeSite::BatchReferenceCast { .. } => {
                         ("batch_references", None)
@@ -243,8 +257,33 @@ pub(crate) async fn run(
         input @ FramePreparation::Graph { .. } => {
             PreparedFrameValue::Graph(graph(&asker, input, &mut attachments)?)
         }
-        input @ FramePreparation::Labels { .. } => PreparedFrameValue::Labels(
-            labels(&asker, input, &facts, &*zones, &mut attachments).await?,
+        input @ FramePreparation::Population { .. } => PreparedFrameValue::Population(
+            population(&asker, input, &facts, &*zones, &mut attachments).await?,
+        ),
+        FramePreparation::LabelBatch {
+            population,
+            range,
+            previous,
+            converted,
+        } => PreparedFrameValue::LabelBatch(
+            population::label_batch(
+                &asker,
+                population,
+                range,
+                previous,
+                converted,
+                &mut attachments,
+            )
+            .await
+            .map_err(FrameStageError::into_core)?,
+        ),
+        FramePreparation::Labels {
+            population,
+            batches,
+        } => PreparedFrameValue::Labels(
+            population::labels(&asker, population, batches, &mut attachments)
+                .await
+                .map_err(FrameStageError::into_core)?,
         ),
         FramePreparation::Task {
             labelled,
@@ -327,7 +366,10 @@ pub(super) fn label_rows(
     frames: &crate::frame_materialize::Context,
     fetches: &[Fetch<'_>],
 ) -> Result<BTreeMap<String, Fetched>, CoreError> {
-    let keys = take(labelling.entity_key, &labelling.examples.index)?;
+    let keys = match labelling.native_keys {
+        Some(keys) => Arc::clone(keys),
+        None => take(labelling.entity_key, &labelling.examples.index)?,
+    };
     let mut fetched = BTreeMap::new();
     for fetch in fetches {
         let windows = label_windows(&labelling.examples.anchors, fetch.start, fetch.end);
@@ -720,14 +762,14 @@ fn task_identity(
 
 /// The existing typed draws produce real labeled entity/anchor/target rows.
 /// No prediction value constructor runs before this function finishes.
-pub(crate) async fn labels(
+pub(crate) async fn population(
     asker: &Asker,
     input: FramePreparation,
     facts: &HostFacts,
     zones: &dyn sdm_engine::time::Zones,
     attachments: &mut Attachments,
-) -> Result<LabelledFrameTask, CoreError> {
-    let FramePreparation::Labels {
+) -> Result<PreparedFramePopulation, CoreError> {
+    let FramePreparation::Population {
         graph: graph_value,
         query,
         values,
@@ -936,10 +978,8 @@ pub(crate) async fn labels(
     )
     .await?;
     let prediction_type = prediction_type(&graph, &entity_ref, &sampled.entity_key)?;
-    let labelled = label_context(
-        asker,
-        &mut memo,
-        LabelDraw {
+    let population = task::example_population(
+        &LabelDraw {
             entity,
             key,
             asked: &asked,
@@ -957,14 +997,20 @@ pub(crate) async fn labels(
             entity_filter: resolved.entity_filter.as_deref(),
         },
         sampled,
-    )
-    .await?;
+    )?;
+    let candidate_keys = population.keys()?;
+    let source_encoding = graph.native_column(&entity_ref)?.strings;
+    let source_rows = crate::frame_materialize::lock(&graph.frames)
+        .resolve_encoded_references(entity, &[(&candidate_keys, source_encoding)])?;
+    let native_index: ArrayRef = Arc::new(arrow_array::Int64Array::from(
+        source_rows
+            .into_iter()
+            .map(|row| {
+                i64::try_from(row).map_err(|_| internal("native source index exceeds int64"))
+            })
+            .collect::<Result<Vec<_>, _>>()?,
+    ));
     keep_stored_times(&mut memo, &times);
-    let rows = data(labelled_rows(
-        &labelled.keys,
-        &labelled.anchors,
-        &labelled.labels,
-    )?);
     let mut meaning = FrameTaskMeaning {
         version: FRAME_MATERIALIZATION_VERSION,
         source: graph.source.clone(),
@@ -983,15 +1029,37 @@ pub(crate) async fn labels(
         statistic: deferred.prediction_statistic,
         limits,
     };
-    let target_encoding = label_encoding(&labelled.labels);
-    meaning.identity = task_identity(&meaning, &prediction_type, target_encoding, &rows)?;
-    let context = asker.attach(Attachment::Arrow(rows))?;
-    Ok(LabelledFrameTask {
-        graph: graph.publish(asker)?,
+    let mut identity = Identity::new("label-population");
+    identity.value(&meaning)?;
+    identity.value(&prediction_type)?;
+    identity.value(&population.examples.index)?;
+    identity.value(&population.examples.anchors)?;
+    identity.arrow(&data(population.sampled.clone()))?;
+    meaning.identity = identity.finish();
+    let graph_value = graph.publish(asker)?;
+    let batches = population::ranges(population.examples.index.len());
+    let owner = population::RetainedFramePopulation::new(population::PopulationData {
+        graph: graph.retained(),
+        meaning: meaning.clone(),
+        prediction_type: prediction_type.clone(),
+        population,
+        native_index,
+        asked: Arc::new(asked),
+        memo: memo.memo.clone(),
+        reader: crate::describe::text_reader(facts)?,
+        context_anchor,
+        span,
+        earliest,
+        context_examples,
+        trials,
+        entity_filter: resolved.entity_filter,
+    })?;
+    Ok(PreparedFramePopulation {
+        graph: graph_value,
         meaning,
-        context: Some(context),
-        target_encoding,
         prediction_type,
+        owner: asker.attach(Attachment::FramePopulation(owner))?,
+        batches,
     })
 }
 

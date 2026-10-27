@@ -604,6 +604,20 @@ impl FrameRun {
             .entity_rows_encoded(&table.name, columns)
     }
 
+    /// Actual immutable rows selected by the same existing primary-key map.
+    /// Native candidate conversions change lookup values, not attribution IDs.
+    pub fn source_rows(
+        &self,
+        table: &Table,
+        rows: &[usize],
+        columns: &[String],
+    ) -> Result<RecordBatch, CoreError> {
+        self.snapshot
+            .as_ref()
+            .ok_or_else(|| internal("frame graph not initialized"))?
+            .selected_rows(&table.name, rows, columns)
+    }
+
     /// Existing immutable frame adjacency supplies temporal label rows.
     /// This operation does not borrow or advance the neighbor generator.
     pub fn temporal_rows(
