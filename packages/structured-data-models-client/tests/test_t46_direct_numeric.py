@@ -1605,3 +1605,43 @@ def test_direct_row_bounds_integer_display_observes_earlier_native_warning(
             assert new[1][2] == 'INVALID_RESPONSE'
     finally:
         sys.set_int_max_str_digits(limit)
+
+
+@pytest.mark.parametrize('earlier_row_failure', [False, True])
+def test_direct_custom_inference_development_guard_precedes_custom_truthiness(
+    monkeypatch, earlier_row_failure
+):
+    invoked = []
+
+    class CustomInference(dict):
+        def __bool__(self):
+            invoked.append('custom truthiness')
+            raise AssertionError('unfinished custom protocol was activated')
+
+    def inputs():
+        return (
+            pd.DataFrame(
+                {
+                    'feature': [
+                        1.0,
+                        np.inf if earlier_row_failure else 2.0,
+                        3.0,
+                    ],
+                    'target': [2, 4, 6],
+                }
+            ),
+            pd.DataFrame({'feature': [4.0, 5.0]}),
+        )
+
+    def edit(request):
+        request.inference = CustomInference()
+
+    result = outcome(monkeypatch, inputs(), core=True, edit=edit)
+    assert not invoked
+    assert not result[3]
+    if earlier_row_failure:
+        assert result[1][2] == 'INVALID_REQUEST'
+        assert 'not JSON-representable' in result[1][-1]
+    else:
+        assert result[1][1] is RouteError
+        assert 'built-in inference' in result[1][-1]
