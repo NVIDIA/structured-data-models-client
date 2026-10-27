@@ -192,7 +192,10 @@ T4.2 remains one canonical package, with these explicit implementation substeps:
    Java only receives compatible explicit timestamp-unit rendering for representable existing scalar paths; no Java frame API or extra-wide Java.time value domain is added.
    The StringDtype constructor substep admits built-in Python/pyarrow storage and their supported pandas missing-value forms through the same conversion, shared UTF8 admission and owned Table/Schema stages.
    Empty/all-null strings retain their known string type; Rust infers meaning, identifiers and links from the whole detached column without parsing date-shaped strings as timestamps.
-   Object-backed text/date-like text, other extension arrays, Decimal and custom hooks remain explicit open families.
+   The ArrowDtype constructor substep admits exact built-in ArrowExtensionArray columns for the already-landed signed/unsigned 8/16/32/64, float32/64, Boolean, UTF8/LargeUTF8 and s/ms/us/ns timestamp physical families through the same Table/Schema stages.
+   Their native Arrow validity retains present NaNs separately from nulls, and their chunks, widths, units, raw counts and zones enter the existing checked admission and detachment path.
+   Native diagnostic reconstruction uses only core-selected scalars, preserving Arrow scalar and mixed-row presentation without changing schema meaning or equality.
+   Date32, Decimal, duration/time, nested/other Arrow types, object-backed text/date-like text, other extension arrays and custom hooks remain explicit open families.
    These remaining native families stay outside the development seam by type, with no content-based date detector, host semantic fallback, new SDK refusal policy or compatibility exception.
 3. Complete frame/index/mutation/edit behavior and the real large-offset admission cases listed below before claiming T4.2 complete or switching defaults.
    T4.4 sampling order, adjacency and random-state work remain separate dependencies.
