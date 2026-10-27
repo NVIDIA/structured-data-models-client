@@ -13,6 +13,7 @@ from __future__ import annotations
 import copy
 import os
 import warnings
+from dataclasses import asdict
 
 import pandas as pd
 import pytest
@@ -110,7 +111,7 @@ def test_live_decomposition_agrees_with_the_original_route(
                     'payloads': payloads,
                     'model': answer.model,
                     'outputs': answer.outputs,
-                    'items': [item.model_dump() for item in answer.items],
+                    'items': [asdict(item) for item in answer.items],
                     'unscored': answer.unscored_candidates,
                     'explanation': answer.explanation,
                     'warnings': [
