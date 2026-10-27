@@ -542,8 +542,35 @@ impl Snapshot {
         rng: &mut Mt19937,
     ) -> Result<Walked, CoreError> {
         let entity_rows = self.entity_rows(entity, keys)?;
+        self.walk_resolved(graph, entity, &entity_rows, anchors, hops, rng)
+    }
+
+    /// Walk concrete node references after task/native key conversion.
+    /// The caller binds the task and graph identity; this boundary also
+    /// rejects rows removed by sanitization before consuming any draws.
+    /// Repeated rows retain their distinct ordered example identities.
+    pub fn walk_resolved(
+        &self,
+        graph: &Graph,
+        entity: &str,
+        entity_rows: &[usize],
+        anchors: &[i64],
+        hops: &[i64],
+        rng: &mut Mt19937,
+    ) -> Result<Walked, CoreError> {
+        let table = self
+            .tables
+            .get(entity)
+            .filter(|_| graph.table(entity).is_some())
+            .ok_or_else(|| invalid("unknown resolved frame entity table"))?;
         if anchors.len() != entity_rows.len() {
             return Err(invalid("frame anchors do not align with entity rows"));
+        }
+        if entity_rows
+            .iter()
+            .any(|row| table.valid.binary_search(row).is_err())
+        {
+            return Err(invalid("a frame reference names a removed or unknown row"));
         }
         let mut nodes: BTreeMap<String, Vec<(usize, usize)>> = graph
             .tables
@@ -555,7 +582,7 @@ impl Snapshot {
             .iter()
             .map(|t| (t.name.clone(), BTreeMap::new()))
             .collect();
-        for (batch, row) in entity_rows.into_iter().enumerate() {
+        for (batch, row) in entity_rows.iter().copied().enumerate() {
             let at = nodes[entity].len();
             nodes.get_mut(entity).unwrap().push((batch, row));
             maps.get_mut(entity).unwrap().insert((batch, row), at);
