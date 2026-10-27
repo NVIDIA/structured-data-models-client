@@ -70,7 +70,9 @@ def test_temporal_table_owns_exact_unit_zone_counts_and_validity_after_run_drop(
     snapshot = run.take_attachment(result['frame_rows'])
     del run
     gc.collect()
-    owned = pa.RecordBatchReader.from_stream(snapshot).read_all()
+    owned = pa.RecordBatchReader._import_from_c_capsule(
+        snapshot.__arrow_c_stream__()
+    ).read_all()
     assert owned.schema.field('observed_at').type == kind
     assert owned['observed_at'].cast(pa.int64()).to_pylist() == [
         original[0],
