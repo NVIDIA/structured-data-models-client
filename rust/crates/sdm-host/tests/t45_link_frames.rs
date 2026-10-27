@@ -83,11 +83,35 @@ fn inputs(shape: &str, chunks: bool) -> Attachments {
         }
         _ => "PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) FOR EACH users.user_id",
     };
-    let schema = json!({"tables":[
+    let mut schema = json!({"tables":[
         {"name":"users","source":{"source":["users"]},"columns":[column("user_id","int64","ID"),column("age","int64","numerical")],"primary_key":["user_id"],"frame_key_form":"scalar","time_column":null},
         {"name":"items","source":{"source":["items"]},"columns":[column("item_id","int64","ID"),column("amount","float64","numerical")],"primary_key":["item_id"],"frame_key_form":"scalar","time_column":null},
         {"name":"buys","source":{"source":["buys"]},"columns":[column("buy_id","int64","ID"),column("user_id","int64","ID"),column("item_id","int64","ID"),column("ts","date","timestamp")],"primary_key":["buy_id"],"frame_key_form":"scalar","time_column":"ts"}],
         "links":[[{"table":"buys","column":"user_id"},{"table":"users","column":"user_id"}],[{"table":"buys","column":"item_id"},{"table":"items","column":"item_id"}]]});
+    if shape == "composite-history" {
+        schema["tables"][2]["columns"]
+            .as_array_mut()
+            .unwrap()
+            .push(column("part", "int64", "ID"));
+        schema["tables"][2]["primary_key"] = json!(["buy_id", "part"]);
+        schema["tables"][2]["frame_key_form"] = json!("sequence");
+    }
+    let mut history = vec![
+        ("buy_id", ints(0..120)),
+        ("user_id", ints((0..120).map(|row| row % 8))),
+        ("item_id", ints((0..120).map(|row| (row * 3) % 4))),
+        (
+            "ts",
+            Arc::new(TimestampMicrosecondArray::from(
+                (0..120)
+                    .map(|row| 1_672_531_200_000_000 + row * 5 * 86_400_000_000)
+                    .collect::<Vec<_>>(),
+            )) as ArrayRef,
+        ),
+    ];
+    if shape == "composite-history" {
+        history.push(("part", ints(std::iter::repeat_n(0, 120))));
+    }
     let indices = if shape == "201-repeated" {
         (0..201).map(|row| row % 8).collect()
     } else {
@@ -124,25 +148,7 @@ fn inputs(shape: &str, chunks: bool) -> Attachments {
                 chunks,
             ),
         ),
-        (
-            AttachmentId(10),
-            arrow(
-                vec![
-                    ("buy_id", ints(0..120)),
-                    ("user_id", ints((0..120).map(|row| row % 8))),
-                    ("item_id", ints((0..120).map(|row| (row * 3) % 4))),
-                    (
-                        "ts",
-                        Arc::new(TimestampMicrosecondArray::from(
-                            (0..120)
-                                .map(|row| 1_672_531_200_000_000 + row * 5 * 86_400_000_000)
-                                .collect::<Vec<_>>(),
-                        )),
-                    ),
-                ],
-                chunks,
-            ),
-        ),
+        (AttachmentId(10), arrow(history, chunks)),
     ])
 }
 
@@ -306,6 +312,7 @@ fn plain_arrow_link_materializes_and_predicts_as_the_frozen_client() {
         "reverse",
         "empty-one-neighborhood",
         "201-repeated",
+        "composite-history",
     ] {
         for chunks in [false, true] {
             let (run, materialized) = materialize(shape, chunks);
