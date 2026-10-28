@@ -270,3 +270,38 @@ def test_legacy_capture_retains_failed_call_journal_without_predict_done():
         item['body']['metadata']['request_id']
         for item in capture.core()['model_calls']
     ] == ['a', 'b']
+
+
+def test_unobserved_legacy_failure_is_distinct_from_observed_empty():
+    core, operations = legacy_observation()
+    core.update(
+        predicted=None, error={'kind': 'transport', 'code': 'TRANSPORT_ERROR'}
+    )
+    unknown = reader().view(core, operations)
+    assert unknown['calls'] is None
+    assert unknown['partial'] == {
+        'observed': False,
+        'answered': None,
+        'results': None,
+    }
+    core.update(model_calls=[], answered=None)
+    empty = reader().view(core, operations)
+    assert empty['calls'] == []
+    assert empty['partial'] == {
+        'observed': True,
+        'answered': None,
+        'results': None,
+    }
+
+
+@pytest.mark.parametrize('bad', ['wrong-run', 'negative-count', 'extra-field'])
+def test_legacy_partial_products_remain_closed_native_evidence(bad):
+    core, operations = legacy_partial(partial_observation()[0])
+    if bad == 'wrong-run':
+        core['model_calls'][0]['run'] = 0
+    elif bad == 'negative-count':
+        core['answered']['rows'] = -1
+    else:
+        core['answered']['next_operation'] = 'not-a-product'
+    with pytest.raises(reader().ObservationError):
+        reader().view(core, operations)

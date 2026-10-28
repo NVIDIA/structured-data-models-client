@@ -90,3 +90,12 @@ def test_preparation_observation_requires_actual_run_and_owner_and_keeps_native_
     )
     with pytest.raises(ValidationError):
         validator('preparationObservation').validate(failed)
+
+
+def test_started_native_input_bytes_are_required_even_for_serving_envelopes():
+    core, _ = actual_observation()
+    call = copy.deepcopy(core['predictions'][0]['calls'][0])
+    validator('predictionCallObservation').validate(call)
+    del call['input_body_base64']
+    with pytest.raises(ValidationError):
+        validator('predictionCallObservation').validate(call)
