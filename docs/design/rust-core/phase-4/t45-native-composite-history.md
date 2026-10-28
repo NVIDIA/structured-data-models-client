@@ -207,3 +207,10 @@ A pre-existing derived column retains its original constructed dtype even though
 The post-fold native constructor uses one new cached reset sample, and its fixed name reaches the existing ID rule.
 Apply live per-table stypes against actual constructed dtypes before advancing to another table, retaining original physical column order and any native columns that caller metadata does not reassign.
 Keep initial caller consistency, SQL policy and full ordered original key authority unchanged.
+
+The existing native graph reader also forwards an optional canonical constructed dtype on each named native column.
+It comes unchanged from the earlier completed core column meaning, while exported Arrow storage and its current native declaration remain separate later observations.
+The same typed fact is accepted from every host, participates in native source identity and must agree with the final constructed source description.
+Where the fact is absent because a raw host did not observe construction, retain the existing physical-buffer Text guard unchanged.
+This avoids both guessing numerical-category semantics from its exported numerical buffer and introducing a native-host bypass.
+No new inference, callback or source reread occurs in this reader.

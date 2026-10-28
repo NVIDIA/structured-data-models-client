@@ -254,3 +254,30 @@ fn original_decimal_declaration_retains_full_scale_through_zero_scale_export_che
         assert!(check_declaration(&FramePhysicalDeclaration::Decimal { native }).is_err());
     }
 }
+
+#[test]
+fn fixed_constructed_text_survives_numeric_export_without_bypassing_raw_type_guards() {
+    use arrow_array::Float64Array;
+    let owner = super::super::retained_tests::owner();
+    let frames = owner.frames();
+    let mut frames = lock(&frames);
+    let batch = RecordBatch::try_from_iter([("id", Arc::new(Float64Array::from(vec![1.25, 2.5])) as ArrayRef)]).unwrap();
+    frames.tables[0].1 = ArrowData::new(batch.schema(), vec![batch]);
+    let mut description = owner.prepared().description.clone();
+    description.tables[0].primary_key.clear();
+    description.tables[0].columns[0].dtype = Dtype::String;
+    description.tables[0].columns[0].stype = Stype::Text;
+    assert!(frames.validate_text_types(&description).is_err());
+    let mut column = FrameNativeColumn {
+        name: "id".into(), declared: None, logical_text: None,
+        strings: None, constructed: Some(Dtype::String),
+    };
+    assert!(validate_native(&frames, &description, &source(column.clone())).is_ok());
+    assert!(frames.validate_native_text_types(&description, &source(column.clone())).is_ok());
+    let fixed = native_identity("same_export", &source(column.clone())).unwrap();
+    column.constructed = None;
+    assert_ne!(fixed, native_identity("same_export", &source(column.clone())).unwrap());
+    assert!(frames.validate_native_text_types(&description, &source(column.clone())).is_err());
+    column.constructed = Some(Dtype::Int);
+    assert!(validate_native(&frames, &description, &source(column)).is_err());
+}

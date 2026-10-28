@@ -68,6 +68,7 @@ CASES = (
     'native-feature-dtype',
     'native-integer-key-logical-edit',
     'category-numeric-component',
+    'category-numeric-feature-text',
     'replace',
     'cached',
     'warning-retry',
@@ -131,6 +132,10 @@ def _observe(label):
         data['users']['age'] = data['users']['age'].astype(str)
     if label == 'constructor-sample-mutation':
         data['buys']['later'] = np.arange(120)
+    if label == 'category-numeric-feature-text':
+        data['users']['age'] = pd.Categorical(
+            data['users']['age'].astype(float)
+        )
     if label == 'category-numeric-component':
         data['buys']['part'] = pd.Categorical([0.25, 0.5] * 60)
     if label == 'reversed':
@@ -274,6 +279,8 @@ def _observe(label):
                 time_columns=times,
                 relationships=links,
             )
+            if label == 'category-numeric-feature-text':
+                schema['users']['age'].stype = 'text'
             if label == 'native-link-dtype':
                 data['buys']['item_id'] = pd.to_numeric(
                     data['buys']['item_id']
@@ -394,6 +401,7 @@ def test_complete_native_composite_history_matches_original(monkeypatch, label):
         'fold-copy-mutation',
         'native-integer-key-logical-edit',
         'category-numeric-component',
+        'category-numeric-feature-text',
         'cached',
         'warning-retry',
     ):
