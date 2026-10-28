@@ -441,3 +441,20 @@ def test_missing_first_legacy_result_stays_unobserved_and_fails_common_prefix(
     assert compare_prefix(
         observation(short, operations[:1]), observation(long, operations)
     )
+
+
+def test_shared_prefix_cannot_cut_a_parent_prediction_from_its_native_child():
+    short_core, short_ops = actual_observation()
+    long_core, long_ops = two_observed_predictions()
+    # The later native work belongs to a prediction invoked while its
+    # parent was still active, not a later independent public call.
+    long_core['predictions'][1]['parent'] = 0
+    long_core['predicted'] = copy.deepcopy(short_core['predicted'])
+    checked = reader().view(long_core, long_ops)
+    assert [event['position'] for event in checked['events']] == [2, 3]
+    short, long = (
+        observation(short_core, short_ops),
+        observation(long_core, long_ops),
+    )
+    assert COMPARE.shared_operations(short, long, 'predict') is None
+    assert compare_prefix(short, long)
