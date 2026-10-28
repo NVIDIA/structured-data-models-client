@@ -14,7 +14,7 @@ import pytest
 from sdm_client import Relationship
 from sdm_client._rust.frame_facade import _relationship_overlap
 from sdm_client.materializers.relational import _warn_of_relationships_that_join_nothing
-from sdm_client.warnings import SDMWarning
+from sdm_client.core.warnings import SDMWarning
 
 
 class Tables(dict):

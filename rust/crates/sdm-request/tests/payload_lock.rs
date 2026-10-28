@@ -983,6 +983,6 @@ fn a_constructed_string_does_not_hide_nonfinite_relational_cells() {
         let mut sample=shop();
         sample.tables[0].columns[1].1=SampledColumn::DeclaredStrings(Arc::new(Float64Array::from(vec![value;5])));
         let error=build(&sample).unwrap_err();
-        assert_eq!(error.sentence,sdm_contract::Sentence::ColumnNonFinite);
+        assert_eq!(error.sentence,sdm_contract::Sentence::NotFinite);
     }
 }

@@ -99,7 +99,7 @@ fn overlap_is_ordered_aggregate_policy_without_graph_or_sampler() {
     assert_eq!(warnings.len(),1);
     assert_eq!(warnings[0]["sentence"],"relationships_disjoint_several");
     let positions = &warnings[0]["fields"]["positions"];
-    assert_eq!(positions, &json!([{"type":"uint64","value":4},{"type":"uint64","value":5}]));
+    assert_eq!(positions, &serde_json::to_value(sdm_contract::Detail::List(vec![Scalar::UInt64(4),Scalar::UInt64(5)])).unwrap());
 }
 
 #[test]
