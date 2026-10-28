@@ -28,6 +28,7 @@ def assert_entry(
         'calls': [],
         'results': [],
         'final': None,
+        'carried': None,
     }
 
 
@@ -115,6 +116,8 @@ def test_entry_forwards_opaque_owners_without_observation(
     original_native = run.native
     original_presentation = errors.error_from_core
     original_carried = run._carried
+    original_present = relational_predict._present
+    original_result_carry = relational_predict._carry
     boundary = RUNNER._Boundary()
     capture = boundary.reset()
     try:
@@ -146,9 +149,11 @@ def test_entry_forwards_opaque_owners_without_observation(
     assert relational_predict.predict is predict
     assert errors.error_from_core is original_presentation
     assert run._carried is original_carried
+    assert relational_predict._present is original_present
+    assert relational_predict._carry is original_result_carry
 
 
-def test_close_restores_four_hooks_in_lifo_order_and_keeps_external_wrapper(
+def test_close_restores_six_hooks_in_lifo_order_and_keeps_external_wrapper(
     monkeypatch,
 ):
     from sdm_client._rust import errors, relational_predict, run
@@ -157,6 +162,8 @@ def test_close_restores_four_hooks_in_lifo_order_and_keeps_external_wrapper(
     original_predict = relational_predict.predict
     original_presentation = errors.error_from_core
     original_carried = run._carried
+    original_present = relational_predict._present
+    original_result_carry = relational_predict._carry
 
     def external_native():
         return original_native()
@@ -170,18 +177,30 @@ def test_close_restores_four_hooks_in_lifo_order_and_keeps_external_wrapper(
     def external_carried(*args, **kwargs):
         return original_carried(*args, **kwargs)
 
+    def external_present(*args, **kwargs):
+        return original_present(*args, **kwargs)
+
+    def external_result_carry(*args, **kwargs):
+        return original_result_carry(*args, **kwargs)
+
     monkeypatch.setattr(run, 'native', external_native)
     monkeypatch.setattr(relational_predict, 'predict', external_predict)
     monkeypatch.setattr(errors, 'error_from_core', external_presentation)
     monkeypatch.setattr(run, '_carried', external_carried)
+    monkeypatch.setattr(relational_predict, '_present', external_present)
+    monkeypatch.setattr(relational_predict, '_carry', external_result_carry)
     outer = RUNNER._Boundary()
     outer_native, outer_predict = run.native, relational_predict.predict
     outer_presentation = errors.error_from_core
     outer_carried = run._carried
+    outer_present = relational_predict._present
+    outer_result_carry = relational_predict._carry
     inner = RUNNER._Boundary()
     inner_native, inner_predict = run.native, relational_predict.predict
     inner_presentation = errors.error_from_core
     inner_carried = run._carried
+    inner_present = relational_predict._present
+    inner_result_carry = relational_predict._carry
     try:
         with pytest.raises(RUNNER.RunnerFailure, match='LIFO|order|active'):
             outer.close()
@@ -189,17 +208,23 @@ def test_close_restores_four_hooks_in_lifo_order_and_keeps_external_wrapper(
         assert relational_predict.predict is inner_predict
         assert errors.error_from_core is inner_presentation
         assert run._carried is inner_carried
+        assert relational_predict._present is inner_present
+        assert relational_predict._carry is inner_result_carry
     finally:
         inner.close()
         assert run.native is outer_native
         assert relational_predict.predict is outer_predict
         assert errors.error_from_core is outer_presentation
         assert run._carried is outer_carried
+        assert relational_predict._present is outer_present
+        assert relational_predict._carry is outer_result_carry
         outer.close()
     assert run.native is external_native
     assert relational_predict.predict is external_predict
     assert errors.error_from_core is external_presentation
     assert run._carried is external_carried
+    assert relational_predict._present is external_present
+    assert relational_predict._carry is external_result_carry
 
 
 def test_two_boundary_lifetimes_and_case_resets_do_not_accumulate_entries(
@@ -216,6 +241,8 @@ def test_two_boundary_lifetimes_and_case_resets_do_not_accumulate_entries(
     original_native = run.native
     original_presentation = errors.error_from_core
     original_carried = run._carried
+    original_present = relational_predict._present
+    original_result_carry = relational_predict._carry
     for _ in range(2):
         boundary = RUNNER._Boundary()
         try:
@@ -246,6 +273,8 @@ def test_two_boundary_lifetimes_and_case_resets_do_not_accumulate_entries(
         assert relational_predict.predict is predict
         assert errors.error_from_core is original_presentation
         assert run._carried is original_carried
+        assert relational_predict._present is original_present
+        assert relational_predict._carry is original_result_carry
 
 
 def test_reset_during_entry_is_rejected_without_splitting_its_owner(
@@ -266,6 +295,8 @@ def test_reset_during_entry_is_rejected_without_splitting_its_owner(
         assert relational_predict.predict is holder['predict']
         assert errors.error_from_core is holder['presentation']
         assert run._carried is holder['carried']
+        assert relational_predict._present is holder['present']
+        assert relational_predict._carry is holder['result_carry']
         return returned
 
     monkeypatch.setattr(relational_predict, 'predict', predict)
@@ -276,6 +307,8 @@ def test_reset_during_entry_is_rejected_without_splitting_its_owner(
         predict=relational_predict.predict,
         presentation=errors.error_from_core,
         carried=run._carried,
+        present=relational_predict._present,
+        result_carry=relational_predict._carry,
     )
     try:
         assert (
@@ -579,6 +612,8 @@ def error_entry(monkeypatch, predict, *, converter=None):
     original_native = run.native
     original_presentation = errors.error_from_core
     original_carried = run._carried
+    original_present = relational_predict._present
+    original_result_carry = relational_predict._carry
     boundary = RUNNER._Boundary()
     captured = boundary.reset()
     error = None
@@ -596,6 +631,8 @@ def error_entry(monkeypatch, predict, *, converter=None):
     assert relational_predict.predict is predict
     assert errors.error_from_core is original_presentation
     assert run._carried is original_carried
+    assert relational_predict._present is original_present
+    assert relational_predict._carry is original_result_carry
     [entry] = entries(captured)
     assert entry['completion'] == (
         'raised' if error is not None else 'returned'
