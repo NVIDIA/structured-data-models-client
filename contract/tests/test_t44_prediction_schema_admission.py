@@ -107,7 +107,9 @@ def test_unproved_siblings_and_changed_item_rules_still_refuse(change):
     elif change == 'external':
         branches(document)[4] = {'$ref': 'urn:other:preparation'}
     elif change == 'pointer':
-        branches(document)[4] = {'$ref': '#/$defs/preparationObservation/properties'}
+        branches(document)[4] = {
+            '$ref': '#/$defs/preparationObservation/properties'
+        }
     elif change == 'chain':
         document['$defs']['alias'] = copy.deepcopy(definition)
         definition['$ref'] = '#/$defs/alias'

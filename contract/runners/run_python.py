@@ -291,6 +291,34 @@ def _at(document: Any, where: tuple[str | int, ...]) -> Any:
     return document
 
 
+def _excludes_long_list(schema: Any, branch: Any, name: str) -> bool:
+    """Prove that a sibling cannot consume the trimmed list's field."""
+    if not isinstance(branch, dict):
+        return False
+    if '$ref' in branch:
+        # Only this exact, single local definition is proved here. Ref
+        # siblings, pointer traversal and chained references need a new proof.
+        reference = branch['$ref']
+        if (
+            set(branch) != {'$ref'}
+            or not isinstance(reference, str)
+            or not reference.startswith('#/$defs/')
+        ):
+            return False
+        definition = reference.removeprefix('#/$defs/')
+        if not definition or '/' in definition or '~' in definition:
+            return False
+        branch = _at(schema, ('$defs', definition))
+    return (
+        isinstance(branch, dict)
+        and '$ref' not in branch
+        and branch.get('additionalProperties') is False
+        and 'patternProperties' not in branch
+        and isinstance(branch.get('properties', {}), dict)
+        and name not in branch.get('properties', {})
+    )
+
+
 def _long_lists_held(schema: Any) -> None:
     r"""Refuse a schema whose long lists hold more than their items' one
     rule, or whose list a ``oneOf`` beside it could read too: the items
@@ -308,10 +336,7 @@ def _long_lists_held(schema: Any) -> None:
                 held
                 and isinstance(branches, list)
                 and all(
-                    isinstance(branch, dict)
-                    and branch.get('additionalProperties') is False
-                    and 'patternProperties' not in branch
-                    and where[-1] not in branch.get('properties', {})
+                    _excludes_long_list(schema, branch, str(where[-1]))
                     for number, branch in enumerate(branches)
                     if number != where[at + 1]
                 )
