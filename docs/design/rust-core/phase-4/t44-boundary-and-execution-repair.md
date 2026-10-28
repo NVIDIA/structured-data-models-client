@@ -333,3 +333,16 @@ Keep the decoded error envelope distinct from native message strings, preserving
 Use ordinary nested module discovery for the overlap unit tests instead of a `path` attribute, so their source remains in the scanner's normal module tree.
 Correct import ordering, equivalent direct attribute access and a test-only loop closure binding without changing native operations, fixture expectations or policy.
 These source-quality corrections receive their normal gates after fresh whole review; private diagnostic instrumentation failure has no product quality credit.
+
+
+## Executed remaining-consumer reconciliation
+
+Twice-approved R27 passes the whole quality gate, connected native consumers and 1,545 public cases.
+Its two remaining public failures are the same hash-dependent native dictionary comparison count on both routes; isolate only that frozen observer in a process with the recorded hash seed and retain a multi-seed complete-route control.
+The normal unscoped handoff exposes Decimal tests that assume construction succeeds even when both routes return the same native dictionary-encoding or Decimal scalar-boxing error.
+Capture complete errors, warnings and mutation effects on both routes and retain successful same-family controls instead of changing the converter or skipping failing inputs.
+Arrow may omit a redundant all-valid bitmap while retaining the exact mantissa value buffer; retain meaningful null-mask, offset, logical-value and lifetime assertions.
+The old boolean-key checkpoint test also names a retired startup capability refusal.
+Its current raw HostRun reaches the existing caller relationship-type diagnostic before any snapshot, so test that reached diagnostic, empty checkpoint state and a successful integer-key twin.
+Reconcile the refusal census with the actual moved constructors and retained native/raw guards, preserving every semantic policy family and truthful intended-site evidence.
+No guard, route, input family or frozen expected result changes as part of this remaining-consumer correction.
