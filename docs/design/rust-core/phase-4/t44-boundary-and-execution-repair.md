@@ -432,3 +432,16 @@ A bounded unchanged-R32 experiment with both supported interpreters confirms tha
 Keep native message, type-name, failed-index diagnosis and structured-part observations at the same reached positions, but perform each directly in its native handler after restoring the prior chain.
 Share only typed chain snapshot and restoration data, with no generic callback, interpreter, post-observation rollback, runtime-version branch or new native API.
 Add raised/unraised, message/type-name and legitimate context/traceback mutation consumers before implementation, preserving original exception identity and every native failure.
+
+### Gathered class policy over actual native conversions
+
+The actual full CI proves that six gathered class cases bypass the established parser grammar and whole-float range after their actual native casts.
+Retain the existing Gathered kernels for Boolean, integer and floating classes; Direct keeps its separately selected native grammar.
+Carry the actual reached held string declaration as optional Unicode code points, extracted through the built-in string implementation after existing truth/prefix reads, and retain each probability key conversion's pre-display NativeValue beside its actual displayed name and unchanged probability.
+These are sufficient value facts, not an origin tag, conversion instruction or new policy choice; nontext declarations remain observed without a new rejection.
+Preserve all existing native dtype, conversion, display, warning, mutation and exception effects at their current positions.
+Apply the existing Gathered kernels to the original decoded values and names before selecting completed native products, and check collisions only after final strict name selection.
+The reached declaration supplies the ordinary part family and unconverted fallback, including the identical converted-facts Boolean/string distinction; actual classification false still skips all class restoration.
+Update the Python producer, complete and later Rust readers, Calls/Steps/Ranking target attachments, Host constructors and malformed/ordinal/probability/value controls together.
+Add complete public typed/mixed and native-effect consumers plus shared-reader and Host consumers before production changes, then canonically author working35 and obtain a fresh whole review pair.
+Published contracts and frozen reference observations stay unchanged.

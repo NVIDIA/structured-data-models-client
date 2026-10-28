@@ -785,6 +785,182 @@ mod tests {
         }
     }
 
+    fn class_target(dtype: &str, numeric_prefix: bool) -> RelationalTargetFacts {
+        RelationalTargetFacts {
+            kind: "classification".chars().map(u32::from).collect(),
+            classification: true,
+            dtype_truth: Some(true),
+            numeric_prefix: Some(numeric_prefix),
+            dtype: Some(dtype.into()),
+        }
+    }
+
+    #[test]
+    fn gathered_class_policy_reads_raw_values_before_completed_native_casts() {
+        for (dtype, raw, converted, expected) in [
+            ("int64", r#""1_0""#, "10", r#""1_0""#),
+            ("int64", r#""١٠""#, "10", r#""١٠""#),
+            ("int64", "9.21e18", "9210000000000000000", "9.21e18"),
+            ("int64", "-9.21e18", "-9210000000000000000", "-9.21e18"),
+            ("int64", r#""10""#, "10", "10"),
+            (
+                "int64",
+                "9.19e18",
+                "9190000000000000000",
+                "9190000000000000000",
+            ),
+            ("float64", r#""1_0.5""#, "10.5", r#""1_0.5""#),
+            ("float64", r#""١٠.5""#, "10.5", r#""١٠.5""#),
+            ("float64", r#""10.5""#, "10.5", "10.5"),
+            (
+                "bool",
+                r#""\u001ctrue\u001c""#,
+                "true",
+                r#""\u001ctrue\u001c""#,
+            ),
+            ("bool", r#""false""#, "false", "false"),
+        ] {
+            let response = read_response(&format!(
+                r#"[{{"row_index":0,"id":"opaque","prediction":{raw}}}]"#
+            ));
+            let attribution = table_facts(&response, None, false);
+            let rows = vec![accepted(
+                &attribution,
+                decode(&response, "actual-call").unwrap().1.remove(0),
+                false,
+            )];
+            let converted = vec![RelationalTargetRow {
+                ordinal: 0,
+                prediction: native(&sdm_wire::json::read_answer(converted.as_bytes()).unwrap())
+                    .unwrap(),
+                probabilities: None,
+            }];
+            let (part, _) = layout(
+                &response,
+                &attribution,
+                &rows,
+                &class_target(dtype, true),
+                &converted,
+                |n| n.to_string(),
+            )
+            .unwrap();
+            let expected = sdm_wire::json::read_answer(expected.as_bytes()).unwrap();
+            assert_eq!(
+                part.rows[0].prediction,
+                native_answer(&expected),
+                "{dtype}: {raw}"
+            );
+        }
+    }
+
+    #[test]
+    fn reached_declaration_distinguishes_identical_unconverted_bool_and_text_facts() {
+        let response = read_response(r#"[{"row_index":0,"id":"opaque","prediction":"true"}]"#);
+        let attribution = table_facts(&response, None, false);
+        let rows = vec![accepted(
+            &attribution,
+            decode(&response, "actual-call").unwrap().1.remove(0),
+            false,
+        )];
+        let converted = vec![RelationalTargetRow {
+            ordinal: 0,
+            prediction: NativeValue::Unicode {
+                points: "true".chars().map(u32::from).collect(),
+            },
+            probabilities: None,
+        }];
+        for (dtype, expected) in [("bool", Value::Bool(true)), ("string", Value::text("true"))] {
+            let (part, _) = layout(
+                &response,
+                &attribution,
+                &rows,
+                &class_target(dtype, false),
+                &converted,
+                |n| n.to_string(),
+            )
+            .unwrap();
+            assert_eq!(part.rows[0].prediction, native_answer(&expected));
+            assert_eq!(
+                part.answers,
+                if dtype == "bool" {
+                    AnswerType::Bool
+                } else {
+                    AnswerType::Text
+                }
+            );
+        }
+        let mut unreached = class_target("bool", false);
+        unreached.classification = false;
+        unreached.dtype_truth = None;
+        unreached.numeric_prefix = None;
+        assert_eq!(
+            layout(
+                &response,
+                &attribution,
+                &rows,
+                &unreached,
+                &converted,
+                |n| n.to_string()
+            )
+            .unwrap_err()
+            .sentence,
+            Sentence::InvalidMessage
+        );
+        let mut invalid = serde_json::to_value(class_target("bool", false)).unwrap();
+        invalid["dtype"] = serde_json::json!([0x110000]);
+        assert!(serde_json::from_value::<RelationalTargetFacts>(invalid).is_err());
+    }
+
+    #[test]
+    fn strict_probability_selection_precedes_collisions_and_keeps_native_products_bound() {
+        let response = read_response(
+            r#"[{"row_index":0,"id":"opaque","prediction":"7","probabilities":{"1_0":0.25,"010":0.75}}]"#,
+        );
+        let attribution = table_facts(&response, None, false);
+        let rows = vec![accepted(
+            &attribution,
+            decode(&response, "actual-call").unwrap().1.remove(0),
+            false,
+        )];
+        let target = class_target("int64", true);
+        let entry = |probability| RelationalTargetProbability {
+            value: NativeValue::Integer {
+                digits: "10".into(),
+            },
+            name: "10".into(),
+            probability: Scalar::Float64(probability),
+        };
+        let mut converted = vec![RelationalTargetRow {
+            ordinal: 0,
+            prediction: NativeValue::Integer { digits: "7".into() },
+            probabilities: Some(vec![entry(0.25), entry(0.75)]),
+        }];
+        let (part, _) = layout(&response, &attribution, &rows, &target, &converted, |n| {
+            n.to_string()
+        })
+        .unwrap();
+        assert_eq!(
+            part.rows[0].probabilities,
+            Some(vec![("1_0".into(), 0.25), ("10".into(), 0.75)])
+        );
+        converted[0].probabilities.as_mut().unwrap().reverse();
+        assert_eq!(
+            layout(&response, &attribution, &rows, &target, &converted, |n| n
+                .to_string())
+            .unwrap_err()
+            .sentence,
+            Sentence::InvalidMessage
+        );
+        converted[0].probabilities.as_mut().unwrap().pop();
+        assert_eq!(
+            layout(&response, &attribution, &rows, &target, &converted, |n| n
+                .to_string())
+            .unwrap_err()
+            .sentence,
+            Sentence::InvalidMessage
+        );
+    }
+
     #[test]
     fn the_first_native_boundary_precedes_later_invalid_rows() {
         let response =
