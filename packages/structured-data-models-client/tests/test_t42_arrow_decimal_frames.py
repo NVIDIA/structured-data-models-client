@@ -298,13 +298,25 @@ def test_small_native_decimal_widths_use_the_same_constructor_stages(
     schema, _, (outcome, notices) = paired(monkeypatch, build)
     if key or scale <= 0:
         assert schema is None
-        kernel = 'unique' if key else 'dictionary_encode'
-        _assert_native_failure(
-            outcome,
-            pa.ArrowNotImplementedError,
-            f"Function '{kernel}' has no kernel matching input types "
-            f'(decimal{bits}(1, {scale}))',
-        )
+        if key:
+            _assert_native_failure(
+                outcome,
+                pa.ArrowNotImplementedError,
+                "Function 'unique' has no kernel matching input types "
+                f'(decimal{bits}(1, {scale}))',
+            )
+        else:
+            # The original keyless-table advice checks native candidate
+            # quality: filter missing cells before duplicate/factorization
+            # work. Some native kernels refuse the earlier Boolean filter.
+            values = raw_series(bits, 1, scale, [0, 1])
+            with pytest.raises(pa.ArrowNotImplementedError) as native:
+                present = values[values.notna()]
+                present.duplicated()
+            _assert_native_failure(
+                outcome, pa.ArrowNotImplementedError, str(native.value)
+            )
+            assert outcome[4] == _decimal_error_graph(native.value)
         assert notices == []
     else:
         assert schema is not None

@@ -171,11 +171,14 @@ def test_ordinary_string_export_keeps_existing_arrow_representation():
     series = pd.Series(
         ['ordinary', None, '😺'], dtype=pd.StringDtype(storage='python')
     )
-    rows, types = _convert('rows', pd.DataFrame({'value': series}))
+    frame = pd.DataFrame({'value': series})
+    original = frame.copy(deep=True)
+    rows, types = _convert('rows', frame)
     assert rows.column(0).equals(
         pa.chunked_array([pa.array(series, from_pandas=True)])
     )
-    assert types['value'] is series.dtype
+    assert types['value'] is frame['value'].dtype
+    pd.testing.assert_frame_equal(frame, original)
 
 
 def test_lossless_constructor_export_does_not_call_scalar_conversion_overrides():
