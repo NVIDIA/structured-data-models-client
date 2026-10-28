@@ -260,3 +260,40 @@ fn standard_codec_checks_all_approximate_types_before_any_component_nulls() {
         sdm_contract::Detail::text("approximate")
     );
 }
+
+#[test]
+fn standard_codec_keeps_surrogate_points_distinct_from_supplementary_scalars() {
+    let values = [
+        b"\xed\xa0\x80".as_slice(),
+        b"\xed\xa0\xbd\xed\xb8\xba".as_slice(),
+        "😺".as_bytes(),
+    ];
+    let rows = RecordBatch::try_from_iter([
+        (
+            "a",
+            Arc::new(arrow_array::BinaryArray::from_iter_values(values)) as ArrayRef,
+        ),
+        ("b", Arc::new(Int64Array::from(vec![0, 0, 0])) as ArrayRef),
+    ])
+    .unwrap();
+    let identity = encode(
+        &rows,
+        &["a".into(), "b".into()],
+        &BTreeMap::from([("a".into(), StringEncoding::Utf8Surrogatepass)]),
+    )
+    .unwrap();
+    assert_eq!(identity.encoding, StringEncoding::Utf8Surrogatepass);
+    let text = sdm_engine::strings::StringColumn::new(identity.values.as_ref(), identity.encoding)
+        .unwrap();
+    let points = (0..3)
+        .map(|row| text.get(row).unwrap().unwrap().points().collect::<Vec<_>>())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        points,
+        [
+            vec![0xd800, 0x1f, 0x30],
+            vec![0xd83d, 0xde3a, 0x1f, 0x30],
+            vec![0x1f63a, 0x1f, 0x30]
+        ]
+    );
+}
