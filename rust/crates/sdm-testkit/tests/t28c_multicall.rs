@@ -416,6 +416,19 @@ fn failure_observations_publish_actual_calls_and_carried_arrow() {
             "{id}"
         );
         assert_eq!(line["core"]["answered"], json!(observed.answered), "{id}");
+        let [prediction] = observed.legacy_predictions.as_slice() else {
+            panic!("{id}: expected one actual prediction Run");
+        };
+        assert_eq!(prediction["completion"], "error", "{id}");
+        assert_eq!(prediction["result"], Value::Null, "{id}");
+        assert_eq!(prediction["error"], line["core"]["error"], "{id}");
+        assert_eq!(prediction["answered"], line["core"]["answered"], "{id}");
+        assert_eq!(
+            prediction["run"].as_u64().unwrap() as usize,
+            observed.operations.iter().position(|op| op == "predict").unwrap(),
+            "{id}"
+        );
+        assert_eq!(line["core"]["legacy_predictions"], json!(observed.legacy_predictions), "{id}");
         if let Some(answered) = &observed.answered {
             assert!(answered["model"].is_string(), "{id}");
             assert!(answered["request_id"].is_string(), "{id}");
@@ -435,4 +448,24 @@ fn failure_observations_publish_actual_calls_and_carried_arrow() {
             );
         }
     }
+}
+
+#[test]
+fn successful_prediction_keeps_its_complete_run_local_result() {
+    use sdm_testkit::observation::{self, Identity};
+    let bases = bases::load(&root().join("contract/bases.yaml")).unwrap();
+    let loaded = case::load(&[root().join("contract/cases/s1/multicall.rows-per-call-3.json")]).unwrap();
+    let observed = host::run(&loaded[0].case, &bases).unwrap();
+    let identity = Identity::new(&root()).unwrap();
+    let line = observation::write(&identity, &loaded[0], &observed, None);
+    let [prediction] = observed.legacy_predictions.as_slice() else {
+        panic!("expected one actual prediction Run");
+    };
+    assert_eq!(prediction["completion"], "done");
+    assert_eq!(prediction["error"], Value::Null);
+    assert_eq!(prediction["answered"], Value::Null);
+    let mut result = prediction["result"].clone();
+    assert!(result["outputs"].is_array());
+    result.as_object_mut().unwrap().remove("outputs");
+    assert_eq!(result, line["core"]["predicted"]);
 }
