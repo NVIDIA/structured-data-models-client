@@ -721,6 +721,13 @@ def _legacy_events(
         'legacy prediction inputs lack actual Run owners',
     )
     journal = core.get('legacy_predictions')
+    control_observed = (
+        'answered' in core
+        if journal is None
+        else (core.get('capture_capabilities') or {}).get(
+            'native_error_control', True
+        )
+    )
     if journal is None:
         require(
             len(legacy_runs) <= 1,
@@ -734,7 +741,9 @@ def _legacy_events(
                 else 'done',
                 'result': core.get('predicted'),
                 'error': core.get('error'),
-                'answered': core.get('answered'),
+                **(
+                    {'answered': core['answered']} if 'answered' in core else {}
+                ),
             }
             for run in legacy_runs
         ]
@@ -752,7 +761,10 @@ def _legacy_events(
         require(
             isinstance(observed, dict)
             and set(observed)
-            == {'run', 'completion', 'result', 'error', 'answered'}
+            == (
+                {'run', 'completion', 'result', 'error'}
+                | ({'answered'} if control_observed else set())
+            )
             and observed['completion'] in ('done', 'error', 'unobserved')
             and (
                 observed['error'] is None
@@ -773,11 +785,17 @@ def _legacy_events(
             )
             and (
                 observed['completion'] == 'error'
-                or observed['answered'] is None
+                or observed.get('answered') is None
             ),
             'legacy prediction journal has contradictory completion products',
         )
         _legacy_product(observed['result'])
+        require(
+            core.get('capture_capabilities') is None
+            or observed['result'] is None
+            or 'outputs' in observed['result'],
+            'current native completion omits its observed output supplement',
+        )
         events.append(
             {
                 'position': run_positions[observed['run']],
@@ -788,10 +806,27 @@ def _legacy_events(
                 else [
                     item for item in attempts if item['run'] == observed['run']
                 ],
+                'calls': [
+                    item['body']
+                    for item in attempts
+                    if item['run'] == observed['run']
+                ]
+                if attempts is not None
+                else (
+                    observed['result'].get(
+                        'calls', [observed['result']['body']]
+                    )
+                    if observed['result'] is not None
+                    and observed['result']['body'] is not None
+                    else []
+                    if observed['result'] is not None
+                    else None
+                ),
                 'result': observed['result'],
                 'error': observed['error'],
                 'partial': _legacy_partial(
-                    observed['answered'], observed['completion'] == 'error'
+                    observed.get('answered'),
+                    control_observed and observed['completion'] == 'error',
                 ),
             }
         )
@@ -799,6 +834,21 @@ def _legacy_events(
 
 
 def _view(core: dict[str, Any], operations: list[str]) -> dict[str, Any]:
+    capabilities = core.get('capture_capabilities')
+    require(
+        capabilities is None
+        or (
+            isinstance(capabilities, dict)
+            and set(capabilities) == {'model_replies', 'native_error_control'}
+            and all(type(value) is bool for value in capabilities.values())
+        ),
+        'capture interception capabilities are malformed',
+    )
+    if capabilities is not None:
+        require(
+            ('answered' in core) == capabilities['native_error_control'],
+            'carried observation availability contradicts capture interception',
+        )
     inputs = core['inputs']
     records = {}
     for record in inputs:
@@ -979,6 +1029,19 @@ def _view(core: dict[str, Any], operations: list[str]) -> dict[str, Any]:
         )
         _reply_obligation(call['reply'])
         _known_endpoint(call['model_endpoint'])
+        if capabilities is not None:
+            if capabilities['model_replies']:
+                require(
+                    not taken
+                    or taken[-1]['run'] != call['run']
+                    or taken[-1]['reply'] is not None,
+                    'a full-observer model call precedes its pending reply',
+                )
+            else:
+                require(
+                    call['reply'] is None,
+                    'a sparse observer claims an unavailable model reply',
+                )
         taken.append(dict(call))
     require(
         [call['run'] for call in taken]
@@ -1049,15 +1112,21 @@ def _view(core: dict[str, Any], operations: list[str]) -> dict[str, Any]:
                 'attempts': [
                     item for item in attempts if item['run'] in raw['runs']
                 ],
+                'calls': [
+                    item['body']
+                    for item in entry['_calls']
+                    if item['body'] is not None
+                ],
                 'result': rendered,
                 'error': records[failure['run']]['error']
                 if failure is not None
                 else None,
-                'partial': _partial_entry(
-                    raw, entry['_results'], carries[entry['ordinal']]
-                )
-                if entry['completion'] == 'raised'
-                else {'observed': False, 'answered': None, 'results': None},
+                'partial': {
+                    **_partial_entry(
+                        raw, entry['_results'], carries[entry['ordinal']]
+                    ),
+                    'observed': entry['completion'] == 'raised',
+                },
             }
         )
     events.sort(key=lambda item: item['position'])

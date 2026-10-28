@@ -944,7 +944,14 @@ class _Capture:
     ``core.predicted.calls``, beside ``body``, the last's (T2.1g); a request
     of one call records ``body`` alone, as before."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        model_replies_observed: bool = True,
+        native_error_control_observed: bool = True,
+    ) -> None:
+        self.model_replies_observed = model_replies_observed
+        self.native_error_control_observed = native_error_control_observed
         self.operations: list[str] = []
         self.inputs: list[dict[str, Any]] = []
         #: What the host passed ``edit_schema`` and ``materialize``'s held
@@ -1421,7 +1428,8 @@ class _Capture:
             self.driver_log.purpose = None
         if step.get('step') == 'call_model':
             if (
-                owner.pending_model is not None
+                self.model_replies_observed
+                and owner.pending_model is not None
                 and owner.pending_model['reply'] is None
                 and (
                     owner.call_id != step.get('id')
@@ -1510,7 +1518,7 @@ class _Capture:
             owner.input_record['error'] = owner.error
         if owner.entry is None:
             self.error = owner.error
-        if owner.operation == 'predict':
+        if owner.operation == 'predict' and self.native_error_control_observed:
             owner.carried = json.loads(error.control)['error'].get('answered')
 
     def done(
@@ -1706,6 +1714,10 @@ class _Capture:
             'predicted': self.predicted,
             'error': self.error,
             'model_calls': self.model_calls,
+            'capture_capabilities': {
+                'model_replies': self.model_replies_observed,
+                'native_error_control': self.native_error_control_observed,
+            },
             'legacy_predictions': [
                 {
                     'run': owner.ordinal,
@@ -1717,12 +1729,20 @@ class _Capture:
                     if owner.predicted is not None
                     else None,
                     'error': owner.error,
-                    'answered': owner.partial,
+                    **(
+                        {'answered': owner.partial}
+                        if self.native_error_control_observed
+                        else {}
+                    ),
                 }
                 for owner in self._runs.values()
                 if owner.operation == 'predict'
             ],
-            'answered': self.partial,
+            **(
+                {'answered': self.partial}
+                if self.native_error_control_observed
+                else {}
+            ),
         }
         if self.edits:
             core['edits'] = self.edits

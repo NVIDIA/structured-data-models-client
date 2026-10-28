@@ -489,7 +489,11 @@ def captured(events: list[dict[str, Any]]) -> Any:
     import base64
     from types import SimpleNamespace
 
-    capture = run_python._Capture()
+    # The existing Trace has neither ModelReply nor native error-control
+    # events. Preserve that absence instead of manufacturing those facts.
+    capture = run_python._Capture(
+        model_replies_observed=False, native_error_control_observed=False
+    )
     for event in events:
         kind = event['event']
         if kind == 'started':

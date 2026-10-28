@@ -152,6 +152,7 @@ pub fn write(
             "predicted": predicted,
             "error": error,
             "model_calls": observed.model_calls,
+            "capture_capabilities": {"model_replies": true, "native_error_control": true},
             "legacy_predictions": observed.legacy_predictions,
             "answered": observed.answered,
         },

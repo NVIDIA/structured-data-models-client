@@ -1136,17 +1136,17 @@ def _prediction_events_agree(
         at = f'{where}: prediction[{left["position"]}]'
         calls = [
             None
-            if event['attempts'] is None
+            if event['calls'] is None
             else [
-                _event_payload(
-                    item['body'], item['model_endpoint'], report.paths
-                )
-                for item in event['attempts']
+                _event_product({'body': body}, event['attempts'], report.paths)[
+                    'body'
+                ]
+                for body in event['calls']
             ]
             for event in (left, right)
         ]
-        # Historical sole-run checkpoints expose bodies but no delivery
-        # observations. Their actual product remains available below.
+        # Known historical bodies remain compared while their newer
+        # reply/hash/attempt observations remain genuinely unavailable.
         if calls[0] != calls[1]:
             _differ(
                 report,
@@ -1172,6 +1172,19 @@ def _prediction_events_agree(
             _event_product(event['result'], event['attempts'], report.paths)
             for event in (left, right)
         ]
+        if all(isinstance(result, dict) for result in results) and not all(
+            'outputs' in result for result in results
+        ):
+            # This supplement was not emitted by older sole-run snapshots.
+            # Mandatory products and actual observed calls stay complete.
+            results = [
+                {
+                    key: value
+                    for key, value in result.items()
+                    if key != 'outputs'
+                }
+                for result in results
+            ]
         if results[0] != results[1]:
             _differ(
                 report,
@@ -1183,9 +1196,9 @@ def _prediction_events_agree(
                 rule='core',
             )
         partials = [event['partial'] for event in (left, right)]
-        if (partials[0]['observed'], partials[0]['answered']) != (
-            partials[1]['observed'],
-            partials[1]['answered'],
+        if (
+            all(partial['observed'] for partial in partials)
+            and partials[0]['answered'] != partials[1]['answered']
         ):
             _differ(
                 report, at, 'core.answered', None, None, show=False, rule='core'
