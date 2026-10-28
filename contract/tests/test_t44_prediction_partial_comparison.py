@@ -136,7 +136,44 @@ def legacy_partial(actual):
         'metadata': copy.deepcopy(final['metadata']),
         'outputs': final['data']['predicted']['outputs'],
     }
+    # This seed models the full current observer. The existing negative
+    # field-deletion oracle therefore tests loss of available facts, while
+    # the separate historical seed retains genuinely unobserved data.
+    core['capture_capabilities'] = {
+        'model_replies': True,
+        'native_error_control': True,
+    }
+    core['legacy_predictions'] = [
+        {
+            'run': 2,
+            'completion': 'error',
+            'result': None,
+            'error': core['error'],
+            # The real Capture writer retains this same native product in
+            # both views before serializing its observation.
+            'answered': core['answered'],
+        }
+    ]
     return core, operations
+
+
+def test_full_legacy_paid_seed_declares_its_actual_available_products():
+    core, operations = legacy_partial(partial_observation()[0])
+    assert core['capture_capabilities'] == {
+        'model_replies': True,
+        'native_error_control': True,
+    }
+    [run] = core['legacy_predictions']
+    assert run == {
+        'run': 2,
+        'completion': 'error',
+        'result': None,
+        'error': core['error'],
+        'answered': core['answered'],
+    }
+    viewed = reader().view(core, operations)
+    assert viewed['events'][0]['partial']['observed'] is True
+    assert viewed['events'][0]['partial']['answered'] == core['answered']
 
 
 def test_failed_prediction_keeps_checked_paid_calls_and_partial_result():
