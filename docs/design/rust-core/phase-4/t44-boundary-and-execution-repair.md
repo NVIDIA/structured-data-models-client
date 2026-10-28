@@ -375,6 +375,7 @@ Keep the allocation assertions and make a valid single-batch, single-column inpu
 Zero-batch, multiple-batch and mismatched/invalid-schema inputs retain the existing concatenation and validation path.
 Add those boundary consumers and direct retained backing-owner assertions before the narrow helper implementation.
 The shared `one_batch` helper, supported families, wire shapes, native callbacks and fixture expectations remain unchanged.
+
 ### Executed installed-base and changing native-runtime closure
 
 R30's exact CI wheel-smoke reproduces a base-install failure before direct-frame ownership consumers collect: importing frame preparation eagerly loads optional warehouse connectors through the schema bridge.

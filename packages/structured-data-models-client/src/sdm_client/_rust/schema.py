@@ -50,7 +50,7 @@ import warnings
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
-from sdm_client._rust import codec, errors, providers, results
+from sdm_client._rust import codec, errors, results
 from sdm_client._rust.run import run
 from sdm_client.errors import StructuredDataError
 
@@ -144,6 +144,8 @@ def from_source(
             for link in links
         ]
         spec['relationships'] = given
+    from sdm_client._rust import providers
+
     choice, provider = providers.for_source(source)
     operation = {
         'op': 'describe_source',

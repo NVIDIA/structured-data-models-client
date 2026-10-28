@@ -29,7 +29,11 @@ pub(super) fn present(py: Python<'_>, value: &LogicalValue) -> PyResult<Py<PyAny
         LogicalValue::Text(text) => {
             let value = match text.utf8() {
                 Some(text) => PyString::new(py, text),
-                None => PyString::from_encoded_object(PyBytes::new(py, text.as_bytes()).as_any(), Some(c"utf-8"), Some(c"surrogatepass"))?,
+                None => PyString::from_encoded_object(
+                    PyBytes::new(py, text.as_bytes()).as_any(),
+                    Some(c"utf-8"),
+                    Some(c"surrogatepass"),
+                )?,
             };
             value.into_any().unbind()
         }

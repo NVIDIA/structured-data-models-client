@@ -21,7 +21,7 @@
       "moved": "T1.36 fix 4 (the final review's P2-2): the host's half of the moved cast: a float in a mix written as the core now writes a float entity (sdm_engine::keys's float_text), the reference's text of it, pyarrow's cast of the float to text at its own width (1e16 is 1e+16), so the core reads back the number the host was given; a boolean as before"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::from_source": {
-      "moved": "T3.17 fix 1: the source with no table is the core's sentence, filled with the source as a host value; the Python sentence is gone; T3.5: a semantic model described on the core, the model's values held for its sentences and its notes said on the schema"
+      "moved": "T3.17 fix 1: the source with no table is the core's sentence, filled with the source as a host value; the Python sentence is gone; T3.5: a semantic model described on the core, the model's values held for its sentences and its notes said on the schema; T4.4: import the existing source provider at its reached source-use boundary; arguments, provider selection and native reads remain unchanged"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::<module>": {
       "moved": "T4.4: gathered prediction now uses fixed relational core operations through relational_predict; retain shared transport/result presentation and remove eager public-payload snapshot helpers."
@@ -93,7 +93,7 @@
       "gone": "T3.16 (fix A): the schema is handed over as plain data by _rust/spec.py's held_schema; no saved description, no merge (sdm_schema::edit::read_held is gone)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::<module>": {
-      "moved": "T3.17 fix 1: imports the errors module for its host values; T3.5: conversion_notes, the host's saying of the core's typed notes of a semantic model; T4.2: build accepts native frame references alongside the same core metadata reader"
+      "moved": "T3.17 fix 1: imports the errors module for its host values; T3.5: conversion_notes, the host's saying of the core's typed notes of a semantic model; T4.2: build accepts native frame references alongside the same core metadata reader; T4.4: optional warehouse providers load only at the actual from_source use; importing native frame preparation retains the declared base frame dependencies"
     },
     "packages/structured-data-models-client/src/sdm_client/client.py::_predicts_on_the_core": {
       "refactor": "T2.2: a request over a SQLite source routes as one over DuckDB (_routing.on_the_core with the backend's predict paths); no rule added; T4.6: select the explicitly opted-in direct preparation bridge for model-neutral Requests; core owns constructor/model validation, body encoding and result policy, and default routing is unchanged"
