@@ -498,6 +498,22 @@ def _assessment(
     return value['data']
 
 
+def _raise_wrapper(
+    native: NativeFrameFailure, selected: StructuredDataError
+) -> NoReturn:
+    """Present the wrapper inside its actual retained native cause's handler."""
+    from sdm_client._rust import errors
+
+    chain = native._chain()
+    try:
+        raise native.error
+    except Exception:
+        # Remove only this handler re-entry before presentation. Native
+        # getter/display edits during raise_error remain authoritative.
+        native._restore_chain(chain)
+        errors.raise_error(selected)
+
+
 def guard_failure(
     native: NativeFrameFailure,
     *,
@@ -569,7 +585,7 @@ def guard_failure(
                 carried.args = (said, *native.error.args[1:])
                 carried.message = said
                 carried.__cause__ = native.error
-            errors.raise_error(carried)
+            _raise_wrapper(native, carried)
         errors.raise_native(native.error)
     if category == 'type_error':
         signature = [ord(point) for point in native.read_message()]
@@ -614,4 +630,4 @@ def guard_failure(
             'frame native error report unexpectedly returned a value'
         )
     selected.__cause__ = native.error
-    errors.raise_error(selected)
+    _raise_wrapper(native, selected)
