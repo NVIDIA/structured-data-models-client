@@ -15,8 +15,8 @@ import pandas as pd
 import pytest
 from test_t44_complete_task_references import question
 from test_t44_decomposition_owners import question as decomposed_question
-from test_t44_text_frames import p3e2_warning_codes, shop, text
 from test_t44_text_frames import core as core
+from test_t44_text_frames import p3e2_warning_codes, shop, text
 
 from sdm_client import PredictiveQuery, StructuredDataError
 
