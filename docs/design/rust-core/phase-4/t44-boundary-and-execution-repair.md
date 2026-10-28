@@ -461,3 +461,49 @@ Rust validates the compact result width and validity, normalizes it once, and ex
 No SQL key deduplication, value-based deduplication, new callback, sampling draw or per-column copy of the mapping belongs in this repair.
 Add threshold, sorted-source order, equal-value distinct-source, ineligible, malformed, complete Host context/payload and public native-effect consumers before production changes.
 Preserve immutable runtime receipts and frozen expectations, then canonically author working35 and obtain fresh whole reviews before execution.
+
+### Whole-review mixed result and probability ownership closure
+
+Both exact R33 whole reviews require changes before execution.
+The compatibility review proves that wrapping an admitted native number or Boolean as Written loses its primary typed Arrow cell in a mixed population even when Python reconstructs the public items correctly.
+Keep strict-rejected values Written, and publish admitted native values through the existing typed Answer variants with their actual bits and type.
+An unchanged numeric raw value is not evidence that a native dtype override selected a different conversion family; use the original decoded NativeValue for that distinction and retain the ordinary declared fallback.
+Keep successful text in its established typed representation and retain nonfinite, surrogate and container pass-through rules.
+Add complete pure and complete/later Host mixed Bool, Int and FloatClass Arrow schema, cells, null masks and fallback JSON consumers before the correction.
+
+Equal probability values are ordinary data rather than entry identities.
+Carry each completed probability product's original entry ordinal, validate it against decoded enumeration at both complete and retained readers, and preserve actual native cast/display timing.
+Add equal-probability success, swapped, duplicate and omitted entry consumers before the correction.
+The new field stays within coherent unpublished contract35 and requires canonical source authoring after all constructors and readers are updated.
+
+### Actual prediction entry, native capture and replay closure
+
+The required captured forecast fails on the actual new call_relational producer while the same uncaptured call succeeds.
+Close the existing harness producer/reader boundary rather than synthesizing a legacy Predict start or changing product prediction.
+The finite harness observation distinguishes an actually invoked relational_predict.predict entry from associated native starts, results, paid calls and terminal completion.
+Record case-local entry ordinal and parent, exact built-in string model argument or explicitly unobserved argument form, and canonical model only from reached typed preparation results.
+The entry observer forwards the same owners once, returns the exact returned owner, and rethrows the exact exception without reading Request properties, model properties, output members, display, equality or public answers.
+An attempted entry alone never proves core execution.
+Keep actual operation names unchanged, associate each Run and attachment owner with its starting entry, and keep run-local attachment state separate from entry-level ordered call journals.
+
+Bind the typed call request ID before forwarding the real native start, the authoritative CallModel bytes when actually taken, and the returned response scope independently.
+Do not re-encode or reread mutable request containers to reconstruct a body or a hypothetical legacy RequestState.
+Validate completed response scopes, final Calls/Steps/Ranking references, native row lineage, final nested Predicted Arrow and metadata through their actual typed products and attachment reads.
+Known-empty children have no invented call or request ID; partial paid calls remain observed when a later encode, endpoint or native read fails.
+Only the outer observed entry completion selects its final result, retaining intermediate or partial results as evidence rather than copying a public PredictionResult into the capture.
+
+The paired native and prediction-entry hooks have one explicit installation lifetime and restore together in LIFO order without unwrapping unrelated tamper hooks.
+Reset between cases retains completed observations and rejects reset during active entries rather than splitting owner scope.
+A real nesting stack keeps callback predictions and their calls distinct.
+
+Extend the handwritten observation schema and the complete connected route, case-input, common-input, common-operation, error/result consistency, capture-conservation and replay readers together.
+A strict role reader accepts legacy actual Predict or the proven finite entry/native bundle, validates each producer's own state or call bindings, and compares common prediction meaning without dropping required body, model, result, source or actual-operation evidence.
+Generic prepare_request or model work outside the observed entry cannot earn a prediction role.
+Replay projects only the actually resolved model into the existing model-only Rust configuration; Rust rebuilds its own source, materialized state and answers.
+Invalid or unresolved model evidence, contradictory scope, missing result data, duplicate independent entries and unrelated preparation fail closed where the corresponding evidence is required.
+
+An independent test author adapts only producer-sensitive forecast observation/tamper setup while preserving all semantic positive, empty-step and negative oracles and separate raw legacy controls.
+New positive and tampered consumers cover independent input/body/scope IDs, equal IDs, ordered calls, all-empty and partial aggregation, early preparation errors, exact argument observation, nested entries, reset/teardown, final Arrow/metadata/lineage, false-role evidence and replay independence.
+All tests precede the bounded harness implementation.
+No product wire, transport, model rule, package, parser, fallback or comparison waiver belongs in this correction.
+Fresh independent whole CODE approvals precede any successor candidate execution.
