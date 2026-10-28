@@ -1239,6 +1239,9 @@ def test_actual_outside_entry_native_failure_does_not_keep_its_payload(
         assert capture.predictions == []
         assert capture.error['code'] == 'UNKNOWN_MODEL'
         assert capture._runs[0].error_owner is None
+        # ExceptionInfo independently owns the public exception and its native
+        # context. Release that test-owned holder while keeping capture alive.
+        del raised
         gc.collect()
         assert len(observed) == 1
         assert observed[0]() is None

@@ -10,6 +10,7 @@ import base64
 import copy
 import hashlib
 import json
+import warnings
 from pathlib import Path
 
 import pytest
@@ -273,7 +274,16 @@ def test_edit_and_unrelated_preparation_do_not_shift_events_by_input_count():
 @pytest.fixture(scope='module')
 def actual_legacy_capture():
     """Run the real legacy Predict producer, then a native version refusal."""
-    from sdm_client import SDMClient, StructuredDataError
+    import duckdb
+    import pandas as pd
+    from sdm_connectors import DuckDBSource
+
+    from sdm_client import (
+        PredictiveQuery,
+        Schema,
+        SDMClient,
+        StructuredDataError,
+    )
     from sdm_client._rust import codec
     from sdm_client._rust.predict import _send
     from sdm_client._rust.run import run
@@ -285,7 +295,18 @@ def actual_legacy_capture():
             / 'packages/structured-data-models-client/tests/test_t313_serving_route.py',
         )
         serving._old.__wrapped__(monkeypatch)
-        request = serving._materialized(monkeypatch)
+        monkeypatch.setenv(serving._routing.ENVIRONMENT, serving.MATERIALIZE)
+        with duckdb.connect() as connection, warnings.catch_warnings():
+            for statement in serving._shop():
+                connection.execute(statement)
+            warnings.simplefilter('ignore')
+            schema = Schema.from_source(DuckDBSource(connection))
+            # Explanation is supported for exactly one scored entity.
+            # Keep the actual public materializer and the explicit output.
+            request = PredictiveQuery(serving.QUERY, schema).materialize(
+                indices=[0], anchor_time=pd.Timestamp('2024-03-01')
+            )
+        monkeypatch.setenv(serving._routing.ENVIRONMENT, '')
         assert request._core is not None
         state = {'version': request._core.version, 'payload': 1, 'query': 2}
         attached = {
@@ -354,7 +375,7 @@ def test_actual_legacy_runs_keep_success_and_early_error_separately(
     assert first['error'] is first['answered'] is None
     assert first['result']['metadata'] == metadata
     assert first['result']['result'] is not None
-    assert len(first['result']['result']['rows']) == 2
+    assert len(first['result']['result']['rows']) == 1
     assert first['result']['outputs'] == ['prediction', 'explanation']
     assert any(
         column['name'] == 'explanation'

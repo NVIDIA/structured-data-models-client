@@ -370,7 +370,8 @@ def test_a_step_with_no_rows_is_captured_as_it_is_answered(
 
 
 def _step_3_s_id_on_step_2(ids: list[str]) -> None:
-    ids[1] = ids[2]
+    # Keep native call IDs unique so only the capture's step binding refuses.
+    ids[1], ids[2] = ids[2], ids[1]
 
 
 def _a_stale_id_on_step_3(ids: list[str]) -> None:
@@ -405,7 +406,7 @@ def _steps_1_and_2_swapped(ids: list[str]) -> None:
 
 
 def _step_3_s_id_on_step_1(ids: list[str]) -> None:
-    ids[0] = ids[2]
+    ids[0], ids[2] = ids[2], ids[0]
 
 
 @pytest.mark.parametrize(
