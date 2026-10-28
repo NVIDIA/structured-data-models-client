@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
-from test_t42_arrow_decimal_frames import raw_series
+from test_t42_arrow_decimal_frames import _decimal_error_graph, raw_series
 from test_t42_frames import PATHS, projection
 
 from sdm_client import Schema
@@ -51,6 +51,7 @@ def replaced(monkeypatch, bits, scale, variant, *, core):
         else list(range(100))
     )
     changed = False
+    events = []
     monkeypatch.setenv('SDM_CORE_ROUTES', PATHS if core else '')
     with warnings.catch_warnings(record=True) as notices:
         warnings.simplefilter('always')
@@ -58,6 +59,7 @@ def replaced(monkeypatch, bits, scale, variant, *, core):
 
         def mutate(message, *args, **kwargs):
             nonlocal changed
+            events.append('warning')
             if not changed:
                 assert 'have no value for it' in str(message)
                 changed = True
@@ -87,6 +89,7 @@ def replaced(monkeypatch, bits, scale, variant, *, core):
                     )
                 else:
                     frame[name] = raw_series(bits, 3, scale, values)
+                events.append('mutation-complete')
             show(message, *args, **kwargs)
 
         warnings.showwarning = mutate
@@ -97,14 +100,30 @@ def replaced(monkeypatch, bits, scale, variant, *, core):
             schema = Schema.from_data(frames)
         except Exception as error:
             outcome = ('error', type(error), str(error))
+            error_graph = _decimal_error_graph(error)
+            events.append('constructor-error')
             native_trace = [
                 item.name for item in traceback.extract_tb(error.__traceback__)
             ]
         else:
             outcome = ('ok', projection(schema))
+            error_graph = None
+            events.append('constructor-complete')
             native_trace = []
     assert changed
-    return outcome, [str(item.message) for item in notices], native_trace
+    return (
+        outcome,
+        [str(item.message) for item in notices],
+        native_trace,
+        {
+            'error_graph': error_graph,
+            'warning_categories': [
+                f'{item.category.__module__}.{item.category.__qualname__}'
+                for item in notices
+            ],
+            'events': events,
+        },
+    )
 
 
 @pytest.mark.parametrize('bits', WIDTHS)
