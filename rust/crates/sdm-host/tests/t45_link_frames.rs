@@ -685,7 +685,17 @@ fn constructed_key_facts_and_native_null_admission_are_closed_host_products() {
         } else {
             json!({"type":kind})
         };
-        json!({"name":name,"declared":null,"values":{"storage":"typed","physical":physical}})
+        let values = json!({"storage":"typed","physical":physical});
+        let mut constructor = sdm_host::frame_constructors::native_column(
+            "buys".into(), name.into(), &serde_json::to_vec(&values).unwrap(), b"null",
+        ).unwrap();
+        if constructor.distinct_sample() {
+            assert!(!constructor.distinct_count(2).unwrap());
+        }
+        let meaning: Value = serde_json::from_slice(
+            &sdm_host::frame_constructors::native_column_bytes(&constructor).unwrap()
+        ).unwrap();
+        json!({"name":name,"declared":null,"values":values,"meaning":meaning})
     })
     .collect::<Vec<_>>();
     let PreparedFrameValue::TableMeaning(typed) = stages

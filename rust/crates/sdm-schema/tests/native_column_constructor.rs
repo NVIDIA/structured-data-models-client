@@ -86,6 +86,9 @@ fn string_binary_and_numeric_share_thresholds_keep_their_own_defaults() {
         if value.separated_sample() {
             value.separator(&[]).unwrap();
         }
+        if value.element_sample() {
+            value.element_count(5).unwrap();
+        }
         assert!(value.distinct_count(20).unwrap());
         value.population_count(rows).unwrap();
         assert_eq!(value.meaning(), Some(expected));
