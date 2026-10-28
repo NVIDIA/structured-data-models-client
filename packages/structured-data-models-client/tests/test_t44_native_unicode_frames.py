@@ -11,12 +11,22 @@ import json
 import struct
 import warnings
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
 import pytest
 import requests
+from test_t42_arrow_decimal_frames import _decimal_error_graph
+from test_t44_native_text_population import (
+    CONTEXT_ANSWERS,
+    HOPS,
+    SOURCE_POSITIONS,
+    TEXT_UNREAD,
+    expected_core,
+    points,
+)
 from test_t44_text_frames import (
     Scripted,
     dt3_no_time_body,
@@ -280,79 +290,188 @@ def test_native_unicode_keeps_full_inspection_wire_and_result_meaning(
             ]
 
 
+def _observe_text_conversion(monkeypatch, *, core_route, case):
+    """Observe the existing public journey on one actual native profile."""
+    with monkeypatch.context() as route:
+        core.__wrapped__(SimpleNamespace(param=core_route), route)
+        frames = shop('python')
+        frames['orders']['ordered_at'] = pd.date_range(
+            '2024-01-01', periods=64
+        ).as_unit('ns')
+        invalid = '\ud800' if case == 'front' else 'A' * 300 + '\ud800'
+        frames['orders']['note'] = text(
+            ['valid'] * 48 + [invalid] * 16, 'python'
+        )
+        options = dict(
+            indices=[7, 8],
+            num_context_samples=3,
+            num_neighbors=[3],
+            num_hops=1,
+            random_seed=7,
+        )
+        events, conversions, switched = [], [], []
+        sampled = False
+        original_astype = pd.Series.astype
+
+        def question():
+            schema = Schema.from_data(
+                frames,
+                primary_keys={'users': 'user_id', 'orders': 'order_id'},
+                time_columns={'orders': 'ordered_at'},
+            )
+            schema['orders']['note'].stype = 'text'
+            return PredictiveQuery(
+                'PREDICT users.age FOR EACH users.user_id', schema
+            )
+
+        def observed_astype(series, dtype, *args, **kwargs):
+            item = None
+            if series.name == 'note' and dtype is str:
+                item = {
+                    'input': points(series),
+                    'index': series.index.tolist(),
+                    'sampled': sampled,
+                    'dtype': str(series.dtype),
+                    'storage': getattr(series.dtype, 'storage', None),
+                    'infer_string': pd.options.future.infer_string,
+                    'option_storage': pd.options.mode.string_storage,
+                }
+                conversions.append(item)
+                events.append('astype-str-enter')
+            try:
+                result = original_astype(series, dtype, *args, **kwargs)
+            except Exception as error:
+                if item is not None:
+                    item.update(
+                        outcome='error', error=_decimal_error_graph(error)
+                    )
+                    events.append('astype-str-error')
+                raise
+            if item is not None:
+                item.update(
+                    outcome='success',
+                    result=points(result),
+                    result_dtype=str(result.dtype),
+                    result_storage=getattr(result.dtype, 'storage', None),
+                )
+                events.append('astype-str-exit')
+            return result
+
+        with (
+            pd.option_context(
+                'future.infer_string', False, 'mode.string_storage', 'python'
+            ),
+            warnings.catch_warnings(record=True) as caught,
+        ):
+            warnings.simplefilter('always')
+            query = question()
+            events.extend(['schema-ready', 'query-ready'])
+            original_show = warnings.showwarning
+
+            def switch_at_hops(
+                message, category, filename, lineno, file=None, line=None
+            ):
+                nonlocal sampled
+                events.append('warning')
+                if str(message) == (
+                    '[HOPS_IGNORED] ' + HOPS if core_route else HOPS
+                ):
+                    assert pd.options.future.infer_string is False
+                    assert pd.options.mode.string_storage == 'python'
+                    pd.options.future.infer_string = True
+                    pd.options.mode.string_storage = 'pyarrow'
+                    sampled = True
+                    switched.append(True)
+                    events.append('hops-option-switch')
+                original_show(
+                    message, category, filename, lineno, file=file, line=line
+                )
+
+            with (
+                patch.object(warnings, 'showwarning', switch_at_hops),
+                patch.object(pd.Series, 'astype', observed_astype),
+            ):
+                try:
+                    request = query.materialize(**options)
+                except StructuredDataError as error:
+                    observed = {
+                        'outcome': 'error',
+                        'error': _decimal_error_graph(error),
+                        'details': copy.deepcopy(error.details),
+                    }
+                    events.append('materialize-error')
+                else:
+                    observed = {
+                        'outcome': 'success',
+                        'payloads': copy.deepcopy(request.payloads),
+                        'context_rows': request.context_rows,
+                        'predict_rows': request.predict_rows,
+                        'nothing_to_score': request.nothing_to_score,
+                    }
+                    events.append('materialize-complete')
+            observed.update(
+                warnings=[
+                    {
+                        'type': type(item.message).__name__,
+                        'category': item.category.__module__
+                        + '.'
+                        + item.category.__qualname__,
+                        'message': str(item.message),
+                    }
+                    for item in caught
+                ],
+                events=events,
+                conversions=conversions,
+                switched=switched,
+                options_after={
+                    'infer_string': pd.options.future.infer_string,
+                    'storage': pd.options.mode.string_storage,
+                },
+            )
+            if core_route:
+                checkpoint = query._relational_materializer._core_sampler_state[
+                    'held'
+                ]['frame_checkpoint']
+                observed['neighbors'] = json.loads(checkpoint['metadata'])[
+                    'neighbors'
+                ]
+                # Same immutable data and graph walk with ordinary full-root
+                # native conversion, as in the original failure control.
+                with (
+                    pd.option_context(
+                        'future.infer_string',
+                        False,
+                        'mode.string_storage',
+                        'python',
+                    ),
+                    warnings.catch_warnings(),
+                ):
+                    warnings.simplefilter('ignore')
+                    control = question()
+                    control.materialize(**options)
+                checkpoint = (
+                    control._relational_materializer._core_sampler_state[
+                        'held'
+                    ]['frame_checkpoint']
+                )
+                observed['control_neighbors'] = json.loads(
+                    checkpoint['metadata']
+                )['neighbors']
+        return observed
+
+
+@pytest.mark.parametrize('core_route', [False, True], ids=['original', 'core'])
 @pytest.mark.parametrize('case', ['front', 'beyond-cap'])
 def test_native_text_conversion_precedes_character_cap_after_sampling(
-    core, case
+    monkeypatch, core_route, case
 ):
     recorded = json.loads(
         Path(__file__)
         .with_name('t44_native_text_conversion_failures_reference.json')
         .read_text()
     )['records'][case]
-    invalid = '\ud800' if case == 'front' else 'A' * 300 + '\ud800'
-    frames = shop('python')
-    frames['orders']['ordered_at'] = pd.date_range(
-        '2024-01-01', periods=64
-    ).as_unit('ns')
-    values = ['valid'] * 48 + [invalid] * 16
-    frames['orders']['note'] = text(values, 'python')
-    options = dict(
-        indices=[7, 8],
-        num_context_samples=3,
-        num_neighbors=[3],
-        num_hops=1,
-        random_seed=7,
-    )
-    notices = recorded['warnings']
-    if core:
-        notices = p3e2_warning_codes(notices)
-    switched = []
-    original_show = warnings.showwarning
-
-    def switch_at_hops(
-        message, category, filename, lineno, file=None, line=None
-    ):
-        if str(message) == notices[0]['message']:
-            assert pd.options.future.infer_string is False
-            assert pd.options.mode.string_storage == 'python'
-            pd.options.future.infer_string = True
-            pd.options.mode.string_storage = 'pyarrow'
-            switched.append(str(message))
-        original_show(message, category, filename, lineno, file=file, line=line)
-
-    def question():
-        schema = Schema.from_data(
-            frames,
-            primary_keys={'users': 'user_id', 'orders': 'order_id'},
-            time_columns={'orders': 'ordered_at'},
-        )
-        schema['orders']['note'].stype = 'text'
-        return PredictiveQuery(
-            'PREDICT users.age FOR EACH users.user_id', schema
-        )
-
-    with (
-        pd.option_context(
-            'future.infer_string', False, 'mode.string_storage', 'python'
-        ),
-        warnings.catch_warnings(record=True) as caught,
-    ):
-        warnings.simplefilter('always')
-        query = question()
-        with patch.object(warnings, 'showwarning', switch_at_hops):
-            with pytest.raises(StructuredDataError) as failure:
-                query.materialize(**options)
-    assert {
-        'stage': 'materialize',
-        'type': type(failure.value).__name__,
-        'code': failure.value.code,
-        'message': str(failure.value),
-    } == recorded['error']
-    assert switched == [notices[0]['message']]
-    assert [
-        {'type': type(item.message).__name__, 'message': str(item.message)}
-        for item in caught
-    ] == notices
+    # The historical producer's failure and schedule remain pinned evidence.
+    # The same native operation can succeed on another installed profile.
     assert not recorded['sent']
     assert [event['event'] for event in recorded['trace']] == [
         'schema-ready',
@@ -365,29 +484,112 @@ def test_native_text_conversion_precedes_character_cap_after_sampling(
         'astype-str-enter',
         'normalize-error',
     ]
-    if core:
-        # A successful full-root conversion over the same immutable data has
-        # exactly the same graph walk. This compares real continuing state,
-        # independently of the producer's unrelated NumPy global state.
-        failed = query._relational_materializer._core_sampler_state['held'][
-            'frame_checkpoint'
-        ]
-        after_failure = json.loads(failed['metadata'])['neighbors']
-        with (
-            pd.option_context(
-                'future.infer_string', False, 'mode.string_storage', 'python'
-            ),
-            warnings.catch_warnings(),
-        ):
-            warnings.simplefilter('ignore')
-            control = question()
-            control.materialize(**options)
-        checkpoint = control._relational_materializer._core_sampler_state[
-            'held'
-        ]['frame_checkpoint']
-        assert after_failure == json.loads(checkpoint['metadata'])['neighbors']
+    original = _observe_text_conversion(
+        monkeypatch, core_route=False, case=case
+    )
+    actual = (
+        _observe_text_conversion(monkeypatch, core_route=True, case=case)
+        if core_route
+        else original
+    )
+    if core_route:
+        actual = copy.deepcopy(actual)
+        neighbors = actual.pop('neighbors')
+        assert neighbors == actual.pop('control_neighbors')
         initial = np.random.RandomState(123).get_state()
-        assert after_failure != {
+        assert neighbors != {
             'words': initial[1].tolist(),
             'position': int(initial[2]),
         }
+        assert actual == expected_core(original)
+    assert original['switched'] == [True]
+    assert original['options_after'] == {
+        'infer_string': True,
+        'storage': 'pyarrow',
+    }
+    conversions = original['conversions']
+    assert [len(item['input']) for item in conversions] == [6, 7, 64, 64, 9]
+    assert [item['sampled'] for item in conversions] == [False] * 4 + [True]
+    assert all(item['outcome'] == 'success' for item in conversions[:-1])
+    final = conversions[-1]
+    invalid = '\ud800' if case == 'front' else 'A' * 300 + '\ud800'
+    assert final['input'] == [
+        list(map(ord, 'valid' if source < 48 else invalid))
+        for source in SOURCE_POSITIONS
+    ]
+    assert final['index'] == list(range(9))
+    assert (
+        final['infer_string'] is True and final['option_storage'] == 'pyarrow'
+    )
+    assert final['storage'] == 'python'
+    if case == 'beyond-cap':
+        assert any(
+            len(value) == 301 and value[-1] == 0xD800
+            for value in final['input']
+        )
+    prefix = [
+        'schema-ready',
+        'query-ready',
+        *[
+            event
+            for _ in range(4)
+            for event in ('astype-str-enter', 'astype-str-exit')
+        ],
+        'warning',
+        'hops-option-switch',
+        'astype-str-enter',
+    ]
+    if original['outcome'] == 'error':
+        error = original['error']
+        assert {
+            'stage': 'materialize',
+            'type': error['type'].rsplit('.', 1)[-1],
+            'code': error['code'],
+            'message': error['text'],
+        } == recorded['error']
+        assert final['outcome'] == 'error'
+        assert original['events'] == prefix + [
+            'astype-str-error',
+            'materialize-error',
+        ]
+        assert [
+            {'type': item['type'], 'message': item['message']}
+            for item in original['warnings']
+        ] == recorded['warnings']
+    else:
+        assert original['outcome'] == final['outcome'] == 'success'
+        assert final['result'] == final['input']
+        assert original['context_rows'] == 1 and original['predict_rows'] == 2
+        assert original['nothing_to_score'] is False
+        assert original['warnings'] == [
+            {
+                'type': 'UserWarning',
+                'category': 'builtins.UserWarning',
+                'message': HOPS,
+            },
+            {
+                'type': 'SDMWarning',
+                'category': 'sdm_client.core.warnings.SDMWarning',
+                'message': TEXT_UNREAD,
+            },
+            {
+                'type': 'SDMWarning',
+                'category': 'sdm_client.core.warnings.SDMWarning',
+                'message': CONTEXT_ANSWERS,
+            },
+        ]
+        assert original['events'] == prefix + [
+            'astype-str-exit',
+            'warning',
+            'warning',
+            'materialize-complete',
+        ]
+        for side in ('context', 'predict'):
+            orders = original['payloads'][0][side]['related_tables']['orders']
+            note = orders['columns'].index('note')
+            values = [row[note] for row in orders['rows']]
+            assert values == (
+                [['valid']] * 3
+                if side == 'context'
+                else [[invalid[:300].lower()]] * 6
+            )
