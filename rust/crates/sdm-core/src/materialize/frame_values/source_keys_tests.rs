@@ -42,6 +42,15 @@ fn table() -> FrameTableMeaning {
     }
 }
 
+fn reached_metadata(key: FrameKeyMeaning, table: HeldTable) -> FrameTableMetadata {
+    let derived = key.composite.as_ref().filter(|definition| {
+        !key.table.constructed.iter().any(|column| column.name == definition.derived)
+    }).map(|definition| FrameConstructedColumn {
+        name: definition.derived.clone(), dtype: Dtype::String, stype: Stype::Id,
+    });
+    FrameTableMetadata { key, table, derived }
+}
+
 #[test]
 fn native_physical_float_and_enumerated_float_have_different_constructed_meaning() {
     assert_eq!(
@@ -86,7 +95,7 @@ fn later_metadata_preserves_captured_key_cast_dtype_and_current_time_stype() {
     live.primary_key = vec!["b".into()];
     live.columns[1].dtype = "string".into();
     live.columns[1].stype = Stype::Categorical;
-    let resolved = source_keys::metadata(FrameTableMetadata { key, table: live }).unwrap();
+    let resolved = source_keys::metadata(reached_metadata(key, live)).unwrap();
     assert_eq!(resolved.table.primary_key, ["a", "b"]);
     assert_eq!(resolved.table.columns[1].dtype, "int64");
     assert_eq!(resolved.table.columns[1].stype, Stype::Categorical);
@@ -106,15 +115,12 @@ fn preexisting_derived_column_is_admitted_then_current_primary_stype_is_checked(
     });
     let key = source_keys::key(fixed.clone(), fixed.table.primary_key.clone()).unwrap();
     assert!(
-        source_keys::metadata(FrameTableMetadata {
-            key: key.clone(),
-            table: fixed.table.clone()
-        })
+        source_keys::metadata(reached_metadata(key.clone(), fixed.table.clone()))
         .is_ok()
     );
     let mut live = fixed.table;
     live.columns[2].stype = Stype::Numerical;
-    let error = source_keys::metadata(FrameTableMetadata { key, table: live }).unwrap_err();
+    let error = source_keys::metadata(reached_metadata(key, live)).unwrap_err();
     assert_eq!(
         error.fields["native_key_reason"],
         Detail::text("primary_stype")
@@ -134,10 +140,7 @@ fn malformed_definition_or_table_key_companions_never_select_another_meaning() {
             _ => forged.composite.as_mut().unwrap().columns[0].dtype = Dtype::Int64,
         }
         assert!(
-            source_keys::metadata(FrameTableMetadata {
-                key: forged,
-                table: fixed.table.clone()
-            })
+            source_keys::metadata(reached_metadata(forged, fixed.table.clone()))
             .is_err()
         );
     }

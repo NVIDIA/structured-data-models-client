@@ -66,6 +66,7 @@ CASES = (
     'native-link-dtype',
     'native-feature-dtype',
     'native-integer-key-logical-edit',
+    'category-numeric-component',
     'replace',
     'cached',
     'warning-retry',
@@ -122,6 +123,8 @@ def _observe(label):
         data['buys']['item_id'] = data['buys']['item_id'].astype(str)
     if label == 'native-feature-dtype':
         data['users']['age'] = data['users']['age'].astype(str)
+    if label == 'category-numeric-component':
+        data['buys']['part'] = pd.Categorical([0.25, 0.5] * 60)
     if label == 'reversed':
         primary['buys'].reverse()
     if label == 'three':
@@ -371,6 +374,7 @@ def test_complete_native_composite_history_matches_original(monkeypatch, label):
         'fold-copy',
         'fold-copy-mutation',
         'native-integer-key-logical-edit',
+        'category-numeric-component',
         'cached',
         'warning-retry',
     ):

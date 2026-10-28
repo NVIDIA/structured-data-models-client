@@ -988,3 +988,22 @@ fn raw_compound_source_empty_refuses_before_key_folding_and_snapshot_publication
         assert!(decoded(&state)["state"]["frame_checkpoint"].is_null());
     }
 }
+
+#[test]
+fn native_identity_component_type_cannot_create_an_alternate_source_identity() {
+    let mut input = inputs("composite-history", false);
+    input.insert(AttachmentId(11), arrow(vec![("identity", Arc::new(arrow_array::StringArray::from(
+        (0..120).map(|row| format!("observed-{row}")).collect::<Vec<_>>()
+    )))], false));
+    let Attachment::Bytes(manifest) = input.get_mut(&AttachmentId(7)).unwrap() else { panic!("manifest") };
+    let mut value: Value = serde_json::from_slice(manifest).unwrap();
+    value["row_identities"] = json!([{
+        "definition":{"table":"buys","source":{"source":["buys"]},"columns":[{"name":"buy_id","dtype":"int"},{"name":"part","dtype":"string"}],"derived":"__kumo_key_6275795f6964_70617274","codec":"escaped_text_v1"},
+        "values":{"values":11,"encoding":"utf8"}
+    }]);
+    *manifest = serde_json::to_vec(&value).unwrap();
+    let start = message(json!({"op":"materialize","provider":{"provider":"frames","manifest":7},"schema":1,"query":2,"indices":3,"seed":"0x7","values":5,"options":[],"anchor_time":{"t":"ts","unit":"ns","v":"1677628800000000000"}}));
+    let run = HostRun::start(&sdm_host::default_root(), &start, input).unwrap();
+    let error = compound_terminal(&run).expect_err("a contradictory allowed component type is not a cache alias");
+    assert_eq!(decoded(&error)["error"]["code"], "INVALID_MESSAGE");
+}
