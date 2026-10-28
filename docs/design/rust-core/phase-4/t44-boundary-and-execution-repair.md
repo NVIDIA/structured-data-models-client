@@ -362,3 +362,16 @@ For the reconstructed causeless `INVALID_REQUEST` semantic error at that selecte
 Actual native observation or warning-handler failures and selected explicit causes retain their existing paths and objects.
 Do not alter global provider privacy, inherit the choice into nested calls, add a callback or registry, or change any core decision, wire shape or supported family.
 Public and direct-presenter consumers precede implementation and retain the real traceback resource-release regression.
+
+
+## Executed typed-owner and allocation consumer closure
+
+R30 passes the preliminary compiler, strict Clippy, public and selected binding gates, then the normal unscoped handoff passes whole quality, client and tooling groups before exposing missing type-stub declarations for seven existing frame owners.
+Declare their actual methods, immutable ownership and complete input/output attachment alternatives without adding runtime APIs or widening annotations to `Any`.
+The remaining approved Rust consumers expose three invalid fixtures and one unnecessary single-column concatenation in a retained-allocation observation.
+Use canonical native constructed types and a UTC host clock in those fixtures, and choose a valid local leap-year time anchor while retaining its adjacent earlier-anchor refusal.
+Do not weaken the complete-column parsing or context-before-data policy.
+Keep the allocation assertions and make a valid single-batch, single-column input with identical schema reuse its original array owner, avoiding a real complete-task prediction copy.
+Zero-batch, multiple-batch and mismatched/invalid-schema inputs retain the existing concatenation and validation path.
+Add those boundary consumers and direct retained backing-owner assertions before the narrow helper implementation.
+The shared `one_batch` helper, supported families, wire shapes, native callbacks and fixture expectations remain unchanged.

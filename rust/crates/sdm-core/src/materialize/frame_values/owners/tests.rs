@@ -176,6 +176,7 @@ fn repeated_small_batches_retain_the_original_task_and_arrow_allocations() {
     let metadata = bound.value.clone();
     let rows = Arc::clone(&bound.rows);
     let predicted = one_column(&bound.predicted).unwrap();
+    let backing = Arc::clone(bound.predicted.batches[0].column(0));
     drop(bound);
     // Binding does not read/hash/rebuild the 100,000 prediction rows.
     // Only TaskRows::batch concatenates the one selected prediction and
@@ -187,6 +188,10 @@ fn repeated_small_batches_retain_the_original_task_and_arrow_allocations() {
         let rebound = owner.bind(bound_graph(graph.clone()), rebound).unwrap();
         assert!(Arc::ptr_eq(&rows, &rebound.rows));
         assert!(Arc::ptr_eq(&owner.data.labelled, &rebound.labels.labelled));
+        assert!(Arc::ptr_eq(
+            &backing,
+            rebound.predicted.batches[0].column(0)
+        ));
         assert!(Arc::ptr_eq(
             &predicted,
             &one_column(&rebound.predicted).unwrap()

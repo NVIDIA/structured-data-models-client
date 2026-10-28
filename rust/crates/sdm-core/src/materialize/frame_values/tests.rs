@@ -8,6 +8,57 @@ use super::*;
 use sdm_engine::words::{CasingProfile, UnicodeDataVersion};
 
 #[test]
+fn one_column_keeps_single_batch_owners_and_existing_other_shape_readers() {
+    use arrow_array::{Int64Array, StringArray};
+    use arrow_schema::{DataType, Field, Schema};
+
+    let numbers: ArrayRef = Arc::new(Int64Array::from(vec![None, Some(4), Some(5)]));
+    let text: ArrayRef = Arc::new(StringArray::from(vec![Some("left"), None, Some("right")]));
+    for source in [numbers.slice(1, 2), text.slice(1, 2)] {
+        let rows = RecordBatch::try_from_iter([("value", Arc::clone(&source))]).unwrap();
+        let input = data(rows);
+        let read = one_column(&input).unwrap();
+        assert!(Arc::ptr_eq(&source, &read));
+        assert_eq!(read.offset(), source.offset());
+        assert_eq!(read.null_count(), source.null_count());
+    }
+
+    let first = RecordBatch::try_from_iter([("value", numbers.slice(0, 2))]).unwrap();
+    let last = RecordBatch::try_from_iter([("value", numbers.slice(2, 1))]).unwrap();
+    let schema = first.schema();
+    let read = one_column(&ArrowData::new(Arc::clone(&schema), vec![first, last])).unwrap();
+    assert_eq!(read.to_data(), numbers.to_data());
+    let empty = one_column(&ArrowData::new(schema, vec![])).unwrap();
+    assert_eq!(empty.len(), 0);
+    assert_eq!(empty.data_type(), &DataType::Int64);
+
+    let rows = RecordBatch::try_from_iter([("value", Arc::clone(&numbers))]).unwrap();
+    let renamed = Arc::new(Schema::new(vec![Field::new(
+        "renamed",
+        DataType::Int64,
+        true,
+    )]));
+    let read = one_column(&ArrowData::new(renamed, vec![rows.clone()])).unwrap();
+    assert_eq!(read.to_data(), numbers.to_data());
+    let wrong = Arc::new(Schema::new(vec![Field::new("value", DataType::Utf8, true)]));
+    assert_eq!(
+        one_column(&ArrowData::new(wrong, vec![rows]))
+            .unwrap_err()
+            .code,
+        sdm_contract::ErrorCode::InternalError
+    );
+    for rows in [
+        RecordBatch::new_empty(Arc::new(Schema::empty())),
+        RecordBatch::try_from_iter([("one", Arc::clone(&numbers)), ("two", numbers)]).unwrap(),
+    ] {
+        assert_eq!(
+            one_column(&data(rows)).unwrap_err().sentence,
+            Sentence::InvalidMessage
+        );
+    }
+}
+
+#[test]
 fn reached_frame_failures_keep_result_storage_small() {
     let error = FrameStageError::from(protocol("frame failure"));
     assert!(std::mem::size_of_val(&error) <= 32);
