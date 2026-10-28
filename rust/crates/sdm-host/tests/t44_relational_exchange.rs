@@ -184,6 +184,31 @@ fn exchange_native_prediction(
     nested_prediction: Option<&Value>,
     native_prediction: Option<&sdm_contract::scalar::native_value::NativeValue>,
 ) -> (CallPreparation, OwnedPart) {
+    exchange_native_rows(
+        payload,
+        child,
+        classification,
+        nested_prediction,
+        native_prediction,
+        NativeRows::default(),
+    )
+}
+
+#[derive(Default)]
+struct NativeRows<'a> {
+    raw: Option<&'a [Value; 2]>,
+    converted: Option<&'a [sdm_contract::scalar::native_value::NativeValue; 2]>,
+    equal_probabilities: bool,
+}
+
+fn exchange_native_rows(
+    payload: &Value,
+    child: usize,
+    classification: bool,
+    nested_prediction: Option<&Value>,
+    native_prediction: Option<&sdm_contract::scalar::native_value::NativeValue>,
+    native_rows: NativeRows<'_>,
+) -> (CallPreparation, OwnedPart) {
     let kind = payload["task"]["kind"].as_str().unwrap();
     let bound = bound(kind);
     let request_id = format!("host-call-{child}");
@@ -224,8 +249,11 @@ fn exchange_native_prediction(
             if let Some(prediction) = nested_prediction {
                 answer["prediction"] = prediction.clone();
             }
+            if let Some(values) = native_rows.raw {
+                answer["prediction"] = values[row].clone();
+            }
             if classification {
-                let positive = [[0.8, 0.2], [0.6, 0.9]][child][row];
+                let positive = if native_rows.equal_probabilities { 0.5 } else { [[0.8, 0.2], [0.6, 0.9]][child][row] };
                 answer["probabilities"] = json!({"False":1.0-positive,"True":positive});
             }
             answer
@@ -340,11 +368,15 @@ fn exchange_native_prediction(
         .iter()
         .map(|row| RelationalTargetRow {
             ordinal: row.ordinal,
-            prediction: native_prediction.unwrap_or(&row.prediction).clone(),
+            prediction: native_rows.converted.map_or_else(
+                || native_prediction.unwrap_or(&row.prediction).clone(),
+                |values| values[row.row_index.parse::<usize>().unwrap()].clone(),
+            ),
             probabilities: row.probabilities.as_ref().map(|values| {
                 values
                     .iter()
-                    .map(|(name, probability)| {
+                    .enumerate()
+                    .map(|(ordinal, (name, probability))| {
                         use sdm_contract::scalar::native_value::NativeValue;
                         let value = match (classification, dtype, name.as_str()) {
                             (true, "bool", "False") => NativeValue::Boolean { value: false },
@@ -354,6 +386,7 @@ fn exchange_native_prediction(
                             },
                         };
                         RelationalTargetProbability {
+                            ordinal,
                             value,
                             name: name.clone(),
                             probability: probability.clone(),
@@ -454,6 +487,196 @@ fn complete_and_later_merge_apply_gathered_grammar_to_original_class_values() {
             panic!("changed target bindings must refuse")
         };
         assert_eq!(error.sentence, sdm_contract::Sentence::InvalidMessage);
+    }
+}
+
+#[test]
+fn complete_and_retained_mixed_class_results_keep_the_primary_typed_columns() {
+    use arrow_array::Array;
+    use arrow_schema::DataType;
+    use sdm_contract::scalar::native_value::NativeValue;
+    let fixture: Value = serde_json::from_str(include_str!("../../../../packages/structured-data-models-client/tests/t44_mutable_prediction_reference.json")).unwrap();
+    let text = |value: &str| NativeValue::Unicode {
+        points: value.chars().map(u32::from).collect(),
+    };
+    let integer = |value: &str| NativeValue::Integer {
+        digits: value.into(),
+    };
+    let float = |value: f64| NativeValue::Float {
+        bits: value.to_be_bytes(),
+    };
+    for (dtype, raw, converted, physical, expected) in [
+        (
+            "bool",
+            [json!("maybe"), json!(true)],
+            [text("maybe"), NativeValue::Boolean { value: true }],
+            DataType::Boolean,
+            vec![None, Some("true")],
+        ),
+        (
+            "int64",
+            [json!("1_0"), json!("10")],
+            [integer("10"), integer("10")],
+            DataType::Int64,
+            vec![None, Some("10")],
+        ),
+        (
+            "float64",
+            [json!("1_0.5"), json!("2.5")],
+            [float(10.5), float(2.5)],
+            DataType::Float64,
+            vec![None, Some("2.5")],
+        ),
+        (
+            "string",
+            [json!(1), json!("two")],
+            [integer("1"), text("two")],
+            DataType::Utf8,
+            vec![None, Some("two")],
+        ),
+        (
+            "bool",
+            [json!(2), json!(1.0)],
+            [integer("2"), float(1.0)],
+            DataType::Float64,
+            vec![Some("2"), Some("1")],
+        ),
+    ] {
+        let mut payload = fixture["cases"]["r2/control"]["wire"][0].clone();
+        payload["task"]["target"]["dtype"] = json!(dtype);
+        let (bound, owned) = exchange_native_rows(
+            &payload,
+            0,
+            true,
+            None,
+            None,
+            NativeRows {
+                raw: Some(&raw),
+                converted: Some(&converted),
+                equal_probabilities: true,
+            },
+        );
+        let mut attached = Attachments::new();
+        let part = owned.attach(&mut attached);
+        let (result, rows) = finish(
+            bound.clone(),
+            RelationalAggregation::Calls {
+                parts: vec![part],
+                counted: vec![Some(2)],
+                known_empty: false,
+            },
+            attached,
+        );
+        assert_eq!(
+            result
+                .lineage
+                .iter()
+                .map(|row| row.source_row)
+                .collect::<Vec<_>>(),
+            [Some(1), Some(0)]
+        );
+        let table = &rows.batches[0];
+        assert_eq!(
+            table
+                .schema()
+                .fields()
+                .iter()
+                .map(|field| field.name().as_str())
+                .collect::<Vec<_>>(),
+            [
+                "row_index",
+                "id",
+                "prediction",
+                "prediction_as_answered",
+                "probabilities",
+                "answer_index"
+            ]
+        );
+        let values = table.column_by_name("prediction").unwrap();
+        assert_eq!(values.data_type(), &physical);
+        let actual = (0..2)
+            .map(|at| {
+                if values.is_null(at) {
+                    return None;
+                }
+                Some(match physical {
+                    DataType::Boolean => values.as_boolean().value(at).to_string(),
+                    DataType::Int64 => values.as_primitive::<Int64Type>().value(at).to_string(),
+                    DataType::Float64 => values.as_primitive::<Float64Type>().value(at).to_string(),
+                    DataType::Utf8 => values.as_string::<i32>().value(at).into(),
+                    _ => panic!("primary type"),
+                })
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            actual,
+            expected
+                .into_iter()
+                .map(|value| value.map(str::to_owned))
+                .collect::<Vec<_>>(),
+            "{dtype}"
+        );
+        let fallback = table
+            .column_by_name("prediction_as_answered")
+            .unwrap()
+            .as_string::<i32>();
+        for at in 0..2 {
+            let actual: Value = serde_json::from_str(fallback.value(at)).unwrap();
+            let expected = if values.is_null(at) {
+                raw[at].clone()
+            } else {
+                match &converted[at] {
+                    NativeValue::Boolean { value } => json!(value),
+                    NativeValue::Integer { digits } => serde_json::from_str(digits).unwrap(),
+                    NativeValue::Float { bits } => json!(f64::from_be_bytes(*bits)),
+                    NativeValue::Unicode { points } => json!(
+                        points
+                            .iter()
+                            .map(|&point| char::from_u32(point).unwrap())
+                            .collect::<String>()
+                    ),
+                    _ => panic!("fixture scalar"),
+                }
+            };
+            assert_eq!(actual, expected, "{dtype} fallback {at}");
+        }
+        // Complete already accepted these equal-probability entries. Later
+        // retained merge must reject a swap, duplicate and omission too.
+        for mode in 0..3 {
+            let mut changed = owned.clone();
+            let mut converted: Vec<RelationalTargetRow> =
+                serde_json::from_slice(&changed.buffers[3]).unwrap();
+            let entries = converted[0].probabilities.as_mut().unwrap();
+            match mode {
+                0 => entries.reverse(),
+                1 => entries[1] = entries[0].clone(),
+                _ => {
+                    entries.pop();
+                }
+            }
+            changed.buffers[3] = serde_json::to_vec(&converted).unwrap();
+            let mut attached = Attachments::new();
+            let part = changed.attach(&mut attached);
+            let run = start(
+                Preparation::FinishRelationalResponse {
+                    input: RelationalResultInput {
+                        bound: bound.clone(),
+                        aggregation: RelationalAggregation::Calls {
+                            parts: vec![part],
+                            counted: vec![Some(2)],
+                            known_empty: false,
+                        },
+                        report_absent: true,
+                    },
+                },
+                attached,
+            );
+            let error = run.next().unwrap_err();
+            let ControlMessage::Error { error } = sdm_host::read(&error).unwrap() else {
+                panic!("retained malformed entries")
+            };
+            assert_eq!(error.sentence, sdm_contract::Sentence::InvalidMessage);
+        }
     }
 }
 
