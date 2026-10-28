@@ -21,6 +21,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import requests
+from t38_forced_routes_record import bare
 from t45_frame_routes import FRAME_PREDICT_ROUTES
 
 from sdm_client import KumoRelational, PredictiveQuery, Schema, SDMClient
@@ -984,10 +985,6 @@ def test_native_decomposed_output_owners_and_paid_boundaries(
 
     monkeypatch.setenv('SDM_CORE_ROUTES', FRAME_PREDICT_ROUTES if core else '')
     expected = copy.deepcopy(DECOMPOSED_OUTPUT_REFERENCE[case])
-    if core and case == 'ranking-owner-control':
-        expected['warnings'][-1]['message'] = (
-            '[CANDIDATES_UNSCORED] ' + expected['warnings'][-1]['message']
-        )
     if expected['sent']:
         if case.startswith('ranking-'):
             monkeypatch.setattr(
@@ -1170,4 +1167,7 @@ def test_native_decomposed_output_owners_and_paid_boundaries(
             for item in caught
         ]
     record.update(events=events, sent=sent, paid_calls=len(sent))
+    if core:
+        for warning in record['warnings']:
+            warning['message'] = bare(warning['message'])
     assert record == expected

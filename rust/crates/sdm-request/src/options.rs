@@ -795,17 +795,22 @@ pub fn rows_per_call(given: &Value) -> Result<Option<u64>, CoreError> {
     if matches!(given, Value::Null) {
         return Ok(None);
     }
-    let Integer {
-        negative,
-        magnitude,
-    } = magnitude("rows_per_call", given)?;
-    match magnitude {
-        _ if negative || magnitude == Some(0) => {
-            Err(invalid(Sentence::RowsPerCall, "rows_per_call", "below_one"))
+    let read = || {
+        let Integer {
+            negative,
+            magnitude,
+        } = magnitude("rows_per_call", given)?;
+        match magnitude {
+            _ if negative || magnitude == Some(0) => {
+                Err(invalid(Sentence::RowsPerCall, "rows_per_call", "below_one"))
+            }
+            Some(n) => Ok(Some(u64::try_from(n).unwrap_or(u64::MAX))),
+            None => Ok(Some(u64::MAX)),
         }
-        Some(n) => Ok(Some(u64::try_from(n).unwrap_or(u64::MAX))),
-        None => Ok(Some(u64::MAX)),
-    }
+    };
+    // This is a caller option, not a source cell. Its JSON form lets each
+    // host present the original provided value only after this refusal.
+    read().map_err(|error| error.with_field("given", given_text(given)))
 }
 
 /// The most rows one model call scores (`predict_rows_max`, the serving
@@ -2186,7 +2191,6 @@ mod tests {
         }
     }
 }
-
 
 #[cfg(test)]
 mod rows_per_call_given_tests {

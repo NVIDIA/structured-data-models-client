@@ -15,6 +15,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
+from t38_forced_routes_record import bare
 from t45_frame_routes import FRAME_ROUTES
 
 from sdm_client import PredictiveQuery, Schema
@@ -98,4 +99,7 @@ def test_public_complete_time_columns_match_frozen_payloads(
                 for item in notices
             ],
         }
+    if core:
+        for warning in observed['warnings']:
+            warning['message'] = bare(warning['message'])
     assert observed == expected

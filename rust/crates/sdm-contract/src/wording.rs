@@ -930,7 +930,7 @@ pub fn template(sentence: Sentence) -> Template {
             said(r#"top_k is {given!S}, and this model ranks between 1 and {limit} candidates"#)
         }
         S::RowsPerCall => said(
-            r#"rows_per_call is not a whole number of at least one, and a call scores a whole number of rows, at least one"#,
+            r#"rows_per_call is {given!G}, and a call scores a whole number of rows, at least one"#,
         ),
         S::MaxPqIterationsNotAWholeNumber => owned(
             r#"max_pq_iterations must be a whole number, got {given!N}"#,
