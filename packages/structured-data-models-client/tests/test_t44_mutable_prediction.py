@@ -14,6 +14,10 @@ from __future__ import annotations
 import copy
 import dataclasses
 import json
+import os
+import subprocess
+import sys
+import textwrap
 import warnings
 from pathlib import Path
 
@@ -696,10 +700,58 @@ MODEL_OUTPUT_REFERENCE = json.loads(
 ]
 
 
-@pytest.mark.parametrize('seed', [0, 1, 2, 3])
+@pytest.mark.parametrize('seed', [0, 1, 8, 12])
 def test_native_model_refusal_keeps_complete_journeys_at_each_hash_seed(seed):
     original, core = _model_output_in_fresh_process(seed, [False, True])
     assert core == original
+
+
+def _model_output_in_fresh_process(seed, cores):
+    """Retain native dictionary probes under an explicit child-only seed."""
+    script = textwrap.dedent(
+        """\
+        import json
+        import runpy
+        import sys
+        from pathlib import Path
+
+        sys.path.insert(0, str(Path(sys.argv[1]).parent))
+        scope = runpy.run_path(sys.argv[1])
+        observed = []
+        for core in json.loads(sys.argv[2]):
+            with scope['pytest'].MonkeyPatch.context() as monkeypatch:
+                if core:
+                    def legacy(*args, **kwargs):
+                        raise AssertionError(
+                            'the core prediction route called legacy '
+                            'SDMClient._prepare'
+                        )
+                    monkeypatch.setattr(
+                        scope['SDMClient'], '_prepare', legacy
+                    )
+                observed.append(
+                    scope['_observe_native_model_and_output_owners'](
+                        monkeypatch, core, 'model-equality-refuses'
+                    )
+                )
+        print(json.dumps(observed))
+        """
+    )
+    done = subprocess.run(
+        [
+            sys.executable,
+            '-c',
+            script,
+            str(Path(__file__).resolve()),
+            json.dumps(cores),
+        ],
+        env={**os.environ, 'PYTHONHASHSEED': str(seed)},
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=120,
+    )
+    return json.loads(done.stdout)
 
 
 @pytest.mark.parametrize('core', [False, True], ids=['original', 'core'])
@@ -707,6 +759,19 @@ def test_native_model_refusal_keeps_complete_journeys_at_each_hash_seed(seed):
 def test_native_model_and_output_owners_keep_complete_public_journeys(
     monkeypatch, core, case
 ):
+    expected = copy.deepcopy(MODEL_OUTPUT_REFERENCE[case])
+    # The frozen native dict probe has one equality visit. A process seed
+    # controls that layout without changing the Name class or its callbacks.
+    if case == 'model-equality-refuses':
+        record = _model_output_in_fresh_process(0, [core])[0]
+    else:
+        record = _observe_native_model_and_output_owners(
+            monkeypatch, core, case
+        )
+    assert record == expected
+
+
+def _observe_native_model_and_output_owners(monkeypatch, core, case):
     from sdm_client.models import Model
 
     monkeypatch.setenv('SDM_CORE_ROUTES', FRAME_PREDICT_ROUTES if core else '')
@@ -868,7 +933,7 @@ def test_native_model_and_output_owners_keep_complete_public_journeys(
             for item in caught
         ]
     record['events'] = events
-    assert record == expected
+    return record
 
 
 MODEL_OUTPUT_SHAPE_REFERENCE = json.loads(
