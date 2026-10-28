@@ -232,3 +232,17 @@ No contract shape, published version, callback or route exception is needed for 
 
 The fixed metadata role guards also preserve native missing-column lookup, time-versus-assigned-key conflict and time-column stype invariants at those same existing setter positions.
 These are native presentation recipes selected from the existing metadata facts, with native KeyError/ValueError causes, not new refusal policies or catch-all error rewrites.
+
+## Approved-candidate execution and remaining source-family feedback
+
+R24 received both independent whole CODE approvals before execution, and its complete workspace compiler passed.
+Strict Clippy stopped on an unused production initializer and helper placement after a test module; the compiler also reported five test-only Option iteration warnings.
+Repair these actual quality failures without suppressions, and retain R24's unchanged approved behavioral diagnostics as a separate evidence identity.
+
+The initial physical shallow copy occurs before the native constructor captures its column names, whereas the later cached reset occurs after that capture.
+A nonkey field removed by the initial copy must be absent from the native constructed table and skipped by later caller metadata assignment.
+A selected key removed there must fail at its existing native key assignment, and an added field belongs to that actual constructed table.
+Remove only the two incorrect subset requirements comparing earlier caller HeldTable column names against the later actual constructed names.
+Keep actual fact/constructed-name uniqueness, declaration/type/meaning checks, selected key/time lookup and support, table/source binding and completed source coherence.
+Do not relax the already corrected frozen-before-reset column list, whose later drop still produces the native lookup error.
+No new shape, native callback, route exception or provider is required.

@@ -68,6 +68,9 @@ CASES = (
     'fold-copy',
     'fold-copy-error',
     'fold-copy-mutation',
+    'initial-copy-drop-feature',
+    'initial-copy-drop-key',
+    'initial-copy-add-feature',
     'native-link-dtype',
     'native-feature-dtype',
     'native-integer-key-logical-edit',
@@ -87,6 +90,7 @@ def _observe(label):
     fold_copies = 0
     native_sample = None
     column_mutation = False
+    initial_copy_changed = False
     mutations = []
     schema = None
 
@@ -218,7 +222,25 @@ def _observe(label):
     original_copy = pd.DataFrame.copy
 
     def copied(frame, *args, **kwargs):
-        nonlocal fold_copies
+        nonlocal fold_copies, initial_copy_changed
+        if (
+            label.startswith('initial-copy-')
+            and stage == 'materialize'
+            and not initial_copy_changed
+            and 'user_id' in frame
+            and 'age' in frame
+            and 'buy_id' not in frame
+        ):
+            initial_copy_changed = True
+            result = original_copy(frame, *args, **kwargs)
+            trace.append(('initial-copy', tuple(frame.columns)))
+            if label.endswith('-drop-feature'):
+                result.drop(columns=['age'], inplace=True)
+            elif label.endswith('-drop-key'):
+                result.drop(columns=['user_id'], inplace=True)
+            else:
+                result['copy_added'] = 7
+            return result
         reached = (
             label.startswith('fold-copy')
             and stage == 'materialize'
@@ -435,6 +457,8 @@ def test_complete_native_composite_history_matches_original(monkeypatch, label):
         'constructor-columns-add',
         'fold-copy',
         'fold-copy-mutation',
+        'initial-copy-drop-feature',
+        'initial-copy-add-feature',
         'native-integer-key-logical-edit',
         'category-numeric-component',
         'category-numeric-feature-text',
