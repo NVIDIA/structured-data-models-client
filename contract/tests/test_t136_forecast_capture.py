@@ -73,7 +73,14 @@ def _module(name: str, path: Path) -> ModuleType:
         assert spec is not None and spec.loader is not None
         module = importlib.util.module_from_spec(spec)
         sys.modules[name] = module
-        spec.loader.exec_module(module)
+        try:
+            spec.loader.exec_module(module)
+        except BaseException:
+            # Optional imports can skip during module setup. A later consumer
+            # must repeat that outcome, not receive an incomplete cached owner.
+            if sys.modules.get(name) is module:
+                del sys.modules[name]
+            raise
     return sys.modules[name]
 
 
