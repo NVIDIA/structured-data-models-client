@@ -42,6 +42,8 @@ Frozen fixture bytes remain unchanged.
 The existing original-client Float32/Float64 boundary campaign has 42 records on Python 3.12 with pandas 3.0.6, NumPy 2.5.3 and Arrow 25.0.1.
 The completed supplemental 42-record original-only campaign uses Python 3.10 with pandas 2.3.3, NumPy 2.2.6 and Arrow 25.0.1.
 That supplement does not establish the older pandas 2.2.3, NumPy 2.1.3 and Arrow 19.0.1 profile.
+The coordinator subsequently completed the same 42-call original-only producer successfully on Python 3.12 with pandas 2.2.3, NumPy 2.1.3 and Arrow 19.0.1, closing that native bit-boundary reference gap.
+It establishes neither candidate parity nor a Python 3.10 minimum-version claim.
 The broad original 144-record constructor receipt and all prior reference fixtures remain immutable.
 Source authoring and formatter writes are the only actions in this prerequisite until the coordinator composes the final candidate and obtains two fresh independent whole CODE approvals.
 The coordinator owns canonical generation, actual compiler/quality checks and both-runtime public and binding execution under the existing resource guard.

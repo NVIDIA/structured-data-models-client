@@ -86,6 +86,71 @@ fn malformed_native_declarations_cannot_bypass_canonical_identity() {
 }
 
 #[test]
+fn fixed_float_declarations_bind_exact_width_without_changing_native_error_rules() {
+    use arrow_array::{Float32Array, Float64Array};
+    use sdm_contract::ColumnType;
+    let owner = super::super::retained_tests::owner();
+    let prepared = owner.prepared();
+    let frames = owner.frames();
+    let mut frames = lock(&frames);
+    for (physical, array) in [
+        (
+            ColumnType::Float32,
+            Arc::new(Float32Array::from(vec![1.0, -0.0])) as ArrayRef,
+        ),
+        (
+            ColumnType::Float64,
+            Arc::new(Float64Array::from(vec![1.0, -0.0])) as ArrayRef,
+        ),
+    ] {
+        let declaration = FramePhysicalDeclaration::Physical {
+            physical: physical.clone(),
+        };
+        assert!(check_declaration(&declaration).is_ok());
+        assert_eq!(declared_export(&declaration), *array.data_type());
+        let batch = RecordBatch::try_from_iter([("id", array)]).unwrap();
+        frames.tables[0].1 = ArrowData::new(batch.schema(), vec![batch]);
+        let native = FrameNativeColumn {
+            name: "id".into(),
+            declared: Some(declaration),
+            logical_text: None,
+            strings: None,
+        };
+        assert!(validate_native(&frames, &prepared.description, &source(native.clone())).is_ok());
+        let mut mismatch = native.clone();
+        mismatch.declared = Some(FramePhysicalDeclaration::Physical {
+            physical: if physical == ColumnType::Float32 {
+                ColumnType::Float64
+            } else {
+                ColumnType::Float32
+            },
+        });
+        assert_eq!(
+            validate_native(&frames, &prepared.description, &source(mismatch))
+                .unwrap_err()
+                .sentence,
+            Sentence::InvalidMessage
+        );
+        let mut logical = native.clone();
+        logical.logical_text = Some(FrameLogicalText {
+            backing: FrameTextBacking::ElementValues,
+            missing: FrameTextMissing::NullScalar,
+        });
+        assert!(validate_native(&frames, &prepared.description, &source(logical)).is_err());
+        let mut encoded = native.clone();
+        encoded.strings = Some(StringEncoding::Utf8);
+        assert!(validate_native(&frames, &prepared.description, &source(encoded)).is_err());
+        let fixed = native_identity("same_export", &source(native.clone())).unwrap();
+        let mut ordinary = native;
+        ordinary.declared = None;
+        assert_ne!(
+            fixed,
+            native_identity("same_export", &source(ordinary)).unwrap()
+        );
+    }
+}
+
+#[test]
 fn large_offsets_are_accepted_for_logical_text_and_refused_only_for_fixed_declaration() {
     use arrow_array::LargeStringArray;
     let owner = super::super::retained_tests::owner();
