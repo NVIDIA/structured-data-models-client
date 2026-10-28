@@ -88,10 +88,16 @@ fn stage(
         .unwrap_or_else(|out| panic!("{:?}", sdm_host::read(&out)));
     let mut warnings = vec![];
     loop {
-        match sdm_host::read(&run.next().unwrap()).unwrap() {
-            ControlMessage::Warnings { warnings: notices } => {
-                warnings.extend(notices.into_iter().map(|n| n.sentence))
-            }
+        let next = run.next().unwrap();
+        if let Some(out) = run.take_warnings().unwrap() {
+            let ControlMessage::Warnings { warnings: notices } = sdm_host::read(&out).unwrap()
+            else {
+                panic!("warning drain must return warnings")
+            };
+            warnings.extend(notices.into_iter().map(|n| n.sentence));
+            assert!(run.take_warnings().unwrap().is_none());
+        }
+        match sdm_host::read(&next).unwrap() {
             ControlMessage::Step(Step::Done {
                 result: OperationResult::InferredFrames(result),
                 ..

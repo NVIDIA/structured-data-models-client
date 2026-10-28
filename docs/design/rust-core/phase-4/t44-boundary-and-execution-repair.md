@@ -398,3 +398,7 @@ These source corrections confer no execution or package acceptance credit.
 The actual R32 complete core library run passes 125 consumers, including retained-allocation identity, and exposes one shared fixture helper that incorrectly imposes the three-column layout on a one-column edge-error consumer.
 Each fixture must supply its complete physical layout explicitly, and the shared native dtype kernel must produce the corresponding canonical constructed facts.
 Keep the one-column Float64-to-Utf8 native-edge refusal and its exact fields, alongside the three-column post-cast meaning and noncanonical-fact refusal, without changing production guards.
+
+The R32 Host time-facts consumer also reaches its intended nomination after the clock repair, exposing an obsolete warning reader.
+Drain the current HostRun warning channel after each reached step, assert one-shot ownership, and retain the exact missing-key notice and complete selected-time assertions.
+Do not move or duplicate production warning emission.
