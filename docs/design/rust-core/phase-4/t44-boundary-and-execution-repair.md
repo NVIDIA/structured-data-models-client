@@ -412,3 +412,12 @@ The temporal conversion spy must forward both existing conversion keywords while
 Replace only the two retired numeric-only object/category startup assertions with complete original/core constructor, warning, input-frame and snapshot comparisons.
 Then replace the three reported list concatenations, two nested conditions and one exact-built-in output-sequence conversion with equivalent expressions that preserve evaluation order and short-circuit native observations.
 The existing style-backlog gate and affected public consumers remain required after normal whole review; this source checkpoint claims no execution or acceptance evidence.
+
+### Preserve gathered structural diagnostics at native presentation
+
+The actual full CI reaches 37 existing public response refusals but loses the established branchable `field` and `reason` details.
+P3E-5 retains these existing details, and P2D-4 omits only the specified request-cell value rather than response structure.
+Use the existing shared response-refusal policy to retain exactly those two public structural fields while keeping the selected native message, cause, handler context and refusal order.
+Private native recipe fields, model names and offending values stay private; direct and provider presentation stay unchanged.
+Retain the existing 33 numeric width and precedence cases and four malformed-mapping cases, and add a core parser-to-error consumer before implementation.
+The recorded original huge-probability failure remains immutable and is compared with only this established core structural-detail addition asserted explicitly.

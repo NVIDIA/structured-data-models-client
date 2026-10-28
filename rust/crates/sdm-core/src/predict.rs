@@ -706,3 +706,59 @@ fn direct_contract_error(_answer: &Value, error: sdm_wire::response::Refused) ->
     }
     selected
 }
+
+#[cfg(test)]
+mod native_contract_tests {
+    use super::*;
+
+    #[test]
+    fn gathered_native_contract_faults_keep_structural_details_and_private_cause_facts_separate() {
+        for (body, field, reason) in [
+            (
+                r#"{"id":"r","model":"kumo-relational","metadata":3,"predictions":[]}"#,
+                "metadata",
+                "not_an_object",
+            ),
+            (
+                r#"{"id":"r","model":"kumo-relational","metadata":{},"predictions":[{"row_index":0,"probabilities":[] }]}"#,
+                "prediction.probabilities",
+                "not_an_object",
+            ),
+            (
+                r#"{"id":"r","model":"kumo-relational","metadata":{},"predictions":[{"row_index":170141183460469231731687303715884105728}]}"#,
+                "prediction.row_index",
+                "out_of_range",
+            ),
+            (
+                r#"{"model":"kumo-relational","metadata":{},"predictions":[]}"#,
+                "id",
+                "missing",
+            ),
+        ] {
+            let answer = json::read_answer(body.as_bytes()).unwrap();
+            let refused = PredictionResponse::read_native_gathered(&answer).unwrap_err();
+            assert_eq!((refused.field, refused.reason), (field, reason));
+            let selected = native_gathered_contract_error(&answer, refused, "kumo-relational");
+            assert_eq!(selected.code, sdm_contract::ErrorCode::InvalidResponse);
+            assert_eq!(
+                selected.public_details.as_deref(),
+                Some(
+                    &[
+                        ("field".to_owned(), Detail::text(field)),
+                        ("reason".to_owned(), Detail::text(reason)),
+                    ]
+                    .into()
+                )
+            );
+            assert_eq!(selected.fields["model"], Detail::text("kumo-relational"));
+            assert_eq!(
+                selected.fields["native_relational_contract"],
+                Detail::Scalar(Scalar::Bool(true))
+            );
+            if field == "metadata" {
+                assert_eq!(selected.fields["native"], Detail::text("dict"));
+                assert!(selected.fields.contains_key("offending"));
+            }
+        }
+    }
+}
