@@ -195,6 +195,37 @@ def test_every_site_has_a_probe() -> None:
     assert done.returncode == 0, done.stdout + done.stderr
 
 
+def test_production_after_test_items_is_discovered_without_test_only_rules(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / 'rust/crates/sdm-core/src'
+    source.mkdir(parents=True)
+    text = (
+        'fn before() { not_yet("before"); }\n'
+        '#[cfg(test)]\nmod external_tests;\n'
+        '#[cfg(test)]\nmod inline_tests {\n'
+        '  fn hidden() { let text = r#"{ }"#; not_yet("hidden"); }\n'
+        '}\n'
+        'fn after() { not_yet("after"); }\n'
+        '#[cfg(test)]\npub(crate) fn test_helper() {\n'
+        '  /* } nested /* { */ comment */ not_yet("test_helper");\n'
+        '}\n'
+        '#[cfg(test)]\nstruct TestOnly { value: usize }\n'
+        'fn last() { not_yet("last"); }\n'
+    )
+    (source / 'lib.rs').write_text(text)
+    (source / 'external_tests.rs').write_text(
+        'fn only_a_test() { not_yet("external_test"); }\n'
+    )
+    found = {site['rule']: site for site in _sites(tmp_path)}
+    assert set(found) == {'before', 'after', 'last'}
+    for rule in found:
+        line = text[: text.index(f'not_yet("{rule}")')].count('\n') + 1
+        assert found[rule]['where'] == (
+            f'rust/crates/sdm-core/src/lib.rs:{line}'
+        )
+
+
 @pytest.mark.tooling
 @pytest.mark.parametrize(
     ('relative', 'code', 'named'),
