@@ -767,9 +767,43 @@ mod native_contract_tests {
                 Detail::Scalar(Scalar::Bool(true))
             );
             if field == "metadata" {
-                assert_eq!(selected.fields["native"], Detail::text("dict"));
+                assert!(!selected.fields.contains_key("native"));
                 assert!(selected.fields.contains_key("offending"));
             }
         }
+    }
+
+    #[test]
+    fn gathered_native_mapping_fault_keeps_the_actual_private_dict_product() {
+        let answer = json::read_answer(
+            br#"{"id":"r","model":"kumo-relational","metadata":{},"predictions":[{"row_index":0,"explanation":3}]}"#,
+        )
+        .unwrap();
+        let refused = PredictionResponse::read_native_gathered(&answer).unwrap_err();
+        assert_eq!(
+            (refused.field, refused.reason),
+            ("prediction.explanation", "not_a_mapping")
+        );
+        assert_eq!(refused.native, Some(sdm_wire::response::NativeFault::Dict));
+        assert_eq!(refused.value, Some(json::read_answer(b"3").unwrap()));
+        let selected = native_gathered_contract_error(&answer, refused, "kumo-relational");
+        assert_eq!(selected.code, sdm_contract::ErrorCode::InvalidResponse);
+        assert_eq!(
+            selected.public_details.as_deref(),
+            Some(
+                &[
+                    ("field".to_owned(), Detail::text("prediction.explanation")),
+                    ("reason".to_owned(), Detail::text("not_a_mapping")),
+                ]
+                .into()
+            )
+        );
+        assert_eq!(selected.fields["model"], Detail::text("kumo-relational"));
+        assert_eq!(
+            selected.fields["native_relational_contract"],
+            Detail::Scalar(Scalar::Bool(true))
+        );
+        assert_eq!(selected.fields["native"], Detail::text("dict"));
+        assert_eq!(selected.fields["offending"], Detail::text("3"));
     }
 }
