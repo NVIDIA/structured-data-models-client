@@ -79,6 +79,7 @@ import subprocess
 import sys
 import warnings
 from collections.abc import Callable, Iterable, Iterator, Mapping
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -882,6 +883,31 @@ class _Guard:
 # --- the core's boundary, for python-core --------------------------------------------
 
 
+@dataclass
+class _CapturedRun:
+    """Attachment state belongs to this actual Run, never the next start."""
+
+    ordinal: int
+    operation: str
+    entry: int | None
+    description: int | None = None
+    state: dict[str, Any] | None = None
+    request_ids: list[str] = field(default_factory=list)
+    skippable: set[str] = field(default_factory=set)
+    call: int | None = None
+    body: dict[str, Any] | None = None
+    bodies: list[dict[str, Any]] = field(default_factory=list)
+    answer: dict[str, Any] | None = None
+    prepared: int | None = None
+    preparation: dict[str, Any] | None = None
+    input_record: dict[str, Any] | None = None
+    call_record: dict[str, Any] | None = None
+    result_record: dict[str, Any] | None = None
+    error: dict[str, str] | None = None
+    error_owner: BaseException | None = None
+    asked: dict[int, dict[str, Any]] = field(default_factory=dict)
+
+
 class _Capture:
     r"""What crossed ``sdm_client._native`` during one case: each operation
     started with its inputs, each fetch the core asked for (its request and
@@ -917,7 +943,6 @@ class _Capture:
         #: replied, for ``--record-fetches`` (the replay's recording, T2.3).
         self.answered: list[dict[str, Any]] = []
         self.recording = False
-        self._asked: dict[int, dict[str, Any]] = {}
         self.accepted: bool | None = None
         self.described: dict[str, Any] | None = None
         self.materialized: dict[str, Any] | None = None
@@ -927,15 +952,173 @@ class _Capture:
         #: ``warnings`` control message carries them, in the order given
         #: (T1.23).
         self.warnings: list[dict[str, Any]] = []
-        self._description: int | None = None
-        self._state: dict[str, Any] | None = None
-        self._request_id: str | None = None
-        self._request_ids: list[str] = []
-        self._skippable: set[str] = set()
-        self._call: int | None = None
-        self._body: dict[str, Any] | None = None
-        self._bodies: list[dict[str, Any]] = []
-        self._answer: dict[str, Any] | None = None
+        self._runs: dict[int, _CapturedRun] = {}
+        self._current_run: _CapturedRun | None = None
+        self.predictions: list[dict[str, Any]] = []
+        self._entries: list[int] = []
+        self._presented: list[tuple[BaseException, int]] = []
+
+    def _run(self, owner: _CapturedRun | None) -> _CapturedRun:
+        owner = self._current_run if owner is None else owner
+        if owner is None:
+            raise RunnerFailure('a capture event has no actual Run')
+        return owner
+
+    def enter_prediction(self, model: Any) -> int:
+        ordinal = len(self.predictions)
+        self.predictions.append(
+            {
+                'ordinal': ordinal,
+                'parent': self._entries[-1] if self._entries else None,
+                'argument': {'form': 'exact_string', 'value': model}
+                if type(model) is str
+                else {'form': 'unobserved'},
+                'completion': 'active',
+                'runs': [],
+                'calls': [],
+                'results': [],
+                'final': None,
+            }
+        )
+        self._entries.append(ordinal)
+        return ordinal
+
+    def leave_prediction(
+        self, ordinal: int, error: BaseException | None
+    ) -> None:
+        if not self._entries or self._entries[-1] != ordinal:
+            raise RunnerFailure(
+                'prediction entries did not finish in nesting order'
+            )
+        entry = self.predictions[ordinal]
+        try:
+            entry['completion'] = 'returned' if error is None else 'raised'
+            self.error = None
+            self.predicted = None
+            if error is None and entry['results']:
+                entry['final'] = len(entry['results']) - 1
+                final = entry['results'][entry['final']]
+                if final['metadata'] is None or final['result'] is None:
+                    raise RunnerFailure(
+                        'prediction returned without its actual final result reads'
+                    )
+                self.predicted = self._final_prediction(entry, final)
+            if error is not None:
+                # Context may be incidental recovery; only exact identity or
+                # an explicit cause establishes this selected relationship.
+                selected = error
+                seen: set[int] = set()
+                while selected is not None and id(selected) not in seen:
+                    seen.add(id(selected))
+                    run = next(
+                        (
+                            run
+                            for owner, run in self._presented
+                            if owner is selected and run in entry['runs']
+                        ),
+                        None,
+                    )
+                    if run is None:
+                        run = next(
+                            (
+                                at
+                                for at in entry['runs']
+                                if self._runs[at].error_owner is selected
+                            ),
+                            None,
+                        )
+                    if run is not None:
+                        self.error = self._runs[run].error
+                        entry['failure'] = {
+                            'run': run,
+                            'relation': 'selected'
+                            if selected is error
+                            else 'cause',
+                        }
+                        break
+                    selected = BaseException.__cause__.__get__(selected)
+        finally:
+            self._entries.pop()
+            self._presented = [
+                (owner, run)
+                for owner, run in self._presented
+                if run not in entry['runs']
+            ]
+            for run in entry['runs']:
+                self._runs[run].error_owner = None
+
+    def presented(
+        self, result: BaseException, internal: BaseException | None
+    ) -> None:
+        if internal is None or not self._entries:
+            return
+        for ordinal in self.predictions[self._entries[-1]]['runs']:
+            if self._runs[ordinal].error_owner is internal:
+                self._presented.append((result, ordinal))
+                return
+
+    @staticmethod
+    def _parts(value: dict[str, Any]) -> list[dict[str, Any]]:
+        aggregation = value['input']['aggregation']
+        if aggregation['kind'] == 'calls':
+            return aggregation['parts']
+        if aggregation['kind'] in ('steps', 'ranking'):
+            return [
+                part
+                for child in aggregation['children']
+                for part in child['parts']
+            ]
+        raise RunnerFailure(
+            'an unknown prediction result aggregation was observed'
+        )
+
+    def _selected_calls(
+        self, entry: dict[str, Any], value: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        calls = {call['request_id']: call for call in entry['calls']}
+        selected = []
+        seen = set()
+        for part in self._parts(value):
+            scope = part['data']['scope']
+            request_id = scope['call_request_id']
+            call = calls.get(request_id)
+            if (
+                call is None
+                or request_id in seen
+                or call['scope'] != scope
+                or call['body'] is None
+            ):
+                raise RunnerFailure(
+                    'prediction result names a missing or contradictory completed call'
+                )
+            selected.append(call)
+            seen.add(request_id)
+        if [call['run'] for call in selected] != sorted(
+            call['run'] for call in selected
+        ):
+            raise RunnerFailure(
+                'prediction result changes actual model call order'
+            )
+        return selected
+
+    def _final_prediction(
+        self, entry: dict[str, Any], final: dict[str, Any]
+    ) -> dict[str, Any]:
+        calls = self._selected_calls(entry, final['input'])
+        if len(calls) != len(entry['calls']):
+            raise RunnerFailure(
+                'prediction returned without all actual model calls in its final result'
+            )
+        bodies = [call['body'] for call in calls]
+        predicted = final['data']['predicted']
+        return {
+            'body': bodies[-1] if bodies else None,
+            **({'calls': bodies} if len(bodies) > 1 else {}),
+            'model': predicted['model'],
+            'request_id': predicted['request_id'],
+            'metadata': final['metadata'],
+            'result': final['result'],
+        }
 
     def warned(self, message: bytes) -> None:
         for warning in json.loads(message)['warnings']:
@@ -945,15 +1128,56 @@ class _Capture:
 
     def started(self, message: bytes, attachments: Any) -> None:
         operation = json.loads(message)['operation']
+        ordinal = len(self.operations)
+        entry = self._entries[-1] if self._entries else None
+        owner = _CapturedRun(ordinal, operation['op'], entry)
+        self._runs[ordinal] = owner
+        self._current_run = owner
         self.operations.append(operation['op'])
-        self._description = None
-        self._state = None
-        self._call = None
-        self._answer = None
-        self._bodies = []
+        if entry is not None:
+            self.predictions[entry]['runs'].append(ordinal)
+        if operation['op'] == 'prepare_request':
+            value = json.loads(attachments[operation['input']])
+            owner.preparation = value
+            owner.input_record = {
+                'op': 'prepare_request',
+                'run': ordinal,
+                'entry': entry,
+                'input': value,
+                'result': None,
+                'error': None,
+            }
+            self.inputs.append(owner.input_record)
+            if value['stage'] == 'call_relational':
+                if entry is None:
+                    raise RunnerFailure(
+                        'a gathered model call has no observed prediction entry'
+                    )
+                call = value['input']
+                request_id = call['request_id']
+                if any(
+                    item['request_id'] == request_id
+                    for item in self.predictions[entry]['calls']
+                ):
+                    raise RunnerFailure(
+                        'the model call does not carry a unique request id'
+                    )
+                body = attachments[call['body']]
+                if not isinstance(body, bytes):
+                    raise RunnerFailure(
+                        'an actual gathered call input has no encoded bytes'
+                    )
+                owner.call_record = {
+                    'run': ordinal,
+                    'request_id': request_id,
+                    'input_body_sha256': digest(body),
+                    'body': None,
+                    'body_sha256': None,
+                    'scope': None,
+                }
+                self.predictions[entry]['calls'].append(owner.call_record)
         if operation['op'] == 'predict':
             state = operation['state']
-            self._request_id = operation['request_id']
             # The id each call carries: one call per step with rows to
             # score, in step order, each with its own step's id (T1.36 fixes
             # 24 and 27); a step with none makes no call, as in the core.
@@ -974,14 +1198,14 @@ class _Capture:
                     for part in (state.get('ranking') or {}).get('parts', ())
                 ]
             )
-            self._request_ids = [
+            owner.request_ids = [
                 request_id
                 for request_id, payload in steps
                 if not _nothing_to_score(json.loads(attachments[payload]))
             ]
             # A ranking's question whose context holds one answer is asked
             # no call (T2.8): its id may be passed over, in order.
-            self._skippable = (
+            owner.skippable = (
                 {request_id for request_id, _ in steps}
                 if state.get('ranking') is not None
                 else set()
@@ -1065,7 +1289,10 @@ class _Capture:
                 }
             )
 
-    def stepped(self, step: dict[str, Any]) -> None:
+    def stepped(
+        self, step: dict[str, Any], *, run: _CapturedRun | None = None
+    ) -> None:
+        owner = self._run(run)
         if step.get('step') == 'fetch':
             self.fetches.extend(
                 {
@@ -1087,16 +1314,22 @@ class _Capture:
                     purposes.pop() if len(purposes) == 1 else None
                 )
             for asked in step['requests']:
-                self._asked[asked['id']] = {
+                owner.asked[asked['id']] = {
                     'request': asked['request'],
                     'plan': asked['plan'],
                 }
         elif self.driver_log is not None:
             self.driver_log.purpose = None
         if step.get('step') == 'call_model':
-            self._call = step['body']
+            owner.call = step['body']
 
-    def replied(self, message: bytes, attachments: Any) -> None:
+    def replied(
+        self,
+        message: bytes,
+        attachments: Any,
+        *,
+        run: _CapturedRun | None = None,
+    ) -> None:
         r"""A fetch's answer as the host replies with it, kept beside the
         fetch: its rows as an Arrow IPC stream in base64, or the provider's
         error, as the replay's recording holds it (``sdm-testkit``'s
@@ -1106,7 +1339,7 @@ class _Capture:
         reply = json.loads(message)
         if reply.get('message') != 'fetch_reply':
             return
-        asked = self._asked.pop(reply['id'], None)
+        asked = self._run(run).asked.pop(reply['id'], None)
         if asked is None:
             raise RunnerFailure('a fetch replied to that was never asked')
         outcome = reply['outcome']
@@ -1130,57 +1363,158 @@ class _Capture:
             }
         )
 
-    def failed(self, error: Any) -> None:
-        self.error = {'kind': str(error.kind), 'code': str(error.code)}
+    def failed(self, error: Any, *, run: _CapturedRun | None = None) -> None:
+        owner = self._run(run)
+        owner.error = {'kind': str(error.kind), 'code': str(error.code)}
+        owner.error_owner = error
+        if owner.input_record is not None:
+            owner.input_record['error'] = owner.error
+        if owner.entry is None:
+            self.error = owner.error
 
-    def done(self, result: dict[str, Any]) -> None:
+    def done(
+        self, result: dict[str, Any], *, run: _CapturedRun | None = None
+    ) -> None:
+        owner = self._run(run)
+        if result.get('op') == 'prepare_request':
+            owner.prepared = result['value']
         if 'accepted' in result:
             self.accepted = bool(result['accepted'])
         if result.get('op') == 'describe_source':
-            self._description = result['description']
+            owner.description = result['description']
         if result.get('op') == 'materialize':
-            self._state = result['state']
+            owner.state = result['state']
             self.materialized = {'version': result['state']['version']}
         if result.get('op') == 'predict':
-            self._passed_over()
-            if self._request_ids:
+            self._passed_over(owner)
+            if owner.request_ids:
                 raise RunnerFailure(
                     'predict answered without calling the model for a step '
                     'with rows to score'
                 )
-            self._answer = result
+            owner.answer = result
             self.predicted = {
-                'body': self._body,
-                **({'calls': self._bodies} if len(self._bodies) > 1 else {}),
+                'body': owner.body,
+                **({'calls': owner.bodies} if len(owner.bodies) > 1 else {}),
                 'model': result['model'],
                 'request_id': result['request_id'],
                 'metadata': None,
                 'result': None,
             }
 
-    def taken(self, attachment: int, value: Any) -> None:
-        if attachment == self._call and isinstance(value, bytes):
-            self._body = json.loads(
+    def taken(
+        self, attachment: int, value: Any, *, run: _CapturedRun | None = None
+    ) -> None:
+        owner = self._run(run)
+        if attachment == owner.call and isinstance(value, bytes):
+            owner.body = json.loads(
                 value, parse_int=_number, parse_float=_number
             )
-            self._bodies.append(self._body)
-            # The next step with rows to score's id, and no call past them.
-            carried = self._body.get('metadata', {}).get('request_id')
-            self._passed_over(carried)
-            if not self._request_ids or carried != self._request_ids.pop(0):
+            owner.bodies.append(owner.body)
+            carried = owner.body.get('metadata', {}).get('request_id')
+            if owner.call_record is not None:
+                record = owner.call_record
+                if record['body'] is not None:
+                    raise RunnerFailure(
+                        'an actual model call body was taken more than once'
+                    )
+                record['body'] = owner.body
+                record['body_sha256'] = digest(value)
+                if (
+                    carried != record['request_id']
+                    or record['body_sha256'] != record['input_body_sha256']
+                ):
+                    raise RunnerFailure(
+                        'the model call does not carry the request id and bytes it was started with'
+                    )
+            else:
+                self._passed_over(owner, carried)
+            if owner.call_record is None and (
+                not owner.request_ids or carried != owner.request_ids.pop(0)
+            ):
                 raise RunnerFailure(
                     'the model call does not carry the request id predict '
                     'was started with'
                 )
-        answer = self._answer
+        if attachment == owner.prepared and isinstance(value, bytes):
+            prepared = json.loads(value)
+            if owner.input_record is not None:
+                owner.input_record['result'] = prepared
+            stage = (owner.preparation or {}).get('stage')
+            if stage == 'call_relational':
+                record = owner.call_record
+                if (
+                    record is None
+                    or prepared['scope']['call_request_id']
+                    != record['request_id']
+                ):
+                    raise RunnerFailure(
+                        'the response scope does not carry the request id of its actual call'
+                    )
+                record['scope'] = prepared['scope']
+            elif stage == 'finish_relational_response':
+                if owner.entry is None:
+                    raise RunnerFailure(
+                        'a gathered result has no observed prediction entry'
+                    )
+                entry = self.predictions[owner.entry]
+                calls = self._selected_calls(entry, owner.preparation)
+                scopes = {call['request_id']: call['scope'] for call in calls}
+                for lineage in prepared['lineage']:
+                    scope = scopes.get(lineage['call_request_id'])
+                    if (
+                        scope is None
+                        or not 0
+                        <= lineage['answer_ordinal']
+                        < scope['response_rows']
+                    ):
+                        raise RunnerFailure(
+                            'final prediction lineage names an unobserved call or row'
+                        )
+                owner.result_record = {
+                    'run': owner.ordinal,
+                    'input': owner.preparation,
+                    'data': prepared,
+                    'metadata': None,
+                    'result': None,
+                }
+                entry['results'].append(owner.result_record)
+        if owner.result_record is not None:
+            final = owner.result_record
+            predicted = final['data']['predicted']
+            if attachment == predicted['metadata'] and isinstance(value, bytes):
+                final['metadata'] = json.loads(value)
+            if attachment == predicted['result'] and not isinstance(
+                value, bytes
+            ):
+                final['result'] = _result_rows(value)
+                rows = final['result']['rows']
+                names = [
+                    column['name'] for column in final['result']['columns']
+                ]
+                if (
+                    len(rows) != len(final['data']['lineage'])
+                    or 'answer_index' not in names
+                ):
+                    raise RunnerFailure(
+                        'final prediction Arrow rows disagree with their actual lineage'
+                    )
+                at = names.index('answer_index')
+                if sorted(int(row[at]['i64']) for row in rows) != list(
+                    range(len(rows))
+                ):
+                    raise RunnerFailure(
+                        'final prediction Arrow answer indices disagree with lineage'
+                    )
+        answer = owner.answer
         if answer is not None and self.predicted is not None:
             if attachment == answer['metadata'] and isinstance(value, bytes):
                 self.predicted['metadata'] = json.loads(value)
             if attachment == answer['result'] and not isinstance(value, bytes):
                 self.predicted['result'] = _result_rows(value)
-        if attachment == self._description and isinstance(value, bytes):
+        if attachment == owner.description and isinstance(value, bytes):
             self.described = json.loads(value)
-        state = self._state
+        state = owner.state
         if state is None or self.materialized is None:
             return
         if attachment == state['payload'] and isinstance(value, bytes):
@@ -1190,15 +1524,17 @@ class _Capture:
         if attachment == state['query'] and isinstance(value, bytes):
             self.materialized['query'] = json.loads(value)
 
-    def _passed_over(self, carried: str | None = None) -> None:
+    def _passed_over(
+        self, owner: _CapturedRun, carried: str | None = None
+    ) -> None:
         r"""Drops the ids of a ranking's questions asked no call before the
         call carrying ``carried``, or, with none, all that are left."""
         while (
-            self._request_ids
-            and self._request_ids[0] != carried
-            and self._request_ids[0] in self._skippable
+            owner.request_ids
+            and owner.request_ids[0] != carried
+            and owner.request_ids[0] in owner.skippable
         ):
-            self._request_ids.pop(0)
+            owner.request_ids.pop(0)
 
     def core(self) -> dict[str, Any]:
         core: dict[str, Any] = {
@@ -1212,6 +1548,10 @@ class _Capture:
         }
         if self.edits:
             core['edits'] = self.edits
+        if self.predictions or any(
+            item['op'] == 'prepare_request' for item in self.inputs
+        ):
+            core['predictions'] = self.predictions
         return core
 
 
@@ -1434,7 +1774,10 @@ def _float_text(value: float) -> str:
 
 
 class _Handle:
-    def __init__(self, handle: Any, native: Any, capture: _Capture) -> None:
+    def __init__(
+        self, handle: Any, native: Any, capture: _Capture, owner: _CapturedRun
+    ) -> None:
+        self._owner = owner
         self._handle = handle
         self._native = native
         self._capture = capture
@@ -1445,18 +1788,18 @@ class _Handle:
         try:
             control, sent = self._handle.next()
         except self._native.CoreError as error:
-            self._capture.failed(error)
+            self._capture.failed(error, run=self._owner)
             raise
         message = codec.read(control, sent)
         if message.get('message') == 'step':
-            self._capture.stepped(message)
+            self._capture.stepped(message, run=self._owner)
             if message.get('step') == 'done':
-                self._capture.done(message['result'])
+                self._capture.done(message['result'], run=self._owner)
         return control, sent
 
     def take_attachment(self, attachment: int) -> Any:
         value = self._handle.take_attachment(attachment)
-        self._capture.taken(attachment, value)
+        self._capture.taken(attachment, value, run=self._owner)
         return value
 
     def take_warnings(self) -> Any:
@@ -1466,11 +1809,11 @@ class _Handle:
         return taken
 
     def reply(self, message: bytes, attachments: Any) -> None:
-        self._capture.replied(message, attachments)
+        self._capture.replied(message, attachments, run=self._owner)
         try:
             self._handle.reply(message, attachments)
         except self._native.CoreError as error:
-            self._capture.failed(error)
+            self._capture.failed(error, run=self._owner)
             raise
 
     def __getattr__(self, name: str) -> Any:
@@ -1484,12 +1827,13 @@ class _Run:
 
     def start(self, message: bytes, attachments: Any) -> _Handle:
         self._capture.started(message, attachments)
+        owner = self._capture._run(None)
         try:
             handle = self._native.Run.start(message, attachments)
         except self._native.CoreError as error:
-            self._capture.failed(error)
+            self._capture.failed(error, run=owner)
             raise
-        return _Handle(handle, self._native, self._capture)
+        return _Handle(handle, self._native, self._capture, owner)
 
 
 class _Native:
@@ -1504,23 +1848,78 @@ class _Native:
 
 
 class _Boundary:
-    r"""Records each case's core runs, by wrapping the one function through
-    which the Python host imports ``sdm_client._native``."""
+    """One explicit lifetime for actual native, entry and presentation reads."""
 
     def __init__(self) -> None:
-        from sdm_client._rust import run
+        from sdm_client._rust import errors, relational_predict, run
 
         self.capture = _Capture()
-        imported = run.native
+        self._closed = False
+        self._native_before = run.native
+        self._predict_before = relational_predict.predict
+        self._presentation_before = errors.error_from_core
+        imported = self._native_before
+        predict_before = self._predict_before
+        presentation_before = self._presentation_before
 
         def native() -> Any:
             return _Native(imported(), self.capture)
 
-        run.native = native  # type: ignore[assignment]
+        def predict(*args: Any, **kwargs: Any) -> Any:
+            capture = self.capture
+            model = args[2] if len(args) > 2 else kwargs.get('model')
+            entry = capture.enter_prediction(model)
+            try:
+                value = predict_before(*args, **kwargs)
+            except BaseException as error:
+                capture.leave_prediction(entry, error)
+                raise
+            else:
+                capture.leave_prediction(entry, None)
+                return value
+
+        def presentation(*args: Any, **kwargs: Any) -> Any:
+            capture = self.capture
+            # Forward exact argument owners and call form. A failed
+            # reconstruction has no successfully selected presentation pair.
+            value = presentation_before(*args, **kwargs)
+            capture.presented(value, kwargs.get('internal_context'))
+            return value
+
+        self._native_hook = native
+        self._predict_hook = predict
+        self._presentation_hook = presentation
+        run.native = native
+        relational_predict.predict = predict
+        errors.error_from_core = presentation
 
     def reset(self) -> _Capture:
+        if self._closed or self.capture._entries:
+            raise RunnerFailure(
+                'cannot reset an active or closed prediction capture'
+            )
         self.capture = _Capture()
         return self.capture
+
+    def close(self) -> None:
+        from sdm_client._rust import errors, relational_predict, run
+
+        if self._closed:
+            return
+        if self.capture._entries:
+            raise RunnerFailure('cannot close an active prediction entry')
+        if (
+            run.native is not self._native_hook
+            or relational_predict.predict is not self._predict_hook
+            or errors.error_from_core is not self._presentation_hook
+        ):
+            raise RunnerFailure(
+                'capture hooks must close in LIFO installation order'
+            )
+        run.native = self._native_before
+        relational_predict.predict = self._predict_before
+        errors.error_from_core = self._presentation_before
+        self._closed = True
 
 
 def _sibling(name: str) -> Any:
@@ -5191,141 +5590,147 @@ def run(
     bases = load_bases(bases_path)
     bases_digest = digest(bases_path.read_bytes())
     boundary = _Boundary() if mode == 'python-core' else None
-    versions = _versions()
-    if 'duckdb' not in versions:
-        raise RunnerFailure('duckdb is not installed')
-    if mode == 'python-core':
-        from sdm_client import _native
-
-        refused = stale_client(getattr(_native, 'CONTRACT_VERSION', None))
-        if refused is not None:
-            raise RunnerFailure(refused)
-    if mode == 'python-core' and database != 'duckdb':
-        from sdm_client import _native
-
-        if provider_for_leg(database) not in _native.PROVIDERS:
-            raise RunnerFailure(
-                f'the core reports no {database} provider: the {database} '
-                'job runs the reference side only'
-            )
-    recorded = []
-    kept: list[dict[str, Any]] = []
-    for case, case_digest in cases:
-        capture = boundary.reset() if boundary is not None else None
-        if capture is not None:
-            capture.recording = record_fetches is not None
+    try:
+        versions = _versions()
+        if 'duckdb' not in versions:
+            raise RunnerFailure('duckdb is not installed')
         if mode == 'python-core':
-            os.environ['SDM_CORE_ROUTES'] = ','.join(routes_on(case, database))
-        else:
-            os.environ['SDM_CORE_ROUTES'] = ''
-        keep: dict[str, Any] | None = {} if record is not None else None
-        try:
-            outcome, shown, driver, public, origins = _call(
-                case, bases, driver_capture, database, keep, capture
-            )
-        finally:
-            os.environ.pop('SDM_CORE_ROUTES', None)
-        if keep is not None and record is not None:
-            kept.append(keep)
-        recorded.append(
-            (
-                case,
-                case_digest,
-                outcome,
-                shown,
-                capture,
-                'sdm_client._native' in sys.modules,
-                driver,
-                public,
-                origins,
-            )
-        )
-    reference_identity = None
-    if guard is not None and reference is not None:
-        guard.check('after the last case')
-        reference_identity = {
-            'commit': _git(reference),
-            'environment': _environment(),
-            'guard': {'before': 'passed', 'after': 'passed'},
-        }
-    native_sha256 = _native_sha256() if mode == 'python-core' else None
-    contract = None
-    if mode == 'python-core' and 'sdm_client._native' in sys.modules:
-        contract = sys.modules['sdm_client._native'].CONTRACT_VERSION
-    commit = _git(REPO)
-    validate = validator('observation')
-    observations = []
-    for (
-        case,
-        case_digest,
-        outcome,
-        shown,
-        capture,
-        loaded,
-        driver,
-        public,
-        origins,
-    ) in recorded:
-        observation = {
-            'format': 'sdm-observation/1',
-            'case': case_key(case['id'], database),
-            'identity': {
-                'runner': mode,
-                'cell': _cell(versions),
-                'platform': f'{sys.platform}-{platform.machine()}',
-                'commit': commit,
-                'reference': reference_identity,
-                'native': (
-                    {'sha256': native_sha256} if native_sha256 else None
-                ),
-                'native_loaded': loaded,
-                'operations': capture.operations if capture else [],
-                'contract': contract,
-                'versions': versions,
-                'inputs': {'case': case_digest, 'bases': bases_digest},
-            },
-            'outcome': outcome,
-            # Each warning's origin on the candidate's runners, which a
-            # cell other than the reference's compares (HOST-5); never on
-            # python-ref, whose committed lines it would change.
-            'host': (
-                {'warnings': shown}
-                if mode == 'python-ref'
-                else {'warnings': shown, 'origins': origins}
-            ),
-            'core': capture.core() if capture else None,
-            'driver': driver,
-            'public': public,
-        }
-        problem = _invalid(validate, observation)
-        if problem is not None:
-            raise RunnerFailure(
-                f'{case["id"]}: its observation is not valid: {problem}'
-            )
-        observations.append(observation)
-    if database in WAREHOUSES and mode == 'python-ref':
-        observations = _held_observations(
-            observations, cases, bases, kept, record
-        )
-    if record_fetches is not None:
-        # The replay's recording (T2.3, KO2-20): each case's fetches, with
-        # the answers the Postgres provider replied with, in order, and the
-        # statements the driver ran for each, so the replay's record of what
-        # ran is python-core's.
-        record_fetches.write_text(
-            ''.join(
-                json.dumps(
-                    _replay_line(case, database, capture, driver),
-                    sort_keys=True,
+            from sdm_client import _native
+
+            refused = stale_client(getattr(_native, 'CONTRACT_VERSION', None))
+            if refused is not None:
+                raise RunnerFailure(refused)
+        if mode == 'python-core' and database != 'duckdb':
+            from sdm_client import _native
+
+            if provider_for_leg(database) not in _native.PROVIDERS:
+                raise RunnerFailure(
+                    f'the core reports no {database} provider: the {database} '
+                    'job runs the reference side only'
                 )
-                + '\n'
-                for case, _, _, _, capture, _, driver, *_ in recorded
-                if capture is not None
-                and (capture.answered or database in WAREHOUSES)
-            ),
-            encoding='utf-8',
-        )
-    return observations
+        recorded = []
+        kept: list[dict[str, Any]] = []
+        for case, case_digest in cases:
+            capture = boundary.reset() if boundary is not None else None
+            if capture is not None:
+                capture.recording = record_fetches is not None
+            if mode == 'python-core':
+                os.environ['SDM_CORE_ROUTES'] = ','.join(
+                    routes_on(case, database)
+                )
+            else:
+                os.environ['SDM_CORE_ROUTES'] = ''
+            keep: dict[str, Any] | None = {} if record is not None else None
+            try:
+                outcome, shown, driver, public, origins = _call(
+                    case, bases, driver_capture, database, keep, capture
+                )
+            finally:
+                os.environ.pop('SDM_CORE_ROUTES', None)
+            if keep is not None and record is not None:
+                kept.append(keep)
+            recorded.append(
+                (
+                    case,
+                    case_digest,
+                    outcome,
+                    shown,
+                    capture,
+                    'sdm_client._native' in sys.modules,
+                    driver,
+                    public,
+                    origins,
+                )
+            )
+        reference_identity = None
+        if guard is not None and reference is not None:
+            guard.check('after the last case')
+            reference_identity = {
+                'commit': _git(reference),
+                'environment': _environment(),
+                'guard': {'before': 'passed', 'after': 'passed'},
+            }
+        native_sha256 = _native_sha256() if mode == 'python-core' else None
+        contract = None
+        if mode == 'python-core' and 'sdm_client._native' in sys.modules:
+            contract = sys.modules['sdm_client._native'].CONTRACT_VERSION
+        commit = _git(REPO)
+        validate = validator('observation')
+        observations = []
+        for (
+            case,
+            case_digest,
+            outcome,
+            shown,
+            capture,
+            loaded,
+            driver,
+            public,
+            origins,
+        ) in recorded:
+            observation = {
+                'format': 'sdm-observation/1',
+                'case': case_key(case['id'], database),
+                'identity': {
+                    'runner': mode,
+                    'cell': _cell(versions),
+                    'platform': f'{sys.platform}-{platform.machine()}',
+                    'commit': commit,
+                    'reference': reference_identity,
+                    'native': (
+                        {'sha256': native_sha256} if native_sha256 else None
+                    ),
+                    'native_loaded': loaded,
+                    'operations': capture.operations if capture else [],
+                    'contract': contract,
+                    'versions': versions,
+                    'inputs': {'case': case_digest, 'bases': bases_digest},
+                },
+                'outcome': outcome,
+                # Each warning's origin on the candidate's runners, which a
+                # cell other than the reference's compares (HOST-5); never on
+                # python-ref, whose committed lines it would change.
+                'host': (
+                    {'warnings': shown}
+                    if mode == 'python-ref'
+                    else {'warnings': shown, 'origins': origins}
+                ),
+                'core': capture.core() if capture else None,
+                'driver': driver,
+                'public': public,
+            }
+            problem = _invalid(validate, observation)
+            if problem is not None:
+                raise RunnerFailure(
+                    f'{case["id"]}: its observation is not valid: {problem}'
+                )
+            observations.append(observation)
+        if database in WAREHOUSES and mode == 'python-ref':
+            observations = _held_observations(
+                observations, cases, bases, kept, record
+            )
+        if record_fetches is not None:
+            # The replay's recording (T2.3, KO2-20): each case's fetches, with
+            # the answers the Postgres provider replied with, in order, and the
+            # statements the driver ran for each, so the replay's record of what
+            # ran is python-core's.
+            record_fetches.write_text(
+                ''.join(
+                    json.dumps(
+                        _replay_line(case, database, capture, driver),
+                        sort_keys=True,
+                    )
+                    + '\n'
+                    for case, _, _, _, capture, _, driver, *_ in recorded
+                    if capture is not None
+                    and (capture.answered or database in WAREHOUSES)
+                ),
+                encoding='utf-8',
+            )
+        return observations
+    finally:
+        if boundary is not None:
+            boundary.close()
 
 
 def _held_observations(
