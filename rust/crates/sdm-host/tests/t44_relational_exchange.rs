@@ -129,6 +129,7 @@ fn payloads(family: &str) -> Vec<Value> {
     serde_json::from_value(reference["families"][family]["seed7"].clone()).unwrap()
 }
 
+#[derive(Clone)]
 struct OwnedPart {
     part: RelationalResponsePart,
     buffers: [Vec<u8>; 4],

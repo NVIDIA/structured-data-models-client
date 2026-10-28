@@ -938,6 +938,7 @@ mod tests {
             )
             .unwrap();
             let expected = sdm_wire::json::read_answer(expected.as_bytes()).unwrap();
+            let expected = logical(&native(&expected).unwrap()).unwrap();
             assert_eq!(
                 part.rows[0].prediction,
                 super::super::answer_of(
