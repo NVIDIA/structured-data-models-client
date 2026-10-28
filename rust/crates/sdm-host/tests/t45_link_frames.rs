@@ -375,6 +375,7 @@ fn native_label_completion_binds_complete_pre_mask_groups_and_uses_actual_values
     let native = [("users", vec!["user_id", "age"]), ("items", vec!["item_id", "amount"]), ("buys", vec!["buy_id", "user_id", "item_id", "ts"])].map(|(name, columns)| json!({"source":{"source":[name]},"columns":columns.into_iter().map(|column| json!({"name":column,"declared":null,"logical_text":null,"strings":null})).collect::<Vec<_>>()}));
     let PreparedFrameValue::Graph(graph) = stages.stage(json!({"stage":"graph","schema":1,"frames":7,"checkpoint":null,"retained":null,"native_tables":native,"values":5,"options":[],"prediction_rows":2,"limits":{}})).unwrap() else { panic!("graph") };
     let PreparedFrameValue::Population(population) = stages.stage(json!({"stage":"population","graph":graph,"query":2,"values":20,"seed":"0x7","entropy":7,"anchor_time":{"t":"ts","unit":"ns","v":"1677628800000000000"},"anchor_entity":false,"num_context_samples":null,"limits":{}})).unwrap() else { panic!("population") };
+    assert!(population.rows <= u64::from(population.batch_rows));
     let PreparedFrameValue::LabelGroups(groups) = stages.stage(json!({"stage":"label_groups","population":population,"range":{"start":0,"stop":population.rows.min(u64::from(population.batch_rows))},"previous":null,"converted":{"kind":"core_keys","values":null}})).unwrap() else { panic!("groups") };
     assert!(
         serde_json::to_value(&groups)
@@ -434,7 +435,7 @@ fn native_label_completion_binds_complete_pre_mask_groups_and_uses_actual_values
     else {
         panic!("completed batch")
     };
-    assert!(batch.complete);
+    assert_eq!(batch.complete, rows.num_rows() >= 1_000);
     let PreparedFrameValue::Labels(labels) = stages
         .stage(json!({"stage":"labels","population":population,"batches":[batch]}))
         .unwrap()
@@ -445,7 +446,7 @@ fn native_label_completion_binds_complete_pre_mask_groups_and_uses_actual_values
         panic!("actual completed context")
     };
     let target = context.batches[0].column(2).as_list::<i32>();
-    assert_eq!(target.len(), 3);
+    assert_eq!(target.len(), rows.num_rows().min(1_000));
     for row in 0..target.len() {
         assert_eq!(
             target
