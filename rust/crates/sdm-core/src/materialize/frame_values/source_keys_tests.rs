@@ -243,10 +243,16 @@ fn native_stype_assignment_refuses_before_later_table_effects_with_a_native_caus
 fn native_role_assignment_precedes_caller_column_stype_order() {
     let mut fixed = table();
     let mut ts = fixed.table.columns[1].clone();
-    ts.name = "ts".into(); ts.dtype = "timestamp[us]".into(); ts.stype = Stype::Timestamp;
+    ts.name = "ts".into();
+    ts.dtype = "timestamp[us]".into();
+    ts.stype = Stype::Timestamp;
     fixed.table.time_column = Some("ts".into());
     fixed.table.columns.push(ts);
-    fixed.constructed.push(FrameConstructedColumn { name: "ts".into(), dtype: Dtype::Int, stype: Stype::Categorical });
+    fixed.constructed.push(FrameConstructedColumn {
+        name: "ts".into(),
+        dtype: Dtype::Int,
+        stype: Stype::Categorical,
+    });
     fixed.table.columns[0].stype = Stype::Numerical;
     let key = source_keys::key(fixed.clone(), fixed.table.primary_key.clone()).unwrap();
     let error = source_keys::metadata(reached_metadata(key, fixed.table)).unwrap_err();
@@ -269,7 +275,10 @@ fn native_role_lookup_and_time_flag_refusals_remain_selected_metadata_errors() {
     let fixed = table();
     let key = source_keys::key(fixed.clone(), vec!["absent".into()]).unwrap();
     let error = source_keys::metadata(reached_metadata(key, fixed.table.clone())).unwrap_err();
-    assert_eq!(error.fields["native_key_reason"], Detail::text("role_missing"));
+    assert_eq!(
+        error.fields["native_key_reason"],
+        Detail::text("role_missing")
+    );
     assert_eq!(error.fields["column"], Detail::text("absent"));
     let mut fixed = table();
     fixed.table.primary_key.clear();
@@ -277,5 +286,20 @@ fn native_role_lookup_and_time_flag_refusals_remain_selected_metadata_errors() {
     fixed.table.columns[0].stype = Stype::Text;
     let key = source_keys::key(fixed.clone(), vec![]).unwrap();
     let error = source_keys::metadata(reached_metadata(key, fixed.table)).unwrap_err();
-    assert_eq!(error.fields["native_key_reason"], Detail::text("time_stype"));
+    assert_eq!(
+        error.fields["native_key_reason"],
+        Detail::text("time_stype")
+    );
+}
+
+#[test]
+fn native_role_meaning_survives_when_caller_does_not_reassign_the_column() {
+    let mut fixed = table();
+    fixed.table.primary_key.clear();
+    fixed.table.time_column = Some("a".into());
+    let key = source_keys::key(fixed.clone(), vec![]).unwrap();
+    fixed.table.columns.remove(0);
+    let value = source_keys::metadata(reached_metadata(key, fixed.table)).unwrap();
+    assert_eq!(value.table.columns[0].name, "a");
+    assert_eq!(value.table.columns[0].stype, Stype::Timestamp);
 }
