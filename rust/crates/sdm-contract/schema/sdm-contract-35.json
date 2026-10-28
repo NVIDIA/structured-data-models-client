@@ -10370,8 +10370,9 @@
             "null"
           ]
         },
-        "python_unicode_database": {
-          "type": "string"
+        "message_casing": {
+          "description": "Actual full-root operation used by native diagnostic-message casing.\nIts identity is consumed only when that normalization is reached.",
+          "$ref": "#/$defs/NativeTextFacts"
         }
       },
       "additionalProperties": false,
@@ -10380,7 +10381,48 @@
         "key_error",
         "structured_data_error",
         "relational_error",
-        "python_unicode_database"
+        "message_casing"
+      ]
+    },
+    "NativeTextFacts": {
+      "description": "Mathematical semantics observed on the actual reached native result.\nThese facts identify its operation, not its library or result dtype, and\ndo not grant the host a choice of model normalization policy.",
+      "oneOf": [
+        {
+          "description": "Full-root lowercase semantics and its actual Unicode table metadata.",
+          "type": "object",
+          "properties": {
+            "unicode_version": {
+              "type": "string"
+            },
+            "mapping": {
+              "type": "string",
+              "const": "full_root"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "mapping",
+            "unicode_version"
+          ]
+        },
+        {
+          "description": "Raw fixed-input output identifying a supported complete simple map.\nUser values never participate in this bounded observation.",
+          "type": "object",
+          "properties": {
+            "identity": {
+              "type": "string"
+            },
+            "mapping": {
+              "type": "string",
+              "const": "simple"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "mapping",
+            "identity"
+          ]
+        }
       ]
     },
     "FrameNativeReport": {
@@ -12297,39 +12339,6 @@
         "column",
         "values",
         "facts"
-      ]
-    },
-    "NativeTextFacts": {
-      "type": "object",
-      "properties": {
-        "target": {
-          "$ref": "#/$defs/NativeStringTarget"
-        },
-        "python_unicode_database": {
-          "description": "Actual builtin database metadata, not an interpreter version guess.",
-          "type": "string"
-        },
-        "arrow_simple_identity": {
-          "description": "Raw fixed-input native kernel output; never a normalized user value.",
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "target",
-        "python_unicode_database"
-      ]
-    },
-    "NativeStringTarget": {
-      "description": "The effective native result dtype at the reached astype(str) position.\nThis is not a caller-selected normalization algorithm or package tag.",
-      "type": "string",
-      "enum": [
-        "numpy_unicode",
-        "pandas_string_python",
-        "pandas_string_pyarrow"
       ]
     },
     "FrameRequestParts": {
