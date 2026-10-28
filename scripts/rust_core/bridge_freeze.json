@@ -212,7 +212,7 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py": {
       "<module>": {
-        "fingerprint": "41461ded28f328df43c6b8f0dc288a8f406f0b0e130baf28524ff3b233b99e83"
+        "fingerprint": "b184483d5040b16402e730a9bf4ec24c444ac303022e379aa5df38e78111289a"
       },
       "_Held.__getattr__": {
         "fingerprint": "1c11f042b8200ddeeed1c4f0ca22f07fa367d50bc7957f1262c3f92fde717fca"
@@ -296,10 +296,10 @@
         "fingerprint": "d152c028f851318aa7d29ee83b460d95e35eae190dfc5df59bbea6fc0df046ea"
       },
       "raise_error": {
-        "fingerprint": "5c267f3dccd2400760d3bd09ad708b182aeeaaa3bb7cf6997fcc882c0531f3ac"
+        "fingerprint": "2b58bc9c0efe8c294af62fa104d9faf5dd6285bd515ca0728536539ca7adaa6c"
       },
       "raise_from_core": {
-        "fingerprint": "086f183a7690d27e1fbd2eb073ca29af340e017b223f695d7ab33885b678f281"
+        "fingerprint": "8655a06c317fcf48c327964bb73d6989e1d2200811afc188c8b4b4d9c395b3ea"
       },
       "raise_native": {
         "fingerprint": "11e405489163409f760abc3b1d57841b7fba64d21ab8c2a8201e1804f6c16b1c"
