@@ -11,13 +11,15 @@ import copy
 import hashlib
 import json
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 from test_t136_forecast_capture import RUNNER, _module
 from test_t44_prediction_observation import actual_observation, reader
 
 ROOT = Path(__file__).parents[2]
+CHECK = _module(
+    't44_serving_capture_check', ROOT / 'contract/runners/capture_check.py'
+)
 
 
 def served_observation(input_text=None, posted_text=None):
@@ -116,6 +118,12 @@ def test_actual_serving_prediction_is_unchanged_under_capture(
         ROOT
         / 'packages/structured-data-models-client/tests/test_t313_serving_route.py',
     )
+    serving._old.__wrapped__(monkeypatch)
+
+    def legacy_prepare(*args, **kwargs):
+        raise AssertionError('core serving fixture called legacy _prepare')
+
+    monkeypatch.setattr(serving.SDMClient, '_prepare', legacy_prepare)
     request = serving._materialized(monkeypatch, unicode_feature=True)
     # Fixture helpers own only their original three routes. The actual new
     # producer requires the full existing preparation inventory as well.
@@ -127,13 +135,9 @@ def test_actual_serving_prediction_is_unchanged_under_capture(
         boundary = RUNNER._Boundary() if captured else None
         observed = boundary.reset() if boundary else None
         try:
-            with patch(
-                'sdm_client.adapters.relational._request_id',
-                return_value='sdm-serving-capture',
-            ):
-                result, received = serving._predict(
-                    monkeypatch, request, routes, max_request_bytes=limit
-                )
+            result, received = serving._predict(
+                monkeypatch, request, routes, max_request_bytes=limit
+            )
             return result, received, observed
         finally:
             if boundary:
@@ -148,14 +152,36 @@ def test_actual_serving_prediction_is_unchanged_under_capture(
         assert captured.to_pandas().equals(plain.to_pandas())
         assert captured.items == plain.items
         assert captured.metadata == plain.metadata
-        assert [body for _, body, _ in received] == [
-            body for _, body, _ in plain_received
+        assert all(
+            path == serving.INVOCATIONS
+            for path, _, _ in [*plain_received, *received]
+        )
+        plain_body = json.loads(plain_received[0][1])
+        captured_body = json.loads(received[0][1])
+        plain_id = json.loads(
+            plain_body['dataframe_records'][0]['request_json']
+        )['metadata']['request_id']
+        captured_id = json.loads(
+            captured_body['dataframe_records'][0]['request_json']
+        )['metadata']['request_id']
+        assert plain_id != captured_id
+        assert [
+            CHECK.masked_serving(json.loads(body)) for _, body, _ in received
+        ] == [
+            CHECK.masked_serving(json.loads(body))
+            for _, body, _ in plain_received
         ]
         [entry] = observed.core()['predictions']
         [call] = entry['calls']
         assert call['body_sha256'] == hashlib.sha256(received[0][1]).hexdigest()
         assert call['body'] == json.loads(received[0][1])
         assert call['input_body_sha256'] != call['body_sha256']
+        assert (
+            hashlib.sha256(
+                base64.b64decode(call['input_body_base64'])
+            ).hexdigest()
+            == call['input_body_sha256']
+        )
     else:
         assert type(captured) is type(plain)
         assert (captured.code, captured.message, captured.details) == (
@@ -167,7 +193,17 @@ def test_actual_serving_prediction_is_unchanged_under_capture(
         [entry] = observed.core()['predictions']
         [call] = entry['calls']
         assert call['body'] is None
-    reader().view(observed.core(), observed.operations)
+    checked = reader().view(observed.core(), observed.operations)
+    reader().check_receipts(
+        checked['attempts'],
+        [
+            {
+                'parsed': json.loads(body),
+                'sha256': hashlib.sha256(body).hexdigest(),
+            }
+            for _, body, _ in received
+        ],
+    )
 
 
 def test_direct_body_snapshot_cannot_change_while_retaining_the_observed_hash():
