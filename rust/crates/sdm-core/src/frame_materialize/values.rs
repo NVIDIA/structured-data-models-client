@@ -128,6 +128,119 @@ fn native_identity(source: &str, native: &[FrameNativeTable]) -> Result<String, 
     Ok(identity.finish())
 }
 
+#[cfg(test)]
+mod native_fact_tests {
+    use super::*;
+    use sdm_contract::frames::materialize::{
+        FrameLogicalText, FrameNativeColumn, FramePhysicalDeclaration, FrameTextBacking,
+        FrameTextMissing,
+    };
+
+    fn source(column: FrameNativeColumn) -> Vec<FrameNativeTable> {
+        vec![FrameNativeTable {
+            source: "input_users".into(),
+            columns: vec![column],
+        }]
+    }
+
+    fn logical() -> FrameNativeColumn {
+        FrameNativeColumn {
+            name: "id".into(),
+            declared: None,
+            logical_text: Some(FrameLogicalText {
+                backing: FrameTextBacking::ElementValues,
+                missing: FrameTextMissing::NullScalar,
+            }),
+            strings: Some(StringEncoding::Utf8),
+        }
+    }
+
+    #[test]
+    fn byte_identical_exports_keep_original_backing_missing_and_declaration_identity() {
+        let original = logical();
+        let mut offset = original.clone();
+        offset.logical_text.as_mut().unwrap().backing = FrameTextBacking::OffsetUtf8;
+        let mut floating = original.clone();
+        floating.logical_text.as_mut().unwrap().missing = FrameTextMissing::IeeeNan;
+        let mut fixed = original.clone();
+        fixed.logical_text = None;
+        fixed.declared = Some(FramePhysicalDeclaration::Physical {
+            physical: sdm_contract::ColumnType::Utf8,
+        });
+        let mut ordinary = original.clone();
+        ordinary.logical_text = None;
+        let identities = [original.clone(), offset, floating, fixed, ordinary]
+            .map(|column| native_identity("identical_exported_rows", &source(column)).unwrap());
+        assert_eq!(
+            identities.iter().collect::<BTreeSet<_>>().len(),
+            identities.len()
+        );
+        assert_eq!(
+            identities[0],
+            native_identity("identical_exported_rows", &source(original)).unwrap()
+        );
+    }
+
+    #[test]
+    fn malformed_native_declarations_cannot_bypass_canonical_identity() {
+        let owner = super::super::retained_tests::owner();
+        let frames = owner.frames();
+        let frames = lock(&frames);
+        let prepared = owner.prepared();
+        let description = &prepared.description;
+        let mut physical = FrameNativeColumn {
+            name: "id".into(),
+            declared: Some(FramePhysicalDeclaration::Physical {
+                physical: sdm_contract::ColumnType::Int64,
+            }),
+            logical_text: None,
+            strings: None,
+        };
+        assert!(validate_native(&frames, description, &source(physical.clone())).is_ok());
+        physical.logical_text = logical().logical_text;
+        assert!(validate_native(&frames, description, &source(physical.clone())).is_err());
+        physical.logical_text = None;
+        physical.declared = Some(FramePhysicalDeclaration::Physical {
+            physical: sdm_contract::ColumnType::Uint64,
+        });
+        assert!(validate_native(&frames, description, &source(physical.clone())).is_err());
+        physical.declared = Some(FramePhysicalDeclaration::Physical {
+            physical: sdm_contract::ColumnType::Decimal128 {
+                precision: 9,
+                scale: 0,
+            },
+        });
+        assert!(validate_native(&frames, description, &source(physical)).is_err());
+    }
+
+    #[test]
+    fn large_offsets_are_accepted_for_logical_text_and_refused_only_for_fixed_declaration() {
+        use arrow_array::LargeStringArray;
+        let owner = super::super::retained_tests::owner();
+        let frames = owner.frames();
+        let mut frames = lock(&frames);
+        let batch = RecordBatch::try_from_iter([(
+            "id",
+            Arc::new(LargeStringArray::from(vec![Some("a"), None])) as ArrayRef,
+        )])
+        .unwrap();
+        frames.tables[0].1 = ArrowData::new(batch.schema(), vec![batch]);
+        let prepared = owner.prepared();
+        let description = &prepared.description;
+        assert!(validate_native(&frames, description, &source(logical())).is_ok());
+        let mut fixed = logical();
+        fixed.logical_text = None;
+        fixed.declared = Some(FramePhysicalDeclaration::LargeUtf8);
+        let error = validate_native(&frames, description, &source(fixed)).unwrap_err();
+        assert_eq!(error.sentence, Sentence::FrameNativeInternal);
+        assert_eq!(
+            error.fields["native_declaration_reason"],
+            Detail::text("fixed_large_utf8")
+        );
+        assert!(!error.fields.contains_key("native_cause_message"));
+    }
+}
+
 pub(crate) fn unsupported_large_string(table: &str, column: &str) -> CoreError {
     let message = format!(
         "Encountered unsupported data type 'large_string[pyarrow]' for column '{}' in table '{}'. Please either cast the column to a supported type before building the table (for example df['{}'] = df['{}'].astype('int64')) or remove the column from this table.",

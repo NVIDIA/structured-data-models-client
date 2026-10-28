@@ -343,4 +343,97 @@ mod tests {
         input.meaning.input.column.dtype = "float64".to_owned();
         assert!(integer(input).is_err());
     }
+
+    #[test]
+    fn closed_observed_contents_preserve_the_existing_conversion_branch_order() {
+        for (observed, designated, declared_type, expected) in [
+            (
+                Some(FrameObservedContent::Text),
+                true,
+                "string",
+                FrameColumnKind::TextTime,
+            ),
+            (
+                Some(FrameObservedContent::Decimal),
+                false,
+                "float64",
+                FrameColumnKind::DecimalFloat,
+            ),
+            (
+                Some(FrameObservedContent::Decimal),
+                false,
+                "int64",
+                FrameColumnKind::DecimalInteger,
+            ),
+            (
+                Some(FrameObservedContent::Decimal),
+                false,
+                "string",
+                FrameColumnKind::DecimalString,
+            ),
+            (
+                Some(FrameObservedContent::Temporal),
+                false,
+                "timestamp[us]",
+                FrameColumnKind::NativeTime,
+            ),
+            (
+                Some(FrameObservedContent::Other),
+                true,
+                "timestamp[us]",
+                FrameColumnKind::Original,
+            ),
+            (None, true, "timestamp[us]", FrameColumnKind::Original),
+            (
+                Some(FrameObservedContent::Temporal),
+                false,
+                "string",
+                FrameColumnKind::Original,
+            ),
+        ] {
+            let mut input = declared(declared_type);
+            input.designated_time = designated;
+            input.facts.inferred = observed;
+            assert_eq!(meaning(input).kind, expected);
+        }
+        let mut input = declared("timestamp[us]");
+        input.facts.inferred = Some(FrameObservedContent::Text);
+        assert_eq!(meaning(input).kind, FrameColumnKind::TextFeatureTime);
+        // A typed Decimal observation wins even when native inference was not
+        // performed; typed time remains separate from boxed temporal content.
+        input.facts.object = false;
+        input.facts.arrow_decimal = true;
+        input.facts.inferred = None;
+        assert_eq!(meaning(input).kind, FrameColumnKind::DecimalString);
+    }
+
+    #[test]
+    fn fixed_large_utf8_table_refusal_is_neutral_and_names_its_reached_column() {
+        let input = FrameTableInputs {
+            table: HeldTable {
+                name: "items".into(),
+                source: "input_items".into(),
+                columns: vec![declared("string").column],
+                primary_key: vec![],
+                frame_key_form: None,
+                time_column: None,
+                duplicate_keys: None,
+            },
+            native: vec![FrameTableColumnFacts {
+                name: "id".into(),
+                declared: Some(FramePhysicalDeclaration::LargeUtf8),
+            }],
+        };
+        let error = table(input).unwrap_err();
+        assert_eq!(error.sentence, Sentence::FrameNativeInternal);
+        assert_eq!(
+            error.fields["native_declaration_reason"],
+            Detail::text("fixed_large_utf8")
+        );
+        assert_eq!(error.fields["table"], Detail::text("items"));
+        assert_eq!(error.fields["column"], Detail::text("id"));
+        assert!(!error.fields.contains_key("native_cause_message"));
+        assert!(!error.fields.contains_key("message_points"));
+        assert_eq!(error.public_details.as_deref(), Some(&BTreeMap::new()));
+    }
 }
