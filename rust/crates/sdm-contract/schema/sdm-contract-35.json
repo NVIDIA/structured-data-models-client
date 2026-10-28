@@ -10437,6 +10437,17 @@
         },
         "table": {
           "$ref": "#/$defs/HeldTable"
+        },
+        "derived": {
+          "description": "Actual completed new derived column; absent for a pre-existing column.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FrameConstructedColumn"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false,
@@ -11052,6 +11063,17 @@
       "properties": {
         "name": {
           "type": "string"
+        },
+        "constructed": {
+          "description": "Earlier core-completed native type, independent of later export storage.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Dtype"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "declared": {
           "description": "At most one original declaration or logical-text fact may be present.\nNeither is needed for ordinary primitive, object or category sources.",
