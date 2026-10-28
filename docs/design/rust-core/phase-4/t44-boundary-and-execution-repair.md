@@ -302,3 +302,13 @@ This is a completed domain validation report, with no action cursor, callback, g
 Subsequent native casts continue reading live declarations at their original positions; this report does not freeze future column metadata.
 Register the new bytes input and complete result shape, including the diagnostic, in the same canonical contract inventory.
 Tests precede implementation and cover source-shape locking, malformed evidence, cold warning-handler dtype/relationship conflicts, mark visibility on failure, column-before-link precedence and retained/reentrant owner reuse without live source reads.
+
+
+## Executed unavailable-evidence closure
+
+Twice-approved R26 passed the full workspace compiler, strict Clippy, complete contract-lock suite and connected key/overlap/request policy consumers.
+Its malformed HostRun consumer found that the tagged unit `Unavailable` alternative accepts an extra `child` field, despite the canonical shape forbidding additional properties.
+Keep the existing invalid-input HostRun witness and add direct serializer/deserializer controls for the unchanged valid unavailable object and malformed extra fields.
+Use an empty struct alternative so the existing serde field-closure rule applies to that reached variant, without changing valid native observations, core overlap selection, the native producer, cache lifetime or any refusal policy.
+Keep the exact R26 source and receipts immutable while collecting its remaining approved public/native diagnostics; they do not establish a package stamp or validate this subsequent source repair.
+Regenerate canonical artifacts only through the existing applicable writers after the complete source checkpoint, then obtain both independent whole reviews before execution.

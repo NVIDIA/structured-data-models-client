@@ -1043,3 +1043,17 @@ fn native_overlap_and_caller_meaning_attachment_shapes_are_locked() {
     );
     assert!(unaccounted(&schema).is_ok());
 }
+
+#[test]
+fn unavailable_native_overlap_evidence_is_a_closed_empty_fact() {
+    use sdm_contract::frames::materialize::FrameRelationshipEvidence;
+    let native = serde_json::json!({"observation":"unavailable"});
+    let observed: FrameRelationshipEvidence = serde_json::from_value(native.clone()).unwrap();
+    assert_eq!(serde_json::to_value(observed).unwrap(), native);
+    for extra in [
+        serde_json::json!({"observation":"unavailable","child":0}),
+        serde_json::json!({"observation":"unavailable","relationship":[]}),
+    ] {
+        assert!(serde_json::from_value::<FrameRelationshipEvidence>(extra).is_err());
+    }
+}
