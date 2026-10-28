@@ -79,6 +79,9 @@ CASES = (
     'replace',
     'cached',
     'warning-retry',
+    'overlap-caller-dtype',
+    'overlap-caller-marks',
+    'overlap-caller-cached',
 )
 
 
@@ -134,6 +137,9 @@ def _observe(label):
             return Rendered(value) if label == 'replace' else value
 
     data, primary, times, links, query = configure('int64', 'composite-history')
+    if label.startswith('overlap-caller-'):
+        data['users']['age'] = data['users']['age'].astype(str)
+        data['buys']['item_id'] += 10000
     if label == 'native-time-before-stype':
         data['buys'].insert(1, 'early', np.arange(len(data['buys'])))
     if label == 'native-key-before-time':
@@ -310,6 +316,22 @@ def _observe(label):
             if reached:
                 active.pop()
 
+    original_showwarning = warnings.showwarning
+    overlap_notices = 0
+
+    def shown(message, *args, **kwargs):
+        nonlocal overlap_notices
+        if label.startswith(
+            'overlap-caller-'
+        ) and 'joins none of the rows given' in str(message):
+            overlap_notices += 1
+            if label != 'overlap-caller-cached' or overlap_notices == 2:
+                schema['users']['age'].dtype = 'int64'
+                if label == 'overlap-caller-marks':
+                    schema.relationships.clear()
+                mutations.append('overlap-caller-edit')
+        return original_showwarning(message, *args, **kwargs)
+
     observed = {}
     script = Scripted()
     stage = 'schema'
@@ -319,6 +341,7 @@ def _observe(label):
         patch.object(pd.Series, 'map', mapped),
         patch.object(pd.DataFrame, 'reset_index', reset),
         patch.object(pd.DataFrame, 'copy', copied),
+        patch.object(warnings, 'showwarning', shown),
     ):
         warnings.simplefilter('always')
         try:
@@ -328,6 +351,8 @@ def _observe(label):
                 time_columns=times,
                 relationships=links,
             )
+            if label.startswith('overlap-caller-'):
+                schema['users']['age'].stype = 'text'
             if label == 'native-time-before-stype':
                 data['buys']['early'] = ['changed'] * len(data['buys'])
                 data['buys']['ts'] = np.arange(len(data['buys']))
@@ -399,6 +424,8 @@ def _observe(label):
             request = gather()
             observed['payloads'] = copy.deepcopy(request.payloads)
             observed['rows'] = (request.context_rows, request.predict_rows)
+            if label == 'overlap-caller-cached':
+                observed['again'] = copy.deepcopy(gather().payloads)
             if label == 'cached':
                 data['buys']['part'] = pd.NA
                 schema['users']['age'].stype = 'categorical'
@@ -438,6 +465,12 @@ def _observe(label):
         observed['warnings'] = [
             (type(n.message).__name__, bare(str(n.message))) for n in notices
         ]
+        if label.startswith('overlap-caller-') and schema is not None:
+            observed['caller_marks'] = [
+                (table_name, name, column.stype, column._stype_before_key)
+                for table_name, table in schema.tables.items()
+                for name, column in table.columns.items()
+            ]
         observed['sent'] = script.calls
     observed['trace'] = trace
     observed['mutations'] = mutations

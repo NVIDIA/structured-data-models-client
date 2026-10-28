@@ -125,3 +125,105 @@ fn empty_or_intersecting_native_evidence_is_silent() {
         assert!(warnings.is_empty());
     }
 }
+
+#[test]
+fn malformed_overlap_alternatives_and_short_circuits_are_protocol_errors() {
+    for evidence in [
+        json!({"observation":"unavailable","child":0}),
+        json!({"observation":"distinct","relationship":[{"table":"c","column":"f"},{"table":"p","column":"k"}],"child":0,"parent":1,"intersects":null}),
+        json!({"observation":"distinct","relationship":[{"table":"c","column":"f"}],"child":1,"parent":1,"intersects":false}),
+        record(1, None, None),
+        record(1, Some(0), Some(false)),
+        record(0, None, Some(true)),
+    ] {
+        let attachments = Attachments::from([
+            (
+                AttachmentId(100),
+                bytes(json!({"stage":"relationship_overlap","observations":1})),
+            ),
+            (AttachmentId(1), bytes(json!([evidence]))),
+        ]);
+        let run = HostRun::start(&sdm_host::default_root(), &message(), attachments).unwrap();
+        let out = run.next().unwrap_err();
+        let ControlMessage::Error { error } = sdm_host::read(&out).unwrap() else {
+            panic!("malformed overlap accepted")
+        };
+        assert_eq!(error.code, sdm_contract::ErrorCode::InvalidMessage);
+        assert!(run.take_sampler_state().unwrap().is_none());
+        assert!(run.take_warnings().unwrap().is_none());
+    }
+}
+
+fn caller_schema(dtype: &str) -> Value {
+    let column = |name: &str, dtype: &str, stype: &str| json!({"name":name,"dtype":dtype,"stype":stype,"stype_before_key":null,"stype_declared":true});
+    json!({"tables":[
+        {"name":"parent","source":{"source":["parent"]},"columns":[column("id","uint64","numerical"),column("feature",dtype,"numerical")],"primary_key":["id"],"frame_key_form":"scalar","time_column":null},
+        {"name":"child","source":{"source":["child"]},"columns":[column("fk","uint64","numerical")],"primary_key":[],"time_column":null}
+    ],"links":[[{"table":"child","column":"fk"},{"table":"parent","column":"id"}]]})
+}
+
+#[test]
+fn completed_caller_report_preserves_marks_even_before_a_column_refusal() {
+    for dtype in ["int16", "string"] {
+        let original = caller_schema(dtype);
+        let (value, owners, warnings) = prepare(
+            json!({"stage":"caller_meaning","schema":1}),
+            Attachments::from([(AttachmentId(1), bytes(original.clone()))]),
+        );
+        assert!(owners.is_empty());
+        assert!(warnings.is_empty());
+        assert_eq!(value["value"], "caller_meaning");
+        let report = &value["data"];
+        assert_eq!(report["schema"]["tables"][0]["columns"][0]["stype"], "ID");
+        assert_eq!(report["schema"]["tables"][1]["columns"][0]["stype"], "ID");
+        assert_eq!(
+            report["schema"]["tables"][1]["columns"][0]["stype_before_key"],
+            "numerical"
+        );
+        assert_eq!(
+            report["schema"]["tables"][0]["columns"][0]["dtype"],
+            "uint64"
+        );
+        assert_eq!(
+            report["schema"]["tables"][0]["columns"][0]["stype_declared"],
+            true
+        );
+        assert_eq!(
+            report["schema"]["tables"][0]["columns"][1],
+            original["tables"][0]["columns"][1]
+        );
+        if dtype == "string" {
+            assert_eq!(report["diagnostic"]["sentence"], "meaning_not_carried");
+        } else {
+            assert!(report["diagnostic"].is_null());
+        }
+    }
+}
+
+#[test]
+fn caller_meanings_precede_links_and_released_marks_remain_live() {
+    let mut original = caller_schema("string");
+    original["links"][0][1]["table"] = json!("missing");
+    let (value, _, _) = prepare(
+        json!({"stage":"caller_meaning","schema":1}),
+        Attachments::from([(AttachmentId(1), bytes(original))]),
+    );
+    assert_eq!(
+        value["data"]["diagnostic"]["sentence"],
+        "meaning_not_carried"
+    );
+    let mut released = caller_schema("int16");
+    released["links"] = json!([]);
+    released["tables"][1]["columns"][0]["stype"] = json!("ID");
+    released["tables"][1]["columns"][0]["stype_before_key"] = json!("numerical");
+    let (value, _, _) = prepare(
+        json!({"stage":"caller_meaning","schema":1}),
+        Attachments::from([(AttachmentId(1), bytes(released))]),
+    );
+    assert!(value["data"]["diagnostic"].is_null());
+    assert_eq!(
+        value["data"]["schema"]["tables"][1]["columns"][0]["stype"],
+        "numerical"
+    );
+    assert!(value["data"]["schema"]["tables"][1]["columns"][0]["stype_before_key"].is_null());
+}

@@ -1000,3 +1000,38 @@ fn the_writer_refuses_unknown_or_unreadable_merged_version_proof() {
         assert!(updated_lock(MERGED_FOR_WRITER, proof, 30, "e", "sdm-contract-30.json").is_err());
     }
 }
+
+#[test]
+fn native_overlap_and_caller_meaning_attachment_shapes_are_locked() {
+    let schema = generated();
+    let properties = &schema["$defs"]["Attachments"]["properties"];
+    assert_eq!(
+        properties["FramePreparation/relationship_overlap.observations"]["type"],
+        "array"
+    );
+    assert_eq!(
+        properties["FramePreparation/relationship_overlap.observations"]["items"]["$ref"],
+        "#/$defs/FrameRelationshipEvidence"
+    );
+    assert_eq!(
+        properties["FramePreparation/caller_meaning.schema"]["$ref"],
+        "#/$defs/HeldSchema"
+    );
+    let alternatives = schema["$defs"]["FrameRelationshipEvidence"]["oneOf"]
+        .as_array()
+        .unwrap();
+    assert_eq!(alternatives.len(), 2);
+    assert_eq!(
+        alternatives[0]["properties"]["observation"]["const"],
+        "unavailable"
+    );
+    assert_eq!(
+        alternatives[1]["properties"]["observation"]["const"],
+        "distinct"
+    );
+    assert_eq!(
+        schema["$defs"]["FrameCallerMeaning"]["properties"]["schema"]["$ref"],
+        "#/$defs/HeldSchema"
+    );
+    assert!(unaccounted(&schema).is_ok());
+}
