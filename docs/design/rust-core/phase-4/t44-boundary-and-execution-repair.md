@@ -150,6 +150,13 @@ Run the public profile/Unicode/error consumers on both supported runtime cells a
 Also close the observed native import lint violation without suppressing the rule.
 The current frame/LINK package remains unaccepted until these and its broader existing acceptance gates pass.
 
+The next executed constructor diagnostic exposed a declared-string meaning mismatch after the lossless surrogate export succeeded.
+The existing native object-meaning descriptor has an optional actual distinct count, and shared inference already consumes that count independently of its exact scalar comparison keys.
+Before correcting the producer, verify the original reached `nunique` result and its native equality path rather than assuming that sixty-five distinct Unicode values imply a native count of sixty-five.
+Keep the exact exported points and native dtype owner separate from that observed count, and retain Rust's existing categorical threshold and key policy.
+If this existing fact is sufficient, observe it only at the original initial column-meaning position before scalar export, without repeating the read during later fresh observations.
+Boundary, malformed-descriptor and Rust-host consumers precede implementation; existing object/category and ordinary string exports, warnings, keys and native effects remain compared to the original public constructor.
+
 ## Connected runtime feedback
 
 Candidate `30312949430471647fcd9f816f2e71f08fdf1b4d` received both independent whole CODE approvals, then passed all-target compilation, strict Clippy, native wheel construction and installed source/binary identity.
