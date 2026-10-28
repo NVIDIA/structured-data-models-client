@@ -104,6 +104,8 @@ Do not reparse the query against metadata edited by the fold, and do not restore
 The original context-time lookup can then fail with native `KeyError(table)` after successful sanitation and graph notices and before any entity or neighbor draw.
 Preserve that selected native cause at the existing frame error presentation boundary instead of returning an unrelated PQL or internal-error diagnostic.
 This closes the reached same-table time mutation in the recorded original journey.
+At that same native task-classification boundary, a retained LIST_DISTINCT query whose final graph no longer has its unique registered target foreign key keeps the original unsupported-multilabel NotImplementedError presentation before label fetches or sampling.
+Reuse the existing unambiguous target-role kernel; leave SQL and late payload admission unchanged.
 
 ## Snapshot and lifetime invariants
 
