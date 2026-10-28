@@ -696,6 +696,12 @@ MODEL_OUTPUT_REFERENCE = json.loads(
 ]
 
 
+@pytest.mark.parametrize('seed', [0, 1, 2, 3])
+def test_native_model_refusal_keeps_complete_journeys_at_each_hash_seed(seed):
+    original, core = _model_output_in_fresh_process(seed, [False, True])
+    assert core == original
+
+
 @pytest.mark.parametrize('core', [False, True], ids=['original', 'core'])
 @pytest.mark.parametrize('case', list(MODEL_OUTPUT_REFERENCE))
 def test_native_model_and_output_owners_keep_complete_public_journeys(
