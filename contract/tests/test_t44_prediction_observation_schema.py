@@ -48,6 +48,7 @@ def test_prediction_entry_schema_keeps_actual_typed_products_without_fake_operat
         'calls',
         'results',
         'final',
+        'carried',
     ],
 )
 def test_prediction_evidence_cannot_omit_its_observation_scope(field):

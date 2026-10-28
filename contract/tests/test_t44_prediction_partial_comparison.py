@@ -391,3 +391,32 @@ def test_legacy_carried_metadata_uses_one_actual_arrow_import():
     assert recorded['metadata'] == {'source': 'actual-carried-schema'}
     assert recorded['outputs'] == ['prediction']
     assert recorded['result']['rows'][0][2] == {'f64_bits': '8000000000000000'}
+
+
+def test_completed_result_without_successful_carry_stays_an_internal_observation():
+    core, operations = partial_observation()
+    core['predictions'][0]['carried'] = None
+    observed = reader().view(core, operations)
+    assert observed['partial']['answered'] is None
+    assert observed['partial']['results']
+    assert observed['partial']['results'][0]['result'] is not None
+
+
+@pytest.mark.parametrize(
+    'bad', ['missing', 'call-run', 'missing-result', 'extra', 'relation']
+)
+def test_carried_result_requires_a_complete_owned_actual_finish_product(bad):
+    core, operations = partial_observation()
+    entry = core['predictions'][0]
+    if bad == 'missing':
+        del entry['carried']
+    elif bad == 'call-run':
+        entry['carried']['run'] = 3
+    elif bad == 'missing-result':
+        entry['results'][0]['result'] = None
+    elif bad == 'extra':
+        entry['carried']['public_object_id'] = 123
+    else:
+        entry['carried']['relation'] = 'context'
+    with pytest.raises(reader().ObservationError):
+        reader().view(core, operations)
