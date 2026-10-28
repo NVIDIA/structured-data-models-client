@@ -39,7 +39,7 @@ fn stage(
         facts: HostFacts {
             now: Scalar::Timestamp {
                 unit: TimestampUnit::Us,
-                zone: None,
+                zone: Some("UTC".into()),
                 value: 0,
             },
             local_zone: None,

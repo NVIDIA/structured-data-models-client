@@ -323,12 +323,25 @@ mod tests {
     use sdm_contract::ops::HeldColumn;
 
     fn typed(table: HeldTable) -> FrameTableMeaning {
+        let physical = [
+            sdm_contract::ColumnType::Int64,
+            sdm_contract::ColumnType::Int64,
+            sdm_contract::ColumnType::Timestamp {
+                unit: sdm_contract::TimestampUnit::Ns,
+                zone: None,
+            },
+        ];
+        assert_eq!(table.columns.len(), physical.len());
         let constructed = table
             .columns
             .iter()
-            .map(|column| FrameConstructedColumn {
+            .zip(physical)
+            .map(|(column, physical)| FrameConstructedColumn {
                 name: column.name.clone(),
-                dtype: sdm_schema::held::wire_dtype(&column.dtype),
+                dtype: sdm_schema::frames::native_column::dtype(&FrameConstructorValues::Typed {
+                    physical,
+                })
+                .unwrap(),
                 stype: column.stype,
             })
             .collect();
@@ -379,6 +392,20 @@ mod tests {
             duplicate_keys: None,
         };
         let typed = typed(table.clone());
+        let mut noncanonical = typed.clone();
+        noncanonical.constructed[0].dtype = sdm_contract::ops::Dtype::Int64;
+        assert_eq!(
+            source(
+                HeldSchema {
+                    tables: vec![table.clone()],
+                    links: vec![]
+                },
+                vec![noncanonical],
+            )
+            .unwrap_err()
+            .sentence,
+            Sentence::InvalidMessage
+        );
         let mut live = table;
         live.columns[1].stype = Stype::Categorical;
         live.columns[1].dtype = "string".into();

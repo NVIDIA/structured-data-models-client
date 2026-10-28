@@ -1603,6 +1603,24 @@ fn text_times_are_read_as_the_provider_declares_and_refused_by_name_otherwise() 
 
 #[test]
 fn client_rules_use_complete_columns_for_bounds_and_selected_timestamp_features() {
+    fn at(description: &SourceDescription, anchor: i64) -> Run {
+        let (mut operation, attached) = materialize_start(
+            host_reading(Some(TextTimes::ClientRules)),
+            description,
+            QUERY,
+            Some(Seed::from(7_u128)),
+        );
+        let Operation::Materialize(operation_value) = &mut operation else {
+            panic!("materialize operation")
+        };
+        operation_value.anchor_time = Some(Scalar::Timestamp {
+            unit: TimestampUnit::Ns,
+            zone: None,
+            value: anchor,
+        });
+        materialize_on(Arc::new(sdm_data::Data::new()), operation, attached).unwrap()
+    }
+
     let first = 1_706_745_600_000_000_i64; // 2024-02-01, day-first 01/02.
     let last = 1_710_460_800_000_000_i64; // 2024-03-15, the late deciding row.
     for feature in [false, true] {
@@ -1632,82 +1650,99 @@ fn client_rules_use_complete_columns_for_bounds_and_selected_timestamp_features(
             ));
         }
         let target = if feature { "seen_at" } else { "ts" };
-        let mut text_run = materialize(
-            host_reading(Some(TextTimes::ClientRules)),
-            &text,
-            QUERY,
-            Some(Seed::from(7_u128)),
-        )
-        .unwrap();
-        let mut typed_run = materialize(
-            host_reading(Some(TextTimes::ClientRules)),
-            &typed,
-            QUERY,
-            Some(Seed::from(7_u128)),
-        )
-        .unwrap();
-        let base = |name: &str, n| -> ArrayRef {
-            if name == "ts" {
+        // 2024 has a 29-day February: Mar2's 30-day lookback is Feb1.
+        // The ordinary feature has separate designated-time bounds.
+        let valid = ANCHOR + 86_400_000_000_000;
+        let anchors = if feature {
+            vec![valid]
+        } else {
+            vec![ANCHOR, valid]
+        };
+        for anchor in anchors {
+            let mut text_run = at(&text, anchor);
+            let mut typed_run = at(&typed, anchor);
+            let base = |name: &str, n| -> ArrayRef {
+                if name == "ts" {
+                    Arc::new(TimestampMicrosecondArray::from(vec![
+                        1_704_412_800_000_000;
+                        n
+                    ]))
+                } else {
+                    shop_column(name, n, None)
+                }
+            };
+            let bounds = || {
                 Arc::new(TimestampMicrosecondArray::from(vec![
-                    1_704_412_800_000_000;
-                    n
-                ]))
-            } else {
-                shop_column(name, n, None)
+                    1_672_531_200_000_000,
+                    1_720_310_400_000_000,
+                ])) as ArrayRef
+            };
+            let (text_result, text_warnings) = times_from_complete_columns(
+                &mut text_run,
+                &|name, n| {
+                    if name == target {
+                        Arc::new(StringArray::from(vec!["01/02/2024"; n]))
+                    } else {
+                        base(name, n)
+                    }
+                },
+                &|name| {
+                    if name == target {
+                        let mut values = vec!["01/02/2024"; 1005];
+                        values[1004] = "15/03/2024";
+                        Arc::new(StringArray::from(values))
+                    } else {
+                        bounds()
+                    }
+                },
+            );
+            let (typed_result, typed_warnings) = times_from_complete_columns(
+                &mut typed_run,
+                &|name, n| {
+                    if name == target {
+                        Arc::new(TimestampMicrosecondArray::from(vec![first; n]))
+                    } else {
+                        base(name, n)
+                    }
+                },
+                &|name| {
+                    if name == target {
+                        Arc::new(TimestampMicrosecondArray::from(vec![first, last]))
+                    } else {
+                        bounds()
+                    }
+                },
+            );
+            if anchor == ANCHOR {
+                let text_error = text_result.unwrap_err();
+                let typed_error = typed_result.unwrap_err();
+                assert_eq!(
+                    text_error.sentence,
+                    sdm_contract::Sentence::ContextBeforeDataRefused
+                );
+                assert_eq!(text_error, typed_error);
+                assert_eq!(text_warnings, typed_warnings);
+                assert_eq!(
+                    text_error.fields["earliest"],
+                    sdm_contract::Detail::Scalar(Scalar::Timestamp {
+                        unit: TimestampUnit::Ns,
+                        zone: None,
+                        value: first * 1_000,
+                    })
+                );
+                continue;
             }
-        };
-        let bounds = || {
-            Arc::new(TimestampMicrosecondArray::from(vec![
-                1_672_531_200_000_000,
-                1_720_310_400_000_000,
-            ])) as ArrayRef
-        };
-        let (text_result, text_warnings) = times_from_complete_columns(
-            &mut text_run,
-            &|name, n| {
-                if name == target {
-                    Arc::new(StringArray::from(vec!["01/02/2024"; n]))
-                } else {
-                    base(name, n)
-                }
-            },
-            &|name| {
-                if name == target {
-                    let mut values = vec!["01/02/2024"; 1005];
-                    values[1004] = "15/03/2024";
-                    Arc::new(StringArray::from(values))
-                } else {
-                    bounds()
-                }
-            },
-        );
-        let (typed_result, typed_warnings) = times_from_complete_columns(
-            &mut typed_run,
-            &|name, n| {
-                if name == target {
-                    Arc::new(TimestampMicrosecondArray::from(vec![first; n]))
-                } else {
-                    base(name, n)
-                }
-            },
-            &|name| {
-                if name == target {
-                    Arc::new(TimestampMicrosecondArray::from(vec![first, last]))
-                } else {
-                    bounds()
-                }
-            },
-        );
-        let text_payload: serde_json::Value =
-            serde_json::from_slice(&text_result.unwrap()).unwrap();
-        let typed_payload: serde_json::Value =
-            serde_json::from_slice(&typed_result.unwrap()).unwrap();
-        assert_eq!(text_payload, typed_payload, "feature={feature}");
-        assert_eq!(text_warnings, typed_warnings, "feature={feature}");
-        assert!(sends(
-            &serde_json::to_vec(&text_payload).unwrap(),
-            "2024-02-01T00:00:00.000000Z"
-        ));
+            let text_payload: serde_json::Value =
+                serde_json::from_slice(&text_result.unwrap()).unwrap();
+            let typed_payload: serde_json::Value =
+                serde_json::from_slice(&typed_result.unwrap()).unwrap();
+            assert_eq!(text_payload, typed_payload, "feature={feature}");
+            assert_eq!(text_warnings, typed_warnings, "feature={feature}");
+            assert!(sends(
+                &serde_json::to_vec(&text_payload).unwrap(),
+                "2024-02-01T00:00:00.000000Z"
+            ));
+        }
     }
 }
 
