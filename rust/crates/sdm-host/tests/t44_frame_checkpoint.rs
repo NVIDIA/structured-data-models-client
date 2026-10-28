@@ -533,7 +533,10 @@ fn incompatible_boolean_link_is_refused_before_a_snapshot_is_constructed() {
         decoded(&failed)["error"]["fields"]["target_dtype"],
         json!({"t":"utf8","v":"bool"})
     );
-    let state = run.take_sampler_state().unwrap().expect("generic sampler memo");
+    let state = run
+        .take_sampler_state()
+        .unwrap()
+        .expect("generic sampler memo");
     let written = decoded(&state);
     assert!(written["state"].get("frame_checkpoint").is_none());
     let memo_id = AttachmentId(written["state"]["memo"].as_u64().unwrap() as u32);
@@ -547,5 +550,9 @@ fn incompatible_boolean_link_is_refused_before_a_snapshot_is_constructed() {
     let valid = HostRun::start(&sdm_host::default_root(), &message(), inputs(3)).unwrap();
     terminal(&valid).expect("matching integer relationship remains admitted");
     let (_, owned) = checkpoint(&valid);
-    assert!(owned.values().any(|value| matches!(value, Attachment::Arrow(_))));
+    assert!(
+        owned
+            .values()
+            .any(|value| matches!(value, Attachment::Arrow(_)))
+    );
 }

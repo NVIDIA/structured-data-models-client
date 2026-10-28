@@ -25,9 +25,18 @@ from sdm_client import Schema, StructuredDataError
         ('none-frame', "table 'rows' must be a pandas DataFrame, got NoneType"),
         ('list-frame', "table 'rows' must be a pandas DataFrame, got list"),
         ('duplicate', "table 'rows' has duplicate column name(s) ['x']"),
-        ('duplicate-integer', "table 'rows' has duplicate column name(s) ['1']"),
-        ('integer-column', "table 'rows' column names must be strings; got [1]"),
-        ('none-column', "table 'rows' column names must be strings; got [None]"),
+        (
+            'duplicate-integer',
+            "table 'rows' has duplicate column name(s) ['1']",
+        ),
+        (
+            'integer-column',
+            "table 'rows' column names must be strings; got [1]",
+        ),
+        (
+            'none-column',
+            "table 'rows' column names must be strings; got [None]",
+        ),
     ],
 )
 def test_native_constructor_refusals_keep_complete_public_outcomes(
@@ -49,7 +58,9 @@ def test_native_constructor_refusals_keep_complete_public_outcomes(
         if case == 'empty':
             frames = {}
         elif case.endswith('-name'):
-            name = {'empty-name': '', 'integer-name': 1, 'none-name': None}[case]
+            name = {'empty-name': '', 'integer-name': 1, 'none-name': None}[
+                case
+            ]
             frames = {name: pd.DataFrame({'value': [1]})}
         elif case.endswith('-frame'):
             frames = {'rows': None if case == 'none-frame' else []}
@@ -60,7 +71,9 @@ def test_native_constructor_refusals_keep_complete_public_outcomes(
                 'integer-column': [1],
                 'none-column': [None],
             }[case]
-            frames = {'rows': pd.DataFrame([[1] * len(columns)], columns=columns)}
+            frames = {
+                'rows': pd.DataFrame([[1] * len(columns)], columns=columns)
+            }
         if frames:
             frames['later'] = later
         with warnings.catch_warnings(record=True) as caught:

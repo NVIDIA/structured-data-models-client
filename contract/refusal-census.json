@@ -3,26 +3,6 @@
   "about": "The refusal census's probes (contract/tools/refusal_census.py; Phase 2 design, choice 10; T2.1a): one per refusal site the tool generates from the code, each written for that site (its intended site): a case's input on the base and the call it runs to, with materialize's keyword arguments the case format does not carry (options) and the model predict asks (model). `why` says what the probe tries and, where the probe's author knows the public calls do not get to the site this way, why. The run records each probe's outcomes on both routes; which site produced an outcome is not claimed (reachability unmeasured).",
   "probes": [
     {
-      "input": {
-        "base": "shop",
-        "materialize": {
-          "anchor_time": "2024-03-01",
-          "indices": [
-            0,
-            1
-          ]
-        },
-        "pql": "PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) FOR EACH users.user_id",
-        "setup": [
-          "CREATE TABLE items AS SELECT i::BIGINT AS item_id FROM range(4) t(i)",
-          "CREATE TABLE buys AS SELECT i::BIGINT AS buy_id, (i % 8)::BIGINT AS user_id, ((i * 3) % 4)::BIGINT AS item_id, TIMESTAMP '2023-01-01' + to_days((i * 5)::INTEGER) AS ts FROM range(120) t(i)"
-        ]
-      },
-      "site": "rule:aggregation",
-      "until": "materialize",
-      "why": "LIST_DISTINCT of a foreign key, which the query validator lets through as a temporal link prediction, Phase 4's (T2.10); every other aggregation outside SUM, COUNT, AVG, MIN and MAX the validator refuses first on both routes"
-    },
-    {
       "site": "rule:column_type",
       "why": "a struct column",
       "input": {
@@ -406,7 +386,7 @@
       "until": "from_source"
     },
     {
-      "site": "rust/crates/sdm-host/src/admission.rs::admitted_type::admission::unsupported#1",
+      "site": "rust/crates/sdm-host/src/admission.rs::admitted_type_with::admission::unsupported#1",
       "why": "a UUID column; DuckDB hands it over as text, so not reached",
       "input": {
         "base": "shop",
@@ -482,7 +462,7 @@
       "until": "from_source"
     },
     {
-      "site": "rust/crates/sdm-request/src/predict.rs::prepare::predict::unsupported#1",
+      "site": "rust/crates/sdm-request/src/predict.rs::validate_native_shape::predict::unsupported#1",
       "why": "a multi-table request to the tabular model",
       "input": {
         "base": "shop",
@@ -499,7 +479,7 @@
       "model": "KumoTabular"
     },
     {
-      "site": "rust/crates/sdm-request/src/predict.rs::prepare::predict::unsupported#2",
+      "site": "rust/crates/sdm-request/src/predict.rs::validate_native_task_outputs::predict::unsupported#1",
       "why": "a task kind the model does not serve; the relational model serves every kind this build sends, so not reached here",
       "input": {
         "base": "shop",
@@ -515,7 +495,7 @@
       "until": "predict"
     },
     {
-      "site": "rust/crates/sdm-request/src/predict.rs::prepare::predict::unsupported#3",
+      "site": "rust/crates/sdm-request/src/predict.rs::validate_native_task_outputs::predict::unsupported#2",
       "why": "an output the model does not produce; the public calls ask none here, so not reached",
       "input": {
         "base": "shop",
@@ -531,7 +511,7 @@
       "until": "predict"
     },
     {
-      "site": "rust/crates/sdm-request/src/predict.rs::prepare::predict::unsupported#4",
+      "site": "rust/crates/sdm-request/src/predict.rs::validate_capacity::predict::unsupported#1",
       "why": "more context rows than the relational model reads; num_context_samples past the limit is refused first, so not reached this way",
       "input": {
         "base": "shop",
@@ -553,7 +533,7 @@
       }
     },
     {
-      "site": "rust/crates/sdm-request/src/predict.rs::preflight::predict::unsupported#1",
+      "site": "rust/crates/sdm-request/src/predict/validation.rs::context_empty::predict::unsupported#1",
       "why": "no context rows left; an anchor before the data is refused first (field anchor_time), so not reached this way",
       "input": {
         "base": "shop",
@@ -569,7 +549,7 @@
       "until": "predict"
     },
     {
-      "site": "rust/crates/sdm-request/src/predict.rs::preflight::predict::unsupported#2",
+      "site": "rust/crates/sdm-request/src/predict/validation.rs::class_count::predict::unsupported#1",
       "why": "a target of 15 classes, past the model's 10",
       "input": {
         "base": "shop",
@@ -588,7 +568,7 @@
       "until": "predict"
     },
     {
-      "site": "rust/crates/sdm-request/src/predict.rs::preflight::predict::unsupported#3",
+      "site": "rust/crates/sdm-request/src/predict/validation.rs::constant::predict::unsupported#1",
       "why": "a classification whose every context row has one answer",
       "input": {
         "base": "shop",
@@ -604,7 +584,7 @@
       "until": "predict"
     },
     {
-      "site": "rust/crates/sdm-request/src/predict.rs::preflight::predict::unsupported#4",
+      "site": "rust/crates/sdm-request/src/predict/validation.rs::explanation_size::predict::unsupported#1",
       "why": "an explanation of more than one entity; the public predict here asks no explanation, so not reached",
       "input": {
         "base": "shop",
@@ -620,7 +600,7 @@
       "until": "predict"
     },
     {
-      "site": "rust/crates/sdm-request/src/predict.rs::preflight::predict::unsupported#5",
+      "site": "rust/crates/sdm-request/src/predict/validation.rs::explanation_mode::predict::unsupported#1",
       "why": "an explanation outside the fast run mode; the public predict here asks no explanation, so not reached",
       "input": {
         "base": "shop",
@@ -648,7 +628,7 @@
           ],
           "anchor_time": "2024-03-01",
           "inference_config": {
-            "num_estimators": 1e400
+            "num_estimators": Infinity
           }
         }
       },
@@ -672,25 +652,6 @@
       "options": {
         "anchor_time": "2024-03-01"
       }
-    },
-    {
-      "site": "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_payload#1",
-      "why": "an infinite feature value in the payload; refused first by the core's own payload check, so not reached this way",
-      "input": {
-        "base": "shop",
-        "setup": [
-          "UPDATE orders SET price = 'inf'::DOUBLE WHERE order_id = 3"
-        ],
-        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
-        "materialize": {
-          "indices": [
-            0,
-            1
-          ],
-          "anchor_time": "2024-03-01"
-        }
-      },
-      "until": "predict"
     },
     {
       "site": "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::from_source#1",
@@ -749,6 +710,214 @@
           "CREATE TABLE buys AS SELECT i::BIGINT AS buy_id, (i % 8)::BIGINT AS user_id, ((i * 3) % 4)::BIGINT AS item_id, TIMESTAMP '2023-01-01' + to_days((i * 5)::INTEGER) AS ts FROM range(120) t(i)"
         ],
         "pql": "PREDICT LIST_DISTINCT(buys.item_id, -INF, 30, days) RANK TOP 2 FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize"
+    },
+    {
+      "site": "rule:direct_numeric_storage",
+      "why": "Raw numeric cell/storage conversion with an unsupported nonnumeric variant. The SQL runner creates gathered relational input, not direct storage, and does not reach this guard. Concrete three-arm negative and primitive/String positive consumers: rust/crates/sdm-request/src/tabular/refusal_tests.rs::numeric_storage_guard_has_three_negative_readers_and_primitive_twins.",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize"
+    },
+    {
+      "site": "rule:frame_native_family",
+      "why": "An unfinished raw Date32 frame descriptor. SQL source construction has separate type admission and does not reach this native fallback. Actual Host consumer: rust/crates/sdm-host/tests/t42_frames.rs::date32_frame_is_an_explicit_unfinished_input_family; admitted native object/Decimal families retain their separate descriptors.",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize"
+    },
+    {
+      "site": "rule:frame_text_key",
+      "why": "Raw UTF8/LargeUTF8 identifying values without an explicit encoding product. SQL keys do not use this raw frame reader. Both raw refusals and encoded successful twins: rust/crates/sdm-engine/tests/frame_raw_refusals.rs::raw_text_keys_require_the_actual_encoding_product_for_both_offset_widths.",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize"
+    },
+    {
+      "site": "rule:frame_text_features",
+      "why": "A raw Text column without completed native preparation. SQL materialization does not enter raw Snapshot preparation. Raw refusal and complete native encoding twin: rust/crates/sdm-engine/tests/frame_raw_refusals.rs::raw_text_and_untimed_timestamps_keep_separate_preparation_guards; public Unicode/casing tests retain exact native normalization.",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize"
+    },
+    {
+      "site": "rule:frame_untimed_timestamp_features",
+      "why": "A raw timestamp feature in a graph with no timed table and no complete native preparation. SQL does not enter this raw frame guard. Exact raw refusal/prepared-native success: rust/crates/sdm-engine/tests/frame_raw_refusals.rs::raw_text_and_untimed_timestamps_keep_separate_preparation_guards.",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize"
+    },
+    {
+      "site": "rule:frame_wide_timestamps",
+      "why": "An unprepared raw timestamp count outside nanoseconds. The SQL runner does not enter frame Snapshot conversion. Direct boundary witness: rust/crates/sdm-engine/tests/frame_raw_refusals.rs::raw_time_type_and_range_guards_do_not_reject_prepared_native_counts. Public test_t44_temporal_frames.py::test_wide_counts_stay_lossless_and_keep_frozen_native_range_refusal preserves the original native INVALID_REQUEST before export for time/feature, seconds/milliseconds and 1600/2263; this raw guard is not an unfinished old-success family.",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize"
+    },
+    {
+      "site": "rule:frame_time_type",
+      "why": "A raw designated time column that is not a timestamp. SQL and complete native source preparation validate/convert it earlier. Actual raw negative/prepared-native positive consumer: rust/crates/sdm-engine/tests/frame_raw_refusals.rs::raw_time_type_and_range_guards_do_not_reject_prepared_native_counts.",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize"
+    },
+    {
+      "site": "rust/crates/sdm-request/src/predict.rs::validate_native_outputs::predict::unsupported#1",
+      "why": "Unsupported positions from actual native supported-output membership. This SQL probe asks default outputs, so does not reach the refusal. Exact selected-position refusal, empty success and duplicate/out-of-range/order-malformed consumers: rust/crates/sdm-request/tests/native_refusal_guards.rs::native_output_membership_refuses_only_valid_selected_positions.",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize"
+    },
+    {
+      "site": "packages/structured-data-models-client/src/sdm_client/_rust/frames.py::_check_header#1",
+      "why": "duplicate labels, including integer duplicates before nonstring-label validation. The SQL shop fixture cannot reach this native mapping/header guard. Actual full old/core public outcomes, exact words and first-failure no-later-column-read consumer: packages/structured-data-models-client/tests/test_t44_census_constructor_boundaries.py::test_native_constructor_refusals_keep_complete_public_outcomes.",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize"
+    },
+    {
+      "site": "packages/structured-data-models-client/src/sdm_client/_rust/frames.py::_check_header#2",
+      "why": "ordinary integer/None nonstring labels. The SQL shop fixture cannot reach this native mapping/header guard. Actual full old/core public outcomes, exact words and first-failure no-later-column-read consumer: packages/structured-data-models-client/tests/test_t44_census_constructor_boundaries.py::test_native_constructor_refusals_keep_complete_public_outcomes.",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize"
+    },
+    {
+      "site": "packages/structured-data-models-client/src/sdm_client/_rust/frames.py::from_data#1",
+      "why": "an empty native table mapping. The SQL shop fixture cannot reach this native mapping/header guard. Actual full old/core public outcomes, exact words and first-failure no-later-column-read consumer: packages/structured-data-models-client/tests/test_t44_census_constructor_boundaries.py::test_native_constructor_refusals_keep_complete_public_outcomes.",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize"
+    },
+    {
+      "site": "packages/structured-data-models-client/src/sdm_client/_rust/frames.py::from_data#2",
+      "why": "empty, integer or None table names. The SQL shop fixture cannot reach this native mapping/header guard. Actual full old/core public outcomes, exact words and first-failure no-later-column-read consumer: packages/structured-data-models-client/tests/test_t44_census_constructor_boundaries.py::test_native_constructor_refusals_keep_complete_public_outcomes.",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize"
+    },
+    {
+      "site": "packages/structured-data-models-client/src/sdm_client/_rust/frames.py::from_data#3",
+      "why": "None/list mapping values rather than DataFrames. The SQL shop fixture cannot reach this native mapping/header guard. Actual full old/core public outcomes, exact words and first-failure no-later-column-read consumer: packages/structured-data-models-client/tests/test_t44_census_constructor_boundaries.py::test_native_constructor_refusals_keep_complete_public_outcomes.",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
         "materialize": {
           "indices": [
             0,

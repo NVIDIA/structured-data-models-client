@@ -33,7 +33,10 @@ fn shared_task_shape_and_capacity_keep_their_distinct_refusals() {
     predict::validate_task_outputs(predict::TABULAR, "regression", &outputs).unwrap();
     assert_eq!(
         predict::validate_native_task_outputs(
-            predict::TABULAR, "regression", &outputs, Some(false),
+            predict::TABULAR,
+            "regression",
+            &outputs,
+            Some(false),
         )
         .unwrap_err()
         .sentence,
@@ -65,7 +68,9 @@ fn shared_task_shape_and_capacity_keep_their_distinct_refusals() {
 fn relocated_preflight_policies_keep_their_boundary_twins() {
     validation::context_empty(false, predict::RELATIONAL).unwrap();
     assert_eq!(
-        validation::context_empty(true, predict::RELATIONAL).unwrap_err().sentence,
+        validation::context_empty(true, predict::RELATIONAL)
+            .unwrap_err()
+            .sentence,
         Sentence::NoContextRows
     );
     validation::class_count(predict::CLASSES_MAX, predict::RELATIONAL).unwrap();
@@ -77,12 +82,16 @@ fn relocated_preflight_policies_keep_their_boundary_twins() {
     );
     validation::explanation_size(1, predict::RELATIONAL).unwrap();
     assert_eq!(
-        validation::explanation_size(2, predict::RELATIONAL).unwrap_err().sentence,
+        validation::explanation_size(2, predict::RELATIONAL)
+            .unwrap_err()
+            .sentence,
         Sentence::ExplanationOneEntity
     );
     validation::explanation_mode(false, predict::RELATIONAL).unwrap();
     assert_eq!(
-        validation::explanation_mode(true, predict::RELATIONAL).unwrap_err().sentence,
+        validation::explanation_mode(true, predict::RELATIONAL)
+            .unwrap_err()
+            .sentence,
         Sentence::ExplanationFastMode
     );
 }

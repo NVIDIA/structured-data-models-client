@@ -18,12 +18,13 @@ probe, and each probe run on both routes.
 ``sites`` prints the sites of DIR's code as JSON, never written by hand:
 
 - every named rule, each ``not_yet("<rule>")`` in ``rust/crates/*/src``
-  outside a file's ``#[cfg(test)]`` part, one site per rule (``rule:<rule>``;
+  outside ``#[cfg(test)]`` items and their module files, one site per rule (``rule:<rule>``;
   ``where`` its first call, ``also`` the others);
 - every call of a rule-less refusal constructor: ``unsupported_type``
   (``sdm-contract/src/types.rs``, public, so a call in any crate),
   admission's ``unsupported`` (``sdm-host/src/admission.rs``) and predict's
-  ``unsupported`` (``sdm-request/src/predict.rs``), each call its own site,
+  ``unsupported`` (``sdm-request/src/predict.rs`` and its shared
+  ``predict/validation.rs`` policy), each call its own site,
   named by its file, enclosing function, constructor and ordinal there
   (``<path>::<fn>::<constructor>#<n>``), its ``where`` the line;
 - the Python host's own refusals: each ``raise StructuredDataError(...)``
@@ -80,20 +81,23 @@ MESSAGES = 'SDM_CENSUS_MESSAGES'
 PROBES = Path('contract/refusal-census.json')
 CRATES = 'rust/crates/*/src/**/*.rs'
 HOST = Path('packages/structured-data-models-client/src/sdm_client/_rust')
-#: The rule-less refusal constructors: the file defining each, and the code
+#: The rule-less refusal constructors: the files defining each, and the code
 #: its error carries. ``unsupported_type`` is public, so its calls in any
-#: crate are sites; the two private ones are called in their own file only.
+#: crate are sites; private calls are read only in their explicit policy homes.
 RULELESS = {
     'unsupported_type': (
-        'rust/crates/sdm-contract/src/types.rs',
+        ('rust/crates/sdm-contract/src/types.rs',),
         'UNSUPPORTED_TYPE',
     ),
     'admission::unsupported': (
-        'rust/crates/sdm-host/src/admission.rs',
+        ('rust/crates/sdm-host/src/admission.rs',),
         'UNSUPPORTED_TYPE',
     ),
     'predict::unsupported': (
-        'rust/crates/sdm-request/src/predict.rs',
+        (
+            'rust/crates/sdm-request/src/predict.rs',
+            'rust/crates/sdm-request/src/predict/validation.rs',
+        ),
         'UNSUPPORTED_REQUEST',
     ),
 }
@@ -122,9 +126,63 @@ class CensusError(Exception):
 # --- sites -----------------------------------------------------------------------
 
 
+def _rust_lexical() -> ModuleType:
+    """Reuse the repository's Rust lexer, without executing any check."""
+    name = '_census_rust_lexical'
+    if name not in sys.modules:
+        spec = importlib.util.spec_from_file_location(
+            name, REPO / 'scripts/rust_core/l0_scan.py'
+        )
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        spec.loader.exec_module(module)
+    return sys.modules[name]
+
+
 def _production(text: str) -> str:
-    r"""A Rust source's text before its ``#[cfg(test)]`` part."""
-    return text.split('#[cfg(test)]', 1)[0]
+    """Blank conditional test items, preserving all production positions.
+
+    The existing lexer handles comments, characters and raw/escaped strings;
+    their braces and semicolons cannot terminate a Rust item here.
+    """
+    source = _rust_lexical().read_rust(text)
+    skeleton = source.skeleton
+    spans = []
+    consumed = 0
+    for match in re.finditer(r'#\[\s*cfg\s*\(\s*test\s*\)\s*\]', skeleton):
+        if match.start() < consumed:
+            continue
+        depth = 0
+        body = False
+        end = len(skeleton)
+        for at in range(match.end(), len(skeleton)):
+            char = skeleton[at]
+            if char in '([':
+                depth += 1
+            elif char in ')]':
+                depth -= 1
+            elif depth == 0 and char == ';' and not body:
+                end = at + 1
+                break
+            elif char == '{':
+                body = True
+                depth += 1
+            elif char == '}':
+                depth -= 1
+                if body and depth == 0:
+                    end = at + 1
+                    break
+        spans.append((match.start(), end))
+        consumed = end
+    code = source.code
+    for start, end in reversed(spans):
+        code = (
+            code[:start]
+            + ''.join('\n' if char == '\n' else ' ' for char in code[start:end])
+            + code[end:]
+        )
+    return code
 
 
 def _line(text: str, offset: int) -> int:
@@ -142,7 +200,10 @@ def _function(lines: list[str], number: int) -> str:
 
 
 def _rust_sources(root: Path) -> list[Path]:
-    return sorted(root.glob(CRATES))
+    excluded = set()
+    for source in (root / 'rust/crates').glob('*/src'):
+        excluded.update(_rust_lexical().test_module_files(source))
+    return sorted(path for path in root.glob(CRATES) if path not in excluded)
 
 
 def _named(root: Path) -> list[dict[str, Any]]:
@@ -173,9 +234,9 @@ def _calls(root: Path) -> list[dict[str, Any]]:
         lines = _production(path.read_text(encoding='utf-8')).splitlines()
         counts: dict[tuple[str, str], int] = {}
         for number, line in enumerate(lines, 1):
-            for name, (home, code) in RULELESS.items():
+            for name, (homes, code) in RULELESS.items():
                 short = name.rpartition('::')[2]
-                if name != 'unsupported_type' and relative != home:
+                if name != 'unsupported_type' and relative not in homes:
                     continue
                 if not re.search(rf'\b{short}\(', line) or re.search(
                     rf'\bfn\s+{short}\(', line

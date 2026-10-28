@@ -8,8 +8,8 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use arrow_array::{
-    ArrayRef, Int64Array, LargeStringArray, RecordBatch, StringArray,
-    TimestampNanosecondArray, TimestampSecondArray,
+    ArrayRef, Int64Array, LargeStringArray, RecordBatch, StringArray, TimestampNanosecondArray,
+    TimestampSecondArray,
 };
 use sdm_contract::data::strings::StringEncoding;
 use sdm_contract::ops::HeldSchema;
@@ -25,7 +25,8 @@ fn source_graph(key_type: &str, value_type: &str, stype: &str, timed: bool) -> G
             {"name":"id","dtype":key_type,"stype":"ID","stype_before_key":null},
             {"name":"value","dtype":value_type,"stype":stype,"stype_before_key":null}
         ],"primary_key":["id"],"time_column":if timed {Some("value")} else {None}
-    }],"links":[]})).unwrap();
+    }],"links":[]}))
+    .unwrap();
     let description = sdm_schema::held::read(held, &BTreeMap::new(), true)
         .unwrap()
         .description;
@@ -107,7 +108,10 @@ fn raw_time_type_and_range_guards_do_not_reject_prepared_native_counts() {
     assert_rule(
         Snapshot::new(
             &graph,
-            rows(ids(), Arc::new(TimestampSecondArray::from(vec![1, i64::MAX]))),
+            rows(
+                ids(),
+                Arc::new(TimestampSecondArray::from(vec![1, i64::MAX])),
+            ),
         ),
         "frame_wide_timestamps",
     );

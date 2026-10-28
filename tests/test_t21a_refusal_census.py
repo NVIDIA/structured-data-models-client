@@ -18,9 +18,11 @@ to; a database the core can't run yet is reported as unmeasured, never as
 zero hits. Its first run is on DuckDB.
 
 The oracle for "every named rule" and "every rule-less call" is computed
-here, independently of the tool, from the same tree: each
+here from the same tree with independent matching: each
 ``not_yet("<rule>")`` name, and each call of the three constructors, in
-``rust/crates/*/src`` outside a file's ``#[cfg(test)]`` part.
+``rust/crates/*/src`` outside conditional test items.
+The production-item reader is shared and independently pinned below by a
+literal source fixture with exact expected rules and original line numbers.
 
 Seeded (T2.0d's row): a refusal site with no probe fails, shown for a new
 named rule and a new rule-less call, each in a copy of the tree whose
@@ -35,12 +37,14 @@ definition. Unmarked tests are controls that pass today.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import re
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 import pytest
@@ -79,12 +83,30 @@ NOT_YET = re.compile(r'\bnot_yet\(\s*"([a-z0-9_]+)"')
 
 
 def _production(text: str) -> str:
-    r"""A Rust source's text before its ``#[cfg(test)]`` part."""
-    return text.split('#[cfg(test)]', 1)[0]
+    """Shared lexical scope; the rule/call matching below is independent."""
+    return _scope()._production(text)
+
+
+def _scope() -> ModuleType:
+    name = '_census_test_scope'
+    if name not in sys.modules:
+        spec = importlib.util.spec_from_file_location(name, TOOL)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        spec.loader.exec_module(module)
+    return sys.modules[name]
 
 
 def _sources(root: Path) -> list[Path]:
-    return sorted(root.glob('rust/crates/*/src/**/*.rs'))
+    excluded = set()
+    for source in (root / 'rust/crates').glob('*/src'):
+        excluded.update(_scope()._rust_lexical().test_module_files(source))
+    return sorted(
+        path
+        for path in root.glob('rust/crates/*/src/**/*.rs')
+        if path not in excluded
+    )
 
 
 def named_rules(root: Path) -> set[str]:

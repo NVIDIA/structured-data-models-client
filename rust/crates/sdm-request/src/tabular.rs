@@ -20,6 +20,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub mod response;
 
+#[cfg(test)]
+mod refusal_tests;
+
 fn text(value: impl Into<String>) -> Value {
     let value: String = value.into();
     Value::Text(value.into())
