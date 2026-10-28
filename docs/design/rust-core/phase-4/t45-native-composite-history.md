@@ -110,7 +110,10 @@ This adds no stage, callback, cursor or second query representation.
 
 Population consumes the retained validation for query meaning and final native graph metadata for actual time bounds and topology.
 Do not reparse the query against metadata edited by the fold, and do not restore the old time column from its validation snapshot.
-The original context-time lookup can then fail with native `KeyError(table)` after successful sanitation and graph notices and before any entity or neighbor draw.
+With an explicit anchor, the original reaches seed-generator construction and then its sample-target required time-column lookup before any entity or neighbor draw.
+The missing final time metadata can then fail with native `KeyError(table)` after successful sanitation and graph notices.
+The reached iteration and explicit anchor/context validations precede that lookup.
+Reuse those existing guards before selecting the missing-time failure, and retain their native ValueError causes at this frame task boundary.
 Preserve that selected native cause at the existing frame error presentation boundary instead of returning an unrelated PQL or internal-error diagnostic.
 This closes the reached same-table time mutation in the recorded original journey.
 At that same native task-classification boundary, a retained LIST_DISTINCT query whose final graph no longer has its unique registered target foreign key keeps the original unsupported-multilabel NotImplementedError presentation before label fetches or sampling.
@@ -161,3 +164,6 @@ The coordinator composes the complete source and canonical artifacts, obtains tw
 The narrow follow-up collision receipt contains seven successful original-route observations with frozen provenance.
 Its ordinary, integer-with-ID and text-with-ID controls succeed through prediction, while ordinary integer/text/category/float metadata collisions fold before their primary-key stype refusal.
 The earlier 34-case receipt and every executed producer remain immutable.
+
+The narrow explicit-anchor precedence witness confirms that context-anchor entity mismatch and zero iterations each precede missing final time metadata, with their exact native ValueError causes.
+The absent-anchor default-time lookup is a distinct earlier read; do not attribute the explicit-anchor witness to it.

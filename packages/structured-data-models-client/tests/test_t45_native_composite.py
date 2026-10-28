@@ -53,6 +53,8 @@ CASES = (
     'key-moved',
     'later-table',
     'same-time',
+    'same-time-context',
+    'same-time-iterations',
     'relationships',
     'render-error',
     'replace',
@@ -86,7 +88,7 @@ def _observe(label):
                     elif label == 'later-table':
                         schema['users']['age'].stype = 'categorical'
                         mutations.append('users-age')
-                    elif label == 'same-time':
+                    elif label.startswith('same-time'):
                         schema['buys'].time_column = None
                         mutations.append('no-time')
                     elif label == 'relationships':
@@ -141,6 +143,8 @@ def _observe(label):
         'key-moved',
         'later-table',
         'same-time',
+        'same-time-context',
+        'same-time-iterations',
         'relationships',
         'render-error',
         'replace',
@@ -207,6 +211,13 @@ def _observe(label):
                     num_context_samples=3,
                     num_hops=1,
                     num_neighbors=[3, 3],
+                    **(
+                        {'context_anchor_time': 'entity'}
+                        if label.endswith('-context')
+                        else {'max_pq_iterations': 0}
+                        if label.endswith('-iterations')
+                        else {}
+                    ),
                 )
 
             stage = 'materialize'
