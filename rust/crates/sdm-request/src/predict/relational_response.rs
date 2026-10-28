@@ -879,7 +879,14 @@ mod tests {
                 |n| n.to_string(),
             )
             .unwrap();
-            assert_eq!(part.rows[0].prediction, native_answer(&expected));
+            assert_eq!(
+                part.rows[0].prediction,
+                if dtype == "bool" {
+                    Answer::Bool(true)
+                } else {
+                    native_answer(&expected)
+                }
+            );
             assert_eq!(
                 part.answers,
                 if dtype == "bool" {
@@ -1073,6 +1080,7 @@ mod tests {
             classification: true,
             dtype_truth: Some(true),
             numeric_prefix: Some(true),
+            dtype: Some("int64".into()),
         };
         let converted = vec![RelationalTargetRow {
             ordinal: 0,

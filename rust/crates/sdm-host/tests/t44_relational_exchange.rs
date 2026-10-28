@@ -174,6 +174,16 @@ fn exchange_prediction(
     classification: bool,
     nested_prediction: Option<&Value>,
 ) -> (CallPreparation, OwnedPart) {
+    exchange_native_prediction(payload, child, classification, nested_prediction, None)
+}
+
+fn exchange_native_prediction(
+    payload: &Value,
+    child: usize,
+    classification: bool,
+    nested_prediction: Option<&Value>,
+    native_prediction: Option<&sdm_contract::scalar::native_value::NativeValue>,
+) -> (CallPreparation, OwnedPart) {
     let kind = payload["task"]["kind"].as_str().unwrap();
     let bound = bound(kind);
     let request_id = format!("host-call-{child}");
@@ -325,12 +335,32 @@ fn exchange_prediction(
         Attachments::new(),
     );
     assert_eq!(meaning.classification, classification);
+    let dtype = payload["task"]["target"]["dtype"].as_str().unwrap();
     let converted = decoded
         .iter()
         .map(|row| RelationalTargetRow {
             ordinal: row.ordinal,
-            prediction: row.prediction.clone(),
-            probabilities: row.probabilities.clone(),
+            prediction: native_prediction.unwrap_or(&row.prediction).clone(),
+            probabilities: row.probabilities.as_ref().map(|values| {
+                values
+                    .iter()
+                    .map(|(name, probability)| {
+                        use sdm_contract::scalar::native_value::NativeValue;
+                        let value = match (classification, dtype, name.as_str()) {
+                            (true, "bool", "False") => NativeValue::Boolean { value: false },
+                            (true, "bool", "True") => NativeValue::Boolean { value: true },
+                            _ => NativeValue::Unicode {
+                                points: name.chars().map(u32::from).collect(),
+                            },
+                        };
+                        RelationalTargetProbability {
+                            value,
+                            name: name.clone(),
+                            probability: probability.clone(),
+                        }
+                    })
+                    .collect()
+            }),
         })
         .collect::<Vec<_>>();
     attached.insert(AttachmentId(5), bytes(&converted));
@@ -350,12 +380,81 @@ fn exchange_prediction(
                         .starts_with(prefix)
                 })
             }),
+            dtype: classification.then(|| dtype.into()),
         },
         target_rows: AttachmentId(5),
     };
     let completion = start(Preparation::CompleteRelationalResponse { part }, attached);
     let part = done(&completion);
     (bound, OwnedPart::take(&completion, part))
+}
+
+#[test]
+fn complete_and_later_merge_apply_gathered_grammar_to_original_class_values() {
+    use sdm_contract::scalar::native_value::NativeValue;
+    let fixture: Value = serde_json::from_str(include_str!(
+        "../../../../packages/structured-data-models-client/tests/t44_mutable_prediction_reference.json"
+    )).unwrap();
+    let mut payload = fixture["cases"]["r2/control"]["wire"][0].clone();
+    payload["task"]["target"]["dtype"] = json!("int64");
+    let native = NativeValue::Integer {
+        digits: "10".into(),
+    };
+    for raw in ["1_0", "10"] {
+        let (bound, mut owned) =
+            exchange_native_prediction(&payload, 0, true, Some(&json!(raw)), Some(&native));
+        let mut attached = Attachments::new();
+        let part = owned.attach(&mut attached);
+        let (result, rows) = finish(
+            bound.clone(),
+            RelationalAggregation::Calls {
+                parts: vec![part],
+                counted: vec![Some(2)],
+                known_empty: false,
+            },
+            attached,
+        );
+        assert_eq!(result.lineage.len(), 2);
+        assert_eq!(result.lineage[0].source_row, Some(1));
+        assert_eq!(result.lineage[1].source_row, Some(0));
+        let values = rows.batches[0].column_by_name("prediction").unwrap();
+        if raw == "1_0" {
+            let values = values.as_string::<i32>();
+            assert_eq!(values.value(0), "1_0");
+            assert_eq!(values.value(1), "1_0");
+        } else {
+            let values = values.as_primitive::<Int64Type>();
+            assert_eq!(values.value(0), 10);
+            assert_eq!(values.value(1), 10);
+        }
+        // This buffer already passed CompleteRelationalResponse. A later
+        // merge must revalidate its ordered entry/probability bindings.
+        let mut converted: Vec<RelationalTargetRow> =
+            serde_json::from_slice(&owned.buffers[3]).unwrap();
+        converted[0].probabilities.as_mut().unwrap().reverse();
+        owned.buffers[3] = serde_json::to_vec(&converted).unwrap();
+        let mut attached = Attachments::new();
+        let part = owned.attach(&mut attached);
+        let run = start(
+            Preparation::FinishRelationalResponse {
+                input: RelationalResultInput {
+                    bound,
+                    aggregation: RelationalAggregation::Calls {
+                        parts: vec![part],
+                        counted: vec![Some(2)],
+                        known_empty: false,
+                    },
+                    report_absent: true,
+                },
+            },
+            attached,
+        );
+        let out = run.next().unwrap_err();
+        let ControlMessage::Error { error } = sdm_host::read(&out).unwrap() else {
+            panic!("changed target bindings must refuse")
+        };
+        assert_eq!(error.sentence, sdm_contract::Sentence::InvalidMessage);
+    }
 }
 
 #[test]
