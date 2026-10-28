@@ -297,3 +297,19 @@ fn standard_codec_keeps_surrogate_points_distinct_from_supplementary_scalars() {
         ]
     );
 }
+
+#[test]
+fn malformed_native_topology_cannot_hide_or_relabel_a_compound_identity() {
+    let graph = NativeGraph::new(&description()).unwrap();
+    for change in 0..3 {
+        let mut malformed = graph.clone();
+        match change {
+            0 => malformed.topology.tables[0].primary_key = None,
+            1 => malformed.primary_keys.get_mut("history").unwrap().reverse(),
+            _ => {
+                malformed.primary_keys.remove("history");
+            }
+        }
+        assert!(Snapshot::new_frame(&malformed, BTreeMap::new(), None, BTreeMap::new()).is_err());
+    }
+}
