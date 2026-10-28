@@ -436,4 +436,56 @@ mod tests {
         assert!(!error.fields.contains_key("message_points"));
         assert_eq!(error.public_details.as_deref(), Some(&BTreeMap::new()));
     }
+
+    #[test]
+    fn post_cast_source_uses_existing_native_edge_kind_refusal() {
+        let mut key = declared("float64").column;
+        key.name = "item_id".into();
+        let items = HeldTable {
+            name: "items".into(),
+            source: "items".into(),
+            columns: vec![key],
+            primary_key: vec!["item_id".into()],
+            frame_key_form: None,
+            time_column: None,
+            duplicate_keys: None,
+        };
+        let mut foreign = declared("string").column;
+        foreign.name = "item_id".into();
+        let buys = HeldTable {
+            name: "buys".into(),
+            source: "buys".into(),
+            columns: vec![foreign],
+            primary_key: vec![],
+            frame_key_form: None,
+            time_column: None,
+            duplicate_keys: None,
+        };
+        let tables = vec![items, buys];
+        let error = source(
+            HeldSchema {
+                tables: tables.clone(),
+                links: vec![vec![
+                    ColumnRef {
+                        table: "buys".into(),
+                        column: "item_id".into(),
+                    },
+                    ColumnRef {
+                        table: "items".into(),
+                        column: "item_id".into(),
+                    },
+                ]],
+            },
+            tables
+                .into_iter()
+                .map(|table| FrameTableMeaning { table })
+                .collect(),
+        )
+        .unwrap_err();
+        assert_eq!(error.sentence, Sentence::EdgeKeyTypes);
+        assert_eq!(error.fields["source_dtype"], Detail::text("string"));
+        assert_eq!(error.fields["target_dtype"], Detail::text("float"));
+        assert_eq!(error.fields["source_table"], Detail::text("buys"));
+        assert_eq!(error.fields["target_table"], Detail::text("items"));
+    }
 }

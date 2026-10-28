@@ -146,3 +146,61 @@ fn forecast_parent_is_silent_and_each_ordinary_child_emits_one_filter_notice() {
         assert_eq!(warnings[0]["code"], "FILTER_CHOSE_EXAMPLES");
     }
 }
+
+fn refused_ordinary_question(dtype: &str) -> sdm_contract::CoreError {
+    let schema = json!({"tables":[{
+        "name":"users","source":{"source":["users"]},
+        "columns":[
+            {"name":"user_id","dtype":"int64","stype":"ID","stype_before_key":null},
+            {"name":"age","dtype":"int32","stype":"numerical","stype_before_key":null},
+            {"name":"amount","dtype":dtype,"stype":"numerical","stype_before_key":null}
+        ],"primary_key":["user_id"],"frame_key_form":"scalar","time_column":null
+    }],"links":[]});
+    let (question, mut owners, warnings) = prepare(
+        json!({"stage":"question","schema":1,"query":2,"candidates_given":false,"statistic_given":false,"top_k_given":false}),
+        Attachments::from([
+            (AttachmentId(1), bytes(schema)),
+            (
+                AttachmentId(2),
+                bytes(json!("PREDICT users.age FOR EACH users.user_id")),
+            ),
+        ]),
+    );
+    assert!(warnings.is_empty());
+    owners.insert(AttachmentId(100), bytes(json!({"stage":"questions","input":{
+        "question":question["data"],"candidates":null,"values":null,"options":[],"option_facts":[],"prediction_rows":2,"limits":{}
+    }})));
+    let run = HostRun::start(&sdm_host::default_root(), &message(), owners)
+        .unwrap_or_else(|out| panic!("{:?}", sdm_host::read(&out)));
+    let out = run
+        .next()
+        .expect_err("incompatible meaning must refuse before any graph");
+    assert!(run.take_sampler_state().unwrap().is_none());
+    assert!(run.take_warnings().unwrap().is_none());
+    let ControlMessage::Error { error } = sdm_host::read(&out).unwrap() else {
+        panic!("ordinary schema refusal")
+    };
+    error
+}
+
+#[test]
+fn caller_type_names_are_retained_in_resolved_question_until_ordinary_checks() {
+    let error = refused_ordinary_question("string");
+    assert_eq!(error.sentence, sdm_contract::Sentence::MeaningNotCarried);
+    assert_eq!(error.fields["dtype"], sdm_contract::Detail::text("string"));
+    assert_eq!(error.fields["column"], sdm_contract::Detail::text("amount"));
+    assert_eq!(
+        error.fields["stype"],
+        sdm_contract::Detail::text("numerical")
+    );
+}
+
+#[test]
+fn caller_unknown_type_passthrough_does_not_remove_later_native_meaning_check() {
+    let error = refused_ordinary_question("custom-native-type");
+    assert_eq!(
+        error.sentence,
+        sdm_contract::Sentence::IncompatibleSemanticType
+    );
+    assert_eq!(error.fields["column"], sdm_contract::Detail::text("amount"));
+}
