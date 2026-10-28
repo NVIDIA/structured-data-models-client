@@ -115,6 +115,181 @@ fn primitive_frame_is_described_without_any_fetch() {
     }
 }
 
+/// The Python constructor uses this existing FrameScalar tuple for declared
+/// strings whose exact native points cannot be represented by Arrow UTF8.
+fn native_text_cells(values: &[Option<Vec<u8>>]) -> arrow_array::ArrayRef {
+    use arrow_array::{ArrayRef, BinaryArray, StructArray, UInt8Array, new_null_array};
+    use arrow_schema::{DataType, Field};
+
+    let definitions = [
+        ("kind", DataType::UInt8),
+        ("negative", DataType::Boolean),
+        ("digits", DataType::Utf8),
+        ("exponent", DataType::Int64),
+        ("special", DataType::UInt8),
+        ("boolean", DataType::Boolean),
+        ("integer", DataType::Utf8),
+        ("float_bits", DataType::UInt64),
+        ("text", DataType::Binary),
+    ];
+    let fields = definitions
+        .into_iter()
+        .enumerate()
+        .map(|(at, (name, dtype))| {
+            let array: ArrayRef = match at {
+                0 => Arc::new(UInt8Array::from(
+                    values
+                        .iter()
+                        .map(|value| if value.is_some() { 6 } else { 1 })
+                        .collect::<Vec<_>>(),
+                )),
+                8 => Arc::new(BinaryArray::from_iter(values.iter().map(Option::as_deref))),
+                _ => new_null_array(&dtype, values.len()),
+            };
+            (Arc::new(Field::new(name, dtype, at != 0)), array)
+        })
+        .collect::<Vec<_>>();
+    Arc::new(StructArray::from(fields))
+}
+
+#[test]
+fn declared_native_text_uses_shared_schema_rules_without_losing_points_or_ordinals() {
+    use arrow_array::ArrayRef;
+    use sdm_contract::ops::{Dtype, SourceDescription, Stype};
+
+    // These are distinct Python strings, although a JSON surrogate pair can
+    // decode to the same supplementary scalar if passed through ordinary JSON.
+    let pair = vec![0xed, 0xa0, 0xbd, 0xed, 0xb8, 0xba];
+    let scalar = "😺".as_bytes().to_vec();
+    for (name, values, expected_stype, expected_key) in [
+        (
+            "value_id",
+            vec![Some(pair.clone()), Some(scalar.clone())],
+            Stype::Id,
+            true,
+        ),
+        (
+            "value_id",
+            vec![Some(pair.clone()), None, Some(scalar.clone())],
+            Stype::Categorical,
+            false,
+        ),
+        (
+            "value",
+            vec![Some(vec![0xed, 0xa0, 0x80]), Some(Vec::new()), None],
+            Stype::Categorical,
+            false,
+        ),
+        (
+            "value",
+            (0..65)
+                .map(|number| Some([number.to_string().as_bytes(), &[0xed, 0xa0, 0x80]].concat()))
+                .collect(),
+            Stype::Text,
+            false,
+        ),
+    ] {
+        let length = values.len();
+        let cells = native_text_cells(&values);
+        let batch = RecordBatch::try_from_iter([
+            (
+                "before",
+                Arc::new(Int16Array::from(vec![0; length])) as ArrayRef,
+            ),
+            (name, Arc::clone(&cells)),
+            (
+                "after",
+                Arc::new(Int16Array::from(vec![1; length])) as ArrayRef,
+            ),
+        ])
+        .unwrap();
+        let mut attached = inputs();
+        attached.insert(
+            AttachmentId(2),
+            bytes(json!({
+                "stage":"schema", "tables":[{
+                    "source":{"source":["users"]}, "rows":3,
+                    "objects":[{"column":1,"name":name,"category":false,
+                        "meaning":{"dtype":"string","untyped":false}}]
+                }]
+            })),
+        );
+        attached.insert(
+            AttachmentId(3),
+            Attachment::Arrow(ArrowData::new(batch.schema(), vec![batch])),
+        );
+        let run = HostRun::start(&sdm_host::default_root(), &message(), attached)
+            .unwrap_or_else(|out| panic!("{:?}", error(out)));
+        loop {
+            match sdm_host::read(&run.next().unwrap()).unwrap() {
+                ControlMessage::Warnings { .. } => {}
+                ControlMessage::Step(Step::Done {
+                    result: OperationResult::DescribeSource(result),
+                    ..
+                }) => {
+                    let Attachment::Bytes(data) =
+                        run.take_attachment(result.description).unwrap().unwrap()
+                    else {
+                        panic!("description bytes")
+                    };
+                    let description: SourceDescription = serde_json::from_slice(&data).unwrap();
+                    let table = &description.tables[0];
+                    assert_eq!(
+                        table
+                            .columns
+                            .iter()
+                            .map(|column| column.name.as_str())
+                            .collect::<Vec<_>>(),
+                        vec!["before", name, "after"]
+                    );
+                    assert_eq!(table.columns[1].dtype, Dtype::String);
+                    assert!(!table.columns[1].untyped);
+                    assert_eq!(table.columns[1].stype, expected_stype);
+                    assert_eq!(!table.primary_key.is_empty(), expected_key);
+                    // The neutral native tuple itself retains exact row/null
+                    // spelling, including the empty string versus a missing row.
+                    assert_eq!(cells.len(), length);
+                    assert_eq!(cells.null_count(), 0);
+                    break;
+                }
+                other => panic!("native text inference must not fetch or call a model: {other:?}"),
+            }
+        }
+    }
+}
+
+#[test]
+fn native_text_constructor_rejects_invalid_surrogatepass_and_wrong_binding() {
+    for wrong_binding in [false, true] {
+        let values = vec![Some(vec![0xed, 0xa0])];
+        let batch = RecordBatch::try_from_iter([("value", native_text_cells(&values))]).unwrap();
+        let mut attached = inputs();
+        attached.insert(AttachmentId(2), bytes(json!({
+            "stage":"schema", "tables":[{
+                "source":{"source":["users"]}, "rows":3,
+                "objects":[{"column":0,"name":if wrong_binding {"other"} else {"value"},"category":false,
+                    "meaning":{"dtype":"string","untyped":false}}]
+            }]
+        })));
+        attached.insert(
+            AttachmentId(3),
+            Attachment::Arrow(ArrowData::new(batch.schema(), vec![batch])),
+        );
+        let run = HostRun::start(&sdm_host::default_root(), &message(), attached)
+            .unwrap_or_else(|out| panic!("start itself failed: {:?}", error(out)));
+        loop {
+            match sdm_host::read(&run.next().unwrap()).unwrap() {
+                ControlMessage::Warnings { .. } => {}
+                ControlMessage::Error { error } => {
+                    assert_eq!(error.sentence, sdm_contract::Sentence::InvalidMessage);
+                    break;
+                }
+                other => panic!("malformed native text was accepted: {other:?}"),
+            }
+        }
+    }
+}
+
 #[test]
 fn native_temporal_whole_frame_rebinds_with_exact_units_and_nanosecond_equality() {
     use arrow_array::{
