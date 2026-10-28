@@ -90,6 +90,13 @@ The captured original primary key replaces any callback-mutated key in that tabl
 Native typed export follows these graph declarations and excludes a newly created internal derived column from feature projection.
 A pre-existing source column under that name retains the original native admission and post-fold behavior instead of being mistaken for a newly added feature.
 
+A callback can legally move the caller's primary key to another unique key while the already selected native compound assignment is in progress.
+The successful original control keeps the captured native identity and releases the old component's caller key marking, so that component can be a categorical feature afterwards.
+Native graph meaning/link checks therefore use the existing folded operational key projection, while full ordered source identities remain unchanged in the native graph, source fingerprint, Snapshot and checkpoint.
+This projection never makes a table keyless and never replaces the authoritative SourceDescription used for sanitation.
+Preserve current component meanings instead of calling the caller-schema key marker on the captured compound vector again.
+SQL and the initial caller-schema checks keep their existing key marking.
+
 ## Resolved question lifetime through native metadata effects
 
 The existing retained question already owns the validated tree, canonical query, filter, initial source description, declared types and query facts before native export.

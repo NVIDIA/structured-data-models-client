@@ -50,6 +50,7 @@ CASES = (
     'collision-text',
     'collision-text-id',
     'collision-float',
+    'key-moved',
     'later-table',
     'same-time',
     'relationships',
@@ -79,7 +80,10 @@ def _observe(label):
                 if label == 'render-error':
                     raise TypeError('native composite render failed')
                 if not mutations:
-                    if label == 'later-table':
+                    if label == 'key-moved':
+                        schema['buys'].primary_key = 'buy_id'
+                        mutations.append('key-moved')
+                    elif label == 'later-table':
                         schema['users']['age'].stype = 'categorical'
                         mutations.append('users-age')
                     elif label == 'same-time':
@@ -134,6 +138,7 @@ def _observe(label):
     if label == 'prefix':
         data['buys']['__kumo_existing'] = np.arange(120)
     if label in (
+        'key-moved',
         'later-table',
         'same-time',
         'relationships',
