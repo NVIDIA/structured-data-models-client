@@ -222,3 +222,13 @@ The later engine checks retain their source-type semantics and existing diagnost
 After all native casts, validate relationship structure and keys before the existing native edge-kind check, allowing an induced type mismatch to reach `EdgeKeyTypes` rather than replaying the earlier caller `LinkTypes` refusal.
 The initial caller relationship check stays unchanged, so a subsequent call with the already-mutated schema still refuses before any native effect.
 Tests preserve the complete frozen live-graph and Decimal callback records, original exception chains and warning/callback order, and distinguish an early incompatible declared meaning from a later native edge mismatch and structural/key failure.
+
+
+## Early ordinary batch-size validation
+
+The independent compatibility review found that an ordinary frame question omitted `rows_per_call` from its early option observations.
+A public reproduction on the unchanged twice-approved R12 build showed that `rows_per_call=0` reaches native `DataFrame.copy`, allowing its RuntimeError to replace the original immediate INVALID_REQUEST with no native effects.
+Pass that original option through the existing ordinary question input and validate it in Rust at the original position after prediction-statistic validation and before reserved names, notices or native graph work.
+Exclude that member from the general option parser at this early boundary so it cannot preempt the original statistic validation.
+Reuse the existing dedicated batch-size reader and leave ranking, forecasting, valid batch sizes and late task readers unchanged.
+Tests precede implementation and cover invalid sizes, statistic precedence, no native copies or warnings, and the independent Rust metadata-only guard.

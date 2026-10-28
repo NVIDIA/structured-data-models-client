@@ -394,3 +394,25 @@ fn native_constructor_refusal_uses_the_reached_first_bad_element_and_dtype() {
         )
     );
 }
+
+
+#[test]
+fn ordinary_batch_refusal_and_statistic_precedence_are_metadata_only() {
+    for rows in ["0", "-1", "true", "1.5", "\"2\""] {
+        let given = sdm_wire::json::read(format!("{{\"rows_per_call\":{rows}}}").as_bytes()).unwrap();
+        let error = check_call(Some(&given), &[], 2, &FrameLimits::default()).unwrap_err();
+        assert_eq!(error.sentence, Sentence::RowsPerCall);
+        for value in [
+            format!("{{\"rows_per_call\":{rows},\"prediction_statistic\":\"not-a-statistic\"}}"),
+            format!("{{\"prediction_statistic\":\"not-a-statistic\",\"rows_per_call\":{rows}}}"),
+        ] {
+            let given = sdm_wire::json::read(value.as_bytes()).unwrap();
+            let error = check_call(Some(&given), &[], 2, &FrameLimits::default()).unwrap_err();
+            assert_eq!(error.sentence, Sentence::StatisticUnknown);
+        }
+    }
+    for rows in ["null", "1", "200", "184467440737095516160"] {
+        let given = sdm_wire::json::read(format!("{{\"rows_per_call\":{rows}}}").as_bytes()).unwrap();
+        assert!(check_call(Some(&given), &[], 2, &FrameLimits::default()).is_ok());
+    }
+}
