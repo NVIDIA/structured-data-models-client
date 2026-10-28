@@ -289,6 +289,15 @@ fn rebind_frame_product(value: &mut PreparedFrameValue, keep: &mut impl FnMut(&m
         | PreparedFrameValue::KeyNulls(_)
         | PreparedFrameValue::ColumnMeaning(_)
         | PreparedFrameValue::IntegerColumn(_) => {}
+        PreparedFrameValue::Question(value) => keep(&mut value.owner),
+        PreparedFrameValue::Questions(value) => {
+            for id in &mut value.call_values {
+                keep(id);
+            }
+            for id in &mut value.question {
+                keep(id);
+            }
+        }
         PreparedFrameValue::Graph(value) => graph(value, keep),
         PreparedFrameValue::Population(value) => {
             graph(&mut value.graph, keep);
@@ -762,4 +771,141 @@ fn resolved_question_survives_final_time_metadata_change_and_rejects_wrong_query
     );
     let error = stages.stage(population).unwrap_err();
     assert_eq!(error["error"]["code"], "INVALID_MESSAGE");
+}
+
+fn compound_checkpoint(run: &HostRun) -> (Value, Attachments, Value) {
+    use sdm_contract::frames::FrameCheckpointManifest;
+    use sdm_contract::ops::SamplerState;
+    let out = run
+        .take_sampler_state()
+        .unwrap()
+        .expect("complete compound checkpoint");
+    let mut state: SamplerState = serde_json::from_value(decoded(&out)["state"].clone()).unwrap();
+    let checkpoint = state.frame_checkpoint.as_mut().unwrap();
+    let Some(Attachment::Bytes(bytes)) = run.take_attachment(checkpoint.manifest).unwrap() else {
+        panic!("checkpoint manifest")
+    };
+    let mut manifest: FrameCheckpointManifest = serde_json::from_slice(&bytes).unwrap();
+    assert!(manifest.retained.is_none());
+    assert_eq!(manifest.row_identities.len(), 1);
+    let mut attached = Attachments::new();
+    let mut fresh = 1000;
+    let mut keep = |id: &mut AttachmentId| {
+        let owner = run
+            .take_attachment(*id)
+            .unwrap()
+            .expect("checkpoint's actual typed owner");
+        *id = AttachmentId(fresh);
+        fresh += 1;
+        attached.insert(*id, owner);
+    };
+    keep(&mut state.memo);
+    keep(&mut manifest.metadata);
+    for table in &mut manifest.tables {
+        keep(&mut table.rows);
+    }
+    for identity in &mut manifest.row_identities {
+        keep(&mut identity.values.values);
+    }
+    let Attachment::Bytes(bytes) = &attached[&manifest.metadata] else {
+        panic!("metadata")
+    };
+    let metadata: Value = serde_json::from_slice(bytes).unwrap();
+    checkpoint.manifest = AttachmentId(fresh);
+    attached.insert(
+        checkpoint.manifest,
+        Attachment::Bytes(serde_json::to_vec(&manifest).unwrap()),
+    );
+    (serde_json::to_value(state).unwrap(), attached, metadata)
+}
+
+fn resumed_compound(state: Value, mut owned: Attachments) -> Result<HostRun, Outgoing> {
+    let mut attached = inputs("composite-history", false);
+    for id in [8, 9, 10].map(AttachmentId) {
+        attached.remove(&id);
+    }
+    attached.insert(AttachmentId(7), bytes(json!({"tables":[]})));
+    attached.append(&mut owned);
+    let start = message(
+        json!({"op":"materialize","provider":{"provider":"frames","manifest":7},"schema":1,"query":2,"indices":3,"seed":"0x7","values":5,"options":[],"anchor_time":{"t":"ts","unit":"ns","v":"1677628800000000000"},"sampler_state":state}),
+    );
+    HostRun::start(&sdm_host::default_root(), &start, attached)
+}
+
+fn compound_terminal(run: &HostRun) -> Result<Materialized, Outgoing> {
+    loop {
+        let out = run.next()?;
+        match sdm_host::read(&out).unwrap() {
+            ControlMessage::Step(Step::Done {
+                result: OperationResult::Materialize(value),
+            }) => return Ok(value),
+            ControlMessage::Warnings { .. } => {}
+            ControlMessage::Step(Step::Warnings) => {
+                let _ = run.take_warnings().unwrap();
+            }
+            other => panic!("checkpoint restore introduced a host effect: {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn compound_checkpoint_rebinds_all_identity_values_and_never_refolds_on_restore() {
+    let (run, materialized) = materialize("composite-history", true);
+    let Some(Attachment::Bytes(first)) = run.take_attachment(materialized.state.payload).unwrap()
+    else {
+        panic!("payload")
+    };
+    let (state, owned, metadata) = compound_checkpoint(&run);
+    assert_eq!(
+        metadata["description"]["tables"][2]["primary_key"],
+        json!(["buy_id", "part"])
+    );
+    drop(run);
+    let restored =
+        resumed_compound(state, owned).unwrap_or_else(|error| panic!("{:?}", decoded(&error)));
+    let materialized =
+        compound_terminal(&restored).unwrap_or_else(|error| panic!("{:?}", decoded(&error)));
+    let Some(Attachment::Bytes(second)) = restored
+        .take_attachment(materialized.state.payload)
+        .unwrap()
+    else {
+        panic!("restored payload")
+    };
+    assert_eq!(
+        serde_json::from_slice::<Value>(&first).unwrap(),
+        serde_json::from_slice::<Value>(&second).unwrap()
+    );
+    let (_, _, restored_metadata) = compound_checkpoint(&restored);
+    assert_eq!(restored_metadata["source"], metadata["source"]);
+    assert_eq!(restored_metadata["neighbors"], metadata["neighbors"]);
+}
+
+#[test]
+fn compound_checkpoint_actual_identity_tampering_fails_before_a_draw_or_payload() {
+    use sdm_contract::frames::FrameCheckpointManifest;
+    let (run, _) = materialize("composite-history", false);
+    let (state, mut owned, _) = compound_checkpoint(&run);
+    let manifest_id = AttachmentId(state["frame_checkpoint"]["manifest"].as_u64().unwrap() as u32);
+    let Attachment::Bytes(bytes) = &owned[&manifest_id] else {
+        panic!("manifest")
+    };
+    let manifest: FrameCheckpointManifest = serde_json::from_slice(bytes).unwrap();
+    let id = manifest.row_identities[0].values.values;
+    let values = (0..120)
+        .map(|row| format!("tampered-{row}"))
+        .collect::<Vec<_>>();
+    owned.insert(
+        id,
+        arrow(
+            vec![("identity", Arc::new(arrow_array::StringArray::from(values)))],
+            false,
+        ),
+    );
+    let error = match resumed_compound(state, owned) {
+        Err(error) => error,
+        Ok(run) => {
+            compound_terminal(&run).expect_err("changed owned identity values must not restore")
+        }
+    };
+    assert_eq!(decoded(&error)["error"]["code"], "INVALID_MESSAGE");
 }
