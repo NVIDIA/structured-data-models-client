@@ -618,6 +618,65 @@ fn a_link_that_cannot_join_is_refused_by_the_consistency_check() {
 }
 
 #[test]
+fn native_link_structure_precedes_edge_kinds_and_keeps_each_stage_order() {
+    let types = assemble::HostTypes::default();
+    let mut schema = description();
+    schema.tables[0].columns[1].dtype = Dtype::String;
+    assert_eq!(
+        assemble::check_links(&schema, &types).unwrap_err().sentence,
+        Sentence::LinkTypes
+    );
+    assert!(assemble::check_link_structure(&schema, &types).is_ok());
+    assert_eq!(
+        assemble::check_edges(&schema).unwrap_err().sentence,
+        Sentence::EdgeKeyTypes
+    );
+    // Native graph.link and target-key checks finish before Graph.validate
+    // compares any edge kinds, including an earlier mismatched edge.
+    let mut later = schema.links[0].clone();
+    later[0].column = "gone".into();
+    schema.links.push(later);
+    assert_ne!(
+        assemble::check_link_structure(&schema, &types)
+            .unwrap_err()
+            .sentence,
+        Sentence::EdgeKeyTypes
+    );
+    assert_eq!(
+        assemble::check_link_structure(&schema, &types)
+            .unwrap_err()
+            .fields["column"],
+        Detail::text("gone")
+    );
+    schema.links.pop();
+    schema.tables.push(schema.tables[1].clone());
+    schema.tables[2].name = "without_key".into();
+    schema.tables[2].primary_key.clear();
+    let mut later = schema.links[0].clone();
+    later[1].table = "without_key".into();
+    schema.links.push(later);
+    assert_eq!(
+        assemble::check_link_structure(&schema, &types)
+            .unwrap_err()
+            .sentence,
+        Sentence::LinkNoKey
+    );
+    schema.links.pop();
+    // Two type mismatches retain native edge order after structure succeeds.
+    let mut later = schema.links[0].clone();
+    schema.tables[2].primary_key = vec![later[1].column.clone()];
+    later[1].table = "without_key".into();
+    schema.links.push(later);
+    assert!(assemble::check_link_structure(&schema, &types).is_ok());
+    let error = assemble::check_edges(&schema).unwrap_err();
+    assert_eq!(error.sentence, Sentence::EdgeKeyTypes);
+    assert_eq!(
+        error.fields["target_table"],
+        Detail::text(&schema.links[0][1].table)
+    );
+}
+
+#[test]
 fn names_are_quoted_and_listed_as_the_reference_s_messages_do() {
     let three = table(
         "c",
