@@ -38,11 +38,13 @@ definition. Unmarked tests are controls that pass today.
 from __future__ import annotations
 
 import importlib.util
+import io
 import json
 import re
 import shutil
 import subprocess
 import sys
+import tarfile
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -288,14 +290,64 @@ def test_a_site_with_no_probe_fails_by_name(
     assert named in seeded.stdout + seeded.stderr
 
 
-def test_the_first_duckdb_run_probed_every_site_on_both_routes() -> None:
+def test_the_first_duckdb_run_probed_every_site_on_both_routes(
+    tmp_path: Path,
+) -> None:
     r"""Exit: the first run is on DuckDB; every site the code has now was
     probed there on both routes, each hit is keyed by rule or by site and
     code with its count of real sources, and SQLite and Postgres are
     reported unmeasured, never as zero hits."""
     evidence = json.loads(EVIDENCE.read_text())
     assert evidence['database'] == 'duckdb'
-    sites = {site['id'] for site in _sites(ROOT)}
+    # A historical receipt describes its recorded clean producer, not later
+    # relocated or newly implemented sites. Current coverage is held above.
+    assert evidence['commit']['clean'] is True
+    producer = evidence['commit']['sha']
+    archived = subprocess.run(
+        [
+            'git',
+            '-C',
+            str(ROOT),
+            'archive',
+            '--format=tar',
+            producer,
+            'rust/crates',
+            'packages/structured-data-models-client/src',
+            'contract/tools/refusal_census.py',
+        ],
+        capture_output=True,
+        check=True,
+    ).stdout
+    with tarfile.open(fileobj=io.BytesIO(archived)) as archive:
+        for entry in archive.getmembers():
+            destination = tmp_path / entry.name
+            assert destination.resolve().is_relative_to(tmp_path.resolve())
+            if entry.isdir():
+                destination.mkdir(parents=True, exist_ok=True)
+            elif entry.isfile():
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                source = archive.extractfile(entry)
+                assert source is not None
+                destination.write_bytes(source.read())
+            else:
+                raise AssertionError(
+                    'a source receipt must not contain special files'
+                )
+    done = subprocess.run(
+        [
+            sys.executable,
+            '-I',
+            str(tmp_path / 'contract/tools/refusal_census.py'),
+            'sites',
+            '--root',
+            str(tmp_path),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    sites = {site['id'] for site in json.loads(done.stdout)}
+    assert len(sites) == evidence['sites']
     probed = {}
     for probe in evidence['probes']:
         assert set(probe['outcomes']) >= {'python-core', 'reference'}, probe

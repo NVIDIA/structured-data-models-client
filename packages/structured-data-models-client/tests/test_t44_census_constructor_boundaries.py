@@ -15,6 +15,18 @@ from test_t42_frames import PATHS
 from sdm_client import Schema, StructuredDataError
 
 
+def _unread_later(touched):
+    class Later(pd.DataFrame):
+        @property
+        def columns(self):
+            touched.append('later-columns')
+            return super().columns
+
+    frame = Later({'later': [1]})
+    touched.clear()
+    return frame
+
+
 @pytest.mark.parametrize(
     'case,expected',
     [
@@ -46,15 +58,7 @@ def test_native_constructor_refusals_keep_complete_public_outcomes(
     for core in (False, True):
         monkeypatch.setenv('SDM_CORE_ROUTES', PATHS if core else '')
         touched = []
-
-        class Later(pd.DataFrame):
-            @property
-            def columns(self):
-                touched.append('later-columns')
-                return super().columns
-
-        later = Later({'later': [1]})
-        touched.clear()
+        later = _unread_later(touched)
         if case == 'empty':
             frames = {}
         elif case.endswith('-name'):
