@@ -603,3 +603,10 @@ Model replies must bind the actual outstanding CallModel identifier and already 
 Keep a current unobserved reply separate from historical absent evidence.
 Per-Run legacy products must similarly distinguish native Done from attachments actually read and from later host presentation failure.
 For every shared comparison, use the same checked logical-event mapping as the ordinary comparison and preserve per-Run local initialization through every early return.
+
+
+The shared-prefix exception must not cut a parent prediction away from its still-owned nested prediction work.
+Derive the included event's logical extent from the actual owned and descendant Run positions, and retain full comparison when a prefix would cross that extent.
+For existing approved core-only column differences, validate the original prediction journal and independent receipt conservation before applying the named-column projection solely to local reference-comparison bodies.
+Do not mutate global prediction evidence while leaving its typed journal or byte hashes unchanged.
+Keep the existing public schema, warning and SQL projections at their original comparison boundary, with unnamed-column and original-receipt tamper controls.
