@@ -416,6 +416,12 @@ fn failure_observations_publish_actual_calls_and_carried_arrow() {
             "{id}"
         );
         assert_eq!(line["core"]["answered"], json!(observed.answered), "{id}");
+        if let Some(answered) = &observed.answered {
+            assert!(answered["model"].is_string(), "{id}");
+            assert!(answered["request_id"].is_string(), "{id}");
+            assert!(answered["metadata"].is_object(), "{id}");
+            assert!(answered["outputs"].is_array(), "{id}");
+        }
         for call in &observed.model_calls {
             assert!(call["body"]["metadata"]["request_id"].is_string());
             assert_eq!(call["body_sha256"].as_str().unwrap().len(), 64);

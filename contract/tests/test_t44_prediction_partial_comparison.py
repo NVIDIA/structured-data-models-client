@@ -120,6 +120,10 @@ def legacy_partial(actual):
     core['answered'] = {
         'rows': final['data']['answer_details']['rows_answered'],
         'result': copy.deepcopy(final['result']),
+        'model': final['data']['predicted']['model'],
+        'request_id': final['data']['predicted']['request_id'],
+        'metadata': copy.deepcopy(final['metadata']),
+        'outputs': final['data']['predicted']['outputs'],
     }
     return core, operations
 
@@ -133,6 +137,16 @@ def test_failed_prediction_keeps_checked_paid_calls_and_partial_result():
     assert view['partial']['answered'] == {
         'rows': 2,
         'result': core['predictions'][0]['results'][-1]['result'],
+        'model': core['predictions'][0]['results'][-1]['data']['predicted'][
+            'model'
+        ],
+        'request_id': core['predictions'][0]['results'][-1]['data'][
+            'predicted'
+        ]['request_id'],
+        'metadata': core['predictions'][0]['results'][-1]['metadata'],
+        'outputs': core['predictions'][0]['results'][-1]['data']['predicted'][
+            'outputs'
+        ],
     }
     assert len(view['partial']['results']) == 1
     assert (
@@ -161,7 +175,18 @@ def test_failure_body_is_bound_to_independently_received_request(tamper):
 
 @pytest.mark.parametrize(
     'tamper',
-    [None, 'body', 'arrow', 'rows', 'missing-calls', 'missing-partial'],
+    [
+        None,
+        'body',
+        'arrow',
+        'rows',
+        'metadata',
+        'model',
+        'endpoint-id',
+        'outputs',
+        'missing-calls',
+        'missing-partial',
+    ],
 )
 def test_failed_new_and_legacy_hosts_compare_actual_common_paid_observations(
     tamper,
@@ -176,6 +201,14 @@ def test_failed_new_and_legacy_hosts_compare_actual_common_paid_observations(
         }
     elif tamper == 'rows':
         legacy['answered']['rows'] += 1
+    elif tamper == 'metadata':
+        legacy['answered']['metadata']['endpoint'] = 'changed native metadata'
+    elif tamper == 'model':
+        legacy['answered']['model'] = 'changed native model'
+    elif tamper == 'endpoint-id':
+        legacy['answered']['request_id'] = 'changed endpoint id'
+    elif tamper == 'outputs':
+        legacy['answered']['outputs'] = []
     elif tamper == 'missing-calls':
         del legacy['model_calls']
     elif tamper == 'missing-partial':
