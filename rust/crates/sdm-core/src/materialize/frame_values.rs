@@ -12,12 +12,15 @@ mod lags;
 mod native_guard;
 mod owners;
 mod population;
+pub(crate) mod source_keys;
 pub use population::{RetainedFrameLabelBatch, RetainedFramePopulation};
 pub(crate) mod questions;
 pub use owners::{RetainedFramePayload, RetainedFrameReferences, RetainedFrameTask};
 pub use questions::RetainedFrameQuestion;
 #[cfg(test)]
 mod native_guard_tests;
+#[cfg(test)]
+mod source_keys_tests;
 
 use arrow_array::UInt64Array;
 use sdm_contract::frames::materialize::*;
@@ -238,6 +241,15 @@ pub(crate) async fn run(
         )?),
         FramePreparation::TableMeaning { input } => {
             PreparedFrameValue::TableMeaning(columns::table(input)?)
+        }
+        FramePreparation::TableKey { table, primary_key } => {
+            PreparedFrameValue::KeyMeaning(source_keys::key(table, primary_key)?)
+        }
+        FramePreparation::KeyNulls { input } => {
+            PreparedFrameValue::KeyNulls(source_keys::nulls(input)?)
+        }
+        FramePreparation::TableMetadata { input } => {
+            PreparedFrameValue::TableMeaning(source_keys::metadata(input)?)
         }
         FramePreparation::ColumnMeaning { input } => {
             PreparedFrameValue::ColumnMeaning(columns::meaning(input))
@@ -728,7 +740,7 @@ pub(crate) fn graph(
             ));
         }
         let manifest: sdm_contract::frames::MaterializeFrames = take_json(attachments, frames)?;
-        if !manifest.tables.is_empty() {
+        if !manifest.tables.is_empty() || !manifest.row_identities.is_empty() {
             return Err(protocol(
                 "a retained frame graph cannot reread caller frames",
             ));
@@ -741,9 +753,9 @@ pub(crate) fn graph(
         }
         let read = sdm_schema::held::read(held, &BTreeMap::new(), true)?;
         let mut description = graph.prepared.description.clone();
-        consistent(&mut description, &read.types)?;
+        columns::consistent_native(&mut description, &read.types)?;
         reserved(&description)?;
-        kept_checks(&description)?;
+        columns::kept_native(&description)?;
         if description != graph.prepared.description {
             return Err(protocol(
                 "retained frame graph no longer matches its immutable schema meaning",
@@ -755,9 +767,9 @@ pub(crate) fn graph(
     }
     let frames = crate::frame_materialize::take(frames, checkpoint, attachments)?;
     let (mut description, types) = crate::frame_materialize::description(&frames, held)?;
-    consistent(&mut description, &types)?;
+    columns::consistent_native(&mut description, &types)?;
     reserved(&description)?;
-    kept_checks(&description)?;
+    columns::kept_native(&description)?;
     let graph = BoundGraph::prepare(asker, frames, description, native)?;
     let value = graph.publish(asker)?;
     crate::frame_materialize::lock(&graph.frames).warn_dropped(asker);
@@ -809,6 +821,7 @@ pub(crate) async fn population(
     let FramePreparation::Population {
         graph: graph_value,
         query,
+        question,
         values,
         seed,
         entropy,
@@ -882,17 +895,30 @@ pub(crate) async fn population(
     };
     let entropy = Entropy::from_hex(seed.magnitude_hex())
         .ok_or_else(|| protocol("frame seed magnitude is invalid"))?;
-    let resolved = resolve_target(&graph.prepared.description, &query, facts, zones)?;
+    let (resolved, query_facts) = match question {
+        Some(id) => {
+            let Some(Attachment::FrameQuestion(owner)) = attachments.remove(&id) else {
+                return Err(protocol(
+                    "frame population lacks its actual resolved question owner",
+                ));
+            };
+            owner.target(&query)?
+        }
+        None => {
+            let resolved = resolve_target(&graph.prepared.description, &query, facts, zones)?;
+            let profile = Profile::resolve(&ProfileSpec {
+                name: ProfileName::Relational,
+                model: None,
+                capabilities: Default::default(),
+            });
+            let query_schema = query_schema(&graph.prepared.description);
+            let query_facts = crate::pql::resolve(&query, &query_schema, &profile, facts, zones)?
+                .facts(&query_schema)
+                .ok_or_else(|| protocol("resolved frame query lacks its facts"))?;
+            (resolved, query_facts)
+        }
+    };
     let asked = asked(&resolved.validated)?;
-    let profile = Profile::resolve(&ProfileSpec {
-        name: ProfileName::Relational,
-        model: None,
-        capabilities: Default::default(),
-    });
-    let query_schema = query_schema(&graph.prepared.description);
-    let query_facts = crate::pql::resolve(&query, &query_schema, &profile, facts, zones)?
-        .facts(&query_schema)
-        .ok_or_else(|| protocol("resolved frame query lacks its facts"))?;
     let entity = graph
         .prepared
         .graph
@@ -918,15 +944,45 @@ pub(crate) async fn population(
         },
     };
     let times = Times::new(crate::describe::text_reader(facts)?, None, &memo.memo);
-    let labelled_fetches = fetches(
-        &graph.prepared.graph,
-        &asked.entity_table,
-        &asked.every_windowed(),
-    )?;
+    let (context_given, max_iterations) =
+        options::task_table(&deferred).map_err(source_keys::task_error)?;
+    source_keys::task(&graph.prepared.graph, &asked.target)?;
+    let missing_time = asked.every_windowed().into_iter().find_map(|window| {
+        graph
+            .prepared
+            .graph
+            .table(&window.table)
+            .is_some_and(|table| table.time_column.is_none())
+            .then_some(window.table.clone())
+    });
+    // An omitted anchor reads the final target's maximum time first. With
+    // an explicit anchor the same missing column is read only after anchor
+    // admission, in sample-target preparation, before any entity draw.
+    if let Some(table) = &missing_time
+        && anchor_time.is_none()
+        && !anchor_entity
+    {
+        return Err(source_keys::native("time_bound_missing", table, ""));
+    }
+    let labelled_fetches = if missing_time.is_some() {
+        Vec::new()
+    } else {
+        fetches(
+            &graph.prepared.graph,
+            &asked.entity_table,
+            &asked.every_windowed(),
+        )?
+    };
     let mut windows = Vec::new();
     asked.target.windowed(&mut windows);
-    let target_fetches = fetches(&graph.prepared.graph, &asked.entity_table, &windows)?;
-    let bounded = if target_fetches.is_empty() {
+    let target_fetches = if missing_time.is_some() {
+        Vec::new()
+    } else {
+        fetches(&graph.prepared.graph, &asked.entity_table, &windows)?
+    };
+    let bounded = if missing_time.is_some() {
+        Vec::new()
+    } else if target_fetches.is_empty() {
         graph
             .prepared
             .graph
@@ -952,7 +1008,6 @@ pub(crate) async fn population(
             ))
         })
         .transpose()?;
-    let (context_given, max_iterations) = options::task_table(&deferred)?;
     let (prediction_anchor, context_anchor, earliest) = if anchor_entity {
         if span.is_some() {
             return Err(invalid(
@@ -972,7 +1027,7 @@ pub(crate) async fn population(
             .with_field("table", Detail::text(&entity.name)));
         }
         if matches!(context_given, AskedAnchor::At(_)) {
-            return Err(shared_anchor());
+            return Err(source_keys::task_error(shared_anchor()));
         }
         (TIME_MIN, TIME_MIN, None)
     } else {
@@ -985,8 +1040,12 @@ pub(crate) async fn population(
             anchor_time,
             &context_given,
         )
-        .await?
+        .await
+        .map_err(source_keys::task_error)?
     };
+    if let Some(table) = missing_time {
+        return Err(source_keys::native("time_bound_missing", &table, ""));
+    }
     let context_examples = run_mode.context_examples();
     let trials = max_iterations
         .unwrap_or(options::Iterations::Whole(ITERATIONS as u64))

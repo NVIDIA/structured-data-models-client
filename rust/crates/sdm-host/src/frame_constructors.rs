@@ -87,3 +87,30 @@ pub fn finish_key_candidates(
             .map_err(|_| invalid("native key notice serialization failed"))?,
     ))
 }
+
+/// Neutral constructor facts enter the same column meaning for every binding.
+pub fn native_column(
+    table: String,
+    name: String,
+    bytes: &[u8],
+    declared: &[u8],
+) -> Result<crate::FrameNativeConstructor, CoreError> {
+    let values = serde_json::from_slice(bytes)
+        .map_err(|_| invalid("native column constructor requires typed source facts"))?;
+    let declared: Option<sdm_contract::frames::materialize::FramePhysicalDeclaration> =
+        serde_json::from_slice(declared)
+            .map_err(|_| invalid("native column constructor requires an original declaration"))?;
+    sdm_core::native_column_constructor(&table, name, &values, declared.as_ref())
+}
+
+pub fn native_column_bytes(value: &crate::FrameNativeConstructor) -> Result<Vec<u8>, CoreError> {
+    serde_json::to_vec(&value.complete()?)
+        .map_err(|_| invalid("native constructed column cannot be serialized"))
+}
+
+pub fn native_column_dtype_bytes(
+    value: &crate::FrameNativeConstructor,
+) -> Result<Vec<u8>, CoreError> {
+    serde_json::to_vec(&value.dtype())
+        .map_err(|_| invalid("native constructed dtype cannot be serialized"))
+}

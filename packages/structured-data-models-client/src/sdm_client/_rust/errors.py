@@ -850,6 +850,79 @@ def error_from_core(
                     )
         if not fields.get('native_relational_contract'):
             details['diagnostic'] = fields['diagnostic']
+    native_key_cause: Exception | None = None
+    key_reason = fields.get('native_key_reason')
+    if (
+        sentence in ('frame_native_caller', 'frame_native_internal')
+        and key_reason is not None
+    ):
+        # Core selected the admission and location. These are the original
+        # native ValueError recipes at the reached presentation boundary.
+        column, table_name = fields['column'], fields['table']
+        if key_reason == 'component_null':
+            message = (
+                f"composite key column '{column}' holds a null value; every "
+                "part of a row's identity has to be present"
+            )
+        elif key_reason == 'approximate_component':
+            message = (
+                f"composite key column '{column}' is {fields['dtype']}; a floating-point "
+                "column cannot be part of a row's identity because its text "
+                'is not reproducible. Use an exact column, or add a column '
+                'holding the identity you intend.'
+            )
+        elif key_reason == 'name_long':
+            message = (
+                f'An identity over {fields["columns"]!r} needs a column name longer '
+                f'than {fields["limit"]} characters, which a warehouse will not '
+                'accept. Add a column holding that identity and declare it '
+                'instead.'
+            )
+        elif key_reason == 'components_missing':
+            message = (
+                f'Cannot use {fields["columns"]!r} as a composite primary key of '
+                f"table '{table_name}': column(s) {fields['missing']!r} are not present"
+            )
+        elif key_reason == 'primary_stype':
+            message = (
+                f"Primary key '{column}' must have 'ID' semantic type "
+                f"(got '{fields['stype']}')"
+            )
+        elif key_reason == 'key_dtype':
+            message = (
+                f"Column '{column}' received an incompatible semantic type "
+                f"(got dtype='{fields['dtype']}' and stype='{fields['stype']}')"
+            )
+        elif key_reason == 'unregistered_list_target':
+            message = (
+                'Multilabel-classification queries based on '
+                "'LIST_DISTINCT' are not supported yet. If you "
+                'planned to write a link prediction query instead, '
+                f"make sure to register '{column}' as a foreign key."
+            )
+            native_key_cause = NotImplementedError(message)
+            fields['native_type'] = type(native_key_cause).__name__
+        elif key_reason == 'time_bound_missing':
+            native_key_cause = KeyError(table_name)
+            message = str(native_key_cause)
+        elif key_reason == 'empty_frame':
+            message = 'Data frame is empty'
+        else:
+            raise codec.CodecError(
+                'unknown core-selected native identity refusal'
+            )
+        if native_key_cause is None:
+            native_key_cause = ValueError(message)
+        with holding(frame_native_message=lambda observed: message):
+            said = _said(sentence, fields)
+    if key_reason == 'task_validation':
+        if sentence not in ('iterations_below_one', 'anchor_entity_not_shared'):
+            raise codec.CodecError('invalid native frame task error sentence')
+        said = _said(sentence, fields)
+        native_key_cause = ValueError(said)
+    if sentence == 'frame_no_valid_rows':
+        said = _said(sentence, fields)
+        native_key_cause = ValueError(said)
     native_graph_cause = (
         sentence == 'frame_native_internal'
         and fields.get('native_declaration_reason') == 'fixed_large_utf8'
@@ -873,7 +946,7 @@ def error_from_core(
             ]
         ):
             said = _said(sentence, fields)
-    else:
+    elif native_key_cause is None:
         said = _said(sentence, fields)
     part = error.get('part')
     if part is not None:
@@ -887,6 +960,8 @@ def error_from_core(
     made._sentence = sentence
     if native_graph_cause:
         made.__cause__ = RuntimeError(fields['native_cause_message'])
+    if native_key_cause is not None:
+        made.__cause__ = native_key_cause
     if sentence == 'direct_response_contract':
         made.__cause__ = (
             response_cause

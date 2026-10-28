@@ -88,6 +88,9 @@ impl FramePreparation {
             Self::Request { plan, .. } => Some(plan.task.labelled.graph.owner),
             Self::SourceMeaning { .. }
             | Self::TableMeaning { .. }
+            | Self::TableKey { .. }
+            | Self::KeyNulls { .. }
+            | Self::TableMetadata { .. }
             | Self::ColumnMeaning { .. }
             | Self::IntegerColumn { .. }
             | Self::TimeColumn { .. }
@@ -104,8 +107,12 @@ impl FramePreparation {
         let mut out = Vec::new();
         match self {
             Self::SourceMeaning { schema, .. } => out.push((*schema, Bytes)),
-            Self::TableMeaning { .. } | Self::ColumnMeaning { .. } | Self::IntegerColumn { .. } => {
-            }
+            Self::TableMeaning { .. }
+            | Self::TableKey { .. }
+            | Self::KeyNulls { .. }
+            | Self::TableMetadata { .. }
+            | Self::ColumnMeaning { .. }
+            | Self::IntegerColumn { .. } => {}
             Self::TimeColumn { values, .. } => out.push((values.values, Arrow)),
             Self::Question { schema, query, .. } => out.extend([(*schema, Bytes), (*query, Bytes)]),
             Self::Questions { input } => {
@@ -133,11 +140,17 @@ impl FramePreparation {
             Self::Population {
                 graph: value,
                 query,
+                question,
                 values,
                 ..
             } => {
                 graph(value, &mut out);
                 out.push((*query, Bytes));
+                out.extend(
+                    question
+                        .iter()
+                        .map(|id| (*id, AttachmentKind::FrameQuestion)),
+                );
                 out.extend(values.iter().map(|values| (*values, Bytes)));
             }
             Self::LabelBatch {

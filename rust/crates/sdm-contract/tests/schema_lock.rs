@@ -653,7 +653,15 @@ const JSON: [(&str, &str); 63] = [
 ];
 
 /// The other fields naming an attachment, and why the lock needs no entry.
-const OTHER: [(&str, &str); 50] = [
+const OTHER: [(&str, &str); 52] = [
+    (
+        "PreparedFrameQuestions.question",
+        "Core-created immutable FrameQuestion resource",
+    ),
+    (
+        "FramePreparation/population.question",
+        "Core-created immutable FrameQuestion resource",
+    ),
     (
         "Preparation/context.context",
         "Arrow, with positional header facts",

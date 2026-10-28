@@ -947,13 +947,15 @@ fn stype_of(
         let first: Vec<Option<Value>> = sample.iter().take(1_000).cloned().collect();
         let held = first.iter().flatten().count();
         let distinct = values::distinct(&first);
-        let share = |limit: f64| held > 0 && (distinct as f64 / held as f64) <= limit;
-        let categorical = distinct < 20
-            || if dtype == Dtype::String {
-                share(0.5)
+        let categorical = native_categorical_share(
+            if dtype == Dtype::Binary {
+                Dtype::Int
             } else {
-                share(0.05)
-            };
+                dtype
+            },
+            distinct as u64,
+            held as u64,
+        );
         if categorical {
             return Ok(Stype::Categorical);
         }
@@ -1081,7 +1083,7 @@ fn text_holds_categories(sample: &[Option<Value>]) -> bool {
         .flat_map(|text| text.split(separator))
         .collect();
     // `values > 1.5 * parts`, in integers.
-    2 * values.len() > 3 * parts.len() && parts.len() <= MOST_CATEGORIES
+    native_multicategory_share(values.len() as u64, parts.len() as u64)
 }
 
 /// What guessing a table's key found.
@@ -1888,4 +1890,25 @@ mod tests {
         }
         assert!(checked > 12_000, "{checked}");
     }
+}
+
+/// Native statistics use the original floating-point score and thresholds.
+pub(crate) fn native_timestamp_share(name: &str, parsed: u64, present: u64) -> bool {
+    present > 0
+        && (if names::says_time(name) { 0.3 } else { 0.0 }) + parsed as f64 / present as f64 >= 1.0
+}
+
+pub(crate) fn native_multicategory_share(whole: u64, parts: u64) -> bool {
+    whole as f64 > 1.5 * parts as f64 && parts <= MOST_CATEGORIES as u64
+}
+
+pub(crate) fn native_categorical_share(dtype: Dtype, distinct: u64, present: u64) -> bool {
+    distinct < 20
+        || present > 0
+            && distinct as f64 / present as f64
+                <= if matches!(dtype, Dtype::String | Dtype::Binary) {
+                    0.5
+                } else {
+                    0.05
+                }
 }

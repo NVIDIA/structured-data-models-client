@@ -87,6 +87,8 @@ pub struct TypedFrameSourceColumn {
 pub struct FrameTableColumnFacts {
     pub name: String,
     pub declared: Option<FramePhysicalDeclaration>,
+    pub values: FrameConstructorValues,
+    pub meaning: FrameConstructedColumn,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -94,6 +96,8 @@ pub struct FrameTableColumnFacts {
 pub struct FrameTableInputs {
     pub table: HeldTable,
     pub native: Vec<FrameTableColumnFacts>,
+    /// Actual reached native container empty observation, before dtype reads.
+    pub empty: bool,
 }
 
 /// Cast-time table dtype facts and their ordered physical column identities.
@@ -102,6 +106,7 @@ pub struct FrameTableInputs {
 #[serde(deny_unknown_fields)]
 pub struct FrameTableMeaning {
     pub table: HeldTable,
+    pub constructed: Vec<FrameConstructedColumn>,
 }
 
 /// Graph declarations composed from cast-time dtypes and live logical metadata

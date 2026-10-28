@@ -129,6 +129,8 @@ pub struct NativeDecimalColumn {
 pub struct MaterializeFrames {
     /// Empty only when a frame checkpoint supplies the frozen snapshot.
     pub tables: Vec<FrameInput>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub row_identities: Vec<materialize::FrameRowIdentity>,
     /// Fresh OS entropy supplied by the host, consumed only by an unseeded
     /// entity/example sample. Neighbor continuation never reads this fact.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -154,6 +156,8 @@ pub struct FrameCheckpoint {
 pub struct FrameCheckpointManifest {
     pub metadata: AttachmentId,
     pub tables: Vec<FrameInput>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub row_identities: Vec<materialize::FrameRowIdentity>,
     /// The same live core-created graph owner, without exporting source rows.
     /// Raw legacy checkpoints have no retained alternative.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -178,6 +182,8 @@ pub struct FrameCheckpointMetadata {
     pub source: String,
     pub description: crate::ops::SourceDescription,
     pub neighbors: Mt19937State,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub strings: Option<BTreeMap<String, BTreeMap<String, crate::data::strings::StringEncoding>>>,
 }
 
 /// A frame source is consumed internally by describe, never by DataLayer.

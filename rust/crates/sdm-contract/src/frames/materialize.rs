@@ -10,6 +10,8 @@
 mod attachments;
 mod columns;
 pub use columns::*;
+mod keys;
+pub use keys::*;
 mod guard;
 mod native;
 mod questions;
@@ -429,6 +431,16 @@ pub enum FramePreparation {
     TableMeaning {
         input: FrameTableInputs,
     },
+    TableKey {
+        table: FrameTableMeaning,
+        primary_key: Vec<String>,
+    },
+    KeyNulls {
+        input: FrameKeyNulls,
+    },
+    TableMetadata {
+        input: FrameTableMetadata,
+    },
     ColumnMeaning {
         input: FrameColumnInputs,
     },
@@ -474,6 +486,9 @@ pub enum FramePreparation {
     Population {
         graph: PreparedFrameGraph,
         query: AttachmentId,
+        /// The same original resolved query, before native metadata effects.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        question: Option<AttachmentId>,
         /// Task-option observations after graph notice/list(indices).
         values: Option<AttachmentId>,
         seed: Option<Seed>,
@@ -543,6 +558,8 @@ pub enum FramePreparation {
 pub enum PreparedFrameValue {
     SourceMeaning(FrameSourceMeaning),
     TableMeaning(FrameTableMeaning),
+    KeyMeaning(FrameKeyMeaning),
+    KeyNulls(FrameKeyNulls),
     ColumnMeaning(FrameColumnMeaning),
     IntegerColumn(FrameIntegerColumn),
     SourceColumn(TypedFrameSourceColumn),

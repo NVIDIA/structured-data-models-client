@@ -857,6 +857,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<FrameReferences>()?;
     module.add_class::<FramePayload>()?;
     module.add_class::<frame_objects::FrameObjectConstructor>()?;
+    module.add_class::<frame_objects::FrameNativeConstructor>()?;
     module.add_class::<frame_objects::FrameKeyCandidates>()?;
     module.add_class::<frame_keys::FrameKeyAdoption>()?;
     module.add_class::<frame_advice::FrameKeyAdvice>()?;
