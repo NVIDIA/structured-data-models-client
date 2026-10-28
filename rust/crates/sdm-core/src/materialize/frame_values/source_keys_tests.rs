@@ -166,3 +166,34 @@ fn native_meaning_checks_keep_full_identity_and_current_component_assignments() 
     // current assignment merely because it has an earlier caller key mark.
     assert_eq!(description.tables[0].columns[1].stype, Stype::Id);
 }
+
+#[test]
+fn native_metadata_uses_fixed_types_and_requires_the_actual_new_derived_meaning() {
+    let mut fixed = table();
+    fixed.table.columns[1].dtype = "string".into();
+    let key = source_keys::key(fixed.clone(), fixed.table.primary_key.clone()).unwrap();
+    let derived = FrameConstructedColumn {
+        name: key.composite.as_ref().unwrap().derived.clone(),
+        dtype: Dtype::String,
+        stype: Stype::Id,
+    };
+    assert!(source_keys::metadata(FrameTableMetadata { key: key.clone(), table: fixed.table.clone(), derived: None }).is_err());
+    let mut wrong = derived.clone();
+    wrong.name.push('x');
+    assert!(source_keys::metadata(FrameTableMetadata { key: key.clone(), table: fixed.table.clone(), derived: Some(wrong) }).is_err());
+    let value = source_keys::metadata(FrameTableMetadata { key, table: fixed.table, derived: Some(derived) }).unwrap();
+    assert_eq!(value.table.columns[1].dtype, "int64");
+    assert_eq!(value.table.columns.last().unwrap().stype, Stype::Id);
+}
+
+#[test]
+fn native_stype_assignment_refuses_before_later_table_effects_with_a_native_cause_recipe() {
+    let mut fixed = table();
+    let key = source_keys::key(fixed.clone(), fixed.table.primary_key.clone()).unwrap();
+    fixed.table.columns[0].stype = Stype::Numerical;
+    let derived = FrameConstructedColumn { name: key.composite.as_ref().unwrap().derived.clone(), dtype: Dtype::String, stype: Stype::Id };
+    let error = source_keys::metadata(FrameTableMetadata { key, table: fixed.table, derived: Some(derived) }).unwrap_err();
+    assert_eq!(error.sentence, Sentence::IncompatibleSemanticType);
+    assert_eq!(error.fields["column"], Detail::text("a"));
+    assert_eq!(error.fields["native_key_reason"], Detail::text("metadata_validation"));
+}

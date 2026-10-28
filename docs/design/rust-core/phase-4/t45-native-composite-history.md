@@ -192,3 +192,18 @@ The first R15 whole architecture review found that native `Table._source_sample_
 Retain exactly one reset-index sample per constructed physical table, reuse it for both dtype and reached stype observations, and preserve its native column identities until the original key assignment releases it.
 The new public constructor reset observer and second-reset failure control must precede the source correction.
 The frozen R15 candidate remains untouched while its two independent reports complete, and the corrected candidate requires a fresh whole pair before any execution.
+
+The complete independent R15 compatibility report also identifies discarded constructed dtypes and a shallow fold copy moved after component observations.
+The final native schema must consume existing fixed constructed dtype facts, while the original validated question retains caller dtype facts for the earlier checks and cast decisions.
+The original-only four-case dtype witness confirms the late native int/string edge refusal, the earlier string/numerical metadata refusal, and the successful exact-integer key logical-edit twin.
+Their native ValueError causes remain part of those selected native boundaries.
+A supplied row identity must agree with this authoritative constructed source type after canonical width normalization, rather than creating a second cache identity for a contradictory component type.
+
+Create the fold shallow owner before missingness and render observations, and retain the actual assigned folded DataFrame for later native values and feature export.
+After assignment, the original invalidates its constructor sample and constructs a new derived column only when that column did not previously exist.
+Extend TableMetadata by one optional useful completed derived-column meaning, required exactly when captured original column identities prove a new derived column was constructed.
+The original key/table meaning remains immutable; the new column meaning cannot overwrite it or masquerade as a pre-existing declaration.
+A pre-existing derived column retains its original constructed dtype even though the native folded frame overwrites its actual values.
+The post-fold native constructor uses one new cached reset sample, and its fixed name reaches the existing ID rule.
+Apply live per-table stypes against actual constructed dtypes before advancing to another table, retaining original physical column order and any native columns that caller metadata does not reassign.
+Keep initial caller consistency, SQL policy and full ordered original key authority unchanged.

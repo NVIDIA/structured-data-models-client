@@ -60,6 +60,12 @@ CASES = (
     'constructor-error',
     'constructor-later-table',
     'constructor-reset',
+    'fold-copy',
+    'fold-copy-error',
+    'fold-copy-mutation',
+    'native-link-dtype',
+    'native-feature-dtype',
+    'native-integer-key-logical-edit',
     'replace',
     'cached',
     'warning-retry',
@@ -71,6 +77,7 @@ def _observe(label):
     active = []
     fold_started = False
     constructor_resets = {}
+    fold_copies = 0
     mutations = []
     schema = None
 
@@ -110,6 +117,11 @@ def _observe(label):
             return Rendered(value) if label == 'replace' else value
 
     data, primary, times, links, query = configure('int64', 'composite-history')
+    if label == 'native-link-dtype':
+        data['items']['item_id'] = data['items']['item_id'].astype(str)
+        data['buys']['item_id'] = data['buys']['item_id'].astype(str)
+    if label == 'native-feature-dtype':
+        data['users']['age'] = data['users']['age'].astype(str)
     if label == 'reversed':
         primary['buys'].reverse()
     if label == 'three':
@@ -170,14 +182,40 @@ def _observe(label):
         data = {name: data[name] for name in ('buys', 'users', 'items')}
     original_map = pd.Series.map
     original_reset = pd.DataFrame.reset_index
+    original_copy = pd.DataFrame.copy
+
+    def copied(frame, *args, **kwargs):
+        nonlocal fold_copies
+        reached = (
+            label.startswith('fold-copy')
+            and stage == 'materialize'
+            and not fold_started
+            and 'buy_id' in frame
+            and 'part' in frame
+        )
+        if reached:
+            fold_copies += 1
+            trace.append(('native-copy', fold_copies))
+            if label == 'fold-copy-error' and fold_copies == 3:
+                raise RuntimeError('native fold shallow copy failed')
+        result = original_copy(frame, *args, **kwargs)
+        if reached and label == 'fold-copy-mutation' and fold_copies == 3:
+            result.loc[0, 'part'] = 'copy-changed'
+        return result
 
     def reset(frame, *args, **kwargs):
-        if label == 'constructor-reset' and stage == 'materialize' and not fold_started:
+        if (
+            label == 'constructor-reset'
+            and stage == 'materialize'
+            and not fold_started
+        ):
             columns = tuple(frame.columns)
             trace.append(('constructor-reset', columns))
             constructor_resets[columns] = constructor_resets.get(columns, 0) + 1
             if constructor_resets[columns] > 1:
-                raise ValueError('a native constructor reset the same sample twice')
+                raise ValueError(
+                    'a native constructor reset the same sample twice'
+                )
         return original_reset(frame, *args, **kwargs)
 
     def mapped(values, *args, **kwargs):
@@ -201,6 +239,7 @@ def _observe(label):
         pd.option_context('future.infer_string', False),
         patch.object(pd.Series, 'map', mapped),
         patch.object(pd.DataFrame, 'reset_index', reset),
+        patch.object(pd.DataFrame, 'copy', copied),
     ):
         warnings.simplefilter('always')
         try:
@@ -210,6 +249,15 @@ def _observe(label):
                 time_columns=times,
                 relationships=links,
             )
+            if label == 'native-link-dtype':
+                data['buys']['item_id'] = pd.to_numeric(
+                    data['buys']['item_id']
+                ).astype('int64')
+            if label == 'native-feature-dtype':
+                schema['users']['age'].dtype = 'int64'
+                schema['users']['age'].stype = 'numerical'
+            if label == 'native-integer-key-logical-edit':
+                schema['buys']['part'].dtype = 'string'
             if label == 'float-logical-edit':
                 schema['buys']['part'].dtype = 'string'
             if label.endswith('-id'):
@@ -316,6 +364,10 @@ def test_complete_native_composite_history_matches_original(monkeypatch, label):
         'collision-int-id',
         'collision-text-id',
         'replace',
+        'constructor-reset',
+        'fold-copy',
+        'fold-copy-mutation',
+        'native-integer-key-logical-edit',
         'cached',
         'warning-retry',
     ):
