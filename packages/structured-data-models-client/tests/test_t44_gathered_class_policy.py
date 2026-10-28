@@ -119,8 +119,13 @@ def assert_result(result, script, predictions, probabilities):
         assert item.forecast_step is None
     # Build the complete expected public frame from explicit policy answers,
     # independently of the core's typed columns and fallback representation.
+    # A null public item omits prediction from its row dictionary, so native
+    # pandas fills that absent cell with NaN even in an object/bool column.
+    frame_predictions = [
+        float('nan') if value is None else value for value in predictions
+    ]
     expected_frame = pd.DataFrame(
-        {'row_index': [0, 1], 'id': [0, 1], 'prediction': predictions}
+        {'row_index': [0, 1], 'id': [0, 1], 'prediction': frame_predictions}
     )
     names = dict.fromkeys(key for row in probabilities for key, _ in row)
     for name in names:
