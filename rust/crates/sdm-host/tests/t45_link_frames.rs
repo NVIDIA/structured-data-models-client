@@ -1143,7 +1143,7 @@ fn native_text_context_projects_once_per_table_then_expands_each_column() {
     );
     let mut stages = FrameStages { held };
     let native_tables = [("users", vec!["user_id", "age", "note"]), ("items", vec!["item_id", "amount"]), ("buys", vec!["buy_id", "user_id", "item_id", "ts"])].map(|(name, columns)| {
-        json!({"source":{"source":[name]},"columns":columns.into_iter().map(|name| json!({"name":name,"declared":null,"logical_text":null,"strings":null})).collect::<Vec<_>>()})
+        json!({"source":{"source":[name]},"columns":columns.into_iter().map(|column| json!({"name":column,"declared":null,"logical_text":null,"strings":if name == "users" && matches!(column, "age" | "note") {Some("utf8")} else {None}})).collect::<Vec<_>>()})
     });
     let PreparedFrameValue::Graph(graph) = stages.stage(json!({"stage":"graph","schema":1,"frames":7,"checkpoint":null,"retained":null,"native_tables":native_tables,"values":5,"options":[],"prediction_rows":201,"limits":{}})).unwrap() else { panic!("graph") };
     let PreparedFrameValue::Population(population) = stages.stage(json!({"stage":"population","graph":graph,"query":2,"values":20,"seed":"0x7","entropy":7,"anchor_time":{"t":"ts","unit":"ns","v":"1677628800000000000"},"anchor_entity":false,"num_context_samples":null,"limits":{}})).unwrap() else { panic!("population") };

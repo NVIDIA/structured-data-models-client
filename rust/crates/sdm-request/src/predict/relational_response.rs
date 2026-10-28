@@ -857,7 +857,13 @@ mod tests {
         row: DecodedRelationalRow,
         forecasting: bool,
     ) -> AttributedRelationalRow {
-        let checked = check_forecast(checked(attribution, row).unwrap(), forecasting).unwrap();
+        let mut rows = check_rows(attribution.clone(), vec![row]).unwrap();
+        let Some(bound) = rows.forecast else {
+            assert_eq!(rows.rows.len(), 1);
+            return rows.rows.pop().unwrap();
+        };
+        assert!(rows.rows.is_empty());
+        let checked = check_forecast(bound, forecasting).unwrap();
         if attribution.instances {
             let instance = RelationalInstanceText {
                 ordinal: checked.bound.row.ordinal,
