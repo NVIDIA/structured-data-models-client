@@ -346,3 +346,5 @@ The old boolean-key checkpoint test also names a retired startup capability refu
 Its current raw HostRun reaches the existing caller relationship-type diagnostic before any snapshot, so test that reached diagnostic, empty checkpoint state and a successful integer-key twin.
 Reconcile the refusal census with the actual moved constructors and retained native/raw guards, preserving every semantic policy family and truthful intended-site evidence.
 No guard, route, input family or frozen expected result changes as part of this remaining-consumer correction.
+The independent compatibility review additionally requires the hand-authored census to retain valid standard JSON.
+Preserve the original `1e400` number spelling rather than emitting the nonstandard `Infinity` token, and pin both strict document parsing and the unchanged positive-infinity option value before that correction.

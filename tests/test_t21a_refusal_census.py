@@ -40,6 +40,7 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
+import math
 import re
 import shutil
 import subprocess
@@ -217,6 +218,29 @@ def test_every_site_has_a_probe() -> None:
     r"""Exit: on this tree, the census's site check passes."""
     done = _run('check', '--root', str(ROOT))
     assert done.returncode == 0, done.stdout + done.stderr
+
+
+def test_probe_document_is_standard_json_with_the_nonfinite_option_preserved():
+    def refuse_extension(token):
+        pytest.fail(
+            f'the census source contains nonstandard JSON token {token}'
+        )
+
+    document = json.loads(
+        (ROOT / 'contract/refusal-census.json').read_text(),
+        parse_constant=refuse_extension,
+    )
+    options = [
+        probe['input']['materialize'].get('inference_config', {})
+        for probe in document['probes']
+    ]
+    values = [
+        option['num_estimators']
+        for option in options
+        if 'num_estimators' in option
+    ]
+    assert len(values) == 1
+    assert math.isinf(values[0]) and values[0] > 0
 
 
 def test_production_after_test_items_is_discovered_without_test_only_rules(
