@@ -5187,6 +5187,17 @@
             "boolean",
             "null"
           ]
+        },
+        "dtype": {
+          "description": "Builtin text of the held declaration, only when that read was reached.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UnicodeText"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false,
@@ -5194,6 +5205,14 @@
         "kind",
         "classification"
       ]
+    },
+    "UnicodeText": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "format": "uint32",
+        "minimum": 0
+      }
     },
     "RelationalResultInput": {
       "type": "object",
@@ -8466,14 +8485,6 @@
           ]
         }
       ]
-    },
-    "UnicodeText": {
-      "type": "array",
-      "items": {
-        "type": "integer",
-        "format": "uint32",
-        "minimum": 0
-      }
     },
     "FrameDecimalExponent": {
       "oneOf": [
@@ -12719,6 +12730,17 @@
           "description": "UInt64 original source positions for immutable native dtype conversion.\nDistinct from the example-ownership batch column in rows.",
           "$ref": "#/$defs/AttachmentId"
         },
+        "text_rows": {
+          "description": "None preserves the expanded occurrence population and its order.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FrameRowProjection"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "stypes": {
           "type": "array",
           "items": {
@@ -12743,6 +12765,33 @@
         "rows",
         "source_rows",
         "stypes"
+      ]
+    },
+    "FrameRowProjection": {
+      "description": "Shared native operand positions and occurrence expansion for one table.\nPositions index its published raw rows, in original source-row order.",
+      "type": "object",
+      "properties": {
+        "positions": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "inverse": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "positions",
+        "inverse"
       ]
     },
     "SampledFrameLink": {
@@ -15033,17 +15082,7 @@
             "null"
           ],
           "items": {
-            "type": "array",
-            "prefixItems": [
-              {
-                "type": "string"
-              },
-              {
-                "$ref": "#/$defs/Scalar"
-              }
-            ],
-            "minItems": 2,
-            "maxItems": 2
+            "$ref": "#/$defs/RelationalTargetProbability"
           }
         }
       },
@@ -15051,6 +15090,27 @@
       "required": [
         "ordinal",
         "prediction"
+      ]
+    },
+    "RelationalTargetProbability": {
+      "description": "The completed native key conversion and its actual reached display.",
+      "type": "object",
+      "properties": {
+        "value": {
+          "$ref": "#/$defs/NativeValue"
+        },
+        "name": {
+          "type": "string"
+        },
+        "probability": {
+          "$ref": "#/$defs/Scalar"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "value",
+        "name",
+        "probability"
       ]
     },
     "RelationalRankGroups": {
