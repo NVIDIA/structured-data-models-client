@@ -38,11 +38,15 @@ endpoint:
   b02af721 (accepted); steps with rows swapped, and an empty later step's
   id on step 1, are refused there already.
 
-The implementer changes nothing of this file.
+The independent test author maintains the producer observer and tamper setup.
+The current gathered producer starts one typed ``call_relational`` at a time;
+empty children have no generated request IDs or actual starts.
+Separate raw legacy controls retain the original three-ID producer contract.
 """
 
 from __future__ import annotations
 
+import copy
 import importlib.util
 import json
 import sys
@@ -51,6 +55,7 @@ from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 
@@ -92,46 +97,114 @@ def test_the_question_is_the_vector_s() -> None:
     assert len(vector['reference']['payloads']) == STEPS
 
 
-class _Tampered:
-    r"""``sdm_client._native`` with ``predict`` started on other ids than
-    the host gave: ``rewrite`` changes the start's ids after the capture
-    has read them."""
+PLANNED_IDS = [f'sdm-{step:012x}' for step in range(1, STEPS + 1)]
 
-    def __init__(self, native: Any, rewrite: Callable[[list[str]], None]):
+
+class _TamperedHandle:
+    def __init__(
+        self,
+        handle: Any,
+        rewrite_scope: str | None,
+        reached: list,
+        *,
+        rewrite_lineage: bool = False,
+    ):
+        self._handle = handle
+        self._rewrite_scope = rewrite_scope
+        self._reached = reached
+        self._rewrite_lineage = rewrite_lineage
+
+    def take_attachment(self, attachment: int) -> Any:
+        value = self._handle.take_attachment(attachment)
+        if self._rewrite_scope is not None and isinstance(value, bytes):
+            decoded = json.loads(value)
+            if isinstance(decoded, dict) and 'scope' in decoded:
+                scope = decoded['scope']
+                assert scope['call_request_id'] == self._rewrite_scope
+                scope['call_request_id'] = 'sdm-stale-response-scope'
+                self._reached.append(('scope', self._rewrite_scope))
+                value = json.dumps(decoded).encode()
+        if self._rewrite_lineage and isinstance(value, bytes):
+            decoded = json.loads(value)
+            if isinstance(decoded, dict) and 'predicted' in decoded:
+                assert decoded['lineage']
+                decoded['lineage'][0]['call_request_id'] = (
+                    'sdm-stale-final-lineage'
+                )
+                self._reached.append(('lineage', attachment))
+                value = json.dumps(decoded).encode()
+        return value
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._handle, name)
+
+
+class _Tampered:
+    r"""Observe actual typed starts, then tamper below the capture hook.
+
+    Planned IDs for empty children exist only in this test's oracle.
+    The actual producer allocates IDs only for children that send calls.
+    """
+
+    def __init__(
+        self,
+        native: Any,
+        started: list[dict[str, Any]],
+        rewritten: list[str],
+        reached: list,
+        mode: str,
+    ):
         self._native = native
         self.Run = self
-        self._rewrite = rewrite
+        self._started = started
+        self._rewritten = rewritten
+        self._reached = reached
+        self._mode = mode
 
     def start(self, message: bytes, attachments: Any) -> Any:
         started = json.loads(message)
         operation = started['operation']
-        if operation['op'] == 'predict':
-            steps = operation['state'].get('forecast') or []
-            ids = [operation['request_id']] + [s['request_id'] for s in steps]
-            self._rewrite(ids)
-            operation['request_id'] = ids[0]
-            for step, given in zip(steps, ids[1:], strict=True):
-                step['request_id'] = given
-            message = json.dumps(started).encode()
-        return self._native.Run.start(message, attachments)
+        rewrite_scope = None
+        rewrite_lineage = False
+        if operation['op'] == 'prepare_request':
+            value = json.loads(attachments[operation['input']])
+            rewrite_lineage = (
+                self._mode == 'lineage'
+                and value['stage'] == 'finish_relational_response'
+                and value['input']['aggregation']['kind'] == 'steps'
+            )
+            if value['stage'] == 'call_relational':
+                given = value['input']['request_id']
+                self._started.append(copy.deepcopy(value))
+                at = PLANNED_IDS.index(given)
+                changed = self._rewritten[at]
+                if changed != given:
+                    attachments = dict(attachments)
+                    if self._mode in ('input', 'both'):
+                        value['input']['request_id'] = changed
+                        attachments[operation['input']] = json.dumps(
+                            value
+                        ).encode()
+                        self._reached.append(('input', given, changed))
+                    if self._mode in ('body', 'both'):
+                        body_id = value['input']['body']
+                        body = json.loads(attachments[body_id])
+                        assert body['metadata']['request_id'] == given
+                        body['metadata']['request_id'] = changed
+                        attachments[body_id] = json.dumps(body).encode()
+                        self._reached.append(('body', given, changed))
+                    if self._mode == 'scope':
+                        rewrite_scope = given
+        handle = self._native.Run.start(message, attachments)
+        return _TamperedHandle(
+            handle,
+            rewrite_scope,
+            self._reached,
+            rewrite_lineage=rewrite_lineage,
+        )
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._native, name)
-
-
-def _unwrapped(native: Callable[[], Any]) -> Callable[[], Any]:
-    r"""``run.native`` without the capture an earlier ``_Boundary`` wrapped
-    it in (each wraps the function it found, kept in its closure)."""
-    while '_Boundary' in getattr(native, '__qualname__', ''):
-        cells = dict(
-            zip(
-                native.__code__.co_freevars,
-                native.__closure__ or (),
-                strict=True,
-            )
-        )
-        native = cells['imported'].cell_contents
-    return native
 
 
 def _ask(
@@ -140,11 +213,15 @@ def _ask(
     *,
     capture: bool,
     rewrite: Callable[[list[str]], None] | None = None,
+    mode: str = 'both',
+    model: Any = None,
+    outputs: Any = None,
 ) -> dict[str, Any]:
-    r"""The forecast with the steps ``empty`` (from 1) given no rows, asked
-    on the core with or without the runner's capture: the answer or the
-    error, the ids ``predict`` was started with, the ids the endpoint
-    received and the capture's record."""
+    r"""Ask the real forecast and observe only actual typed call starts.
+
+    Empty-step planned IDs are test-only reserved values, never captured
+    as starts. The below-capture tamper records each actual changed boundary.
+    """
     import duckdb
     import pandas as pd
     from sdm_client import (
@@ -160,33 +237,28 @@ def _ask(
     monkeypatch.setenv(
         'SDM_CORE_ROUTES', ','.join(list(_routing.S0) + EN.core_routes({}))
     )
-    # Each run starts from the binding itself; whatever a capture installs
-    # is undone after the test.
-    monkeypatch.setattr(run, 'native', _unwrapped(run.native))
+    started: list[dict[str, Any]] = []
+    reached: list = []
+    rewritten = PLANNED_IDS.copy()
     if rewrite is not None:
-        inner = run.native
-        monkeypatch.setattr(run, 'native', lambda: _Tampered(inner(), rewrite))
-    started: list[list[str]] = []
+        rewrite(rewritten)
+    inner = run.native
+    monkeypatch.setattr(
+        run,
+        'native',
+        lambda: _Tampered(inner(), started, rewritten, reached, mode),
+    )
     recorded = None
+    boundary = None
     if capture:
         boundary = RUNNER._Boundary()
         recorded = boundary.reset()
-        seen = recorded.started
-
-        def started_and_seen(message: bytes, attachments: Any) -> None:
-            operation = json.loads(message)['operation']
-            if operation['op'] == 'predict':
-                started.append(
-                    [operation['request_id']]
-                    + [
-                        s['request_id']
-                        for s in operation['state'].get('forecast') or ()
-                    ]
-                )
-            seen(message, attachments)
-
-        recorded.started = started_and_seen  # type: ignore[method-assign]
-    out: dict[str, Any] = {'started': started, 'capture': recorded}
+    out: dict[str, Any] = {
+        'started': started,
+        'capture': recorded,
+        'tampered': reached,
+        'planned': PLANNED_IDS.copy(),
+    }
     connection = duckdb.connect()
     try:
         for statement in EN.shop():
@@ -201,10 +273,24 @@ def _ask(
                 part = request.parts[step - 1]
                 part.payloads[0]['predict']['instance_table']['rows'] = []
             with SERVE() as (url, received), SDMClient(url) as client:
+                ids = [
+                    value
+                    for step, value in enumerate(PLANNED_IDS, 1)
+                    if step not in empty
+                ]
                 try:
-                    out['frame'] = client.predict(
-                        request, model=KumoRelational()
-                    ).to_pandas()
+                    with patch(
+                        'sdm_client.adapters.relational._request_id',
+                        side_effect=ids,
+                    ):
+                        answer = client.predict(
+                            request,
+                            model=KumoRelational() if model is None else model,
+                            outputs=outputs,
+                        )
+                    out['frame'] = answer.to_pandas()
+                    out['metadata'] = copy.deepcopy(answer.metadata)
+                    out['items'] = copy.deepcopy(answer.items)
                     out['error'] = None
                 except Exception as error:  # noqa: BLE001 - the outcome
                     out['frame'] = None
@@ -215,6 +301,9 @@ def _ask(
                 ]
     finally:
         connection.close()
+        if boundary is not None:
+            boundary.close()
+        monkeypatch.setattr(run, 'native', inner)
     return out
 
 
@@ -240,12 +329,29 @@ def test_a_step_with_no_rows_is_captured_as_it_is_answered(
     # The answer is the one given without the capture.
     assert captured['frame'].equals(plain['frame'])
     # Each call carries the id its own step was started with.
-    [ids] = captured['started']
-    assert len(ids) == STEPS and len(set(ids)) == STEPS
-    assert captured['received'] == [ids[s - 1] for s in with_rows]
+    ids = [value['input']['request_id'] for value in captured['started']]
+    assert ids == [PLANNED_IDS[s - 1] for s in with_rows]
+    assert len(set(ids)) == len(with_rows)
+    assert not set(ids).intersection(PLANNED_IDS[s - 1] for s in empty)
+    assert captured['received'] == ids
+    assert captured['metadata'] == plain['metadata']
+    assert captured['items'] == plain['items']
+    assert 'predict' not in captured['capture'].operations
     # The capture keeps the last call's body.
     body = captured['capture'].predicted['body']
-    assert body['metadata']['request_id'] == ids[with_rows[-1] - 1]
+    assert body['metadata']['request_id'] == ids[-1]
+    if len(ids) > 1:
+        assert [
+            call['metadata']['request_id']
+            for call in captured['capture'].predicted['calls']
+        ] == ids
+    inputs = [
+        item['input']['input']['request_id']
+        for item in captured['capture'].inputs
+        if item['op'] == 'prepare_request'
+        and item['input']['stage'] == 'call_relational'
+    ]
+    assert inputs == ids
 
 
 def _step_3_s_id_on_step_2(ids: list[str]) -> None:
@@ -267,7 +373,10 @@ def test_the_capture_still_refuses_a_call_with_another_step_s_id(
     rewrite: Callable[[list[str]], None],
     empty: tuple[int, ...],
 ) -> None:
+    control = _ask(monkeypatch, empty, capture=True)
+    assert control['error'] is None, control['error']
     got = _ask(monkeypatch, empty, capture=True, rewrite=rewrite)
+    assert got['tampered'], 'the rewrite never reached an actual call start'
     assert isinstance(got['error'], RUNNER.RunnerFailure), got['error']
     assert 'does not carry the request id' in str(got['error'])
     # Without the capture the same tampered start is answered: the refusal
@@ -318,7 +427,10 @@ def test_the_capture_refuses_an_id_that_is_not_the_next_step_with_rows(
     step, or of a step with rows out of its turn, is refused by name; the
     same tampered start without the capture is answered (Codex round 3,
     P2: at b02af721 the capture accepts any later step's id)."""
+    control = _ask(monkeypatch, empty, capture=True)
+    assert control['error'] is None, control['error']
     got = _ask(monkeypatch, empty, capture=True, rewrite=rewrite)
+    assert got['tampered'], 'the rewrite never reached an actual call start'
     assert isinstance(got['error'], RUNNER.RunnerFailure), (
         f'accepted: calls carried {got["received"]}, the steps were '
         f'started with {got["started"]}, steps {empty} empty'
@@ -326,3 +438,22 @@ def test_the_capture_refuses_an_id_that_is_not_the_next_step_with_rows(
     assert 'does not carry the request id' in str(got['error'])
     plain = _ask(monkeypatch, empty, capture=False, rewrite=rewrite)
     assert plain['error'] is None, plain['error']
+
+
+@pytest.mark.parametrize('mode', ['input', 'body', 'scope'])
+def test_typed_input_body_and_scope_ids_are_independent_obligations(
+    monkeypatch: pytest.MonkeyPatch, mode: str
+) -> None:
+    control = _ask(monkeypatch, (), capture=True)
+    assert control['error'] is None, control['error']
+    got = _ask(
+        monkeypatch,
+        (),
+        capture=True,
+        rewrite=_a_stale_id_on_step_3,
+        mode=mode,
+    )
+    assert got['tampered']
+    assert {change[0] for change in got['tampered']} == {mode}
+    assert isinstance(got['error'], RUNNER.RunnerFailure), got['error']
+    assert 'request id' in str(got['error']).lower()
