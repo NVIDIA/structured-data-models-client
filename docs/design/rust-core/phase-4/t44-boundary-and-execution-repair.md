@@ -322,3 +322,14 @@ Keep the complete payload/warning/error observations in the new failing-first pu
 For this already-selected frame payload range recipe only, retain the active caller context from the known internal bridge exception on the bare cause and retain the original bare-exception handler context on the qualified cause.
 The existing shared raising helper then removes only its own bridge exception and preserves this native graph.
 Do not change unmarked SQL/direct errors, read source values, parse error text, introduce another capture step or change outer part wording/public details.
+
+
+## Executed source-quality closure
+
+The corrected exact-R26 quality recorder exposes five Ruff diagnostics, one repeated local-variable typing conflict, two native-declaration parameter annotation mismatches and one disallowed test-module path attribute.
+Keep the enabled checks and source scope unchanged.
+Use the existing precise neutral `NativeDeclaration` union for the constructor parameter rather than widening or suppressing its callers.
+Keep the decoded error envelope distinct from native message strings, preserving all existing reads and presentation timing.
+Use ordinary nested module discovery for the overlap unit tests instead of a `path` attribute, so their source remains in the scanner's normal module tree.
+Correct import ordering, equivalent direct attribute access and a test-only loop closure binding without changing native operations, fixture expectations or policy.
+These source-quality corrections receive their normal gates after fresh whole review; private diagnostic instrumentation failure has no product quality credit.
