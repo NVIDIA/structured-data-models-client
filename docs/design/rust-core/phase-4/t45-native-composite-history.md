@@ -56,7 +56,9 @@ The current unpublished contract version remains coherent and published locks re
 `FrameTableColumnFacts` gains a closed neutral value representation beside the existing original physical declaration.
 The alternatives are typed physical scalar storage, enumerated values, or actual observed object scalar content.
 Object inference is observed at the constructed table boundary, using the original prefix and missingness schedule; the Rust reader maps those observations to its existing constructed dtype vocabulary.
-`FrameTableMeaning` retains those fixed ordered constructed columns and original row count alongside its existing cast-time declarations.
+`FrameTableMeaning` retains those fixed ordered constructed columns alongside its existing cast-time declarations.
+The input carries the original reached native container-empty observation before any header or dtype work.
+Do not add an early native row-count read; complete Arrow source and identity owners later establish cardinality directly.
 It carries no future metadata position or callback.
 
 `FrameKeyMeaning` binds one table's captured ordered primary key to that immutable constructed table.

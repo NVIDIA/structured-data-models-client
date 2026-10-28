@@ -37,7 +37,6 @@ fn table() -> FrameTableMeaning {
                 dtype: Dtype::Int,
             },
         ],
-        row_count: 4,
     }
 }
 
@@ -127,7 +126,7 @@ fn malformed_definition_or_table_key_companions_never_select_another_meaning() {
         let mut forged = key.clone();
         match change {
             0 => forged.composite.as_mut().unwrap().columns.reverse(),
-            1 => forged.composite.as_mut().unwrap().rows += 1,
+            1 => forged.composite.as_mut().unwrap().source = "another".into(),
             2 => forged.composite.as_mut().unwrap().derived.push('x'),
             _ => forged.composite.as_mut().unwrap().columns[0].dtype = Dtype::Int64,
         }
