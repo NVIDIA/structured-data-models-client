@@ -59,19 +59,22 @@ def test_lossless_native_decimal_mantissa_view(bits, scale):
         assert len(view) == len(source)
         assert view.offset == source.offset
         assert view.null_count == source.null_count
-        addresses = [
-            buffer.address if buffer else None for buffer in view.buffers()
-        ]
-        assert addresses == [
-            buffer.address if buffer else None for buffer in source.buffers()
-        ]
+        assert view.buffers()[1].address == source.buffers()[1].address
+        assert view.buffers()[1].size == source.buffers()[1].size
+        assert view.is_valid().to_pylist() == source.is_valid().to_pylist()
+        if source.null_count:
+            # A nullable slice needs its bitmap. An all-valid or empty slice
+            # may omit that redundant buffer while retaining every value.
+            assert view.buffers()[0].address == source.buffers()[0].address
     # The C stream carries representable typed mantissas, with the original
     # full native descriptor retained separately and no per-cell tree.
     table = pa.table({'value': storage})
     reader = pa.RecordBatchReader.from_stream(table)
     restored = reader.read_all()['value']
-    del original, series, chunks, storage, table, reader
+    del original, series, chunks, storage, table, reader, source, view
     gc.collect()
+    assert restored.null_count == 1
+    assert restored.is_valid().to_pylist() == [True, False, True, True]
     values = [
         str(value) if value is not None else None
         for value in restored.to_pylist()

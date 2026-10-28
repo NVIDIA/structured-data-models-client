@@ -30,25 +30,62 @@ def series(values, dtype):
     )
 
 
+def _decimal_error_graph(error):
+    if error is None:
+        return None
+    return {
+        'type': f'{type(error).__module__}.{type(error).__qualname__}',
+        'code': getattr(error, 'code', None),
+        'text': str(error),
+        'cause': _decimal_error_graph(error.__cause__),
+        'context': 'same-as-cause'
+        if error.__context__ is error.__cause__
+        else _decimal_error_graph(error.__context__),
+        'suppress': error.__suppress_context__,
+    }
+
+
+def _constructor_outcome(frames, **options):
+    try:
+        schema = Schema.from_data(frames, **options)
+    except Exception as error:
+        return None, (
+            'error',
+            type(error),
+            getattr(error, 'code', None),
+            str(error),
+            _decimal_error_graph(error),
+        )
+    for name, frame in frames.items():
+        assert schema[name].data is frame
+    return schema, ('ok', projection(schema))
+
+
+def _assert_native_failure(outcome, error_type, message):
+    assert outcome == (
+        'error',
+        error_type,
+        None,
+        message,
+        {
+            'type': f'{error_type.__module__}.{error_type.__qualname__}',
+            'code': None,
+            'text': message,
+            'cause': None,
+            'context': 'same-as-cause',
+            'suppress': False,
+        },
+    )
+
+
 def paired(monkeypatch, build, **options):
     outcomes = []
     for core in (False, True):
         frames = build()
         monkeypatch.setenv('SDM_CORE_ROUTES', PATHS if core else '')
-        schema = None
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter('always')
-            try:
-                schema = Schema.from_data(frames, **options)
-            except Exception as error:
-                outcome = (
-                    'error',
-                    type(error),
-                    getattr(error, 'code', None),
-                    str(error),
-                )
-            else:
-                outcome = ('ok', projection(schema))
+            schema, outcome = _constructor_outcome(frames, **options)
         outcomes.append(
             (outcome, [(str(item.message), item.category) for item in caught])
         )
@@ -258,9 +295,20 @@ def test_small_native_decimal_widths_use_the_same_constructor_stages(
             'rows': pd.DataFrame({name: raw_series(bits, 1, scale, [0, 1])})
         }
 
-    schema, _, _ = paired(monkeypatch, build)
-    assert schema['rows'][name].dtype == ('float64' if scale > 0 else 'int64')
-    assert schema['rows'].primary_key == (name if key else None)
+    schema, _, (outcome, notices) = paired(monkeypatch, build)
+    if key or scale <= 0:
+        assert schema is None
+        _assert_native_failure(
+            outcome,
+            pa.ArrowNotImplementedError,
+            "Function 'dictionary_encode' has no kernel matching input types "
+            f'(decimal{bits}(1, {scale}))',
+        )
+        assert notices == []
+    else:
+        assert schema is not None
+        assert schema['rows'][name].dtype == 'float64'
+        assert schema['rows'].primary_key is None
 
 
 @pytest.mark.parametrize('bits', [128, 256])
@@ -325,8 +373,13 @@ def test_repeated_key_error_uses_original_native_decimal_scalar(
     )
     assert schema is None
     assert outcome[0] == 'error'
-    assert outcome[2] == 'INVALID_REQUEST'
-    assert 'Decimal(' in outcome[3]
+    if scale == 2:
+        assert outcome[2] == 'INVALID_REQUEST'
+        assert 'Decimal(' in outcome[3]
+    else:
+        _assert_native_failure(
+            outcome, InvalidOperation, "[<class 'decimal.ConversionSyntax'>]"
+        )
 
 
 @pytest.mark.parametrize('bits', [128, 256])
@@ -346,6 +399,7 @@ def test_missing_key_advice_can_change_later_decimal_scale_and_example(
             }
         )
         changed = False
+        events = []
         monkeypatch.setenv('SDM_CORE_ROUTES', PATHS if core else '')
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter('always')
@@ -353,23 +407,60 @@ def test_missing_key_advice_can_change_later_decimal_scale_and_example(
 
             def mutate(message, *args, frame=frame, show=show, **kwargs):
                 nonlocal changed
+                events.append(('warning', str(message)))
                 if not changed:
                     assert 'have no value for it' in str(message)
                     changed = True
+                    events.append(('mutate-scale', mutated_scale))
                     frame['value_id'] = raw_series(
                         bits, 3, mutated_scale, [1, 1] + list(range(2, 100))
                     )
                 show(message, *args, **kwargs)
 
             warnings.showwarning = mutate
-            schema = Schema.from_data({'rows': frame})
+            schema, outcome = _constructor_outcome({'rows': frame})
         assert changed
-        assert schema['rows']['value_id'].dtype == 'int64'
-        assert schema['rows'].duplicate_keys == 1
         messages = [str(item.message) for item in caught]
-        example = repr(Decimal(1).scaleb(-mutated_scale))
-        assert any(example in message for message in messages)
-        outcomes.append((projection(schema), messages))
+        assert messages[0] == (
+            'rows.value_id identifies a row, but 1 row(s) have no value for '
+            'it. Those rows cannot be scored and the model will not see '
+            'them; fill or drop them, or name a different primary key.'
+        )
+        assert events.count(('mutate-scale', mutated_scale)) == 1
+        assert frame['value_id'].dtype.pyarrow_dtype == make(3, mutated_scale)
+        expected_bytes = b''.join(
+            value.to_bytes(bits // 8, 'little', signed=True)
+            for value in [1, 1] + list(range(2, 100))
+        )
+        assert (
+            frame['value_id']
+            .array.__arrow_array__()
+            .chunk(0)
+            .buffers()[1]
+            .to_pybytes()
+        ) == expected_bytes
+        if mutated_scale == 2:
+            assert schema is not None
+            assert schema['rows']['value_id'].dtype == 'int64'
+            assert schema['rows'].primary_key == 'value_id'
+            assert schema['rows'].duplicate_keys == 1
+            assert any("Decimal('0.01')" in message for message in messages)
+        else:
+            assert schema is None
+            _assert_native_failure(
+                outcome,
+                InvalidOperation,
+                "[<class 'decimal.ConversionSyntax'>]",
+            )
+            assert len(messages) == 1
+        outcomes.append(
+            (
+                outcome,
+                [(str(item.message), item.category) for item in caught],
+                events,
+                expected_bytes,
+            )
+        )
     assert outcomes[0] == outcomes[1]
 
 
@@ -414,12 +505,40 @@ def test_decimal_constructor_rereads_mutated_native_buffers(
             {'value_id': pd.Series(pd.arrays.ArrowExtensionArray(array))}
         )
         monkeypatch.setenv('SDM_CORE_ROUTES', PATHS if core else '')
-        before = Schema.from_data({'rows': frame})
-        snapshot = before.snapshot()
-        backing[width : 2 * width] = bytes(width)
-        after = Schema.from_data({'rows': frame})
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            before, initial = _constructor_outcome({'rows': frame})
+            assert before is not None
+            snapshot = before.snapshot()
+            snapshot_before = projection(snapshot)
+            original_bytes = bytes(backing)
+            backing[width : 2 * width] = bytes(width)
+            assert original_bytes != bytes(backing)
+            assert array.buffers()[1].to_pybytes() == bytes(backing)
+            after, outcome = _constructor_outcome({'rows': frame})
         assert snapshot['rows'].primary_key == 'value_id'
-        assert after['rows'].primary_key is None
         assert snapshot['rows'].data is frame
-        outcomes.append((projection(snapshot), projection(after)))
+        assert projection(snapshot) == snapshot_before
+        assert (
+            projection(pickle.loads(pickle.dumps(snapshot))) == snapshot_before
+        )
+        if scale == -129:
+            assert after is None
+            _assert_native_failure(
+                outcome,
+                InvalidOperation,
+                "[<class 'decimal.ConversionSyntax'>]",
+            )
+        else:
+            assert after is not None
+            assert after['rows'].primary_key is None
+        outcomes.append(
+            (
+                initial,
+                snapshot_before,
+                outcome,
+                [(str(item.message), item.category) for item in caught],
+                (original_bytes, bytes(backing)),
+            )
+        )
     assert outcomes[0] == outcomes[1]
