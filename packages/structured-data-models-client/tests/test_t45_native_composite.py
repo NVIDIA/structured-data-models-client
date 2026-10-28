@@ -77,6 +77,7 @@ def _observe(label):
 
     class Key(str):
         def __str__(self):
+            trace.append(('native-str', bool(active)))
             if active:
                 trace.append(('render', str.__str__(self)))
                 if label == 'render-error':

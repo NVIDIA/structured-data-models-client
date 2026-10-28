@@ -71,7 +71,7 @@ Its completion validates shape/null representation and the native primary-key se
 The setter assigns ID meaning to the derived column.
 The later per-table metadata product then validates the current caller stype of any pre-existing derived column before advancing to the next table; overwriting its assigned ID with numerical or text meaning fails there.
 The successful integer/text collision twins with explicit ID metadata prove this distinction.
-No new value-based semantic inference engine or fixed initial stype is required for this boundary.
+The fixed initial stype is overwritten by later caller metadata, but its native inference observations remain observable and must still occur before the next physical column.
 
 `MaterializeFrames` and detached `FrameCheckpointManifest` carry explicit row-identity bindings separately from ordinary source-table bindings.
 `FrameCheckpointMetadata` retains the existing string-encoding facts needed to reconstruct the same snapshot.
@@ -167,3 +167,14 @@ The earlier 34-case receipt and every executed producer remain immutable.
 
 The narrow explicit-anchor precedence witness confirms that context-anchor entity mismatch and zero iterations each precede missing final time metadata, with their exact native ValueError causes.
 The absent-anchor default-time lookup is a distinct earlier read; do not attribute the explicit-anchor witness to it.
+
+## Native physical-constructor observations
+
+The additional original-only constructor probe proves that physical table construction itself reaches native timestamp parsing before the first key fold.
+A string subclass receives an actual `__str__` callback inside the native parser, even though its initial inferred semantic type is overwritten by later caller metadata.
+The constructor-effects and constructor-stack receipts are immutable successful original-only observations; they are not candidate parity evidence.
+Preserve native timestamp, multi-value and distinct observations in their original per-column short-circuit order, with Rust selecting the existing semantic predicates from sufficient neutral samples and counts.
+Do not suppress those operations merely because the final caller stype is already known.
+Native failures keep the original constructed-column RuntimeError wrapper and their real cause at this boundary.
+The actual native source sample resets its index before each original inference read; this must not freeze later source or metadata observations ahead of callbacks.
+A focused fixed constructor profile may own useful immutable dtype/name facts and native statistical observations; it cannot retain a callback, issue a generic instruction stream or change RunStep.
