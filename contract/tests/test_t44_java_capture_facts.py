@@ -212,3 +212,47 @@ def test_full_observer_cannot_lose_mandatory_available_facts(changed):
         core['model_calls'].append(copy.deepcopy(core['model_calls'][0]))
     with pytest.raises(reader().ObservationError):
         reader().view(core, captured.operations)
+
+
+def test_unavailable_sparse_carried_data_keeps_all_common_error_and_call_fields():
+    compare = _module(
+        't44_sparse_compare', ROOT / 'scripts/rust_core/compare.py'
+    )
+    events, _ = sparse_trace(1)
+    events.append(
+        {
+            'event': 'failed',
+            'kind': 'invalid_response',
+            'code': 'INVALID_RESPONSE',
+        }
+    )
+    capture = JAVA.captured(events)
+    sparse = capture.core()
+    # Independent typed evidence: this producer observed native control
+    # carrying no answer, while the sparse Trace could not observe control.
+    controlled = copy.deepcopy(sparse)
+    controlled['capture_capabilities']['native_error_control'] = True
+    controlled['answered'] = None
+    controlled['legacy_predictions'][0]['answered'] = None
+    for core in (sparse, controlled):
+        reader().view(core, capture.operations)
+
+    def failures(core):
+        report = compare.Report(paths=(('metadata', 'request_id'),))
+        compare._core_agree(
+            report,
+            {'id': 'sparse-control-availability'},
+            {
+                'identity': {'operations': capture.operations, 'contract': 35},
+                'core': sparse,
+            },
+            {
+                'identity': {'operations': capture.operations, 'contract': 35},
+                'core': core,
+            },
+        )
+        return report.failures
+
+    assert failures(controlled) == []
+    controlled['legacy_predictions'][0]['error']['code'] = 'TRANSPORT_ERROR'
+    assert failures(controlled)
