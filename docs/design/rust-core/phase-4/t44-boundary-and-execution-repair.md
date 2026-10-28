@@ -643,3 +643,13 @@ Compare carried supplements only when both producers observed them, while retain
 The retained paid-partial negative fixture represents a full current observer, not a historical observer whose carried supplement is unavailable.
 Declare its actual full interceptions and matching Run-local error/answered products while preserving every existing body, Arrow, row-count, model, response-ID, metadata, output and missing-current-fact oracle.
 Keep the separate historical-unavailable positive and the product reader unchanged for this fixture correction.
+
+
+### Actual compiler and quality feedback
+
+The twice-approved R38 workspace check found one retained LINK host-test attachment literal with the wrong integer width.
+Use the existing u32 attachment identity with checked conversion for its fixed two-column fixture, preserving every journey assertion.
+The unchanged-source quality diagnostic also reported one collapsible pure Rust guard and Python import ordering plus two context-only test raisers.
+Collapse the equivalent short-circuit guard without changing any selected answer branch.
+Keep the context tests' exact implicit context and absent explicit cause by calling a normal failing helper within the handler, rather than suppressing a lint or changing the exception graph.
+Group these routine source repairs before fresh whole review, preserve actual R38 receipts, and claim no package stamp from the diagnostic.
