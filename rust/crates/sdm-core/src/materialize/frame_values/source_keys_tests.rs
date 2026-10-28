@@ -140,3 +140,27 @@ fn malformed_definition_or_table_key_companions_never_select_another_meaning() {
         );
     }
 }
+
+#[test]
+fn native_meaning_checks_keep_full_identity_and_current_component_assignments() {
+    let mut fixed = table();
+    fixed.table.columns[0].stype = Stype::Categorical;
+    fixed.table.columns[1].stype_before_key = Some(Stype::Categorical);
+    let read = sdm_schema::held::read(
+        sdm_contract::ops::HeldSchema {
+            tables: vec![fixed.table],
+            links: vec![],
+        },
+        &BTreeMap::new(),
+        true,
+    )
+    .unwrap();
+    let mut description = read.description;
+    super::columns::consistent_native(&mut description, &read.types).unwrap();
+    super::columns::kept_native(&description).unwrap();
+    assert_eq!(description.tables[0].primary_key, ["a", "b"]);
+    assert_eq!(description.tables[0].columns[0].stype, Stype::Categorical);
+    // Unlike caller Schema edits, native graph metadata does not release a
+    // current assignment merely because it has an earlier caller key mark.
+    assert_eq!(description.tables[0].columns[1].stype, Stype::Id);
+}
