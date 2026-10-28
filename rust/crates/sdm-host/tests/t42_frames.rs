@@ -115,6 +115,152 @@ fn primitive_frame_is_described_without_any_fetch() {
     }
 }
 
+#[test]
+fn native_float_cardinality_and_quality_are_independent_host_constructor_products() {
+    use arrow_array::{ArrayRef, Float32Array, Float64Array};
+    use sdm_contract::frames::FrameInference;
+    use sdm_contract::ops::{Dtype, Stype};
+    use sdm_contract::{Detail, Sentence};
+    for narrow in [false, true] {
+        let (sign, quiet, signaling, one, two) = if narrow {
+            (
+                1_u64 << 31,
+                0x7fc0_0000,
+                0x7f80_0001,
+                0x3f80_0000,
+                0x4000_0000,
+            )
+        } else {
+            (
+                1_u64 << 63,
+                0x7ff8_0000_0000_0000,
+                0x7ff0_0000_0000_0001,
+                0x3ff0_0000_0000_0000,
+                0x4000_0000_0000_0000,
+            )
+        };
+        for (bits, native_distinct, duplicate) in [
+            ([0, sign], 2, true),
+            ([quiet, quiet | sign], 2, true),
+            ([quiet | 1, quiet | 2], 2, true),
+            ([signaling, quiet | 1], 2, true),
+            ([0, 0], 1, true),
+            ([quiet, quiet], 1, true),
+            ([one, two], 2, false),
+        ] {
+            let column: ArrayRef = if narrow {
+                Arc::new(Float32Array::from(
+                    bits.map(|bits| f32::from_bits(bits as u32)).to_vec(),
+                ))
+            } else {
+                Arc::new(Float64Array::from(bits.map(f64::from_bits).to_vec()))
+            };
+            let batch = RecordBatch::try_from_iter([("user_id", column)]).unwrap();
+            let mut attached = inputs();
+            attached.insert(AttachmentId(2), bytes(json!({"stage":"column_meanings","tables":[{"source":{"source":["users"]},"rows":3}]})));
+            attached.insert(
+                AttachmentId(3),
+                Attachment::Arrow(ArrowData::new(batch.schema(), vec![batch])),
+            );
+            let run = HostRun::start(&sdm_host::default_root(), &message(), attached).unwrap();
+            let product = loop {
+                match sdm_host::read(&run.next().unwrap()).unwrap() {
+                    ControlMessage::Step(Step::Done {
+                        result: OperationResult::InferredFrames(result),
+                    }) => {
+                        let Some(Attachment::Bytes(product)) =
+                            run.take_attachment(result.value).unwrap()
+                        else {
+                            panic!("column meanings")
+                        };
+                        break product;
+                    }
+                    ControlMessage::Warnings { .. } => {}
+                    other => panic!("native float meanings cannot fetch/model/callback: {other:?}"),
+                }
+            };
+            let FrameInference::ColumnMeanings(table) = serde_json::from_slice(&product).unwrap()
+            else {
+                panic!("typed meanings")
+            };
+            assert!(table.primary_key.is_empty());
+            assert_eq!(
+                table.columns[0].dtype,
+                if narrow {
+                    Dtype::Float32
+                } else {
+                    Dtype::Float64
+                }
+            );
+            assert_eq!(table.columns[0].stype, Stype::Numerical);
+            let mut candidates = sdm_host::frame_constructors::key_candidates(&product, 2).unwrap();
+            assert_eq!(candidates.column(), Some("user_id"));
+            candidates.observe(native_distinct, 2).unwrap();
+            assert!(candidates.column().is_none());
+            let (nomination, notices) = sdm_host::frame_constructors::finish_key_candidates(
+                candidates,
+                (native_distinct == 2).then_some((false, 0)),
+            )
+            .unwrap();
+            assert!(
+                serde_json::from_slice::<Vec<sdm_contract::CoreWarning>>(&notices)
+                    .unwrap()
+                    .is_empty()
+            );
+            let mut adoption = sdm_host::frame_constructors::key_adoption(&nomination).unwrap();
+            if native_distinct == 1 {
+                assert!(adoption.validation_columns().is_none());
+                adoption.adopt(None).unwrap();
+            } else {
+                assert_eq!(adoption.validation_columns(), Some(vec!["user_id".into()]));
+                adoption.validation_empty(false);
+                let quality = sdm_host::frame_constructors::key_quality(&serde_json::to_vec(&json!({"missing":0,"duplicates":u64::from(duplicate),"example_row":duplicate.then_some(1)})).unwrap()).unwrap();
+                adoption.validation_quality(quality.clone()).unwrap();
+                assert!(adoption.missing_columns().is_empty());
+                assert!(adoption.validation_needs_rows());
+                let validation = adoption.validate(vec![], Some(2));
+                if duplicate {
+                    let error = validation.unwrap_err();
+                    assert_eq!(error.sentence, Sentence::FrameKeyNotUnique);
+                    assert_eq!(
+                        error.fields["native_quality"],
+                        Detail::Scalar(Scalar::Bool(true))
+                    );
+                    assert_eq!(
+                        error.fields["example_row"],
+                        Detail::Scalar(Scalar::UInt64(1))
+                    );
+                    assert_eq!(error.fields["table"], Detail::text("users"));
+                    continue;
+                }
+                validation.unwrap();
+                adoption.adopt(Some(quality)).unwrap();
+            }
+            assert!(adoption.discriminators().unwrap().is_empty());
+            assert!(adoption.usable_columns().unwrap().is_empty());
+            let (product, notices) =
+                sdm_host::frame_constructors::finish_key_adoption(adoption, None).unwrap();
+            assert!(
+                serde_json::from_slice::<Vec<sdm_contract::CoreWarning>>(&notices)
+                    .unwrap()
+                    .is_empty()
+            );
+            let FrameInference::Adoption(adopted) = serde_json::from_slice(&product).unwrap()
+            else {
+                panic!("typed adoption")
+            };
+            assert_eq!(
+                adopted.table.primary_key,
+                if native_distinct == 1 {
+                    vec![]
+                } else {
+                    vec!["user_id"]
+                }
+            );
+        }
+    }
+}
+
 /// The Python constructor uses this existing FrameScalar tuple for declared
 /// strings whose exact native points cannot be represented by Arrow UTF8.
 fn native_text_cells(values: &[Option<Vec<u8>>]) -> arrow_array::ArrayRef {

@@ -427,6 +427,81 @@ mod tests {
 
     use super::*;
 
+    #[test]
+    fn constructor_canonical_equality_and_raw_bit_counts_are_distinct_at_both_widths() {
+        use arrow_array::cast::AsArray;
+        use arrow_array::{Array, Float32Array};
+        for narrow in [false, true] {
+            let (sign, quiet, signaling, one) = if narrow {
+                (1_u64 << 31, 0x7fc0_0000, 0x7f80_0001, 0x3f80_0000)
+            } else {
+                (
+                    1_u64 << 63,
+                    0x7ff8_0000_0000_0000,
+                    0x7ff0_0000_0000_0001,
+                    0x3ff0_0000_0000_0000,
+                )
+            };
+            let bits = [
+                0,
+                sign,
+                quiet,
+                quiet | sign,
+                quiet | 1,
+                signaling,
+                quiet | 1,
+                one,
+            ];
+            let values: ArrayRef = if narrow {
+                Arc::new(Float32Array::from(
+                    bits.iter()
+                        .map(|bits| Some(f32::from_bits(*bits as u32)))
+                        .chain([None])
+                        .collect::<Vec<_>>(),
+                ))
+            } else {
+                Arc::new(Float64Array::from(
+                    bits.iter()
+                        .map(|bits| Some(f64::from_bits(*bits)))
+                        .chain([None])
+                        .collect::<Vec<_>>(),
+                ))
+            };
+            let batches = [0..0, 0..3, 3..6, 6..9].map(|range| {
+                RecordBatch::try_from_iter([("value", values.slice(range.start, range.len()))])
+                    .unwrap()
+            });
+            let raw = column(&batches, 0, Floats::NanValue).unwrap();
+            let canonical = column(&batches, 0, Floats::Frame).unwrap();
+            let missing = column(&batches, 0, Floats::NanMissing).unwrap();
+            assert_eq!(distinct(&raw), 7);
+            assert_eq!(distinct(&canonical), 3);
+            assert_eq!(distinct(&missing), 2);
+            assert_eq!(raw.iter().flatten().count(), 8);
+            assert_eq!(canonical.iter().flatten().count(), 8);
+            assert_eq!(missing.iter().flatten().count(), 3);
+            assert_eq!(raw[8], None);
+            assert_eq!(canonical[8], None);
+            for (at, expected) in bits.into_iter().enumerate() {
+                assert_eq!(raw[at], Some(Value::Float(expected)));
+            }
+            // Canonical comparison changes only its keys, never the actual
+            // Float32 signaling bits or any validity/source value buffer.
+            if narrow {
+                assert_eq!(
+                    values.as_primitive::<Float32Type>().value(5).to_bits(),
+                    signaling as u32
+                );
+            } else {
+                assert_eq!(
+                    values.as_primitive::<Float64Type>().value(5).to_bits(),
+                    signaling
+                );
+            }
+            assert!(values.is_null(8));
+        }
+    }
+
     /// A NaN and the two zeros as each reference frame counts them: in
     /// Arrow-backed pandas (DuckDB's and SQLite's) each float is a value of
     /// its own bits, a NaN of each sign and each zero apart; in NumPy-backed

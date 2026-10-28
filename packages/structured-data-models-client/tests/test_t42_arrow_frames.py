@@ -32,6 +32,8 @@ PRIMITIVES = [
     pa.uint16(),
     pa.uint32(),
     pa.uint64(),
+    pa.float32(),
+    pa.float64(),
     pa.bool_(),
     pa.string(),
     pa.large_string(),
@@ -104,7 +106,7 @@ def test_arrow_primitive_metadata_snapshot_and_mutation(
 @pytest.mark.parametrize(
     'variant', ['signed_zero', 'nan_sign', 'nan_payload', 'nan_signaling']
 )
-def test_arrow_float_native_nomination_boundary_remains_on_default(
+def test_arrow_float_native_nomination_and_duplicate_quality_are_separate(
     monkeypatch, width, variant
 ):
     # Frozen public witness: Arrow nunique nominates a two-row key from
@@ -125,21 +127,19 @@ def test_arrow_float_native_nomination_boundary_remains_on_default(
     frame = pd.DataFrame(
         {'user_id': pd.Series(pd.arrays.ArrowExtensionArray(array))}
     )
-    monkeypatch.delenv('SDM_CORE_ROUTES', raising=False)
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter('always')
-        with pytest.raises(StructuredDataError) as error:
-            Schema.from_data({'users': frame})
-    example = '-0.0' if variant == 'signed_zero' else 'nan'
-    assert error.value.code == 'INVALID_REQUEST'
-    assert str(error.value) == (
-        '[INVALID_REQUEST] users.user_id is not unique enough to identify '
-        'a row: 1 of 2 rows repeat a value already used, e.g. ' + example
-    )
-    assert not caught
-    monkeypatch.setenv('SDM_CORE_ROUTES', PATHS)
-    with pytest.raises(RouteError, match='partial frame constructor'):
-        Schema.from_data({'users': frame})
+    for core in (False, True):
+        monkeypatch.setenv('SDM_CORE_ROUTES', PATHS if core else '')
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            with pytest.raises(StructuredDataError) as error:
+                Schema.from_data({'users': frame})
+        example = '-0.0' if variant == 'signed_zero' else 'nan'
+        assert error.value.code == 'INVALID_REQUEST'
+        assert str(error.value) == (
+            '[INVALID_REQUEST] users.user_id is not unique enough to identify '
+            'a row: 1 of 2 rows repeat a value already used, e.g. ' + example
+        )
+        assert not caught
 
 
 @pytest.mark.parametrize('dtype', [pa.float32(), pa.float64()])
@@ -147,13 +147,11 @@ def test_arrow_float_native_nomination_boundary_remains_on_default(
     'values', [[], [None, None], [1, 2], [np.nan, np.nan], [0.0, -0.0]]
 )
 @pytest.mark.parametrize('name', ['user_id', 'value'])
-def test_arrow_float_whole_family_remains_unfinished(
+def test_arrow_float_whole_family_matches_original(
     monkeypatch, dtype, values, name
 ):
     frame = pd.DataFrame({name: series(values, dtype)})
-    monkeypatch.setenv('SDM_CORE_ROUTES', PATHS)
-    with pytest.raises(RouteError, match='partial frame constructor'):
-        Schema.from_data({'rows': frame})
+    paired(monkeypatch, {'rows': frame})
 
 
 @pytest.mark.parametrize('left', [pa.int32(), pa.uint64()])
@@ -335,6 +333,7 @@ def test_arrow_table_warning_precedes_later_failure(monkeypatch):
 @pytest.mark.parametrize(
     'dtype',
     [
+        pa.float16(),
         pa.date32(),
         pa.date64(),
         pa.decimal128(10, 0),
@@ -352,7 +351,8 @@ def test_other_arrow_families_remain_explicitly_unfinished(monkeypatch, dtype):
         Schema.from_data({'rows': frame})
 
 
-def test_arrow_custom_extension_array_export_is_not_invoked(monkeypatch):
+@pytest.mark.parametrize('dtype', [pa.int64(), pa.float32(), pa.float64()])
+def test_arrow_custom_extension_array_export_is_not_invoked(monkeypatch, dtype):
     touched = []
 
     class Custom(pd.arrays.ArrowExtensionArray):
@@ -360,7 +360,9 @@ def test_arrow_custom_extension_array_export_is_not_invoked(monkeypatch):
             touched.append('export')
             raise AssertionError('custom Arrow conversion was invoked')
 
-    frame = pd.DataFrame({'value': pd.Series(Custom(pa.array([1, 2])))})
+    frame = pd.DataFrame(
+        {'value': pd.Series(Custom(pa.array([1, 2], type=dtype)))}
+    )
     monkeypatch.setenv('SDM_CORE_ROUTES', PATHS)
     with pytest.raises(RouteError, match='partial frame constructor'):
         Schema.from_data({'rows': frame})
@@ -382,15 +384,18 @@ def test_arrow_date_hint_warning_as_error_keeps_final_stage(monkeypatch):
     assert outcomes[1] == outcomes[0]
 
 
-def test_arrow_schema_domain_rules_never_reenter_python_inference(monkeypatch):
+@pytest.mark.parametrize('dtype', [pa.int64(), pa.float32(), pa.float64()])
+def test_arrow_schema_domain_rules_never_reenter_python_inference(
+    monkeypatch, dtype
+):
     import sdm_client.schema as schema_module
 
     frames = {
-        'users': pd.DataFrame({'user_id': series([1, 2], pa.int64())}),
+        'users': pd.DataFrame({'user_id': series([1, 2], dtype)}),
         'events': pd.DataFrame(
             {
                 'event_id': series([10, 11], pa.uint8()),
-                'user_id': series([1, 2], pa.int64()),
+                'user_id': series([1, 2], dtype),
                 'active': series([True, False], pa.bool_()),
             }
         ),
