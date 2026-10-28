@@ -465,6 +465,7 @@
         "run",
         "request_id",
         "input_body_sha256",
+        "input_body_base64",
         "body",
         "body_sha256",
         "scope"
@@ -480,6 +481,10 @@
         },
         "input_body_sha256": {
           "$ref": "#/$defs/sha256"
+        },
+        "input_body_base64": {
+          "type": "string",
+          "contentEncoding": "base64"
         },
         "body": {
           "type": [

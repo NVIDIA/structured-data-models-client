@@ -65,6 +65,7 @@ which maps each inventory case into the case format and back without loss.
 from __future__ import annotations
 
 import argparse
+import base64
 import copy
 import functools
 import hashlib
@@ -1202,6 +1203,7 @@ class _Capture:
                     'run': ordinal,
                     'request_id': request_id,
                     'input_body_sha256': digest(body),
+                    'input_body_base64': base64.b64encode(body).decode('ascii'),
                     'body': None,
                     'body_sha256': None,
                     'scope': None,
@@ -1397,7 +1399,9 @@ class _Capture:
     def failed(self, error: Any, *, run: _CapturedRun | None = None) -> None:
         owner = self._run(run)
         owner.error = {'kind': str(error.kind), 'code': str(error.code)}
-        owner.error_owner = error
+        owner.error_owner = (
+            error if owner.entry is not None and self._entries else None
+        )
         if owner.input_record is not None:
             owner.input_record['error'] = owner.error
         if owner.entry is None:
@@ -1451,13 +1455,15 @@ class _Capture:
                     )
                 record['body'] = owner.body
                 record['body_sha256'] = digest(value)
-                if (
-                    carried != record['request_id']
-                    or record['body_sha256'] != record['input_body_sha256']
-                ):
+                reader = _sibling('prediction_observation')
+                try:
+                    reader.observed_call_body(
+                        record, owner.preparation['input']
+                    )
+                except (ValueError, TypeError) as error:
                     raise RunnerFailure(
                         'the model call does not carry the request id and bytes it was started with'
-                    )
+                    ) from error
             else:
                 self._passed_over(owner, carried)
             if owner.call_record is None and (

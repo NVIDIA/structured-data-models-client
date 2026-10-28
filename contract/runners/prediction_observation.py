@@ -11,6 +11,9 @@ This module reads JSON data and never evaluates SDK or user-owned objects.
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import json
 from typing import Any
 
 
@@ -25,6 +28,107 @@ def require(condition: bool, message: str) -> None:
 
 def _ordinal(value: Any) -> bool:
     return type(value) is int and value >= 0
+
+
+def _ordered_json(value: bytes | str) -> Any:
+    def nonfinite(_token: str) -> Any:
+        raise ObservationError('prediction input has a nonfinite JSON value')
+
+    return json.loads(
+        value,
+        parse_int=lambda token: ('number', token),
+        parse_float=lambda token: ('number', token),
+        object_pairs_hook=lambda members: ('object', members),
+        parse_constant=nonfinite,
+    )
+
+
+def _same_snapshot(left: Any, right: Any) -> bool:
+    pending = [(left, right)]
+    while pending:
+        left, right = pending.pop()
+        if type(left) is not type(right):
+            return False
+        if isinstance(left, dict):
+            if list(left) != list(right):
+                return False
+            pending.extend((left[key], right[key]) for key in left)
+        elif isinstance(left, list):
+            if len(left) != len(right):
+                return False
+            pending.extend(zip(left, right, strict=True))
+        elif left != right:
+            return False
+    return True
+
+
+def observed_call_body(call: dict[str, Any], encoded: dict[str, Any]) -> None:
+    """Bind independently observed input bytes and the actual posted JSON.
+
+    The standard decoder's internal tuple tags distinguish number tokens
+    from all JSON objects, including duplicate and ordered object members.
+    No serialized request is reconstructed from this comparison product.
+    """
+    original = base64.b64decode(call['input_body_base64'], validate=True)
+    require(
+        hashlib.sha256(original).hexdigest() == call['input_body_sha256'],
+        'prediction input bytes differ from their observed hash',
+    )
+    body = call['body']
+    if body is None:
+        return
+    require(
+        isinstance(body, dict)
+        and type(call['body_sha256']) is str
+        and len(call['body_sha256']) == 64,
+        'prediction posted body/hash is unobserved',
+    )
+    endpoint = encoded.get('model_endpoint')
+    if endpoint is None:
+        require(
+            call['body_sha256'] == call['input_body_sha256']
+            and _same_snapshot(
+                json.loads(
+                    original,
+                    parse_int=lambda token: {'number': token},
+                    parse_float=lambda token: {'number': token},
+                ),
+                body,
+            ),
+            'prediction direct body differs from its actual input bytes',
+        )
+        payload = body
+    else:
+        require(
+            isinstance(endpoint, dict)
+            and set(endpoint) == {'endpoint', 'name', 'max_request_bytes'}
+            and endpoint['endpoint'] == 'serving_endpoint'
+            and type(endpoint['name']) is str
+            and _ordinal(endpoint['max_request_bytes']),
+            'prediction has an unknown model endpoint observation',
+        )
+        rows = body.get('dataframe_records')
+        require(
+            set(body) == {'dataframe_records'}
+            and isinstance(rows, list)
+            and len(rows) == 1
+            and isinstance(rows[0], dict)
+            and set(rows[0]) == {'request_json'}
+            and type(rows[0]['request_json']) is str,
+            'prediction serving body has no single request_json row',
+        )
+        inner = rows[0]['request_json']
+        require(
+            _ordered_json(original) == _ordered_json(inner),
+            'prediction serving request differs from its actual input JSON',
+        )
+        payload = json.loads(inner)
+    metadata = payload.get('metadata') if isinstance(payload, dict) else None
+    require(
+        isinstance(metadata, dict)
+        and metadata.get('request_id') == call['request_id'],
+        'prediction posted request ID differs from its actual typed input',
+    )
 
 
 def _model(value: Any) -> str:
@@ -278,6 +382,7 @@ def _entry(
             'prediction input request ID differs from its actual call',
         )
         body, scope = call['body'], call['scope']
+        observed_call_body(call, encoded)
         if body is None:
             require(
                 entry['completion'] == 'raised'
@@ -287,14 +392,6 @@ def _entry(
                 'prediction call body is unobserved',
             )
             continue
-        require(
-            isinstance(body, dict)
-            and body.get('metadata', {}).get('request_id') == call['request_id']
-            and call['body_sha256'] == call['input_body_sha256']
-            and type(call['body_sha256']) is str
-            and len(call['body_sha256']) == 64,
-            'prediction body/ID/hash differs from its actual typed input',
-        )
         models.add(_model(encoded['call']))
         if scope is None:
             require(
