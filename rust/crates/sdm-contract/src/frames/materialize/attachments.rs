@@ -87,6 +87,7 @@ impl FramePreparation {
             Self::Payload { context, .. } => Some(context.plan.task.labelled.graph.owner),
             Self::Request { plan, .. } => Some(plan.task.labelled.graph.owner),
             Self::SourceMeaning { .. }
+            | Self::CallerMeaning { .. }
             | Self::TableMeaning { .. }
             | Self::TableKey { .. }
             | Self::KeyNulls { .. }
@@ -107,7 +108,9 @@ impl FramePreparation {
         use AttachmentKind::{Arrow, Bytes, FrameGraph};
         let mut out = Vec::new();
         match self {
-            Self::SourceMeaning { schema, .. } => out.push((*schema, Bytes)),
+            Self::SourceMeaning { schema, .. } | Self::CallerMeaning { schema } => {
+                out.push((*schema, Bytes))
+            }
             Self::TableMeaning { .. }
             | Self::TableKey { .. }
             | Self::KeyNulls { .. }

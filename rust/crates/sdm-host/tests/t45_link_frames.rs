@@ -314,7 +314,8 @@ fn rebind_frame_product(value: &mut PreparedFrameValue, keep: &mut impl FnMut(&m
         keep(&mut value.sampling_values);
     }
     match value {
-        PreparedFrameValue::SourceMeaning(_)
+        PreparedFrameValue::CallerMeaning(_)
+        | PreparedFrameValue::SourceMeaning(_)
         | PreparedFrameValue::TableMeaning(_)
         | PreparedFrameValue::KeyMeaning(_)
         | PreparedFrameValue::KeyNulls(_)

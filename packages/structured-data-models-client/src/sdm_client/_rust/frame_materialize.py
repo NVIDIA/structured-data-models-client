@@ -20,6 +20,42 @@ from sdm_client._rust.frame_facts import native_source_facts
 from sdm_client._rust.frames import _convert
 
 
+def check_caller(schema: Any, state: dict[str, Any]) -> None:
+    """Adopt reached cold graph key marks before presenting caller refusal.
+
+    Cached native models observe no fresh schema here. The current owner is
+    tested after overlap handlers and any reentrant materialization return.
+    """
+    checkpoint = state.get('held', {}).get('frame_checkpoint')
+    if checkpoint is not None and 'owner' in checkpoint:
+        return
+    from sdm_client._rust import edits, errors
+    from sdm_client._rust.frame_facade import _adopt, _Bindings, _prepare
+    from sdm_client._rust.spec import held_schema
+
+    bindings = _Bindings()
+    report = _adopt(
+        _prepare(
+            {
+                'stage': 'caller_meaning',
+                'schema': bindings.json(held_schema(schema)),
+            },
+            bindings,
+            state,
+        ),
+        'caller_meaning',
+    )
+    try:
+        edits._store(schema, report.data['schema'], None)
+        diagnostic = report.data['diagnostic']
+        if diagnostic is not None:
+            errors.raise_from_core(
+                codec.encode({'message': 'error', 'error': diagnostic}), {}
+            )
+    finally:
+        report.owners.clear()
+
+
 def native_inputs(
     schema: Any, state: dict[str, Any]
 ) -> tuple[

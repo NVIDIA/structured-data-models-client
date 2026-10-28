@@ -1579,6 +1579,11 @@ pub struct Attachments {
     pub prepared_frames_value: crate::frames::materialize::PreparedFrameValue,
     #[schemars(rename = "FramePreparation/source_meaning.schema")]
     pub frame_source_meaning_schema: HeldSchema,
+    #[schemars(rename = "FramePreparation/caller_meaning.schema")]
+    pub frame_caller_meaning_schema: HeldSchema,
+    #[schemars(rename = "FramePreparation/relationship_overlap.observations")]
+    pub frame_relationship_overlap_observations:
+        Vec<crate::frames::materialize::FrameRelationshipEvidence>,
     #[schemars(rename = "FramePreparation/question.schema")]
     pub frame_question_schema: HeldSchema,
     #[schemars(rename = "FramePreparation/question.query")]

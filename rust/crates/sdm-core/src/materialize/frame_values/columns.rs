@@ -30,6 +30,24 @@ pub(super) fn kept_native(description: &SourceDescription) -> Result<(), CoreErr
     kept_checks(&native_projection(description))
 }
 
+/// Preserve failure-side key marks independently of later native construction.
+/// The report retains caller dtype spellings/flags/source facts verbatim.
+pub(super) fn caller(mut schema: HeldSchema) -> Result<FrameCallerMeaning, CoreError> {
+    let mut read = sdm_schema::held::read(schema.clone(), &BTreeMap::new(), true)?;
+    sdm_schema::assemble::mark_keys(&mut read.description);
+    for (held, marked) in schema.tables.iter_mut().zip(&read.description.tables) {
+        held.time_column.clone_from(&marked.time_column);
+        for (held, marked) in held.columns.iter_mut().zip(&marked.columns) {
+            held.stype = marked.stype;
+            held.stype_before_key = marked.stype_before_key;
+        }
+    }
+    let diagnostic = meanings_carried(&read.description, Some(&read.types))
+        .and_then(|()| sdm_schema::assemble::check_links(&read.description, &read.types))
+        .err();
+    Ok(FrameCallerMeaning { schema, diagnostic })
+}
+
 pub(super) fn source(
     mut schema: sdm_contract::ops::HeldSchema,
     typed_tables: Vec<FrameTableMeaning>,

@@ -100,6 +100,7 @@ def _ids(kind: str, value: dict[str, Any]) -> list[int]:
     """Attachment fields of the fixed contract, never an arbitrary JSON scan."""
     if kind in (
         'source_meaning',
+        'caller_meaning',
         'table_meaning',
         'key_meaning',
         'key_nulls',
@@ -469,6 +470,7 @@ def _single(
 
     bindings = _Bindings()
     try:
+        frame_materialize.check_caller(materializer.schema, state)
         try:
             attached, schema, columns, native_tables = (
                 frame_materialize.native_inputs(materializer.schema, state)

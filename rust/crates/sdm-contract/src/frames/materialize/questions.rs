@@ -110,3 +110,12 @@ pub enum FrameRelationshipEvidence {
 pub struct FrameRelationshipOverlap {
     pub disjoint: Vec<u64>,
 }
+
+/// Completed caller metadata after reached key marking, including a later
+/// selected consistency refusal. Marks remain observable on failure.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FrameCallerMeaning {
+    pub schema: crate::ops::HeldSchema,
+    pub diagnostic: Option<crate::CoreError>,
+}

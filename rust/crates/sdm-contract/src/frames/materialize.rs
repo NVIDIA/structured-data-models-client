@@ -431,6 +431,9 @@ pub enum FramePreparation {
         /// Cast-time dtype facts from those same ordered physical tables.
         typed_tables: Vec<FrameTableMeaning>,
     },
+    CallerMeaning {
+        schema: AttachmentId,
+    },
     TableMeaning {
         input: FrameTableInputs,
     },
@@ -563,6 +566,7 @@ pub enum FramePreparation {
 )]
 pub enum PreparedFrameValue {
     SourceMeaning(FrameSourceMeaning),
+    CallerMeaning(FrameCallerMeaning),
     TableMeaning(FrameTableMeaning),
     KeyMeaning(FrameKeyMeaning),
     KeyNulls(FrameKeyNulls),

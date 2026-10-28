@@ -239,6 +239,13 @@ pub(crate) async fn run(
             take_json(&mut attachments, schema)?,
             typed_tables,
         )?),
+        FramePreparation::CallerMeaning { schema } => {
+            let mut report = columns::caller(take_json(&mut attachments, schema)?)?;
+            report.diagnostic = report
+                .diagnostic
+                .map(|error| questions::in_part(error, part_scope.as_ref()));
+            PreparedFrameValue::CallerMeaning(report)
+        }
         FramePreparation::TableMeaning { input } => {
             PreparedFrameValue::TableMeaning(columns::table(input)?)
         }
