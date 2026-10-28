@@ -9,7 +9,10 @@ from predictive_query import RELATIONAL, Profile
 from predictive_query.parser.parser import PQLParser
 from predictive_query.query import ValidatedPredictiveQuery
 from predictive_query.schema.definition import SchemaDefinition
-from predictive_query.validator.capability import check_capabilities
+from predictive_query.validator.capability import (
+    check_capabilities,
+    check_parsed_capabilities,
+)
 from predictive_query.validator.predictive_query_validator import (
     PredictiveQueryValidator,
 )
@@ -73,6 +76,13 @@ def parse_query_locally(
         raise ValueError(f"Failed to parse query '{query}'. {exc}") from None
 
     _name_the_identity(parsed_query, graph_definition)
+
+    parsed_capability = check_parsed_capabilities(parsed_query, profile)
+    if not parsed_capability.ok:
+        raise ValueError(
+            f"Failed to parse query '{query}'. "
+            f'{_response_message(parsed_capability)}'
+        )
 
     try:
         validated_query, response = PredictiveQueryValidator(
