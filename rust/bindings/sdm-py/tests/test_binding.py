@@ -103,13 +103,15 @@ def test_base_frame_schema_and_request_do_not_load_optional_sources(
                     raise ModuleNotFoundError(fullname)
 
         sys.meta_path.insert(0, NoOptionalSources())
+        import pandas as pd
+        from sdm_client import Request, Schema
+        from sdm_client import _routing
+
         os.environ['SDM_CORE_ROUTES'] = ','.join((
             'schema.from-data/frames/frames',
             'schema.from-data/mapping/frames',
-            'request.tabular/regression/frames',
+            *_routing.DIRECT_CONSUMERS,
         ))
-        import pandas as pd
-        from sdm_client import Request, Schema
 
         context = pd.DataFrame({'feature': [1, 2, 3], 'target': [2, 4, 6]})
         scoring = pd.DataFrame({'feature': [4, 5]})

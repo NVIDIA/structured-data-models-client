@@ -533,14 +533,7 @@ async fn call_response_with_contract(
     };
     let response = decoded.map_err(|error| {
         if let Some(model) = native_model {
-            let mut selected = direct_contract_error(&answer, error)
-                .with_field("model", Detail::text(model))
-                .with_field(
-                    "native_relational_contract",
-                    Detail::Scalar(Scalar::Bool(true)),
-                );
-            selected.public_details = Some(Box::default());
-            selected
+            native_gathered_contract_error(&answer, error, model)
         } else if direct {
             direct_contract_error(&answer, error)
         } else {
@@ -548,6 +541,24 @@ async fn call_response_with_contract(
         }
     })?;
     Ok((answer, response))
+}
+
+fn native_gathered_contract_error(
+    answer: &Value,
+    error: sdm_wire::response::Refused,
+    model: &str,
+) -> CoreError {
+    let details = refused(error.clone()).fields;
+    let mut selected = direct_contract_error(answer, error)
+        .with_field("model", Detail::text(model))
+        .with_field(
+            "native_relational_contract",
+            Detail::Scalar(Scalar::Bool(true)),
+        );
+    // Native wording/cause facts stay private; the established gathered
+    // structural diagnostics remain available to callers under P3E-5.
+    selected.public_details = Some(Box::new(details));
+    selected
 }
 
 /// Present the shared decoder's selected field/value fault, without parsing

@@ -421,3 +421,6 @@ Use the existing shared response-refusal policy to retain exactly those two publ
 Private native recipe fields, model names and offending values stay private; direct and provider presentation stay unchanged.
 Retain the existing 33 numeric width and precedence cases and four malformed-mapping cases, and add a core parser-to-error consumer before implementation.
 The recorded original huge-probability failure remains immutable and is compared with only this established core structural-detail addition asserted explicitly.
+
+The R32 base-install consumer reaches direct Request construction but its test selected only one member of an indivisible constructor route group.
+Select the existing complete `DIRECT_CONSUMERS` inventory in the test, keeping the optional-package blocker and both public calls; do not relax routing validation.
