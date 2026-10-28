@@ -445,3 +445,19 @@ The reached declaration supplies the ordinary part family and unconverted fallba
 Update the Python producer, complete and later Rust readers, Calls/Steps/Ranking target attachments, Host constructors and malformed/ordinal/probability/value controls together.
 Add complete public typed/mixed and native-effect consumers plus shared-reader and Host consumers before production changes, then canonically author working35 and obtain a fresh whole review pair.
 Published contracts and frozen reference observations stay unchanged.
+
+
+### Native Text source-row operand population
+
+The unchanged approved R32 pinned runtime reproduces equal complete payloads but a different reached native Text operand: original converts nine compact source rows while the core host converts fifteen expanded occurrences.
+Preserve the original source-position compaction before the existing native fillna and astype operations, independently of later payload expansion.
+Add one optional table-shared row projection with selected expanded positions in ascending original source-row order and an inverse covering every expanded occurrence.
+Rust derives that projection from its existing immutable source-row lineage, only for tables with Text features and the original strict greater-than 1.05 redundancy threshold.
+The current admitted native graph has no designated end-time role; do not mistake an ordinary time column for one or add end-time support here.
+Anchor-dependent or otherwise ineligible inputs retain the identity operand population.
+Bind and independently rederive the exact projection at the existing context reader, so altered source positions, mappings, ordering or identities cannot change the native operand.
+Python takes only those core-selected Arrow positions before the same single reached conversion for each Text column, retaining native owner, dtype, casing, warning and failure order.
+Rust validates the compact result width and validity, normalizes it once, and expands through the shared inverse into the unchanged sampled words, rows, links and payload meaning.
+No SQL key deduplication, value-based deduplication, new callback, sampling draw or per-column copy of the mapping belongs in this repair.
+Add threshold, sorted-source order, equal-value distinct-source, ineligible, malformed, complete Host context/payload and public native-effect consumers before production changes.
+Preserve immutable runtime receipts and frozen expectations, then canonically author working35 and obtain fresh whole reviews before execution.

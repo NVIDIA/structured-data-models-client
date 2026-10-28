@@ -468,3 +468,44 @@ fn ordinary_batch_refusal_and_statistic_precedence_are_metadata_only() {
         assert!(check_call(Some(&given), &[], 2, &FrameLimits::default()).is_ok());
     }
 }
+
+#[test]
+fn text_operand_projection_tracks_sorted_source_positions_and_strict_thresholds() {
+    use crate::frame_materialize::values::text_row_projection;
+    use sdm_contract::frames::materialize::FrameRowProjection;
+
+    let repeated = [7, 3, 7, 5, 3];
+    assert_eq!(
+        text_row_projection(&repeated, true),
+        Some(FrameRowProjection {
+            positions: vec![1, 3, 0],
+            inverse: vec![2, 0, 2, 1, 0],
+        })
+    );
+    assert_eq!(text_row_projection(&repeated, false), None);
+    assert_eq!(text_row_projection(&[], true), None);
+    assert_eq!(text_row_projection(&[7, 3, 5], true), None);
+    let mut boundary = (0..20).collect::<Vec<_>>();
+    boundary.push(0);
+    assert_eq!(text_row_projection(&boundary, true), None);
+    boundary.push(19);
+    let projected = text_row_projection(&boundary, true).unwrap();
+    assert_eq!(projected.positions, (0..20).collect::<Vec<_>>());
+    assert_eq!(
+        projected.inverse,
+        boundary.iter().map(|&row| row as u64).collect::<Vec<_>>()
+    );
+    // Source positions, never equal cell values, determine operand identity.
+    let equal_text = ["same", "same", "same", "same", "same"];
+    let projected = text_row_projection(&[4, 2, 4, 1, 2], true).unwrap();
+    assert_eq!(projected.positions, [3, 1, 0]);
+    assert_eq!(
+        projected
+            .positions
+            .iter()
+            .map(|&at| equal_text[at as usize])
+            .count(),
+        3
+    );
+    assert_eq!(projected.inverse, [2, 1, 2, 0, 1]);
+}
