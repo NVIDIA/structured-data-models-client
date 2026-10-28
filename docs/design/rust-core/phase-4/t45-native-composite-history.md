@@ -229,3 +229,6 @@ Before the caller-order stype loop, apply original scalar/compound primary-key I
 Preserve competing-error precedence and native ValueError causes before any later table effect.
 The caller's column order still governs the following general stype assignments.
 No contract shape, published version, callback or route exception is needed for these reader/order corrections.
+
+The fixed metadata role guards also preserve native missing-column lookup, time-versus-assigned-key conflict and time-column stype invariants at those same existing setter positions.
+These are native presentation recipes selected from the existing metadata facts, with native KeyError/ValueError causes, not new refusal policies or catch-all error rewrites.

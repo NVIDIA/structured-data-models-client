@@ -263,3 +263,19 @@ fn native_role_assignment_precedes_caller_column_stype_order() {
     assert_eq!(error.fields["column"], Detail::text("b"));
     assert_eq!(error.fields["stype"], Detail::text("ID"));
 }
+
+#[test]
+fn native_role_lookup_and_time_flag_refusals_remain_selected_metadata_errors() {
+    let fixed = table();
+    let key = source_keys::key(fixed.clone(), vec!["absent".into()]).unwrap();
+    let error = source_keys::metadata(reached_metadata(key, fixed.table.clone())).unwrap_err();
+    assert_eq!(error.fields["native_key_reason"], Detail::text("role_missing"));
+    assert_eq!(error.fields["column"], Detail::text("absent"));
+    let mut fixed = table();
+    fixed.table.primary_key.clear();
+    fixed.table.time_column = Some("a".into());
+    fixed.table.columns[0].stype = Stype::Text;
+    let key = source_keys::key(fixed.clone(), vec![]).unwrap();
+    let error = source_keys::metadata(reached_metadata(key, fixed.table)).unwrap_err();
+    assert_eq!(error.fields["native_key_reason"], Detail::text("time_stype"));
+}
