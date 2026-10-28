@@ -83,6 +83,57 @@ def test_the_stub_describes_the_module() -> None:
         } == members[cls], cls
 
 
+def test_base_frame_schema_and_request_do_not_load_optional_sources(
+    tmp_path: pathlib.Path,
+) -> None:
+    script = textwrap.dedent(
+        """
+        import importlib.abc
+        import os
+        import sys
+
+        attempted = []
+
+        class NoOptionalSources(importlib.abc.MetaPathFinder):
+            def find_spec(self, fullname, path=None, target=None):
+                if fullname.split('.')[0] in {
+                    'sdm_connectors', 'sdm_relational_engine'
+                }:
+                    attempted.append(fullname)
+                    raise ModuleNotFoundError(fullname)
+
+        sys.meta_path.insert(0, NoOptionalSources())
+        os.environ['SDM_CORE_ROUTES'] = ','.join((
+            'schema.from-data/frames/frames',
+            'schema.from-data/mapping/frames',
+            'request.tabular/regression/frames',
+        ))
+        import pandas as pd
+        from sdm_client import Request, Schema
+
+        context = pd.DataFrame({'feature': [1, 2, 3], 'target': [2, 4, 6]})
+        scoring = pd.DataFrame({'feature': [4, 5]})
+        schema = Schema.from_data({'rows': context})
+        assert list(schema['rows'].columns) == ['feature', 'target']
+        assert schema['rows'].data is context
+        request = Request(
+            context, scoring, target='target', task='regression'
+        )
+        assert request.context.instance_table is context
+        assert request.predict.instance_table is scoring
+        assert attempted == []
+        """
+    )
+    result = subprocess.run(
+        [sys.executable, '-I', '-c', script],
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
+        timeout=120,
+    )
+    assert result.returncode == 0, result.stderr
+
+
 @pytest.mark.parametrize(
     ('alias', 'stream'),
     [

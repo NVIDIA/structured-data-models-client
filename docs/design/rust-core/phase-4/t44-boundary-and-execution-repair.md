@@ -375,3 +375,19 @@ Keep the allocation assertions and make a valid single-batch, single-column inpu
 Zero-batch, multiple-batch and mismatched/invalid-schema inputs retain the existing concatenation and validation path.
 Add those boundary consumers and direct retained backing-owner assertions before the narrow helper implementation.
 The shared `one_batch` helper, supported families, wire shapes, native callbacks and fixture expectations remain unchanged.
+### Executed installed-base and changing native-runtime closure
+
+R30's exact CI wheel-smoke reproduces a base-install failure before direct-frame ownership consumers collect: importing frame preparation eagerly loads optional warehouse connectors through the schema bridge.
+The base client must keep its declared frame dependencies sufficient, and source providers must load at their existing reached `from_source` use, without broadening installed dependencies or removing smoke consumers.
+A fresh-process public frame-schema and direct-request consumer will forbid warehouse connectors and the old engine before implementation.
+The existing source-provider regressions remain required after the narrow import change.
+
+The actual CP312 CI runtime resolved pandas 3.1.0, NumPy 2.5.4 and Arrow 26.0.0.
+A serial run of unchanged approved R30 reproduces only three hardcoded native-cardinality assertions in the 159-case declared-string file; its other 156 paired original/core tests pass.
+The older pandas 3.0.6 profile passes all 159 cases, and its immutable native-count receipts remain valid for that actual profile.
+The boundary consumer must assert the exact current native distinct observation and exact exported codepoints, preserving all six full original/core calls instead of imposing a historical library count on later native runtimes.
+No product inference, native operation schedule, string normalization, profile branch or frozen expected result changes for this correction.
+
+Apply the actual mandatory formatter diff to the handwritten logical-value presenter.
+Declare and canonically regenerate only the changed frozen schema-bridge fingerprints with actual source provenance before fresh whole reviews.
+These source corrections confer no execution or package acceptance credit.

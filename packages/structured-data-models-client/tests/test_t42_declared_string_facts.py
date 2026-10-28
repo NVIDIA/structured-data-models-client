@@ -86,7 +86,7 @@ def test_string_meaning_boundaries_keep_actual_native_equality(
 
 @pytest.mark.parametrize('size', [64, 65, 66])
 @pytest.mark.parametrize('missing', [False, True])
-def test_measured_native_surrogate_population_changes_with_missingness(
+def test_measured_native_surrogate_population_is_the_exact_constructor_fact(
     monkeypatch, size, missing
 ):
     values = [f'{number}\ud800' for number in range(size)] + (
@@ -98,9 +98,19 @@ def test_measured_native_surrogate_population_changes_with_missingness(
             {'value': pd.Series(values, dtype=pd.StringDtype(storage='python'))}
         )
 
-    # Both frozen runtime profiles observed the native all-string hash
-    # population as one value; a null changes its native equality path.
-    assert int(make()['value'].nunique(dropna=True)) == (size if missing else 1)
+    # Historical profiles counted nonmissing surrogate strings differently.
+    # The constructor carries this runtime's actual native observation.
+    frame = make()
+    expected = int(frame['value'].nunique(dropna=True))
+    rows, native = frames._convert('rows', frame)
+    assert native['value'].descriptor == {
+        'category': False,
+        'meaning': {'dtype': 'string', 'untyped': False, 'distinct': expected},
+    }
+    assert [row['text'] for row in rows.column('value').to_pylist()] == [
+        None if value is None else str.encode(value, 'utf-8', 'surrogatepass')
+        for value in values
+    ]
     assert observe(monkeypatch, make, True) == observe(monkeypatch, make, False)
 
 
