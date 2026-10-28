@@ -60,6 +60,7 @@ CASES = (
     'constructor-error',
     'constructor-later-table',
     'constructor-reset',
+    'constructor-sample-mutation',
     'fold-copy',
     'fold-copy-error',
     'fold-copy-mutation',
@@ -79,6 +80,7 @@ def _observe(label):
     fold_started = False
     constructor_resets = {}
     fold_copies = 0
+    native_sample = None
     mutations = []
     schema = None
 
@@ -97,6 +99,10 @@ def _observe(label):
                 if label == 'constructor-later-table' and not mutations:
                     schema['users']['age'].stype = 'categorical'
                     mutations.append('constructor-users-age')
+                if label == 'constructor-sample-mutation' and not mutations:
+                    assert native_sample is not None
+                    native_sample['later'] = ['changed'] * len(native_sample)
+                    mutations.append('constructor-sample-later')
             if active:
                 trace.append(('render', str.__str__(self)))
                 if label == 'render-error':
@@ -123,6 +129,8 @@ def _observe(label):
         data['buys']['item_id'] = data['buys']['item_id'].astype(str)
     if label == 'native-feature-dtype':
         data['users']['age'] = data['users']['age'].astype(str)
+    if label == 'constructor-sample-mutation':
+        data['buys']['later'] = np.arange(120)
     if label == 'category-numeric-component':
         data['buys']['part'] = pd.Categorical([0.25, 0.5] * 60)
     if label == 'reversed':
@@ -176,6 +184,7 @@ def _observe(label):
         'render-error',
         'constructor-error',
         'constructor-later-table',
+        'constructor-sample-mutation',
         'fold-copy',
         'fold-copy-error',
         'fold-copy-mutation',
@@ -210,6 +219,7 @@ def _observe(label):
         return result
 
     def reset(frame, *args, **kwargs):
+        nonlocal native_sample
         if (
             label == 'constructor-reset'
             and stage == 'materialize'
@@ -222,7 +232,16 @@ def _observe(label):
                 raise ValueError(
                     'a native constructor reset the same sample twice'
                 )
-        return original_reset(frame, *args, **kwargs)
+        result = original_reset(frame, *args, **kwargs)
+        if (
+            label == 'constructor-sample-mutation'
+            and stage == 'materialize'
+            and not fold_started
+            and 'buy_id' in frame
+            and 'part' in frame
+        ):
+            native_sample = result
+        return result
 
     def mapped(values, *args, **kwargs):
         nonlocal fold_started
