@@ -308,6 +308,28 @@ fn count(n: usize) -> Detail {
     Detail::Scalar(Scalar::UInt64(u64::try_from(n).unwrap_or(u64::MAX)))
 }
 
+/// The same entity-filter notice for provider and native-frame requests.
+/// Its condition/count are resolved metadata, before any source is gathered.
+fn filter_chose_examples(condition: Option<&str>, entities: u64) -> Option<CoreWarning> {
+    if entities == 0 {
+        return None;
+    }
+    condition.map(|condition| CoreWarning {
+        fields: [
+            ("condition".to_owned(), Detail::text(condition)),
+            (
+                "entities".to_owned(),
+                Detail::Scalar(Scalar::UInt64(entities)),
+            ),
+        ]
+        .into(),
+        ..CoreWarning::new(
+            Sentence::FilterChoseExamples,
+            "the entity filter chooses the labelled examples, not the entities scored",
+        )
+    })
+}
+
 /// A seed's value as decimal text, `-` before a negative one, of any size,
 /// for the host's words.
 pub(crate) fn seed_text(seed: Option<&Seed>) -> String {
@@ -438,6 +460,52 @@ enum Shape {
         left: Box<Shape>,
         right: Box<Shape>,
     },
+}
+
+/// Derive only an already unambiguous LINK entity role. Sampling can retain
+/// that role without moving the strict target refusal before its old boundary.
+fn link_target_role<'a>(graph: &'a Graph, target: &Shape) -> Option<&'a str> {
+    let Shape::Aggregated(windowed) = target else {
+        return None;
+    };
+    if windowed.aggregation != labels::Aggregation::ListDistinct {
+        return None;
+    }
+    let column = windowed.column.as_deref()?;
+    let mut edges = graph
+        .edges
+        .iter()
+        .filter(|edge| edge.src == windowed.table && edge.fkey == column);
+    let edge = edges.next()?;
+    if edges.next().is_some() {
+        return None;
+    }
+    Some(edge.dst.as_str())
+}
+
+/// Strict existing LINK target policy, called only at its reached boundary.
+fn link_target(graph: &Graph, target: &Shape) -> Result<Option<String>, CoreError> {
+    let Shape::Aggregated(windowed) = target else {
+        return Ok(None);
+    };
+    if windowed.aggregation != labels::Aggregation::ListDistinct {
+        return Ok(None);
+    }
+    let column = windowed
+        .column
+        .as_deref()
+        .ok_or_else(|| unvalidated("a list target with no column"))?;
+    let role = link_target_role(graph, target).ok_or_else(|| {
+        CoreError::new(
+            Sentence::LinkTargetNotForeignKey,
+            "the list target is not one foreign key",
+        )
+        .with_field(
+            "column",
+            Detail::text(format!("{}.{}", windowed.table, column)),
+        )
+    })?;
+    Ok(Some(role.to_owned()))
 }
 
 impl Shape {
@@ -3266,18 +3334,11 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // scored, which the client says before it gathers
     // (`_warn_the_filter_chose_only_the_examples`), as a code and the
     // filter's condition and the entities' count the host words.
-    if let Some(condition) = &entity_filter {
-        asker.warn(CoreWarning {
-            fields: [
-                ("condition".to_owned(), Detail::text(condition.as_str())),
-                ("entities".to_owned(), count(indices.len())),
-            ]
-            .into(),
-            ..CoreWarning::new(
-                Sentence::FilterChoseExamples,
-                "the entity filter chooses the labelled examples, not the entities scored",
-            )
-        });
+    if let Some(warning) = filter_chose_examples(
+        entity_filter.as_deref(),
+        u64::try_from(indices.len()).unwrap_or(u64::MAX),
+    ) {
+        asker.warn(warning);
     }
     // What the sampler needs of its provider, refused before anything is
     // fetched.
@@ -3339,34 +3400,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // Frame temporal and LIST_DISTINCT labels read the same sanitized
     // snapshot through label_context's local adapter, before link-target
     // resolution and existing task/payload policy below.
-    let link_target = if let Shape::Aggregated(windowed) = &asked.target
-        && windowed.aggregation == labels::Aggregation::ListDistinct
-    {
-        let column = windowed
-            .column
-            .as_deref()
-            .ok_or_else(|| unvalidated("a list target with no column"))?;
-        let edges: Vec<_> = graph
-            .edges
-            .iter()
-            .filter(|e| e.src == windowed.table && e.fkey == column)
-            .collect();
-        match edges.as_slice() {
-            [edge] => Some(edge.dst.clone()),
-            _ => {
-                return Err(CoreError::new(
-                    Sentence::LinkTargetNotForeignKey,
-                    "the list target is not one foreign key",
-                )
-                .with_field(
-                    "column",
-                    Detail::text(format!("{}.{}", windowed.table, column)),
-                ));
-            }
-        }
-    } else {
-        None
-    };
+    let link_target = link_target(&graph, &asked.target)?;
     options::statistic_for(asked.task, statistic.as_ref())?;
     let entity = graph
         .table(&asked.entity_table)
@@ -3875,6 +3909,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
                         neighbor_values: deferred.neighbors.as_deref(),
                         excluded: &excluded,
                         seed: (!unseeded).then(|| seed.to_u128()).flatten(),
+                        link_target: link_target.as_deref(),
                     },
                 )?
                 .into_walked(&memo.memo.source)?
