@@ -1099,3 +1099,176 @@ fn native_graph_and_identity_share_date_constructor_and_time_wire_equivalence() 
         }
     }
 }
+
+#[test]
+fn native_text_context_projects_once_per_table_then_expands_each_column() {
+    use arrow_array::StringArray;
+    use sdm_contract::frames::materialize::SampledFrameContext;
+
+    let mut held = inputs("201-repeated", false);
+    let Attachment::Bytes(schema) = &held[&AttachmentId(1)] else {
+        panic!("schema")
+    };
+    let mut schema: Value = serde_json::from_slice(schema).unwrap();
+    schema["tables"][0]["columns"][1] = column("age", "string", "text");
+    schema["tables"][0]["columns"]
+        .as_array_mut()
+        .unwrap()
+        .push(column("note", "string", "text"));
+    held.insert(AttachmentId(1), bytes(schema));
+    held.insert(
+        AttachmentId(8),
+        arrow(
+            vec![
+                ("user_id", ints(0..8)),
+                (
+                    "age",
+                    Arc::new(StringArray::from_iter_values(
+                        (0..8).map(|row| format!("SOURCE {row}")),
+                    )),
+                ),
+                (
+                    "note",
+                    Arc::new(StringArray::from_iter_values(
+                        (0..8).map(|row| format!("NOTE {row}")),
+                    )),
+                ),
+            ],
+            false,
+        ),
+    );
+    held.insert(
+        AttachmentId(20),
+        bytes(json!({"num_context_samples":3,"num_neighbors":[3,3],"rows_per_call":500})),
+    );
+    let mut stages = FrameStages { held };
+    let native_tables = [("users", vec!["user_id", "age", "note"]), ("items", vec!["item_id", "amount"]), ("buys", vec!["buy_id", "user_id", "item_id", "ts"])].map(|(name, columns)| {
+        json!({"source":{"source":[name]},"columns":columns.into_iter().map(|name| json!({"name":name,"declared":null,"logical_text":null,"strings":null})).collect::<Vec<_>>()})
+    });
+    let PreparedFrameValue::Graph(graph) = stages.stage(json!({"stage":"graph","schema":1,"frames":7,"checkpoint":null,"retained":null,"native_tables":native_tables,"values":5,"options":[],"prediction_rows":201,"limits":{}})).unwrap() else { panic!("graph") };
+    let PreparedFrameValue::Population(population) = stages.stage(json!({"stage":"population","graph":graph,"query":2,"values":20,"seed":"0x7","entropy":7,"anchor_time":{"t":"ts","unit":"ns","v":"1677628800000000000"},"anchor_entity":false,"num_context_samples":null,"limits":{}})).unwrap() else { panic!("population") };
+    let mut batches = Vec::new();
+    for start in (0..population.rows).step_by(population.batch_rows as usize) {
+        let PreparedFrameValue::LabelBatch(batch) = stages.stage(json!({"stage":"label_batch","population":population,"range":{"start":start,"stop":population.rows.min(start+u64::from(population.batch_rows))},"previous":batches.last(),"converted":{"kind":"core_keys","values":null}})).unwrap() else { panic!("batch") };
+        let complete = batch.complete;
+        batches.push(batch);
+        if complete {
+            break;
+        }
+    }
+    let PreparedFrameValue::Labels(labelled) = stages
+        .stage(json!({"stage":"labels","population":population,"batches":batches}))
+        .unwrap()
+    else {
+        panic!("labels")
+    };
+    let PreparedFrameValue::Task(task) = stages.stage(json!({"stage":"task","labelled":labelled,"prediction":{"kind":"core_keys","values":3},"values":20})).unwrap() else { panic!("task") };
+    let PreparedFrameValue::Plan(plan) = stages
+        .stage(json!({"stage":"plan","task":task,"values":20}))
+        .unwrap()
+    else {
+        panic!("plan")
+    };
+    let PreparedFrameValue::References(references) = stages.stage(json!({"stage":"references","plan":plan,"converted":{"kind":"core_keys","values":null}})).unwrap() else { panic!("references") };
+    let PreparedFrameValue::Context(context) = stages.stage(json!({"stage":"context","references":references,"range":{"start":0,"stop":201},"converted":{"kind":"core_keys","values":null}})).unwrap() else { panic!("context") };
+    let users = context
+        .tables
+        .iter()
+        .find(|table| table.name == "users")
+        .unwrap();
+    let projection = users
+        .text_rows
+        .as_ref()
+        .expect("repeated original nodes compact");
+    let Attachment::Arrow(source) = &stages.held[&users.source_rows] else {
+        panic!("source rows")
+    };
+    let source = source.batches[0]
+        .column(0)
+        .as_primitive::<arrow_array::types::UInt64Type>();
+    let mut unique = source.values().iter().copied().collect::<Vec<_>>();
+    unique.sort_unstable();
+    unique.dedup();
+    assert_eq!(projection.positions.len(), unique.len());
+    assert_eq!(projection.inverse.len(), source.len());
+    assert!(projection.positions.len() < projection.inverse.len());
+    for (&position, &original) in projection.positions.iter().zip(&unique) {
+        assert_eq!(source.value(position as usize), original);
+    }
+    for (at, &compact) in projection.inverse.iter().enumerate() {
+        assert_eq!(unique[compact as usize], source.value(at));
+    }
+    assert_eq!(
+        context
+            .text
+            .iter()
+            .map(|column| column.column.column.as_str())
+            .collect::<Vec<_>>(),
+        ["age", "note"]
+    );
+    let converted = ["age", "note"].into_iter().enumerate().map(|(at, name)| {
+        let id = AttachmentId(50000 + at as u64);
+        stages.held.insert(id, arrow(vec![("text", Arc::new(StringArray::from_iter_values(unique.iter().map(|source| format!("{} {source}", if name == "age" { "SOURCE" } else { "NOTE" })))))], false));
+        json!({"column":{"table":"users","column":name},"values":{"values":id,"encoding":"utf8"},"facts":{"mapping":"full_root","unicode_version":"14.0.0"}})
+    }).collect::<Vec<_>>();
+    let payload = |context: &SampledFrameContext, columns: &[Value]| json!({"stage":"payload","context":context,"text":{"outcome":"converted","columns":columns},"values":null});
+    for mode in [0, 1, 2, 3] {
+        let mut malformed = context.clone();
+        let rows = malformed
+            .tables
+            .iter_mut()
+            .find(|table| table.name == "users")
+            .unwrap()
+            .text_rows
+            .as_mut()
+            .unwrap();
+        match mode {
+            0 => rows.positions.reverse(),
+            1 => rows.inverse[0] = u64::MAX,
+            2 => {
+                rows.inverse.pop();
+            }
+            _ => {
+                malformed
+                    .tables
+                    .iter_mut()
+                    .find(|table| table.name == "users")
+                    .unwrap()
+                    .text_rows = None
+            }
+        }
+        assert_eq!(
+            stages.stage(payload(&malformed, &converted)).unwrap_err()["error"]["sentence"],
+            "invalid_message"
+        );
+    }
+    let PreparedFrameValue::Part(part) = stages.stage(payload(&context, &converted)).unwrap()
+    else {
+        panic!("part")
+    };
+    let Attachment::FramePayload(owner) = &stages.held[&part.payload] else {
+        panic!("payload")
+    };
+    let actual: Value = serde_json::from_slice(owner.wire()).unwrap();
+    for side in ["context", "predict"] {
+        let users = &actual[side]["related_tables"]["users"];
+        let names = users["columns"].as_array().unwrap();
+        let key = names.iter().position(|name| name == "user_id").unwrap();
+        let age = names.iter().position(|name| name == "age").unwrap();
+        let note = names.iter().position(|name| name == "note").unwrap();
+        for row in users["rows"].as_array().unwrap() {
+            let id = row[key].as_i64().unwrap().to_string();
+            assert_eq!(row[age], json!(["source", id]));
+            assert_eq!(row[note], json!(["note", id]));
+        }
+    }
+    // A retained/rebound context consumes exactly the same projected product.
+    let PreparedFrameValue::Part(repeated) = stages.stage(payload(&context, &converted)).unwrap()
+    else {
+        panic!("retained part")
+    };
+    let Attachment::FramePayload(other) = &stages.held[&repeated.payload] else {
+        panic!("retained payload")
+    };
+    assert_eq!(other.wire(), owner.wire());
+}
