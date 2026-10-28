@@ -31,7 +31,7 @@ fn numeric_storage_guard_has_three_negative_readers_and_primitive_twins() {
         cell(Scalar::UInt64(u64::MAX), Dtype::String, "value", |v| v
             .to_string())
         .unwrap(),
-        Value::text(u64::MAX.to_string())
+        Value::text(&u64::MAX.to_string())
     );
     assert_eq!(
         cell(Scalar::Bool(true), Dtype::String, "value", |v| v
