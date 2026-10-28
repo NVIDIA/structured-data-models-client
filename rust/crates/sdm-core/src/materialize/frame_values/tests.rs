@@ -73,7 +73,8 @@ fn neutral_casing_facts_select_only_supported_mathematical_maps() {
         assert_eq!(
             casing_profile(&NativeTextFacts::FullRoot {
                 unicode_version: database.to_owned(),
-            }).unwrap(),
+            })
+            .unwrap(),
             CasingProfile::FullRoot(version),
         );
     }
@@ -84,28 +85,60 @@ fn neutral_casing_facts_select_only_supported_mathematical_maps() {
         ("iσⱟᲊ꟏", UnicodeDataVersion::V17_0),
     ] {
         assert_eq!(
-            casing_profile(&NativeTextFacts::Simple { identity: identity.into() }).unwrap(),
+            casing_profile(&NativeTextFacts::Simple {
+                identity: identity.into()
+            })
+            .unwrap(),
             CasingProfile::Simple(version),
         );
     }
     for facts in [
-        NativeTextFacts::FullRoot { unicode_version: "12.0.0".into() },
-        NativeTextFacts::Simple { identity: "unknown".into() },
-        NativeTextFacts::Simple { identity: String::new() },
+        NativeTextFacts::FullRoot {
+            unicode_version: "12.0.0".into(),
+        },
+        NativeTextFacts::Simple {
+            identity: "unknown".into(),
+        },
+        NativeTextFacts::Simple {
+            identity: String::new(),
+        },
     ] {
-        assert_eq!(casing_profile(&facts).unwrap_err().sentence, Sentence::InvalidMessage);
+        assert_eq!(
+            casing_profile(&facts).unwrap_err().sentence,
+            Sentence::InvalidMessage
+        );
     }
 }
 
 #[test]
 fn neutral_mapping_facts_preserve_contextual_and_simple_lowercase() {
-    let input = sdm_contract::scalar::unicode::UnicodeText::from("ΟΣ İ");
+    use sdm_contract::scalar::unicode::UnicodeText;
+    let input = UnicodeText::from("ΟΣ İ");
     for (facts, expected) in [
-        (NativeTextFacts::FullRoot { unicode_version: "15.0.0".into() }, vec!["ος", "i\u{307}"]),
-        (NativeTextFacts::Simple { identity: "iσⱟᲊ꟏".into() }, vec!["οσ", "i"]),
+        (
+            NativeTextFacts::FullRoot {
+                unicode_version: "15.0.0".into(),
+            },
+            vec!["ος", "i\u{307}"],
+        ),
+        (
+            NativeTextFacts::Simple {
+                identity: "iσⱟᲊ꟏".into(),
+            },
+            vec!["οσ", "i"],
+        ),
     ] {
-        let words = sdm_engine::words::normalize_native(Some(input.as_slice()), casing_profile(&facts).unwrap());
-        assert_eq!(words, expected.into_iter().map(Into::into).collect::<Vec<_>>());
+        let words = sdm_engine::words::normalize_native(
+            Some(input.as_slice()),
+            casing_profile(&facts).unwrap(),
+        );
+        assert_eq!(
+            words,
+            expected
+                .into_iter()
+                .map(UnicodeText::from)
+                .collect::<Vec<_>>()
+        );
     }
 }
 
@@ -256,8 +289,10 @@ fn native_constructor_refusal_uses_the_reached_first_bad_element_and_dtype() {
         key_error: false,
         structured_data_error: false,
         relational_error: false,
-        deepest_module: Some("pandas.core".into()),
-        python_unicode_database: "14.0.0".into(),
+        deepest_module: Some("native.library".into()),
+        message_casing: NativeTextFacts::FullRoot {
+            unicode_version: "14.0.0".into(),
+        },
     };
     let error = FrameStageError::Native(Box::new(FrameNativeFailureContext {
         site: NativeSite::Prediction {

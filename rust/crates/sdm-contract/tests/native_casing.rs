@@ -24,7 +24,10 @@ fn casing_facts_roundtrip_only_their_relevant_identity() {
         ),
     ] {
         assert_eq!(serde_json::to_value(&fact).unwrap(), wire);
-        assert_eq!(serde_json::from_value::<NativeTextFacts>(wire).unwrap(), fact);
+        assert_eq!(
+            serde_json::from_value::<NativeTextFacts>(wire).unwrap(),
+            fact
+        );
     }
 }
 

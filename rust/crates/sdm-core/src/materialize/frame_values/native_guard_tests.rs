@@ -13,7 +13,9 @@ fn facts(classes: Vec<BuiltinFailureClass>) -> FrameNativeFailure {
         structured_data_error: false,
         relational_error: false,
         deepest_module: Some("native.library".into()),
-        python_unicode_database: "14.0.0".into(),
+        message_casing: NativeTextFacts::FullRoot {
+            unicode_version: "14.0.0".into(),
+        },
     }
 }
 
@@ -177,4 +179,29 @@ fn native_part_truth_is_reached_only_after_structured_pass_through() {
         reached.fields["forecast_step"],
         Detail::Scalar(Scalar::UInt32(2))
     );
+}
+
+#[test]
+fn diagnostic_message_casing_is_validated_only_when_consumed() {
+    let mut failure = facts(vec![BuiltinFailureClass::ValueError]);
+    failure.message_casing = NativeTextFacts::Simple {
+        identity: "iσⱟᲊ꟏".into(),
+    };
+    assert_eq!(
+        assess(FrameErrorOrigin::Unguarded, failure.clone(), None)
+            .unwrap()
+            .category,
+        FrameNativeCategory::PassThrough
+    );
+    let assessment = assess(FrameErrorOrigin::Engine, failure, None).unwrap();
+    let error = report(FrameNativeReport {
+        assessment,
+        native_type: None,
+        refusal: Some(text("we would need data back to")),
+        said: text("native failure"),
+        dropped_summary: None,
+        rows_per_call: None,
+    })
+    .unwrap_err();
+    assert_eq!(error.sentence, Sentence::InvalidMessage);
 }

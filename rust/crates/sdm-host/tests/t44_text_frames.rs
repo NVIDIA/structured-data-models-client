@@ -1058,7 +1058,10 @@ fn unresolved_entities_share_the_same_drop_summary_as_the_graph_notice() {
 #[test]
 fn neutral_message_casing_crosses_hostrun_without_library_taxonomy() {
     let points = |text: &str| text.chars().map(u32::from).collect::<Vec<_>>();
-    for (version, sentence) in [("14.0.0", "frame_native_caller"), ("12.0.0", "invalid_message")] {
+    for (version, sentence) in [
+        ("14.0.0", "frame_native_caller"),
+        ("12.0.0", "invalid_message"),
+    ] {
         let report = json!({
             "stage":"report_failure",
             "report":{
@@ -1080,15 +1083,87 @@ fn neutral_message_casing_crosses_hostrun_without_library_taxonomy() {
             &sdm_host::default_root(),
             &message(json!({"op":"prepare_frames","input":100})),
             Attachments::from([(AttachmentId(100), bytes(report))]),
-        ).unwrap_or_else(|error| panic!("{:?}", decoded(&error)));
-        let error = run.next().expect_err("the report returns its classified error");
+        )
+        .unwrap_or_else(|error| panic!("{:?}", decoded(&error)));
+        let error = run
+            .next()
+            .expect_err("the report returns its classified error");
         let error = decoded(&error);
         assert_eq!(error["error"]["sentence"], sentence);
         if version == "14.0.0" {
-            assert_eq!(error["error"]["public_details"]["window_outran_the_data"], json!({"t":"bool","v":"true"}));
-            assert_eq!(error["error"]["fields"]["message_points"], json!([
-                {"t":"u32","v":"55296"},{"t":"u32","v":"33"}
-            ]));
+            assert_eq!(
+                error["error"]["public_details"]["window_outran_the_data"],
+                json!({"t":"bool","v":true})
+            );
+            assert_eq!(
+                error["error"]["fields"]["message_points"],
+                json!([
+                    {"t":"u32","v":"55296"},{"t":"u32","v":"33"}
+                ])
+            );
         }
+    }
+}
+
+#[test]
+fn both_neutral_casing_facts_cross_hostrun_without_early_message_reads() {
+    use sdm_contract::frames::materialize::{
+        FrameErrorOrigin, FrameNativeFailure, FramePreparation, NativeTextFacts,
+    };
+    use sdm_contract::prepare::NativeFailure;
+
+    for mapping in [
+        NativeTextFacts::FullRoot {
+            unicode_version: "15.0.0".into(),
+        },
+        NativeTextFacts::Simple {
+            identity: "iσⱟᲊ꟏".into(),
+        },
+        // An unguarded failure does not reach message normalization and must
+        // not validate or replace an identity it has not consumed.
+        NativeTextFacts::Simple {
+            identity: "not-consumed".into(),
+        },
+    ] {
+        let expected = serde_json::to_value(&mapping).unwrap();
+        let input = FramePreparation::AssessFailure {
+            origin: FrameErrorOrigin::Unguarded,
+            failure: FrameNativeFailure {
+                builtin: NativeFailure { ancestry: vec![] },
+                key_error: false,
+                structured_data_error: false,
+                relational_error: false,
+                deepest_module: None,
+                message_casing: mapping,
+            },
+            signature: None,
+            window_outran: None,
+        };
+        let run = HostRun::start(
+            &sdm_host::default_root(),
+            &message(json!({"op":"prepare_frames","input":100})),
+            Attachments::from([(
+                AttachmentId(100),
+                bytes(serde_json::to_value(input).unwrap()),
+            )]),
+        )
+        .unwrap_or_else(|error| panic!("{:?}", decoded(&error)));
+        let out = run
+            .next()
+            .unwrap_or_else(|error| panic!("{:?}", decoded(&error)));
+        let ControlMessage::Step(Step::Done {
+            result: OperationResult::PrepareFrames(value),
+            ..
+        }) = sdm_host::read(&out).unwrap()
+        else {
+            panic!("failure facts need no native action or model call")
+        };
+        let Attachment::Bytes(raw) = run.take_attachment(value.value).unwrap().unwrap() else {
+            panic!("complete failure assessment")
+        };
+        let assessment: Value = serde_json::from_slice(&raw).unwrap();
+        assert_eq!(assessment["value"], "failure_assessment");
+        assert_eq!(assessment["data"]["category"], "pass_through");
+        assert_eq!(assessment["data"]["failure"]["message_casing"], expected);
     }
 }
