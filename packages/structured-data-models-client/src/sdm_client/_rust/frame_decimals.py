@@ -11,15 +11,25 @@ No native scalar is converted and no schema meaning is chosen here.
 
 from __future__ import annotations
 
+from typing import Protocol, TypeGuard
+
 import pandas as pd
 import pyarrow as pa
 
 
+class _NativeArrowDtype(Protocol):
+    @property
+    def pyarrow_dtype(self) -> pa.DataType: ...
+
+
+def _native_arrow_dtype(dtype: object) -> TypeGuard[_NativeArrowDtype]:
+    return type(dtype) is pd.ArrowDtype
+
+
 def native_decimal_type(dtype: object) -> dict[str, str | int] | None:
     """Original immutable built-in native type facts, without reading cells."""
-    if type(dtype) is not pd.ArrowDtype:
+    if not _native_arrow_dtype(dtype):
         return None
-    assert isinstance(dtype, pd.ArrowDtype)
     physical = dtype.pyarrow_dtype
     tag = next(
         (

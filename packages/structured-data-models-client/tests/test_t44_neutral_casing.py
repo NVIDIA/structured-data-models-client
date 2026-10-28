@@ -20,9 +20,11 @@ from test_t44_native_text_profiles import (
 )
 from test_t44_text_frames import (
     Scripted,
-    core as core,
     question,
     shop,
+)
+from test_t44_text_frames import (
+    core as core,
 )
 
 from sdm_client._rust.frame_native import NativeColumn, NativeFrameFailure
