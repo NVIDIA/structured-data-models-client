@@ -95,7 +95,7 @@ pub struct FrameQuestionScope {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "observation", rename_all = "snake_case", deny_unknown_fields)]
 pub enum FrameRelationshipEvidence {
-    Unavailable,
+    Unavailable {},
     Distinct {
         relationship: [ColumnRef; 2],
         child: u64,
