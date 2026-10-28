@@ -127,4 +127,7 @@ The previous candidate `296a7694429487c0e2cff02aef48d7ca94b5cf02` passed all-tar
 Its ordinary handoff failed at Python quality and architecture-scan checks before the own-test phase, so it has no passing package stamp.
 Those passing artifacts remain evidence for that exact source, not for the corrected candidate.
 The first execution under this plan records the existing focused public behavior on that unchanged approved candidate while the new source is authored separately.
+That diagnostic completed with 34 original-route cases passing and 34 core cases failing.
+The core failures expose an incomplete test route-family selection and an earlier StringDtype surrogate-conversion gap, rather than proving that the new fact representation has run.
+Repair the coherent test opt-in as a consumer companion; retain the constructor gap as an explicit next connected repair after this casing slice executes, with no skipped cases or rewritten expected outputs.
 The corrected source then receives its own reviews, canonical artifacts, wheel identity and full required checks.

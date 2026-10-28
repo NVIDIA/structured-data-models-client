@@ -53,7 +53,8 @@ Do not promote [`sdm-testkit::memory`](../../../../rust/crates/sdm-testkit/src/m
 
 ## Contract and API boundaries
 
-T4.1 owns the common contract change, provisionally version 30 if Phase 3 finishes at 29.
+T4.1 owns the shared input, state and session contracts across the phase.
+The original provisional version allocation assumed a Phase 3 result that has since been superseded; published locks and exact candidate artifacts determine actual versions.
 The following are proposed contract responsibilities; T4.1 must complete the proof checkpoint below before proposing serialized shapes and state versions for approval and dependent implementation.
 
 1. **Frames enter as data, not as a Python provider.**
@@ -118,8 +119,9 @@ These are bounded additions to existing contracts, not a new abstraction for eve
 
 The recommendation is to preserve observed legacy ordering and per-call native mutability.
 Earlier recommendations for an original-input-row-order default and an early custom-conversion timing exception are withdrawn; both behavior differences remain unapproved.
-The owner's request for further investigation approves design work only, with no interface freeze, implementation, contract bump or new model experiment.
+The earlier request for further investigation authorized design work for that draft only, with no interface freeze, implementation, contract bump or new model experiment.
 The fourth private interface draft remains a historical, unactivated checkpoint rather than a complete input representation.
+Later bounded internal-message authorizations permit proved connected contract/consumer slices; they do not approve the withdrawn ordering/timing exceptions or freeze the unresolved index/session families.
 
 1. **Preserve the actual context-order policies and measure their consequences.**
    Over-cap tabular materialization filters, samples with seed 42 and sorts the selected rows by pandas index labels; candidates within the cap and direct `Request` context retain their supplied order.
@@ -158,7 +160,7 @@ If a remaining incompatibility requires an owner choice, name the affected publi
 Only the paths listed above and tests/contracts needed by each journey are implementation scope; tooling defects ride with the affected work only when a concrete failure requires them.
 At most two Phase 4 packages run concurrently within eight vCPUs; full CI runs only nightly and at phase end.
 Tests are written before implementation, and both independent Sol 6.1 High reviewers approve the same exact candidate before its package tests, lint or cheap checks run.
-The owner's separate direction permits isolated foundation progress while Phase 3 validates; it does not approve a serialized contract bump, changed behavior, new live resources or a merge into `rust-core`.
+The earlier separate direction permitted isolated foundation progress during Phase 3 validation; subsequent bounded interface and live-resource authorizations retain their specific scope and do not approve different public behavior or a merge into `rust-core`.
 
 ### Contract-family closure and bounded execution
 
@@ -191,7 +193,8 @@ The ordinary handoff and landing gates remain blocking even when separately appr
   The representation above is a candidate, not a claim of completeness; if that proof finds a real unsupported behavior or necessary boundary exception, bring the concrete source reproduction and alternatives to the owner rather than adding a callback, approximation or refusal.
 - Distinguish/version model-neutral prepared state from model-bound materialized state, preserving later model selection, immediate generic constructor checks and existing incompatible gathered-payload diagnostics.
 - Write round-trip, unknown-version, attachment-kind, index-fact validation and core subset-order equivalence, empty-delete-reply and existing Java-call compatibility tests first.
-- Dependency: final Phase 3 contract/source reconciliation; T4.2, T4.3, T4.5 and T4.6 may develop against this reviewed interface after it lands.
+- Dependency: final Phase 3 contract/source reconciliation and a reviewed sufficient contract/ownership/read-schedule design for each connected consumer.
+  A bounded contract slice may land with its producer and both host consumers after validation, using established foundations rather than pretending every future index/session detail is already frozen.
 
 ### T4.2 – Frame conversion, schema and large-offset admission
 
