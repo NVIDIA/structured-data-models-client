@@ -54,12 +54,6 @@ pub(super) fn key(
         .collect::<BTreeSet<_>>()
         .len()
         != table.constructed.len()
-        || table.table.columns.iter().any(|column| {
-            !table
-                .constructed
-                .iter()
-                .any(|fixed| column.name == fixed.name)
-        })
     {
         return Err(protocol(
             "constructed table columns differ from their fixed source identities",

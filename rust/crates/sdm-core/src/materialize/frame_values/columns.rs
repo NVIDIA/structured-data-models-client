@@ -10,22 +10,7 @@ use super::*;
 use sdm_contract::data::strings::StringData;
 use sdm_contract::ops::{HeldSchema, HeldTable};
 
-/// Meaning checks consume the same folded operational key as the actual
-/// native graph. Full ordered source identity remains in the caller value.
-fn native_projection(description: &SourceDescription) -> SourceDescription {
-    let mut projected = description.clone();
-    for table in &mut projected.tables {
-        // Native columns already received their reached current metadata.
-        // Caller-schema historical marks must not release those assignments.
-        for column in &mut table.columns {
-            column.stype_before_key = None;
-        }
-        if table.primary_key.len() > 1 {
-            table.primary_key = vec![sdm_engine::graph::folded_name(&table.primary_key)];
-        }
-    }
-    projected
-}
+use crate::frame_materialize::native_projection;
 
 pub(super) fn consistent_native(
     description: &mut SourceDescription,
@@ -159,16 +144,6 @@ pub(super) fn table(input: FrameTableInputs) -> Result<FrameTableMeaning, CoreEr
             Ok(column.meaning.clone())
         })
         .collect::<Result<Vec<_>, CoreError>>()?;
-    if input
-        .table
-        .columns
-        .iter()
-        .any(|column| !constructed.iter().any(|fixed| column.name == fixed.name))
-    {
-        return Err(protocol(
-            "native constructed column facts differ from physical table order",
-        ));
-    }
     Ok(FrameTableMeaning {
         table: input.table,
         constructed,

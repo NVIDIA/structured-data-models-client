@@ -96,6 +96,7 @@ impl FramePreparation {
             | Self::TimeColumn { .. }
             | Self::Question { .. }
             | Self::Questions { .. }
+            | Self::RelationshipOverlap { .. }
             | Self::AssessFailure { .. }
             | Self::ReportFailure { .. } => None,
         }
@@ -120,6 +121,7 @@ impl FramePreparation {
                 out.extend(input.candidates.map(|id| (id, Bytes)));
                 out.extend(input.values.map(|id| (id, Bytes)));
             }
+            Self::RelationshipOverlap { observations } => out.push((*observations, Bytes)),
             Self::Graph {
                 schema,
                 frames,

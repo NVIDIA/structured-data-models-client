@@ -347,6 +347,23 @@ fn native_hops(graph: &Graph, values: &[Value]) -> Result<Vec<i64>, CoreError> {
     Ok(hops)
 }
 
+/// Meaning checks consume the same folded operational key as the actual
+/// native graph. Full ordered source identity remains in the caller value.
+pub(crate) fn native_projection(description: &SourceDescription) -> SourceDescription {
+    let mut projected = description.clone();
+    for table in &mut projected.tables {
+        // Native columns already received their reached current metadata.
+        // Caller-schema historical marks must not release those assignments.
+        for column in &mut table.columns {
+            column.stype_before_key = None;
+        }
+        if table.primary_key.len() > 1 {
+            table.primary_key = vec![sdm_engine::graph::folded_name(&table.primary_key)];
+        }
+    }
+    projected
+}
+
 impl FrameRun {
     pub(crate) fn retain_owner(&mut self) {
         self.retained_owner = true;
@@ -410,7 +427,7 @@ impl FrameRun {
                 }
             }
         }
-        crate::materialize::meanings_carried(&physical, None)
+        crate::materialize::meanings_carried(&native_projection(&physical), None)
     }
 
     fn table_shapes(&self, description: &SourceDescription) -> Result<(), CoreError> {
@@ -520,6 +537,7 @@ impl FrameRun {
     }
     /// Called at the existing materializer's graph-build stage, before
     /// entity validation. Failed construction publishes no snapshot.
+    #[cfg(test)]
     pub fn initialize(
         &mut self,
         asker: &Asker,

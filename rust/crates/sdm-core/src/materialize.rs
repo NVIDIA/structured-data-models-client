@@ -3325,7 +3325,9 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         if resolved.query.is_none() {
             return Err(unresolved(&query, &resolved.diagnostics));
         }
-        refuse_composite_keys(&description)?;
+        if frames.is_none() {
+            refuse_composite_keys(&description)?;
+        }
     }
 
     let (graph, dropped_notice) = if let Some(frames) = &frames {

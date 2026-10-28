@@ -1836,6 +1836,27 @@ fn earliest(
     Ok(best.map_or(among[0], |(_, i)| i))
 }
 
+/// Native statistics use the original floating-point score and thresholds.
+pub(crate) fn native_timestamp_share(name: &str, parsed: u64, present: u64) -> bool {
+    present > 0
+        && (if names::says_time(name) { 0.3 } else { 0.0 }) + parsed as f64 / present as f64 >= 1.0
+}
+
+pub(crate) fn native_multicategory_share(whole: u64, parts: u64) -> bool {
+    whole as f64 > 1.5 * parts as f64 && parts <= MOST_CATEGORIES as u64
+}
+
+pub(crate) fn native_categorical_share(dtype: Dtype, distinct: u64, present: u64) -> bool {
+    distinct < 20
+        || present > 0
+            && distinct as f64 / present as f64
+                <= if matches!(dtype, Dtype::String | Dtype::Binary) {
+                    0.5
+                } else {
+                    0.05
+                }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1890,25 +1911,4 @@ mod tests {
         }
         assert!(checked > 12_000, "{checked}");
     }
-}
-
-/// Native statistics use the original floating-point score and thresholds.
-pub(crate) fn native_timestamp_share(name: &str, parsed: u64, present: u64) -> bool {
-    present > 0
-        && (if names::says_time(name) { 0.3 } else { 0.0 }) + parsed as f64 / present as f64 >= 1.0
-}
-
-pub(crate) fn native_multicategory_share(whole: u64, parts: u64) -> bool {
-    whole as f64 > 1.5 * parts as f64 && parts <= MOST_CATEGORIES as u64
-}
-
-pub(crate) fn native_categorical_share(dtype: Dtype, distinct: u64, present: u64) -> bool {
-    distinct < 20
-        || present > 0
-            && distinct as f64 / present as f64
-                <= if matches!(dtype, Dtype::String | Dtype::Binary) {
-                    0.5
-                } else {
-                    0.05
-                }
 }

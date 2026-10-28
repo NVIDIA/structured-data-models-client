@@ -92,20 +92,35 @@ fn overlap_is_ordered_aggregate_policy_without_graph_or_sampler() {
     ]);
     let (value, owners, warnings) = prepare(
         json!({"stage":"relationship_overlap","observations":1}),
-        Attachments::from([(AttachmentId(1),bytes(records))]),
+        Attachments::from([(AttachmentId(1), bytes(records))]),
     );
     assert!(owners.is_empty());
-    assert_eq!(value["value"],"relationship_overlap");
-    assert_eq!(warnings.len(),1);
-    assert_eq!(warnings[0]["sentence"],"relationships_disjoint_several");
+    assert_eq!(value["value"], "relationship_overlap");
+    assert_eq!(warnings.len(), 1);
+    assert_eq!(warnings[0]["sentence"], "relationships_disjoint_several");
     let positions = &warnings[0]["fields"]["positions"];
-    assert_eq!(positions, &serde_json::to_value(sdm_contract::Detail::List(vec![Scalar::UInt64(4),Scalar::UInt64(5)])).unwrap());
+    assert_eq!(
+        positions,
+        &serde_json::to_value(sdm_contract::Detail::List(vec![
+            Scalar::UInt64(4),
+            Scalar::UInt64(5)
+        ]))
+        .unwrap()
+    );
 }
 
 #[test]
 fn empty_or_intersecting_native_evidence_is_silent() {
-    for records in [json!([]),json!([record(0,None,None)]),json!([record(1,Some(0),None)]),json!([record(1,Some(2),Some(true))])] {
-        let (_,owners,warnings)=prepare(json!({"stage":"relationship_overlap","observations":1}),Attachments::from([(AttachmentId(1),bytes(records))]));
+    for records in [
+        json!([]),
+        json!([record(0, None, None)]),
+        json!([record(1, Some(0), None)]),
+        json!([record(1, Some(2), Some(true))]),
+    ] {
+        let (_, owners, warnings) = prepare(
+            json!({"stage":"relationship_overlap","observations":1}),
+            Attachments::from([(AttachmentId(1), bytes(records))]),
+        );
         assert!(owners.is_empty());
         assert!(warnings.is_empty());
     }

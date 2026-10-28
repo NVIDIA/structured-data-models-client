@@ -93,6 +93,8 @@ pub const PAYLOAD_BYTES: usize = 30 * 1024 * 1024;
 #[derive(Debug, Clone)]
 pub enum SampledColumn {
     Arrow(ArrayRef),
+    /// Completed native String meaning over unchanged primitive storage.
+    DeclaredStrings(ArrayRef),
     /// Native text keeps its explicit encoding through the existing cell encoder.
     Strings(ArrayRef, sdm_contract::data::strings::StringEncoding),
     Words(Vec<Vec<UnicodeText>>),
@@ -101,7 +103,9 @@ pub enum SampledColumn {
 impl SampledColumn {
     fn len(&self) -> usize {
         match self {
-            SampledColumn::Arrow(array) | SampledColumn::Strings(array, _) => array.len(),
+            SampledColumn::Arrow(array)
+            | SampledColumn::DeclaredStrings(array)
+            | SampledColumn::Strings(array, _) => array.len(),
             SampledColumn::Words(words) => words.len(),
         }
     }
@@ -671,6 +675,22 @@ fn string_cell(
         })
 }
 
+/// Preserve the reached relational finite-value guard before native String
+/// formatting. The shared primitive reader retains unsigned digits and Float32
+/// widening without making a new Arrow text representation.
+fn declared_string_cell(
+    array: &ArrayRef,
+    row: usize,
+    column: &str,
+    float_text: fn(f64) -> String,
+) -> Result<Value, CoreError> {
+    let value = crate::tabular::raw(array, row)?;
+    if let Scalar::Float64(number) = value {
+        float_cell(number, column)?;
+    }
+    crate::tabular::cell(value, sdm_contract::ops::Dtype::String, column, float_text)
+}
+
 /// A column of `rows`: as sampled, or, for words, a `stringlist` of them,
 /// as the reference types a column holding lists (`_list_dtype_name`;
 /// a column of no rows holds no list, and is `string`).
@@ -679,9 +699,21 @@ fn sampled_column(
     column: &SampledColumn,
     rows: &[usize],
     key: bool,
+    float_text: fn(f64) -> String,
 ) -> Result<FrameColumn, CoreError> {
     match column {
         SampledColumn::Arrow(array) => arrow_column(name, array, rows, key),
+        SampledColumn::DeclaredStrings(array) => Ok(FrameColumn {
+            name: name.to_owned(),
+            dtype: Dtype::String,
+            cells: rows
+                .iter()
+                .map(|&row| {
+                    declared_string_cell(array, row, name, float_text)
+                        .map_err(|error| error.with_field("row", count(row)))
+                })
+                .collect::<Result<_, _>>()?,
+        }),
         SampledColumn::Strings(array, encoding) => {
             let values = sdm_engine::strings::StringColumn::new(array.as_ref(), *encoding)
                 .map_err(|_| {
@@ -979,9 +1011,10 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
             .iter()
             .find_map(|(name, column)| (name == key).then_some(column))
             .ok_or_else(|| internal("an entity key was not sampled"))?;
-        let (key_array, native_encoding) = match key_column {
-            SampledColumn::Arrow(array) => (array, None),
-            SampledColumn::Strings(array, encoding) => (array, Some(*encoding)),
+        let (key_array, native_encoding, declared_strings) = match key_column {
+            SampledColumn::Arrow(array) => (array, None, false),
+            SampledColumn::DeclaredStrings(array) => (array, None, true),
+            SampledColumn::Strings(array, encoding) => (array, Some(*encoding), false),
             SampledColumn::Words(_) => {
                 return Err(internal("an entity key cannot be normalized feature words"));
             }
@@ -1001,7 +1034,7 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
         }
         let reference = unique_name(&occupied, &format!("{ENTITY_REFERENCE}_{role}"));
         occupied.push(reference.clone());
-        let source_dtype = if native_strings.is_some() {
+        let source_dtype = if native_strings.is_some() || declared_strings {
             Dtype::String
         } else {
             key_dtype(key_array)?
@@ -1024,9 +1057,13 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
                                 .with_field("row", count(at))
                         });
                     }
-                    let value = match &native_strings {
-                        Some(strings) => string_cell(strings, *row),
-                        None => cell(key_array, *row, &reference, source_dtype),
+                    let value = if declared_strings {
+                        declared_string_cell(key_array, *row, &reference, sampled.float_text)
+                    } else {
+                        match &native_strings {
+                            Some(strings) => string_cell(strings, *row),
+                            None => cell(key_array, *row, &reference, source_dtype),
+                        }
                     }
                     .map_err(|e| {
                         e.with_field("table", Detail::text(INSTANCE_TABLE))
@@ -1101,7 +1138,7 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
             }
             let key = table.primary_key.as_deref() == Some(name.as_str());
             frame.columns.push(
-                sampled_column(name, column, &rows, key)
+                sampled_column(name, column, &rows, key, sampled.float_text)
                     .map_err(|e| e.with_field("table", Detail::text(&table.name)))?,
             );
         }

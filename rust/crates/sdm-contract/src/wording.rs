@@ -895,6 +895,9 @@ pub fn template(sentence: Sentence) -> Template {
         S::NotFinite => said(
             r#"encountered a non-finite value ({value}); NIM requests must contain finite numbers or nulls"#,
         ),
+        S::PastInt64Bare => said(
+            r#"a value is outside the range {dtype} represents (-9223372036854775808 to 9223372036854775807); send the column as strings"#,
+        ),
         S::PastInt64 => said(
             r#"Column '{table}.{column}' row {row}: a value is outside the range {dtype} represents (-9223372036854775808 to 9223372036854775807); send the column as strings"#,
         ),
@@ -1226,6 +1229,12 @@ pub fn template(sentence: Sentence) -> Template {
         ),
         S::ColumnsUnreadSeveral => said(
             r#"{columns!c} are typed text, which this model does not read, so the request is answered without them and they contribute nothing to the prediction. Type a column categorical if its values are labels rather than prose, or leave it out to say so."#,
+        ),
+        S::RelationshipsDisjointOne => said(
+            r#"{relationships} joins none of the rows given: no value of the foreign key appears in the key it points at, so the tables are related in the schema and in no row of the data, and the question is answered as though it were not declared. Check that the foreign key is the column naming the parent row; one spelled differently from the key it points at has to be said outright, as relationships=[Relationship({source_table!r}, <that column>, {target_table!r}, {target_column!r})]."#,
+        ),
+        S::RelationshipsDisjointSeveral => said(
+            r#"{relationships} join none of the rows given: no value of the foreign key appears in the key it points at, so the tables are related in the schema and in no row of the data, and the question is answered as though they were not declared. Check that the foreign key is the column naming the parent row; one spelled differently from the key it points at has to be said outright, as relationships=[Relationship({source_table!r}, <that column>, {target_table!r}, {target_column!r})]."#,
         ),
         S::FilterChoseExamples => said(
             r#"the entity filter {condition!r} selects the labelled examples the model learns from, and does not narrow the {entities} rows named for scoring. Those are scored as given, whether or not they satisfy it. Pass only indices that satisfy the condition if that is what you meant."#,

@@ -13,7 +13,9 @@ import pytest
 
 from sdm_client import Relationship
 from sdm_client._rust.frame_facade import _relationship_overlap
-from sdm_client.materializers.relational import _warn_of_relationships_that_join_nothing
+from sdm_client.materializers.relational import (
+    _warn_of_relationships_that_join_nothing,
+)
 from sdm_client.core.warnings import SDMWarning
 
 
@@ -25,8 +27,10 @@ class Tables(dict):
 
 def observe(core, child, parent, *, duplicate=False, fail=None):
     link = Relationship('child', 'fk', 'parent', 'id')
-    schema = Tables(child=SimpleNamespace(data=pd.DataFrame({'fk': child})),
-                    parent=SimpleNamespace(data=pd.DataFrame({'id': parent})))
+    schema = Tables(
+        child=SimpleNamespace(data=pd.DataFrame({'fk': child})),
+        parent=SimpleNamespace(data=pd.DataFrame({'id': parent})),
+    )
     schema.relationships = [link, link] if duplicate else [link]
     trace = []
     unique = pd.Series.unique
@@ -42,7 +46,10 @@ def observe(core, child, parent, *, duplicate=False, fail=None):
         trace.append(('isin', tuple(series), tuple(values)))
         return isin(series, values)
 
-    with patch.object(pd.Series, 'unique', native_unique), patch.object(pd.Series, 'isin', native_isin):
+    with (
+        patch.object(pd.Series, 'unique', native_unique),
+        patch.object(pd.Series, 'isin', native_isin),
+    ):
         with warnings.catch_warnings(record=True) as seen:
             warnings.simplefilter('always')
             error = None
@@ -53,27 +60,53 @@ def observe(core, child, parent, *, duplicate=False, fail=None):
                     _warn_of_relationships_that_join_nothing(schema)
             except Exception as caught:
                 error = (type(caught), str(caught))
-            return trace, [(type(w.message), str(w.message)) for w in seen], error
+            return (
+                trace,
+                [(type(w.message), str(w.message)) for w in seen],
+                error,
+            )
 
 
-@pytest.mark.parametrize(('child', 'parent'), [([], []), ([], [1]), ([1], []), ([None], [1]), ([1, 1], [1]), ([1], [2]), ([1, None], [2, None])])
+@pytest.mark.parametrize(
+    ('child', 'parent'),
+    [
+        ([], []),
+        ([], [1]),
+        ([1], []),
+        ([None], [1]),
+        ([1, 1], [1]),
+        ([1], [2]),
+        ([1, None], [2, None]),
+    ],
+)
 @pytest.mark.parametrize('duplicate', [False, True])
 def test_complete_overlap_native_schedule_and_warning(child, parent, duplicate):
-    assert observe(True, child, parent, duplicate=duplicate) == observe(False, child, parent, duplicate=duplicate)
+    assert observe(True, child, parent, duplicate=duplicate) == observe(
+        False, child, parent, duplicate=duplicate
+    )
 
 
 @pytest.mark.parametrize('failed', ['fk', 'id'])
 def test_native_observation_error_prevents_all_warning(failed):
-    assert observe(True, [1], [2], fail=failed) == observe(False, [1], [2], fail=failed)
+    assert observe(True, [1], [2], fail=failed) == observe(
+        False, [1], [2], fail=failed
+    )
 
 
-@pytest.mark.parametrize('error_type', [RuntimeError, KeyboardInterrupt, SDMWarning])
+@pytest.mark.parametrize(
+    'error_type', [RuntimeError, KeyboardInterrupt, SDMWarning]
+)
 def test_overlap_handler_error_is_the_actual_exception(error_type):
-    schema = Tables(child=SimpleNamespace(data=pd.DataFrame({'fk': [1]})),
-                    parent=SimpleNamespace(data=pd.DataFrame({'id': [2]})))
+    schema = Tables(
+        child=SimpleNamespace(data=pd.DataFrame({'fk': [1]})),
+        parent=SimpleNamespace(data=pd.DataFrame({'id': [2]})),
+    )
     schema.relationships = [Relationship('child', 'fk', 'parent', 'id')]
     actual = error_type('native warning failed')
-    with patch.object(warnings, 'showwarning', side_effect=actual), warnings.catch_warnings():
+    with (
+        patch.object(warnings, 'showwarning', side_effect=actual),
+        warnings.catch_warnings(),
+    ):
         warnings.simplefilter('always')
         with pytest.raises(error_type) as got:
             _relationship_overlap(schema)
@@ -84,10 +117,14 @@ def test_selected_relationship_rendering_errors_are_not_formatter_defects():
     class NativeLink:
         source_table, source_column = 'child', 'fk'
         target_table, target_column = 'parent', 'id'
+
         def __str__(self):
             raise ValueError('native relationship render failed')
-    schema = Tables(child=SimpleNamespace(data=pd.DataFrame({'fk': [1]})),
-                    parent=SimpleNamespace(data=pd.DataFrame({'id': [2]})))
+
+    schema = Tables(
+        child=SimpleNamespace(data=pd.DataFrame({'fk': [1]})),
+        parent=SimpleNamespace(data=pd.DataFrame({'id': [2]})),
+    )
     schema.relationships = [NativeLink()]
     with pytest.raises(ValueError, match='native relationship render failed'):
         _relationship_overlap(schema)
@@ -95,16 +132,25 @@ def test_selected_relationship_rendering_errors_are_not_formatter_defects():
 
 def test_later_relationship_native_failure_prevents_earlier_disjoint_notice():
     for core in [False, True]:
-        schema = Tables(child=SimpleNamespace(data=pd.DataFrame({'fk': [1], 'later': [2]})),
-                        parent=SimpleNamespace(data=pd.DataFrame({'id': [3]})))
-        schema.relationships = [Relationship('child', 'fk', 'parent', 'id'),
-                                Relationship('child', 'later', 'parent', 'id')]
+        schema = Tables(
+            child=SimpleNamespace(data=pd.DataFrame({'fk': [1], 'later': [2]})),
+            parent=SimpleNamespace(data=pd.DataFrame({'id': [3]})),
+        )
+        schema.relationships = [
+            Relationship('child', 'fk', 'parent', 'id'),
+            Relationship('child', 'later', 'parent', 'id'),
+        ]
         unique = pd.Series.unique
+
         def native_unique(series):
             if series.name == 'later':
                 raise ValueError('later equality failed')
             return unique(series)
-        with patch.object(pd.Series, 'unique', native_unique), warnings.catch_warnings(record=True) as seen:
+
+        with (
+            patch.object(pd.Series, 'unique', native_unique),
+            warnings.catch_warnings(record=True) as seen,
+        ):
             warnings.simplefilter('always')
             with pytest.raises(ValueError, match='later equality failed'):
                 if core:
@@ -116,8 +162,10 @@ def test_later_relationship_native_failure_prevents_earlier_disjoint_notice():
 
 @pytest.mark.parametrize('missing', ['table', 'column', 'data'])
 def test_unavailable_relationship_values_remain_silent(missing):
-    schema = Tables(child=SimpleNamespace(data=pd.DataFrame({'fk': [1]})),
-                    parent=SimpleNamespace(data=pd.DataFrame({'id': [2]})))
+    schema = Tables(
+        child=SimpleNamespace(data=pd.DataFrame({'fk': [1]})),
+        parent=SimpleNamespace(data=pd.DataFrame({'id': [2]})),
+    )
     schema.relationships = [Relationship('child', 'fk', 'parent', 'id')]
     if missing == 'table':
         del schema['parent']

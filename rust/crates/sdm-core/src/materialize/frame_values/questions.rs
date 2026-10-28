@@ -295,3 +295,76 @@ pub(crate) fn in_part(error: CoreError, scope: Option<&FrameQuestionScope>) -> C
             .in_part(Sentence::PartRankingCandidate),
     }
 }
+
+/// Shared warning policy over finite observed native facts, without native values.
+pub(super) fn relationship_overlap(
+    observations: Vec<FrameRelationshipEvidence>,
+) -> Result<(FrameRelationshipOverlap, Option<CoreWarning>), CoreError> {
+    let mut disjoint = Vec::new();
+    let mut names = Vec::new();
+    let mut first = None;
+    for (position, observation) in observations.into_iter().enumerate() {
+        let FrameRelationshipEvidence::Distinct {
+            relationship,
+            child,
+            parent,
+            intersects,
+        } = observation
+        else {
+            continue;
+        };
+        if relationship
+            .iter()
+            .any(|column| column.table.is_empty() || column.column.is_empty())
+        {
+            return Err(protocol("relationship overlap has an empty endpoint"));
+        }
+        let selected = match (child, parent, intersects) {
+            (0, None, None) | (1.., Some(0), None) => false,
+            (1.., Some(1..), Some(intersects)) => !intersects,
+            _ => {
+                return Err(protocol(
+                    "relationship overlap contradicts its reached native counts",
+                ));
+            }
+        };
+        if selected {
+            let [source, target] = relationship;
+            names.push(format!(
+                "{}.{} -> {}.{}",
+                source.table, source.column, target.table, target.column
+            ));
+            if first.is_none() {
+                first = Some((source, target));
+            }
+            disjoint.push(position as u64);
+        }
+    }
+    let notice = first.map(|(source, target)| {
+        let mut notice = CoreWarning::new(
+            if disjoint.len() == 1 {
+                Sentence::RelationshipsDisjointOne
+            } else {
+                Sentence::RelationshipsDisjointSeveral
+            },
+            "declared relationships match no given rows",
+        );
+        notice.fields = [
+            (
+                "positions".into(),
+                Detail::List(disjoint.iter().copied().map(Scalar::UInt64).collect()),
+            ),
+            ("relationships".into(), Detail::text(names.join(", "))),
+            ("source_table".into(), Detail::text(source.table)),
+            ("target_table".into(), Detail::text(target.table)),
+            ("target_column".into(), Detail::text(target.column)),
+        ]
+        .into();
+        notice
+    });
+    Ok((FrameRelationshipOverlap { disjoint }, notice))
+}
+
+#[cfg(test)]
+#[path = "overlap_tests.rs"]
+mod overlap_tests;

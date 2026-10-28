@@ -89,3 +89,24 @@ pub struct FrameQuestionScope {
     pub position: u32,
     pub parts: u32,
 }
+
+/// Reached native overlap observations, in the actual live relationship order.
+/// Unavailable guards do not observe future endpoint attributes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "observation", rename_all = "snake_case", deny_unknown_fields)]
+pub enum FrameRelationshipEvidence {
+    Unavailable,
+    Distinct {
+        relationship: [ColumnRef; 2],
+        child: u64,
+        parent: Option<u64>,
+        intersects: Option<bool>,
+    },
+}
+
+/// The ordered disjoint positions selected from complete reached observations.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FrameRelationshipOverlap {
+    pub disjoint: Vec<u64>,
+}

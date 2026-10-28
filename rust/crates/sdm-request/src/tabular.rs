@@ -65,7 +65,7 @@ fn widened(a: Dtype, b: Dtype) -> Dtype {
     }
 }
 
-fn raw(array: &ArrayRef, row: usize) -> Result<Scalar, CoreError> {
+pub(crate) fn raw(array: &ArrayRef, row: usize) -> Result<Scalar, CoreError> {
     if array.is_null(row) {
         return Ok(Scalar::Null);
     }
@@ -97,7 +97,7 @@ fn raw(array: &ArrayRef, row: usize) -> Result<Scalar, CoreError> {
     })
 }
 
-fn cell(
+pub(crate) fn cell(
     value: Scalar,
     dtype: Dtype,
     column: &str,

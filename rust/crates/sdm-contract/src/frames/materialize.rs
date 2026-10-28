@@ -464,6 +464,9 @@ pub enum FramePreparation {
     Questions {
         input: FrameQuestionInputs,
     },
+    RelationshipOverlap {
+        observations: AttachmentId,
+    },
     AssessFailure {
         origin: FrameErrorOrigin,
         failure: FrameNativeFailure,
@@ -568,6 +571,7 @@ pub enum PreparedFrameValue {
     SourceColumn(TypedFrameSourceColumn),
     Question(PreparedFrameQuestion),
     Questions(PreparedFrameQuestions),
+    RelationshipOverlap(FrameRelationshipOverlap),
     FailureAssessment(FrameFailureAssessment),
     Graph(PreparedFrameGraph),
     Population(PreparedFramePopulation),

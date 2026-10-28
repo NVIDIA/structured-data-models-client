@@ -16,7 +16,7 @@ import json
 import secrets
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, NoReturn, TypedDict
+from typing import Any, Literal, NoReturn, TypedDict
 
 import pandas as pd
 
@@ -34,6 +34,23 @@ from sdm_client._rust.frame_native import (
 )
 from sdm_client._rust.run import Finished, run
 from sdm_client.errors import StructuredDataError
+
+
+class _UnavailableOverlap(TypedDict):
+    observation: Literal['unavailable']
+
+
+class _OverlapEndpoint(TypedDict):
+    table: str
+    column: str
+
+
+class _DistinctOverlap(TypedDict):
+    observation: Literal['distinct']
+    relationship: list[_OverlapEndpoint]
+    child: int
+    parent: int | None
+    intersects: bool | None
 
 
 class _FrameTableInput(TypedDict):
@@ -243,7 +260,14 @@ def _prepare(
         operation: dict[str, Any] = {'op': 'prepare_frames', 'input': 1}
         if state.get('frame_part') is not None:
             operation['part'] = state['frame_part']
-        return run(operation, attachments, state=state)
+        return run(
+            operation,
+            attachments,
+            state=state,
+            warning_presentation='frame_schema'
+            if value['stage'] == 'relationship_overlap'
+            else None,
+        )
     finally:
         attachments.clear()
         bindings.attachments.clear()
@@ -977,6 +1001,7 @@ def gather(
         )
         decomposition = questions.data['decomposition']
         if decomposition is None:
+            _relationship_overlap(materializer.schema)
             return _single(
                 materializer,
                 query.to_string(),
@@ -1015,6 +1040,7 @@ def gather(
             # Each rewritten question owns a new native graph, as the old
             # public PredictiveQuery constructor did for every reached part.
             # Neither this parent nor a preceding part supplies a graph/RNG.
+            _relationship_overlap(materializer.schema, part=scope)
             prepared.append(
                 _single(
                     materializer,
@@ -1130,3 +1156,77 @@ def _questions(
         )
     finally:
         question.owners.clear()
+
+
+def _relationship_overlap(
+    schema: Any, *, part: dict[str, Any] | None = None
+) -> None:
+    """Observe native equality at the original pre-gather warning boundary."""
+    links = []
+    observations: list[_UnavailableOverlap | _DistinctOverlap] = []
+    for link in schema.relationships:
+        links.append(link)
+        if (
+            link.source_table not in schema.tables
+            or link.target_table not in schema.tables
+        ):
+            observations.append({'observation': 'unavailable'})
+            continue
+        source_table = link.source_table
+        child = getattr(schema[source_table], 'data', None)
+        target_table = link.target_table
+        parent = getattr(schema[target_table], 'data', None)
+        if child is None or parent is None:
+            observations.append({'observation': 'unavailable'})
+            continue
+        if (
+            link.source_column not in child.columns
+            or link.target_column not in parent.columns
+        ):
+            observations.append({'observation': 'unavailable'})
+            continue
+        source_column = link.source_column
+        values = child[source_column].dropna().unique()
+        target_column = link.target_column
+        keys = parent[target_column].dropna().unique()
+        child_count = len(values)
+        parent_count = len(keys) if child_count else None
+        intersects = (
+            bool(pd.Series(values).isin(keys).any())
+            if child_count and parent_count
+            else None
+        )
+        observations.append(
+            {
+                'observation': 'distinct',
+                'relationship': [
+                    {'table': source_table, 'column': source_column},
+                    {'table': target_table, 'column': target_column},
+                ],
+                'child': child_count,
+                'parent': parent_count,
+                'intersects': intersects,
+            }
+        )
+
+    def present(fields: dict[str, Any]) -> dict[str, Any]:
+        selected = [links[position] for position in fields['positions']]
+        rendered = ', '.join(str(link) for link in selected)
+        first = selected[0]
+        return {
+            'relationships': rendered,
+            'source_table': first.source_table,
+            'target_table': first.target_table,
+            'target_column': first.target_column,
+        }
+
+    bindings = _Bindings()
+    with errors.holding(frame_relationship_overlap=present):
+        _prepare(
+            {
+                'stage': 'relationship_overlap',
+                'observations': bindings.json(observations),
+            },
+            bindings,
+            {'frame_part': part},
+        )

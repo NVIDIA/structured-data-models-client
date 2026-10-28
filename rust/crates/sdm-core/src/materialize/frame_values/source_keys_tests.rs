@@ -310,13 +310,18 @@ fn actual_native_columns_need_not_include_removed_stale_caller_fields() {
     fixed.table.primary_key = vec!["b".into()];
     fixed.constructed.remove(0);
     let typed = super::columns::table(FrameTableInputs {
-        table: fixed.table.clone(), empty: false,
+        table: fixed.table.clone(),
+        empty: false,
         native: vec![FrameTableColumnFacts {
-            name: "b".into(), declared: None,
-            values: FrameConstructorValues::Typed { physical: ColumnType::Int64 },
+            name: "b".into(),
+            declared: None,
+            values: FrameConstructorValues::Typed {
+                physical: ColumnType::Int64,
+            },
             meaning: fixed.constructed[0].clone(),
         }],
-    }).unwrap();
+    })
+    .unwrap();
     assert_eq!(typed.constructed.len(), 1);
     let key = source_keys::key(typed, vec!["b".into()]).unwrap();
     let value = source_keys::metadata(reached_metadata(key, fixed.table.clone())).unwrap();
@@ -324,5 +329,8 @@ fn actual_native_columns_need_not_include_removed_stale_caller_fields() {
     assert_eq!(value.table.columns[0].name, "b");
     let key = source_keys::key(fixed.clone(), vec!["a".into()]).unwrap();
     let error = source_keys::metadata(reached_metadata(key, fixed.table)).unwrap_err();
-    assert_eq!(error.fields["native_key_reason"], Detail::text("role_missing"));
+    assert_eq!(
+        error.fields["native_key_reason"],
+        Detail::text("role_missing")
+    );
 }

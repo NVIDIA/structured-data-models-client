@@ -459,6 +459,15 @@ def _said(sentence: str, fields: dict[str, Any]) -> str:
     r""":func:`render` with the values the call in progress holds
     (:func:`holding`), or, where the core gave a sentence its fields cannot
     fill, the defect named: never a sentence the core did not choose."""
+    if sentence in (
+        'relationships_disjoint_one',
+        'relationships_disjoint_several',
+    ):
+        present = _held().get('frame_relationship_overlap')
+        if present is not None:
+            # Actual native relationship rendering is outside the template
+            # defect guard, just as it was outside the engine guard.
+            fields = {**fields, **present(fields)}
     try:
         return render(sentence, fields, _HostValues(_held(), fields))
     except (KeyError, IndexError, TypeError, ValueError, AttributeError):
@@ -683,6 +692,11 @@ def error_from_core(
     }
     if error.get('public_details') is not None:
         details = _fields(error['public_details'])
+    frame_payload_range = fields.get('frame_payload_range') is True
+    if frame_payload_range:
+        if error['sentence'] != 'past_int64':
+            raise codec.CodecError('invalid frame request range presentation')
+        details.pop('frame_payload_range', None)
     response_cause: Exception | None = None
     if code == 'PROVIDER_ERROR' and driver_class is not None:
         details['driver_class'] = driver_class
@@ -968,6 +982,11 @@ def error_from_core(
             said = _said(sentence, fields)
     elif native_key_cause is None:
         said = _said(sentence, fields)
+    if frame_payload_range:
+        native_key_cause = ValueError(said)
+        native_key_cause.__cause__ = ValueError(
+            _said('past_int64_bare', fields)
+        )
     part = error.get('part')
     if part is not None:
         # The part of a question asked in parts it happened in, the core's

@@ -282,6 +282,14 @@ pub(crate) async fn run(
         FramePreparation::Questions { input } => {
             PreparedFrameValue::Questions(questions::prepare(&asker, input, &mut attachments)?)
         }
+        FramePreparation::RelationshipOverlap { observations } => {
+            let observations = take_json(&mut attachments, observations)?;
+            let (selected, notice) = questions::relationship_overlap(observations)?;
+            if let Some(notice) = notice {
+                asker.warn(notice);
+            }
+            PreparedFrameValue::RelationshipOverlap(selected)
+        }
         input @ FramePreparation::Graph { .. } => {
             PreparedFrameValue::Graph(graph(&asker, input, &mut attachments)?)
         }
@@ -2241,22 +2249,26 @@ fn bind_context(
         let columns = columns
             .into_iter()
             .map(|name| {
-                Ok((
-                    name.clone(),
-                    match graph
-                        .native_column(&ColumnRef {
-                            table: table.name.clone(),
-                            column: name.clone(),
-                        })?
-                        .strings
-                    {
-                        Some(encoding) => payload::SampledColumn::Strings(
-                            Arc::clone(named(&rows, &name)?),
-                            encoding,
-                        ),
-                        None => payload::SampledColumn::Arrow(Arc::clone(named(&rows, &name)?)),
-                    },
-                ))
+                Ok((name.clone(), {
+                    let native = graph.native_column(&ColumnRef {
+                        table: table.name.clone(),
+                        column: name.clone(),
+                    })?;
+                    let array = Arc::clone(named(&rows, &name)?);
+                    match native.strings {
+                        Some(encoding) => payload::SampledColumn::Strings(array, encoding),
+                        None if native.constructed == Some(Dtype::String)
+                            && (array.data_type().is_integer()
+                                || matches!(
+                                    array.data_type(),
+                                    DataType::Float32 | DataType::Float64 | DataType::Boolean
+                                )) =>
+                        {
+                            payload::SampledColumn::DeclaredStrings(array)
+                        }
+                        None => payload::SampledColumn::Arrow(array),
+                    }
+                }))
             })
             .collect::<Result<Vec<_>, CoreError>>()?;
         for (column, stype) in &stypes {
@@ -2621,6 +2633,13 @@ pub(crate) fn payload_part(
         rows_per_call: context.plan.task.value.rows_per_call as usize,
         lags,
         float_text: crate::pql::float_text,
+    })
+    .map_err(|error| {
+        if error.sentence == Sentence::PastInt64 {
+            error.with_field("frame_payload_range", Detail::Scalar(Scalar::Bool(true)))
+        } else {
+            error
+        }
     })?;
     Ok(EncodedCall {
         plan: context.plan,

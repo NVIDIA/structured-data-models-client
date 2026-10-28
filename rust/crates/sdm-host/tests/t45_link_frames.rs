@@ -296,16 +296,16 @@ fn rebind_frame_product(value: &mut PreparedFrameValue, keep: &mut impl FnMut(&m
     }
     fn labels(value: &mut LabelledFrameTask, keep: &mut impl FnMut(&mut AttachmentId)) {
         graph(&mut value.graph, keep);
-        for id in &mut value.context {
+        if let Some(id) = &mut value.context {
             keep(id);
         }
     }
     fn task(value: &mut CompletedFrameTask, keep: &mut impl FnMut(&mut AttachmentId)) {
         labels(&mut value.labelled, keep);
-        for id in &mut value.prediction {
+        if let Some(id) = &mut value.prediction {
             keep(id);
         }
-        for id in &mut value.owner {
+        if let Some(id) = &mut value.owner {
             keep(id);
         }
     }
@@ -319,13 +319,14 @@ fn rebind_frame_product(value: &mut PreparedFrameValue, keep: &mut impl FnMut(&m
         | PreparedFrameValue::KeyMeaning(_)
         | PreparedFrameValue::KeyNulls(_)
         | PreparedFrameValue::ColumnMeaning(_)
-        | PreparedFrameValue::IntegerColumn(_) => {}
+        | PreparedFrameValue::IntegerColumn(_)
+        | PreparedFrameValue::RelationshipOverlap(_) => {}
         PreparedFrameValue::Question(value) => keep(&mut value.owner),
         PreparedFrameValue::Questions(value) => {
-            for id in &mut value.call_values {
+            if let Some(id) = &mut value.call_values {
                 keep(id);
             }
-            for id in &mut value.question {
+            if let Some(id) = &mut value.question {
                 keep(id);
             }
         }
@@ -399,7 +400,7 @@ fn unsigned_link_native_rows_survive_owner_rebinding_until_the_real_request_boun
                 Attachment::Arrow(ArrowData::new(batch.schema(), vec![batch])),
             );
         }
-        held.insert(AttachmentId(20), bytes(json!({"num_context_samples":3,"num_hops":1,"num_neighbors":[3],"rows_per_call":200})));
+        held.insert(AttachmentId(20), bytes(json!({"num_context_samples":3,"num_hops":1,"num_neighbors":[3,3],"rows_per_call":200})));
         let mut stages = FrameStages { held };
         let native_tables = [("users", vec!["user_id", "age"]), ("items", vec!["item_id", "amount"]), ("buys", vec!["buy_id", "user_id", "item_id", "ts"])].map(|(name, columns)| {
             json!({"source":{"source":[name]},"columns":columns.into_iter().map(|name| json!({"name":name,"declared":null,"logical_text":null,"strings":null})).collect::<Vec<_>>()})

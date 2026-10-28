@@ -13,7 +13,9 @@ from sdm_client._rust import errors
 
 @pytest.mark.parametrize('marked', [False, True])
 @pytest.mark.parametrize('part', [None, 'part_forecast_step'])
-def test_only_reached_frame_payload_range_has_native_nested_causes(marked, part):
+def test_only_reached_frame_payload_range_has_native_nested_causes(
+    marked, part
+):
     fields = {
         'table': {'t': 'utf8', 'v': 'buys'},
         'column': {'t': 'utf8', 'v': 'part'},
@@ -24,10 +26,17 @@ def test_only_reached_frame_payload_range_has_native_nested_causes(marked, part)
     }
     if marked:
         fields['frame_payload_range'] = {'t': 'bool', 'v': True}
-    sent = {'kind': 'invalid_request', 'code': 'INVALID_REQUEST',
-            'sentence': 'past_int64', 'part': part, 'fields': fields,
-            'message': 'a value exceeds its request representation'}
-    made = errors.error_from_core(json.dumps({'message': 'error', 'error': sent}).encode(), {})
+    sent = {
+        'kind': 'invalid_request',
+        'code': 'INVALID_REQUEST',
+        'sentence': 'past_int64',
+        'part': part,
+        'fields': fields,
+        'message': 'a value exceeds its request representation',
+    }
+    made = errors.error_from_core(
+        json.dumps({'message': 'error', 'error': sent}).encode(), {}
+    )
     assert 'frame_payload_range' not in made.details
     assert made.details['table'] == 'buys'
     assert made.details['column'] == 'part'
@@ -39,7 +48,9 @@ def test_only_reached_frame_payload_range_has_native_nested_causes(marked, part)
     assert type(cause) is ValueError
     bare = cause.__cause__
     assert type(bare) is ValueError
-    assert str(bare) == ('a value is outside the range int64 represents '
-                         '(-9223372036854775808 to 9223372036854775807); send the column as strings')
+    assert str(bare) == (
+        'a value is outside the range int64 represents '
+        '(-9223372036854775808 to 9223372036854775807); send the column as strings'
+    )
     assert str(cause) == f"Column 'buys.part' row 0: {bare}"
     assert 'forecast' not in str(cause)

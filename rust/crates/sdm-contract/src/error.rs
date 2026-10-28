@@ -753,6 +753,7 @@ warning_codes! {
     TablesUnreached = "TABLES_UNREACHED",
     ColumnsUnread = "COLUMNS_UNREAD",
     FilterChoseExamples = "FILTER_CHOSE_EXAMPLES",
+    RelationshipsDisjoint = "RELATIONSHIPS_DISJOINT",
     ContextAnswers = "CONTEXT_ANSWERS",
     NullKeysLeftOut = "NULL_KEYS_LEFT_OUT",
     DateLiteralDayFirst = "DATE_LITERAL_DAY_FIRST",
@@ -1013,6 +1014,7 @@ sentences! {
     OutputsNone = "outputs_none", E::InvalidRequest;
     NotFinite = "not_finite", E::InvalidRequest;
     PastInt64 = "past_int64", E::InvalidRequest;
+    PastInt64Bare = "past_int64_bare", E::InvalidRequest;
     ColumnTimePastNanoseconds = "column_time_past_nanoseconds", E::ValueOutOfRange;
     LagNegative = "lag_negative", E::InvalidRequest;
     LagNotWhole = "lag_not_whole", E::InvalidRequest;
@@ -1130,6 +1132,8 @@ sentences! {
     TablesUnreachedSeveral = "tables_unreached_several", W::TablesUnreached;
     ColumnsUnreadSeveral = "columns_unread_several", W::ColumnsUnread;
     FilterChoseExamples = "filter_chose_examples", W::FilterChoseExamples;
+    RelationshipsDisjointOne = "relationships_disjoint_one", W::RelationshipsDisjoint;
+    RelationshipsDisjointSeveral = "relationships_disjoint_several", W::RelationshipsDisjoint;
     ContextAnswersWindowed = "context_answers_windowed", W::ContextAnswers;
     ContextAnswersStatic = "context_answers_static", W::ContextAnswers;
     NullKeysLeftOut = "null_keys_left_out", W::NullKeysLeftOut;
