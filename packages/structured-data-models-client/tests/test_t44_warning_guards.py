@@ -18,7 +18,8 @@ from test_t44_native_text_profiles import (
     send,
     warning_values,
 )
-from test_t44_text_frames import Scripted, core as core, question, shop, text
+from test_t44_text_frames import Scripted, question, shop, text
+from test_t44_text_frames import core as core
 
 from sdm_client import StructuredDataError
 from sdm_client._rust import codec, errors
@@ -189,6 +190,49 @@ def test_hops_warning_filter_error_keeps_its_native_cause(core):
     assert str(native) == (f'[HOPS_IGNORED] {HOPS}' if core else HOPS)
     assert raised.value.code == 'INTERNAL_ERROR'
     assert raised.value.message.endswith(f'UserWarning: {native}')
+
+
+def test_hops_handler_uses_the_reached_graph_summary_and_actual_batch_size(
+    core,
+):
+    native = ValueError(
+        'size exceeds the 30MB limit; the number of entities predicted at once. '
+        'Please reduce either setting.'
+    )
+    frames = shop('python')
+    original_show = warnings.showwarning
+
+    def fail(message, category, filename, lineno, file=None, line=None):
+        if 'Received custom' in str(message):
+            raise native
+        original_show(message, category, filename, lineno, file=file, line=line)
+
+    with (
+        pd.option_context(
+            'future.infer_string', False, 'mode.string_storage', 'python'
+        ),
+        warnings.catch_warnings(),
+    ):
+        warnings.simplefilter('always')
+        asked = question(frames, prose=True)
+        frames['orders'].loc[1, 'order_id'] = 0
+        with patch.object(warnings, 'showwarning', fail):
+            with pytest.raises(StructuredDataError) as raised:
+                asked.materialize(
+                    indices=[7, 8],
+                    num_context_samples=3,
+                    num_neighbors=[3],
+                    num_hops=1,
+                    rows_per_call=99,
+                    random_seed=7,
+                )
+    assert raised.value.__cause__ is native
+    assert raised.value.code == 'INVALID_REQUEST'
+    assert raised.value.details['batch_too_large_to_send'] is True
+    assert 'below the 2 this one holds' in raised.value.message
+    assert raised.value.message.endswith(
+        ' [orders: 1 of 64 rows dropped (1 with a repeated primary key)]'
+    )
 
 
 @pytest.mark.parametrize('presentation', ['coded', 'frame_graph'])
