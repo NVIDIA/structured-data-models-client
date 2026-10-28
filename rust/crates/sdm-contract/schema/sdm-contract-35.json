@@ -15096,6 +15096,12 @@
       "description": "The completed native key conversion and its actual reached display.",
       "type": "object",
       "properties": {
+        "ordinal": {
+          "description": "Original ordered decoded key, independent of its probability value.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
         "value": {
           "$ref": "#/$defs/NativeValue"
         },
@@ -15108,6 +15114,7 @@
       },
       "additionalProperties": false,
       "required": [
+        "ordinal",
         "value",
         "name",
         "probability"
