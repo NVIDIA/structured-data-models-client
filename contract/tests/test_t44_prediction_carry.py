@@ -261,6 +261,7 @@ def test_incomplete_or_unmatched_operations_do_not_infer_carry(
     'foreign',
     [
         'finished-subclass',
+        'wrong-finished-control',
         'handle-subclass',
         'unrelated-wrapper',
         'foreign-capture',
@@ -290,6 +291,8 @@ def test_present_provenance_stops_at_unknown_or_foreign_owners(
         state.fake_present = True
         if foreign == 'finished-subclass':
             finished = FinishedSubclass(original.result, original._run)
+        elif foreign == 'wrong-finished-control':
+            finished = Finished({}, original._run)
         elif foreign == 'handle-subclass':
             handle = original._run
             wrapper = HandleSubclass(
