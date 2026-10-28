@@ -205,7 +205,7 @@ impl FrameStages {
         let start = message(json!({"op":"prepare_frames","input":id}));
         let run = HostRun::start(&sdm_host::default_root(), &start, attached)
             .map_err(|error| decoded(&error))?;
-        let value = loop {
+        let mut value = loop {
             match sdm_host::read(&run.next().map_err(|error| decoded(&error))?).unwrap() {
                 ControlMessage::Step(Step::Done {
                     result: OperationResult::PrepareFrames(out),
@@ -223,52 +223,92 @@ impl FrameStages {
                 other => panic!("unexpected native frame I/O: {other:?}"),
             }
         };
-        let core_keys = json!({"kind":"core_keys","values":null});
-        // The next useful consumer is the authoritative declaration of each
-        // compound product's owners. No recursive JSON owner discovery.
-        let next = match &value {
-            PreparedFrameValue::Graph(value) => {
-                json!({"stage":"population","graph":value,"query":2,"values":null,"seed":null,"entropy":null,"anchor_time":null,"anchor_entity":false,"num_context_samples":null,"limits":{}})
+        // Output ids belong to this run, whose allocator may reuse 1/2/3.
+        // Preserve aliases while rebinding actual returned owners into the
+        // fixture namespace; inherited already-rebound ids remain unchanged.
+        let mut aliases = std::collections::BTreeMap::new();
+        rebind_frame_product(&mut value, &mut |id| {
+            let old = *id;
+            if let Some(rebound) = aliases.get(&old) {
+                *id = *rebound;
+                return;
             }
-            PreparedFrameValue::Population(value) => {
-                json!({"stage":"labels","population":value,"batches":[]})
-            }
-            PreparedFrameValue::LabelBatch(value) => {
-                self.held.insert(
-                    value.owner,
-                    run.take_attachment(value.owner).unwrap().unwrap(),
+            let rebound = if let Some(owner) = run.take_attachment(old).unwrap() {
+                let fresh = AttachmentId(
+                    (self.held.keys().map(|id| id.0).max().unwrap_or(0) + 1).max(1000),
                 );
-                return Ok(PreparedFrameValue::LabelBatch(value.clone()));
-            }
-            PreparedFrameValue::Labels(value) => {
-                json!({"stage":"task","labelled":value,"prediction":{"kind":"core_keys","values":3},"values":null})
-            }
-            PreparedFrameValue::Task(value) => json!({"stage":"plan","task":value,"values":null}),
-            PreparedFrameValue::Plan(value) => {
-                json!({"stage":"references","plan":value,"converted":core_keys})
-            }
-            PreparedFrameValue::References(value) => {
-                json!({"stage":"context","references":value,"range":{"start":0,"stop":2},"converted":core_keys})
-            }
-            PreparedFrameValue::Context(value) => {
-                json!({"stage":"payload","context":value,"text":{"outcome":"converted","columns":[]},"values":null})
-            }
-            PreparedFrameValue::Part(value) => {
-                self.held.insert(
-                    value.payload,
-                    run.take_attachment(value.payload).unwrap().unwrap(),
+                self.held.insert(fresh, owner);
+                fresh
+            } else {
+                assert!(
+                    self.held.contains_key(&old),
+                    "missing inherited owner {old:?}"
                 );
-                return Ok(PreparedFrameValue::Part(value.clone()));
+                old
+            };
+            aliases.insert(old, rebound);
+            *id = rebound;
+        });
+        Ok(value)
+    }
+}
+
+/// Explicit typed resource fields only. Counts, ordinals and native source
+/// positions are data and can never be treated as attachment ids here.
+fn rebind_frame_product(value: &mut PreparedFrameValue, keep: &mut impl FnMut(&mut AttachmentId)) {
+    use sdm_contract::frames::materialize::{
+        CompletedFrameTask, FrameRequestPlan, LabelledFrameTask, PreparedFrameGraph,
+    };
+
+    fn graph(value: &mut PreparedFrameGraph, keep: &mut impl FnMut(&mut AttachmentId)) {
+        keep(&mut value.owner);
+    }
+    fn labels(value: &mut LabelledFrameTask, keep: &mut impl FnMut(&mut AttachmentId)) {
+        graph(&mut value.graph, keep);
+        for id in &mut value.context {
+            keep(id);
+        }
+    }
+    fn task(value: &mut CompletedFrameTask, keep: &mut impl FnMut(&mut AttachmentId)) {
+        labels(&mut value.labelled, keep);
+        for id in &mut value.prediction {
+            keep(id);
+        }
+        for id in &mut value.owner {
+            keep(id);
+        }
+    }
+    fn plan(value: &mut FrameRequestPlan, keep: &mut impl FnMut(&mut AttachmentId)) {
+        task(&mut value.task, keep);
+        keep(&mut value.sampling_values);
+    }
+    match value {
+        PreparedFrameValue::Graph(value) => graph(value, keep),
+        PreparedFrameValue::Population(value) => {
+            graph(&mut value.graph, keep);
+            keep(&mut value.owner);
+        }
+        PreparedFrameValue::LabelBatch(value) => keep(&mut value.owner),
+        PreparedFrameValue::Labels(value) => labels(value, keep),
+        PreparedFrameValue::Task(value) => task(value, keep),
+        PreparedFrameValue::Plan(value) => plan(value, keep),
+        PreparedFrameValue::References(value) => {
+            plan(&mut value.plan, keep);
+            keep(&mut value.owner);
+        }
+        PreparedFrameValue::Context(value) => {
+            plan(&mut value.plan, keep);
+            keep(&mut value.anchors);
+            for table in &mut value.tables {
+                keep(&mut table.rows);
+                keep(&mut table.source_rows);
             }
-            other => panic!("unexpected product: {other:?}"),
-        };
-        let next: FramePreparation = serde_json::from_value(next).unwrap();
-        for (id, _) in next.attachments() {
-            if let Some(attachment) = run.take_attachment(id).unwrap() {
-                self.held.insert(id, attachment);
+            for link in &mut value.links {
+                keep(&mut link.pairs);
             }
         }
-        Ok(value)
+        PreparedFrameValue::Part(value) => keep(&mut value.payload),
+        other => panic!("unexpected frame fixture product: {other:?}"),
     }
 }
 
