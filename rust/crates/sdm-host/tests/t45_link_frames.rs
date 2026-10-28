@@ -283,6 +283,12 @@ fn rebind_frame_product(value: &mut PreparedFrameValue, keep: &mut impl FnMut(&m
         keep(&mut value.sampling_values);
     }
     match value {
+        PreparedFrameValue::SourceMeaning(_)
+        | PreparedFrameValue::TableMeaning(_)
+        | PreparedFrameValue::KeyMeaning(_)
+        | PreparedFrameValue::KeyNulls(_)
+        | PreparedFrameValue::ColumnMeaning(_)
+        | PreparedFrameValue::IntegerColumn(_) => {}
         PreparedFrameValue::Graph(value) => graph(value, keep),
         PreparedFrameValue::Population(value) => {
             graph(&mut value.graph, keep);
@@ -665,7 +671,7 @@ fn constructed_key_facts_and_native_null_admission_are_closed_host_products() {
     assert_eq!(refused["error"]["code"], "INVALID_REQUEST");
     assert_eq!(
         refused["error"]["fields"]["native_key_reason"],
-        "component_null"
+        json!({"t":"utf8","v":"component_null"})
     );
     let mut forged = serde_json::to_value(&definition).unwrap();
     forged["derived"] = json!("not-the-selected-name");
@@ -721,4 +727,39 @@ fn native_row_identity_manifest_is_not_a_scalar_topology_or_cache_alias() {
             other => panic!("unexpected native identity host effect: {other:?}"),
         }
     }
+}
+
+#[test]
+fn resolved_question_survives_final_time_metadata_change_and_rejects_wrong_query_owner() {
+    let mut stages = FrameStages {
+        held: inputs("composite-history", false),
+    };
+    let PreparedFrameValue::Question(question) = stages.stage(json!({"stage":"question","schema":1,"query":2,"candidates_given":false,"statistic_given":false,"top_k_given":false})).unwrap() else { panic!("resolved question") };
+    let PreparedFrameValue::Questions(questions) = stages.stage(json!({"stage":"questions","input":{"question":question,"candidates":null,"values":5,"options":[],"option_facts":[],"prediction_rows":2,"limits":{}}})).unwrap() else { panic!("ordinary questions") };
+    let owner = questions.question.expect("ordinary query meaning retained");
+    let Attachment::Bytes(schema) = stages.held.get_mut(&AttachmentId(1)).unwrap() else {
+        panic!("schema")
+    };
+    let mut value: Value = serde_json::from_slice(schema).unwrap();
+    value["tables"][2]["time_column"] = Value::Null;
+    *schema = serde_json::to_vec(&value).unwrap();
+    let native = [("users", vec!["user_id", "age"]), ("items", vec!["item_id", "amount"]), ("buys", vec!["buy_id", "user_id", "item_id", "ts", "part"])].map(|(name, columns)| json!({"source":{"source":[name]},"columns":columns.into_iter().map(|name| json!({"name":name,"declared":null,"logical_text":null,"strings":null})).collect::<Vec<_>>()}));
+    let PreparedFrameValue::Graph(graph) = stages.stage(json!({"stage":"graph","schema":1,"frames":7,"checkpoint":null,"retained":null,"native_tables":native,"values":5,"options":[],"prediction_rows":2,"limits":{}})).unwrap() else { panic!("final physical graph") };
+    let population = json!({"stage":"population","graph":graph,"query":2,"question":owner,"values":5,"seed":"0x7","entropy":null,"anchor_time":{"t":"ts","unit":"ns","v":"1677628800000000000"},"anchor_entity":false,"num_context_samples":3,"limits":{}});
+    let error = stages.stage(population.clone()).unwrap_err();
+    assert_eq!(error["error"]["code"], "INVALID_REQUEST");
+    assert_eq!(
+        error["error"]["fields"]["native_key_reason"],
+        json!({"t":"utf8","v":"time_bound_missing"})
+    );
+    assert_eq!(
+        error["error"]["fields"]["table"],
+        json!({"t":"utf8","v":"buys"})
+    );
+    stages.held.insert(
+        AttachmentId(2),
+        bytes(json!("PREDICT users.age FOR EACH users.user_id")),
+    );
+    let error = stages.stage(population).unwrap_err();
+    assert_eq!(error["error"]["code"], "INVALID_MESSAGE");
 }
