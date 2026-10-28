@@ -422,9 +422,17 @@ fn failure_observations_publish_actual_calls_and_carried_arrow() {
             assert!(answered["metadata"].is_object(), "{id}");
             assert!(answered["outputs"].is_array(), "{id}");
         }
-        for call in &observed.model_calls {
+        for (at, call) in observed.model_calls.iter().enumerate() {
             assert!(call["body"]["metadata"]["request_id"].is_string());
             assert_eq!(call["body_sha256"].as_str().unwrap().len(), 64);
+            assert_eq!(call["model_endpoint"], Value::Null);
+            assert_eq!(
+                call["reply"],
+                json!({
+                    "outcome": "response", "status": if at + 1 == calls { 500 } else { 200 },
+                }),
+                "{id} call {at}"
+            );
         }
     }
 }
