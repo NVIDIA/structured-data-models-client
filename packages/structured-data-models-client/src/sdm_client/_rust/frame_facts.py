@@ -84,6 +84,11 @@ def native_declaration(dtype: object) -> NativeDeclaration | None:
             'declaration': 'physical',
             'physical': {'type': f'{prefix}{physical.bit_width}'},
         }
+    if pa.types.is_floating(physical) and physical.bit_width in (32, 64):
+        return {
+            'declaration': 'physical',
+            'physical': {'type': f'float{physical.bit_width}'},
+        }
     if pa.types.is_timestamp(physical):
         return {
             'declaration': 'physical',

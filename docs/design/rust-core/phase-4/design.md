@@ -217,11 +217,14 @@ T4.2 remains one canonical package, with these explicit implementation substeps:
    Java only receives compatible explicit timestamp-unit rendering for representable existing scalar paths; no Java frame API or extra-wide Java.time value domain is added.
    The StringDtype constructor substep admits built-in Python/pyarrow storage and their supported pandas missing-value forms through the same conversion, shared UTF8 admission and owned Table/Schema stages.
    Empty/all-null strings retain their known string type; Rust infers meaning, identifiers and links from the whole detached column without parsing date-shaped strings as timestamps.
-   The ArrowDtype constructor substep admits exact built-in ArrowExtensionArray columns for signed/unsigned 8/16/32/64, Boolean and UTF8/LargeUTF8 physical families through the same Table/Schema stages.
+   The ArrowDtype constructor substep admits exact built-in ArrowExtensionArray columns for signed/unsigned 8/16/32/64, Float32/Float64, Boolean and UTF8/LargeUTF8 physical families through the same Table/Schema stages.
    Their native Arrow validity, chunks and widths enter the existing checked admission and detachment path.
    Native diagnostic reconstruction uses only core-selected scalars, preserving integer/string scalar and mixed-row presentation without changing schema meaning or equality.
-   Arrow float32/64 remain unfinished as whole native types: frozen two-row signed-zero and NaN-sign/payload witnesses show Arrow distinct counts nominate keys using bit distinctions that pandas duplicate-key equality merges, while the current shared frame mode represents only the latter equality.
-   Supporting both facts requires a separately reviewed shared representation; no bit normalization, native-origin policy flag or default SDK behavior change is introduced by this bounded substep.
+   Arrow float32/64 use the existing separately reached native candidate-cardinality and key-quality products: frozen two-row signed-zero and NaN-sign/payload witnesses show Arrow distinct counts nominate keys using bit distinctions that pandas duplicate-key equality merges.
+   The host reports the actual selected native counts and example row while Rust retains eligibility, thresholds, key policy and notices.
+   Generic Arrow-only compatibility stages retain canonical `Floats::Frame` equality; they do not replace those native observations.
+   Exact float-width physical declarations bind the same original dtype at early table and later graph admission.
+   The [bounded float prerequisite plan](t42-arrow-float-native-products.md) requires two fresh whole CODE approvals and corrected-source public/binding execution before the new family can be claimed validated; no bit normalization, native-origin flag or default route change is introduced.
    Arrow s/ms/us/ns timestamps also remain unfinished as whole native types, including every zone and ordinary/empty/all-null columns.
    Frozen coarse-unit extreme-count witnesses raise native scalar-boxing OverflowError only when consumed first, while a valid ns minimum count boxes NaT and changes time choice when its row moves first.
    Preserving these stage-sensitive native read and comparison facts requires a separately reviewed representation; the converter adds no eager cell boxing, content-range gate, MIN-to-null normalization or timestamp diagnostic reconstruction.

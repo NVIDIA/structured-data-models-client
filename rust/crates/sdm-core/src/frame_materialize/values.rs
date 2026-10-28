@@ -173,6 +173,8 @@ pub(crate) fn check_declaration(declaration: &FramePhysicalDeclaration) -> Resul
                     | ColumnType::Uint16
                     | ColumnType::Uint32
                     | ColumnType::Uint64
+                    | ColumnType::Float32
+                    | ColumnType::Float64
                     | ColumnType::Utf8
                     | ColumnType::Timestamp { .. }
             ) {
