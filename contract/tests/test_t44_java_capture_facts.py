@@ -155,3 +155,60 @@ def test_sparse_success_preserves_only_actually_taken_metadata(count):
     viewed = reader().view(core, captured.operations)
     assert len(viewed['calls']) == count
     assert events == original
+
+
+def test_sparse_capture_declares_the_unavailable_interceptions():
+    events, _ = sparse_trace(2)
+    captured = JAVA.captured(events)
+    core = captured.core()
+    assert core['capture_capabilities'] == {
+        'model_replies': False,
+        'native_error_control': False,
+    }
+    assert 'answered' not in core
+    assert 'answered' not in core['legacy_predictions'][0]
+    assert all(call['reply'] is None for call in core['model_calls'])
+
+
+@pytest.mark.parametrize('changed', ['top-answered', 'run-answered', 'reply'])
+def test_sparse_unavailable_facts_cannot_be_presented_as_observed(changed):
+    events, _ = sparse_trace(2)
+    events.append(
+        {
+            'event': 'failed',
+            'kind': 'invalid_response',
+            'code': 'INVALID_RESPONSE',
+        }
+    )
+    captured = JAVA.captured(events)
+    core = captured.core()
+    if changed == 'top-answered':
+        core['answered'] = None
+    elif changed == 'run-answered':
+        core['legacy_predictions'][0]['answered'] = None
+    else:
+        core['model_calls'][0]['reply'] = {'outcome': 'response', 'status': 200}
+    with pytest.raises(reader().ObservationError):
+        reader().view(core, captured.operations)
+
+
+@pytest.mark.parametrize(
+    'changed', ['top-answered', 'run-answered', 'pending-reply']
+)
+def test_full_observer_cannot_lose_mandatory_available_facts(changed):
+    from test_t44_prediction_delivery import capture_attempt
+
+    captured = capture_attempt()
+    core = captured.core()
+    assert core['capture_capabilities'] == {
+        'model_replies': True,
+        'native_error_control': True,
+    }
+    if changed == 'top-answered':
+        core.pop('answered')
+    elif changed == 'run-answered':
+        core['legacy_predictions'][0].pop('answered')
+    else:
+        core['model_calls'].append(copy.deepcopy(core['model_calls'][0]))
+    with pytest.raises(reader().ObservationError):
+        reader().view(core, captured.operations)
