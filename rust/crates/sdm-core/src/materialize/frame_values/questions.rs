@@ -192,6 +192,15 @@ pub(super) fn prepare(
             )?;
             reserved(description)?;
             kept_checks(description)?;
+            // This original client notice is outside the native engine guard
+            // and before native export. Decomposition parents stay silent;
+            // each ordinary child reaches this same metadata-only boundary.
+            if let Some(warning) = super::super::filter_chose_examples(
+                validation.entity_filter.as_deref(),
+                input.prediction_rows,
+            ) {
+                asker.warn(warning);
+            }
             None
         }
     };
