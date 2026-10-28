@@ -493,15 +493,24 @@ def _convert(
             # Arrow UTF8 cannot hold these already-valid native string
             # points. Reuse the explicit FrameScalar::Text tuple without
             # changing their declared meaning or native dtype owner.
-            # Shared Rust inference still counts nulls/distinct values and
-            # decides categorical/text/key rules from the exact points.
+            # Native nunique can differ from exact Unicode equality. Keep
+            # its original initial-meaning read separate from exported points;
+            # later fresh observations must not repeat that native read.
+            declared_string_meaning: dict[str, str | bool | int] = {
+                'dtype': 'string',
+                'untyped': False,
+            }
+            if infer_objects:
+                declared_string_meaning['distinct'] = int(
+                    series.nunique(dropna=True)
+                )
             object_values = frame_objects.storage(series)
             native_types[column] = _NativeObjectType(
                 dtype,
                 series,
                 {
                     'category': False,
-                    'meaning': {'dtype': 'string', 'untyped': False},
+                    'meaning': declared_string_meaning,
                 },
             )
         arrow = False
