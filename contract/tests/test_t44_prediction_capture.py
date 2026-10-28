@@ -559,10 +559,25 @@ def test_raw_legacy_three_id_producer_keeps_nonempty_call_order(empty):
     ids = [
         value for step, value in enumerate(PLANNED_IDS, 1) if step not in empty
     ]
-    for request_id in ids:
-        capture.stepped({'step': 'call_model', 'body': 20})
+    for at, request_id in enumerate(ids):
+        capture.stepped({'step': 'call_model', 'id': at, 'body': 20})
         capture.taken(
             20, json.dumps({'metadata': {'request_id': request_id}}).encode()
+        )
+        capture.replied(
+            json.dumps(
+                {
+                    'message': 'model_reply',
+                    'id': at,
+                    'outcome': {
+                        'outcome': 'response',
+                        'status': 200,
+                        'content_type': 'application/json',
+                        'body': 1,
+                    },
+                }
+            ).encode(),
+            {1: b'{}'},
         )
     capture.done(
         {

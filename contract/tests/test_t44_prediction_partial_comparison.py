@@ -308,11 +308,29 @@ def test_legacy_capture_retains_failed_call_journal_without_predict_done():
         },
     )
     for attachment, request_id in [(10, 'a'), (11, 'b')]:
-        capture.stepped({'step': 'call_model', 'body': attachment})
+        capture.stepped(
+            {'step': 'call_model', 'id': attachment, 'body': attachment}
+        )
         capture.taken(
             attachment,
             json.dumps({'metadata': {'request_id': request_id}}).encode(),
         )
+        if request_id == 'a':
+            capture.replied(
+                json.dumps(
+                    {
+                        'message': 'model_reply',
+                        'id': attachment,
+                        'outcome': {
+                            'outcome': 'response',
+                            'status': 200,
+                            'content_type': 'application/json',
+                            'body': 1,
+                        },
+                    }
+                ).encode(),
+                {1: b'{}'},
+            )
     assert capture.predicted is None
     assert [
         item['body']['metadata']['request_id']
