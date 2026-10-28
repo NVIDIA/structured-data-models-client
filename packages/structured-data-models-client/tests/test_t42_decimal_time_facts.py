@@ -22,6 +22,58 @@ from sdm_client import Schema
 WIDTHS = [bits for bits in (32, 64, 128, 256) if hasattr(pa, f'decimal{bits}')]
 
 
+def native_time_values(bits, scale, values):
+    if all(value is not None for value in values):
+        return raw_series(bits, 3, scale, values)
+    make = getattr(pa, f'decimal{bits}')
+    # Preserve the exact native validity rather than casting a missing cell
+    # to a numeric value for the time read.
+    dtype = make(3, scale)
+    raw = b''.join(
+        (value or 0).to_bytes(bits // 8, 'little', signed=True)
+        for value in values
+    )
+    valid = bytearray((len(values) + 7) // 8)
+    for at, value in enumerate(values):
+        if value is not None:
+            valid[at // 8] |= 1 << (at % 8)
+    array = pa.Array.from_buffers(
+        dtype, len(values), [pa.py_buffer(valid), pa.py_buffer(raw)]
+    )
+    return pd.Series(pd.arrays.ArrowExtensionArray(array))
+
+
+def native_dropna_failure(bits, scale, *, missing):
+    # Independent of Schema and either SDK outcome: the original time read
+    # filters this exact input before checking lengths or boxing a scalar.
+    values = native_time_values(
+        bits, scale, [None] * 100 if missing else list(range(100))
+    )
+    try:
+        values.dropna()
+    except pa.ArrowNotImplementedError as error:
+        return ('error', type(error), str(error)), _decimal_error_graph(error)
+    return None
+
+
+def assert_native_dropna_failure(observed, expected):
+    outcome, graph = expected
+    assert observed[0] == outcome
+    assert observed[3]['error_graph'] == graph
+    assert observed[3]['warning_categories'] == [
+        'sdm_client.core.warnings.SDMWarning'
+    ]
+    assert observed[3]['events'] == [
+        'warning',
+        'mutation-complete',
+        'constructor-error',
+    ]
+    assert len(observed[1]) == 1
+    assert 'dropna' in observed[2]
+    assert 'pyarrow.lib.ChunkedArray.filter' in observed[2]
+    assert not any('Scalar.as_py' in name for name in observed[2])
+
+
 def replaced(monkeypatch, bits, scale, variant, *, core):
     frame = pd.DataFrame(
         {
@@ -67,26 +119,7 @@ def replaced(monkeypatch, bits, scale, variant, *, core):
                     frame.drop(frame.index, inplace=True)
                     frame[name] = raw_series(bits, 3, scale, [])
                 elif variant in ('null', 'null_windowed', 'sparse'):
-                    make = getattr(pa, f'decimal{bits}')
-                    # Preserve the exact native validity rather than casting
-                    # a missing cell to a numeric value for the time read.
-                    dtype = make(3, scale)
-                    raw = b''.join(
-                        (value or 0).to_bytes(bits // 8, 'little', signed=True)
-                        for value in values
-                    )
-                    valid = bytearray((len(values) + 7) // 8)
-                    for at, value in enumerate(values):
-                        if value is not None:
-                            valid[at // 8] |= 1 << (at % 8)
-                    array = pa.Array.from_buffers(
-                        dtype,
-                        len(values),
-                        [pa.py_buffer(valid), pa.py_buffer(raw)],
-                    )
-                    frame[name] = pd.Series(
-                        pd.arrays.ArrowExtensionArray(array)
-                    )
+                    frame[name] = native_time_values(bits, scale, values)
                 else:
                     frame[name] = raw_series(bits, 3, scale, values)
                 events.append('mutation-complete')
@@ -134,7 +167,12 @@ def test_frozen_native_first_boxing_happens_after_missing_key_advice(
     old = replaced(monkeypatch, bits, scale, 'ordinary', core=False)
     new = replaced(monkeypatch, bits, scale, 'ordinary', core=True)
     assert new[:2] == old[:2]
-    if abs(scale) == 129:
+    assert new[3] == old[3]
+    native_filter = native_dropna_failure(bits, scale, missing=False)
+    if native_filter is not None:
+        assert_native_dropna_failure(old, native_filter)
+        assert_native_dropna_failure(new, native_filter)
+    elif abs(scale) == 129:
         assert new[0] == (
             'error',
             InvalidOperation,
@@ -168,5 +206,14 @@ def test_first_scalar_plan_retains_skips_counts_order_and_native_constant(
     old = replaced(monkeypatch, bits, scale, variant, core=False)
     new = replaced(monkeypatch, bits, scale, variant, core=True)
     assert new[:2] == old[:2]
-    if variant in ('empty', 'null', 'null_windowed', 'load', 'birth'):
+    assert new[3] == old[3]
+    native_filter = (
+        native_dropna_failure(bits, scale, missing=True)
+        if variant in ('null', 'null_windowed')
+        else None
+    )
+    if native_filter is not None:
+        assert_native_dropna_failure(old, native_filter)
+        assert_native_dropna_failure(new, native_filter)
+    elif variant in ('empty', 'null', 'null_windowed', 'load', 'birth'):
         assert new[0][0] == 'ok'
