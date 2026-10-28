@@ -299,6 +299,120 @@ fn native_text_cells(values: &[Option<Vec<u8>>]) -> arrow_array::ArrayRef {
 }
 
 #[test]
+fn observed_string_cardinality_changes_meaning_without_changing_exact_native_rows() {
+    use arrow_array::cast::AsArray;
+    use sdm_contract::frames::FrameInference;
+    use sdm_contract::ops::{Dtype, Stype};
+
+    let values = (0..65)
+        .map(|number| Some([number.to_string().as_bytes(), &[0xed, 0xa0, 0x80]].concat()))
+        .chain([
+            None,
+            Some(vec![0xed, 0xa0, 0xbd, 0xed, 0xb8, 0xba]),
+            Some("😺".as_bytes().to_vec()),
+        ])
+        .collect::<Vec<_>>();
+    let cells = native_text_cells(&values);
+    let batch = RecordBatch::try_from_iter([("value", Arc::clone(&cells))]).unwrap();
+    for (distinct, expected) in [
+        (Some(0), Stype::Categorical),
+        (Some(1), Stype::Categorical),
+        (Some(64), Stype::Categorical),
+        (Some(65), Stype::Text),
+        (None, Stype::Text),
+    ] {
+        let mut attached = inputs();
+        attached.insert(AttachmentId(2), bytes(json!({"stage":"column_meanings","tables":[{"source":{"source":["users"]},"rows":3,"objects":[{"column":0,"name":"value","category":false,"meaning":{"dtype":"string","untyped":false,"distinct":distinct}}]}]})));
+        attached.insert(
+            AttachmentId(3),
+            Attachment::Arrow(ArrowData::new(batch.schema(), vec![batch.clone()])),
+        );
+        let run = HostRun::start(&sdm_host::default_root(), &message(), attached).unwrap();
+        let next = run.next().unwrap();
+        let ControlMessage::Step(Step::Done {
+            result: OperationResult::InferredFrames(result),
+        }) = sdm_host::read(&next).unwrap()
+        else {
+            panic!("native column meanings")
+        };
+        let Some(Attachment::Bytes(product)) = run.take_attachment(result.value).unwrap() else {
+            panic!("meaning bytes")
+        };
+        let FrameInference::ColumnMeanings(table) = serde_json::from_slice(&product).unwrap()
+        else {
+            panic!("fixed meaning")
+        };
+        assert_eq!(table.columns[0].dtype, Dtype::String);
+        assert_eq!(table.columns[0].stype, expected);
+        assert!(!table.columns[0].untyped);
+        assert!(table.primary_key.is_empty());
+        // The host-reported count selects the existing semantic threshold;
+        // exact Unicode scalar data remains separate and unchanged.
+        let text = cells
+            .as_struct()
+            .column_by_name("text")
+            .unwrap()
+            .as_binary::<i32>();
+        assert_eq!(
+            text.iter()
+                .map(|value| value.map(<[u8]>::to_vec))
+                .collect::<Vec<_>>(),
+            values
+        );
+    }
+}
+
+#[test]
+fn malformed_declared_string_facts_keep_the_existing_protocol_boundary() {
+    use sdm_contract::Sentence;
+    let valid = json!({"column":0,"name":"value","category":false,"meaning":{"dtype":"string","untyped":false,"distinct":1}});
+    for mode in [
+        "name",
+        "ordinal",
+        "negative_count",
+        "meaning",
+        "repeated",
+        "invalid_points",
+    ] {
+        let mut descriptor = valid.clone();
+        match mode {
+            "name" => descriptor["name"] = json!("absent"),
+            "ordinal" => descriptor["column"] = json!(1),
+            "negative_count" => descriptor["meaning"]["distinct"] = json!(-1),
+            "meaning" => {
+                descriptor["meaning"]["dtype"] = json!("bool");
+                descriptor["meaning"]["untyped"] = json!(true);
+            }
+            _ => {}
+        }
+        let objects = if mode == "repeated" {
+            vec![descriptor.clone(), descriptor]
+        } else {
+            vec![descriptor]
+        };
+        let cells = native_text_cells(&[Some(if mode == "invalid_points" {
+            vec![0xff]
+        } else {
+            vec![0xed, 0xa0, 0x80]
+        })]);
+        let batch = RecordBatch::try_from_iter([("value", cells)]).unwrap();
+        let mut attached = inputs();
+        attached.insert(AttachmentId(2), bytes(json!({"stage":"column_meanings","tables":[{"source":{"source":["users"]},"rows":3,"objects":objects}]})));
+        attached.insert(
+            AttachmentId(3),
+            Attachment::Arrow(ArrowData::new(batch.schema(), vec![batch])),
+        );
+        let failed = match HostRun::start(&sdm_host::default_root(), &message(), attached) {
+            Err(out) => out,
+            Ok(run) => run
+                .next()
+                .expect_err("malformed native string data must be refused"),
+        };
+        assert_eq!(error(failed).sentence, Sentence::InvalidMessage, "{mode}");
+    }
+}
+
+#[test]
 fn declared_native_text_uses_shared_schema_rules_without_losing_points_or_ordinals() {
     use arrow_array::ArrayRef;
     use sdm_contract::ops::{Dtype, SourceDescription, Stype};

@@ -156,6 +156,8 @@ Before correcting the producer, verify the original reached `nunique` result and
 Keep the exact exported points and native dtype owner separate from that observed count, and retain Rust's existing categorical threshold and key policy.
 If this existing fact is sufficient, observe it only at the original initial column-meaning position before scalar export, without repeating the read during later fresh observations.
 Boundary, malformed-descriptor and Rust-host consumers precede implementation; existing object/category and ordinary string exports, warnings, keys and native effects remain compared to the original public constructor.
+The native-only diagnostic confirmed the distinction on both pandas 2.2.3 and 3.0.6: sixty-four, sixty-five and sixty-six nonmissing numbered surrogate strings each have native cardinality one, whereas adding one null gives the full corresponding nonmissing cardinality.
+Pandas dispatches an all-string backing array to its string hash table and a backing array with a null to its object equality path; exact shared Unicode keys remain a separate representation of the preserved points.
 
 ## Connected runtime feedback
 
