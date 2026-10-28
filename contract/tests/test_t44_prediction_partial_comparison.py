@@ -31,7 +31,12 @@ def partial_observation():
     core, operations = actual_observation()
     entry = core['predictions'][0]
     failed = copy.deepcopy(entry['calls'][0])
-    failed.update(run=5, request_id='sdm-second-failed', scope=None)
+    failed.update(
+        run=5,
+        request_id='sdm-second-failed',
+        scope=None,
+        reply={'outcome': 'transport_error'},
+    )
     failed['body']['metadata']['request_id'] = failed['request_id']
 
     # This seed observes two actual independent JSON bodies. It does not
@@ -66,6 +71,7 @@ def partial_observation():
         completion='raised',
         final=None,
         failure={'run': 5, 'relation': 'selected'},
+        carried={'run': 4, 'relation': 'selected'},
     )
     entry['runs'].append(5)
     entry['calls'].append(failed)
@@ -116,6 +122,8 @@ def legacy_partial(actual):
             'run': 2,
             'body': copy.deepcopy(call['body']),
             'body_sha256': call['body_sha256'],
+            'reply': copy.deepcopy(call['reply']),
+            'model_endpoint': None,
         }
         for call in entry['calls']
     ]

@@ -189,6 +189,7 @@ def actual_observation(call_id=CALL_ID, endpoint_id='endpoint-r1'):
         'request_id': call_id,
         'input_body_sha256': hashlib.sha256(encoded).hexdigest(),
         'input_body_base64': base64.b64encode(encoded).decode('ascii'),
+        'reply': {'outcome': 'response', 'status': 200},
         'body': body,
         'body_sha256': hashlib.sha256(encoded).hexdigest(),
         'scope': scope,
@@ -250,6 +251,7 @@ def actual_observation(call_id=CALL_ID, endpoint_id='endpoint-r1'):
         'calls': [copy.deepcopy(call)],
         'results': [copy.deepcopy(final)],
         'final': 0,
+        'carried': None,
     }
     core = {
         'inputs': starts,
