@@ -811,3 +811,55 @@ def test_python_core_keeps_the_answers_when_a_call_raises(
         assert not found, f'{case_key}: ' + '; '.join(found)
 
     held(f'py-raised:{case_key}', check)
+
+
+@pytest.mark.parametrize(
+    'producer',
+    ['gathered', 'legacy', 'unrelated', 'missing-result', 'foreign-owner'],
+)
+def test_core_route_uses_only_checked_actual_prediction_evidence(producer):
+    from test_t44_prediction_observation import (
+        actual_observation,
+        legacy_observation,
+    )
+
+    core, operations = (
+        legacy_observation() if producer == 'legacy' else actual_observation()
+    )
+    if producer == 'unrelated':
+        core.pop('predictions')
+        core['predicted'] = None
+        core['inputs'] = core['inputs'][:2] + [
+            {
+                'op': 'prepare_request',
+                'run': 2,
+                'entry': None,
+                'input': {'stage': 'model', 'model': 'kumo-relational'},
+                'result': {
+                    'phase': 'model_resolved',
+                    'version': 1,
+                    'model': 'kumo-relational',
+                },
+                'error': None,
+            }
+        ]
+        operations = operations[:3]
+    elif producer == 'missing-result':
+        core['predictions'][0]['results'] = []
+    elif producer == 'foreign-owner':
+        core['inputs'][2]['entry'] = 100
+    untouched = copy.deepcopy((core, operations))
+    reader = runner()._sibling('prediction_observation')
+    if producer in ('missing-result', 'foreign-owner'):
+        with pytest.raises(reader.ObservationError):
+            reader.view(core, operations)
+    else:
+        checked = reader.view(core, operations)['operations']
+        assert checked == (
+            ['describe_source', 'materialize', 'prepare_request']
+            if producer == 'unrelated'
+            else ['describe_source', 'materialize', 'predict']
+        )
+        if producer == 'gathered':
+            assert 'predict' not in operations
+    assert (core, operations) == untouched
