@@ -173,6 +173,9 @@ def _observe(label):
         'render-error',
         'constructor-error',
         'constructor-later-table',
+        'fold-copy',
+        'fold-copy-error',
+        'fold-copy-mutation',
         'replace',
     ):
         data['buys']['part'] = pd.Series(
