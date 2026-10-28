@@ -171,9 +171,9 @@ def test_float_key_forms_thresholds_and_missing_precedence(
     def make():
         values = np.arange(rows, dtype=f'float{width}')
         values[-1] = values[-2]
-        array = pa.array(
-            values, mask=[missing] + [False] * (rows - 1), from_pandas=False
-        )
+        mask = np.zeros(rows, dtype=bool)
+        mask[0] = missing
+        array = pa.array(values, mask=mask, from_pandas=False)
         return pd.DataFrame(
             {
                 'user_id': pd.Series(pd.arrays.ArrowExtensionArray(array)),
