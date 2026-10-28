@@ -15,6 +15,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
+from test_t44_text_frames import dt3_no_time_body, p3e2_warning_codes
 from t45_frame_routes import FRAME_ROUTES
 
 from sdm_client import (
@@ -202,6 +203,25 @@ def test_graph_observes_logical_metadata_after_all_declared_casts(
     )
     schema['orders']['amount'].dtype = case['declared']
     query = PredictiveQuery('PREDICT users.age FOR EACH users.user_id', schema)
+    expected = copy.deepcopy(case['calls'])
+    request_ids = iter(
+        body['metadata']['request_id']
+        for call in expected
+        for body in call['outcome'].get('sent', [])
+    )
+    monkeypatch.setattr(
+        'sdm_client.adapters.relational._request_id', request_ids.__next__
+    )
+    if core:
+        for call in expected:
+            outcome = call['outcome']
+            if outcome['kind'] == 'success':
+                for body in [
+                    *outcome['inspection']['payloads'],
+                    *outcome['sent'],
+                ]:
+                    dt3_no_time_body(body)
+            call['warnings'] = p3e2_warning_codes(call['warnings'])
     calls = []
     with warnings.catch_warnings(record=True) as notices:
         warnings.simplefilter('always')
@@ -237,7 +257,7 @@ def test_graph_observes_logical_metadata_after_all_declared_casts(
                 }
             )
     assert changed == case['effect_reached']
-    assert calls == case['calls']
+    assert calls == expected
     # The second call uses the exact retained graph. Schema dtype mutation
     # neither replays the Decimal callbacks nor resets its actual ownership.
     assert calls[1]['trace'] == []

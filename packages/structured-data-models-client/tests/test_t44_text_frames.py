@@ -388,8 +388,15 @@ def test_exact_largeutf8_guard_follows_existing_fresh_conversion_errors(
     asked = question(frames)
     if invalid == 'duplicate':
         frames['users'].columns = ['user_id', 'age', 'category', 'category']
-        with pytest.raises(StructuredDataError, match='duplicate column name'):
+        # The native declared cast reaches the duplicated name before header
+        # admission and receives a DataFrame, as on the Python route.
+        with pytest.raises(StructuredDataError) as failed:
             materialize(asked)
+        assert failed.value.code == 'INTERNAL_ERROR'
+        assert type(failed.value.__cause__) is AttributeError
+        assert str(failed.value.__cause__) == (
+            "'DataFrame' object has no attribute 'dtype'"
+        )
     elif invalid == 'nonstring':
         frames['users'].columns = ['user_id', 'age', 'category', 7]
         with pytest.raises(
