@@ -4,7 +4,7 @@
   "files": {
     "packages/structured-data-models-client/src/sdm_client/_rust/schema.py": {
       "<module>": {
-        "fingerprint": "b29fe101355f7102a2e1097b9633f1d40c4e0c564d45554dff0c00ce0945cccc"
+        "fingerprint": "ccbe06125049775f5accd5dcfb472abb90559cac037cd5d33a1e5e1df08eaea3"
       },
       "build": {
         "fingerprint": "3f0bd92ca2685ca4e6a70c65a64e5db1d034386cd6ce725635989c6bbff8732d"
@@ -13,7 +13,7 @@
         "fingerprint": "508ac21006be52f300b68ce0ac50cfb65c45ab8ae95a20270866b9fc418f9de1"
       },
       "from_source": {
-        "fingerprint": "20e26258e82b0520a361d3a91dd2e701785919b997768744ac85d5515a6d02cc"
+        "fingerprint": "fb7f2d9e713a880cdfdad8ad22405bab80f45af30a9ef4fec0bcfe60a8438930"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py": {
