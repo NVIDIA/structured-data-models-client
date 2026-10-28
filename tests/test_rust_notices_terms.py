@@ -22,7 +22,9 @@ _SPEC = importlib.util.spec_from_file_location(
 )
 assert _SPEC is not None and _SPEC.loader is not None
 rust_notices = importlib.util.module_from_spec(_SPEC)
-_SPEC.loader.exec_module(rust_notices)
+with pytest.MonkeyPatch.context() as imports:
+    imports.syspath_prepend(str(ROOT / 'scripts/rust_core'))
+    _SPEC.loader.exec_module(rust_notices)
 
 
 @pytest.mark.parametrize(

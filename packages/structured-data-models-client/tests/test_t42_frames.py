@@ -383,18 +383,41 @@ def test_constructor_key_sequences_and_native_composite_examples(
         'categorical',
     ],
 )
-def test_unfinished_native_families_are_not_forced_through_numeric_constructor(
+def test_native_object_and_category_constructors_match_original(
     monkeypatch, family
 ):
-    from sdm_client._routing import RouteError
-
     values = {
         'object': pd.Series([1, 2], dtype=object),
         'categorical': pd.Series(['a', 'b'], dtype='category'),
     }
-    monkeypatch.setenv('SDM_CORE_ROUTES', PATHS)
-    with pytest.raises(RouteError, match='numeric and Boolean'):
-        Schema.from_data({'users': pd.DataFrame({'value': values[family]})})
+    frame = pd.DataFrame({'value': values[family]})
+    original = frame.copy(deep=True)
+    schemas = []
+    notices = []
+    for core in (False, True):
+        monkeypatch.setenv('SDM_CORE_ROUTES', PATHS if core else '')
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            schema = Schema.from_data({'users': frame})
+            snapshot = schema.snapshot()
+        for held in (schema, snapshot):
+            assert held['users'].data is frame
+            assert all(
+                c._source is None for c in held['users'].columns.values()
+            )
+        assert snapshot['users'].columns is not schema['users'].columns
+        assert snapshot['users']['value'] is not schema['users']['value']
+        pd.testing.assert_frame_equal(frame, original)
+        schemas.append((schema, snapshot))
+        notices.append(
+            [(type(item.message), str(item.message)) for item in caught]
+        )
+    for old, new in zip(schemas[0], schemas[1], strict=True):
+        assert projection(new) == projection(old)
+        assert new['users'].columns == old['users'].columns
+    assert projection(schemas[0][1]) == projection(schemas[0][0])
+    assert projection(schemas[1][1]) == projection(schemas[1][0])
+    assert notices[1] == notices[0]
 
 
 @pytest.mark.parametrize(

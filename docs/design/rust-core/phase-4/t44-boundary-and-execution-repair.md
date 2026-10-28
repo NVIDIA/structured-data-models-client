@@ -402,3 +402,13 @@ Keep the one-column Float64-to-Utf8 native-edge refusal and its exact fields, al
 The R32 Host time-facts consumer also reaches its intended nomination after the clock repair, exposing an obsolete warning reader.
 Drain the current HostRun warning channel after each reached step, assert one-shot ownership, and retain the exact missing-key notice and complete selected-time assertions.
 Do not move or duplicate production warning emission.
+
+### Full CI quality and constructor-consumer closure
+
+The actual R30 CP310 full CI exposes six enabled style diagnostics and narrow test setup assumptions after the native frame families were implemented.
+Record the consumer corrections before the equivalent production cleanup, without changing frozen observations or running this source-only companion's SDK, tests or quality tools.
+The notices test must resolve the existing sibling helper within its own import setup, the Java ratchet fake must implement the actual strict JSON-lines protocol, and the isolated gate fixture must supply the production database startup values.
+The temporal conversion spy must forward both existing conversion keywords while retaining its mutation and owned-time assertions.
+Replace only the two retired numeric-only object/category startup assertions with complete original/core constructor, warning, input-frame and snapshot comparisons.
+Then replace the three reported list concatenations, two nested conditions and one exact-built-in output-sequence conversion with equivalent expressions that preserve evaluation order and short-circuit native observations.
+The existing style-backlog gate and affected public consumers remain required after normal whole review; this source checkpoint claims no execution or acceptance evidence.
