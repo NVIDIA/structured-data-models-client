@@ -16,7 +16,18 @@ pub struct FrameColumnFacts {
     pub string: bool,
     pub arrow_decimal: bool,
     pub timestamp: bool,
-    pub inferred: Option<String>,
+    pub inferred: Option<FrameObservedContent>,
+}
+
+/// The observed scalar content, adapted after one reached native inference.
+/// None at the containing field means inference was not performed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum FrameObservedContent {
+    Text,
+    Decimal,
+    Temporal,
+    Other,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -75,7 +86,7 @@ pub struct TypedFrameSourceColumn {
 #[serde(deny_unknown_fields)]
 pub struct FrameTableColumnFacts {
     pub name: String,
-    pub arrow_large_string: bool,
+    pub declared: Option<FramePhysicalDeclaration>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

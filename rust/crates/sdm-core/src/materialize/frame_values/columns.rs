@@ -57,7 +57,10 @@ pub(super) fn table(input: FrameTableInputs) -> Result<FrameTableMeaning, CoreEr
                 "native table type facts repeat a physical source column",
             ));
         }
-        if column.arrow_large_string {
+        if let Some(declared) = &column.declared {
+            crate::frame_materialize::values::check_declaration(declared)?;
+        }
+        if column.declared == Some(FramePhysicalDeclaration::LargeUtf8) {
             return Err(crate::frame_materialize::values::unsupported_large_string(
                 &input.table.name,
                 &column.name,
@@ -69,9 +72,9 @@ pub(super) fn table(input: FrameTableInputs) -> Result<FrameTableMeaning, CoreEr
 
 pub(super) fn meaning(input: FrameColumnInputs) -> FrameColumnMeaning {
     let facts = &input.facts;
-    let text = (facts.object || facts.string) && facts.inferred.as_deref() == Some("string");
-    let decimal =
-        facts.arrow_decimal || (facts.object && facts.inferred.as_deref() == Some("decimal"));
+    let text = (facts.object || facts.string) && facts.inferred == Some(FrameObservedContent::Text);
+    let decimal = facts.arrow_decimal
+        || (facts.object && facts.inferred == Some(FrameObservedContent::Decimal));
     let declared = &input.column.dtype;
     let kind = if input.designated_time && text {
         FrameColumnKind::TextTime
@@ -85,10 +88,7 @@ pub(super) fn meaning(input: FrameColumnInputs) -> FrameColumnMeaning {
         }
     } else if facts.object
         && declared.starts_with("timestamp")
-        && matches!(
-            facts.inferred.as_deref(),
-            Some("datetime" | "datetime64" | "date")
-        )
+        && facts.inferred == Some(FrameObservedContent::Temporal)
     {
         FrameColumnKind::NativeTime
     } else if facts.timestamp
@@ -243,7 +243,7 @@ mod tests {
                 string: false,
                 arrow_decimal: false,
                 timestamp: false,
-                inferred: Some("decimal".to_owned()),
+                inferred: Some(FrameObservedContent::Decimal),
             },
         }
     }

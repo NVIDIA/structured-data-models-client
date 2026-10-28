@@ -65,15 +65,18 @@ def test_fixed_native_declarations_describe_the_original_reconstruction_type(
 
 
 @pytest.mark.parametrize(
-    'bits,precision', [(32, 9), (64, 18), (128, 38), (256, 76)]
+    'bits,precision',
+    [
+        (bits, precision)
+        for bits, precision in [(32, 9), (64, 18), (128, 38), (256, 76)]
+        if hasattr(pa, f'decimal{bits}')
+    ],
 )
 @pytest.mark.parametrize('scale', [-129, 0, 129])
 def test_decimal_declaration_does_not_use_widened_scale_zero_export(
     bits, precision, scale
 ):
-    make = getattr(pa, f'decimal{bits}', None)
-    if make is None:
-        pytest.skip('this native runtime has no narrow Decimal constructor')
+    make = getattr(pa, f'decimal{bits}')
     dtype = pd.ArrowDtype(make(precision, scale))
     assert native_declaration(dtype) == {
         'declaration': 'decimal',
@@ -188,7 +191,7 @@ def test_fixed_large_utf8_native_message_and_cause_are_presented_at_table_admiss
     assert raised.value.code == expected['code']
     assert str(raised.value) == expected['message']
     assert type(raised.value.__cause__) is RuntimeError
-    prefix = 'the relational engine failed while building this request: RuntimeError: '
+    prefix = f'[{expected["code"]}] the relational engine failed while building this request: RuntimeError: '
     assert expected['message'].startswith(prefix)
     assert str(raised.value.__cause__) == expected['message'][len(prefix) :]
     assert reached == []

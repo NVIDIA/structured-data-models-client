@@ -84,3 +84,16 @@ fn observed_content_is_closed_and_does_not_accept_native_inference_labels() {
         assert!(serde_json::from_value::<FrameObservedContent>(json!(name)).is_err());
     }
 }
+
+#[test]
+fn logical_text_alternatives_reject_unknown_or_mixed_storage_vocabulary() {
+    use sdm_contract::frames::materialize::FrameLogicalText;
+    for malformed in [
+        json!({"backing":"python","missing":"null_scalar"}),
+        json!({"backing":"offset_utf8","missing":"pandas_na"}),
+        json!({"backing":"element_values","missing":"null_scalar","storage":"extra"}),
+        json!({"backing":"element_values"}),
+    ] {
+        assert!(serde_json::from_value::<FrameLogicalText>(malformed).is_err());
+    }
+}

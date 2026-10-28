@@ -852,11 +852,21 @@ def error_from_core(
             details['diagnostic'] = fields['diagnostic']
     native_graph_cause = (
         sentence == 'frame_native_internal'
-        and fields.get('native_cause_kind') == 'runtime_error'
+        and fields.get('native_declaration_reason') == 'fixed_large_utf8'
     )
     if native_graph_cause:
-        # This exact builtin cause is selected by the shared core's native
-        # dtype rule. No native object or caller display is evaluated here.
+        # Rust selected this original fixed declaration and its location.
+        # The native dtype spelling and Python recipe belong to this host's
+        # reached presentation, independently of the shared outer wording.
+        column, table_name = fields['column'], fields['table']
+        fields['native_type'] = 'RuntimeError'
+        fields['native_cause_message'] = (
+            "Encountered unsupported data type 'large_string[pyarrow]' for "
+            f"column '{column}' in table '{table_name}'. Please either cast "
+            'the column to a supported type before building the table '
+            f"(for example df['{column}'] = df['{column}'].astype('int64')) "
+            'or remove the column from this table.'
+        )
         with holding(
             frame_native_message=lambda observed: observed[
                 'native_cause_message'

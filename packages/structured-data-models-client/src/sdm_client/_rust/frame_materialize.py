@@ -16,6 +16,7 @@ import pandas as pd
 from sdm_client._routing import RouteError
 from sdm_client._rust import codec
 from sdm_client._rust.frame_decimals import native_decimal_type
+from sdm_client._rust.frame_facts import native_source_facts
 from sdm_client._rust.frames import _convert
 
 
@@ -86,7 +87,6 @@ def native_inputs(
             series = time_feature(held, column, frame.iloc[:, ordinal], state)
             dtype = series.dtype
             encoding = None
-            origin: str | dict[str, dict[str, str]]
             object_text = pd.api.types.is_object_dtype(
                 dtype
             ) and pd.api.types.infer_dtype(series, skipna=True) in (
@@ -104,7 +104,6 @@ def native_inputs(
                 ):
                     encoding = None
                 category_arrays[column] = series.array
-                origin = 'builtin_primitive'
             elif (
                 object_text
                 or type(dtype) is pd.StringDtype
@@ -116,18 +115,6 @@ def native_inputs(
             ):
                 values, encoding = NativeColumn(series).arrow()
                 array = values.column(0)
-                origin = (
-                    'builtin_primitive'
-                    if object_text
-                    else {
-                        'pandas_string': {
-                            'storage': dtype.storage,
-                            'missing': 'pandas_na'
-                            if dtype.na_value is pd.NA
-                            else 'floating_nan',
-                        }
-                    }
-                )
             else:
                 values, converted_types = _convert(
                     name,
@@ -137,11 +124,6 @@ def native_inputs(
                 )
                 array = values.column(0)
                 types.update(converted_types)
-                origin = (
-                    'arrow_dtype'
-                    if type(dtype) is pd.ArrowDtype
-                    else 'builtin_primitive'
-                )
                 if pa.types.is_string(array.type) or pa.types.is_large_string(
                     array.type
                 ):
@@ -149,7 +131,11 @@ def native_inputs(
             arrays.append(array)
             types[column] = dtype
             origins.append(
-                {'name': column, 'origin': origin, 'strings': encoding}
+                {
+                    'name': column,
+                    **native_source_facts(dtype),
+                    'strings': encoding,
+                }
             )
         source = held['source']
         source_name = codec.relation_name(source)
