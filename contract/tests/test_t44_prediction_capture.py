@@ -114,6 +114,7 @@ def test_entry_forwards_opaque_owners_without_observation(
     monkeypatch.setattr(relational_predict, 'predict', predict)
     original_native = run.native
     original_presentation = errors.error_from_core
+    original_carried = run._carried
     boundary = RUNNER._Boundary()
     capture = boundary.reset()
     try:
@@ -144,9 +145,10 @@ def test_entry_forwards_opaque_owners_without_observation(
     assert run.native is original_native
     assert relational_predict.predict is predict
     assert errors.error_from_core is original_presentation
+    assert run._carried is original_carried
 
 
-def test_close_restores_three_hooks_in_lifo_order_and_keeps_external_wrapper(
+def test_close_restores_four_hooks_in_lifo_order_and_keeps_external_wrapper(
     monkeypatch,
 ):
     from sdm_client._rust import errors, relational_predict, run
@@ -154,6 +156,7 @@ def test_close_restores_three_hooks_in_lifo_order_and_keeps_external_wrapper(
     original_native = run.native
     original_predict = relational_predict.predict
     original_presentation = errors.error_from_core
+    original_carried = run._carried
 
     def external_native():
         return original_native()
@@ -164,30 +167,39 @@ def test_close_restores_three_hooks_in_lifo_order_and_keeps_external_wrapper(
     def external_presentation(*args, **kwargs):
         return original_presentation(*args, **kwargs)
 
+    def external_carried(*args, **kwargs):
+        return original_carried(*args, **kwargs)
+
     monkeypatch.setattr(run, 'native', external_native)
     monkeypatch.setattr(relational_predict, 'predict', external_predict)
     monkeypatch.setattr(errors, 'error_from_core', external_presentation)
+    monkeypatch.setattr(run, '_carried', external_carried)
     outer = RUNNER._Boundary()
     outer_native, outer_predict = run.native, relational_predict.predict
     outer_presentation = errors.error_from_core
+    outer_carried = run._carried
     inner = RUNNER._Boundary()
     inner_native, inner_predict = run.native, relational_predict.predict
     inner_presentation = errors.error_from_core
+    inner_carried = run._carried
     try:
         with pytest.raises(RUNNER.RunnerFailure, match='LIFO|order|active'):
             outer.close()
         assert run.native is inner_native
         assert relational_predict.predict is inner_predict
         assert errors.error_from_core is inner_presentation
+        assert run._carried is inner_carried
     finally:
         inner.close()
         assert run.native is outer_native
         assert relational_predict.predict is outer_predict
         assert errors.error_from_core is outer_presentation
+        assert run._carried is outer_carried
         outer.close()
     assert run.native is external_native
     assert relational_predict.predict is external_predict
     assert errors.error_from_core is external_presentation
+    assert run._carried is external_carried
 
 
 def test_two_boundary_lifetimes_and_case_resets_do_not_accumulate_entries(
@@ -203,6 +215,7 @@ def test_two_boundary_lifetimes_and_case_resets_do_not_accumulate_entries(
     monkeypatch.setattr(relational_predict, 'predict', predict)
     original_native = run.native
     original_presentation = errors.error_from_core
+    original_carried = run._carried
     for _ in range(2):
         boundary = RUNNER._Boundary()
         try:
@@ -232,6 +245,7 @@ def test_two_boundary_lifetimes_and_case_resets_do_not_accumulate_entries(
         assert run.native is original_native
         assert relational_predict.predict is predict
         assert errors.error_from_core is original_presentation
+        assert run._carried is original_carried
 
 
 def test_reset_during_entry_is_rejected_without_splitting_its_owner(
@@ -251,6 +265,7 @@ def test_reset_during_entry_is_rejected_without_splitting_its_owner(
         assert run.native is holder['native']
         assert relational_predict.predict is holder['predict']
         assert errors.error_from_core is holder['presentation']
+        assert run._carried is holder['carried']
         return returned
 
     monkeypatch.setattr(relational_predict, 'predict', predict)
@@ -260,6 +275,7 @@ def test_reset_during_entry_is_rejected_without_splitting_its_owner(
         native=run.native,
         predict=relational_predict.predict,
         presentation=errors.error_from_core,
+        carried=run._carried,
     )
     try:
         assert (
@@ -562,6 +578,7 @@ def error_entry(monkeypatch, predict, *, converter=None):
         monkeypatch.setattr(errors, 'error_from_core', converter)
     original_native = run.native
     original_presentation = errors.error_from_core
+    original_carried = run._carried
     boundary = RUNNER._Boundary()
     captured = boundary.reset()
     error = None
@@ -578,6 +595,7 @@ def error_entry(monkeypatch, predict, *, converter=None):
     assert run.native is original_native
     assert relational_predict.predict is predict
     assert errors.error_from_core is original_presentation
+    assert run._carried is original_carried
     [entry] = entries(captured)
     assert entry['completion'] == (
         'raised' if error is not None else 'returned'
@@ -806,3 +824,262 @@ def test_nested_refusal_keeps_its_actual_child_run_and_outer_error_identity(
     assert capture.error == lookup['error']
     assert BaseException.__getattribute__(selected, '__cause__') is None
     assert BaseException.__getattribute__(selected, '__context__') is None
+
+
+class NoHandoverReads(UnformattedFailure):
+    @property
+    def details(self):
+        raise AssertionError(
+            'observer repeated the no-op handover details read'
+        )
+
+
+@pytest.mark.parametrize('later_success', [False, True])
+def test_noop_refused_handover_selects_exact_native_owner(
+    monkeypatch, later_success
+):
+    from sdm_client import StructuredDataError
+    from sdm_client._rust import run
+    from sdm_client._rust.prepare import _call
+
+    retained = NoHandoverReads('original transport owner')
+    selected = []
+    actual_carried = run._carried
+    handovers = []
+
+    def carried(error, raised):
+        assert raised is retained
+        result = actual_carried(error, raised)
+        handovers.append((error, raised))
+        return result
+
+    monkeypatch.setattr(run, '_carried', carried)
+
+    def predict(*args):
+        try:
+            _call({'stage': 'model_lookup', 'position': None})
+        except StructuredDataError as refused:
+            selected.append(refused)
+        run._carried(selected[0], retained)
+        if later_success:
+            assert 'kumo-relational' in _call({'stage': 'model_catalogue'})
+        raise retained
+
+    capture, entry, error, _ = error_entry(monkeypatch, predict)
+    assert error is retained
+    assert len(handovers) == 1
+    assert handovers[0][0] is selected[0]
+    assert handovers[0][1] is retained
+    assert BaseException.__getattribute__(error, '__cause__') is None
+    assert BaseException.__getattribute__(error, '__context__') is None
+    assert BaseException.__getattribute__(error, '__dict__') == {}
+    [lookup] = lookup_errors(capture)
+    assert capture.error == lookup['error']
+    assert entry['failure'] == {'run': lookup['run'], 'relation': 'refused'}
+
+
+def test_failed_refused_handover_does_not_pair_its_raised_owner(monkeypatch):
+    from sdm_client import StructuredDataError
+    from sdm_client._rust import run
+    from sdm_client._rust.prepare import _call
+
+    target = NoHandoverReads('unselected replacement')
+    retained = UnformattedFailure('handover failed')
+    attempted = []
+
+    def carried(error, raised):
+        attempted.append((error, raised))
+        raise retained
+
+    monkeypatch.setattr(run, '_carried', carried)
+
+    def predict(*args):
+        selected = None
+        try:
+            _call({'stage': 'model_lookup', 'position': None})
+        except StructuredDataError as refused:
+            selected = refused
+        run._carried(selected, target)
+        raise AssertionError('failed handover returned')
+
+    capture, entry, error, _ = error_entry(monkeypatch, predict)
+    assert error is retained
+    assert len(attempted) == 1 and attempted[0][1] is target
+    assert lookup_errors(capture)
+    assert capture.error is None
+    assert entry.get('failure') is None
+
+
+def test_later_part_presentation_failure_is_not_the_refused_target(monkeypatch):
+    from sdm_client import StructuredDataError
+    from sdm_client._rust import run
+    from sdm_client._rust.prepare import _call
+
+    target = NoHandoverReads('successfully handed over')
+    retained = UnformattedFailure('later part presentation failed')
+    observed = []
+
+    def of_the_part(error, raised):
+        observed.append((error, raised))
+        raise retained
+
+    monkeypatch.setattr(run, '_of_the_part', of_the_part)
+
+    def predict(*args):
+        selected = None
+        try:
+            _call({'stage': 'model_lookup', 'position': None})
+        except StructuredDataError as refused:
+            selected = refused
+        run._carried(selected, target)
+        try:
+            raise target
+        except ValueError:
+            run._of_the_part(selected, target)
+
+    capture, entry, error, _ = error_entry(monkeypatch, predict)
+    assert error is retained
+    assert len(observed) == 1 and observed[0][1] is target
+    assert BaseException.__getattribute__(error, '__context__') is target
+    assert BaseException.__getattribute__(error, '__cause__') is None
+    assert lookup_errors(capture)
+    assert capture.error is None
+    assert entry.get('failure') is None
+
+
+def test_handover_without_a_captured_native_error_cannot_infer_core_failure(
+    monkeypatch,
+):
+    from sdm_client import StructuredDataError
+    from sdm_client._rust import run
+    from sdm_client._rust.prepare import _call
+
+    retained = NoHandoverReads('no selected native refusal')
+    unassociated = StructuredDataError(
+        'not reconstructed here', code='UNKNOWN_MODEL'
+    )
+
+    def predict(*args):
+        assert 'kumo-relational' in _call({'stage': 'model_catalogue'})
+        run._carried(unassociated, retained)
+        raise retained
+
+    capture, entry, error, _ = error_entry(monkeypatch, predict)
+    assert error is retained
+    assert all(record['error'] is None for record in capture.inputs)
+    assert capture.error is None
+    assert entry.get('failure') is None
+
+
+def test_stale_handover_pair_does_not_cross_prediction_entries(monkeypatch):
+    from sdm_client import StructuredDataError
+    from sdm_client._rust import relational_predict, run
+    from sdm_client._rust.prepare import _call
+
+    retained = NoHandoverReads('same owner in two entries')
+    selected = []
+
+    def predict(client, request, model, outputs):
+        if model == 'first':
+            try:
+                _call({'stage': 'model_lookup', 'position': None})
+            except StructuredDataError as refused:
+                selected.append(refused)
+        run._carried(selected[0], retained)
+        raise retained
+
+    monkeypatch.setattr(relational_predict, 'predict', predict)
+    boundary = RUNNER._Boundary()
+    capture = boundary.reset()
+    try:
+        with pytest.raises(ValueError) as first:
+            relational_predict.predict(None, None, 'first', None)
+        assert first.value is retained
+        first_failure = dict(entries(capture)[0]['failure'])
+        assert first_failure['relation'] == 'refused'
+        assert capture.error is not None
+        with pytest.raises(ValueError) as second:
+            relational_predict.predict(None, None, 'second', None)
+        assert second.value is retained
+        first_entry, second_entry = entries(capture)
+        assert first_entry['failure'] == first_failure
+        assert second_entry['runs'] == []
+        assert second_entry.get('failure') is None
+        assert capture.error is None
+    finally:
+        boundary.close()
+
+
+@pytest.mark.parametrize(
+    'fail_call', [0, 1], ids=['first-call', 'after-paid-step']
+)
+def test_forecast_endpoint_refusal_preserves_public_failure_and_paid_answers(
+    monkeypatch, fail_call
+):
+    from sdm_client import NimRequestError
+
+    plain = _ask(monkeypatch, (), capture=False, fail_call=fail_call)
+    captured = _ask(monkeypatch, (), capture=True, fail_call=fail_call)
+    public = []
+    partials = []
+    for observed in (plain, captured):
+        error = observed['error']
+        assert isinstance(error, NimRequestError)
+        assert len(observed['handovers']) == 1
+        reconstructed, replacement = observed['handovers'][0]
+        assert error is not reconstructed
+        owners = []
+        current = error
+        while current is not None and not any(
+            current is owner for owner in owners
+        ):
+            owners.append(current)
+            current = BaseException.__getattribute__(current, '__cause__')
+        assert any(owner is replacement for owner in owners)
+        details = dict(error.details or {})
+        partial = details.pop('answered', None)
+        partials.append(partial)
+        public.append(
+            {
+                'type': type(error),
+                'status': error.status_code,
+                'code': error.code,
+                'message': str(error),
+                'details': details,
+            }
+        )
+        assert observed['received'] == PLANNED_IDS[: fail_call + 1]
+        assert [
+            value['input']['request_id'] for value in observed['started']
+        ] == observed['received']
+    assert public[0] == public[1]
+    if fail_call:
+        assert public[0]['details']['parts_answered'] == 1
+        assert partials[0] is not None and partials[1] is not None
+        assert len(partials[0].items) == len(partials[1].items) == 2
+        assert partials[0].model == partials[1].model
+        assert partials[0].request_id == partials[1].request_id
+        assert partials[0].outputs == partials[1].outputs
+        assert partials[0].items == partials[1].items
+        assert partials[0].metadata == partials[1].metadata
+        assert partials[0].explanation == partials[1].explanation
+        assert partials[0].to_pandas().equals(partials[1].to_pandas())
+    else:
+        assert partials == [None, None]
+    capture = captured['capture']
+    [entry] = entries(capture)
+    assert entry['completion'] == 'raised'
+    assert entry['failure']['relation'] == 'refused'
+    failed = [
+        record
+        for record in capture.inputs
+        if record['op'] == 'prepare_request'
+        and record['input']['stage'] == 'call_relational'
+        and record['error'] is not None
+    ]
+    assert len(failed) == 1
+    assert entry['failure']['run'] == failed[0]['run']
+    assert capture.error == failed[0]['error']
+    assert [call['request_id'] for call in entry['calls']] == captured[
+        'received'
+    ]
