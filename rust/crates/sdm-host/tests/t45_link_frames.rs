@@ -614,3 +614,111 @@ fn plain_arrow_link_materializes_and_predicts_as_the_frozen_client() {
         }
     }
 }
+
+#[test]
+fn constructed_key_facts_and_native_null_admission_are_closed_host_products() {
+    let mut stages = FrameStages {
+        held: inputs("composite-history", false),
+    };
+    let Attachment::Bytes(schema) = &stages.held[&AttachmentId(1)] else {
+        panic!("schema")
+    };
+    let schema: Value = serde_json::from_slice(schema).unwrap();
+    let table = schema["tables"][2].clone();
+    let native = [
+        ("buy_id", "int64"),
+        ("user_id", "int64"),
+        ("item_id", "int64"),
+        ("ts", "timestamp"),
+        ("part", "int64"),
+    ]
+    .into_iter()
+    .map(|(name, kind)| {
+        let physical = if kind == "timestamp" {
+            json!({"type":"timestamp","unit":"us","zone":null})
+        } else {
+            json!({"type":kind})
+        };
+        json!({"name":name,"declared":null,"values":{"storage":"typed","physical":physical}})
+    })
+    .collect::<Vec<_>>();
+    let PreparedFrameValue::TableMeaning(typed) = stages.stage(json!({"stage":"table_meaning","input":{"table":table,"native":native,"row_count":120}})).unwrap() else { panic!("table meaning") };
+    let PreparedFrameValue::KeyMeaning(key) = stages
+        .stage(json!({"stage":"table_key","table":typed,"primary_key":["buy_id","part"]}))
+        .unwrap()
+    else {
+        panic!("key meaning")
+    };
+    let definition = key.composite.unwrap();
+    assert_eq!(definition.derived, "__kumo_key_6275795f6964_70617274");
+    assert_eq!(
+        definition
+            .columns
+            .iter()
+            .map(|column| column.name.as_str())
+            .collect::<Vec<_>>(),
+        ["buy_id", "part"]
+    );
+    let no_null = stages.stage(json!({"stage":"key_nulls","input":{"definition":definition,"column":"buy_id","missing":false}})).unwrap();
+    assert!(matches!(no_null, PreparedFrameValue::KeyNulls(_)));
+    let refused = stages.stage(json!({"stage":"key_nulls","input":{"definition":definition,"column":"part","missing":true}})).unwrap_err();
+    assert_eq!(refused["error"]["code"], "INVALID_REQUEST");
+    assert_eq!(
+        refused["error"]["fields"]["native_key_reason"],
+        "component_null"
+    );
+    let mut forged = serde_json::to_value(&definition).unwrap();
+    forged["derived"] = json!("not-the-selected-name");
+    let refused = stages.stage(json!({"stage":"key_nulls","input":{"definition":forged,"column":"part","missing":false}})).unwrap_err();
+    assert_eq!(refused["error"]["code"], "INVALID_MESSAGE");
+}
+
+#[test]
+fn native_row_identity_manifest_is_not_a_scalar_topology_or_cache_alias() {
+    let mut input = inputs("composite-history", false);
+    // The observed strings need not equal a standard rendering: actual native
+    // replace/map/add operations are authoritative source observations.
+    let identity: Vec<String> = (0..120).map(|row| format!("observed-{row}")).collect();
+    input.insert(
+        AttachmentId(11),
+        arrow(
+            vec![(
+                "identity",
+                Arc::new(arrow_array::StringArray::from(identity)),
+            )],
+            false,
+        ),
+    );
+    let Attachment::Bytes(manifest) = input.get_mut(&AttachmentId(7)).unwrap() else {
+        panic!("manifest")
+    };
+    let mut manifest_value: Value = serde_json::from_slice(manifest).unwrap();
+    manifest_value["row_identities"] = json!([{
+        "definition":{"table":"buys","source":{"source":["buys"]},"columns":[{"name":"buy_id","dtype":"int"},{"name":"part","dtype":"int"}],"derived":"__kumo_key_6275795f6964_70617274","rows":120,"codec":"escaped_text_v1"},
+        "values":{"values":11,"encoding":"utf8"}
+    }]);
+    *manifest = serde_json::to_vec(&manifest_value).unwrap();
+    let start = message(
+        json!({"op":"materialize","provider":{"provider":"frames","manifest":7},"schema":1,"query":2,"indices":3,"seed":"0x7","values":5,"options":[],"anchor_time":{"t":"ts","unit":"ns","v":"1677628800000000000"}}),
+    );
+    let run = HostRun::start(&sdm_host::default_root(), &start, input).unwrap();
+    loop {
+        let outgoing = run
+            .next()
+            .unwrap_or_else(|error| panic!("{:?}", decoded(&error)));
+        match sdm_host::read(&outgoing).unwrap() {
+            ControlMessage::Step(Step::Done {
+                result: OperationResult::Materialize(value),
+            }) => {
+                assert!(value.query.is_some());
+                assert!(run.take_attachment(value.state.payload).unwrap().is_some());
+                break;
+            }
+            ControlMessage::Warnings { .. } => {}
+            ControlMessage::Step(Step::Warnings) => {
+                let _ = run.take_warnings().unwrap();
+            }
+            other => panic!("unexpected native identity host effect: {other:?}"),
+        }
+    }
+}
