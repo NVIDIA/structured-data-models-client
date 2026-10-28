@@ -21,7 +21,7 @@ from sdm_client._rust.frames import _convert, _native_dtype
 def native_string_options():
     # Match the successful frozen Unicode journeys. With inferred strings,
     # pandas 3 can choose Arrow while the old date hint casts to str, which
-    # rejects these points before either constructor is being compared.
+    # rejects these points before a successful schema can be compared.
     with pd.option_context('future.infer_string', False):
         yield
 
@@ -54,6 +54,54 @@ def test_declared_string_constructor_keeps_schema_validity_and_native_owner(
     assert new['rows']['value'].dtype == 'string'
     assert not new['rows']['value'].untyped
     pd.testing.assert_frame_equal(frame, original)
+
+
+def test_inferred_arrow_date_hint_keeps_the_original_native_outcome(
+    monkeypatch,
+):
+    frame = pd.DataFrame(
+        {
+            'before': range(4),
+            'value': pd.Series(
+                ['\ud800', None, 'ordinary', '😺'],
+                dtype=pd.StringDtype(storage='python'),
+            ),
+            'after': range(4),
+        }
+    )
+    outcomes = []
+    for core in (False, True):
+        monkeypatch.setenv('SDM_CORE_ROUTES', PATHS if core else '')
+        with (
+            pd.option_context(
+                'future.infer_string', True, 'mode.string_storage', 'pyarrow'
+            ),
+            warnings.catch_warnings(record=True) as caught,
+        ):
+            warnings.simplefilter('always')
+            try:
+                schema = Schema.from_data({'rows': frame})
+            except UnicodeEncodeError as error:
+                outcome = (
+                    'native encoding error',
+                    error.encoding,
+                    error.object,
+                    error.start,
+                    error.end,
+                    error.reason,
+                )
+            else:
+                outcome = ('schema', projection(schema))
+            outcomes.append(
+                (
+                    outcome,
+                    [
+                        (type(item.message), str(item.message))
+                        for item in caught
+                    ],
+                )
+            )
+    assert outcomes[1] == outcomes[0]
 
 
 @pytest.mark.parametrize('variant', ['unique', 'repeat', 'null'])
