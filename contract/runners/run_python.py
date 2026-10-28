@@ -983,6 +983,14 @@ class _Capture:
         self._entries.append(ordinal)
         return ordinal
 
+    def _within(self, run: int, parent: int) -> bool:
+        entry = self._runs[run].entry
+        while entry is not None:
+            if entry == parent:
+                return True
+            entry = self.predictions[entry]['parent']
+        return False
+
     def leave_prediction(
         self, ordinal: int, error: BaseException | None
     ) -> None:
@@ -1014,7 +1022,7 @@ class _Capture:
                         (
                             run
                             for owner, run in self._presented
-                            if owner is selected and run in entry['runs']
+                            if owner is selected and self._within(run, ordinal)
                         ),
                         None,
                     )
@@ -1022,8 +1030,9 @@ class _Capture:
                         run = next(
                             (
                                 at
-                                for at in entry['runs']
-                                if self._runs[at].error_owner is selected
+                                for at in self._runs
+                                if self._within(at, ordinal)
+                                and self._runs[at].error_owner is selected
                             ),
                             None,
                         )
@@ -1039,13 +1048,17 @@ class _Capture:
                     selected = BaseException.__cause__.__get__(selected)
         finally:
             self._entries.pop()
-            self._presented = [
-                (owner, run)
-                for owner, run in self._presented
-                if run not in entry['runs']
-            ]
-            for run in entry['runs']:
-                self._runs[run].error_owner = None
+            if not self._entries:
+                # Child identities remain useful for an exact outer rethrow.
+                # No exception owner survives the completed outer observation.
+                self._presented = [
+                    (owner, run)
+                    for owner, run in self._presented
+                    if not self._within(run, ordinal)
+                ]
+                for run, owner in self._runs.items():
+                    if self._within(run, ordinal):
+                        owner.error_owner = None
 
     def presented(
         self, result: BaseException, internal: BaseException | None

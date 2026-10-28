@@ -246,9 +246,15 @@
                     }
                   }
                 }
-              }
+              },
+              {"$ref": "#/$defs/preparationObservation"}
             ]
           }
+        },
+        "predictions": {
+          "description": "Actual gathered Python prediction invocations, their independently observed native Runs/calls/results and exact presentation relationships; never synthetic Predict operations or public-result reconstruction.",
+          "type": "array",
+          "items": {"$ref": "#/$defs/predictionEntry"}
         },
         "fetches": {
           "type": "array",
@@ -281,7 +287,7 @@
           "additionalProperties": false,
           "required": ["body", "model", "request_id", "metadata", "result"],
           "properties": {
-            "body": {"type": "object"},
+            "body": {"type": ["object", "null"]},
             "calls": {"description": "Where predict made more than one call (a forecast's steps, a request asked in several calls), every call's body in the order sent, body the last's (T2.1g); absent for one call.", "type": "array", "minItems": 2, "items": {"type": "object"}},
             "model": {"type": "string"},
             "request_id": {"type": "string"},
@@ -350,6 +356,372 @@
     }
   },
   "$defs": {
+    "predictionCoreError": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "code"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "pattern": "^[a-z_]+$"
+        },
+        "code": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$"
+        }
+      }
+    },
+    "preparationObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "op",
+        "run",
+        "entry",
+        "input",
+        "result",
+        "error"
+      ],
+      "properties": {
+        "op": {
+          "const": "prepare_request"
+        },
+        "run": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "entry": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "input": {
+          "type": "object",
+          "required": [
+            "stage"
+          ],
+          "properties": {
+            "stage": {
+              "type": "string"
+            }
+          }
+        },
+        "result": {},
+        "error": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/predictionCoreError"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "predictionResponseScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "call_request_id",
+        "model",
+        "request_id",
+        "response_rows"
+      ],
+      "properties": {
+        "version": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "call_request_id": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "request_id": {
+          "type": "string"
+        },
+        "response_rows": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "predictionCallObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run",
+        "request_id",
+        "input_body_sha256",
+        "body",
+        "body_sha256",
+        "scope"
+      ],
+      "properties": {
+        "run": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "input_body_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "body": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "body_sha256": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/sha256"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/predictionResponseScope"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "predictionResultObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run",
+        "input",
+        "data",
+        "metadata",
+        "result"
+      ],
+      "properties": {
+        "run": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "input": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "input"
+          ],
+          "properties": {
+            "stage": {
+              "const": "finish_relational_response"
+            },
+            "input": {
+              "type": "object"
+            }
+          }
+        },
+        "data": {
+          "type": "object",
+          "required": [
+            "predicted",
+            "lineage",
+            "answer_details"
+          ],
+          "properties": {
+            "predicted": {
+              "type": "object"
+            },
+            "lineage": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "call_request_id",
+                  "answer_ordinal",
+                  "source_row"
+                ],
+                "properties": {
+                  "call_request_id": {
+                    "type": "string"
+                  },
+                  "answer_ordinal": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "source_row": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            "answer_details": {
+              "type": "object"
+            }
+          }
+        },
+        "metadata": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "result": {
+          "type": [
+            "object",
+            "null"
+          ]
+        }
+      }
+    },
+    "predictionEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ordinal",
+        "parent",
+        "argument",
+        "completion",
+        "runs",
+        "calls",
+        "results",
+        "final"
+      ],
+      "properties": {
+        "ordinal": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "parent": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "argument": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "form"
+              ],
+              "properties": {
+                "form": {
+                  "const": "unobserved"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "form",
+                "value"
+              ],
+              "properties": {
+                "form": {
+                  "const": "exact_string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              }
+            }
+          ]
+        },
+        "completion": {
+          "enum": [
+            "returned",
+            "raised"
+          ]
+        },
+        "runs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "calls": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/predictionCallObservation"
+          }
+        },
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/predictionResultObservation"
+          }
+        },
+        "final": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "failure": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "run",
+            "relation"
+          ],
+          "properties": {
+            "run": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "relation": {
+              "enum": [
+                "selected",
+                "cause"
+              ]
+            }
+          }
+        }
+      }
+    },
     "key": {
       "description": "The case a line is of, and the database or warehouse leg it ran on (design choice 2, T2.0f; Phase 3 design choice 1): a DuckDB line is keyed by the bare case ID (case.schema.json's id), a SQLite or Postgres line by <case>@sqlite or <case>@postgres, and a warehouse leg's by <case>@<leg> (databricks-sql, databricks-spark, snowflake, lakebase). Observations, reference lines, captures and baselines use the same keys.",
       "type": "string",
@@ -459,7 +831,7 @@
           "type": ["boolean", "null"]
         },
         "operations": {
-          "description": "The HostRun operations the case started, in order.",
+          "description": "The actual HostRun operations the case started, in order. An observed gathered prediction entry is recorded separately and never adds a synthetic operation.",
           "type": "array",
           "items": {"type": "string", "pattern": "^[a-z_]+$"}
         },
