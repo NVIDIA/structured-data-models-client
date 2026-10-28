@@ -507,3 +507,9 @@ New positive and tampered consumers cover independent input/body/scope IDs, equa
 All tests precede the bounded harness implementation.
 No product wire, transport, model rule, package, parser, fallback or comparison waiver belongs in this correction.
 Fresh independent whole CODE approvals precede any successor candidate execution.
+
+Terminal prediction error attribution must not reuse the last observed native failure after recovery or treat incidental exception context as causality.
+Observe the existing error_from_core return boundary transparently, pairing only a successfully reconstructed exception owner with its exact already observed internal CoreError and Run.
+Record no presentation pair if reconstruction itself raises a native failure.
+At entry completion, exact selected identity or an explicit builtin cause-chain relationship can retain that native association; ordinary context links remain incidental, and the actual outer public failure stays independently observed.
+Use builtin exception descriptors with cycle protection rather than user attribute access or formatting, release ephemeral exception owners at entry completion, and restore this presentation observer with the other harness hooks in the same LIFO lifetime.
