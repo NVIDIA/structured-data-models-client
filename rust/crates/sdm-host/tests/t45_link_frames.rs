@@ -337,6 +337,7 @@ fn rebind_frame_product(value: &mut PreparedFrameValue, keep: &mut impl FnMut(&m
             keep(&mut value.owner);
         }
         PreparedFrameValue::LabelBatch(value) => keep(&mut value.owner),
+        PreparedFrameValue::LabelGroups(value) => keep(&mut value.owner),
         PreparedFrameValue::Labels(value) => labels(value, keep),
         PreparedFrameValue::Task(value) => task(value, keep),
         PreparedFrameValue::Plan(value) => plan(value, keep),
@@ -358,6 +359,107 @@ fn rebind_frame_product(value: &mut PreparedFrameValue, keep: &mut impl FnMut(&m
         PreparedFrameValue::Part(value) => keep(&mut value.payload),
         other => panic!("unexpected frame fixture product: {other:?}"),
     }
+}
+
+#[test]
+fn native_label_completion_binds_complete_pre_mask_groups_and_uses_actual_values() {
+    use arrow_array::ListArray;
+    use arrow_array::builder::{Int64Builder, ListBuilder};
+    let mut stages = FrameStages {
+        held: inputs("ordinary", false),
+    };
+    stages.held.insert(
+        AttachmentId(20),
+        bytes(json!({"num_context_samples":3,"num_neighbors":[3,3]})),
+    );
+    let native = [("users", vec!["user_id", "age"]), ("items", vec!["item_id", "amount"]), ("buys", vec!["buy_id", "user_id", "item_id", "ts"])].map(|(name, columns)| json!({"source":{"source":[name]},"columns":columns.into_iter().map(|column| json!({"name":column,"declared":null,"logical_text":null,"strings":null})).collect::<Vec<_>>()}));
+    let PreparedFrameValue::Graph(graph) = stages.stage(json!({"stage":"graph","schema":1,"frames":7,"checkpoint":null,"retained":null,"native_tables":native,"values":5,"options":[],"prediction_rows":2,"limits":{}})).unwrap() else { panic!("graph") };
+    let PreparedFrameValue::Population(population) = stages.stage(json!({"stage":"population","graph":graph,"query":2,"values":20,"seed":"0x7","entropy":7,"anchor_time":{"t":"ts","unit":"ns","v":"1677628800000000000"},"anchor_entity":false,"num_context_samples":null,"limits":{}})).unwrap() else { panic!("population") };
+    let PreparedFrameValue::LabelGroups(groups) = stages.stage(json!({"stage":"label_groups","population":population,"range":{"start":0,"stop":population.rows.min(u64::from(population.batch_rows))},"previous":null,"converted":{"kind":"core_keys","values":null}})).unwrap() else { panic!("groups") };
+    assert!(
+        serde_json::to_value(&groups)
+            .unwrap()
+            .get("complete")
+            .is_none()
+    );
+    let Attachment::FrameLabelGroups(owner) = &stages.held[&groups.owner] else {
+        panic!("actual group owner")
+    };
+    let rows = owner.rows().unwrap().batches[0].clone();
+    assert!(rows.num_rows() > 3);
+    let original = rows.column(2).as_any().downcast_ref::<ListArray>().unwrap();
+    let mut builder = ListBuilder::new(Int64Builder::new());
+    for _ in 0..rows.num_rows() {
+        builder.values().append_value(3);
+        builder.append(true);
+    }
+    let changed = RecordBatch::try_from_iter([
+        ("entity", rows.column(0).clone()),
+        ("anchor", rows.column(1).clone()),
+        ("target", Arc::new(builder.finish()) as ArrayRef),
+    ])
+    .unwrap();
+    assert_ne!(original.to_data(), changed.column(2).to_data());
+    stages.held.insert(
+        AttachmentId(40_000),
+        Attachment::Arrow(ArrowData::new(changed.schema(), vec![changed.clone()])),
+    );
+    let complete = |groups: &sdm_contract::frames::materialize::PreparedFrameLabelGroups, rows| json!({"stage":"complete_label_batch","population":population,"groups":groups,"restored":{"rows":rows,"encoding":null}});
+    for malformed in [0, 1, 2, 3] {
+        let mut bad = groups.clone();
+        let mut altered = changed.clone();
+        match malformed {
+            0 => bad.population.push_str("-foreign"),
+            1 => bad.range.stop -= 1,
+            2 => altered = altered.slice(0, altered.num_rows() - 1),
+            _ => {
+                altered = RecordBatch::try_from_iter([
+                    ("entity", ints(std::iter::repeat_n(999, altered.num_rows()))),
+                    ("anchor", altered.column(1).clone()),
+                    ("target", altered.column(2).clone()),
+                ])
+                .unwrap();
+            }
+        }
+        stages.held.insert(
+            AttachmentId(40_001),
+            Attachment::Arrow(ArrowData::new(altered.schema(), vec![altered])),
+        );
+        let error = stages
+            .stage(complete(&bad, 40_001))
+            .expect_err("foreign, partial or misaligned native results accepted");
+        assert_eq!(error["error"]["code"], "INVALID_MESSAGE");
+    }
+    let PreparedFrameValue::LabelBatch(batch) = stages.stage(complete(&groups, 40_000)).unwrap()
+    else {
+        panic!("completed batch")
+    };
+    assert!(batch.complete);
+    let PreparedFrameValue::Labels(labels) = stages
+        .stage(json!({"stage":"labels","population":population,"batches":[batch]}))
+        .unwrap()
+    else {
+        panic!("labels")
+    };
+    let Attachment::Arrow(context) = &stages.held[&labels.context.unwrap()] else {
+        panic!("actual completed context")
+    };
+    let target = context.batches[0].column(2).as_list::<i32>();
+    assert_eq!(target.len(), 3);
+    for row in 0..target.len() {
+        assert_eq!(
+            target
+                .value(row)
+                .as_primitive::<arrow_array::types::Int64Type>()
+                .values()
+                .as_ref(),
+            &[3]
+        );
+    }
+    let error = stages
+        .stage(json!({"stage":"labels","population":population,"batches":[batch,batch]}))
+        .expect_err("same completed rows counted twice");
+    assert_eq!(error["error"]["code"], "INVALID_MESSAGE");
 }
 
 #[test]
