@@ -550,3 +550,43 @@ Keep public terminal errors, complete partial answers, call order and existing p
 
 Independent serving-envelope, ordering/token/ID/hash tampering, pre-call refusal, outside-entry owner collection and paid-partial comparison consumers must precede the bounded implementation.
 Keep frozen observations and R34 untouched, update all closed observation readers together, and obtain two fresh whole CODE approvals before successor SDK execution.
+
+
+### Exact carry, delivery and shared-event ownership
+
+Both R35 whole reports require changes before any candidate validation.
+Keep R35 frozen and retain every completed native result independently of whether a later SDK carry actually occurs.
+Observe the existing successful relational_predict._present return as an exact built-in result/details tuple, binding only its result identity to the known native Run through exact internal Finished and runner-owned Handle storage.
+Traverse only known nested capture handles, stopping at unrelated wrappers without calling attribute protocols.
+Observe the existing successful _carry return to associate that exact result owner and actual error owner.
+At entry completion select only exact terminal identity or a built-in explicit cause path to that error, with latest applicable carry first and actual nested ancestry.
+The closed carried-result observation names the already checked result Run and selected/cause relation; it contains no public object identifier or answer reconstruction.
+Only this actual carry relation may supply answered, while native output-shape, absence and forecast-explanation failures retain internal results with no inferred carry.
+Restore both additional hooks with the existing hooks and release all result/error owners at the enclosing outer entry completion.
+
+A taken CallModel body is an attempt, and an observed host ModelReply remains distinct from an independently received endpoint request.
+Record each actual model reply before forwarding, independently of fetch recording, and bind it to the exact outstanding CallModel ID, Run and taken body.
+Retain response plus actual status, failed plus actual status where present, transport_error, and genuinely unobserved reply as separate closed alternatives.
+Do not derive these facts from an exception code, silently overwrite a repeated reply, or treat an interrupted callback as a reported transport failure.
+A successful typed response scope requires its actual response observation.
+A pre-call refusal has no taken body or reply.
+The controlled endpoint comparison must consume every actual receipt in order, matching actual body and posted hash, while allowing zero receipts where physical receipt is not established and requiring a receipt for each reported response.
+Identical retry bytes may repeat, and identical adjacent attempts must admit a finite allocation satisfying all response obligations without greedy starvation or an invented individual retry attribution.
+Keep every attempted call and every independent public receipt count/order observation.
+Reuse the existing pre-send ValueError and actual serving retry controls before implementation.
+
+Expose one checked prediction event at each actual common logical operation position.
+Gathered entries retain their own typed calls, observed results, actual selected final result, error association and proved carried result.
+Legacy Predict observations must retain each actual Run's native start, Done/error and taken result/metadata/carried products instead of leaving only the latest global snapshot.
+Initialize per-Run result, error, answered and explanation independently, including native start and reply failures, and append each reached legacy completion once through the existing observer boundary.
+A missing historical product remains explicitly unobserved, and a sole historical successful snapshot may describe only its sole actual Predict.
+Map events from actual Run/entry ownership rather than equating input count with operation count.
+Apply the existing body, row, model, response-ID, metadata and output comparisons to exactly those events within a proven shared prefix.
+Compare additional result aggregation, scope and lineage only where both actual producers observed them, and leave longer-only events outside the earlier-stop comparison.
+Replay remains model-only and never consumes observed answers.
+
+At a proved serving payload boundary, apply the existing E35 request-ID value rule to its nested logical request while retaining presence, type and all other values.
+Keep actual posted bodies and hashes unchanged, use no new exclusion, and never erase or regenerate request_json to manufacture equality.
+Add independent-ID captured/uncaptured serving controls and absent/retyped ID and unrelated nested-value negatives.
+Add source-first true-carry, completed-but-not-carried, failed/stale/nested owner, every reply alternative, pre-send/retry, malformed/reordered receipt and shared-prefix body/Arrow/metadata/output controls.
+The successor needs two fresh independent whole CODE approvals before any SDK execution, with no package or Phase completion claim from these source steps.
