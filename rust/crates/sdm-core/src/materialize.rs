@@ -5022,6 +5022,23 @@ fn key_scalar(array: &dyn Array, row: usize) -> Scalar {
 mod tests {
 
     #[test]
+    fn list_distinct_reader_keeps_unsigned_values_without_widening_other_targets() {
+        use arrow_array::UInt64Array;
+        let values: ArrayRef = Arc::new(UInt64Array::from(vec![Some(1), None, Some(u64::MAX)]));
+        assert_eq!(
+            list_distinct_column(&values, &[2, 0, 1], None).unwrap(),
+            labels::Column::UInt(vec![Some(u64::MAX), Some(1), None])
+        );
+        assert_eq!(
+            static_column(&values, &[0, 1], None).unwrap(),
+            labels::Column::Int(vec![Some(1), None])
+        );
+        assert!(static_column(&values, &[2], None).is_err());
+        let times: ArrayRef = Arc::new(TimestampNanosecondArray::from(vec![1]));
+        assert!(list_distinct_column(&times, &[0], None).is_err());
+    }
+
+    #[test]
     fn filter_notice_is_one_shared_value_for_nonempty_scored_entities_only() {
         let warning = filter_chose_examples(Some("users.user_id = 1"), 2).unwrap();
         assert_eq!(warning.sentence, Sentence::FilterChoseExamples);

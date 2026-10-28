@@ -61,6 +61,80 @@ fn labelled_link_rows_preserve_typed_order_duplicates_and_decimal_scale() {
 }
 
 #[test]
+fn unsigned_link_labels_roundtrip_batch_extend_and_narrow_without_changing_digits() {
+    use arrow_array::{Array, Int64Array};
+    use sdm_engine::labels::{Labels, LinkValue};
+    let values = [
+        0,
+        (1_u64 << 53) - 1,
+        1_u64 << 53,
+        (1_u64 << 53) + 1,
+        i64::MAX as u64,
+        (i64::MAX as u64) + 1,
+        u64::MAX,
+    ];
+    let mut labels = Labels::Lists(vec![
+        values[..3].iter().copied().map(LinkValue::UInt).collect(),
+        vec![],
+    ]);
+    labels
+        .extend(&Labels::Lists(vec![
+            values[3..].iter().copied().map(LinkValue::UInt).collect(),
+        ]))
+        .unwrap();
+    let keys: ArrayRef = Arc::new(Int64Array::from(vec![1, 2, 3]));
+    let rows = labelled_rows(&keys, &[10, 20, 30], &labels).unwrap();
+    let target = rows.column(2).as_list::<i32>();
+    assert_eq!(target.values().data_type(), &DataType::UInt64);
+    assert_eq!(target.values().null_count(), 0);
+    assert_eq!(
+        target
+            .values()
+            .as_primitive::<UInt64Type>()
+            .values()
+            .as_ref(),
+        values
+    );
+    let context = read_labels(&rows, None).unwrap();
+    assert_eq!(context.labels, labels);
+    let narrowed = context.narrow(Some(2));
+    let again = labelled_rows(&narrowed.keys, &narrowed.anchors, &narrowed.labels).unwrap();
+    assert_eq!(
+        read_labels(&again, None).unwrap().labels,
+        labels.clone().truncated(2)
+    );
+    let empty: ArrayRef = Arc::new(Int64Array::from(Vec::<i64>::new()));
+    let rows = labelled_rows(&empty, &[], &Labels::Lists(vec![])).unwrap();
+    assert_eq!(
+        read_labels(&rows, None).unwrap().labels,
+        Labels::Lists(vec![])
+    );
+}
+
+#[test]
+fn unsigned_native_lists_reject_mixed_family_and_missing_child_evidence() {
+    use arrow_array::types::UInt64Type;
+    use arrow_array::{Int64Array, ListArray};
+    use sdm_engine::labels::{Labels, LinkValue};
+    let keys: ArrayRef = Arc::new(Int64Array::from(vec![1]));
+    assert!(
+        labelled_rows(
+            &keys,
+            &[10],
+            &Labels::Lists(vec![vec![LinkValue::UInt(1), LinkValue::Int(1)]])
+        )
+        .is_err()
+    );
+    let forged: ArrayRef = Arc::new(ListArray::from_iter_primitive::<UInt64Type, _, _>([Some(
+        vec![Some(u64::MAX), None],
+    )]));
+    assert_eq!(
+        read_link_labels(&forged, None).unwrap_err().sentence,
+        Sentence::InvalidMessage
+    );
+}
+
+#[test]
 fn neutral_casing_facts_select_only_supported_mathematical_maps() {
     for (database, version) in [
         ("13.0.0", UnicodeDataVersion::V13_0),

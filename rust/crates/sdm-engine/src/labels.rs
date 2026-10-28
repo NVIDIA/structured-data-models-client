@@ -2044,3 +2044,116 @@ mod native_text_tests {
         );
     }
 }
+
+#[cfg(test)]
+mod unsigned_link_tests {
+    use super::*;
+
+    #[test]
+    fn unsigned_distinct_retains_all_boundaries_and_first_occurrence_per_batch() {
+        let boundaries = [
+            0,
+            (1_u64 << 53) - 1,
+            1_u64 << 53,
+            (1_u64 << 53) + 1,
+            i64::MAX as u64,
+            (i64::MAX as u64) + 1,
+            u64::MAX,
+        ];
+        let mut values = boundaries.iter().copied().map(Some).collect::<Vec<_>>();
+        values.extend([
+            Some(boundaries[2]),
+            None,
+            Some(7),
+            Some(8),
+            Some(9),
+            Some(10),
+        ]);
+        let batch = [0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0];
+        let times = [
+            Some(1),
+            Some(1),
+            Some(1),
+            Some(1),
+            Some(1),
+            Some(1),
+            Some(1),
+            Some(1),
+            Some(1),
+            Some(1),
+            None,
+            Some(0),
+            Some(3),
+        ];
+        let kept = [
+            true, true, true, true, true, true, true, true, true, false, true, true, true,
+        ];
+        let result = distinct(
+            2,
+            &batch,
+            &Column::UInt(values),
+            &times,
+            Bounds {
+                starts: Some(&[0, 0]),
+                ends: &[2, 2],
+            },
+            Some(&kept),
+        )
+        .unwrap();
+        assert_eq!(result.mask, [true, true]);
+        assert_eq!(
+            result.labels,
+            Labels::Lists(vec![
+                vec![
+                    LinkValue::UInt(boundaries[0]),
+                    LinkValue::UInt(boundaries[2]),
+                    LinkValue::UInt(boundaries[4]),
+                    LinkValue::UInt(boundaries[6])
+                ],
+                vec![
+                    LinkValue::UInt(boundaries[1]),
+                    LinkValue::UInt(boundaries[3]),
+                    LinkValue::UInt(boundaries[5])
+                ],
+            ])
+        );
+    }
+
+    #[test]
+    fn unsigned_null_empty_groups_and_scalar_time_guards_keep_their_previous_policy() {
+        for (values, batch, times) in [
+            (vec![], vec![], vec![]),
+            (vec![None], vec![0], vec![Some(1)]),
+        ] {
+            let result = distinct(
+                1,
+                &batch,
+                &Column::UInt(values),
+                &times,
+                Bounds {
+                    starts: None,
+                    ends: &[2],
+                },
+                None,
+            )
+            .unwrap();
+            assert_eq!(result.mask, [false]);
+            assert_eq!(result.labels, Labels::Lists(vec![]));
+        }
+        assert!(label(&Target::Column(Column::UInt(vec![Some(1)]))).is_err());
+        assert!(
+            distinct(
+                1,
+                &[0],
+                &Column::Time(vec![Some(1)]),
+                &[Some(1)],
+                Bounds {
+                    starts: None,
+                    ends: &[2]
+                },
+                None
+            )
+            .is_err()
+        );
+    }
+}
