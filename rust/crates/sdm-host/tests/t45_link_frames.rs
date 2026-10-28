@@ -688,7 +688,14 @@ fn constructed_key_facts_and_native_null_admission_are_closed_host_products() {
         json!({"name":name,"declared":null,"values":{"storage":"typed","physical":physical}})
     })
     .collect::<Vec<_>>();
-    let PreparedFrameValue::TableMeaning(typed) = stages.stage(json!({"stage":"table_meaning","input":{"table":table,"native":native,"row_count":120}})).unwrap() else { panic!("table meaning") };
+    let PreparedFrameValue::TableMeaning(typed) = stages
+        .stage(
+            json!({"stage":"table_meaning","input":{"table":table,"native":native,"empty":false}}),
+        )
+        .unwrap()
+    else {
+        panic!("table meaning")
+    };
     let PreparedFrameValue::KeyMeaning(key) = stages
         .stage(json!({"stage":"table_key","table":typed,"primary_key":["buy_id","part"]}))
         .unwrap()
@@ -740,7 +747,7 @@ fn native_row_identity_manifest_is_not_a_scalar_topology_or_cache_alias() {
     };
     let mut manifest_value: Value = serde_json::from_slice(manifest).unwrap();
     manifest_value["row_identities"] = json!([{
-        "definition":{"table":"buys","source":{"source":["buys"]},"columns":[{"name":"buy_id","dtype":"int"},{"name":"part","dtype":"int"}],"derived":"__kumo_key_6275795f6964_70617274","rows":120,"codec":"escaped_text_v1"},
+        "definition":{"table":"buys","source":{"source":["buys"]},"columns":[{"name":"buy_id","dtype":"int"},{"name":"part","dtype":"int"}],"derived":"__kumo_key_6275795f6964_70617274","codec":"escaped_text_v1"},
         "values":{"values":11,"encoding":"utf8"}
     }]);
     *manifest = serde_json::to_vec(&manifest_value).unwrap();
@@ -939,4 +946,30 @@ fn compound_checkpoint_actual_identity_tampering_fails_before_a_draw_or_payload(
         }
     };
     assert_eq!(decoded(&error)["error"]["code"], "INVALID_MESSAGE");
+}
+
+#[test]
+fn raw_compound_source_empty_refuses_before_key_folding_and_snapshot_publication() {
+    let mut attached = inputs("composite-history", false);
+    let Attachment::Arrow(data) = &attached[&AttachmentId(10)] else {
+        panic!("history source")
+    };
+    let empty = data.batches[0].slice(0, 0);
+    attached.insert(
+        AttachmentId(10),
+        Attachment::Arrow(ArrowData::new(empty.schema(), vec![empty])),
+    );
+    let start = message(
+        json!({"op":"materialize","provider":{"provider":"frames","manifest":7},"schema":1,"query":2,"indices":3,"seed":"0x7","values":5,"options":[],"anchor_time":{"t":"ts","unit":"ns","v":"1677628800000000000"}}),
+    );
+    let run = HostRun::start(&sdm_host::default_root(), &start, attached).unwrap();
+    let error =
+        compound_terminal(&run).expect_err("empty physical table has no native constructor");
+    assert_eq!(
+        decoded(&error)["error"]["fields"]["native_key_reason"],
+        json!({"t":"utf8","v":"empty_frame"})
+    );
+    if let Some(state) = run.take_sampler_state().unwrap() {
+        assert!(decoded(&state)["state"]["frame_checkpoint"].is_null());
+    }
 }
