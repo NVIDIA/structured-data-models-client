@@ -80,13 +80,13 @@ fn prepare(input: Value, mut attachments: Attachments) -> (Value, Attachments, V
 }
 
 fn record(child: u64, parent: Option<u64>, intersects: Option<bool>) -> Value {
-    json!({"relationship":[{"table":"child","column":"fk"},{"table":"parent","column":"id"}],"evidence":{"observation":"distinct","child":child,"parent":parent,"intersects":intersects}})
+    json!({"observation":"distinct","relationship":[{"table":"child","column":"fk"},{"table":"parent","column":"id"}],"child":child,"parent":parent,"intersects":intersects})
 }
 
 #[test]
 fn overlap_is_ordered_aggregate_policy_without_graph_or_sampler() {
     let records = json!([
-        {"relationship":[{"table":"missing","column":"fk"},{"table":"parent","column":"id"}],"evidence":{"observation":"unavailable"}},
+        {"observation":"unavailable"},
         record(0,None,None), record(1,Some(0),None), record(1,Some(1),Some(true)),
         record(2,Some(3),Some(false)), record(2,Some(3),Some(false))
     ]);

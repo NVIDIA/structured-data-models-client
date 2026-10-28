@@ -91,3 +91,41 @@ def test_selected_relationship_rendering_errors_are_not_formatter_defects():
     schema.relationships = [NativeLink()]
     with pytest.raises(ValueError, match='native relationship render failed'):
         _relationship_overlap(schema)
+
+
+def test_later_relationship_native_failure_prevents_earlier_disjoint_notice():
+    for core in [False, True]:
+        schema = Tables(child=SimpleNamespace(data=pd.DataFrame({'fk': [1], 'later': [2]})),
+                        parent=SimpleNamespace(data=pd.DataFrame({'id': [3]})))
+        schema.relationships = [Relationship('child', 'fk', 'parent', 'id'),
+                                Relationship('child', 'later', 'parent', 'id')]
+        unique = pd.Series.unique
+        def native_unique(series):
+            if series.name == 'later':
+                raise ValueError('later equality failed')
+            return unique(series)
+        with patch.object(pd.Series, 'unique', native_unique), warnings.catch_warnings(record=True) as seen:
+            warnings.simplefilter('always')
+            with pytest.raises(ValueError, match='later equality failed'):
+                if core:
+                    _relationship_overlap(schema)
+                else:
+                    _warn_of_relationships_that_join_nothing(schema)
+        assert not seen
+
+
+@pytest.mark.parametrize('missing', ['table', 'column', 'data'])
+def test_unavailable_relationship_values_remain_silent(missing):
+    schema = Tables(child=SimpleNamespace(data=pd.DataFrame({'fk': [1]})),
+                    parent=SimpleNamespace(data=pd.DataFrame({'id': [2]})))
+    schema.relationships = [Relationship('child', 'fk', 'parent', 'id')]
+    if missing == 'table':
+        del schema['parent']
+    elif missing == 'column':
+        schema['parent'].data = pd.DataFrame({'other': [2]})
+    else:
+        schema['parent'].data = None
+    with warnings.catch_warnings(record=True) as seen:
+        warnings.simplefilter('always')
+        _relationship_overlap(schema)
+    assert not seen

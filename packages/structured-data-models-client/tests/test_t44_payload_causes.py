@@ -15,10 +15,10 @@ from sdm_client._rust import errors
 @pytest.mark.parametrize('part', [None, 'part_forecast_step'])
 def test_only_reached_frame_payload_range_has_native_nested_causes(marked, part):
     fields = {
-        'table': {'t': 'str', 'v': 'buys'},
-        'column': {'t': 'str', 'v': 'part'},
+        'table': {'t': 'utf8', 'v': 'buys'},
+        'column': {'t': 'utf8', 'v': 'part'},
         'row': {'t': 'u64', 'v': '0'},
-        'dtype': {'t': 'str', 'v': 'int64'},
+        'dtype': {'t': 'utf8', 'v': 'int64'},
         'forecast_step': {'t': 'u32', 'v': '2'},
         'forecast_steps': {'t': 'u32', 'v': '3'},
     }

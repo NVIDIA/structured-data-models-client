@@ -986,3 +986,16 @@ fn a_constructed_string_does_not_hide_nonfinite_relational_cells() {
         assert_eq!(error.sentence,sdm_contract::Sentence::NotFinite);
     }
 }
+
+#[test]
+fn constructed_string_entity_keys_do_not_take_missing_integer_reference_promotion() {
+    let mut sample=shop();
+    sample.tables[0].batch=vec![0,1,1,3,4];
+    sample.tables[0].columns[0].1=SampledColumn::DeclaredStrings(Arc::new(UInt64Array::from(vec![0,1,u64::MAX,3,4])));
+    let payload=built(&sample);
+    assert_eq!(payload["schema"]["instance_table"]["columns"]["__kumo_entity_ref_0"]["dtype"],"string");
+    let predict=&payload["predict"]["instance_table"];
+    let position=predict["columns"].as_array().unwrap().iter().position(|value|value=="__kumo_entity_ref_0").unwrap();
+    assert_eq!(predict["rows"][0][position],"3");
+    assert_eq!(payload["context"]["instance_table"]["rows"][2][position],Value::Null);
+}
