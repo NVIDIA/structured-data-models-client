@@ -316,6 +316,15 @@
         "FramePreparation/source_meaning.schema": {
           "$ref": "#/$defs/HeldSchema"
         },
+        "FramePreparation/caller_meaning.schema": {
+          "$ref": "#/$defs/HeldSchema"
+        },
+        "FramePreparation/relationship_overlap.observations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FrameRelationshipEvidence"
+          }
+        },
         "FramePreparation/question.schema": {
           "$ref": "#/$defs/HeldSchema"
         },
@@ -502,6 +511,8 @@
         "PrepareFrames.input",
         "PreparedFrames.value",
         "FramePreparation/source_meaning.schema",
+        "FramePreparation/caller_meaning.schema",
+        "FramePreparation/relationship_overlap.observations",
         "FramePreparation/question.schema",
         "FramePreparation/question.query",
         "FramePreparation/graph.schema",
@@ -9537,6 +9548,23 @@
         {
           "type": "object",
           "properties": {
+            "schema": {
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "stage": {
+              "type": "string",
+              "const": "caller_meaning"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "schema"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
             "input": {
               "$ref": "#/$defs/FrameTableInputs"
             },
@@ -12923,6 +12951,23 @@
           "properties": {
             "value": {
               "type": "string",
+              "const": "caller_meaning"
+            },
+            "data": {
+              "$ref": "#/$defs/FrameCallerMeaning"
+            }
+          },
+          "required": [
+            "value",
+            "data"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "string",
               "const": "table_meaning"
             },
             "data": {
@@ -13271,6 +13316,315 @@
       "additionalProperties": false,
       "required": [
         "schema"
+      ]
+    },
+    "FrameCallerMeaning": {
+      "description": "Completed caller metadata after reached key marking, including a later\nselected consistency refusal. Marks remain observable on failure.",
+      "type": "object",
+      "properties": {
+        "schema": {
+          "$ref": "#/$defs/HeldSchema"
+        },
+        "diagnostic": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CoreError"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "schema"
+      ]
+    },
+    "CoreError": {
+      "description": "An error the core reports.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/ErrorKind"
+        },
+        "code": {
+          "description": "Stable across releases and languages.",
+          "$ref": "#/$defs/ErrorCode"
+        },
+        "sentence": {
+          "description": "What the error says, of [`ErrorCode`]'s sentences: the template each\nhost fills, read only for wording (T3.17).",
+          "$ref": "#/$defs/Sentence"
+        },
+        "part": {
+          "description": "Where the error happened in a question asked in parts (a forecast's\nstep, a ranking's candidate), a sentence of [`Code::Part`] said after\nthe error's own; none for any other error (T3.17 fix 2).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Sentence"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "message": {
+          "description": "For a person to read; not promised, and never holding an input value.",
+          "type": "string"
+        },
+        "fields": {
+          "description": "What callers branch on, by name.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/Detail"
+          }
+        },
+        "public_details": {
+          "description": "When native compatibility requires its exact public details, keep\npresentation-only fields separate from what callers branch on.\nAbsence preserves the existing shared error details convention.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/Detail"
+          }
+        },
+        "cause": {
+          "description": "The error this one was raised from.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CoreError"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "retryable": {
+          "description": "Whether the same call may succeed if tried again; carried from\nprovider and transport errors, false otherwise.",
+          "type": "boolean",
+          "default": false
+        },
+        "drop_held": {
+          "description": "The states the host handed this run that it must drop rather than\nhand back again: the core refused them, so a later run given them\nwould be refused the same way (decision E74). The host follows this\nalone, never reading which field an error names; empty for any\nother error.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/HeldState"
+          }
+        },
+        "answered": {
+          "description": "What a request asked in several model calls had been answered when\na later call failed (design choice 1, `main`'s answered parts,\nT2.8c): the error keeps what was paid for, so the rest can be asked\nagain. Absent for any other error.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AnsweredParts"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "code",
+        "sentence",
+        "message"
+      ]
+    },
+    "ErrorKind": {
+      "description": "What kind of problem an error is.",
+      "oneOf": [
+        {
+          "description": "The caller's request is not one the core accepts.",
+          "type": "string",
+          "const": "invalid_request"
+        },
+        {
+          "description": "A valid request the core does not support, such as a type outside\nthe closed set.",
+          "type": "string",
+          "const": "unsupported"
+        },
+        {
+          "description": "Something the request names does not exist.",
+          "type": "string",
+          "const": "not_found"
+        },
+        {
+          "description": "The data source or its driver failed.",
+          "type": "string",
+          "const": "data_source"
+        },
+        {
+          "description": "The model endpoint or its transport failed.",
+          "type": "string",
+          "const": "model_endpoint"
+        },
+        {
+          "description": "The run was cancelled.",
+          "type": "string",
+          "const": "cancelled"
+        },
+        {
+          "description": "The host broke the run protocol: a call in the wrong state, a reply\nthe run did not ask for, a malformed control message.",
+          "type": "string",
+          "const": "protocol"
+        },
+        {
+          "description": "A defect in the core, a contained panic included.",
+          "type": "string",
+          "const": "internal"
+        }
+      ]
+    },
+    "ErrorCode": {
+      "description": "The codes the core gives: one closed list, so each host's mapping\nmatches every code with no catch-all arm (decision H6). Host and core\nship together, so the list is exhaustive; a new code is a contract\nversion bump. PQL's own diagnostic codes stay strings inside\n`PqlDiagnostic`.",
+      "oneOf": [
+        {
+          "description": "The caller's request is not one the core accepts.",
+          "type": "string",
+          "const": "INVALID_REQUEST"
+        },
+        {
+          "description": "A valid request this core does not support.",
+          "type": "string",
+          "const": "UNSUPPORTED_REQUEST"
+        },
+        {
+          "description": "The model endpoint answered with something the core cannot read.",
+          "type": "string",
+          "const": "INVALID_RESPONSE"
+        },
+        {
+          "description": "The host's configuration of a run is not one the core accepts.",
+          "type": "string",
+          "const": "INVALID_CONFIGURATION"
+        },
+        {
+          "description": "The transport to the model endpoint failed: it could not reach the\nendpoint, or could not read its answer.",
+          "type": "string",
+          "const": "TRANSPORT_ERROR"
+        },
+        {
+          "description": "A defect in the core, a contained panic included.",
+          "type": "string",
+          "const": "INTERNAL_ERROR"
+        },
+        {
+          "description": "The model a request names does not exist.",
+          "type": "string",
+          "const": "UNKNOWN_MODEL"
+        },
+        {
+          "description": "An optional dependency of the host is not installed.",
+          "type": "string",
+          "const": "MISSING_EXTRA"
+        },
+        {
+          "description": "A schema the core cannot work with.",
+          "type": "string",
+          "const": "INVALID_SCHEMA"
+        },
+        {
+          "description": "The endpoint does not support sessions.",
+          "type": "string",
+          "const": "SESSIONS_UNSUPPORTED"
+        },
+        {
+          "description": "An Arrow type outside the closed set.",
+          "type": "string",
+          "const": "UNSUPPORTED_TYPE"
+        },
+        {
+          "description": "A value the admitted type of its column cannot hold, such as a `timestamp[s]` past the microseconds an int64 counts.",
+          "type": "string",
+          "const": "VALUE_OUT_OF_RANGE"
+        },
+        {
+          "description": "A provider answered with a schema other than the one asked for.",
+          "type": "string",
+          "const": "PROVIDER_SCHEMA_MISMATCH"
+        },
+        {
+          "description": "A provider's query failed.",
+          "type": "string",
+          "const": "PROVIDER_ERROR"
+        },
+        {
+          "description": "A reply for an id the run is not waiting on: unknown, stale or already answered.",
+          "type": "string",
+          "const": "UNKNOWN_REPLY"
+        },
+        {
+          "description": "`next` was called before every reply the run asked for arrived.",
+          "type": "string",
+          "const": "REPLY_MISSING"
+        },
+        {
+          "description": "A reply of the wrong kind: a model answer for a fetch, or the other way round.",
+          "type": "string",
+          "const": "WRONG_REPLY"
+        },
+        {
+          "description": "The run was used after it finished.",
+          "type": "string",
+          "const": "RUN_FINISHED"
+        },
+        {
+          "description": "The run was used after it was cancelled.",
+          "type": "string",
+          "const": "RUN_CANCELLED"
+        },
+        {
+          "description": "The run was used after a panic poisoned it.",
+          "type": "string",
+          "const": "RUN_POISONED"
+        },
+        {
+          "description": "A second call reached a run while one was in progress.",
+          "type": "string",
+          "const": "RUN_BUSY"
+        },
+        {
+          "description": "A control message the contract cannot read, larger than the control cap, of the wrong direction, or whose attachments do not match the ids it names.",
+          "type": "string",
+          "const": "INVALID_MESSAGE"
+        },
+        {
+          "description": "A model serving endpoint refused the request, with an HTTP status and\nperhaps a code of its own (contract v28, T3.27): the host raises its\nendpoint-refusal error with the status ([`REFUSED_STATUS`]) and the\ncode ([`REFUSED_CODE`], none where there is none), as the old client\nraises `NimRequestError(status, code=...)`, the error's other fields\nits details.",
+          "type": "string",
+          "const": "ENDPOINT_REFUSED"
+        }
+      ]
+    },
+    "HeldState": {
+      "description": "A state a host holds between runs and hands back to the core with a\nlater run's start, opaque to it.",
+      "oneOf": [
+        {
+          "description": "The sampler state a materializer's last run left\n(`Materialize.sampler_state`, decision E52).",
+          "type": "string",
+          "const": "sampler_state"
+        }
+      ]
+    },
+    "AnsweredParts": {
+      "description": "The answers a failed request had received ([`CoreError::answered`]).",
+      "type": "object",
+      "properties": {
+        "result": {
+          "description": "An Arrow attachment of the answers received, laid out as\n`Predicted.result`, travelling with the error.",
+          "$ref": "#/$defs/AttachmentId"
+        },
+        "rows": {
+          "description": "The rows those answers score (`main`'s `rows_answered`).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "result",
+        "rows"
       ]
     },
     "TypedFrameSourceColumn": {
@@ -13680,6 +14034,66 @@
         "identity",
         "value",
         "wire"
+      ]
+    },
+    "FrameRelationshipEvidence": {
+      "description": "Reached native overlap observations, in the actual live relationship order.\nUnavailable guards do not observe future endpoint attributes.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "observation": {
+              "type": "string",
+              "const": "unavailable"
+            }
+          },
+          "required": [
+            "observation"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "relationship": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ColumnRef"
+              },
+              "minItems": 2,
+              "maxItems": 2
+            },
+            "child": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "parent": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "intersects": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "observation": {
+              "type": "string",
+              "const": "distinct"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "observation",
+            "relationship",
+            "child"
+          ]
+        }
       ]
     },
     "CallValues": {
@@ -16391,51 +16805,6 @@
         "retryable"
       ]
     },
-    "ErrorKind": {
-      "description": "What kind of problem an error is.",
-      "oneOf": [
-        {
-          "description": "The caller's request is not one the core accepts.",
-          "type": "string",
-          "const": "invalid_request"
-        },
-        {
-          "description": "A valid request the core does not support, such as a type outside\nthe closed set.",
-          "type": "string",
-          "const": "unsupported"
-        },
-        {
-          "description": "Something the request names does not exist.",
-          "type": "string",
-          "const": "not_found"
-        },
-        {
-          "description": "The data source or its driver failed.",
-          "type": "string",
-          "const": "data_source"
-        },
-        {
-          "description": "The model endpoint or its transport failed.",
-          "type": "string",
-          "const": "model_endpoint"
-        },
-        {
-          "description": "The run was cancelled.",
-          "type": "string",
-          "const": "cancelled"
-        },
-        {
-          "description": "The host broke the run protocol: a call in the wrong state, a reply\nthe run did not ask for, a malformed control message.",
-          "type": "string",
-          "const": "protocol"
-        },
-        {
-          "description": "A defect in the core, a contained panic included.",
-          "type": "string",
-          "const": "internal"
-        }
-      ]
-    },
     "ModelOutcome": {
       "oneOf": [
         {
@@ -17918,247 +18287,6 @@
       "additionalProperties": false,
       "required": [
         "sentence"
-      ]
-    },
-    "CoreError": {
-      "description": "An error the core reports.",
-      "type": "object",
-      "properties": {
-        "kind": {
-          "$ref": "#/$defs/ErrorKind"
-        },
-        "code": {
-          "description": "Stable across releases and languages.",
-          "$ref": "#/$defs/ErrorCode"
-        },
-        "sentence": {
-          "description": "What the error says, of [`ErrorCode`]'s sentences: the template each\nhost fills, read only for wording (T3.17).",
-          "$ref": "#/$defs/Sentence"
-        },
-        "part": {
-          "description": "Where the error happened in a question asked in parts (a forecast's\nstep, a ranking's candidate), a sentence of [`Code::Part`] said after\nthe error's own; none for any other error (T3.17 fix 2).",
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Sentence"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "message": {
-          "description": "For a person to read; not promised, and never holding an input value.",
-          "type": "string"
-        },
-        "fields": {
-          "description": "What callers branch on, by name.",
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/$defs/Detail"
-          }
-        },
-        "public_details": {
-          "description": "When native compatibility requires its exact public details, keep\npresentation-only fields separate from what callers branch on.\nAbsence preserves the existing shared error details convention.",
-          "type": [
-            "object",
-            "null"
-          ],
-          "additionalProperties": {
-            "$ref": "#/$defs/Detail"
-          }
-        },
-        "cause": {
-          "description": "The error this one was raised from.",
-          "anyOf": [
-            {
-              "$ref": "#/$defs/CoreError"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "retryable": {
-          "description": "Whether the same call may succeed if tried again; carried from\nprovider and transport errors, false otherwise.",
-          "type": "boolean",
-          "default": false
-        },
-        "drop_held": {
-          "description": "The states the host handed this run that it must drop rather than\nhand back again: the core refused them, so a later run given them\nwould be refused the same way (decision E74). The host follows this\nalone, never reading which field an error names; empty for any\nother error.",
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/HeldState"
-          }
-        },
-        "answered": {
-          "description": "What a request asked in several model calls had been answered when\na later call failed (design choice 1, `main`'s answered parts,\nT2.8c): the error keeps what was paid for, so the rest can be asked\nagain. Absent for any other error.",
-          "anyOf": [
-            {
-              "$ref": "#/$defs/AnsweredParts"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "kind",
-        "code",
-        "sentence",
-        "message"
-      ]
-    },
-    "ErrorCode": {
-      "description": "The codes the core gives: one closed list, so each host's mapping\nmatches every code with no catch-all arm (decision H6). Host and core\nship together, so the list is exhaustive; a new code is a contract\nversion bump. PQL's own diagnostic codes stay strings inside\n`PqlDiagnostic`.",
-      "oneOf": [
-        {
-          "description": "The caller's request is not one the core accepts.",
-          "type": "string",
-          "const": "INVALID_REQUEST"
-        },
-        {
-          "description": "A valid request this core does not support.",
-          "type": "string",
-          "const": "UNSUPPORTED_REQUEST"
-        },
-        {
-          "description": "The model endpoint answered with something the core cannot read.",
-          "type": "string",
-          "const": "INVALID_RESPONSE"
-        },
-        {
-          "description": "The host's configuration of a run is not one the core accepts.",
-          "type": "string",
-          "const": "INVALID_CONFIGURATION"
-        },
-        {
-          "description": "The transport to the model endpoint failed: it could not reach the\nendpoint, or could not read its answer.",
-          "type": "string",
-          "const": "TRANSPORT_ERROR"
-        },
-        {
-          "description": "A defect in the core, a contained panic included.",
-          "type": "string",
-          "const": "INTERNAL_ERROR"
-        },
-        {
-          "description": "The model a request names does not exist.",
-          "type": "string",
-          "const": "UNKNOWN_MODEL"
-        },
-        {
-          "description": "An optional dependency of the host is not installed.",
-          "type": "string",
-          "const": "MISSING_EXTRA"
-        },
-        {
-          "description": "A schema the core cannot work with.",
-          "type": "string",
-          "const": "INVALID_SCHEMA"
-        },
-        {
-          "description": "The endpoint does not support sessions.",
-          "type": "string",
-          "const": "SESSIONS_UNSUPPORTED"
-        },
-        {
-          "description": "An Arrow type outside the closed set.",
-          "type": "string",
-          "const": "UNSUPPORTED_TYPE"
-        },
-        {
-          "description": "A value the admitted type of its column cannot hold, such as a `timestamp[s]` past the microseconds an int64 counts.",
-          "type": "string",
-          "const": "VALUE_OUT_OF_RANGE"
-        },
-        {
-          "description": "A provider answered with a schema other than the one asked for.",
-          "type": "string",
-          "const": "PROVIDER_SCHEMA_MISMATCH"
-        },
-        {
-          "description": "A provider's query failed.",
-          "type": "string",
-          "const": "PROVIDER_ERROR"
-        },
-        {
-          "description": "A reply for an id the run is not waiting on: unknown, stale or already answered.",
-          "type": "string",
-          "const": "UNKNOWN_REPLY"
-        },
-        {
-          "description": "`next` was called before every reply the run asked for arrived.",
-          "type": "string",
-          "const": "REPLY_MISSING"
-        },
-        {
-          "description": "A reply of the wrong kind: a model answer for a fetch, or the other way round.",
-          "type": "string",
-          "const": "WRONG_REPLY"
-        },
-        {
-          "description": "The run was used after it finished.",
-          "type": "string",
-          "const": "RUN_FINISHED"
-        },
-        {
-          "description": "The run was used after it was cancelled.",
-          "type": "string",
-          "const": "RUN_CANCELLED"
-        },
-        {
-          "description": "The run was used after a panic poisoned it.",
-          "type": "string",
-          "const": "RUN_POISONED"
-        },
-        {
-          "description": "A second call reached a run while one was in progress.",
-          "type": "string",
-          "const": "RUN_BUSY"
-        },
-        {
-          "description": "A control message the contract cannot read, larger than the control cap, of the wrong direction, or whose attachments do not match the ids it names.",
-          "type": "string",
-          "const": "INVALID_MESSAGE"
-        },
-        {
-          "description": "A model serving endpoint refused the request, with an HTTP status and\nperhaps a code of its own (contract v28, T3.27): the host raises its\nendpoint-refusal error with the status ([`REFUSED_STATUS`]) and the\ncode ([`REFUSED_CODE`], none where there is none), as the old client\nraises `NimRequestError(status, code=...)`, the error's other fields\nits details.",
-          "type": "string",
-          "const": "ENDPOINT_REFUSED"
-        }
-      ]
-    },
-    "HeldState": {
-      "description": "A state a host holds between runs and hands back to the core with a\nlater run's start, opaque to it.",
-      "oneOf": [
-        {
-          "description": "The sampler state a materializer's last run left\n(`Materialize.sampler_state`, decision E52).",
-          "type": "string",
-          "const": "sampler_state"
-        }
-      ]
-    },
-    "AnsweredParts": {
-      "description": "The answers a failed request had received ([`CoreError::answered`]).",
-      "type": "object",
-      "properties": {
-        "result": {
-          "description": "An Arrow attachment of the answers received, laid out as\n`Predicted.result`, travelling with the error.",
-          "$ref": "#/$defs/AttachmentId"
-        },
-        "rows": {
-          "description": "The rows those answers score (`main`'s `rows_answered`).",
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "result",
-        "rows"
       ]
     }
   }
