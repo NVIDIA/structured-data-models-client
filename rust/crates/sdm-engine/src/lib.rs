@@ -21,6 +21,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod frame_identity;
 pub mod frames;
 pub mod graph;
 pub mod index_sort;

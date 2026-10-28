@@ -164,7 +164,7 @@ def source_meaning(
             {
                 'stage': 'source_meaning',
                 'schema': bindings.json(schema),
-                'typed_tables': [{'table': table} for table in typed_tables],
+                'typed_tables': typed_tables,
             },
             bindings,
             state,
@@ -175,31 +175,128 @@ def source_meaning(
 
 
 def table_meaning(
-    table: dict[str, Any], frame: pd.DataFrame, state: dict[str, Any]
+    table: dict[str, Any],
+    frame: pd.DataFrame,
+    state: dict[str, Any],
+    *,
+    empty: bool,
 ) -> dict[str, Any]:
     """Admit physical table types after all declared native casts."""
+    from sdm_client._rust.frame_constructor import column as constructor_column
     from sdm_client._rust.frame_facade import _adopt, _Bindings, _prepare
 
     bindings = _Bindings()
-    native = [
-        {
-            'name': column,
-            'declared': native_declaration(dtype),
-        }
-        for column, dtype in frame.dtypes.items()
-    ]
+
+    native = []
+    if not empty:
+        for name in frame.columns:
+            # Source dtype and stype inference independently reset the native
+            # sample index in the original physical table constructor.
+            values = frame.reset_index(drop=True)[name]
+            dtype = values.dtype
+            facts = constructor_values(values)
+            declared = native_declaration(dtype)
+            native.append(
+                {
+                    'name': name,
+                    'declared': declared,
+                    'values': facts,
+                    'meaning': constructor_column(
+                        table['name'], name, frame, facts, declared
+                    ),
+                }
+            )
     result = _adopt(
         _prepare(
             {
                 'stage': 'table_meaning',
-                'input': {'table': table, 'native': native},
+                'input': {
+                    'table': table,
+                    'native': native,
+                    'empty': empty,
+                },
             },
             bindings,
             state,
         ),
         'table_meaning',
     )
-    return result.data['table']
+    return result.data
+
+
+def constructor_values(values: pd.Series) -> dict[str, Any]:
+    """Actual fixed constructor storage/content, before caller key metadata."""
+    dtype = values.dtype
+    if type(dtype) is pd.CategoricalDtype:
+        return {'storage': 'enumerated'}
+    if pd.api.types.is_object_dtype(dtype) and type(dtype) is not pd.ArrowDtype:
+        sample = values.iloc[:1000]
+        # Keep the original first-valid lookup before native scalar inference.
+        index = sample.first_valid_index()
+        if index is not None:
+            pd.api.types.is_list_like(values[index])
+        observed = pd.api.types.infer_dtype(sample, skipna=True)
+        content = {
+            'integer': 'integer',
+            'floating': 'real',
+            'mixed-integer-float': 'real',
+            'decimal': 'real',
+            'boolean': 'boolean',
+            'timedelta': 'duration',
+        }.get(observed, 'other')
+        return {'storage': 'elements', 'content': content}
+    declaration = native_declaration(dtype)
+    if declaration is not None and declaration['declaration'] == 'physical':
+        return {'storage': 'typed', 'physical': declaration['physical']}
+    if pd.api.types.is_datetime64_any_dtype(dtype):
+        return {'storage': 'temporal'}
+    if pd.api.types.is_timedelta64_dtype(dtype):
+        return {'storage': 'duration'}
+    if pd.api.types.is_bool_dtype(dtype):
+        physical = {'type': 'bool'}
+    elif pd.api.types.is_integer_dtype(dtype):
+        width = getattr(dtype, 'itemsize') * 8
+        prefix = (
+            'uint' if pd.api.types.is_unsigned_integer_dtype(dtype) else 'int'
+        )
+        physical = {'type': prefix + str(width)}
+    elif pd.api.types.is_float_dtype(dtype):
+        physical = {'type': 'float' + str(getattr(dtype, 'itemsize') * 8)}
+    else:
+        # String values can contain native surrogate points, independently
+        # of the later Arrow representation selected for their export.
+        return {'storage': 'text'}
+    return {'storage': 'typed', 'physical': physical}
+
+
+def table_key(
+    table: dict[str, Any], primary_key: list[str], state: dict[str, Any]
+) -> dict[str, Any]:
+    from sdm_client._rust.frame_facade import _adopt, _Bindings, _prepare
+
+    return _adopt(
+        _prepare(
+            {'stage': 'table_key', 'table': table, 'primary_key': primary_key},
+            _Bindings(),
+            state,
+        ),
+        'key_meaning',
+    ).data
+
+
+def table_metadata(
+    key: dict[str, Any], table: dict[str, Any], state: dict[str, Any]
+) -> dict[str, Any]:
+    from sdm_client._rust.frame_facade import _adopt, _Bindings, _prepare
+
+    return _adopt(
+        _prepare(
+            {'stage': 'table_metadata', 'input': {'key': key, 'table': table}},
+            _Bindings(),
+            state,
+        ),
+        'table_meaning',
+    ).data
 
 
 def typed_table(table: Any, state: dict[str, Any]) -> pd.DataFrame:

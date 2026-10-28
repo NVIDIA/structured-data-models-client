@@ -10,6 +10,41 @@ use super::*;
 use sdm_contract::data::strings::StringData;
 use sdm_contract::ops::{HeldSchema, HeldTable};
 
+/// Meaning checks consume the same folded operational key as the actual
+/// native graph. Full ordered source identity remains in the caller value.
+fn native_projection(description: &SourceDescription) -> SourceDescription {
+    let mut projected = description.clone();
+    for table in &mut projected.tables {
+        // Native columns already received their reached current metadata.
+        // Caller-schema historical marks must not release those assignments.
+        for column in &mut table.columns {
+            column.stype_before_key = None;
+        }
+        if table.primary_key.len() > 1 {
+            table.primary_key = vec![sdm_engine::graph::folded_name(&table.primary_key)];
+        }
+    }
+    projected
+}
+
+pub(super) fn consistent_native(
+    description: &mut SourceDescription,
+    types: &sdm_schema::assemble::HostTypes,
+) -> Result<(), CoreError> {
+    let mut projected = native_projection(description);
+    consistent(&mut projected, types)?;
+    for (actual, marked) in description.tables.iter_mut().zip(projected.tables) {
+        for (column, marked) in actual.columns.iter_mut().zip(marked.columns) {
+            column.stype = marked.stype;
+        }
+    }
+    Ok(())
+}
+
+pub(super) fn kept_native(description: &SourceDescription) -> Result<(), CoreError> {
+    kept_checks(&native_projection(description))
+}
+
 pub(super) fn source(
     mut schema: sdm_contract::ops::HeldSchema,
     typed_tables: Vec<FrameTableMeaning>,
@@ -42,7 +77,7 @@ pub(super) fn source(
         }
     }
     let read = sdm_schema::held::read(schema.clone(), &BTreeMap::new(), true)?;
-    let mut description = read.description;
+    let mut description = native_projection(&read.description);
     sdm_schema::assemble::mark_keys(&mut description);
     sdm_schema::assemble::check_link_structure(&description, &read.types)?;
     reserved(&description)?;
@@ -51,6 +86,13 @@ pub(super) fn source(
 }
 
 pub(super) fn table(input: FrameTableInputs) -> Result<FrameTableMeaning, CoreError> {
+    if input.empty {
+        return Err(super::source_keys::native(
+            "empty_frame",
+            &input.table.name,
+            "",
+        ));
+    }
     let mut names = BTreeSet::new();
     for column in &input.native {
         if !names.insert(&column.name) {
@@ -61,6 +103,16 @@ pub(super) fn table(input: FrameTableInputs) -> Result<FrameTableMeaning, CoreEr
         if let Some(declared) = &column.declared {
             crate::frame_materialize::values::check_declaration(declared)?;
         }
+        if let Some(FramePhysicalDeclaration::Physical { physical }) = &column.declared
+            && column.values
+                != (FrameConstructorValues::Typed {
+                    physical: physical.clone(),
+                })
+        {
+            return Err(protocol(
+                "fixed native declaration contradicts its constructed value storage",
+            ));
+        }
         if column.declared == Some(FramePhysicalDeclaration::LargeUtf8) {
             return Err(crate::frame_materialize::values::unsupported_large_string(
                 &input.table.name,
@@ -68,7 +120,35 @@ pub(super) fn table(input: FrameTableInputs) -> Result<FrameTableMeaning, CoreEr
             ));
         }
     }
-    Ok(FrameTableMeaning { table: input.table })
+    let constructed = input
+        .native
+        .iter()
+        .map(|column| {
+            if column.meaning.name != column.name
+                || column.meaning.dtype != super::source_keys::constructed(&column.values)?
+                || !crate::edit::supports(column.meaning.stype, column.meaning.dtype)
+            {
+                return Err(protocol(
+                    "constructed native meaning contradicts its observed type",
+                ));
+            }
+            Ok(column.meaning.clone())
+        })
+        .collect::<Result<Vec<_>, CoreError>>()?;
+    if input
+        .table
+        .columns
+        .iter()
+        .any(|column| !constructed.iter().any(|fixed| column.name == fixed.name))
+    {
+        return Err(protocol(
+            "native constructed column facts differ from physical table order",
+        ));
+    }
+    Ok(FrameTableMeaning {
+        table: input.table,
+        constructed,
+    })
 }
 
 pub(super) fn meaning(input: FrameColumnInputs) -> FrameColumnMeaning {
@@ -225,6 +305,19 @@ mod tests {
     use super::*;
     use sdm_contract::ops::HeldColumn;
 
+    fn typed(table: HeldTable) -> FrameTableMeaning {
+        let constructed = table
+            .columns
+            .iter()
+            .map(|column| FrameConstructedColumn {
+                name: column.name.clone(),
+                dtype: sdm_schema::held::wire_dtype(&column.dtype),
+                stype: column.stype,
+            })
+            .collect();
+        FrameTableMeaning { table, constructed }
+    }
+
     fn declared(dtype: &str) -> FrameColumnInputs {
         FrameColumnInputs {
             table: "items".to_owned(),
@@ -268,9 +361,7 @@ mod tests {
             time_column: None,
             duplicate_keys: None,
         };
-        let typed = FrameTableMeaning {
-            table: table.clone(),
-        };
+        let typed = typed(table.clone());
         let mut live = table;
         live.columns[1].stype = Stype::Categorical;
         live.columns[1].dtype = "string".into();
@@ -414,6 +505,7 @@ mod tests {
     #[test]
     fn fixed_large_utf8_table_refusal_is_neutral_and_names_its_reached_column() {
         let input = FrameTableInputs {
+            empty: false,
             table: HeldTable {
                 name: "items".into(),
                 source: "input_items".into(),
@@ -426,6 +518,14 @@ mod tests {
             native: vec![FrameTableColumnFacts {
                 name: "id".into(),
                 declared: Some(FramePhysicalDeclaration::LargeUtf8),
+                values: FrameConstructorValues::Typed {
+                    physical: sdm_contract::ColumnType::Utf8,
+                },
+                meaning: FrameConstructedColumn {
+                    name: "id".into(),
+                    dtype: Dtype::String,
+                    stype: Stype::Id,
+                },
             }],
         };
         let error = table(input).unwrap_err();
@@ -480,10 +580,7 @@ mod tests {
                     },
                 ]],
             },
-            tables
-                .into_iter()
-                .map(|table| FrameTableMeaning { table })
-                .collect(),
+            tables.into_iter().map(typed).collect(),
         )
         .unwrap_err();
         assert_eq!(error.sentence, Sentence::EdgeKeyTypes);

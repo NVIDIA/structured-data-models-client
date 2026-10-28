@@ -61,6 +61,8 @@ pub struct FrameDecomposition {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct PreparedFrameQuestions {
+    /// Ordinary query meaning retained across native graph conversion.
+    pub question: Option<AttachmentId>,
     /// Reached immutable early call observations, reused without rereading native option objects.
     pub call_values: Option<AttachmentId>,
     pub query: QueryFacts,

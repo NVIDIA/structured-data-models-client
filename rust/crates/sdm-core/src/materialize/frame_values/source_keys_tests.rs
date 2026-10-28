@@ -31,10 +31,12 @@ fn table() -> FrameTableMeaning {
             FrameConstructedColumn {
                 name: "a".into(),
                 dtype: Dtype::String,
+                stype: Stype::Text,
             },
             FrameConstructedColumn {
                 name: "b".into(),
                 dtype: Dtype::Int,
+                stype: Stype::Numerical,
             },
         ],
     }
@@ -100,6 +102,7 @@ fn preexisting_derived_column_is_admitted_then_current_primary_stype_is_checked(
     fixed.constructed.push(FrameConstructedColumn {
         name: derived,
         dtype: Dtype::Int,
+        stype: Stype::Numerical,
     });
     let key = source_keys::key(fixed.clone(), fixed.table.primary_key.clone()).unwrap();
     assert!(

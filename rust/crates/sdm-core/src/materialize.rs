@@ -2550,7 +2550,7 @@ fn nan_rows(array: &ArrayRef) -> BTreeSet<usize> {
 /// The prefix of the column the reference's engine folds a key of several
 /// columns into (`composite_key.DERIVED_PREFIX`), and the longest name it
 /// gives one (`MAX_DERIVED_NAME`).
-const FOLDED_NAME_MOST: usize = 200;
+const FOLDED_NAME_MOST: usize = sdm_engine::graph::FOLDED_NAME_MOST;
 
 /// A schema keyed by several columns somewhere, refused as the reference
 /// refuses it at materialize, after its query resolved: its engine folds
@@ -3334,7 +3334,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         memo.memo.source = prepared.source;
         memo.keep();
         description = prepared.description;
-        (prepared.graph, frames.warn_dropped(asker))
+        (prepared.graph.topology, frames.warn_dropped(asker))
     } else {
         (Graph::new(&description)?, false)
     };

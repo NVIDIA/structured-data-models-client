@@ -10,6 +10,7 @@ use super::*;
 use crate::attached::take_json_if;
 
 struct QuestionData {
+    raw_query: String,
     description: SourceDescription,
     types: sdm_schema::assemble::HostTypes,
     validation: crate::pql::Validation,
@@ -28,6 +29,39 @@ impl std::fmt::Debug for RetainedFrameQuestion {
             .debug_struct("RetainedFrameQuestion")
             .field("facts", &self.data.facts)
             .finish_non_exhaustive()
+    }
+}
+
+impl RetainedFrameQuestion {
+    pub(super) fn target(
+        &self,
+        raw_query: &str,
+    ) -> Result<(ResolvedTarget, QueryFacts), CoreError> {
+        if raw_query != self.data.raw_query
+            || self.data.validation.ranking.is_some()
+            || self.data.validation.steps.is_some()
+        {
+            return Err(protocol(
+                "frame population query differs from its ordinary resolved question owner",
+            ));
+        }
+        let validation = &self.data.validation;
+        let validated = validation
+            .query
+            .clone()
+            .ok_or_else(|| protocol("retained frame question has no validated tree"))?;
+        let source_query = validation
+            .text
+            .clone()
+            .ok_or_else(|| protocol("retained frame question has no canonical query"))?;
+        Ok((
+            ResolvedTarget {
+                validated,
+                source_query,
+                entity_filter: validation.entity_filter.clone(),
+            },
+            self.data.facts.clone(),
+        ))
     }
 }
 
@@ -87,6 +121,7 @@ pub(super) fn resolve(
     }
     let owner = RetainedFrameQuestion {
         data: Arc::new(QuestionData {
+            raw_query: query,
             description,
             types: read.types,
             validation,
@@ -210,6 +245,11 @@ pub(super) fn prepare(
         }
     };
     Ok(PreparedFrameQuestions {
+        question: if decomposition.is_none() {
+            Some(asker.attach(Attachment::FrameQuestion(owner))?)
+        } else {
+            None
+        },
         call_values: if decomposition.is_none() {
             raw_values
                 .map(|bytes| asker.attach(Attachment::Bytes(bytes)))

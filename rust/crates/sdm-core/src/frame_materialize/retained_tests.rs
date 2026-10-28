@@ -41,7 +41,7 @@ pub(crate) fn owner() -> RetainedFrameGraph {
         }],
         links: vec![],
     };
-    let graph = Graph::new(&description).unwrap();
+    let graph = NativeGraph::new(&description).unwrap();
     let rows =
         RecordBatch::try_from_iter([("id", Arc::new(Int64Array::from(vec![1, 2, 3])) as ArrayRef)])
             .unwrap();
@@ -49,14 +49,16 @@ pub(crate) fn owner() -> RetainedFrameGraph {
         Relation::from("input_users"),
         ArrowData::new(rows.schema(), vec![rows.clone()]),
     )];
-    let source = fingerprint(&description, &tables).unwrap();
+    let source = fingerprint(&description, &tables, &[], None).unwrap();
     let snapshot = Snapshot::new(&graph, BTreeMap::from([("users".into(), rows)])).unwrap();
     let frames = Arc::new(Mutex::new(FrameRun {
+        row_identities: Vec::new(),
         tables,
         metadata: Some(FrameCheckpointMetadata {
             source: source.clone(),
             description: description.clone(),
             neighbors: Mt19937::seeded(123).checkpoint(),
+            strings: None,
         }),
         snapshot: Some(snapshot),
         neighbors: Mt19937::seeded(123),

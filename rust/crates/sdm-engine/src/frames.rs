@@ -23,7 +23,8 @@ use sdm_contract::data::strings::StringEncoding;
 use sdm_contract::data::{BATCH_COLUMN, MATCHES_COLUMN};
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 
-use crate::graph::{Edge, Graph};
+use crate::frame_identity::IdentityColumn;
+use crate::graph::{Edge, Graph, NativeGraph};
 use crate::keys::{self, Key};
 use crate::random::Mt19937;
 use crate::time::Instant;
@@ -215,7 +216,7 @@ pub struct TemporalWindow {
 
 impl Snapshot {
     pub fn new(graph: &Graph, input: BTreeMap<String, RecordBatch>) -> Result<Self, CoreError> {
-        Self::prepare(graph, input, None)
+        Self::prepare(graph, input, None, BTreeMap::new())
     }
 
     /// Explicit native logical text bindings are validated once with the
@@ -226,13 +227,36 @@ impl Snapshot {
         input: BTreeMap<String, RecordBatch>,
         strings: BTreeMap<String, BTreeMap<String, StringEncoding>>,
     ) -> Result<Self, CoreError> {
-        Self::prepare(graph, input, Some(strings))
+        Self::prepare(graph, input, Some(strings), BTreeMap::new())
+    }
+
+    /// Complete native identity data is independent of scalar feature rows.
+    pub fn new_frame(
+        graph: &NativeGraph,
+        input: BTreeMap<String, RecordBatch>,
+        strings: Option<BTreeMap<String, BTreeMap<String, StringEncoding>>>,
+        identities: BTreeMap<String, IdentityColumn>,
+    ) -> Result<Self, CoreError> {
+        graph.validate()?;
+        let expected = graph
+            .primary_keys
+            .iter()
+            .filter(|(_, key)| key.len() > 1)
+            .map(|(name, _)| name)
+            .collect::<BTreeSet<_>>();
+        if expected != identities.keys().collect::<BTreeSet<_>>() {
+            return Err(invalid(
+                "native graph lacks complete compound identity bindings",
+            ));
+        }
+        Self::prepare(&graph.topology, input, strings, identities)
     }
 
     fn prepare(
         graph: &Graph,
         mut input: BTreeMap<String, RecordBatch>,
         mut strings: Option<BTreeMap<String, BTreeMap<String, StringEncoding>>>,
+        mut identities: BTreeMap<String, IdentityColumn>,
     ) -> Result<Self, CoreError> {
         let mut tables = BTreeMap::new();
         let mut dropped = Vec::new();
@@ -340,6 +364,24 @@ impl Snapshot {
                         .collect::<Vec<_>>())
                 })
                 .transpose()?;
+            let identity = identities.remove(&table.name);
+            if identity.as_ref().is_some_and(|identity| {
+                identity.values.len() != rows.num_rows() || identity.values.null_count() != 0
+            }) {
+                return Err(invalid(
+                    "native identity differs from its complete aligned source rows",
+                ));
+            }
+            let key_encoding = identity
+                .as_ref()
+                .map(|identity| identity.encoding)
+                .or_else(|| {
+                    table
+                        .primary_key
+                        .as_ref()
+                        .and_then(|key| encodings.get(key))
+                        .copied()
+                });
             let mut index = BTreeMap::new();
             let mut seen = BTreeSet::new();
             let mut null_keys = 0;
@@ -355,27 +397,32 @@ impl Snapshot {
             };
             let valid: Vec<usize> = match &table.primary_key {
                 None => (0..rows.num_rows()).filter(|&row| has_time(row)).collect(),
-                Some(key) => encoded_keys(named(&rows, key)?, encodings.get(key).copied())?
-                    .into_iter()
-                    .enumerate()
-                    .filter_map(|(row, key)| {
-                        let Some(key) = key else {
-                            null_keys += 1;
-                            return None;
-                        };
-                        // Duplicate detection precedes time removal, so a
-                        // later duplicate cannot replace a missing-time row.
-                        if !seen.insert(key.clone()) {
-                            duplicate_keys += 1;
-                            None
-                        } else if !has_time(row) {
-                            None
-                        } else {
-                            index.insert(key, row);
-                            Some(row)
-                        }
-                    })
-                    .collect(),
+                Some(key) => encoded_keys(
+                    identity
+                        .as_ref()
+                        .map_or_else(|| named(&rows, key), |identity| Ok(&identity.values))?,
+                    key_encoding,
+                )?
+                .into_iter()
+                .enumerate()
+                .filter_map(|(row, key)| {
+                    let Some(key) = key else {
+                        null_keys += 1;
+                        return None;
+                    };
+                    // Duplicate detection precedes time removal, so a
+                    // later duplicate cannot replace a missing-time row.
+                    if !seen.insert(key.clone()) {
+                        duplicate_keys += 1;
+                        None
+                    } else if !has_time(row) {
+                        None
+                    } else {
+                        index.insert(key, row);
+                        Some(row)
+                    }
+                })
+                .collect(),
             };
             if table.primary_key.is_some() && valid.is_empty() {
                 return Err(CoreError::new(
@@ -413,17 +460,16 @@ impl Snapshot {
                     index,
                     time,
                     bounds,
-                    key_encoding: table
-                        .primary_key
-                        .as_ref()
-                        .and_then(|key| encodings.get(key))
-                        .copied(),
+                    key_encoding,
                     strings: encodings,
                 },
             );
         }
         if strings.is_some_and(|strings| !strings.is_empty()) {
             return Err(invalid("native text bindings name an absent frame table"));
+        }
+        if !identities.is_empty() {
+            return Err(invalid("native identity names an absent frame table"));
         }
         if !input.is_empty() {
             return Err(invalid("a snapshot binds an undescribed frame"));

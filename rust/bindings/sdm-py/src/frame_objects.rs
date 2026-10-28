@@ -144,3 +144,106 @@ impl FrameObjectConstructor {
         Ok(PyBytes::new(py, &bytes).unbind())
     }
 }
+
+fn native_checked<T>(py: Python<'_>, value: Result<T, sdm_contract::CoreError>) -> PyResult<T> {
+    value.map_err(|error| {
+        crate::core_error(
+            py,
+            sdm_host::write_error(&error, || Ok(sdm_contract::data::AttachmentId(0))),
+        )
+    })
+}
+
+/// Fixed aggregate samples only; this owner never stores a native callback.
+#[pyclass(module = "sdm_client._native")]
+pub(crate) struct FrameNativeConstructor {
+    meaning: sdm_host::FrameNativeConstructor,
+}
+
+#[pymethods]
+impl FrameNativeConstructor {
+    #[new]
+    fn new(
+        py: Python<'_>,
+        table: String,
+        name: String,
+        values: &[u8],
+        declared: &[u8],
+    ) -> PyResult<Self> {
+        Ok(Self {
+            meaning: native_checked(
+                py,
+                crate::core_call(py, || {
+                    sdm_host::frame_constructors::native_column(table, name, values, declared)
+                })?,
+            )?,
+        })
+    }
+    fn dtype(&self, py: Python<'_>) -> PyResult<Py<PyBytes>> {
+        let bytes = native_checked(
+            py,
+            crate::core_call(py, || {
+                sdm_host::frame_constructors::native_column_dtype_bytes(&self.meaning)
+            })?,
+        )?;
+        Ok(PyBytes::new(py, &bytes).unbind())
+    }
+    fn timestamp_sample(&self, py: Python<'_>) -> PyResult<bool> {
+        crate::core_call(py, || self.meaning.timestamp_sample())
+    }
+    fn separated_sample(&self, py: Python<'_>) -> PyResult<bool> {
+        crate::core_call(py, || self.meaning.separated_sample())
+    }
+    fn element_sample(&self, py: Python<'_>) -> PyResult<bool> {
+        crate::core_call(py, || self.meaning.element_sample())
+    }
+    fn element_count(&mut self, py: Python<'_>, parts: u64) -> PyResult<()> {
+        native_checked(
+            py,
+            crate::core_call(py, || self.meaning.element_count(parts))?,
+        )
+    }
+    fn distinct_sample(&self, py: Python<'_>) -> PyResult<bool> {
+        crate::core_call(py, || self.meaning.distinct_sample())
+    }
+    fn timestamp_counts(&mut self, py: Python<'_>, parsed: u64, present: u64) -> PyResult<()> {
+        native_checked(
+            py,
+            crate::core_call(py, || self.meaning.timestamp_counts(parsed, present))?,
+        )
+    }
+    fn separator(&mut self, py: Python<'_>, points: Vec<u32>) -> PyResult<Option<String>> {
+        Ok(native_checked(
+            py,
+            crate::core_call(py, || self.meaning.separator(&points))?,
+        )?
+        .map(|c| c.to_string()))
+    }
+    fn separated_counts(&mut self, py: Python<'_>, whole: u64, parts: u64) -> PyResult<()> {
+        native_checked(
+            py,
+            crate::core_call(py, || self.meaning.separated_counts(whole, parts))?,
+        )
+    }
+    fn distinct_count(&mut self, py: Python<'_>, distinct: u64) -> PyResult<bool> {
+        native_checked(
+            py,
+            crate::core_call(py, || self.meaning.distinct_count(distinct))?,
+        )
+    }
+    fn population_count(&mut self, py: Python<'_>, present: u64) -> PyResult<()> {
+        native_checked(
+            py,
+            crate::core_call(py, || self.meaning.population_count(present))?,
+        )
+    }
+    fn meaning(&self, py: Python<'_>) -> PyResult<Py<PyBytes>> {
+        let bytes = native_checked(
+            py,
+            crate::core_call(py, || {
+                sdm_host::frame_constructors::native_column_bytes(&self.meaning)
+            })?,
+        )?;
+        Ok(PyBytes::new(py, &bytes).unbind())
+    }
+}

@@ -33,18 +33,23 @@ def native_inputs(
     """
     import pyarrow as pa
 
+    from sdm_client._rust.frame_identity import convert as convert_identity
     from sdm_client._rust.frame_native import NativeColumn, NativeFrameColumns
     from sdm_client._rust.frame_source import (
         source_meaning,
         table_meaning,
+        table_key,
+        table_metadata,
         time_feature,
         typed_table,
     )
     from sdm_client._rust.frames import _check_header
-    from sdm_client._rust.spec import held_schema, held_table
+    from sdm_client._rust.spec import _links, held_table
+    from sdm_client.schema import _as_key_tuple
 
     checkpoint = state.get('held', {}).get('frame_checkpoint')
     if checkpoint is not None and 'owner' in checkpoint:
+        state['frame_row_identities'] = []
         return (
             [],
             state['frame_schema'],
@@ -68,15 +73,67 @@ def native_inputs(
     # Graph.from_data constructs its physical tables only after ALL declared
     # casts. Keep their dtype declarations, but delay physical admission to
     # this boundary so an earlier table cannot skip a later cast's effects.
+    physical_tables = []
     for name, frame, held in prepared_tables:
-        _check_header(name, frame)
-        held_tables.append(table_meaning(held, frame, state))
-    # _build_graph applies live key/time/stype metadata after construction.
-    # LocalGraphStore sanitization follows, using those fixed graph facts;
-    # its native timestamp callbacks cannot rewrite that graph's metadata.
-    graph_schema = source_meaning(held_schema(schema), held_tables, state)
+        empty = bool(frame.empty)
+        if not empty:
+            _check_header(name, frame)
+            constructed = frame.copy(deep=False)
+        else:
+            constructed = frame
+        held_tables.append(table_meaning(held, constructed, state, empty=empty))
+        physical_tables.append((name, constructed, held))
+    # Each physical owner exists before the first caller key assignment.
+    # Read later metadata only after that table's actual native fold callbacks.
+    constructed_tables = {
+        name: (frame, meaning)
+        for (name, frame, _), meaning in zip(
+            physical_tables, held_tables, strict=True
+        )
+    }
+    completed_tables = {}
+    identities = []
+    for name, table in schema.tables.items():
+        frame, constructed = constructed_tables[name]
+        primary = table.primary_key
+        key_table = {
+            **constructed,
+            'table': {
+                **constructed['table'],
+                'frame_key_form': None
+                if primary is None
+                else 'scalar'
+                if isinstance(primary, str)
+                else 'sequence',
+            },
+        }
+        key = table_key(
+            key_table,
+            [] if primary is None else list(_as_key_tuple(primary)),
+            state,
+        )
+        definition = key['composite']
+        if definition is not None:
+            aligned = convert_identity(frame, definition, state)
+            values, encoding = NativeColumn(aligned).arrow()
+            identities.append((definition, values, encoding))
+        live = held_table(name, table)
+        metadata = table_metadata(key, live, state)
+        completed_tables[name] = metadata
+    # Graph.from_data's physical table order is independent of the later
+    # metadata assignment order. Keep the captured values in that order.
+    typed_tables = [completed_tables[name] for name, _, _ in physical_tables]
+    graph_schema = source_meaning(
+        {
+            'tables': [table['table'] for table in typed_tables],
+            'links': _links(schema),
+        },
+        typed_tables,
+        state,
+    )
+    state['frame_row_identities'] = identities
     for (name, frame, _), held in zip(
-        prepared_tables, graph_schema['tables'], strict=True
+        physical_tables, graph_schema['tables'], strict=True
     ):
         frame = frame.copy(deep=False).reset_index(drop=True)
         arrays = []
@@ -216,9 +273,23 @@ def rebind(
         next_id += 1
         attached[next_id] = table['rows']
         tables.append({'source': table['source'], 'rows': next_id})
+    row_identities = []
+    for identity in checkpoint.get('row_identities', []):
+        next_id += 1
+        attached[next_id] = identity['rows']
+        row_identities.append(
+            {
+                'definition': identity['definition'],
+                'values': {'values': next_id, 'encoding': identity['encoding']},
+            }
+        )
     next_id += 1
     attached[next_id] = codec.attachment(
-        {'metadata': metadata, 'tables': tables}
+        {
+            'metadata': metadata,
+            'tables': tables,
+            'row_identities': row_identities,
+        }
     )
     return {'version': checkpoint['version'], 'manifest': next_id}
 
@@ -242,10 +313,21 @@ def take(handle: Any, checkpoint: dict[str, Any]) -> dict[str, Any]:
     for table in manifest['tables']:
         owner = handle.take_attachment(table['rows'])
         tables.append({'source': table['source'], 'rows': pa.table(owner)})
+    row_identities = []
+    for identity in manifest.get('row_identities', []):
+        owner = handle.take_attachment(identity['values']['values'])
+        row_identities.append(
+            {
+                'definition': identity['definition'],
+                'encoding': identity['values']['encoding'],
+                'rows': pa.table(owner),
+            }
+        )
     return {
         'version': checkpoint['version'],
         'metadata': metadata,
         'tables': tables,
+        'row_identities': row_identities,
     }
 
 

@@ -10,6 +10,7 @@ mod decimal_storage;
 pub mod key_adoption;
 pub mod key_advice;
 pub mod key_candidates;
+pub mod native_column;
 pub(crate) mod object_decimal;
 pub mod object_infer;
 mod objects;

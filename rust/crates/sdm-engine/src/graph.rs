@@ -8,7 +8,7 @@
 //! engine's graph from the client's schema (`_build_graph`) and its
 //! sampler reads it.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use sdm_contract::ops::{ColumnRef, DescribedColumn, SourceDescription, Stype};
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
@@ -70,6 +70,9 @@ pub const RESERVED_PREFIX: &str = "__kumo_";
 
 /// The prefix a key of several columns is folded under (`DERIVED_PREFIX`).
 pub const FOLDED_PREFIX: &str = "__kumo_key_";
+
+/// Maximum complete encoded native/warehouse identity column name.
+pub const FOLDED_NAME_MOST: usize = 200;
 
 /// The column a key of several columns is folded into: the prefix, then
 /// each column's name as the hexadecimal of its UTF-8, joined by `_`
@@ -186,13 +189,18 @@ impl Graph {
             tables,
             edges: Vec::new(),
         };
+        graph.add_links(description)?;
+        Ok(graph)
+    }
+
+    fn add_links(&mut self, description: &SourceDescription) -> Result<(), CoreError> {
         for link in &description.links {
             let [foreign, referenced]: &[ColumnRef; 2] = link
                 .as_slice()
                 .try_into()
                 .map_err(|_| invalid("a link is not a foreign key and its key", "schema"))?;
             let (Some(src), Some(dst)) =
-                (graph.table(&foreign.table), graph.table(&referenced.table))
+                (self.table(&foreign.table), self.table(&referenced.table))
             else {
                 return Err(invalid("a link names a table the schema lacks", "schema"));
             };
@@ -210,11 +218,11 @@ impl Graph {
                 fkey: foreign.column.clone(),
                 dst: referenced.table.clone(),
             };
-            if !graph.edges.contains(&edge) {
-                graph.edges.push(edge);
+            if !self.edges.contains(&edge) {
+                self.edges.push(edge);
             }
         }
-        Ok(graph)
+        Ok(())
     }
 
     /// The table `name`, if the graph has it.
@@ -256,5 +264,113 @@ impl Graph {
             .filter(|c| !foreign.contains(c.name.as_str()))
             .map(|c| (c.name.clone(), c.stype))
             .collect()
+    }
+}
+
+/// Native source semantics alongside the scalar operational traversal graph.
+/// Full ordered identities are never discarded to make a table keyless.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NativeGraph {
+    pub topology: Graph,
+    pub primary_keys: BTreeMap<String, Vec<String>>,
+}
+
+impl NativeGraph {
+    pub fn new(description: &SourceDescription) -> Result<Self, CoreError> {
+        let mut tables = Vec::with_capacity(description.tables.len());
+        let mut primary_keys = BTreeMap::new();
+        for table in &description.tables {
+            if primary_keys
+                .insert(table.name.clone(), table.primary_key.clone())
+                .is_some()
+            {
+                return Err(invalid("native graph repeats a table identity", "schema"));
+            }
+            for name in &table.primary_key {
+                if !table.columns.iter().any(|column| &column.name == name) {
+                    return Err(invalid(
+                        "native row identity names an absent source column",
+                        "schema",
+                    ));
+                }
+            }
+            let primary_key = match table.primary_key.as_slice() {
+                [] => None,
+                [one] => Some(one.clone()),
+                many => Some(folded_name(many)),
+            };
+            tables.push(Table {
+                name: table.name.clone(),
+                source: table.source.clone(),
+                columns: table.columns.clone(),
+                primary_key,
+                time_column: table.time_column.clone(),
+            });
+        }
+        let mut topology = Graph {
+            tables,
+            edges: Vec::new(),
+        };
+        topology.add_links(description)?;
+        let native = Self {
+            topology,
+            primary_keys,
+        };
+        native.validate()?;
+        Ok(native)
+    }
+    /// Validate a typed native product before reading any row or adjacency.
+    pub fn validate(&self) -> Result<(), CoreError> {
+        let invalid_product = || {
+            CoreError::protocol(
+                Sentence::InvalidMessage,
+                "native graph topology contradicts its complete ordered identities",
+            )
+        };
+        if self.primary_keys.len() != self.topology.tables.len() {
+            return Err(invalid_product());
+        }
+        let mut names = BTreeSet::new();
+        for table in &self.topology.tables {
+            if !names.insert(&table.name) {
+                return Err(invalid_product());
+            }
+            let key = self
+                .primary_keys
+                .get(&table.name)
+                .ok_or_else(invalid_product)?;
+            if key.iter().collect::<BTreeSet<_>>().len() != key.len()
+                || key.iter().any(|name| table.column(name).is_none())
+            {
+                return Err(invalid_product());
+            }
+            let operational = match key.as_slice() {
+                [] => None,
+                [one] => Some(one.clone()),
+                many => Some(folded_name(many)),
+            };
+            if table.primary_key != operational {
+                return Err(invalid_product());
+            }
+        }
+        let mut edges = BTreeSet::new();
+        for edge in &self.topology.edges {
+            let source = self.topology.table(&edge.src).ok_or_else(invalid_product)?;
+            let target = self.topology.table(&edge.dst).ok_or_else(invalid_product)?;
+            if !edges.insert(edge)
+                || source.column(&edge.fkey).is_none()
+                || self.primary_keys[&target.name].len() != 1
+            {
+                return Err(invalid_product());
+            }
+        }
+        Ok(())
+    }
+}
+
+impl std::ops::Deref for NativeGraph {
+    type Target = Graph;
+    fn deref(&self) -> &Graph {
+        &self.topology
     }
 }

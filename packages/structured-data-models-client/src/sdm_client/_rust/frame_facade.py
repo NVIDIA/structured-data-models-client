@@ -44,6 +44,7 @@ class _FrameTableInput(TypedDict):
 class _FrameInput(TypedDict):
     tables: list[_FrameTableInput]
     entropy: int
+    row_identities: list[dict[str, Any]]
 
 
 class _ConvertedText(TypedDict):
@@ -83,6 +84,8 @@ def _ids(kind: str, value: dict[str, Any]) -> list[int]:
     if kind in (
         'source_meaning',
         'table_meaning',
+        'key_meaning',
+        'key_nulls',
         'column_meaning',
         'integer_column',
     ):
@@ -92,7 +95,11 @@ def _ids(kind: str, value: dict[str, Any]) -> list[int]:
     if kind == 'question':
         return [value['owner']]
     if kind == 'questions':
-        return [] if value['call_values'] is None else [value['call_values']]
+        return [
+            value[field]
+            for field in ('call_values', 'question')
+            if value[field] is not None
+        ]
     if kind == 'graph':
         return [value['owner']]
     if kind == 'label_batch':
@@ -415,6 +422,7 @@ def _single(
     *,
     cache: dict[str, Any],
     call_values: bytes,
+    question_owner: object,
     part: dict[str, Any] | None = None,
 ) -> tuple[tuple[dict[str, Any], ...], results.QueryFacts, results.CoreRequest]:
     from sdm_client._rust.materialize import (
@@ -453,10 +461,26 @@ def _single(
             frame_native_tables=native_tables,
         )
         bindings = _Bindings()
-        frames: _FrameInput = {'tables': [], 'entropy': secrets.randbits(64)}
+        frames: _FrameInput = {
+            'tables': [],
+            'entropy': secrets.randbits(64),
+            'row_identities': [],
+        }
         for source, rows in attached:
             frames['tables'].append(
                 {'source': source, 'rows': bindings.add(rows)}
+            )
+        for definition, values, encoding in state.get(
+            'frame_row_identities', []
+        ):
+            frames['row_identities'].append(
+                {
+                    'definition': definition,
+                    'values': {
+                        'values': bindings.add(values),
+                        'encoding': encoding,
+                    },
+                }
             )
         checkpoint = state.get('held', {}).get('frame_checkpoint')
         retained = None
@@ -491,6 +515,7 @@ def _single(
             _prepare(
                 {
                     'stage': 'population',
+                    'question': bindings.add(question_owner),
                     'graph': _bind(graph, bindings),
                     'query': bindings.json(query),
                     'values': bindings.json(
@@ -961,6 +986,7 @@ def gather(
                 limits,
                 cache=materializer._core_sampler_state,
                 call_values=questions.owners[questions.data['call_values']],
+                question_owner=questions.owners[questions.data['question']],
             )
         child_options = {
             name: options[name] for name in decomposition['child_options']
@@ -999,6 +1025,7 @@ def gather(
                     limits,
                     cache={},
                     call_values=child.owners[child.data['call_values']],
+                    question_owner=child.owners[child.data['question']],
                     part=scope,
                 )
             )

@@ -7,6 +7,8 @@
 
 pub(crate) mod identity;
 mod retained;
+mod row_identity;
+use row_identity::OwnedIdentity;
 pub(crate) mod time_columns;
 pub(crate) mod values;
 
@@ -24,7 +26,10 @@ use arrow_array::{ArrayRef, RecordBatch};
 use arrow_schema::DataType;
 use sdm_contract::data::strings::StringEncoding;
 use sdm_contract::data::{AttachmentId, Relation};
-use sdm_contract::frames::materialize::FrameNativeTable;
+use sdm_contract::frames::materialize::{
+    FrameCompositeDefinition, FrameIdentityCodec, FrameIdentityComponent, FrameNativeTable,
+    FrameRowIdentity,
+};
 use sdm_contract::frames::{
     FRAME_CHECKPOINT_VERSION, FrameCheckpoint, FrameCheckpointManifest, FrameCheckpointMetadata,
     MaterializeFrames,
@@ -32,7 +37,7 @@ use sdm_contract::frames::{
 use sdm_contract::ops::{Dtype, HeldSchema, SamplerMemo, SourceDescription, Stype};
 use sdm_contract::{CoreError, CoreWarning, Detail, HeldState, Scalar, Sentence};
 use sdm_engine::frames::Snapshot;
-use sdm_engine::graph::{Graph, Table};
+use sdm_engine::graph::{Graph, NativeGraph, Table};
 use sdm_engine::random::Mt19937;
 use sdm_request::options::Hop;
 use sdm_request::payload::{SampledColumn, SampledLink, SampledTable};
@@ -56,6 +61,7 @@ fn invalid(message: &str) -> CoreError {
 pub(crate) struct OwnedCheckpoint {
     pub metadata: FrameCheckpointMetadata,
     pub tables: Vec<(Relation, ArrowData)>,
+    pub row_identities: Vec<OwnedIdentity>,
 }
 
 /// A fully constructed immutable graph, independently of any task or walk.
@@ -63,7 +69,7 @@ pub(crate) struct OwnedCheckpoint {
 pub(crate) struct PreparedGraph {
     pub source: String,
     pub description: SourceDescription,
-    pub graph: Graph,
+    pub graph: NativeGraph,
 }
 
 /// Actual selected raw tables and links of one graph snapshot. The useful
@@ -90,6 +96,7 @@ impl SampledContext {
 }
 
 pub(crate) struct FrameRun {
+    row_identities: Vec<OwnedIdentity>,
     tables: Vec<(Relation, ArrowData)>,
     metadata: Option<FrameCheckpointMetadata>,
     snapshot: Option<Snapshot>,
@@ -139,9 +146,10 @@ pub(crate) fn take(
     attachments: &mut Attachments,
 ) -> Result<Context, CoreError> {
     let input: MaterializeFrames = take_json(attachments, manifest)?;
-    let (tables, metadata, neighbors) = match checkpoint {
+    let (tables, row_identities, metadata, neighbors) = match checkpoint {
         None => (
             bound_tables(input.tables, attachments)?,
+            row_identity::bind(input.row_identities, attachments)?,
             None,
             Mt19937::seeded(123),
         ),
@@ -161,7 +169,7 @@ pub(crate) fn take(
                 )
                 .dropping(HeldState::SamplerState));
             }
-            if !input.tables.is_empty() {
+            if !input.tables.is_empty() || !input.row_identities.is_empty() {
                 return Err(invalid("a resumed frame run must not reread caller frames"));
             }
             let manifest: FrameCheckpointManifest = take_json(attachments, checkpoint.manifest)?;
@@ -176,14 +184,20 @@ pub(crate) fn take(
             })?;
             (
                 bound_tables(manifest.tables, attachments)?,
+                row_identity::bind(manifest.row_identities, attachments)?,
                 Some(metadata),
                 neighbors,
             )
         }
     };
     if let Some(metadata) = &metadata {
-        let source = fingerprint(&metadata.description, &tables)
-            .map_err(|error| error.dropping(HeldState::SamplerState))?;
+        let source = fingerprint(
+            &metadata.description,
+            &tables,
+            &row_identities,
+            metadata.strings.as_ref(),
+        )
+        .map_err(|error| error.dropping(HeldState::SamplerState))?;
         if metadata.source != source {
             return Err(
                 invalid("frame checkpoint no longer matches its logical snapshot")
@@ -193,6 +207,7 @@ pub(crate) fn take(
     }
     Ok(Arc::new(Mutex::new(FrameRun {
         tables,
+        row_identities,
         metadata,
         snapshot: None,
         neighbors,
@@ -221,6 +236,8 @@ pub(crate) fn description(
 fn fingerprint(
     description: &SourceDescription,
     tables: &[(Relation, ArrowData)],
+    row_identities: &[OwnedIdentity],
+    strings: Option<&BTreeMap<String, BTreeMap<String, StringEncoding>>>,
 ) -> Result<String, CoreError> {
     let mut hash = 0xcbf2_9ce4_8422_2325_u64;
     let mut feed = |bytes: &[u8]| {
@@ -263,6 +280,32 @@ fn fingerprint(
             let bytes = row.as_ref();
             feed(&(bytes.len() as u64).to_le_bytes());
             feed(bytes);
+        }
+    }
+    if let Some(strings) = strings {
+        feed(b"native-string-encodings-v1");
+        feed(
+            &serde_json::to_vec(strings)
+                .map_err(|_| internal("native text encodings do not serialize"))?,
+        );
+    }
+    for identity in row_identities {
+        feed(b"native-row-identity-v1");
+        feed(
+            &serde_json::to_vec(&(&identity.definition, identity.encoding))
+                .map_err(|_| internal("native identity facts do not serialize"))?,
+        );
+        let batch = crate::materialize::one_batch(&identity.values)?;
+        let converter = arrow_row::RowConverter::new(vec![arrow_row::SortField::new(
+            batch.column(0).data_type().clone(),
+        )])
+        .map_err(|_| invalid("native identity type cannot be fingerprinted"))?;
+        let values = converter
+            .convert_columns(batch.columns())
+            .map_err(|_| invalid("native identity values cannot be fingerprinted"))?;
+        for row in values.iter() {
+            feed(&(row.as_ref().len() as u64).to_le_bytes());
+            feed(row.as_ref());
         }
     }
     Ok(format!("{hash:016x}"))
@@ -341,6 +384,26 @@ impl FrameRun {
         crate::materialize::meanings_carried(&physical, None)
     }
 
+    fn table_shapes(&self, description: &SourceDescription) -> Result<(), CoreError> {
+        for table in &description.tables {
+            let (_, data) = self
+                .tables
+                .iter()
+                .find(|(source, _)| source == &table.source)
+                .ok_or_else(|| invalid("a native graph lacks its constructed source table"))?;
+            if data.schema.fields().is_empty()
+                || data.batches.iter().all(|batch| batch.num_rows() == 0)
+            {
+                return Err(sdm_engine::frame_identity::refusal(
+                    "empty_frame",
+                    &table.name,
+                    "",
+                ));
+            }
+        }
+        Ok(())
+    }
+
     /// Prepare a useful graph artifact before task-native input conversion.
     /// Construction retains the snapshot before its separate drop notice is
     /// presented, so warning-as-error does not reread mutated caller frames.
@@ -349,8 +412,9 @@ impl FrameRun {
         asker: &Asker,
         description: SourceDescription,
     ) -> Result<PreparedGraph, CoreError> {
-        let graph = Graph::new(&description)?;
-        self.initialize(asker, &description, &graph)?;
+        self.table_shapes(&description)?;
+        let graph = NativeGraph::new(&description)?;
+        self.initialize_strings(asker, &description, &graph, None)?;
         Ok(PreparedGraph {
             source: self.source(),
             description,
@@ -366,7 +430,8 @@ impl FrameRun {
         description: SourceDescription,
         native: &[FrameNativeTable],
     ) -> Result<PreparedGraph, CoreError> {
-        let graph = Graph::new(&description)?;
+        self.table_shapes(&description)?;
+        let graph = NativeGraph::new(&description)?;
         let strings = description
             .tables
             .iter()
@@ -432,14 +497,20 @@ impl FrameRun {
         description: &SourceDescription,
         graph: &Graph,
     ) -> Result<(), CoreError> {
-        self.initialize_strings(asker, description, graph, None)
+        let native = NativeGraph::new(description)?;
+        if &native.topology != graph {
+            return Err(invalid(
+                "native topology differs from its complete source identity",
+            ));
+        }
+        self.initialize_strings(asker, description, &native, None)
     }
 
     fn initialize_strings(
         &mut self,
         asker: &Asker,
         description: &SourceDescription,
-        graph: &Graph,
+        graph: &NativeGraph,
         strings: Option<BTreeMap<String, BTreeMap<String, StringEncoding>>>,
     ) -> Result<(), CoreError> {
         if self.snapshot.is_some() {
@@ -450,9 +521,27 @@ impl FrameRun {
         // retains those immutable rows; failed construction caches none.
         // Resumed rows and identity were validated once at the ownership
         // boundary, before carry. Immutable owners need no second full scan.
+        let strings = strings.or_else(|| {
+            self.metadata
+                .as_ref()
+                .and_then(|metadata| metadata.strings.clone())
+        });
+        row_identity::complete(
+            &mut self.row_identities,
+            &self.tables,
+            self.metadata.is_some(),
+            description,
+            graph,
+            strings.as_ref(),
+        )?;
         let source = match &self.metadata {
             Some(metadata) => metadata.source.clone(),
-            None => fingerprint(description, &self.tables)?,
+            None => fingerprint(
+                description,
+                &self.tables,
+                &self.row_identities,
+                strings.as_ref(),
+            )?,
         };
         let rows = description
             .tables
@@ -466,14 +555,31 @@ impl FrameRun {
                 Ok((table.name.clone(), crate::materialize::one_batch(rows)?))
             })
             .collect::<Result<BTreeMap<_, _>, CoreError>>()?;
-        self.snapshot = Some(match strings {
-            Some(strings) => Snapshot::new_native(graph, rows, strings)?,
-            None => Snapshot::new(graph, rows)?,
-        });
+        let identities = self
+            .row_identities
+            .iter()
+            .map(|identity| {
+                let batch = crate::materialize::one_batch(&identity.values)?;
+                Ok((
+                    identity.definition.table.clone(),
+                    sdm_engine::frame_identity::IdentityColumn {
+                        values: Arc::clone(batch.column(0)),
+                        encoding: identity.encoding,
+                    },
+                ))
+            })
+            .collect::<Result<BTreeMap<_, _>, CoreError>>()?;
+        self.snapshot = Some(Snapshot::new_frame(
+            graph,
+            rows,
+            strings.clone(),
+            identities,
+        )?);
         self.metadata = Some(FrameCheckpointMetadata {
             source,
             description: description.clone(),
             neighbors: self.neighbors.checkpoint(),
+            strings,
         });
         self.keep(asker);
         Ok(())
@@ -488,6 +594,7 @@ impl FrameRun {
             asker.keep_frame(OwnedCheckpoint {
                 metadata: metadata.clone(),
                 tables: self.tables.clone(),
+                row_identities: self.row_identities.clone(),
             });
         }
     }
@@ -811,6 +918,7 @@ mod parent_hop_tests {
             .collect();
         (
             FrameRun {
+                row_identities: Vec::new(),
                 tables,
                 metadata: None,
                 snapshot: None,

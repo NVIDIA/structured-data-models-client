@@ -48,6 +48,12 @@ pub fn resolved_attachments(
                     };
                     let manifest: MaterializeFrames = serde_json::from_slice(read(frames)?)
                         .map_err(|_| invalid("unreadable frame graph source manifest", frames))?;
+                    named.extend(
+                        manifest
+                            .row_identities
+                            .iter()
+                            .map(|identity| (identity.values.values, AttachmentKind::Arrow)),
+                    );
                     declare_frame_rows(manifest.tables, &mut named)?;
                     if let Some(checkpoint) = checkpoint {
                         let manifest: FrameCheckpointManifest =
@@ -64,6 +70,12 @@ pub fn resolved_attachments(
                             ));
                         }
                         named.push((manifest.metadata, AttachmentKind::Bytes));
+                        named.extend(
+                            manifest
+                                .row_identities
+                                .iter()
+                                .map(|identity| (identity.values.values, AttachmentKind::Arrow)),
+                        );
                         declare_frame_rows(manifest.tables, &mut named)?;
                     }
                 }
@@ -234,9 +246,15 @@ pub fn resolved_attachments(
             frame.tables
         }
         Operation::Materialize(request) => {
-            let mut tables = serde_json::from_slice::<MaterializeFrames>(read(manifest)?)
-                .map_err(|_| invalid("unreadable materialize frame manifest", manifest))?
-                .tables;
+            let input = serde_json::from_slice::<MaterializeFrames>(read(manifest)?)
+                .map_err(|_| invalid("unreadable materialize frame manifest", manifest))?;
+            named.extend(
+                input
+                    .row_identities
+                    .iter()
+                    .map(|identity| (identity.values.values, AttachmentKind::Arrow)),
+            );
+            let mut tables = input.tables;
             if let Some(checkpoint) = request
                 .sampler_state
                 .as_ref()
@@ -247,6 +265,12 @@ pub fn resolved_attachments(
                         invalid("unreadable frame checkpoint manifest", checkpoint.manifest)
                     })?;
                 named.push((checkpoint_manifest.metadata, AttachmentKind::Bytes));
+                named.extend(
+                    checkpoint_manifest
+                        .row_identities
+                        .iter()
+                        .map(|identity| (identity.values.values, AttachmentKind::Arrow)),
+                );
                 tables.extend(checkpoint_manifest.tables);
             }
             tables

@@ -24,7 +24,9 @@ def test_native_constructor_binds_name_source_type_and_completed_meaning():
     assert column.separator([ord(char) for char in 'x|y;x|y;']) == '|'
     column.separated_counts(4, 2)
     assert json.loads(column.meaning()) == {
-        'name': 'part', 'dtype': 'string', 'stype': 'multicategorical'
+        'name': 'part',
+        'dtype': 'string',
+        'stype': 'multicategorical',
     }
     with pytest.raises(_native.CoreError):
         column.distinct_count(1)
@@ -33,6 +35,8 @@ def test_native_constructor_binds_name_source_type_and_completed_meaning():
 def test_fixed_native_declaration_cannot_be_replaced_by_exported_storage():
     with pytest.raises(_native.CoreError):
         _native.FrameNativeConstructor(
-            'history', 'part', b'{"storage":"text"}',
+            'history',
+            'part',
+            b'{"storage":"text"}',
             b'{"declaration":"physical","physical":{"type":"int64"}}',
         )

@@ -1585,6 +1585,7 @@ impl Run {
             let manifest = sdm_contract::frames::FrameCheckpointManifest {
                 metadata,
                 tables: Vec::new(),
+                row_identities: Vec::new(),
                 retained: Some(retained),
             };
             let manifest = attach(
@@ -1619,9 +1620,21 @@ impl Run {
                             objects: vec![],
                         });
                     }
+                    let mut row_identities = Vec::new();
+                    for identity in checkpoint.row_identities {
+                        let values = attach(&mut shared, Attachment::Arrow(identity.values))?;
+                        row_identities.push(sdm_contract::frames::materialize::FrameRowIdentity {
+                            definition: identity.definition,
+                            values: sdm_contract::data::strings::StringData {
+                                values,
+                                encoding: identity.encoding,
+                            },
+                        });
+                    }
                     let manifest = sdm_contract::frames::FrameCheckpointManifest {
                         metadata,
                         tables,
+                        row_identities,
                         retained: None,
                     };
                     let manifest = attach(
