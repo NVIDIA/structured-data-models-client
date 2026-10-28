@@ -88,6 +88,7 @@ CASES = (
     'overlap-caller-dtype',
     'overlap-caller-marks',
     'overlap-caller-cached',
+    'overlap-caller-reentry',
 )
 
 
@@ -332,7 +333,17 @@ def _observe(label):
             'overlap-caller-'
         ) and 'joins none of the rows given' in str(message):
             overlap_notices += 1
-            if label != 'overlap-caller-cached' or overlap_notices == 2:
+            reached_notice = overlap_notices
+            if label == 'overlap-caller-reentry' and reached_notice == 1:
+                gather()
+            if (
+                label == 'overlap-caller-reentry'
+                and reached_notice == 1
+                or label == 'overlap-caller-cached'
+                and reached_notice == 2
+                or label
+                not in ('overlap-caller-cached', 'overlap-caller-reentry')
+            ):
                 schema['users']['age'].dtype = 'int64'
                 if label == 'overlap-caller-marks':
                     schema.relationships.clear()
@@ -504,6 +515,8 @@ def test_complete_native_composite_history_matches_original(monkeypatch, label):
         'category-numeric-feature-text',
         'cached',
         'warning-retry',
+        'overlap-caller-cached',
+        'overlap-caller-reentry',
     ):
         assert expected['outcome'] == 'success'
     monkeypatch.setenv('SDM_CORE_ROUTES', FRAME_ROUTES)
