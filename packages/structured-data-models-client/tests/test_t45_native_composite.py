@@ -57,6 +57,8 @@ CASES = (
     'same-time-iterations',
     'relationships',
     'render-error',
+    'constructor-error',
+    'constructor-later-table',
     'replace',
     'cached',
     'warning-retry',
@@ -78,6 +80,12 @@ def _observe(label):
     class Key(str):
         def __str__(self):
             trace.append(('native-str', bool(active)))
+            if not active and stage == 'materialize':
+                if label == 'constructor-error':
+                    raise TypeError('native physical constructor failed')
+                if label == 'constructor-later-table' and not mutations:
+                    schema['users']['age'].stype = 'categorical'
+                    mutations.append('constructor-users-age')
             if active:
                 trace.append(('render', str.__str__(self)))
                 if label == 'render-error':
@@ -148,12 +156,14 @@ def _observe(label):
         'same-time-iterations',
         'relationships',
         'render-error',
+        'constructor-error',
+        'constructor-later-table',
         'replace',
     ):
         data['buys']['part'] = pd.Series(
             [Key('part') for _ in range(120)], dtype=object
         )
-    if label == 'later-table':
+    if label in ('later-table', 'constructor-later-table'):
         data = {name: data[name] for name in ('buys', 'users', 'items')}
     original_map = pd.Series.map
 
