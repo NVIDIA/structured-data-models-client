@@ -17,6 +17,7 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
+from t38_forced_routes_record import bare
 from t45_frame_routes import FRAME_ROUTES
 
 from sdm_client import (
@@ -323,4 +324,19 @@ def test_public_link_frame_journey_matches_frozen_client(
             RelationalMaterializer, '_get_model', old_engine_was_called
         )
     observed = observe(case['kind'], case['shape'], case['expected'])
-    assert observed == case['expected']
+    expected = copy.deepcopy(case['expected'])
+    if core:
+        # P3E-2 changes only a leading warning code, using the same pinned
+        # comparison as the existing forced-route differential consumers.
+        for warning in observed['warnings']:
+            warning['message'] = bare(warning['message'])
+        if (case['kind'], case['shape']) == ('uint64-high', 'ordinary'):
+            # P2D-4 omits this captured data value and preserves the exact
+            # class/code, table/column/row, range and remedy around it.
+            message = expected['error']['message']
+            captured = 'value 9223372036854775808'
+            assert message.count(captured) == 1
+            expected['error']['message'] = message.replace(
+                captured, 'a value', 1
+            )
+    assert observed == expected

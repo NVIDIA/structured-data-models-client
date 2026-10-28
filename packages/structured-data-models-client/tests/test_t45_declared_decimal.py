@@ -16,6 +16,7 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
+from t38_forced_routes_record import bare
 from t45_frame_routes import FRAME_ROUTES
 
 from sdm_client import PredictiveQuery, Schema
@@ -255,4 +256,9 @@ def test_declared_decimal_materialize_matches_frozen_native_behavior(
             for n in notices
         ]
     observed['effect_reached'] = effect_reached
+    if core:
+        # P3E-2 permits only the core's leading notice code. Native effects,
+        # warning classes/bodies/order and all complete payload hashes stay.
+        for warning in observed['warnings']:
+            warning['message'] = bare(warning['message'])
     assert observed == case['expected']
