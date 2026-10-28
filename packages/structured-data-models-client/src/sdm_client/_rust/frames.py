@@ -296,15 +296,12 @@ def _key_advice(
                     while (column := state.declined_column()) is not None:
                         if state.declined_distinct(
                             int(frame[column].nunique(dropna=True)), len(frame)
+                        ) and state.declined_quality(
+                            observe(name, frame, [column]).facts()
                         ):
-                            if state.declined_quality(
-                                observe(name, frame, [column]).facts()
-                            ):
-                                _show_held(
-                                    json.loads(
-                                        state.declined_notice(len(frame))
-                                    )
-                                )
+                            _show_held(
+                                json.loads(state.declined_notice(len(frame)))
+                            )
                 for name in state.keyless_tables():
                     frame = source(name)
                     columns = state.keyless_columns(
@@ -378,11 +375,15 @@ def _primitive_array(series: pd.Series) -> Any:
 
 def _numeric_physical(dtype: Any) -> str | None:
     """The physical width of the closed built-in numeric storage family."""
-    if isinstance(dtype, np.dtype) and dtype.isnative:
-        if (dtype.kind in 'biu' and dtype.itemsize <= 8) or (
-            dtype.kind == 'f' and dtype.itemsize in (4, 8)
-        ):
-            return 'bool' if dtype.kind == 'b' else dtype.name
+    if (
+        isinstance(dtype, np.dtype)
+        and dtype.isnative
+        and (
+            (dtype.kind in 'biu' and dtype.itemsize <= 8)
+            or (dtype.kind == 'f' and dtype.itemsize in (4, 8))
+        )
+    ):
+        return 'bool' if dtype.kind == 'b' else dtype.name
     if type(dtype) in (
         pd.Int8Dtype,
         pd.Int16Dtype,
