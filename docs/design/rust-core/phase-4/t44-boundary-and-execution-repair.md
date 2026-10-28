@@ -312,3 +312,13 @@ Keep the existing invalid-input HostRun witness and add direct serializer/deseri
 Use an empty struct alternative so the existing serde field-closure rule applies to that reached variant, without changing valid native observations, core overlap selection, the native producer, cache lifetime or any refusal policy.
 Keep the exact R26 source and receipts immutable while collecting its remaining approved public/native diagnostics; they do not establish a package stamp or validate this subsequent source repair.
 Regenerate canonical artifacts only through the existing applicable writers after the complete source checkpoint, then obtain both independent whole reviews before execution.
+
+
+## Retained caller context of the late range cause
+
+The unchanged approved R26 public matrix passes1,542 cases and its existing UInt64 case matches the ordinary three-error chain.
+Running that same public case inside an active caller `LookupError` exposes one additional context mismatch: the original bare range `ValueError` retains that caller exception, while the generated core presentation drops it.
+Keep the complete payload/warning/error observations in the new failing-first public twin and inspect the actual cause/context object identities in the direct presenter consumer.
+For this already-selected frame payload range recipe only, retain the active caller context from the known internal bridge exception on the bare cause and retain the original bare-exception handler context on the qualified cause.
+The existing shared raising helper then removes only its own bridge exception and preserves this native graph.
+Do not change unmarked SQL/direct errors, read source values, parse error text, introduce another capture step or change outer part wording/public details.

@@ -530,3 +530,29 @@ def test_complete_native_composite_history_matches_original(monkeypatch, label):
         RelationalMaterializer, '_get_model', old_engine_was_called
     )
     assert _observe(label) == expected
+
+
+def test_late_uint64_range_retains_the_active_caller_exception(monkeypatch):
+    def observed_while_handling():
+        try:
+            raise LookupError('active caller context')
+        except LookupError:
+            return _observe('uint64')
+
+    monkeypatch.setenv('SDM_CORE_ROUTES', '')
+    expected = observed_while_handling()
+    assert [item[0] for item in expected['chain']] == [
+        'StructuredDataError',
+        'ValueError',
+        'ValueError',
+        'LookupError',
+    ]
+    monkeypatch.setenv('SDM_CORE_ROUTES', FRAME_ROUTES)
+
+    def old_engine_was_called(*args, **kwargs):
+        raise AssertionError('core range conversion called the old engine')
+
+    monkeypatch.setattr(
+        RelationalMaterializer, '_get_model', old_engine_was_called
+    )
+    assert observed_while_handling() == expected

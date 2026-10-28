@@ -13,8 +13,9 @@ from sdm_client._rust import errors
 
 @pytest.mark.parametrize('marked', [False, True])
 @pytest.mark.parametrize('part', [None, 'part_forecast_step'])
+@pytest.mark.parametrize('ambient', [False, True])
 def test_only_reached_frame_payload_range_has_native_nested_causes(
-    marked, part
+    marked, part, ambient
 ):
     fields = {
         'table': {'t': 'utf8', 'v': 'buys'},
@@ -34,8 +35,13 @@ def test_only_reached_frame_payload_range_has_native_nested_causes(
         'fields': fields,
         'message': 'a value exceeds its request representation',
     }
+    caller = LookupError('active caller context') if ambient else None
+    bridge = RuntimeError('private core bridge')
+    bridge.__context__ = caller
     made = errors.error_from_core(
-        json.dumps({'message': 'error', 'error': sent}).encode(), {}
+        json.dumps({'message': 'error', 'error': sent}).encode(),
+        {},
+        internal_context=bridge,
     )
     assert 'frame_payload_range' not in made.details
     assert made.details['table'] == 'buys'
@@ -48,6 +54,8 @@ def test_only_reached_frame_payload_range_has_native_nested_causes(
     assert type(cause) is ValueError
     bare = cause.__cause__
     assert type(bare) is ValueError
+    assert cause.__context__ is bare
+    assert bare.__context__ is caller
     assert str(bare) == (
         'a value is outside the range int64 represents '
         '(-9223372036854775808 to 9223372036854775807); send the column as strings'
