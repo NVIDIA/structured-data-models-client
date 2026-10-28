@@ -14047,10 +14047,10 @@
               "const": "unavailable"
             }
           },
+          "additionalProperties": false,
           "required": [
             "observation"
-          ],
-          "additionalProperties": false
+          ]
         },
         {
           "type": "object",
