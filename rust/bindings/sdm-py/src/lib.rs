@@ -240,6 +240,22 @@ struct FrameQuestion {
 }
 
 #[pyclass(frozen, module = "sdm_client._native")]
+struct FrameLabelGroups {
+    owner: sdm_host::RetainedFrameLabelGroups,
+}
+
+#[pymethods]
+impl FrameLabelGroups {
+    fn rows(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let rows = self
+            .owner
+            .rows()
+            .map_err(|error| PyValueError::new_err(error.message))?;
+        to_python(py, Attachment::Arrow(rows), true)
+    }
+}
+
+#[pyclass(frozen, module = "sdm_client._native")]
 struct FrameLabelBatch {
     owner: sdm_host::RetainedFrameLabelBatch,
 }
@@ -362,6 +378,7 @@ fn to_python(py: Python<'_>, attachment: Attachment, retained: bool) -> PyResult
         )?
         .into_any(),
         Attachment::FrameGraph(owner) => Py::new(py, FrameGraph { owner })?.into_any(),
+        Attachment::FrameLabelGroups(owner) => Py::new(py, FrameLabelGroups { owner })?.into_any(),
         Attachment::FrameLabelBatch(owner) => Py::new(py, FrameLabelBatch { owner })?.into_any(),
         Attachment::FramePopulation(owner) => Py::new(py, FramePopulation { owner })?.into_any(),
         Attachment::FrameQuestion(owner) => Py::new(py, FrameQuestion { owner })?.into_any(),
@@ -629,6 +646,13 @@ fn attachments_from_python(
             Attachment::Bytes(bytes.as_bytes().to_vec())
         } else if value.is_exact_instance_of::<FrameGraph>() {
             Attachment::FrameGraph(value.extract::<PyRef<'_, FrameGraph>>()?.owner.clone())
+        } else if value.is_exact_instance_of::<FrameLabelGroups>() {
+            Attachment::FrameLabelGroups(
+                value
+                    .extract::<PyRef<'_, FrameLabelGroups>>()?
+                    .owner
+                    .clone(),
+            )
         } else if value.is_exact_instance_of::<FrameLabelBatch>() {
             Attachment::FrameLabelBatch(
                 value.extract::<PyRef<'_, FrameLabelBatch>>()?.owner.clone(),
@@ -852,6 +876,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<FrameGraph>()?;
     module.add_class::<FrameQuestion>()?;
     module.add_class::<FramePopulation>()?;
+    module.add_class::<FrameLabelGroups>()?;
     module.add_class::<FrameLabelBatch>()?;
     module.add_class::<FrameTask>()?;
     module.add_class::<FrameReferences>()?;

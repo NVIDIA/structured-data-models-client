@@ -17,12 +17,23 @@ import unicodedata
 from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType, TracebackType
-from typing import Any, Literal, NoReturn, TypeAlias, TypedDict, cast
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Literal,
+    NoReturn,
+    TypeAlias,
+    TypedDict,
+    cast,
+)
 
 import pandas as pd
 
 from sdm_client._rust.codec import relation_name
 from sdm_client.errors import StructuredDataError
+
+if TYPE_CHECKING:
+    import numpy as np
 
 _ExceptionChain: TypeAlias = tuple[
     TracebackType | None, BaseException | None, BaseException | None, bool
@@ -275,7 +286,7 @@ class NativeFrameColumns:
     def __init__(
         self,
         columns: Mapping[str, Mapping[str, Any]],
-        categorical: Mapping[str, Mapping[str, Any]] | None = None,
+        arrays: Mapping[str, Mapping[str, Any]] | None = None,
     ) -> None:
         self._columns = MappingProxyType(
             {
@@ -283,10 +294,10 @@ class NativeFrameColumns:
                 for source, types in columns.items()
             }
         )
-        self._categorical = MappingProxyType(
+        self._arrays = MappingProxyType(
             {
                 source: MappingProxyType(dict(arrays))
-                for source, arrays in (categorical or {}).items()
+                for source, arrays in (arrays or {}).items()
             }
         )
 
@@ -297,31 +308,35 @@ class NativeFrameColumns:
 
     def label_result(
         self, binding: Mapping[str, Any], values: list[Any]
-    ) -> None:
-        """Perform the reached native category pointwise-result conversion.
+    ) -> (
+        np.ndarray[Any, np.dtype[np.object_]] | pd.api.extensions.ExtensionArray
+    ):
+        """Perform the reached native pointwise-result conversion.
 
         Values are the core's actual list labels, never host aggregations.
-        The original category array retains its native categories/index owner.
+        The original array retains its actual native dtype and storage owner.
         Native pandas chooses its own conversion/fallback behavior, including
         the measured unhashable-list failure; no runtime-version policy lives
-        here. Successful list results retain the core's logical values.
+        here. The actual successful native result is authoritative.
         """
         import numpy as np
 
         source = relation_name(binding['source'])
-        native = self._categorical[source][binding['column']]
+        native = self._arrays[source][binding['column']]
         boxed = np.empty(len(values), dtype=object)
         for ordinal, value in enumerate(values):
             boxed[ordinal] = value
         cast = getattr(native, '_cast_pointwise_result', None)
         if cast is not None:
-            cast(boxed)
+            return cast(boxed)
         else:
             # This is the native operation used by pandas' earlier groupby
             # implementation, including its own extension-cast fallback.
             from pandas.core.dtypes.cast import maybe_cast_pointwise_result
 
-            maybe_cast_pointwise_result(boxed, native.dtype, numeric_only=True)
+            return maybe_cast_pointwise_result(
+                boxed, self.dtype(binding), numeric_only=True
+            )
 
     def prediction(
         self, binding: Mapping[str, Any], indices: list[Any]

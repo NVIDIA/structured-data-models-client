@@ -47,6 +47,7 @@ pub enum Attachment {
     FrameGraph(crate::RetainedFrameGraph),
     FrameQuestion(crate::RetainedFrameQuestion),
     FramePopulation(crate::RetainedFramePopulation),
+    FrameLabelGroups(crate::RetainedFrameLabelGroups),
     FrameLabelBatch(crate::RetainedFrameLabelBatch),
     FrameTask(crate::RetainedFrameTask),
     FrameReferences(crate::RetainedFrameReferences),

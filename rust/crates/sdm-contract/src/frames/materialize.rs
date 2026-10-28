@@ -236,6 +236,26 @@ pub struct PreparedFramePopulation {
     pub batch_rows: u32,
 }
 
+/// Complete reached target groups before native restoration or later masks.
+/// The owner retains immutable source rows, ordered groups and prior batch data.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct PreparedFrameLabelGroups {
+    pub population: String,
+    pub range: FrameBatchRange,
+    pub owner: AttachmentId,
+    pub native_target: Option<FrameNativeColumnRef>,
+    pub target_encoding: Option<StringEncoding>,
+}
+
+/// Actual successful entity/anchor/target rows returned by native restoration.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RestoredFrameLabels {
+    pub rows: AttachmentId,
+    pub encoding: Option<StringEncoding>,
+}
+
 /// Actual evaluated label rows for one candidate range. Completeness is
 /// derived from the complete earlier label evidence, not a resume request.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -520,6 +540,17 @@ pub enum FramePreparation {
         num_context_samples: Option<u64>,
         limits: FrameLimits,
     },
+    LabelGroups {
+        population: PreparedFramePopulation,
+        range: FrameBatchRange,
+        previous: Option<PreparedFrameLabelBatch>,
+        converted: FrameReferenceValues,
+    },
+    CompleteLabelBatch {
+        population: PreparedFramePopulation,
+        groups: PreparedFrameLabelGroups,
+        restored: Option<RestoredFrameLabels>,
+    },
     LabelBatch {
         population: PreparedFramePopulation,
         range: FrameBatchRange,
@@ -590,6 +621,7 @@ pub enum PreparedFrameValue {
     FailureAssessment(FrameFailureAssessment),
     Graph(PreparedFrameGraph),
     Population(PreparedFramePopulation),
+    LabelGroups(PreparedFrameLabelGroups),
     LabelBatch(PreparedFrameLabelBatch),
     Labels(LabelledFrameTask),
     Task(CompletedFrameTask),

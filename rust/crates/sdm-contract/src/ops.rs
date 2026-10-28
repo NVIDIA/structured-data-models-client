@@ -62,6 +62,7 @@ pub enum AttachmentKind {
     FrameGraph,
     FrameQuestion,
     FramePopulation,
+    FrameLabelGroups,
     FrameLabelBatch,
     FrameTask,
     FrameReferences,

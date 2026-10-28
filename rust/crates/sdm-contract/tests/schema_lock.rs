@@ -759,6 +759,14 @@ const OTHER: [(&str, &str); 52] = [
         "Core-created immutable FramePopulation resource",
     ),
     (
+        "PreparedFrameLabelGroups.owner",
+        "Core-created immutable pre-mask FrameLabelGroups resource",
+    ),
+    (
+        "RestoredFrameLabels.rows",
+        "Arrow complete aligned entity, anchor and restored target groups",
+    ),
+    (
         "PreparedFrameLabelBatch.owner",
         "Core-created immutable FrameLabelBatch resource",
     ),

@@ -13,7 +13,7 @@ mod native_guard;
 mod owners;
 mod population;
 pub(crate) mod source_keys;
-pub use population::{RetainedFrameLabelBatch, RetainedFramePopulation};
+pub use population::{RetainedFrameLabelBatch, RetainedFrameLabelGroups, RetainedFramePopulation};
 pub(crate) mod questions;
 pub use owners::{RetainedFramePayload, RetainedFrameReferences, RetainedFrameTask};
 pub use questions::RetainedFrameQuestion;
@@ -305,6 +305,31 @@ pub(crate) async fn run(
         }
         input @ FramePreparation::Population { .. } => PreparedFrameValue::Population(
             population(&asker, input, &facts, &*zones, &mut attachments).await?,
+        ),
+        FramePreparation::LabelGroups {
+            population,
+            range,
+            previous,
+            converted,
+        } => PreparedFrameValue::LabelGroups(
+            population::label_groups(
+                &asker,
+                population,
+                range,
+                previous,
+                converted,
+                &mut attachments,
+            )
+            .await
+            .map_err(FrameStageError::into_core)?,
+        ),
+        FramePreparation::CompleteLabelBatch {
+            population,
+            groups,
+            restored,
+        } => PreparedFrameValue::LabelBatch(
+            population::complete_batch(&asker, population, groups, restored, &mut attachments)
+                .map_err(FrameStageError::into_core)?,
         ),
         FramePreparation::LabelBatch {
             population,

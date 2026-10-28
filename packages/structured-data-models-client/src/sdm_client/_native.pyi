@@ -114,6 +114,12 @@ class FramePopulation:
     def keys(self) -> ArrowStream: ...
 
 @final
+class FrameLabelGroups:
+    """Actual immutable pre-mask native label groups created by the core."""
+
+    def rows(self) -> ArrowStream: ...
+
+@final
 class FrameLabelBatch:
     """An immutable label batch owner created by the core."""
 

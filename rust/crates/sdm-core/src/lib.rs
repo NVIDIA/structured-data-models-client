@@ -41,8 +41,8 @@ pub use dispatch::start;
 pub use edit::{dtype_names, meanings, wire_names};
 pub use frame_materialize::RetainedFrameGraph;
 pub use materialize::frame_values::{
-    RetainedFrameLabelBatch, RetainedFramePayload, RetainedFramePopulation, RetainedFrameQuestion,
-    RetainedFrameReferences, RetainedFrameTask,
+    RetainedFrameLabelBatch, RetainedFrameLabelGroups, RetainedFramePayload,
+    RetainedFramePopulation, RetainedFrameQuestion, RetainedFrameReferences, RetainedFrameTask,
 };
 /// The text a float is spelled in, as the reference's language writes it
 /// (Python's `repr`): for a host that hands the data layer a value to

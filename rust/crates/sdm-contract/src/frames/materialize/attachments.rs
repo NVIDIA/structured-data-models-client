@@ -77,9 +77,10 @@ impl FramePreparation {
         match self {
             Self::Graph { retained, .. } => *retained,
             Self::Population { graph, .. } => Some(graph.owner),
-            Self::LabelBatch { population, .. } | Self::Labels { population, .. } => {
-                Some(population.graph.owner)
-            }
+            Self::LabelGroups { population, .. }
+            | Self::CompleteLabelBatch { population, .. }
+            | Self::LabelBatch { population, .. }
+            | Self::Labels { population, .. } => Some(population.graph.owner),
             Self::Task { labelled, .. } => Some(labelled.graph.owner),
             Self::Plan { task, .. } => Some(task.labelled.graph.owner),
             Self::References { plan, .. } => Some(plan.task.labelled.graph.owner),
@@ -158,7 +159,13 @@ impl FramePreparation {
                 );
                 out.extend(values.iter().map(|values| (*values, Bytes)));
             }
-            Self::LabelBatch {
+            Self::LabelGroups {
+                population,
+                previous,
+                converted: values,
+                ..
+            }
+            | Self::LabelBatch {
                 population,
                 previous,
                 converted: values,
@@ -172,6 +179,16 @@ impl FramePreparation {
                         .map(|batch| (batch.owner, AttachmentKind::FrameLabelBatch)),
                 );
                 converted(values, &mut out);
+            }
+            Self::CompleteLabelBatch {
+                population,
+                groups,
+                restored,
+            } => {
+                graph(&population.graph, &mut out);
+                out.push((population.owner, AttachmentKind::FramePopulation));
+                out.push((groups.owner, AttachmentKind::FrameLabelGroups));
+                out.extend(restored.iter().map(|value| (value.rows, Arrow)));
             }
             Self::Labels {
                 population,

@@ -338,7 +338,8 @@ pub fn check_attachments(
             (Some(Attachment::Bytes(_)), AttachmentKind::Bytes)
             | (Some(Attachment::Arrow(_)), AttachmentKind::Arrow)
             | (Some(Attachment::FrameGraph(_)), AttachmentKind::FrameGraph) => {}
-            (Some(Attachment::FrameLabelBatch(_)), AttachmentKind::FrameLabelBatch)
+            (Some(Attachment::FrameLabelGroups(_)), AttachmentKind::FrameLabelGroups)
+            | (Some(Attachment::FrameLabelBatch(_)), AttachmentKind::FrameLabelBatch)
             | (Some(Attachment::FramePopulation(_)), AttachmentKind::FramePopulation)
             | (Some(Attachment::FrameQuestion(_)), AttachmentKind::FrameQuestion)
             | (Some(Attachment::FrameTask(_)), AttachmentKind::FrameTask)

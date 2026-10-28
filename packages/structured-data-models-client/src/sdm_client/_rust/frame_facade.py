@@ -120,7 +120,7 @@ def _ids(kind: str, value: dict[str, Any]) -> list[int]:
         ]
     if kind == 'graph':
         return [value['owner']]
-    if kind == 'label_batch':
+    if kind in ('label_groups', 'label_batch'):
         return [value['owner']]
     if kind == 'population':
         return [*_ids('graph', value['graph']), value['owner']]
@@ -210,7 +210,7 @@ def _bind(product: _Product, into: _Bindings) -> dict[str, Any]:
         return {**value, 'owner': bound[value['owner']]}
     if product.kind == 'graph':
         return graph(value)
-    if product.kind == 'label_batch':
+    if product.kind in ('label_groups', 'label_batch'):
         return {**value, 'owner': bound[value['owner']]}
     if product.kind == 'population':
         return {
@@ -618,7 +618,7 @@ def _single(
                     evidence = adopt(
                         _prepare(
                             {
-                                'stage': 'label_batch',
+                                'stage': 'label_groups',
                                 'population': _bind(population, bindings),
                                 'range': candidate_range,
                                 'previous': _bind(label_batches[-1], bindings)
@@ -629,39 +629,83 @@ def _single(
                             bindings,
                             state,
                         ),
-                        'label_batch',
+                        'label_groups',
                     )
                 except StructuredDataError as error:
                     _native_rejected(
                         error, native_failure, graph.data, part=part
                     )
                     raise
-                native_target = evidence.data.get('native_target')
-                if (
-                    native_target is not None
-                    and type(columns.dtype(native_target))
-                    is pd.CategoricalDtype
-                ):
-                    label_rows = _table(
-                        evidence.owners[evidence.data['owner']].rows()
-                    )
-                    values = label_rows.column('target').to_pylist()
-                    if evidence.data['target_encoding'] == 'utf8_surrogatepass':
-                        values = [
-                            [
-                                value.decode('utf-8', 'surrogatepass')
-                                for value in row
-                            ]
-                            for row in values
-                        ]
-                    try:
-                        columns.label_result(native_target, values)
-                    except Exception as error:
-                        _guard(
-                            NativeFrameFailure.capture(error),
-                            graph.data,
-                            part=part,
+                try:
+                    native_target = evidence.data['native_target']
+                    bindings = _Bindings()
+                    restored = None
+                    if native_target is not None:
+                        import pyarrow as pa
+
+                        label_rows = _table(
+                            evidence.owners[evidence.data['owner']].rows()
                         )
+                        target = label_rows.column('target')
+                        values = target.to_pylist()
+                        exceptional = (
+                            evidence.data['target_encoding']
+                            == 'utf8_surrogatepass'
+                        )
+                        if exceptional:
+                            values = [
+                                [
+                                    value.decode('utf-8', 'surrogatepass')
+                                    for value in row
+                                ]
+                                for row in values
+                            ]
+                        try:
+                            native_labels = columns.label_result(
+                                native_target, values
+                            )
+                            converted_labels: object = native_labels
+                            if exceptional:
+                                converted_labels = [
+                                    [
+                                        str.encode(
+                                            value, 'utf-8', 'surrogatepass'
+                                        )
+                                        for value in row
+                                    ]
+                                    for row in native_labels
+                                ]
+                            restored_rows = label_rows.set_column(
+                                2,
+                                label_rows.schema.field(2),
+                                pa.array(converted_labels, type=target.type),
+                            )
+                        except Exception as error:
+                            _guard(
+                                NativeFrameFailure.capture(error),
+                                graph.data,
+                                part=part,
+                            )
+                        restored = {
+                            'rows': bindings.add(restored_rows),
+                            'encoding': evidence.data['target_encoding'],
+                        }
+                    completed = adopt(
+                        _prepare(
+                            {
+                                'stage': 'complete_label_batch',
+                                'population': _bind(population, bindings),
+                                'groups': _bind(evidence, bindings),
+                                'restored': restored,
+                            },
+                            bindings,
+                            state,
+                        ),
+                        'label_batch',
+                    )
+                finally:
+                    evidence.owners.clear()
+                evidence = completed
                 label_batches.append(evidence)
                 if evidence.data['complete']:
                     break

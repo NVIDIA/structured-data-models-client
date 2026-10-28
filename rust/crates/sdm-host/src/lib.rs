@@ -33,9 +33,9 @@ pub use sdm_core::{
     ArrowData, Attachment, Attachments, CompositionRoot, FrameKeyAdoption, FrameKeyAdvice,
     FrameKeyCandidates, FrameNativeConstructor, FrameObjectConstructor, FrameObjectContent,
     FrameObjectRead, LogicalValue, RetainedFrameGraph, RetainedFrameLabelBatch,
-    RetainedFramePayload, RetainedFramePopulation, RetainedFrameQuestion, RetainedFrameReferences,
-    RetainedFrameTask, check_frame_cell, dtype_names, meanings, native_constructed_dtype,
-    wire_names,
+    RetainedFrameLabelGroups, RetainedFramePayload, RetainedFramePopulation, RetainedFrameQuestion,
+    RetainedFrameReferences, RetainedFrameTask, check_frame_cell, dtype_names, meanings,
+    native_constructed_dtype, wire_names,
 };
 pub use zones::{ZoneError, ZoneResolver, ZoneRoot, ZoneSource, session_zone_offset};
 
