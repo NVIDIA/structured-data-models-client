@@ -338,3 +338,41 @@ def test_legacy_partial_products_remain_closed_native_evidence(bad):
         core['answered']['next_operation'] = 'not-a-product'
     with pytest.raises(reader().ObservationError):
         reader().view(core, operations)
+
+
+def test_legacy_carried_metadata_uses_one_actual_arrow_import():
+    import pyarrow as pa
+
+    class Stream:
+        def __init__(self, table):
+            self.reader = table.to_reader()
+            self.imports = 0
+
+        def __arrow_c_stream__(self):
+            self.imports += 1
+            return self.reader.__arrow_c_stream__()
+
+    table = pa.table(
+        {
+            'row_index': pa.array([0], type=pa.int64()),
+            'id': pa.array([7], type=pa.int64()),
+            'prediction': pa.array([-0.0], type=pa.float64()),
+            'answer_index': pa.array([0], type=pa.int64()),
+        }
+    ).replace_schema_metadata(
+        {
+            b'model': b'endpoint-version',
+            b'request_id': b'endpoint-answer',
+            b'metadata': b'{"source":"actual-carried-schema"}',
+            b'outputs': b'["prediction"]',
+        }
+    )
+    stream = Stream(table)
+    recorded = RUNNER._carried_result(stream, 3)
+    assert stream.imports == 1
+    assert recorded['rows'] == 3
+    assert recorded['model'] == 'endpoint-version'
+    assert recorded['request_id'] == 'endpoint-answer'
+    assert recorded['metadata'] == {'source': 'actual-carried-schema'}
+    assert recorded['outputs'] == ['prediction']
+    assert recorded['result']['rows'][0][2] == {'f64_bits': '8000000000000000'}
