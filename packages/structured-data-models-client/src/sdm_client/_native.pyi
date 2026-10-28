@@ -5,9 +5,10 @@
 """The Rust core's binding, built from rust/bindings/sdm-py.
 
 Control messages cross as ``bytes`` both ways, each with the attachments it
-names in a ``dict`` by id. An attachment is ``bytes`` or Arrow data: in, any
-object with ``__arrow_c_stream__``; out, an :class:`ArrowStream`. Only
-``sdm_client._rust`` imports this module, and only on a core route.
+names in a ``dict`` by id. Attachments carry ``bytes``, Arrow data or exact
+core-created frame owners. Arrow data enters as any object with
+``__arrow_c_stream__`` and leaves as an :class:`ArrowStream`.
+Only ``sdm_client._rust`` imports this module, and only on a core route.
 """
 
 from collections.abc import Mapping
@@ -85,10 +86,72 @@ class ArrowStream:
     ) -> object: ...
     def __arrow_c_schema__(self) -> object: ...
 
+#: The builtin values presented from the core's logical JSON data.
+_LogicalValue = (
+    bool
+    | int
+    | float
+    | str
+    | None
+    | list['_LogicalValue']
+    | dict[str, '_LogicalValue']
+)
+
+@final
+class FrameGraph:
+    """An immutable graph owner created by the core."""
+
+    def same_owner(self, other: FrameGraph) -> bool: ...
+
+@final
+class FrameQuestion:
+    """An opaque question owner created by the core."""
+
+@final
+class FramePopulation:
+    """An immutable population owner created by the core."""
+
+    def keys(self) -> ArrowStream: ...
+
+@final
+class FrameLabelBatch:
+    """An immutable label batch owner created by the core."""
+
+    def rows(self) -> ArrowStream: ...
+
+@final
+class FrameTask:
+    """An immutable task owner created by the core."""
+
+    def context(self) -> ArrowStream: ...
+    def prediction(self) -> ArrowStream: ...
+
+@final
+class FrameReferences:
+    """An immutable reference owner created by the core."""
+
+    def nodes(self) -> ArrowStream: ...
+
+@final
+class FramePayload:
+    """A complete immutable payload created by the core."""
+
+    def wire(self) -> bytes: ...
+    def value(self) -> _LogicalValue: ...
+
+_FrameOwner = (
+    FrameGraph
+    | FrameQuestion
+    | FramePopulation
+    | FrameLabelBatch
+    | FrameTask
+    | FrameReferences
+    | FramePayload
+)
 #: An attachment a caller sends.
-_AttachmentIn = bytes | _ArrowStreamExportable
+_AttachmentIn = bytes | _ArrowStreamExportable | _FrameOwner
 #: An attachment the core gives.
-_AttachmentOut = bytes | ArrowStream
+_AttachmentOut = bytes | ArrowStream | _FrameOwner
 #: A control message the core wrote, with the attachments it names.
 _Outgoing = tuple[bytes, dict[int, _AttachmentOut]]
 
