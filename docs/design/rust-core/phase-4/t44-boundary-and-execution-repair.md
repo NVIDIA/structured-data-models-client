@@ -193,6 +193,18 @@ Reentry observers must mark the same reached normalization scope as the frozen w
 Use the existing complete frozen public consumers and pure Rust host journeys as the failing-first evidence, adding only tests needed to distinguish role ownership, malformed products and native observation/error timing.
 Keep any distinct remaining failure explicitly open until its full output and actual producer/reader rule are understood.
 
+## Unsigned LINK values and the reached request range boundary
+
+The complete frozen UInt64 LINK case refuses an out-of-range related-table cell during request preparation, after native task and label work.
+The current generic signed target reader instead refuses that already-admitted unsigned input before the typed LINK label exists.
+Keep the full unsigned value in the existing LIST_DISTINCT path, its internal typed list value and its Arrow publication/readback, without changing scalar labels, arithmetic targets or timestamp support.
+Render unsigned LINK label members as exact decimal text through the existing target encoder.
+For an integer entity reference that the existing missing-example rule promotes to float64, perform that reached physical-integer conversion before signed request-cell validation.
+The real related key still reaches its ordinary range check, preserving table, column, row, error kind and execution order.
+Retain complete-reference range behavior at its existing instance-reference location.
+Use the existing approved P2D-4 omission of the data value and P3E-2 warning-prefix comparison only; retain every other frozen byte, native effect, transport accounting and refusal field.
+Tests must span the unsigned range, JSON-safe and signed boundaries, null/empty lists, deduplication order, mixed/malformed lists, retained owners and missing-reference promotion before this producer/reader repair is executed.
+
 The original fixed physical declaration cannot be represented by `ColumnType` alone.
 That admitted interchange vocabulary omits LargeUTF8 and Decimal32/64 and narrows Decimal scale to i8, while the already admitted native Decimal facts retain all four widths and full i32 scale.
 Compose the existing neutral physical vocabulary with an explicit LargeUTF8 declaration and the existing `NativeDecimal` descriptor; do not substitute the exported scale-zero/widened storage type for the native declaration.
