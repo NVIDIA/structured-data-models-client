@@ -88,7 +88,7 @@ class UnobservedText(str):
 def test_entry_forwards_opaque_owners_without_observation(
     monkeypatch, model_kind, raised
 ):
-    from sdm_client._rust import relational_predict, run
+    from sdm_client._rust import errors, relational_predict, run
 
     model = (
         'kumo-relational'
@@ -113,6 +113,7 @@ def test_entry_forwards_opaque_owners_without_observation(
 
     monkeypatch.setattr(relational_predict, 'predict', predict)
     original_native = run.native
+    original_presentation = errors.error_from_core
     boundary = RUNNER._Boundary()
     capture = boundary.reset()
     try:
@@ -142,15 +143,17 @@ def test_entry_forwards_opaque_owners_without_observation(
         boundary.close()
     assert run.native is original_native
     assert relational_predict.predict is predict
+    assert errors.error_from_core is original_presentation
 
 
-def test_close_restores_both_hooks_in_lifo_order_and_keeps_external_wrapper(
+def test_close_restores_three_hooks_in_lifo_order_and_keeps_external_wrapper(
     monkeypatch,
 ):
-    from sdm_client._rust import relational_predict, run
+    from sdm_client._rust import errors, relational_predict, run
 
     original_native = run.native
     original_predict = relational_predict.predict
+    original_presentation = errors.error_from_core
 
     def external_native():
         return original_native()
@@ -158,30 +161,39 @@ def test_close_restores_both_hooks_in_lifo_order_and_keeps_external_wrapper(
     def external_predict(*args, **kwargs):
         return original_predict(*args, **kwargs)
 
+    def external_presentation(*args, **kwargs):
+        return original_presentation(*args, **kwargs)
+
     monkeypatch.setattr(run, 'native', external_native)
     monkeypatch.setattr(relational_predict, 'predict', external_predict)
+    monkeypatch.setattr(errors, 'error_from_core', external_presentation)
     outer = RUNNER._Boundary()
     outer_native, outer_predict = run.native, relational_predict.predict
+    outer_presentation = errors.error_from_core
     inner = RUNNER._Boundary()
     inner_native, inner_predict = run.native, relational_predict.predict
+    inner_presentation = errors.error_from_core
     try:
         with pytest.raises(RUNNER.RunnerFailure, match='LIFO|order|active'):
             outer.close()
         assert run.native is inner_native
         assert relational_predict.predict is inner_predict
+        assert errors.error_from_core is inner_presentation
     finally:
         inner.close()
         assert run.native is outer_native
         assert relational_predict.predict is outer_predict
+        assert errors.error_from_core is outer_presentation
         outer.close()
     assert run.native is external_native
     assert relational_predict.predict is external_predict
+    assert errors.error_from_core is external_presentation
 
 
 def test_two_boundary_lifetimes_and_case_resets_do_not_accumulate_entries(
     monkeypatch,
 ):
-    from sdm_client._rust import relational_predict, run
+    from sdm_client._rust import errors, relational_predict, run
 
     returned = Unobserved()
 
@@ -190,6 +202,7 @@ def test_two_boundary_lifetimes_and_case_resets_do_not_accumulate_entries(
 
     monkeypatch.setattr(relational_predict, 'predict', predict)
     original_native = run.native
+    original_presentation = errors.error_from_core
     for _ in range(2):
         boundary = RUNNER._Boundary()
         try:
@@ -218,12 +231,13 @@ def test_two_boundary_lifetimes_and_case_resets_do_not_accumulate_entries(
             boundary.close()
         assert run.native is original_native
         assert relational_predict.predict is predict
+        assert errors.error_from_core is original_presentation
 
 
 def test_reset_during_entry_is_rejected_without_splitting_its_owner(
     monkeypatch,
 ):
-    from sdm_client._rust import relational_predict
+    from sdm_client._rust import errors, relational_predict, run
 
     holder = {}
     returned = Unobserved()
@@ -234,11 +248,19 @@ def test_reset_during_entry_is_rejected_without_splitting_its_owner(
         ):
             holder['boundary'].reset()
         assert holder['boundary'].capture is holder['capture']
+        assert run.native is holder['native']
+        assert relational_predict.predict is holder['predict']
+        assert errors.error_from_core is holder['presentation']
         return returned
 
     monkeypatch.setattr(relational_predict, 'predict', predict)
     boundary = RUNNER._Boundary()
     holder.update(boundary=boundary, capture=boundary.reset())
+    holder.update(
+        native=run.native,
+        predict=relational_predict.predict,
+        presentation=errors.error_from_core,
+    )
     try:
         assert (
             relational_predict.predict(None, None, 'active', None) is returned
@@ -522,3 +544,226 @@ def test_raw_legacy_capture_rejects_an_empty_steps_reserved_id():
             20,
             json.dumps({'metadata': {'request_id': PLANNED_IDS[2]}}).encode(),
         )
+
+
+class UnformattedFailure(ValueError):
+    __str__ = Unobserved.__str__
+    __repr__ = Unobserved.__repr__
+    __hash__ = Unobserved.__hash__
+    __eq__ = Unobserved.__eq__
+
+
+def error_entry(monkeypatch, predict, *, converter=None):
+    """Reach real preparation inside the transparently observed entry."""
+    from sdm_client._rust import errors, relational_predict, run
+
+    monkeypatch.setattr(relational_predict, 'predict', predict)
+    if converter is not None:
+        monkeypatch.setattr(errors, 'error_from_core', converter)
+    original_native = run.native
+    original_presentation = errors.error_from_core
+    boundary = RUNNER._Boundary()
+    captured = boundary.reset()
+    error = None
+    value = None
+    try:
+        try:
+            value = relational_predict.predict(
+                None, None, 'kumo-relational', None
+            )
+        except Exception as raised:  # noqa: BLE001 - preserve the actual owner
+            error = raised
+    finally:
+        boundary.close()
+    assert run.native is original_native
+    assert relational_predict.predict is predict
+    assert errors.error_from_core is original_presentation
+    [entry] = entries(captured)
+    assert entry['completion'] == (
+        'raised' if error is not None else 'returned'
+    )
+    return captured, entry, error, value
+
+
+def lookup_errors(capture):
+    found = [
+        record
+        for record in capture.inputs
+        if record['op'] == 'prepare_request'
+        and record['input'] == {'stage': 'model_lookup', 'position': None}
+    ]
+    assert found
+    for record in found:
+        assert record['error'] is not None
+        assert record['result'] is None
+        assert record['entry'] == 0
+    return found
+
+
+def test_recovered_refusal_as_context_does_not_become_terminal_core_error(
+    monkeypatch,
+):
+    from sdm_client import StructuredDataError
+    from sdm_client._rust.prepare import _call
+
+    retained = UnformattedFailure('host failure after recovery')
+    selected = []
+
+    def predict(*args):
+        try:
+            _call({'stage': 'model_lookup', 'position': None})
+        except StructuredDataError as refused:
+            selected.append(refused)
+            raise retained
+
+    capture, entry, error, _ = error_entry(monkeypatch, predict)
+    assert error is retained
+    [refused] = selected
+    assert BaseException.__getattribute__(error, '__context__') is refused
+    assert BaseException.__getattribute__(error, '__cause__') is None
+    assert (
+        BaseException.__getattribute__(error, '__suppress_context__') is False
+    )
+    [lookup] = lookup_errors(capture)
+    assert lookup['run'] in entry['runs']
+    assert capture.error is None
+    assert entry.get('failure') is None
+
+
+def test_exact_presented_refusal_survives_a_later_successful_run(monkeypatch):
+    from sdm_client import StructuredDataError
+    from sdm_client._rust import errors
+    from sdm_client._rust.prepare import _call
+
+    actual_converter = errors.error_from_core
+    presentations = []
+    selected = []
+
+    def converter(*args, **kwargs):
+        made = actual_converter(*args, **kwargs)
+        presentations.append((made, kwargs['internal_context']))
+        return made
+
+    def predict(*args):
+        try:
+            _call({'stage': 'model_lookup', 'position': None})
+        except StructuredDataError as refused:
+            selected.append(refused)
+        assert 'kumo-relational' in _call({'stage': 'model_catalogue'})
+        raise selected[0]
+
+    capture, entry, error, _ = error_entry(
+        monkeypatch, predict, converter=converter
+    )
+    [refused] = selected
+    [(made, native)] = presentations
+    assert error is refused is made
+    assert native is not refused
+    assert BaseException.__getattribute__(error, '__cause__') is None
+    assert BaseException.__getattribute__(error, '__context__') is None
+    [lookup] = lookup_errors(capture)
+    catalogue = capture.inputs[-1]
+    assert catalogue['input'] == {'stage': 'model_catalogue'}
+    assert catalogue['error'] is None
+    assert 'kumo-relational' in catalogue['result']
+    assert catalogue['run'] != lookup['run']
+    assert capture.error == lookup['error']
+    assert entry['failure'] == {'run': lookup['run'], 'relation': 'selected'}
+
+
+def test_failed_reconstruction_has_no_successful_presentation_pair(monkeypatch):
+    from sdm_client._rust.prepare import _call
+
+    retained = UnformattedFailure('native reconstruction failed')
+    contexts = []
+
+    def converter(*args, **kwargs):
+        contexts.append(kwargs['internal_context'])
+        raise retained
+
+    def predict(*args):
+        return _call({'stage': 'model_lookup', 'position': None})
+
+    capture, entry, error, _ = error_entry(
+        monkeypatch, predict, converter=converter
+    )
+    assert error is retained
+    [native] = contexts
+    assert BaseException.__getattribute__(error, '__context__') is native
+    assert BaseException.__getattribute__(error, '__cause__') is None
+    assert (
+        BaseException.__getattribute__(error, '__suppress_context__') is False
+    )
+    [lookup] = lookup_errors(capture)
+    assert lookup['run'] in entry['runs']
+    assert capture.error is None
+    assert entry.get('failure') is None
+
+
+def test_explicit_outer_cause_keeps_public_owner_and_native_association(
+    monkeypatch,
+):
+    from sdm_client import StructuredDataError
+    from sdm_client._rust.prepare import _call
+
+    retained = UnformattedFailure('distinct host wrapper')
+    selected = []
+
+    def predict(*args):
+        try:
+            _call({'stage': 'model_lookup', 'position': None})
+        except StructuredDataError as refused:
+            selected.append(refused)
+            assert 'kumo-relational' in _call({'stage': 'model_catalogue'})
+            raise retained from refused
+
+    capture, entry, error, _ = error_entry(monkeypatch, predict)
+    assert error is retained
+    [refused] = selected
+    assert BaseException.__getattribute__(error, '__cause__') is refused
+    assert BaseException.__getattribute__(error, '__context__') is refused
+    assert BaseException.__getattribute__(error, '__suppress_context__') is True
+    [lookup] = lookup_errors(capture)
+    assert capture.inputs[-1]['error'] is None
+    assert capture.error == lookup['error']
+    assert entry['failure'] == {'run': lookup['run'], 'relation': 'cause'}
+
+
+def test_reconstruction_reraising_prior_sdk_owner_does_not_select_new_run(
+    monkeypatch,
+):
+    from sdm_client import StructuredDataError
+    from sdm_client._rust import errors
+    from sdm_client._rust.prepare import _call
+
+    actual_converter = errors.error_from_core
+    presentations = []
+    attempts = []
+
+    def converter(*args, **kwargs):
+        attempts.append(kwargs['internal_context'])
+        if presentations:
+            raise presentations[0]
+        made = actual_converter(*args, **kwargs)
+        presentations.append(made)
+        return made
+
+    def predict(*args):
+        try:
+            _call({'stage': 'model_lookup', 'position': None})
+        except StructuredDataError:
+            pass
+        return _call({'stage': 'model_lookup', 'position': None})
+
+    capture, entry, error, _ = error_entry(
+        monkeypatch, predict, converter=converter
+    )
+    [made] = presentations
+    assert error is made
+    assert len(attempts) == 2
+    assert attempts[0] is not attempts[1]
+    assert BaseException.__getattribute__(error, '__context__') is attempts[1]
+    first, second = lookup_errors(capture)
+    assert first['run'] != second['run']
+    assert capture.error == first['error']
+    assert entry['failure'] == {'run': first['run'], 'relation': 'selected'}
