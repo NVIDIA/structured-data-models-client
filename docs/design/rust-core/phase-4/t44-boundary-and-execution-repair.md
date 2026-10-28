@@ -610,3 +610,25 @@ Derive the included event's logical extent from the actual owned and descendant 
 For existing approved core-only column differences, validate the original prediction journal and independent receipt conservation before applying the named-column projection solely to local reference-comparison bodies.
 Do not mutate global prediction evidence while leaving its typed journal or byte hashes unchanged.
 Keep the existing public schema, warning and SQL projections at their original comparison boundary, with unnamed-column and original-receipt tamper controls.
+
+
+### Complete successful and sparse observation readers
+
+Both exact R36 whole reports require a grouped correction of the remaining connected observer readers before validation.
+Keep R36 frozen and unexecuted.
+Retain the normalized actual result journal for successful gathered predictions as well as raised entries, without claiming any carried answer on success.
+Compare actual aggregation, call selection, scopes and lineage under ordinary and shared-prefix comparison whenever both actual producers observed those products.
+
+Keep actually observed body/calls independent of the newer attempt/reply/hash evidence.
+A sole historical successful snapshot can supply its own observed body/calls and mandatory result fields while its delivery facts and optional output supplement remain unavailable.
+Compare all common actual mandatory products, compare optional output supplements only where both are observed, and never reconstruct a missing multi-Predict journal or whole result.
+
+The existing Java Trace exposes steps, taken bodies, Done and kind/code failures, but neither model replies nor native error control.
+Declare those interception capabilities explicitly at the harness adapter and retain their absence in the observation.
+The live Python observer keeps its strict actual pending-reply and error-control checks.
+Sparse Java progress must not fabricate a response/status or answered product, read nonexistent error-control data, or select SDK policy by host origin.
+Its actual call bytes, ordering, native kind/code and Run-local products remain checked.
+Update the handwritten observation schema and shared availability reader together, and preserve existing Java acceptance coverage.
+
+Commit successful scope/lineage and sparse Java adapter controls before implementation.
+The corrected exact whole source needs two fresh independent CODE approvals before any SDK or validation execution.
