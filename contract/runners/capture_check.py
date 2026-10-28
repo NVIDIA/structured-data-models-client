@@ -484,6 +484,21 @@ def complete(observation: dict[str, Any]) -> list[str]:
     if capture is None:
         return ['the capture was off']
     problems = [f'could not record: {what}' for what in capture['incomplete']]
+    core = observation.get('core')
+    if isinstance(core, dict) and (
+        'predictions' in core
+        or any(
+            item.get('op') == 'prepare_request'
+            for item in core.get('inputs', [])
+        )
+    ):
+        reader = runner()._sibling('prediction_observation')
+        try:
+            reader.view(core, observation['identity']['operations'])
+        except reader.ObservationError:
+            problems.append(
+                'actual prediction evidence is incomplete or contradictory'
+            )
     if logged is None:
         # Every line has its log: DuckDB's own, or off DuckDB the driver's
         # statement log (T2.1a fix 4); a capture held to none is incomplete.

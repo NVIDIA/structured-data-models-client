@@ -79,7 +79,6 @@ import subprocess
 import sys
 import warnings
 from collections.abc import Callable, Iterable, Iterator, Mapping
-from dataclasses import dataclass, field
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -883,33 +882,41 @@ class _Guard:
 # --- the core's boundary, for python-core --------------------------------------------
 
 
-@dataclass
 class _CapturedRun:
     """Attachment state belongs to this actual Run, never the next start."""
 
-    ordinal: int
-    operation: str
-    entry: int | None
-    description: int | None = None
-    state: dict[str, Any] | None = None
-    request_ids: list[str] = field(default_factory=list)
-    skippable: set[str] = field(default_factory=set)
-    call: int | None = None
-    body: dict[str, Any] | None = None
-    bodies: list[dict[str, Any]] = field(default_factory=list)
-    answer: dict[str, Any] | None = None
-    prepared: int | None = None
-    preparation: dict[str, Any] | None = None
-    input_record: dict[str, Any] | None = None
-    call_record: dict[str, Any] | None = None
-    result_record: dict[str, Any] | None = None
-    error: dict[str, str] | None = None
-    error_owner: BaseException | None = None
-    asked: dict[int, dict[str, Any]] = field(default_factory=dict)
+    def __init__(self, ordinal: int, operation: str, entry: int | None) -> None:
+        self.ordinal = ordinal
+        self.operation = operation
+        self.entry = entry
+        self.description: int | None = None
+        self.state: dict[str, Any] | None = None
+        self.request_ids: list[str] = []
+        self.skippable: set[str] = set()
+        self.call: int | None = None
+        self.body: dict[str, Any] | None = None
+        self.bodies: list[dict[str, Any]] = []
+        self.answer: dict[str, Any] | None = None
+        self.prepared: int | None = None
+        self.preparation: dict[str, Any] | None = None
+        self.input_record: dict[str, Any] | None = None
+        self.call_record: dict[str, Any] | None = None
+        self.result_record: dict[str, Any] | None = None
+        self.error: dict[str, str] | None = None
+        self.error_owner: BaseException | None = None
+        self.asked: dict[int, dict[str, Any]] = {}
 
 
 class _Capture:
-    r"""What crossed ``sdm_client._native`` during one case: each operation
+    r"""Actual native Runs plus separately observed gathered prediction entries.
+
+    The entry/model-argument observation establishes invocation only; typed
+    native starts/results independently establish core execution and model.
+    Each handle retains its own attachment state, while entry journals retain
+    actual ordered calls, response scopes and complete final result reads.
+    Neither actual operations nor public answers are reconstructed.
+
+    What crossed ``sdm_client._native`` during one case: each operation
     started with its inputs, each fetch the core asked for (its request and
     plan, the step trace), and the core's answers: ``validate_query``'s
     acceptance, ``describe_source``'s description, ``materialize``'s
@@ -5712,6 +5719,17 @@ def run(
                 'driver': driver,
                 'public': public,
             }
+            if capture is not None:
+                reader = _sibling('prediction_observation')
+                try:
+                    reader.view(
+                        observation['core'],
+                        observation['identity']['operations'],
+                    )
+                except reader.ObservationError as error:
+                    raise RunnerFailure(
+                        'the actual prediction observation is inconsistent'
+                    ) from error
             problem = _invalid(validate, observation)
             if problem is not None:
                 raise RunnerFailure(
@@ -5829,8 +5847,25 @@ def _replay_core(capture: _Capture) -> dict[str, Any]:
         'materialize': ('provider', 'indices', 'anchor_time', 'seed'),
         'predict': ('model',),
     }
+    inputs = capture.inputs
+    if any(started['op'] == 'prepare_request' for started in inputs):
+        reader = _sibling('prediction_observation')
+        try:
+            observed = reader.view(capture.core(), capture.operations)
+        except reader.ObservationError as error:
+            raise RunnerFailure(
+                'a replay has invalid actual prediction evidence'
+            ) from error
+        entries = observed['predictions']
+        if len(entries) != 1 or entries[0]['parent'] is not None:
+            raise RunnerFailure(
+                'a replay has multiple or ambiguous prediction entries'
+            )
+        if entries[0]['model'] is None or not entries[0]['native']:
+            raise RunnerFailure('a replay has no resolved prediction model')
+        inputs = observed['inputs']
     core: dict[str, Any] = {}
-    for started in capture.inputs:
+    for started in inputs:
         operation = started['op']
         if operation not in fields:
             raise RunnerFailure('an operation this replay does not carry')

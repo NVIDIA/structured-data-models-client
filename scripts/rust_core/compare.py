@@ -330,6 +330,26 @@ def _capture_check() -> ModuleType:
     return module
 
 
+@functools.cache
+def _prediction_reader() -> ModuleType:
+    path = REPO / 'contract/runners/prediction_observation.py'
+    spec = importlib.util.spec_from_file_location(
+        'common_prediction_observation', path
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _prediction_view(observation: dict[str, Any]) -> dict[str, Any]:
+    core = observation.get('core')
+    operations = observation['identity'].get('operations') or []
+    if core is None:
+        return {'operations': operations, 'inputs': [], 'predictions': []}
+    return _prediction_reader().view(core, operations)
+
+
 def _predicted(core: dict[str, Any], paths: tuple[Any, ...]) -> Any:
     r"""``core.predicted``, its call's request id compared by presence and
     type only (decision E35), and payload numbers by exact kind and value."""
@@ -739,7 +759,7 @@ def core_held(
     before."""
     if stop is None:
         return case
-    ran = set(observation['identity'].get('operations') or [])
+    ran = set(_prediction_view(observation)['operations'])
     limit = STAGES.index(stop)
     held = {
         op: spec
@@ -755,12 +775,19 @@ def _route(
     identity = observation['identity']
     where = f'{case["id"]}: {who}'
     wanted = sorted(case.get('core', {}))
+    try:
+        operations = _prediction_view(observation)['operations']
+    except _prediction_reader().ObservationError:
+        report.fail(
+            f'{where}: route: invalid actual prediction evidence', 'route'
+        )
+        return
     if who == 'python-core':
         if identity['native_loaded'] is not True or identity['native'] is None:
             report.fail(
                 f'{where}: route: sdm_client._native was not loaded', 'route'
             )
-        missing = [op for op in wanted if op not in identity['operations']]
+        missing = [op for op in wanted if op not in operations]
         if missing or observation['core'] is None:
             report.fail(
                 f'{where}: route: {missing} did not run on the core', 'route'
@@ -773,7 +800,7 @@ def _route(
         if who == 'python-ref' and identity['reference'] is None:
             report.fail(f'{where}: route: no reference guard result', 'route')
     elif who == 'rust-host':
-        missing = [op for op in wanted if op not in identity['operations']]
+        missing = [op for op in wanted if op not in operations]
         if missing or observation['core'] is None:
             report.fail(
                 f'{where}: route: {missing} did not run on the host', 'route'
@@ -893,6 +920,34 @@ def _core_consistent(
             'state with no fetch recorded',
             'core',
         )
+    try:
+        prediction = _prediction_view(observation)['predictions']
+    except _prediction_reader().ObservationError:
+        report.fail(
+            f'{case["id"]}: {who}: core: invalid actual prediction evidence',
+            'core',
+        )
+        return
+    outer = next(
+        (entry for entry in reversed(prediction) if entry['parent'] is None),
+        None,
+    )
+    if (
+        outer is not None
+        and outer['completion'] == 'raised'
+        and (
+            outer['failure'] is None or outer['failure']['relation'] == 'cause'
+        )
+    ):
+        # A host/native failure has its independently observed public outcome.
+        # An explicit wrapper may be linked to a core refusal, but cannot be
+        # replaced by that ancestor's code. Context alone gives no core error.
+        if observation['outcome']['result'] != 'refusal':
+            report.fail(
+                f'{case["id"]}: {who}: raised prediction entry has a success outcome',
+                'outcome',
+            )
+        return
     if 'predict' in case.get('core', {}) and core['materialized'] is not None:
         # Materialized, the call goes on to predict, which answers its call
         # and result or an error, never both (T1.11d); its error ends the
@@ -1007,8 +1062,8 @@ def shared_operations(
     None otherwise, and the hosts are held to each other whole."""
     if stop is None:
         return None
-    mine = python['identity']['operations']
-    theirs = rust['identity']['operations']
+    mine = _prediction_view(python)['operations']
+    theirs = _prediction_view(rust)['operations']
     short, long = (mine, theirs) if len(mine) <= len(theirs) else (theirs, mine)
     if mine == theirs or long[: len(short)] != short:
         return None
@@ -1035,12 +1090,27 @@ def _core_agree(
     on the operations both ran, their fetches the shorter's, and not on
     the results of the operations one alone ran."""
     where = f'{case["id"]}: python-core against {host}'
+    try:
+        python_view = _prediction_view(python)
+        rust_view = _prediction_view(rust)
+    except _prediction_reader().ObservationError:
+        report.fail(f'{where}: invalid actual prediction evidence', 'core')
+        return
     shared = shared_operations(python, rust, stop)
     if shared is not None:
-        _core_agree_shared(report, where, python['core'], rust['core'], shared)
+        if python['core'] is None or rust['core'] is None:
+            _same_contract(report, where, python, rust)
+            return
+        _core_agree_shared(
+            report,
+            where,
+            {**python['core'], 'inputs': python_view['inputs']},
+            {**rust['core'], 'inputs': rust_view['inputs']},
+            shared,
+        )
         _same_contract(report, where, python, rust)
         return
-    if python['identity']['operations'] != rust['identity']['operations']:
+    if python_view['operations'] != rust_view['operations']:
         _differ(
             report,
             where,
@@ -1052,6 +1122,8 @@ def _core_agree(
     mine, theirs = python['core'], rust['core']
     if mine is None or theirs is None:
         return
+    mine = {**mine, 'inputs': python_view['inputs']}
+    theirs = {**theirs, 'inputs': rust_view['inputs']}
     for field in ('inputs', 'fetches', 'described', 'materialized'):
         if _core_field(field, mine[field]) != _core_field(field, theirs[field]):
             _differ(
@@ -1319,6 +1391,13 @@ def _case_inputs(
     core = observation['core']
     if core is None:
         return
+    try:
+        inputs = _prediction_view(observation)['inputs']
+    except _prediction_reader().ObservationError:
+        report.fail(
+            f'{case["id"]}: {who}: invalid actual prediction inputs', 'inputs'
+        )
+        return
     wanted = []
     if 'validate_query' in case.get('core', {}):
         spec = case['core']['validate_query']
@@ -1339,7 +1418,7 @@ def _case_inputs(
         wanted.append(
             {'op': 'describe_source', **case['core']['describe_source']}
         )
-    missing = any(each not in core['inputs'] for each in wanted)
+    missing = any(each not in inputs for each in wanted)
     if 'materialize' in case.get('core', {}):
         # The schema it samples is the host's own; the case names the rest.
         wanted_materialize = {
@@ -1347,9 +1426,7 @@ def _case_inputs(
             'query': case['input']['pql'],
             **case['core']['materialize'],
         }
-        started = [
-            each for each in core['inputs'] if each.get('op') == 'materialize'
-        ]
+        started = [each for each in inputs if each.get('op') == 'materialize']
         missing = missing or not any(
             all(
                 each.get(key) == value
@@ -1377,7 +1454,7 @@ def _case_inputs(
         wanted_predict = {'op': 'predict', **case['core']['predict']}
         missing = missing or not any(
             all(each.get(key) == value for key, value in wanted_predict.items())
-            for each in core['inputs']
+            for each in inputs
             if each.get('op') == 'predict'
         )
     if missing:
@@ -3402,6 +3479,14 @@ def compare(
                 continue
             _shape(report, case, who, observation)
             _inputs(report, case, who, observation, digests)
+            try:
+                _prediction_view(observation)
+            except _prediction_reader().ObservationError:
+                report.fail(
+                    f'{case["id"]}: {who}: invalid actual prediction evidence',
+                    'core',
+                )
+                continue
             wanted = effective.get(case['id'], {}).get(who)
             # An approved move of the reference's refusal to an earlier
             # call (T2.1r) holds the line to the calls up to that one, on
