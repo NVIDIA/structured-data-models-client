@@ -1149,3 +1149,43 @@ def test_prediction_failure_identity_is_released_only_at_outer_completion():
     del error
     gc.collect()
     assert ref() is None
+
+
+def test_actual_outside_entry_native_failure_does_not_keep_its_payload(
+    monkeypatch,
+):
+    import gc
+    import weakref
+
+    from sdm_client import StructuredDataError
+    from sdm_client._rust import errors
+    from sdm_client._rust.prepare import _call
+
+    class Payload:
+        pass
+
+    actual = errors.error_from_core
+    observed = []
+
+    def converter(*args, **kwargs):
+        native = kwargs['internal_context']
+        payload = Payload()
+        native.lifetime_probe = payload
+        observed.append(weakref.ref(payload))
+        return actual(*args, **kwargs)
+
+    monkeypatch.setattr(errors, 'error_from_core', converter)
+    boundary = RUNNER._Boundary()
+    capture = boundary.reset()
+    try:
+        with pytest.raises(StructuredDataError) as raised:
+            _call({'stage': 'model_lookup', 'position': None})
+        assert raised.value.code == 'UNKNOWN_MODEL'
+        assert capture.predictions == []
+        assert capture.error['code'] == 'UNKNOWN_MODEL'
+        assert capture._runs[0].error_owner is None
+        gc.collect()
+        assert len(observed) == 1
+        assert observed[0]() is None
+    finally:
+        boundary.close()
