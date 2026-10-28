@@ -61,7 +61,7 @@ fn labelled_link_rows_preserve_typed_order_duplicates_and_decimal_scale() {
 }
 
 #[test]
-fn every_builtin_database_and_actual_result_storage_selects_core_casing() {
+fn neutral_casing_facts_select_only_supported_mathematical_maps() {
     for (database, version) in [
         ("13.0.0", UnicodeDataVersion::V13_0),
         ("14.0.0", UnicodeDataVersion::V14_0),
@@ -70,37 +70,43 @@ fn every_builtin_database_and_actual_result_storage_selects_core_casing() {
         ("16.0.0", UnicodeDataVersion::V16_0),
         ("17.0.0", UnicodeDataVersion::V17_0),
     ] {
-        for target in [
-            NativeStringTarget::NumpyUnicode,
-            NativeStringTarget::PandasStringPython,
-        ] {
-            let facts = NativeTextFacts {
-                target,
-                python_unicode_database: database.to_owned(),
-                arrow_simple_identity: None,
-            };
-            assert_eq!(
-                casing_profile(&facts).unwrap(),
-                CasingProfile::FullRoot(version)
-            );
-        }
+        assert_eq!(
+            casing_profile(&NativeTextFacts::FullRoot {
+                unicode_version: database.to_owned(),
+            }).unwrap(),
+            CasingProfile::FullRoot(version),
+        );
     }
-    let facts = NativeTextFacts {
-        target: NativeStringTarget::PandasStringPyarrow,
-        python_unicode_database: "17.0.0".to_owned(),
-        arrow_simple_identity: Some("iσⰯᲉ꟎".to_owned()),
-    };
-    assert_eq!(
-        casing_profile(&facts).unwrap(),
-        CasingProfile::Simple(UnicodeDataVersion::V13_0)
-    );
-    assert!(
-        casing_profile(&NativeTextFacts {
-            arrow_simple_identity: None,
-            ..facts
-        })
-        .is_err()
-    );
+    for (identity, version) in [
+        ("iσⰯᲉ꟎", UnicodeDataVersion::V13_0),
+        ("iσⱟᲉ꟎", UnicodeDataVersion::V14_0),
+        ("iσⱟᲊ꟎", UnicodeDataVersion::V16_0),
+        ("iσⱟᲊ꟏", UnicodeDataVersion::V17_0),
+    ] {
+        assert_eq!(
+            casing_profile(&NativeTextFacts::Simple { identity: identity.into() }).unwrap(),
+            CasingProfile::Simple(version),
+        );
+    }
+    for facts in [
+        NativeTextFacts::FullRoot { unicode_version: "12.0.0".into() },
+        NativeTextFacts::Simple { identity: "unknown".into() },
+        NativeTextFacts::Simple { identity: String::new() },
+    ] {
+        assert_eq!(casing_profile(&facts).unwrap_err().sentence, Sentence::InvalidMessage);
+    }
+}
+
+#[test]
+fn neutral_mapping_facts_preserve_contextual_and_simple_lowercase() {
+    let input = sdm_contract::scalar::unicode::UnicodeText::from("ΟΣ İ");
+    for (facts, expected) in [
+        (NativeTextFacts::FullRoot { unicode_version: "15.0.0".into() }, vec!["ος", "i\u{307}"]),
+        (NativeTextFacts::Simple { identity: "iσⱟᲊ꟏".into() }, vec!["οσ", "i"]),
+    ] {
+        let words = sdm_engine::words::normalize_native(Some(input.as_slice()), casing_profile(&facts).unwrap());
+        assert_eq!(words, expected.into_iter().map(Into::into).collect::<Vec<_>>());
+    }
 }
 
 #[test]

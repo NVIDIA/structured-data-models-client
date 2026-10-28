@@ -1054,3 +1054,41 @@ fn unresolved_entities_share_the_same_drop_summary_as_the_graph_notice() {
         json!({"t":"utf8","v":format!(" {expected}")})
     );
 }
+
+#[test]
+fn neutral_message_casing_crosses_hostrun_without_library_taxonomy() {
+    let points = |text: &str| text.chars().map(u32::from).collect::<Vec<_>>();
+    for (version, sentence) in [("14.0.0", "frame_native_caller"), ("12.0.0", "invalid_message")] {
+        let report = json!({
+            "stage":"report_failure",
+            "report":{
+                "assessment":{
+                    "origin":"engine",
+                    "failure":{
+                        "builtin":{"ancestry":["value_error"]},
+                        "key_error":false,"structured_data_error":false,
+                        "relational_error":false,"deepest_module":null,
+                        "message_casing":{"mapping":"full_root","unicode_version":version}
+                    },
+                    "signature":null,"category":"caller_data","part":null
+                },
+                "native_type":null,"refusal":points("we would need data bacK to"),
+                "said":[55296,33],"dropped_summary":null,"rows_per_call":null
+            }
+        });
+        let run = HostRun::start(
+            &sdm_host::default_root(),
+            &message(json!({"op":"prepare_frames","input":100})),
+            Attachments::from([(AttachmentId(100), bytes(report))]),
+        ).unwrap_or_else(|error| panic!("{:?}", decoded(&error)));
+        let error = run.next().expect_err("the report returns its classified error");
+        let error = decoded(&error);
+        assert_eq!(error["error"]["sentence"], sentence);
+        if version == "14.0.0" {
+            assert_eq!(error["error"]["public_details"]["window_outran_the_data"], json!({"t":"bool","v":"true"}));
+            assert_eq!(error["error"]["fields"]["message_points"], json!([
+                {"t":"u32","v":"55296"},{"t":"u32","v":"33"}
+            ]));
+        }
+    }
+}
