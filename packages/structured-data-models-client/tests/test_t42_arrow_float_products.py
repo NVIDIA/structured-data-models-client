@@ -448,17 +448,18 @@ def test_float_final_observation_is_fresh_after_native_warning_mutation(
 
 
 @pytest.mark.parametrize('width', [32, 64])
+@pytest.mark.parametrize(
+    'case', ['signed_zero', 'nan_payload', 'nan_signaling']
+)
 def test_arrow_and_masked_float_identical_buffers_keep_native_cardinality(
-    monkeypatch, width
+    monkeypatch, width, case
 ):
     outcomes = []
     for core in (False, True):
         monkeypatch.setenv('SDM_CORE_ROUTES', PATHS if core else '')
         row = []
         for arrow in (False, True):
-            bits = np.array(
-                bit_cases(width)['signed_zero'], dtype=f'uint{width}'
-            )
+            bits = np.array(bit_cases(width)[case], dtype=f'uint{width}')
             if arrow:
                 values = raw_series(width, bits)
             else:
@@ -540,10 +541,10 @@ def test_float_numeric_text_reaches_frozen_graph_error_before_normalization(
     monkeypatch, core, case
 ):
     from sdm_relational_engine.rfm.base import sampler
+    from t45_frame_routes import FRAME_ROUTES
     from test_t44_native_text_keys import (
         test_physical_numeric_text_keeps_actual_schema_and_native_graph_errors,
     )
-    from t45_frame_routes import FRAME_ROUTES
 
     from sdm_client._rust import frame_facade
     from sdm_client.core.transport import Transport

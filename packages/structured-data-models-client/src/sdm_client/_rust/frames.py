@@ -515,15 +515,18 @@ def _convert(
                     pa.types.is_integer(physical)
                     and physical.bit_width in (8, 16, 32, 64)
                 )
+                or (
+                    pa.types.is_floating(physical)
+                    and physical.bit_width in (32, 64)
+                )
                 or pa.types.is_boolean(physical)
                 or pa.types.is_string(physical)
                 or pa.types.is_large_string(physical)
             )
-            # Arrow float nunique distinguishes zero/NaN bit patterns while
-            # pandas duplicate-key equality can merge them. The current
-            # frame contract does not represent both native facts, so that
-            # whole family remains outside this development route.
-            # Arrow timestamps also remain unfinished: native scalar
+            # Native candidate cardinality and selected-key duplicate quality
+            # are observed separately at their reached constructor stages.
+            # Export preserves float width, NaN bits and Arrow validity.
+            # Arrow timestamps remain unfinished: native scalar
             # boxing can overflow or turn a present ns MIN into NaT, which
             # affects time choice at its consumed row and constructor stage.
         if not (
@@ -535,7 +538,7 @@ def _convert(
             or object_values is not None
         ):
             raise RouteError(
-                f'the partial frame constructor supports only NumPy or pandas masked numeric and Boolean columns, native datetimes, built-in pandas strings, or built-in Arrow integer, Boolean, string or Decimal columns: {name}.{column}'
+                f'the partial frame constructor supports only NumPy or pandas masked numeric and Boolean columns, native datetimes, built-in pandas strings, or built-in Arrow integer, Float32/Float64, Boolean, string or Decimal columns: {name}.{column}'
             )
         # Convert values only. DataFrame export may add a non-Range index
         # column, which the public schema constructor never describes.
