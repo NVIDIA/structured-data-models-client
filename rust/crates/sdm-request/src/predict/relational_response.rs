@@ -1211,6 +1211,103 @@ mod tests {
     }
 
     #[test]
+    fn custom_numeric_products_keep_declared_fallback_and_negative_zero_bits() {
+        use arrow_array::Array;
+        use arrow_array::cast::AsArray;
+        use arrow_array::types::{Float64Type, Int64Type};
+        use arrow_schema::DataType;
+
+        for (raw, converted, homogeneous) in [
+            (r#"["-0.0","1.5"]"#, "[-0.0,1.5]", true),
+            (r#"["-0.0","1_0.5"]"#, "[-0.0,10.5]", false),
+            (r#"["-0.0","2","1_0.5",null]"#, "[-0.0,2,10.5,null]", false),
+        ] {
+            let Value::Array(raw) = sdm_wire::json::read_answer(raw.as_bytes()).unwrap() else {
+                panic!("raw")
+            };
+            let Value::Array(converted) =
+                sdm_wire::json::read_answer(converted.as_bytes()).unwrap()
+            else {
+                panic!("converted")
+            };
+            let predictions = raw
+                .iter()
+                .enumerate()
+                .map(|(at, raw)| {
+                    format!(
+                        r#"{{"row_index":{at},"prediction":{}}}"#,
+                        std::str::from_utf8(&raw.to_bytes()).unwrap()
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(",");
+            let response = read_response(&format!("[{predictions}]"));
+            let attribution = table_facts(&response, None, false);
+            let rows = decode(&response, "actual-call")
+                .unwrap()
+                .1
+                .into_iter()
+                .map(|row| accepted(&attribution, row, false))
+                .collect::<Vec<_>>();
+            let converted = converted
+                .iter()
+                .enumerate()
+                .map(|(ordinal, value)| RelationalTargetRow {
+                    ordinal,
+                    prediction: native(value).unwrap(),
+                    probabilities: None,
+                })
+                .collect::<Vec<_>>();
+            let (part, _) = layout(
+                &response,
+                &attribution,
+                &rows,
+                &class_target("int64", true),
+                &converted,
+                |n| n.to_string(),
+            )
+            .unwrap();
+            assert_eq!(part.answers, AnswerType::Int);
+            assert_eq!(
+                part.rows[0].prediction,
+                Answer::Written(Value::Number("-0.0".into()))
+            );
+            let table = super::super::table(&part).unwrap();
+            let primary = table.column_by_name("prediction").unwrap();
+            if homogeneous {
+                assert_eq!(primary.data_type(), &DataType::Float64);
+                let values = primary.as_primitive::<Float64Type>();
+                assert_eq!(values.value(0).to_bits(), (-0.0_f64).to_bits());
+                assert_eq!(values.value(1), 1.5);
+                assert!(table.column_by_name("prediction_as_answered").is_none());
+            } else {
+                assert_eq!(primary.data_type(), &DataType::Int64);
+                let values = primary.as_primitive::<Int64Type>();
+                for at in 0..values.len() {
+                    if raw.len() == 4 && at == 1 {
+                        assert_eq!(values.value(at), 2);
+                        assert!(!values.is_null(at));
+                    } else {
+                        assert!(values.is_null(at));
+                    }
+                }
+                let fallback = table
+                    .column_by_name("prediction_as_answered")
+                    .unwrap()
+                    .as_string::<i32>();
+                assert_eq!(fallback.value(0), "-0.0");
+                if raw.len() == 4 {
+                    assert_eq!(fallback.value(1), "2");
+                    assert_eq!(fallback.value(2), r#""1_0.5""#);
+                    assert!(fallback.is_null(3));
+                } else {
+                    assert_eq!(fallback.value(1), r#""1_0.5""#);
+                }
+            }
+        }
+    }
+
+    #[test]
     fn equal_probability_products_bind_to_original_entry_ordinals() {
         let response = read_response(
             r#"[{"row_index":0,"id":"opaque","prediction":"7","probabilities":{"1":0.5,"2":0.5}}]"#,

@@ -681,6 +681,70 @@ fn complete_and_retained_mixed_class_results_keep_the_primary_typed_columns() {
 }
 
 #[test]
+fn retained_custom_class_products_keep_declared_fallback_and_native_float_bits() {
+    use arrow_array::Array;
+    use sdm_contract::scalar::native_value::NativeValue;
+    let fixture: Value = serde_json::from_str(include_str!("../../../../packages/structured-data-models-client/tests/t44_mutable_prediction_reference.json")).unwrap();
+    let mut payload = fixture["cases"]["r2/control"]["wire"][0].clone();
+    payload["task"]["target"]["dtype"] = json!("int64");
+    for malformed in [false, true] {
+        let raw = [
+            json!("-0.0"),
+            json!(if malformed { "1_0.5" } else { "1.5" }),
+        ];
+        let converted = [
+            NativeValue::Float {
+                bits: (-0.0_f64).to_be_bytes(),
+            },
+            NativeValue::Float {
+                bits: (if malformed { 10.5_f64 } else { 1.5_f64 }).to_be_bytes(),
+            },
+        ];
+        let (bound, owned) = exchange_native_rows(
+            &payload,
+            0,
+            true,
+            None,
+            None,
+            NativeRows {
+                raw: Some(&raw),
+                converted: Some(&converted),
+                equal_probabilities: false,
+            },
+        );
+        let mut attached = Attachments::new();
+        let part = owned.attach(&mut attached);
+        let (_, rows) = finish(
+            bound,
+            RelationalAggregation::Calls {
+                parts: vec![part],
+                counted: vec![Some(2)],
+                known_empty: false,
+            },
+            attached,
+        );
+        let table = &rows.batches[0];
+        let primary = table.column_by_name("prediction").unwrap();
+        if malformed {
+            assert_eq!(primary.null_count(), 2);
+            assert_eq!(primary.data_type(), &arrow_schema::DataType::Int64);
+            let fallback = table
+                .column_by_name("prediction_as_answered")
+                .unwrap()
+                .as_string::<i32>();
+            assert_eq!(fallback.value(0), "-0.0");
+            assert_eq!(fallback.value(1), r#""1_0.5""#);
+        } else {
+            let primary = primary.as_primitive::<Float64Type>();
+            assert_eq!(primary.null_count(), 0);
+            assert_eq!(primary.value(0).to_bits(), (-0.0_f64).to_bits());
+            assert_eq!(primary.value(1), 1.5);
+            assert!(table.column_by_name("prediction_as_answered").is_none());
+        }
+    }
+}
+
+#[test]
 fn deep_builtin_predictions_keep_wire_depth_across_all_response_products() {
     let fixture: Value = serde_json::from_str(include_str!(
         "../../../../packages/structured-data-models-client/tests/t44_mutable_prediction_reference.json"
