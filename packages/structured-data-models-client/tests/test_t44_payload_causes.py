@@ -56,6 +56,10 @@ def test_only_reached_frame_payload_range_has_native_nested_causes(
     assert type(bare) is ValueError
     assert cause.__context__ is bare
     assert bare.__context__ is caller
+    assert bare.__cause__ is None
+    assert not bare.__suppress_context__
+    assert cause.__suppress_context__
+    assert bare is not bridge and cause is not bridge
     assert str(bare) == (
         'a value is outside the range int64 represents '
         '(-9223372036854775808 to 9223372036854775807); send the column as strings'
