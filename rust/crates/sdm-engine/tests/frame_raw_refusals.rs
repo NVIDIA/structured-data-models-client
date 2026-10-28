@@ -18,7 +18,7 @@ use sdm_engine::frames::Snapshot;
 use sdm_engine::graph::Graph;
 use serde_json::json;
 
-fn graph(key_type: &str, value_type: &str, stype: &str, timed: bool) -> Graph {
+fn source_graph(key_type: &str, value_type: &str, stype: &str, timed: bool) -> Graph {
     let held: HeldSchema = serde_json::from_value(json!({"tables":[{
         "name":"rows","source":{"source":["rows"]},
         "columns":[
@@ -48,13 +48,13 @@ fn assert_rule(result: Result<Snapshot, CoreError>, rule: &str) {
         Ok(_) => panic!("unprepared raw input must retain its intended guard"),
         Err(error) => error,
     };
-    assert_eq!(error.sentence, Sentence::UnsupportedOperation);
+    assert_eq!(error.sentence, Sentence::NotYetMaterialize);
     assert_eq!(error.fields["rule"], Detail::text(rule));
 }
 
 #[test]
 fn raw_text_keys_require_the_actual_encoding_product_for_both_offset_widths() {
-    let graph = graph("string", "int64", "numerical", false);
+    let graph = source_graph("string", "int64", "numerical", false);
     for id in [
         Arc::new(StringArray::from(vec!["a", "b"])) as ArrayRef,
         Arc::new(LargeStringArray::from(vec!["a", "b"])) as ArrayRef,
@@ -75,7 +75,7 @@ fn raw_text_keys_require_the_actual_encoding_product_for_both_offset_widths() {
 
 #[test]
 fn raw_text_and_untimed_timestamps_keep_separate_preparation_guards() {
-    let graph = graph("int64", "string", "text", false);
+    let graph = source_graph("int64", "string", "text", false);
     let input = rows(ids(), Arc::new(StringArray::from(vec!["A", "B"])));
     assert_rule(Snapshot::new(&graph, input.clone()), "frame_text_features");
     Snapshot::new_native(
@@ -88,7 +88,7 @@ fn raw_text_and_untimed_timestamps_keep_separate_preparation_guards() {
     )
     .unwrap();
 
-    let graph = graph("int64", "timestamp[ns]", "timestamp", false);
+    let graph = source_graph("int64", "timestamp[ns]", "timestamp", false);
     let input = rows(ids(), Arc::new(TimestampNanosecondArray::from(vec![1, 2])));
     assert_rule(
         Snapshot::new(&graph, input.clone()),
@@ -99,7 +99,7 @@ fn raw_text_and_untimed_timestamps_keep_separate_preparation_guards() {
 
 #[test]
 fn raw_time_type_and_range_guards_do_not_reject_prepared_native_counts() {
-    let graph = graph("int64", "timestamp[ns]", "timestamp", true);
+    let graph = source_graph("int64", "timestamp[ns]", "timestamp", true);
     assert_rule(
         Snapshot::new(&graph, rows(ids(), Arc::new(Int64Array::from(vec![1, 2])))),
         "frame_time_type",
