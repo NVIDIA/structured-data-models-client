@@ -195,9 +195,40 @@ impl FrameStages {
             .into_iter()
             .map(|(id, _)| (id, self.held[&id].clone()))
             .collect();
-        if matches!(input, FramePreparation::Graph { .. }) {
-            for id in [8, 9, 10].map(AttachmentId) {
-                attached.insert(id, self.held[&id].clone());
+        if let FramePreparation::Graph {
+            frames, checkpoint, ..
+        } = &input
+        {
+            let Attachment::Bytes(bytes) = &self.held[frames] else {
+                panic!("typed graph manifest")
+            };
+            let manifest: sdm_contract::frames::MaterializeFrames =
+                serde_json::from_slice(bytes).unwrap();
+            for table in manifest.tables {
+                attached.insert(table.rows, self.held[&table.rows].clone());
+            }
+            for identity in manifest.row_identities {
+                attached.insert(
+                    identity.values.values,
+                    self.held[&identity.values.values].clone(),
+                );
+            }
+            if let Some(checkpoint) = checkpoint {
+                let Attachment::Bytes(bytes) = &self.held[&checkpoint.manifest] else {
+                    panic!("typed checkpoint manifest")
+                };
+                let manifest: sdm_contract::frames::FrameCheckpointManifest =
+                    serde_json::from_slice(bytes).unwrap();
+                attached.insert(manifest.metadata, self.held[&manifest.metadata].clone());
+                for table in manifest.tables {
+                    attached.insert(table.rows, self.held[&table.rows].clone());
+                }
+                for identity in manifest.row_identities {
+                    attached.insert(
+                        identity.values.values,
+                        self.held[&identity.values.values].clone(),
+                    );
+                }
             }
         }
         let id = AttachmentId(self.held.keys().map(|id| id.0).max().unwrap_or(0) + 100);
