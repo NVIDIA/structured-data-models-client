@@ -632,3 +632,9 @@ Update the handwritten observation schema and shared availability reader togethe
 
 Commit successful scope/lineage and sparse Java adapter controls before implementation.
 The corrected exact whole source needs two fresh independent CODE approvals before any SDK or validation execution.
+
+
+A closed handwritten capture-capability product records which existing interceptions the producer actually supplies.
+Sparse replay omits unobserved answered fields, whereas a declared full observer must retain the top-level and per-Run fields and cannot advance past a missing reply.
+Current completed native products must retain their observed output supplement; only older products without the new interception declaration may lack that supplement.
+Compare carried supplements only when both producers observed them, while retaining every common call, native error and mandatory result comparison.

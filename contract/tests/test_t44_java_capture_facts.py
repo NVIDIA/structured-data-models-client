@@ -256,3 +256,26 @@ def test_unavailable_sparse_carried_data_keeps_all_common_error_and_call_fields(
     assert failures(controlled) == []
     controlled['legacy_predictions'][0]['error']['code'] = 'TRANSPORT_ERROR'
     assert failures(controlled)
+
+
+def test_current_completed_trace_cannot_lose_its_observed_outputs():
+    events, _ = sparse_trace(1)
+    events.append(
+        {
+            'event': 'done',
+            'result': {
+                'op': 'predict',
+                'result': 20,
+                'metadata': 21,
+                'model': 'actual-model',
+                'request_id': 'actual-response',
+                'outputs': ['prediction'],
+            },
+        }
+    )
+    capture = JAVA.captured(events)
+    core = capture.core()
+    reader().view(core, capture.operations)
+    core['legacy_predictions'][0]['result'].pop('outputs')
+    with pytest.raises(reader().ObservationError):
+        reader().view(core, capture.operations)
