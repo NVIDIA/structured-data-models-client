@@ -212,7 +212,7 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py": {
       "<module>": {
-        "fingerprint": "18a0bcffd690b4f4b010773f83c245b8a260f2aeabad09bfbace17f2c2a2ba12"
+        "fingerprint": "41461ded28f328df43c6b8f0dc288a8f406f0b0e130baf28524ff3b233b99e83"
       },
       "_Held.__getattr__": {
         "fingerprint": "1c11f042b8200ddeeed1c4f0ca22f07fa367d50bc7957f1262c3f92fde717fca"
@@ -287,7 +287,7 @@
         "fingerprint": "4c0cd92b0d16c9578b5dd4422038951893cd46dbc685e3afe4d005ba3cc85107"
       },
       "error_from_core": {
-        "fingerprint": "88a7daf39f0270115731ef2b1e7853baa279f58cf5802eb9ee25f5d925185802"
+        "fingerprint": "eea44791cd8ed9c164a64a7a693d95429bb1a32266123ea94858a75de3ae3e26"
       },
       "holding": {
         "fingerprint": "9e64ecd7e71e03b647320abf8b92f74c8f5a13dcb9189888250b145cb9dffaf2"
@@ -317,7 +317,7 @@
         "fingerprint": "0d4dfdebd8bbd6257ced1784723a96e754324c9301f1f918e112a9ed35fd8625"
       },
       "warn_from_core": {
-        "fingerprint": "ed6bba10804f00a79d3414f2ed82e21c2fd1340b113e157cab2ef126b5725f7b"
+        "fingerprint": "b398b83eefbe562658b526a08cd0fff99342882062131c7b10b75b46a7ec88f5"
       },
       "warn_held": {
         "fingerprint": "bfd36139c92eefac64653070dee6a6402f13bb6bbbe3f60573a86a3c2c24e1d3"

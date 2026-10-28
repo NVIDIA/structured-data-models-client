@@ -9999,14 +9999,73 @@
         "name": {
           "type": "string"
         },
-        "arrow_large_string": {
-          "type": "boolean"
+        "declared": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FramePhysicalDeclaration"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false,
       "required": [
-        "name",
-        "arrow_large_string"
+        "name"
+      ]
+    },
+    "FramePhysicalDeclaration": {
+      "description": "Original reconstruction declaration, independently of exported buffers.\nNative Decimal widths and full i32 scale are not narrowed to interchange\nadmission's widened scale-zero physical representation.",
+      "oneOf": [
+        {
+          "description": "Canonical non-Decimal scalar declaration. The shared reader rejects\nDecimal interchange variants in favor of the original descriptor below.",
+          "type": "object",
+          "properties": {
+            "physical": {
+              "$ref": "#/$defs/ColumnType"
+            },
+            "declaration": {
+              "type": "string",
+              "const": "physical"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "declaration",
+            "physical"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "declaration": {
+              "type": "string",
+              "const": "large_utf8"
+            }
+          },
+          "required": [
+            "declaration"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "native": {
+              "$ref": "#/$defs/NativeDecimal"
+            },
+            "declaration": {
+              "type": "string",
+              "const": "decimal"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "declaration",
+            "native"
+          ]
+        }
       ]
     },
     "FrameColumnInputs": {
@@ -10054,9 +10113,13 @@
           "type": "boolean"
         },
         "inferred": {
-          "type": [
-            "string",
-            "null"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FrameObservedContent"
+            },
+            {
+              "type": "null"
+            }
           ]
         }
       },
@@ -10066,6 +10129,16 @@
         "string",
         "arrow_decimal",
         "timestamp"
+      ]
+    },
+    "FrameObservedContent": {
+      "description": "The observed scalar content, adapted after one reached native inference.\nNone at the containing field means inference was not performed.",
+      "type": "string",
+      "enum": [
+        "text",
+        "decimal",
+        "temporal",
+        "other"
       ]
     },
     "FrameIntegerColumn": {
@@ -10605,8 +10678,26 @@
         "name": {
           "type": "string"
         },
-        "origin": {
-          "$ref": "#/$defs/FrameNativeOrigin"
+        "declared": {
+          "description": "At most one original declaration or logical-text fact may be present.\nNeither is needed for ordinary primitive, object or category sources.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FramePhysicalDeclaration"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "logical_text": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FrameLogicalText"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "strings": {
           "description": "Present only for logical string source data, explicitly binding an\nexceptional Binary buffer to its native Unicode meaning.",
@@ -10622,58 +10713,38 @@
       },
       "additionalProperties": false,
       "required": [
-        "name",
-        "origin"
+        "name"
       ]
     },
-    "FrameNativeOrigin": {
-      "description": "Native dtype identity, independently of logical schema dtype edits and\nphysical Arrow offset width. No semantic inference policy lives here.",
-      "oneOf": [
-        {
-          "type": "string",
-          "enum": [
-            "builtin_primitive",
-            "arrow_dtype"
-          ]
+    "FrameLogicalText": {
+      "description": "Original logical text storage/missing semantics, not its exported offset\nwidth or its later reached lowercase operation.",
+      "type": "object",
+      "properties": {
+        "backing": {
+          "$ref": "#/$defs/FrameTextBacking"
         },
-        {
-          "type": "object",
-          "properties": {
-            "pandas_string": {
-              "type": "object",
-              "properties": {
-                "storage": {
-                  "$ref": "#/$defs/FrameStringStorage"
-                },
-                "missing": {
-                  "$ref": "#/$defs/FrameStringMissing"
-                }
-              },
-              "required": [
-                "storage",
-                "missing"
-              ]
-            }
-          },
-          "required": [
-            "pandas_string"
-          ],
-          "additionalProperties": false
+        "missing": {
+          "$ref": "#/$defs/FrameTextMissing"
         }
+      },
+      "additionalProperties": false,
+      "required": [
+        "backing",
+        "missing"
       ]
     },
-    "FrameStringStorage": {
+    "FrameTextBacking": {
       "type": "string",
       "enum": [
-        "python",
-        "pyarrow"
+        "element_values",
+        "offset_utf8"
       ]
     },
-    "FrameStringMissing": {
+    "FrameTextMissing": {
       "type": "string",
       "enum": [
-        "pandas_na",
-        "floating_nan"
+        "null_scalar",
+        "ieee_nan"
       ]
     },
     "PreparedFrameGraph": {
