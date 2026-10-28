@@ -149,3 +149,17 @@ Update each existing producer and reader needed to describe and materialize the 
 Run the public profile/Unicode/error consumers on both supported runtime cells and the corresponding Rust host consumers after fresh exact-candidate approvals.
 Also close the observed native import lint violation without suppressing the rule.
 The current frame/LINK package remains unaccepted until these and its broader existing acceptance gates pass.
+
+## Connected runtime feedback
+
+Candidate `30312949430471647fcd9f816f2e71f08fdf1b4d` received both independent whole CODE approvals, then passed all-target compilation, strict Clippy, native wheel construction and installed source/binary identity.
+Its first connected public run produced 60 passes and 23 failures; its complete constructor and text HostRun targets then passed all 26 tests.
+The Unicode journeys reached matching inspected payloads, results and merges, but their transport observer watched the old route's `predict` method while the core reaches the shared native encoder directly.
+Observe the actual encoder reached by both routes, keeping every frozen native-point, wire, result and warning expectation.
+The new constructor comparison also needs the explicitly successful native-string options of the frozen Unicode journeys rather than assuming pandas 3's default string inference preserves surrogate points inside the old date hint.
+
+Repair the remaining actual warning presentation and warning-as-error guard as one connected producer/reader family.
+Generic request preparation must not inherit constructor-only warning presentation, and the native HOPS warning must retain its original engine guard without catching the neighboring context-cap warning outside that guard.
+Preserve arbitrary native warning-handler exceptions, structured-error and interrupt passthrough, original cause ownership, warning order, handler mutations and sampler continuation.
+These observed failures are the next bounded repair, before any new feature layer or package expansion.
+The compiler, wheel and HostRun results retain their exact producer identity and do not provide a passing package stamp.
