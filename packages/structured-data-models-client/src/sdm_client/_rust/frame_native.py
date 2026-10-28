@@ -12,18 +12,31 @@ remain in Rust. No exception is displayed while capturing native facts.
 
 from __future__ import annotations
 
+import sys
+import unicodedata
 from collections.abc import Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from types import MappingProxyType, TracebackType
-from typing import Any, Iterator, NoReturn, cast
-import sys
-import unicodedata
+from typing import Any, Iterator, Literal, NoReturn, TypeAlias, TypedDict, cast
 
 import pandas as pd
 
 from sdm_client._rust.codec import relation_name
 from sdm_client.errors import StructuredDataError
+
+
+class FullRootCasingFacts(TypedDict):
+    mapping: Literal['full_root']
+    unicode_version: str
+
+
+class SimpleCasingFacts(TypedDict):
+    mapping: Literal['simple']
+    identity: str
+
+
+NativeCasingFacts: TypeAlias = FullRootCasingFacts | SimpleCasingFacts
 
 
 @dataclass(frozen=True)
@@ -44,7 +57,7 @@ class NativeFailureFacts:
     classes: tuple[NativeClass, ...]
     deepest_module: str | None
     relational_error: bool
-    python_unicode_database: str
+    unicode_version: str
 
     def as_wire(self) -> dict[str, Any]:
         return {
@@ -59,7 +72,10 @@ class NativeFailureFacts:
             'structured_data_error': 'structured_data_error' in self.ancestry,
             'relational_error': self.relational_error,
             'deepest_module': self.deepest_module,
-            'python_unicode_database': self.python_unicode_database,
+            'message_casing': {
+                'mapping': 'full_root',
+                'unicode_version': self.unicode_version,
+            },
         }
 
 
@@ -209,34 +225,28 @@ class NativeColumn:
             array = array.cast(pa.string())
         return pa.table({'values': array}), 'utf8'
 
-    def text_facts(self, identity_input: str) -> dict[str, Any]:
-        """Observe this actual result's native class/storage and fixed kernel.
+    def text_facts(self, identity_input: str) -> NativeCasingFacts:
+        """Report this actual result's observed casing operation and identity.
 
         The core supplies the fixed probe input and selects the casing
         profile. No user text is lowered or clipped by this observer.
         """
         dtype = self.values.dtype
-        if type(dtype) is pd.StringDtype:
-            target = (
-                'pandas_string_python'
-                if dtype.storage == 'python'
-                else 'pandas_string_pyarrow'
-            )
-        else:
-            target = 'numpy_unicode'
-        identity = None
-        if target == 'pandas_string_pyarrow':
+        simple = type(dtype) is pd.StringDtype and dtype.storage != 'python'
+        identity = ''
+        if simple:
             import pyarrow as pa
             import pyarrow.compute as pc
 
             identity = pc.utf8_lower(
                 pa.array([identity_input], type=pa.string())
             )[0].as_py()
-        return {
-            'target': target,
-            'python_unicode_database': unicodedata.unidata_version,
-            'arrow_simple_identity': identity,
-        }
+        # Preserve the existing metadata observation after the reached probe,
+        # including when the simple operation does not consume this version.
+        unicode_version = unicodedata.unidata_version
+        if simple:
+            return {'mapping': 'simple', 'identity': identity}
+        return {'mapping': 'full_root', 'unicode_version': unicode_version}
 
 
 class NativeFrameColumns:
@@ -374,7 +384,7 @@ def _native_references(
         try:
             return NativeColumn(selected.astype(str))
         except (TypeError, ValueError, OverflowError):
-            converted = []
+            converted: list[str | None] = []
             for value in selected:
                 try:
                     converted.append(str(value))
@@ -548,7 +558,7 @@ def guard_failure(
         raise CodecError(
             'frame diagnostic assessment has no final native category'
         )
-    said = [ord(point) for point in native.read_message()]
+    said_points = [ord(point) for point in native.read_message()]
     selected = None
     with errors.holding(
         frame_native_message=lambda fields: ''.join(
@@ -563,7 +573,7 @@ def guard_failure(
                         'assessment': assessment,
                         'native_type': name,
                         'refusal': refusal,
-                        'said': said,
+                        'said': said_points,
                         'dropped_summary': dropped_summary,
                         'rows_per_call': rows_per_call,
                     },

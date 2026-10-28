@@ -12,6 +12,8 @@ use crate::prepare::NativeFailure;
 use crate::{Detail, Sentence};
 use std::collections::BTreeMap;
 
+use super::NativeTextFacts;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum FrameErrorOrigin {
@@ -28,7 +30,9 @@ pub struct FrameNativeFailure {
     /// Exact native class identity, not a qualified-name inference.
     pub relational_error: bool,
     pub deepest_module: Option<String>,
-    pub python_unicode_database: String,
+    /// Actual full-root operation used by native diagnostic-message casing.
+    /// Its identity is consumed only when that normalization is reached.
+    pub message_casing: NativeTextFacts,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

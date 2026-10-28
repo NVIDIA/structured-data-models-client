@@ -348,24 +348,17 @@ pub struct SampledFrameContext {
     pub text_identity_input: String,
 }
 
-/// The effective native result dtype at the reached astype(str) position.
-/// This is not a caller-selected normalization algorithm or package tag.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum NativeStringTarget {
-    NumpyUnicode,
-    PandasStringPython,
-    PandasStringPyarrow,
-}
-
+/// Mathematical semantics observed on the actual reached native result.
+/// These facts identify its operation, not its library or result dtype, and
+/// do not grant the host a choice of model normalization policy.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct NativeTextFacts {
-    pub target: NativeStringTarget,
-    /// Actual builtin database metadata, not an interpreter version guess.
-    pub python_unicode_database: String,
-    /// Raw fixed-input native kernel output; never a normalized user value.
-    pub arrow_simple_identity: Option<String>,
+#[serde(tag = "mapping", rename_all = "snake_case", deny_unknown_fields)]
+pub enum NativeTextFacts {
+    /// Full-root lowercase semantics and its actual Unicode table metadata.
+    FullRoot { unicode_version: String },
+    /// Raw fixed-input output identifying a supported complete simple map.
+    /// User values never participate in this bounded observation.
+    Simple { identity: String },
 }
 
 /// One complete valid encoded call, through the existing request encoder.

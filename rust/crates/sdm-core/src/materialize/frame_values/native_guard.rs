@@ -206,11 +206,15 @@ pub(super) fn report(input: FrameNativeReport) -> Result<CoreError, CoreError> {
             let refusal = unicode(input.refusal.as_ref().ok_or_else(|| {
                 protocol("caller native error report lacks its distinct refusal observation")
             })?)?;
-            let profile = casing_profile(&NativeTextFacts {
-                target: NativeStringTarget::NumpyUnicode,
-                python_unicode_database: assessment.failure.python_unicode_database.clone(),
-                arrow_simple_identity: None,
-            })?;
+            if !matches!(
+                &assessment.failure.message_casing,
+                NativeTextFacts::FullRoot { .. }
+            ) {
+                return Err(protocol(
+                    "native diagnostic casing does not describe a full-root operation",
+                ));
+            }
+            let profile = casing_profile(&assessment.failure.message_casing)?;
             let lowered = sdm_engine::words::lower_native(refusal.as_slice(), profile);
             if assessment.category == C::CallerData
                 && let Some(summary) = &input.dropped_summary

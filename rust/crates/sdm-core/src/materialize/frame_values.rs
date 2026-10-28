@@ -2260,24 +2260,28 @@ fn bind_context(
 
 fn casing_profile(facts: &NativeTextFacts) -> Result<sdm_engine::words::CasingProfile, CoreError> {
     use sdm_engine::words::{CasingProfile, UnicodeDataVersion};
-    if facts.target == NativeStringTarget::PandasStringPyarrow {
-        return facts.arrow_simple_identity.as_deref().and_then(CasingProfile::from_simple_identity)
-            .ok_or_else(|| protocol("native Arrow lowercase facts do not identify a supported complete simple table"));
-    }
-    let version = match facts.python_unicode_database.as_str() {
-        "13.0.0" => UnicodeDataVersion::V13_0,
-        "14.0.0" => UnicodeDataVersion::V14_0,
-        "15.0.0" => UnicodeDataVersion::V15_0,
-        "15.1.0" => UnicodeDataVersion::V15_1,
-        "16.0.0" => UnicodeDataVersion::V16_0,
-        "17.0.0" => UnicodeDataVersion::V17_0,
-        _ => {
-            return Err(protocol(
-                "native builtin lowercase facts name an unsupported Unicode database",
-            ));
+    match facts {
+        NativeTextFacts::Simple { identity } => CasingProfile::from_simple_identity(identity)
+            .ok_or_else(|| {
+                protocol("native lowercase facts do not identify a supported complete simple table")
+            }),
+        NativeTextFacts::FullRoot { unicode_version } => {
+            let version = match unicode_version.as_str() {
+                "13.0.0" => UnicodeDataVersion::V13_0,
+                "14.0.0" => UnicodeDataVersion::V14_0,
+                "15.0.0" => UnicodeDataVersion::V15_0,
+                "15.1.0" => UnicodeDataVersion::V15_1,
+                "16.0.0" => UnicodeDataVersion::V16_0,
+                "17.0.0" => UnicodeDataVersion::V17_0,
+                _ => {
+                    return Err(protocol(
+                        "native full-root lowercase facts name an unsupported Unicode database",
+                    ));
+                }
+            };
+            Ok(CasingProfile::FullRoot(version))
         }
-    };
-    Ok(CasingProfile::FullRoot(version))
+    }
 }
 
 fn check_text_order(
