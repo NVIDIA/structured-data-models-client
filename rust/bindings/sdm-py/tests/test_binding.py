@@ -27,6 +27,15 @@ STUB = (
     REPO / 'packages/structured-data-models-client/src/sdm_client/_native.pyi'
 )
 CANARY = 'CANARY-5e0d'
+_FRAME_OWNERS = (
+    'FrameGraph',
+    'FrameQuestion',
+    'FramePopulation',
+    'FrameLabelBatch',
+    'FrameTask',
+    'FrameReferences',
+    'FramePayload',
+)
 
 
 def _public(names: object) -> set[str]:
@@ -67,11 +76,55 @@ def test_the_build_is_the_one_named(native_build: str) -> None:
 def test_the_stub_describes_the_module() -> None:
     names, members = _stub()
     assert _public(dir(_native)) == names
-    for cls in ('Run', 'ArrowStream'):
+    for cls in ('Run', 'ArrowStream', *_FRAME_OWNERS):
         declared = getattr(_native, cls).__dict__
         assert {m for m in declared if not m.startswith('__')} | {
             m for m in declared if m.startswith('__arrow')
         } == members[cls], cls
+
+
+@pytest.mark.parametrize(
+    ('alias', 'stream'),
+    [
+        ('_AttachmentIn', '_ArrowStreamExportable'),
+        ('_AttachmentOut', 'ArrowStream'),
+    ],
+)
+def test_attachment_annotations_include_every_native_owner(
+    alias: str, stream: str
+) -> None:
+    tree = ast.parse(STUB.read_text())
+    aliases = {
+        node.targets[0].id: node.value
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        and isinstance(node.targets[0], ast.Name)
+    }
+
+    def alternatives(node: ast.expr) -> set[str]:
+        if isinstance(node, ast.Name):
+            if node.id in aliases:
+                return alternatives(aliases[node.id])
+            return {node.id}
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
+            return alternatives(node.left) | alternatives(node.right)
+        raise AssertionError(f'{alias}: unexpected union {ast.unparse(node)}')
+
+    assert alternatives(aliases[alias]) == {'bytes', stream, *_FRAME_OWNERS}
+
+
+@pytest.mark.parametrize('name', _FRAME_OWNERS)
+def test_native_owners_cannot_be_forged_or_subclassed(name: str) -> None:
+    owner = getattr(_native, name)
+    assert owner.__module__ == 'sdm_client._native'
+    with pytest.raises(TypeError):
+        owner()
+    with pytest.raises(TypeError):
+        owner.__new__(owner)
+    with pytest.raises(TypeError):
+        object.__new__(owner)
+    with pytest.raises(TypeError):
+        type('ForgedOwner', (owner,), {})
 
 
 def test_the_contract_version_is_the_contract_crate_s() -> None:
