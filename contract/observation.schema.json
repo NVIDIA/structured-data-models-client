@@ -304,6 +304,34 @@
             }
           }
         },
+        "model_calls": {
+          "description": "Actually taken legacy Predict CallModel bodies in call order, including failed calls. Absent in older observations means unobserved, not observed-empty. Gathered entry call records remain in predictions.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["run", "body", "body_sha256"],
+            "properties": {
+              "run": {"type": "integer", "minimum": 0},
+              "body": {"type": "object"},
+              "body_sha256": {"$ref": "#/$defs/sha256"}
+            }
+          }
+        },
+        "answered": {
+          "description": "The carried partial Arrow product actually taken from a legacy native error. Null means observed without a carried product; absent means not observed by that checkpoint.",
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": ["rows", "result", "model", "request_id", "metadata", "outputs"],
+          "properties": {
+            "rows": {"type": "integer", "minimum": 0},
+            "result": {"$ref": "#/properties/core/properties/predicted/properties/result"},
+            "model": {"type": "string"},
+            "request_id": {"type": "string"},
+            "metadata": {"type": "object"},
+            "outputs": {"type": "array", "items": {"type": "string"}}
+          }
+        },
         "error": {
           "type": ["object", "null"],
           "additionalProperties": false,

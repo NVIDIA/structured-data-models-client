@@ -487,6 +487,7 @@ def complete(observation: dict[str, Any]) -> list[str]:
     core = observation.get('core')
     if isinstance(core, dict) and (
         'predictions' in core
+        or 'model_calls' in core
         or any(
             item.get('op') == 'prepare_request'
             for item in core.get('inputs', [])
@@ -494,7 +495,19 @@ def complete(observation: dict[str, Any]) -> list[str]:
     ):
         reader = runner()._sibling('prediction_observation')
         try:
-            reader.view(core, observation['identity']['operations'])
+            observed = reader.view(core, observation['identity']['operations'])
+            if observation['identity']['runner'] == 'python-core':
+                received = (observation.get('public') or {}).get('payloads', [])
+                if observed['calls'] != [item['parsed'] for item in received]:
+                    problems.append(
+                        'actual model call bodies differ from received requests'
+                    )
+                if observed['call_hashes'] is not None and observed[
+                    'call_hashes'
+                ] != [item.get('sha256') for item in received]:
+                    problems.append(
+                        'actual posted bytes differ from received bytes'
+                    )
         except reader.ObservationError:
             problems.append(
                 'actual prediction evidence is incomplete or contradictory'

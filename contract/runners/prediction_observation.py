@@ -30,6 +30,14 @@ def _ordinal(value: Any) -> bool:
     return type(value) is int and value >= 0
 
 
+def _sha256(value: Any) -> bool:
+    return (
+        type(value) is str
+        and len(value) == 64
+        and all(character in '0123456789abcdef' for character in value)
+    )
+
+
 def _ordered_json(value: bytes | str) -> Any:
     def nonfinite(_token: str) -> Any:
         raise ObservationError('prediction input has a nonfinite JSON value')
@@ -78,9 +86,7 @@ def observed_call_body(call: dict[str, Any], encoded: dict[str, Any]) -> None:
     if body is None:
         return
     require(
-        isinstance(body, dict)
-        and type(call['body_sha256']) is str
-        and len(call['body_sha256']) == 64,
+        isinstance(body, dict) and _sha256(call['body_sha256']),
         'prediction posted body/hash is unobserved',
     )
     endpoint = encoded.get('model_endpoint')
@@ -469,7 +475,94 @@ def _entry(
         'completion': entry['completion'],
         'failure': failure,
         '_rendered': rendered[final] if final is not None else None,
+        '_calls': calls,
+        '_results': rendered,
     }
+
+
+def _partial_entry(
+    entry: dict[str, Any],
+    rendered: list[dict[str, Any]],
+    records: dict[int, Any],
+) -> dict[str, Any]:
+    results = []
+    positions = {
+        call['request_id']: at for at, call in enumerate(entry['calls'])
+    }
+    for raw, value in zip(entry['results'], rendered, strict=True):
+        selected = _selected(raw, entry['calls'])
+        results.append(
+            {
+                **value,
+                'aggregation': raw['input']['input']['aggregation']['kind'],
+                'outputs': raw['data']['predicted']['outputs'],
+                'call_indices': [
+                    positions[call['request_id']] for call in selected
+                ],
+                'scopes': [
+                    {
+                        'call_index': positions[call['request_id']],
+                        **{
+                            key: call['scope'][key]
+                            for key in ('model', 'request_id', 'response_rows')
+                        },
+                    }
+                    for call in selected
+                ],
+                'lineage': [
+                    {
+                        'call_index': positions[source['call_request_id']],
+                        'answer_ordinal': source['answer_ordinal'],
+                        'source_row': source['source_row'],
+                    }
+                    for source in raw['data']['lineage']
+                ],
+            }
+        )
+    answered = None
+    ranking = any(
+        records[run]['input']['stage'] == 'validate_relational_ranking'
+        for run in entry['runs']
+        if run in records
+    ) or any(result['aggregation'] == 'ranking' for result in results)
+    if (
+        results
+        and not ranking
+        and results[-1]['result'] is not None
+        and results[-1]['metadata'] is not None
+    ):
+        aggregation = entry['results'][-1]['input']['input']['aggregation']
+        groups = (
+            [aggregation]
+            if aggregation['kind'] == 'calls'
+            else aggregation['children']
+        )
+        rows = 0
+        for group in groups:
+            require(
+                all(
+                    value is None or _ordinal(value)
+                    for value in group['counted']
+                ),
+                'partial prediction has malformed actual row counts',
+            )
+            rows += sum(
+                value for value in group['counted'] if value is not None
+            )
+        answered = {
+            'rows': rows,
+            **{
+                key: results[-1][key]
+                for key in (
+                    'result',
+                    'model',
+                    'request_id',
+                    'metadata',
+                    'outputs',
+                )
+            },
+        }
+    return {'observed': True, 'answered': answered, 'results': results}
 
 
 def _view(core: dict[str, Any], operations: list[str]) -> dict[str, Any]:
@@ -571,12 +664,82 @@ def _view(core: dict[str, Any], operations: list[str]) -> dict[str, Any]:
             core.get('error') == error,
             'common prediction error lacks an actual selected native owner',
         )
+    legacy_calls = core.get('model_calls')
+    require(
+        legacy_calls is None or isinstance(legacy_calls, list),
+        'legacy actual model calls are malformed',
+    )
+    taken = []
+    for call in legacy_calls or []:
+        require(
+            set(call) == {'run', 'body', 'body_sha256'}
+            and _ordinal(call['run'])
+            and call['run'] < len(operations)
+            and operations[call['run']] == 'predict'
+            and isinstance(call['body'], dict)
+            and _sha256(call['body_sha256']),
+            'legacy model call lacks an actual prediction Run/body/hash',
+        )
+        taken.append((call['run'], call['body'], call['body_sha256']))
+    require(
+        [run for run, _body, _hash in taken]
+        == sorted(run for run, _body, _hash in taken),
+        'legacy model call observations change actual Run order',
+    )
+    for entry in projected:
+        taken.extend(
+            (call['run'], call['body'], call['body_sha256'])
+            for call in entry['_calls']
+            if call['body'] is not None
+        )
+    taken.sort(key=lambda item: item[0])
+    calls = [body for _run, body, _hash in taken]
+    hashes = [hash_ for _run, _body, hash_ in taken]
+    if not entries and legacy_calls is None:
+        predicted = core.get('predicted')
+        calls = (
+            predicted.get('calls', [predicted['body']])
+            if predicted is not None and predicted.get('body') is not None
+            else None
+        )
+        hashes = None
+    partial = {
+        'observed': 'answered' in core and core.get('error') is not None,
+        'answered': core.get('answered'),
+        'results': None,
+    }
+    if partial['answered'] is not None:
+        answered = partial['answered']
+        require(
+            isinstance(answered, dict)
+            and set(answered)
+            == {'rows', 'result', 'model', 'request_id', 'metadata', 'outputs'}
+            and _ordinal(answered['rows'])
+            and isinstance(answered['result'], dict)
+            and isinstance(answered['result']['columns'], list)
+            and isinstance(answered['result']['rows'], list)
+            and type(answered['model']) is str
+            and type(answered['request_id']) is str
+            and isinstance(answered['metadata'], dict)
+            and isinstance(answered['outputs'], list)
+            and all(type(value) is str for value in answered['outputs']),
+            'legacy carried partial result is malformed',
+        )
+    if last is not None and last['completion'] == 'raised':
+        partial = _partial_entry(
+            entries[last['ordinal']], last['_results'], records
+        )
     for entry in projected:
         del entry['_rendered']
+        del entry['_calls']
+        del entry['_results']
     return {
         'operations': logical_operations,
         'inputs': logical_inputs,
         'predictions': projected,
+        'calls': calls,
+        'call_hashes': hashes,
+        'partial': partial,
     }
 
 

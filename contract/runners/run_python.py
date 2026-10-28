@@ -905,6 +905,7 @@ class _CapturedRun:
         self.result_record: dict[str, Any] | None = None
         self.error: dict[str, str] | None = None
         self.error_owner: BaseException | None = None
+        self.carried: dict[str, Any] | None = None
         self.asked: dict[int, dict[str, Any]] = {}
 
 
@@ -965,6 +966,8 @@ class _Capture:
         self.predictions: list[dict[str, Any]] = []
         self._entries: list[int] = []
         self._presented: list[tuple[BaseException, int, str]] = []
+        self.model_calls: list[dict[str, Any]] = []
+        self.partial: dict[str, Any] | None = None
 
     def _run(self, owner: _CapturedRun | None) -> _CapturedRun:
         owner = self._current_run if owner is None else owner
@@ -1406,6 +1409,8 @@ class _Capture:
             owner.input_record['error'] = owner.error
         if owner.entry is None:
             self.error = owner.error
+        if owner.operation == 'predict':
+            owner.carried = json.loads(error.control)['error'].get('answered')
 
     def done(
         self, result: dict[str, Any], *, run: _CapturedRun | None = None
@@ -1473,6 +1478,17 @@ class _Capture:
                     'the model call does not carry the request id predict '
                     'was started with'
                 )
+            if owner.call_record is None:
+                self.model_calls.append(
+                    {
+                        'run': owner.ordinal,
+                        'body': owner.body,
+                        'body_sha256': digest(value),
+                    }
+                )
+        if owner.carried is not None and attachment == owner.carried['result']:
+            if value is not None:
+                self.partial = _carried_result(value, owner.carried['rows'])
         if attachment == owner.prepared and isinstance(value, bytes):
             prepared = json.loads(value)
             if owner.input_record is not None:
@@ -1582,6 +1598,8 @@ class _Capture:
             'materialized': self.materialized,
             'predicted': self.predicted,
             'error': self.error,
+            'model_calls': self.model_calls,
+            'answered': self.partial,
         }
         if self.edits:
             core['edits'] = self.edits
@@ -1592,23 +1610,35 @@ class _Capture:
         return core
 
 
-def _result_rows(stream: Any) -> dict[str, Any]:
-    r"""An Arrow result the core gave, as the pure-Rust host records one:
-    the result's explanation where the core gave one (its schema's
-    ``explanation``, T2.16a), its columns' names and types, and its rows in
-    order, each cell an
-    integer's digits (``i64``), a float's IEEE-754 bits (``f64_bits``, 16
-    hex digits, so no text form of a float is compared) or text
-    (``utf8``); from T1.28b a boolean (``bool``) and a class's
-    probabilities (``map``: each class and its probability's bits, in
-    order); from T2.8 a list (``list``: a ranking's scores and rankings, an
-    item's own, each member a cell as above, a null ``None``), as the
-    pure-Rust host records one."""
+def _result_table(stream: Any) -> Any:
     import pyarrow as pa
 
-    table = pa.RecordBatchReader._import_from_c_capsule(
+    return pa.RecordBatchReader._import_from_c_capsule(
         stream.__arrow_c_stream__()
     ).read_all()
+
+
+def _carried_result(stream: Any, rows: int) -> dict[str, Any]:
+    table = _result_table(stream)
+    metadata = table.schema.metadata or {}
+    return {
+        'rows': rows,
+        'result': _result_snapshot(table),
+        'model': metadata[b'model'].decode('utf-8'),
+        'request_id': metadata[b'request_id'].decode('utf-8'),
+        'metadata': json.loads(metadata[b'metadata']),
+        'outputs': json.loads(metadata[b'outputs']),
+    }
+
+
+def _result_rows(stream: Any) -> dict[str, Any]:
+    return _result_snapshot(_result_table(stream))
+
+
+def _result_snapshot(table: Any) -> dict[str, Any]:
+    """Actual Arrow columns/cells/bits and optional explanation metadata."""
+    import pyarrow as pa
+
     kinds = {
         pa.int64(): 'int64',
         pa.float64(): 'float64',

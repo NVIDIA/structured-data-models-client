@@ -97,8 +97,11 @@ pub struct Observed {
     /// What a failed `predict` had answered before it failed, as the core
     /// carried it on its error (`CoreError.answered`, T2.1g): the result's
     /// columns and rows, as a predicted answer's, and the rows those calls
-    /// score. In process only; no observation writes it yet.
+    /// score. Published separately from a successful prediction so failed
+    /// paid work remains independent observation evidence.
     pub answered: Option<Value>,
+    /// Actual taken CallModel bodies, including calls whose response failed.
+    pub model_calls: Vec<Value>,
     /// The explanation of `predict`'s result (T2.13), where the core gave
     /// one: its Arrow schema's `explanation` metadata, the JSON text the
     /// core wrote. Apart from the answer, whose shape a gate's checkpoint
@@ -221,6 +224,10 @@ fn answered_of(handle: &HostRun, out: &Outgoing) -> Result<Option<Value>> {
     Ok(Some(json!({
         "result": result_rows(&result)?,
         "rows": answered.rows,
+        "model": result.schema.metadata().get("model").context("carried model is absent")?,
+        "request_id": result.schema.metadata().get("request_id").context("carried request id is absent")?,
+        "metadata": serde_json::from_str::<Value>(result.schema.metadata().get("metadata").context("carried metadata is absent")?)?,
+        "outputs": serde_json::from_str::<Value>(result.schema.metadata().get("outputs").context("carried outputs are absent")?)?,
     })))
 }
 
@@ -363,6 +370,7 @@ pub fn run_edited(case: &Case, bases: &Bases, edits: &[SchemaEdit]) -> Result<Ob
         driver: None,
         edits: vec![],
         answered: None,
+        model_calls: Vec::new(),
         explanation: None,
     })
 }
@@ -1129,6 +1137,7 @@ fn describe_on(
         driver: None,
         edits: Vec::new(),
         answered: None,
+        model_calls: Vec::new(),
         explanation: None,
     };
     let handle = match HostRun::start(&source.root(), &message, attachments) {
@@ -1975,6 +1984,7 @@ pub fn materialize_repeatedly_holding(
             driver: None,
             edits: Vec::new(),
             answered: None,
+            model_calls: Vec::new(),
             explanation: None,
         };
         materialize(
@@ -2221,10 +2231,8 @@ fn predict(
             return Ok(());
         }
     };
-    // Each model call answered in turn, a forecast's one per step (T1.36
-    // fix 21); the body recorded is the last call's, as the Python runner
-    // records `core.predicted.body`, and every call's is kept in the
-    // answer's `calls`, which the observation leaves out (T1.36 fix 22).
+    // Each actual call remains observed even if a later reply fails.
+    // A successful result also retains its existing last/all body fields.
     let mut bodies: Vec<Value> = Vec::new();
     // The scripted endpoint over the calls in order, failing the case's
     // `fail_call` (T2.1a), as the Python runner serves it.
@@ -2259,6 +2267,11 @@ fn predict(
             );
         }
         bodies.push(sent);
+        observed.model_calls.push(json!({
+            "run": observed.operations.len() - 1,
+            "body": bodies.last().unwrap(),
+            "body_sha256": crate::case::sha256(&body),
+        }));
         // The test's script where one stands in for the rule on this thread
         // (`endpoint::answered_by`), its bytes as they travel; else the
         // scripted endpoint, failing the case's call, and answering beside
@@ -2299,6 +2312,7 @@ fn predict(
         let answer = BTreeMap::from([(AttachmentId(1), Attachment::Bytes(answered))]);
         if let Err(failed) = handle.reply(&reply, answer) {
             observed.answer = error_of(&failed)?;
+            observed.answered = answered_of(&handle, &failed)?;
             return Ok(());
         }
         next = handle.next();

@@ -150,6 +150,8 @@ pub fn write(
             "materialized": materialized,
             "predicted": predicted,
             "error": error,
+            "model_calls": observed.model_calls,
+            "answered": observed.answered,
         },
     });
     // What the provider ran, for a case whose operations read data; a

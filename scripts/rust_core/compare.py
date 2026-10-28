@@ -1125,6 +1125,48 @@ def _core_agree(
         return
     mine = {**mine, 'inputs': python_view['inputs']}
     theirs = {**theirs, 'inputs': rust_view['inputs']}
+    calls = [
+        None
+        if view['calls'] is None
+        else [_payload(body, report.paths) for body in view['calls']]
+        for view in (python_view, rust_view)
+    ]
+    if calls[0] != calls[1]:
+        _differ(
+            report,
+            where,
+            'core.model_calls',
+            None,
+            None,
+            show=False,
+            rule='payload',
+        )
+    partials = [view['partial'] for view in (python_view, rust_view)]
+    if (
+        partials[0]['observed'] != partials[1]['observed']
+        or partials[0]['answered'] != partials[1]['answered']
+    ):
+        _differ(
+            report, where, 'core.answered', None, None, show=False, rule='core'
+        )
+    if all(partial['results'] is not None for partial in partials):
+        results = [
+            [
+                _predicted({'predicted': result}, report.paths)
+                for result in partial['results']
+            ]
+            for partial in partials
+        ]
+        if results[0] != results[1]:
+            _differ(
+                report,
+                where,
+                'core.partial_results',
+                None,
+                None,
+                show=False,
+                rule='core',
+            )
     for field in ('inputs', 'fetches', 'described', 'materialized'):
         if _core_field(field, mine[field]) != _core_field(field, theirs[field]):
             _differ(
@@ -2329,23 +2371,38 @@ def _core_payload(
     T3.2 r1, Codex 5), and the requests the endpoint received, on
     ``python-core``, call by call, in order: the ``payload`` rule on the
     core; on those hosts, held to the reference only where it reached
-    ``predict`` when past its ``stop`` (:func:`past_stop`). One call is
-    ``core.predicted.body``; several are ``core.predicted.calls``, every
-    call's body in order (T2.1g)."""
-    predicted = (observation.get('core') or {}).get('predicted')
-    if not predicted or predicted.get('body') is None:
+    ``predict`` when past its ``stop`` (:func:`past_stop`). The shared reader
+    retains every taken call on success or failure; older successful
+    observations expose their actual calls through core.predicted."""
+    if observation.get('core') is None:
         return
-    several = isinstance(predicted.get('calls'), list)
-    named = 'core.predicted.calls' if several else 'core.predicted.body'
-    bodies = [
-        _payload(body, report.paths)
-        for body in (predicted['calls'] if several else [predicted['body']])
-    ]
+    try:
+        viewed = _prediction_view(observation)
+        calls = viewed['calls']
+    except _prediction_reader().ObservationError:
+        report.fail(
+            f'{case["id"]}: invalid actual model call evidence', 'payload'
+        )
+        return
+    named = 'core.model_calls'
+    if calls is None:
+        expected = observation if who == 'python-core' else reference
+        if (expected or {}).get('public', {}).get('payloads'):
+            report.fail(
+                f'{case["id"]}: {who}: model calls were not observed', 'payload'
+            )
+        return
+    bodies = [_payload(body, report.paths) for body in calls]
     if who == 'python-core':
-        sent = [
-            _payload(each['parsed'], report.paths)
-            for each in (observation.get('public') or {}).get('payloads', [])
-        ]
+        received = (observation.get('public') or {}).get('payloads', [])
+        if viewed['call_hashes'] is not None and viewed['call_hashes'] != [
+            each.get('sha256') for each in received
+        ]:
+            report.fail(
+                f'{case["id"]}: python-core: posted bytes differ from received bytes',
+                'payload',
+            )
+        sent = [_payload(each['parsed'], report.paths) for each in received]
         found = _path_of(bodies, sent, named)
         if found:
             report.fail(
