@@ -65,8 +65,11 @@ Rust selects it at the reached key assignment, validates component presence, app
 A derived-prefix collision is not an early refusal on the native route.
 `FrameKeyNulls` validates a reached component's actual `isna().any()` observation without storing an execution position.
 `FrameRowIdentity` binds that definition to one complete aligned typed string column with explicit encoding and original row order.
-Its completion validates shape/null representation and then performs the post-fold ID admission of any pre-existing derived column.
-The derived name contains the existing ID token `key`, so the existing native name/type kernel determines ID eligibility directly; this boundary does not need another value-based semantic inference engine.
+Its completion validates shape/null representation and the native primary-key setter's dtype support.
+The setter assigns ID meaning to the derived column.
+The later per-table metadata product then validates the current caller stype of any pre-existing derived column before advancing to the next table; overwriting its assigned ID with numerical or text meaning fails there.
+The successful integer/text collision twins with explicit ID metadata prove this distinction.
+No new value-based semantic inference engine or fixed initial stype is required for this boundary.
 
 `MaterializeFrames` and detached `FrameCheckpointManifest` carry explicit row-identity bindings separately from ordinary source-table bindings.
 `FrameCheckpointMetadata` retains the complete immutable definitions and existing string-encoding facts needed to reconstruct the same snapshot, while actual arrays stay separately owned.
@@ -127,3 +130,7 @@ The corrected third source uses the explicit scalar relationships of the existin
 Every executed probe source and receipt remains immutable.
 No candidate SDK import, build, test, checker, generator or endpoint is executed by this source author.
 The coordinator composes the complete source and canonical artifacts, obtains two fresh independent whole CODE approvals and then runs the required public, HostRun, checkpoint and quality consumers under the existing resource guard.
+
+The narrow follow-up collision receipt contains seven successful original-route observations with frozen provenance.
+Its ordinary, integer-with-ID and text-with-ID controls succeed through prediction, while ordinary integer/text/category/float metadata collisions fold before their primary-key stype refusal.
+The earlier 34-case receipt and every executed producer remain immutable.
