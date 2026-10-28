@@ -11,6 +11,7 @@ use crate::attached::take_json_if;
 
 struct QuestionData {
     description: SourceDescription,
+    types: sdm_schema::assemble::HostTypes,
     validation: crate::pql::Validation,
     facts: QueryFacts,
 }
@@ -87,6 +88,7 @@ pub(super) fn resolve(
     let owner = RetainedFrameQuestion {
         data: Arc::new(QuestionData {
             description,
+            types: read.types,
             validation,
             facts: query_facts.clone(),
         }),
@@ -191,6 +193,9 @@ pub(super) fn prepare(
                 &input.limits,
             )?;
             reserved(description)?;
+            // Caller consistency uses the original declared names, before
+            // any native cast. The later kept checks retain source semantics.
+            meanings_carried(description, Some(&data.types))?;
             kept_checks(description)?;
             // This original client notice is outside the native engine guard
             // and before native export. Decomposition parents stay silent;
