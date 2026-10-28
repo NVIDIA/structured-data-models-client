@@ -653,3 +653,17 @@ The unchanged-source quality diagnostic also reported one collapsible pure Rust 
 Collapse the equivalent short-circuit guard without changing any selected answer branch.
 Keep the context tests' exact implicit context and absent explicit cause by calling a normal failing helper within the handler, rather than suppressing a lint or changing the exception graph.
 Group these routine source repairs before fresh whole review, preserve actual R38 receipts, and claim no package stamp from the diagnostic.
+
+### Executed R39 consumer feedback
+
+The complete approved R39 diagnostic reached 1,808 passing public frame/LINK cases and five fixture assertions that obscured later comparisons.
+Retain exact native first-seen null-prediction column order and the earlier constructor warning prefix, rather than changing result or warning policy.
+A narrow paired receipt confirms both successful Text populations exactly and exposes one additional native failure context link on the later-column failure.
+Preserve that complete exception graph oracle and repair only the reached native presentation handover after tracing all companion readers.
+
+The capture schema guard currently rejects a closed sibling branch merely because it is represented by a local definition reference.
+Resolve only an exact single local definition reference for this closed-sibling proof, require a closed object with no competing indices property or patternProperties, and refuse unresolved, external, chained or augmented references.
+Keep the locked long-list item shape, item-by-item tail validation, full malformed-document fallback and all existing T2.1l ordering guarantees unchanged.
+Commit current-schema, closed-reference, malformed-reference and deep-tail controls before implementation.
+Truthful fixture repairs keep unique wrong-step IDs, release test-owned exception holders and request explanation for one actually materialized entity.
+All actual R39 compiler, quality, public, capture and setup-only retry receipts remain attached to R39; the successor requires a new exact whole pair before execution.
