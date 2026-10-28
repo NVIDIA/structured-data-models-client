@@ -280,3 +280,25 @@ Encode it only at the existing request-cell position using the shared primitive 
 Carry String through entity-reference dtype selection and disable integer missing-reference promotion for that meaning, while keeping physical Snapshot keys unchanged.
 Real UTF8 and surrogate-preserving string carriers retain their explicit encodings; raw callers without a completed constructed String meaning retain physical inference.
 Boundary consumers cover signed/unsigned widths, Boolean values, signed zero, JSON-safe and int64 limits, null/NaN/infinity, references, retained ownership and all overlap short-circuit/error/mutation cases before implementation.
+
+
+## Cold caller consistency after native overlap effects
+
+R25 source review independently confirmed that the new overlap evidence bytes input needs its typed entry in `ops::Attachments`, schema-lock JSON inventory and explicit locked-evidence assertions.
+Runtime attachment-kind discovery alone does not lock the JSON data shape.
+The canonical writer must regenerate the unpublished35 artifact from the complete source registry, leaving published entries intact.
+
+An ordinary overlap observation or warning handler can mutate caller dtype, key and relationship metadata after question validation.
+The original cold `_build_graph` then re-derives live key marks, checks column meanings against caller dtype names in order and checks relationships before any native cast or copy.
+A retained original model skips that graph-building check, including when warning-handler reentry creates the retained owner before the outer call resumes.
+Preserve exactly that current owner decision after the overlap returns and before fresh schema serialization.
+
+Add one closed `CallerMeaning` operation returning a completed `FrameCallerMeaning` validation report containing the marked `HeldSchema` and an optional existing `CoreError` diagnostic.
+The core reads the live declarations, applies the existing key marking kernel, checks caller meanings with `HostTypes` and then checks relationships in their existing order.
+Preserve original dtype strings, source facts, untyped/declared flags, ordered key form and duplicate facts; forward only reached mark/release and associated time-column changes.
+Return those marks even when a later consistency check fails, since the original updates live marks before that refusal.
+The host adopts this core-selected schema using the existing metadata store and then presents the exact optional core diagnostic outside native exception capture.
+This is a completed domain validation report, with no action cursor, callback, generic interpreter or repeated query resolution.
+Subsequent native casts continue reading live declarations at their original positions; this report does not freeze future column metadata.
+Register the new bytes input and complete result shape, including the diagnostic, in the same canonical contract inventory.
+Tests precede implementation and cover source-shape locking, malformed evidence, cold warning-handler dtype/relationship conflicts, mark visibility on failure, column-before-link precedence and retained/reentrant owner reuse without live source reads.
