@@ -455,7 +455,7 @@ def present(finished: Finished, envelope: dict[str, Any]) -> CompletedResponse:
             native_probabilities = None
             if probabilities is not None:
                 native_probabilities = []
-                for key, probability in probabilities:
+                for ordinal, (key, probability) in enumerate(probabilities):
                     restored = (
                         as_declared(key, dtype)
                         if target['numeric_prefix']
@@ -464,6 +464,7 @@ def present(finished: Finished, envelope: dict[str, Any]) -> CompletedResponse:
                     name = key if restored is key else str(restored)
                     native_probabilities.append(
                         {
+                            'ordinal': ordinal,
                             'value': _encoded_native(restored),
                             'name': name,
                             'probability': probability,

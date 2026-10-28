@@ -677,7 +677,7 @@ pub fn layout(
         }
         if meaning.classification {
             row.prediction = gathered_class_answer(
-                &logical(&decoded.prediction)?,
+                &decoded.prediction,
                 &converted.prediction,
                 declared,
                 numeric,
@@ -702,15 +702,6 @@ pub fn layout(
     Ok((part, lineage))
 }
 
-fn native_answer(value: &Value) -> Answer {
-    match value {
-        Value::Null => Answer::None,
-        // Written retains the actual native scalar type even across mixed
-        // classes; existing result table machinery owns its representation.
-        other => Answer::Written(other.clone()),
-    }
-}
-
 /// Actual completed numeric products select the corresponding existing
 /// Gathered kernel; unchanged strings and containers retain declared meaning.
 fn converted_family(value: &NativeValue) -> Option<AnswerType> {
@@ -723,35 +714,49 @@ fn converted_family(value: &NativeValue) -> Option<AnswerType> {
 }
 
 fn gathered_class_answer(
-    raw: &Value,
+    raw: &NativeValue,
     converted: &NativeValue,
     declared: AnswerType,
     numeric: bool,
 ) -> Result<Answer, CoreError> {
+    let original = logical(raw)?;
     let native = logical(converted)?;
-    let family = if numeric {
+    // A numeric carrier that the native cast left unchanged is still a raw
+    // value under its declaration, not evidence of another selected family.
+    let family = if numeric && raw != converted {
         converted_family(converted)
     } else {
         None
     };
     let strict = super::answer_of(
-        Some(raw),
+        Some(&original),
         family.unwrap_or(declared),
         AnswerPolicy::Gathered,
     )?;
-    if family.is_some()
-        && !matches!(
+    if let Some(family) = family {
+        if !matches!(
             strict,
             Answer::Written(_) | Answer::None | Answer::NonFinite(_)
-        )
-    {
-        return Ok(native_answer(&native));
+        ) {
+            // Cross-declaration products use the existing actual-value
+            // inference and declared heterogeneous fallback. Matching typed
+            // successes must remain visible in the primary Arrow column.
+            return if family == declared {
+                Ok(match converted {
+                    NativeValue::Boolean { value } => Answer::Bool(*value),
+                    NativeValue::Integer { digits } => digits
+                        .parse::<i64>()
+                        .map(Answer::Int)
+                        .unwrap_or(Answer::Written(native)),
+                    NativeValue::Float { bits } => Answer::Float(f64::from_be_bytes(*bits)),
+                    _ => unreachable!("a selected numeric family has a numeric native product"),
+                })
+            } else {
+                Ok(Answer::Written(native))
+            };
+        }
     }
-    Ok(if matches!(strict, Answer::Text(_)) {
-        native_answer(raw)
-    } else {
-        strict
-    })
+    Ok(strict)
 }
 
 fn renamed_probabilities(
@@ -765,7 +770,12 @@ fn renamed_probabilities(
         (None, None) => Ok(None),
         (Some(original), Some(renamed)) if original.len() == renamed.len() => {
             let mut selected = Vec::with_capacity(original.len());
-            for ((key, value), actual) in original.iter().zip(renamed) {
+            for (ordinal, ((key, value), actual)) in original.iter().zip(renamed).enumerate() {
+                if actual.ordinal != ordinal {
+                    return Err(protocol(
+                        "native probability conversions are not in source order",
+                    ));
+                }
                 if value != &actual.probability {
                     return Err(protocol("native probability rename changed a probability"));
                 }
