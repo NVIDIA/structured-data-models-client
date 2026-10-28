@@ -679,12 +679,15 @@ def test_recovered_refusal_as_context_does_not_become_terminal_core_error(
     retained = UnformattedFailure('host failure after recovery')
     selected = []
 
+    def fail():
+        raise retained
+
     def predict(*args):
         try:
             _call({'stage': 'model_lookup', 'position': None})
         except StructuredDataError as refused:
             selected.append(refused)
-            raise retained
+            fail()
 
     capture, entry, error, _ = error_entry(monkeypatch, predict)
     assert error is retained

@@ -24,7 +24,6 @@ import pandas as pd
 from sdm_client._rust.codec import relation_name
 from sdm_client.errors import StructuredDataError
 
-
 _ExceptionChain: TypeAlias = tuple[
     TracebackType | None, BaseException | None, BaseException | None, bool
 ]

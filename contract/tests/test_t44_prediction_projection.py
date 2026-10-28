@@ -13,13 +13,13 @@ import json
 from pathlib import Path
 
 import pytest
-from test_t136_forecast_capture import RUNNER, _module
 from test_t44_prediction_observation import (
     actual_observation,
     legacy_observation,
     reader,
     two_observed_predictions,
 )
+from test_t136_forecast_capture import RUNNER, _module
 
 ROOT = Path(__file__).parents[2]
 COMPARE = _module(

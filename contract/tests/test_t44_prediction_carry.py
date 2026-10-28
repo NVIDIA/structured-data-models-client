@@ -15,8 +15,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from test_t136_forecast_capture import RUNNER, _ask
 from test_t44_prediction_capture import UnformattedFailure, Unobserved, entries
+from test_t136_forecast_capture import RUNNER, _ask
 
 CLIENT_TESTS = (
     Path(__file__).parents[2] / 'packages/structured-data-models-client/tests'
@@ -32,7 +32,6 @@ def public_tests(monkeypatch):
 def journey(monkeypatch):
     """Real preparation/call/finish reads; an opaque presentation result owner."""
     import requests
-
     from sdm_client import KumoRelational, SDMClient
     from sdm_client._rust import relational_predict as rp
 
@@ -369,13 +368,16 @@ def test_context_only_carry_target_does_not_select_an_answer(journey):
     carried = UnformattedFailure('incidental context')
     terminal = UnformattedFailure('new host failure')
 
+    def fail():
+        raise terminal
+
     def action(state):
         result, details = state.finish()
         state.rp._carry(carried, result, details)
         try:
             raise carried
         except ValueError:
-            raise terminal
+            fail()
 
     outcome = journey.invoke(action)
     assert outcome['error'] is terminal

@@ -12,8 +12,8 @@ import json
 from types import SimpleNamespace
 
 import pytest
-from test_t136_forecast_capture import RUNNER
 from test_t44_prediction_observation import reader
+from test_t136_forecast_capture import RUNNER
 
 
 def attempt(name, outcome='response', status=200):

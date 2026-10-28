@@ -13,12 +13,12 @@ import json
 from pathlib import Path
 
 import pytest
-from test_t136_forecast_capture import RUNNER, _ask, _module
 from test_t44_prediction_observation import (
     actual_observation,
     legacy_observation,
     reader,
 )
+from test_t136_forecast_capture import RUNNER, _ask, _module
 
 ROOT = Path(__file__).parents[2]
 COMPARE = _module('t44_partial_compare', ROOT / 'scripts/rust_core/compare.py')

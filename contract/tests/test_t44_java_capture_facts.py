@@ -13,8 +13,8 @@ import json
 from pathlib import Path
 
 import pytest
-from test_t136_forecast_capture import _module
 from test_t44_prediction_observation import reader
+from test_t136_forecast_capture import _module
 
 ROOT = Path(__file__).parents[2]
 JAVA = _module('t44_java_capture_facts', ROOT / 'contract/runners/run_java.py')

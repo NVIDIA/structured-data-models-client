@@ -13,9 +13,9 @@ import warnings
 from pathlib import Path
 
 import pytest
-from test_t136_forecast_capture import EN, RUNNER, SERVE, _module
 from test_t44_prediction_observation import reader
 from test_t44_prediction_serving_capture import CHECK
+from test_t136_forecast_capture import EN, RUNNER, SERVE, _module
 
 ROOT = Path(__file__).parents[2]
 SERVING_PATH = '/serving-endpoints/fixture/invocations'
