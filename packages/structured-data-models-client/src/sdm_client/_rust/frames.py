@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import json
+import re
 import warnings
 from collections.abc import Mapping, Sequence
 from contextlib import AbstractContextManager
@@ -45,6 +46,11 @@ _FINAL_NOTICE_CODES = frozenset(
         'TWO_WAYS_TO_A_TABLE',
     }
 )
+
+# Scan native string storage in C, without calling scalar conversion or
+# iterator overrides. The first surrogate selects lossless typed storage;
+# ordinary strings keep their existing Arrow export and physical buffers.
+_SURROGATE_POINT = re.compile(r'[\ud800-\udfff]')
 
 
 @dataclass(frozen=True)
@@ -474,6 +480,30 @@ def _convert(
             'python',
             'pyarrow',
         )
+        if (
+            constructor_objects
+            and text
+            and dtype.storage == 'python'
+            and any(
+                _SURROGATE_POINT.search(value) is not None
+                for value in series.array
+                if isinstance(value, str)
+            )
+        ):
+            # Arrow UTF8 cannot hold these already-valid native string
+            # points. Reuse the explicit FrameScalar::Text tuple without
+            # changing their declared meaning or native dtype owner.
+            # Shared Rust inference still counts nulls/distinct values and
+            # decides categorical/text/key rules from the exact points.
+            object_values = frame_objects.storage(series)
+            native_types[column] = _NativeObjectType(
+                dtype,
+                series,
+                {
+                    'category': False,
+                    'meaning': {'dtype': 'string', 'untyped': False},
+                },
+            )
         arrow = False
         if (
             type(dtype) is pd.ArrowDtype

@@ -14,11 +14,11 @@ from __future__ import annotations
 
 import sys
 import unicodedata
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from types import MappingProxyType, TracebackType
-from typing import Any, Iterator, Literal, NoReturn, TypeAlias, TypedDict, cast
+from typing import Any, Literal, NoReturn, TypeAlias, TypedDict, cast
 
 import pandas as pd
 
