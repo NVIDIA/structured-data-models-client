@@ -733,28 +733,28 @@ fn gathered_class_answer(
         family.unwrap_or(declared),
         AnswerPolicy::Gathered,
     )?;
-    if let Some(family) = family {
-        if !matches!(
+    if let Some(family) = family
+        && !matches!(
             strict,
             Answer::Written(_) | Answer::None | Answer::NonFinite(_)
-        ) {
-            // Cross-declaration products use the existing actual-value
-            // inference and declared heterogeneous fallback. Matching typed
-            // successes must remain visible in the primary Arrow column.
-            return if family == declared {
-                Ok(match converted {
-                    NativeValue::Boolean { value } => Answer::Bool(*value),
-                    NativeValue::Integer { digits } => digits
-                        .parse::<i64>()
-                        .map(Answer::Int)
-                        .unwrap_or(Answer::Written(native)),
-                    NativeValue::Float { bits } => Answer::Float(f64::from_be_bytes(*bits)),
-                    _ => unreachable!("a selected numeric family has a numeric native product"),
-                })
-            } else {
-                Ok(Answer::Written(native))
-            };
-        }
+        )
+    {
+        // Cross-declaration products use the existing actual-value
+        // inference and declared heterogeneous fallback. Matching typed
+        // successes must remain visible in the primary Arrow column.
+        return if family == declared {
+            Ok(match converted {
+                NativeValue::Boolean { value } => Answer::Bool(*value),
+                NativeValue::Integer { digits } => digits
+                    .parse::<i64>()
+                    .map(Answer::Int)
+                    .unwrap_or(Answer::Written(native)),
+                NativeValue::Float { bits } => Answer::Float(f64::from_be_bytes(*bits)),
+                _ => unreachable!("a selected numeric family has a numeric native product"),
+            })
+        } else {
+            Ok(Answer::Written(native))
+        };
     }
     Ok(strict)
 }
