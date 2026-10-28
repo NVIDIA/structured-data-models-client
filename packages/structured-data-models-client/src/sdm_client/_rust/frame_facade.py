@@ -12,17 +12,18 @@ operations; all selection, graph, label and request policy stays in Rust.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from dataclasses import dataclass
 import json
 import secrets
-from typing import Any, NoReturn
+from collections.abc import Sequence
+from dataclasses import dataclass
+from typing import Any, NoReturn, TypedDict
 
 import pandas as pd
 
 from sdm_client._routing import RouteError
 from sdm_client._rust import codec, errors, frame_materialize, results
 from sdm_client._rust.frame_native import (
+    NativeCasingFacts,
     NativeColumn,
     NativeFrameColumns,
     NativeFrameFailure,
@@ -33,6 +34,22 @@ from sdm_client._rust.frame_native import (
 )
 from sdm_client._rust.run import Finished, run
 from sdm_client.errors import StructuredDataError
+
+
+class _FrameTableInput(TypedDict):
+    source: dict[str, Any]
+    rows: int
+
+
+class _FrameInput(TypedDict):
+    tables: list[_FrameTableInput]
+    entropy: int
+
+
+class _ConvertedText(TypedDict):
+    column: dict[str, str]
+    values: dict[str, Any]
+    facts: NativeCasingFacts
 
 
 @dataclass(frozen=True)
@@ -410,6 +427,8 @@ def _single(
     state = {**cache, 'frame_cache': cache, 'frame_part': part}
     products: list[_Product] = []
     attached: list[tuple[dict[str, Any], Any]] = []
+    converted_column: NativeColumn | NativeFrameFailure | None
+    finished: Finished | None
 
     def adopt(finished: Finished, expected: str) -> _Product:
         product = _adopt(finished, expected)
@@ -434,7 +453,7 @@ def _single(
             frame_native_tables=native_tables,
         )
         bindings = _Bindings()
-        frames = {'tables': [], 'entropy': secrets.randbits(64)}
+        frames: _FrameInput = {'tables': [], 'entropy': secrets.randbits(64)}
         for source, rows in attached:
             frames['tables'].append(
                 {'source': source, 'rows': bindings.add(rows)}
@@ -503,7 +522,7 @@ def _single(
             ),
             'population',
         )
-        label_batches = []
+        label_batches: list[_Product] = []
         population_type = population.data['prediction_type']
         try:
             for start in range(
@@ -768,7 +787,7 @@ def _single(
                 )
                 raise
             bindings = _Bindings()
-            converted_text = []
+            converted_text: list[_ConvertedText] = []
             native_failure = None
             for selected in context.data['text']:
                 table = next(

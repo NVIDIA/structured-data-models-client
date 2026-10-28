@@ -310,7 +310,9 @@ def _described(read: dict[str, Any]) -> Described:
     return Described(
         description=_int(read['description'], 'description'),
         frame_rows=_maybe(read.get('frame_rows'), _int, 'frame_rows'),
-        frame_decimals=_maybe(read.get('frame_decimals'), _int, 'frame_decimals'),
+        frame_decimals=_maybe(
+            read.get('frame_decimals'), _int, 'frame_decimals'
+        ),
         # Left out where there is none, which the reading gives as None.
         notes=tuple(
             _note(note) for note in _list(read.get('notes') or [], 'notes')

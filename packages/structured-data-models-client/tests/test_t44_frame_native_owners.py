@@ -30,11 +30,15 @@ class DisplayFailure(Exception):
 def test_capture_keeps_exception_identity_without_observing_native_text():
     error = DisplayFailure()
     context = ValueError('original context')
+
+    def fail():
+        raise error
+
     try:
         try:
             raise context
         except ValueError:
-            raise error
+            fail()
     except DisplayFailure as caught:
         held = NativeFrameFailure.capture(caught)
         traceback = caught.__traceback__

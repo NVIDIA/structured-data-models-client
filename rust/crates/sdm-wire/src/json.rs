@@ -16,10 +16,10 @@
 
 use std::collections::BTreeMap;
 
-use serde::de::{Deserializer, MapAccess, Visitor};
-use serde::Serialize;
-use serde_json::value::RawValue;
 use sdm_contract::scalar::unicode::UnicodeText;
+use serde::Serialize;
+use serde::de::{Deserializer, MapAccess, Visitor};
+use serde_json::value::RawValue;
 
 mod logical;
 mod unicode;
@@ -580,7 +580,10 @@ impl Value {
 
     /// The same logical text even where no ordinary UTF-8 view exists.
     pub fn as_unicode(&self) -> Option<&UnicodeText> {
-        match self { Value::Text(text) => Some(text), _ => None }
+        match self {
+            Value::Text(text) => Some(text),
+            _ => None,
+        }
     }
 
     /// Whether a decoded value has only ordinary JSON numeric tokens.
@@ -654,11 +657,18 @@ impl Value {
 /// Serialize the one native text meaning, retaining an ordinary UTF-8 fast
 /// view. The logical serializer receives original canonical bytes rather
 /// than a JSON escape that could combine distinct surrogate codepoints.
-pub fn serialize_text<S: serde::Serializer>(text: &UnicodeText, serializer: S) -> Result<S::Ok, S::Error> {
-    if let Some(text) = text.utf8() { return serializer.serialize_str(text); }
+pub fn serialize_text<S: serde::Serializer>(
+    text: &UnicodeText,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    if let Some(text) = text.utf8() {
+        return serializer.serialize_str(text);
+    }
     struct Bytes<'a>(&'a [u8]);
     impl serde::Serialize for Bytes<'_> {
-        fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> { serializer.serialize_bytes(self.0) }
+        fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+            serializer.serialize_bytes(self.0)
+        }
     }
     if !serializer.is_human_readable() {
         return serializer.serialize_newtype_struct(logical::UNICODE, &Bytes(text.as_bytes()));
@@ -667,18 +677,27 @@ pub fn serialize_text<S: serde::Serializer>(text: &UnicodeText, serializer: S) -
     let mut encoded = Vec::new();
     unicode::write(text, &mut encoded);
     let encoded = String::from_utf8(encoded).expect("native JSON text is escaped UTF-8");
-    RawValue::from_string(encoded).map_err(S::Error::custom)?.serialize(serializer)
+    RawValue::from_string(encoded)
+        .map_err(S::Error::custom)?
+        .serialize(serializer)
 }
 
 /// The typed model's class strings use the same logical serializer as cells.
-pub fn serialize_texts<S: serde::Serializer>(texts: &[UnicodeText], serializer: S) -> Result<S::Ok, S::Error> {
+pub fn serialize_texts<S: serde::Serializer>(
+    texts: &[UnicodeText],
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
     use serde::ser::SerializeSeq;
     struct Text<'a>(&'a UnicodeText);
     impl serde::Serialize for Text<'_> {
-        fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> { serialize_text(self.0, serializer) }
+        fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+            serialize_text(self.0, serializer)
+        }
     }
     let mut sequence = serializer.serialize_seq(Some(texts.len()))?;
-    for text in texts { sequence.serialize_element(&Text(text))?; }
+    for text in texts {
+        sequence.serialize_element(&Text(text))?;
+    }
     sequence.end()
 }
 

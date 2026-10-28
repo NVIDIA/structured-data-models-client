@@ -30,7 +30,8 @@ def arrays(bits, precision, scale):
 
 
 @pytest.mark.parametrize(
-    'bits', [bits for bits in (32, 64, 128, 256) if hasattr(pa, f'decimal{bits}')]
+    'bits',
+    [bits for bits in (32, 64, 128, 256) if hasattr(pa, f'decimal{bits}')],
 )
 @pytest.mark.parametrize('scale', [-129, -128, -1, 0, 1, 2, 129])
 def test_lossless_native_decimal_mantissa_view(bits, scale):

@@ -14,18 +14,19 @@ from unittest.mock import patch
 
 import pandas as pd
 import pytest
-
-from sdm_client import KumoRelational, SDMClient, StructuredDataError
-
 from test_t44_text_frames import (
     Scripted,
-    core as core,
     dt3_no_time_body,
     p3e2_warning_codes,
     question,
     shop,
     text,
 )
+from test_t44_text_frames import (
+    core as core,
+)
+
+from sdm_client import KumoRelational, SDMClient, StructuredDataError
 
 HOPS = "Received custom 'num_neighbors' option; ignoring custom 'num_hops=1' option"
 

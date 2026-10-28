@@ -19,12 +19,14 @@ def native_decimal_type(dtype: object) -> dict[str, str | int] | None:
     """Original immutable built-in native type facts, without reading cells."""
     if type(dtype) is not pd.ArrowDtype:
         return None
+    assert isinstance(dtype, pd.ArrowDtype)
     physical = dtype.pyarrow_dtype
     tag = next(
         (
             f'decimal{bits}'
             for bits in (32, 64, 128, 256)
-            if (check := getattr(pa.types, f'is_decimal{bits}', None)) is not None
+            if (check := getattr(pa.types, f'is_decimal{bits}', None))
+            is not None
             and check(physical)
         ),
         None,

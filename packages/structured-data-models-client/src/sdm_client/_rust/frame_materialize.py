@@ -86,6 +86,7 @@ def native_inputs(
             series = time_feature(held, column, frame.iloc[:, ordinal], state)
             dtype = series.dtype
             encoding = None
+            origin: str | dict[str, dict[str, str]]
             object_text = pd.api.types.is_object_dtype(
                 dtype
             ) and pd.api.types.infer_dtype(series, skipna=True) in (
@@ -115,7 +116,7 @@ def native_inputs(
             ):
                 values, encoding = NativeColumn(series).arrow()
                 array = values.column(0)
-                origin: Any = (
+                origin = (
                     'builtin_primitive'
                     if object_text
                     else {

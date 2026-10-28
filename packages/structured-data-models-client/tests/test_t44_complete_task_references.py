@@ -13,17 +13,23 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-
-from sdm_client import KumoRelational, PredictiveQuery, Schema, SDMClient
-from sdm_client import StructuredDataError
-
 from test_t44_text_frames import (
     Scripted,
-    core as core,
     dt3_no_time_body,
     inspection,
     p3e2_warning_codes,
     shop,
+)
+from test_t44_text_frames import (
+    core as core,
+)
+
+from sdm_client import (
+    KumoRelational,
+    PredictiveQuery,
+    Schema,
+    SDMClient,
+    StructuredDataError,
 )
 
 
@@ -80,7 +86,7 @@ def test_complete_task_validation_precedes_all_neighbor_draws_and_seed_resets(
             with warnings.catch_warnings(record=True) as caught:
                 warnings.simplefilter('always')
 
-                def gather():
+                def gather(asked=asked, record=record):
                     return asked.materialize(
                         indices=record['indices'],
                         num_context_samples=1,

@@ -355,6 +355,7 @@ def _ranked(
     from sdm_client.result import PredictionResult
 
     wanted = answered.outputs if native_outputs is None else native_outputs
+    fields: Sequence[Any]
     items = []
     for row in rows:
         chosen = [given[at] for at in row['candidates']]

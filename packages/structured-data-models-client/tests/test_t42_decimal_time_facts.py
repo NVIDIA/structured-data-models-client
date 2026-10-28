@@ -19,7 +19,6 @@ from test_t42_frames import PATHS, projection
 
 from sdm_client import Schema
 
-
 WIDTHS = [bits for bits in (32, 64, 128, 256) if hasattr(pa, f'decimal{bits}')]
 
 
@@ -34,16 +33,21 @@ def replaced(monkeypatch, bits, scale, variant, *, core):
     if variant in ('multiple', 'load', 'birth'):
         frame['other_at'] = pd.date_range('2025-01-01', periods=100, freq='s')
     name = (
-        'loaded_at' if variant == 'load'
-        else 'birth_date' if variant == 'birth'
+        'loaded_at'
+        if variant == 'load'
+        else 'birth_date'
+        if variant == 'birth'
         else 'observed_at'
     )
     if name != 'observed_at':
         frame.rename(columns={'observed_at': name}, inplace=True)
     values = (
-        [None] * 100 if variant in ('null', 'null_windowed')
-        else [0] * 100 if variant in ('constant', 'constant_windowed', 'multiple')
-        else [0] + [None] * 99 if variant == 'sparse'
+        [None] * 100
+        if variant in ('null', 'null_windowed')
+        else [0] * 100
+        if variant in ('constant', 'constant_windowed', 'multiple')
+        else [0] + [None] * 99
+        if variant == 'sparse'
         else list(range(100))
     )
     changed = False
@@ -74,9 +78,13 @@ def replaced(monkeypatch, bits, scale, variant, *, core):
                         if value is not None:
                             valid[at // 8] |= 1 << (at % 8)
                     array = pa.Array.from_buffers(
-                        dtype, len(values), [pa.py_buffer(valid), pa.py_buffer(raw)]
+                        dtype,
+                        len(values),
+                        [pa.py_buffer(valid), pa.py_buffer(raw)],
                     )
-                    frame[name] = pd.Series(pd.arrays.ArrowExtensionArray(array))
+                    frame[name] = pd.Series(
+                        pd.arrays.ArrowExtensionArray(array)
+                    )
                 else:
                     frame[name] = raw_series(bits, 3, scale, values)
             show(message, *args, **kwargs)
@@ -89,7 +97,9 @@ def replaced(monkeypatch, bits, scale, variant, *, core):
             schema = Schema.from_data(frames)
         except Exception as error:
             outcome = ('error', type(error), str(error))
-            native_trace = [item.name for item in traceback.extract_tb(error.__traceback__)]
+            native_trace = [
+                item.name for item in traceback.extract_tb(error.__traceback__)
+            ]
         else:
             outcome = ('ok', projection(schema))
             native_trace = []
@@ -107,7 +117,9 @@ def test_frozen_native_first_boxing_happens_after_missing_key_advice(
     assert new[:2] == old[:2]
     if abs(scale) == 129:
         assert new[0] == (
-            'error', InvalidOperation, "[<class 'decimal.ConversionSyntax'>]"
+            'error',
+            InvalidOperation,
+            "[<class 'decimal.ConversionSyntax'>]",
         )
         assert len(new[1]) == 1
         assert any(f'Decimal{bits}Scalar.as_py' in name for name in new[2])
@@ -120,8 +132,15 @@ def test_frozen_native_first_boxing_happens_after_missing_key_advice(
 @pytest.mark.parametrize(
     'variant',
     [
-        'empty', 'null', 'constant', 'sparse', 'multiple', 'load', 'birth',
-        'constant_windowed', 'null_windowed',
+        'empty',
+        'null',
+        'constant',
+        'sparse',
+        'multiple',
+        'load',
+        'birth',
+        'constant_windowed',
+        'null_windowed',
     ],
 )
 def test_first_scalar_plan_retains_skips_counts_order_and_native_constant(

@@ -16,11 +16,10 @@ from unittest.mock import patch
 import numpy as np
 import pandas as pd
 import pytest
+from test_t44_text_frames import p3e2_warning_codes
 
 from sdm_client import KumoRelational, PredictiveQuery, Schema, SDMClient
 from sdm_client.materializers.relational import RelationalMaterializer
-
-from test_t44_text_frames import p3e2_warning_codes
 
 ROUTES = ','.join(
     (

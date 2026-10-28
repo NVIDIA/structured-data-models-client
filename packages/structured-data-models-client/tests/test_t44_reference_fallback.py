@@ -8,12 +8,22 @@ from __future__ import annotations
 
 import copy
 import json
-from pathlib import Path
 import warnings
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
+from test_t44_text_frames import (
+    core as core,
+)
+from test_t44_text_frames import (
+    dt3_no_time_body,
+    p3e2_warning_codes,
+    question,
+    shop,
+    text,
+)
 
 from sdm_client import (
     KumoRelational,
@@ -22,15 +32,6 @@ from sdm_client import (
     StructuredDataError,
 )
 from sdm_client.materializers.relational import RelationalMaterializer
-
-from test_t44_text_frames import (
-    core as core,
-    dt3_no_time_body,
-    p3e2_warning_codes,
-    question,
-    shop,
-    text,
-)
 
 REFERENCE = json.loads(
     Path(__file__).with_name('t44_reference_fallback.json').read_text()

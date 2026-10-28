@@ -93,8 +93,9 @@ def _encoded_native(value: Any) -> dict[str, Any]:
 def _encoded_native_tree(value: Any) -> dict[str, Any]:
     """Encode complete builtin containers as local postorder value data."""
     pending = [('value', value)]
-    nodes = []
-    roots = []
+    nodes: list[dict[str, Any]] = []
+    roots: list[int] = []
+    node: dict[str, Any]
     while pending:
         kind, item = pending.pop()
         if kind == 'value':
@@ -162,7 +163,7 @@ def _native_tree(nodes: list[dict[str, Any]]) -> Any:
         if any(
             type(child) is not int or not 0 <= child < ordinal
             for child in children
-        ) or any(a >= b for a, b in zip(children, children[1:])):
+        ) or any(a >= b for a, b in zip(children, children[1:], strict=False)):
             raise codec.CodecError('native tree child order is invalid')
         start = starts[children[0]] if children else ordinal
         next_ordinal = start
@@ -334,6 +335,7 @@ def present(finished: Finished, envelope: dict[str, Any]) -> CompletedResponse:
         if field == 'kind':
             return repr(envelope.get('task', {}).get('kind'))
         if field == 'expected':
+            assert instances is not None
             return repr(instances[fields['index']])
         if field == 'where':
             template = (

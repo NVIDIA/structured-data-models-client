@@ -16,10 +16,10 @@ from __future__ import annotations
 import warnings
 
 import pandas as pd
+from test_t44_text_frames import core as core
+from test_t44_text_frames import shop
 
 from sdm_client import PredictiveQuery, Schema
-
-from test_t44_text_frames import core as core, shop
 
 
 def schema():

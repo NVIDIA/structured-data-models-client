@@ -13,26 +13,27 @@ import warnings
 from pathlib import Path
 from unittest.mock import patch
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 import pytest
 import requests
-
-from sdm_client import (
-    KumoRelational,
-    PredictiveQuery,
-    SDMClient,
-    Schema,
-    StructuredDataError,
-)
-
 from test_t44_text_frames import (
     Scripted,
-    core as core,
     dt3_no_time_body,
     p3e2_warning_codes,
     shop,
     text,
+)
+from test_t44_text_frames import (
+    core as core,
+)
+
+from sdm_client import (
+    KumoRelational,
+    PredictiveQuery,
+    Schema,
+    SDMClient,
+    StructuredDataError,
 )
 
 

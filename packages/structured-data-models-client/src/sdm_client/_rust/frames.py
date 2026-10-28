@@ -142,20 +142,26 @@ def _frame_timestamp(
     value = fields['value']
     if 'frame_decimal_kind' in fields:
         kind = fields['frame_decimal_kind']
-        exponent = (
-            fields['frame_decimal_exponent']
-            if kind == 'finite'
-            else {'infinity': 'F', 'nan': 'n', 'signaling_nan': 'N'}[kind]
+        if kind == 'finite':
+            exponent = fields['frame_decimal_exponent']
+        else:
+            special = {
+                'infinity': 'Infinity',
+                'nan': 'NaN',
+                'signaling_nan': 'sNaN',
+            }[kind]
+        negative = int(fields['frame_decimal_negative'])
+        digits = tuple(int(digit) for digit in value)
+        if kind == 'finite':
+            return str(Decimal((negative, digits, exponent)))
+        # The standard stub omits runtime-supported special tuple exponents.
+        # These already-decoded core facts have exact native spellings too.
+        payload = (
+            ''
+            if kind == 'infinity'
+            else ''.join(str(digit) for digit in digits)
         )
-        return str(
-            Decimal(
-                (
-                    int(fields['frame_decimal_negative']),
-                    tuple(int(digit) for digit in value),
-                    exponent,
-                )
-            )
-        )
+        return str(Decimal(f'{"-" if negative else ""}{special}{payload}'))
     dtype = _native_dtype(native_types[fields['table']][fields['column']])
     if not hasattr(value, 'unit'):
         return str(pd.Series([value], dtype=dtype).iloc[0])
@@ -650,16 +656,17 @@ def _adopt(
                     else observe(columns).facts()
                 )
                 for column in state.discriminators():
+                    assert columns is not None
                     state.discriminator(
                         column, observe([*columns, column]).facts()
                     )
                 for column in state.usable_columns():
-                    missing = (
+                    usable_missing = (
                         bool(frame[column].isna().any())
                         if column in frame.columns
                         else None
                     )
-                    state.usable(column, missing)
+                    state.usable(column, usable_missing)
                 adopted, notices = state.finish(
                     len(frame) if state.needs_rows() else None
                 )
@@ -798,7 +805,6 @@ def from_data(
     originals: dict[str, pd.DataFrame] = {}
     native_types: dict[str, dict[str, Any]] = {}
     finished: Finished | None = None
-    converted: Any = None
     held_notices: list[dict[str, Any]] = []
     try:
         for name, frame in tables.items():
@@ -999,7 +1005,6 @@ def from_data(
         # Tracebacks can retain these frames. Clear only call-owned snapshots;
         # the public tables retain their original DataFrames by reference.
         finished = None
-        converted = None
         snapshots.clear()
         inferred.clear()
         time_types.clear()

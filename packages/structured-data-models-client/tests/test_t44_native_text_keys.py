@@ -15,11 +15,10 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
-
-from sdm_client import PredictiveQuery, Schema, StructuredDataError
-
 from test_t44_text_frames import (
     core as core,
+)
+from test_t44_text_frames import (
     dt3_no_time_body,
     inspection,
     p3e2_warning_codes,
@@ -28,6 +27,8 @@ from test_t44_text_frames import (
     shop,
     text,
 )
+
+from sdm_client import PredictiveQuery, Schema, StructuredDataError
 
 
 def reference(family):

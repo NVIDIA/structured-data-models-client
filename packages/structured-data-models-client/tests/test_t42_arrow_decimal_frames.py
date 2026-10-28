@@ -42,7 +42,10 @@ def paired(monkeypatch, build, **options):
                 schema = Schema.from_data(frames, **options)
             except Exception as error:
                 outcome = (
-                    'error', type(error), getattr(error, 'code', None), str(error)
+                    'error',
+                    type(error),
+                    getattr(error, 'code', None),
+                    str(error),
                 )
             else:
                 outcome = ('ok', projection(schema))
@@ -111,7 +114,9 @@ def test_public_decimal_metadata_and_owned_snapshots(
 
 @pytest.mark.parametrize('make', [pa.decimal128, pa.decimal256])
 @pytest.mark.parametrize('scale', [0, 18])
-@pytest.mark.parametrize('key', ['value_id', ['value_id'], ('value_id', 'group')])
+@pytest.mark.parametrize(
+    'key', ['value_id', ['value_id'], ('value_id', 'group')]
+)
 def test_decimal_duplicate_examples_preserve_native_values(
     monkeypatch, make, scale, key
 ):
@@ -198,7 +203,11 @@ def test_decimal_key_relationships_are_assembled_in_core(
         }
 
     options = (
-        {'relationships': [Relationship('orders', 'user_id', 'users', 'user_id')]}
+        {
+            'relationships': [
+                Relationship('orders', 'user_id', 'users', 'user_id')
+            ]
+        }
         if explicit
         else {}
     )
@@ -229,7 +238,9 @@ def test_small_native_decimal_widths_use_the_same_constructor_stages(
     name = 'value_id' if key else 'value'
 
     def build():
-        return {'rows': pd.DataFrame({name: raw_series(bits, 1, scale, [0, 1])})}
+        return {
+            'rows': pd.DataFrame({name: raw_series(bits, 1, scale, [0, 1])})
+        }
 
     schema, _, _ = paired(monkeypatch, build)
     assert schema['rows'][name].dtype == ('float64' if scale > 0 else 'int64')
@@ -247,7 +258,9 @@ def test_full_native_scale_descriptor_is_not_narrowed(
     name = 'value_id' if key else 'value'
 
     def build():
-        return {'rows': pd.DataFrame({name: raw_series(bits, 1, scale, [0, 1])})}
+        return {
+            'rows': pd.DataFrame({name: raw_series(bits, 1, scale, [0, 1])})
+        }
 
     schema, _, _ = paired(monkeypatch, build)
     assert schema['rows'][name].dtype == ('float64' if scale > 0 else 'int64')
@@ -321,7 +334,7 @@ def test_missing_key_advice_can_change_later_decimal_scale_and_example(
             warnings.simplefilter('always')
             show = warnings.showwarning
 
-            def mutate(message, *args, **kwargs):
+            def mutate(message, *args, frame=frame, show=show, **kwargs):
                 nonlocal changed
                 if not changed:
                     assert 'have no value for it' in str(message)

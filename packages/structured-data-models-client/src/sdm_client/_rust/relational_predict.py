@@ -39,7 +39,7 @@ class CallResult:
 
     def attached(self, first: int) -> tuple[dict[str, Any], dict[int, Any]]:
         parts = []
-        attached = {}
+        attached: dict[int, Any] = {}
         for response in self.parts:
             part, buffers = response.attached(first + len(attached))
             parts.append(part)
@@ -343,7 +343,7 @@ def _parts(
     rewritten = request._decomposition
     ranking = rewritten.kind == RANKING
     total = len(request.parts)
-    answered = []
+    answered: list[tuple[int, Any]] = []
 
     def scope(position: int, about: Any) -> dict[str, Any]:
         return (
@@ -449,7 +449,7 @@ def _finish_parts(
     ranking: Any,
 ) -> tuple[Any, dict[str, int]]:
     values = []
-    attached = {}
+    attached: dict[int, Any] = {}
     for child in children:
         value, buffers = child.attached(2 + len(attached))
         values.append(value)
@@ -457,6 +457,7 @@ def _finish_parts(
     owners = _owners(children)
     given = None
     native_outputs = None
+    aggregation: dict[str, object]
     if ranking is None:
         aggregation = {
             'kind': 'steps',

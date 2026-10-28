@@ -16,6 +16,7 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
+from t45_frame_routes import FRAME_ROUTES
 
 from sdm_client import (
     KumoRelational,
@@ -30,18 +31,7 @@ from sdm_client.materializers.relational import RelationalMaterializer
 REFERENCE = json.loads(
     Path(__file__).with_name('t44_text_reference.json').read_text()
 )
-ROUTES = ','.join(
-    (
-        'schema.from-data/frames/frames',
-        'schema.from-data/mapping/frames',
-        'query.materialize/indices-regression/frames',
-        'query.materialize/indices-binary/frames',
-        'query.materialize/indices-multiclass/frames',
-        'client.predict/regression/frames',
-        'client.predict/binary/frames',
-        'client.predict/multiclass/frames',
-    )
-)
+ROUTES = FRAME_ROUTES
 
 
 # DT-3 and P3E-2 are approved register changes, not comparator exclusions.

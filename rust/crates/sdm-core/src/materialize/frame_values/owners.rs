@@ -9,7 +9,6 @@
 use super::*;
 
 #[cfg(test)]
-#[path = "owners_tests.rs"]
 mod tests;
 
 #[derive(Clone, PartialEq, Eq)]

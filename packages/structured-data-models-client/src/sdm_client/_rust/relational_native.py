@@ -15,12 +15,19 @@ import dataclasses
 import json
 import re
 import sys
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, TypedDict
 
 from sdm_client._rust import errors
 from sdm_client._rust.prepare import _call
+
+
+class _TaskFacts(TypedDict):
+    purpose: str
+    classification: bool | None
+    regression_not_equal: bool | None
+    summarized: bool | None
 
 
 def _points(value: str) -> list[int]:
@@ -355,7 +362,7 @@ def task(
     # actual comparisons at the original reached guard.
     words = vocabulary()
     kind = str(payload.get('task', {}).get('kind', ''))
-    facts = {
+    facts: _TaskFacts = {
         'purpose': purpose,
         'classification': None,
         'regression_not_equal': None,
@@ -566,7 +573,7 @@ def absent(call: dict[str, Any], answer: Any, requested: Any) -> None:
     words = _prepared({'data': 'output_vocabulary'})['value']
     names = list(dict.fromkeys(requested))
     item_fields = tuple(sys.intern(name) for name in words['item_fields'])
-    factories = {
+    factories: dict[str, Callable[[], object]] = {
         'null': lambda: None,
         'mapping': dict,
         'list': list,
@@ -621,8 +628,8 @@ def output_shapes(
     outputs: tuple[Any, ...], count: int
 ) -> tuple[set[Any], dict[str, Any]]:
     """One actual native set insertion per completed call, without replay."""
-    shapes = set()
-    origins = {}
+    shapes: set[tuple[Any, ...]] = set()
+    origins: dict[int, int] = {}
     for position in range(count):
         origins.setdefault(id(outputs), position)
         shapes.add(outputs)
@@ -642,7 +649,7 @@ def ranking_outputs(outputs: Any, total: int) -> dict[str, Any]:
         }
     )
     accepted = tuple(sys.intern(name) for name in words['outputs'])
-    observed = []
+    observed: list[Any] = []
     unsupported = []
     for name in outputs or ():
         position = len(observed)

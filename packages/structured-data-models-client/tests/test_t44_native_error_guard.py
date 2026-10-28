@@ -11,16 +11,16 @@ isolate exception observation effects; they are not frozen builtin outcomes.
 from __future__ import annotations
 
 import json
-from pathlib import Path
 import sys
 import warnings
+from pathlib import Path
 
 import pandas as pd
 import pytest
+from test_t44_text_frames import core as core
+from test_t44_text_frames import question, shop
 
 from sdm_client import StructuredDataError
-
-from test_t44_text_frames import core as core, question, shop
 
 
 def inject(monkeypatch, error, events=None):

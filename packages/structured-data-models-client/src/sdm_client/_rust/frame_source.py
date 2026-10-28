@@ -25,7 +25,7 @@ def meaning(
 ) -> dict[str, Any]:
     import pyarrow as pa
 
-    from sdm_client._rust.frame_facade import _Bindings, _adopt, _prepare
+    from sdm_client._rust.frame_facade import _adopt, _Bindings, _prepare
 
     dtype = values.dtype
     object_dtype = pd.api.types.is_object_dtype(dtype)
@@ -82,7 +82,7 @@ def _time(
 ) -> pd.Series:
     import pyarrow as pa
 
-    from sdm_client._rust.frame_facade import _Bindings, _adopt, _prepare
+    from sdm_client._rust.frame_facade import _adopt, _Bindings, _prepare
     from sdm_client._rust.frame_native import NativeColumn
 
     rows, encoding = NativeColumn(values).arrow()
@@ -113,7 +113,7 @@ def _time(
 def _decimal(
     values: pd.Series, resolved: dict[str, Any], state: dict[str, Any]
 ) -> pd.Series:
-    from sdm_client._rust.frame_facade import _Bindings, _adopt, _prepare
+    from sdm_client._rust.frame_facade import _adopt, _Bindings, _prepare
 
     kind = resolved['kind']
     if kind == 'decimal_float':
@@ -155,7 +155,7 @@ def source_meaning(
     state: dict[str, Any],
 ) -> dict[str, Any]:
     """Bind final graph metadata to the tables' frozen dtype facts."""
-    from sdm_client._rust.frame_facade import _Bindings, _adopt, _prepare
+    from sdm_client._rust.frame_facade import _adopt, _Bindings, _prepare
 
     bindings = _Bindings()
     result = _adopt(
@@ -179,7 +179,7 @@ def table_meaning(
     """Admit physical table types after all declared native casts."""
     import pyarrow as pa
 
-    from sdm_client._rust.frame_facade import _Bindings, _adopt, _prepare
+    from sdm_client._rust.frame_facade import _adopt, _Bindings, _prepare
 
     bindings = _Bindings()
     native = [
