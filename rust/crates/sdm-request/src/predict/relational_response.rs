@@ -930,7 +930,12 @@ mod tests {
             let expected = sdm_wire::json::read_answer(expected.as_bytes()).unwrap();
             assert_eq!(
                 part.rows[0].prediction,
-                native_answer(&expected),
+                super::super::answer_of(
+                    Some(&expected),
+                    super::super::declared_class_answers(Some(dtype.as_bytes())),
+                    AnswerPolicy::Gathered
+                )
+                .unwrap(),
                 "{dtype}: {raw}"
             );
         }
@@ -967,7 +972,7 @@ mod tests {
                 if dtype == "bool" {
                     Answer::Bool(true)
                 } else {
-                    native_answer(&expected)
+                    Answer::Text(expected.as_text().unwrap().to_owned())
                 }
             );
             assert_eq!(
@@ -1013,7 +1018,8 @@ mod tests {
             false,
         )];
         let target = class_target("int64", true);
-        let entry = |probability| RelationalTargetProbability {
+        let entry = |ordinal, probability| RelationalTargetProbability {
+            ordinal,
             value: NativeValue::Integer {
                 digits: "10".into(),
             },
@@ -1023,7 +1029,7 @@ mod tests {
         let mut converted = vec![RelationalTargetRow {
             ordinal: 0,
             prediction: NativeValue::Integer { digits: "7".into() },
-            probabilities: Some(vec![entry(0.25), entry(0.75)]),
+            probabilities: Some(vec![entry(0, 0.25), entry(1, 0.75)]),
         }];
         let (part, _) = layout(&response, &attribution, &rows, &target, &converted, |n| {
             n.to_string()
@@ -1049,6 +1055,219 @@ mod tests {
             .sentence,
             Sentence::InvalidMessage
         );
+    }
+
+    #[test]
+    fn mixed_gathered_classes_keep_primary_arrow_cells_and_exact_raw_fallbacks() {
+        use arrow_array::Array;
+        use arrow_array::cast::AsArray;
+        use arrow_array::types::{Float64Type, Int64Type};
+        use arrow_schema::DataType;
+
+        for (dtype, raw, converted, physical, expected) in [
+            (
+                "bool",
+                r#"["maybe",true]"#,
+                r#"["maybe",true]"#,
+                DataType::Boolean,
+                vec![None, Some("true")],
+            ),
+            (
+                "int64",
+                r#"["1_0","10"]"#,
+                "[10,10]",
+                DataType::Int64,
+                vec![None, Some("10")],
+            ),
+            (
+                "float64",
+                r#"["1_0.5","2.5"]"#,
+                "[10.5,2.5]",
+                DataType::Float64,
+                vec![None, Some("2.5")],
+            ),
+            (
+                "string",
+                r#"[1,"two"]"#,
+                r#"[1,"two"]"#,
+                DataType::Utf8,
+                vec![None, Some("two")],
+            ),
+            (
+                "bool",
+                "[2,1.0]",
+                "[2,1.0]",
+                DataType::Float64,
+                vec![Some("2"), Some("1")],
+            ),
+        ] {
+            let raw = sdm_wire::json::read_answer(raw.as_bytes()).unwrap();
+            let Value::Array(raw) = raw else {
+                panic!("raw rows")
+            };
+            let Value::Array(native_rows) =
+                sdm_wire::json::read_answer(converted.as_bytes()).unwrap()
+            else {
+                panic!("native rows")
+            };
+            let predictions = Value::Array(
+                raw.iter()
+                    .enumerate()
+                    .map(|(ordinal, value)| {
+                        Value::Object(vec![
+                            ("row_index".into(), Value::Number(ordinal.to_string())),
+                            ("id".into(), Value::text("opaque")),
+                            ("prediction".into(), value.clone()),
+                        ])
+                    })
+                    .collect(),
+            );
+            let response = read_response(std::str::from_utf8(&predictions.to_bytes()).unwrap());
+            let attribution = table_facts(&response, None, false);
+            let rows = decode(&response, "actual-call")
+                .unwrap()
+                .1
+                .into_iter()
+                .map(|row| accepted(&attribution, row, false))
+                .collect::<Vec<_>>();
+            let converted = native_rows
+                .iter()
+                .enumerate()
+                .map(|(ordinal, value)| RelationalTargetRow {
+                    ordinal,
+                    prediction: native(value).unwrap(),
+                    probabilities: None,
+                })
+                .collect::<Vec<_>>();
+            let (part, _) = layout(
+                &response,
+                &attribution,
+                &rows,
+                &class_target(dtype, dtype != "string"),
+                &converted,
+                |n| n.to_string(),
+            )
+            .unwrap();
+            let table = super::super::table(&part).unwrap();
+            assert_eq!(
+                table
+                    .schema()
+                    .fields()
+                    .iter()
+                    .map(|field| field.name().as_str())
+                    .collect::<Vec<_>>(),
+                [
+                    "row_index",
+                    "id",
+                    "prediction",
+                    "prediction_as_answered",
+                    "answer_index"
+                ]
+            );
+            let prediction = table.column_by_name("prediction").unwrap();
+            assert_eq!(prediction.data_type(), &physical, "{dtype}");
+            let values = (0..prediction.len())
+                .map(|row| {
+                    if prediction.is_null(row) {
+                        return None;
+                    }
+                    Some(match physical {
+                        DataType::Boolean => prediction.as_boolean().value(row).to_string(),
+                        DataType::Int64 => prediction
+                            .as_primitive::<Int64Type>()
+                            .value(row)
+                            .to_string(),
+                        DataType::Float64 => prediction
+                            .as_primitive::<Float64Type>()
+                            .value(row)
+                            .to_string(),
+                        DataType::Utf8 => prediction.as_string::<i32>().value(row).to_owned(),
+                        _ => panic!("unexpected physical family"),
+                    })
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(
+                values,
+                expected
+                    .into_iter()
+                    .map(|value| value.map(str::to_owned))
+                    .collect::<Vec<_>>(),
+                "{dtype}"
+            );
+            let fallback = table
+                .column_by_name("prediction_as_answered")
+                .unwrap()
+                .as_string::<i32>();
+            for (at, value) in raw.iter().enumerate() {
+                let actual = sdm_wire::json::read_answer(fallback.value(at).as_bytes()).unwrap();
+                let expected = if prediction.is_null(at) {
+                    value.clone()
+                } else {
+                    logical(&converted[at].prediction).unwrap()
+                };
+                assert_eq!(actual, expected, "{dtype} fallback row {at}");
+            }
+        }
+    }
+
+    #[test]
+    fn equal_probability_products_bind_to_original_entry_ordinals() {
+        let response = read_response(
+            r#"[{"row_index":0,"id":"opaque","prediction":"7","probabilities":{"1":0.5,"2":0.5}}]"#,
+        );
+        let attribution = table_facts(&response, None, false);
+        let rows = vec![accepted(
+            &attribution,
+            decode(&response, "actual-call").unwrap().1.remove(0),
+            false,
+        )];
+        let entries = (0..2)
+            .map(|ordinal| RelationalTargetProbability {
+                ordinal,
+                value: NativeValue::Integer {
+                    digits: (ordinal + 1).to_string(),
+                },
+                name: (ordinal + 1).to_string(),
+                probability: Scalar::Float64(0.5),
+            })
+            .collect::<Vec<_>>();
+        let original = RelationalTargetRow {
+            ordinal: 0,
+            prediction: NativeValue::Integer { digits: "7".into() },
+            probabilities: Some(entries),
+        };
+        let target = class_target("int64", true);
+        let (part, _) = layout(
+            &response,
+            &attribution,
+            &rows,
+            &target,
+            std::slice::from_ref(&original),
+            |n| n.to_string(),
+        )
+        .unwrap();
+        assert_eq!(
+            part.rows[0].probabilities,
+            Some(vec![("1".into(), 0.5), ("2".into(), 0.5)])
+        );
+        for mode in 0..3 {
+            let mut changed = original.clone();
+            let entries = changed.probabilities.as_mut().unwrap();
+            match mode {
+                0 => entries.reverse(),
+                1 => entries[1] = entries[0].clone(),
+                _ => {
+                    entries.pop();
+                }
+            }
+            assert_eq!(
+                layout(&response, &attribution, &rows, &target, &[changed], |n| n
+                    .to_string())
+                .unwrap_err()
+                .sentence,
+                Sentence::InvalidMessage
+            );
+        }
     }
 
     #[test]
@@ -1182,10 +1401,7 @@ mod tests {
                 source_row: Some(0),
             }]
         );
-        assert_eq!(
-            part.rows[0].prediction,
-            Answer::Written(Value::Number("7".into()))
-        );
+        assert_eq!(part.rows[0].prediction, Answer::Int(7));
         // The actual entity (including HTTP-time 0 -> 7 mutation) is held
         // natively; no stale serialized key enters this core representation.
         assert_eq!(part.rows[0].id, Entity::Integer(0));
@@ -1199,11 +1415,13 @@ mod tests {
         ];
         let renamed = vec![
             RelationalTargetProbability {
+                ordinal: 0,
                 value: NativeValue::Boolean { value: false },
                 name: "False".into(),
                 probability: Scalar::Float64(0.25),
             },
             RelationalTargetProbability {
+                ordinal: 1,
                 value: NativeValue::Boolean { value: false },
                 name: "False".into(),
                 probability: Scalar::Float64(0.75),
