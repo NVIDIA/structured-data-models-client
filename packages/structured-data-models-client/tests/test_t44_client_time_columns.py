@@ -84,11 +84,12 @@ def test_public_complete_time_columns_match_frozen_payloads(
             random_seed=7,
             anchor_time=pd.Timestamp('2024-04-01'),
         )
+        assert type(request.payloads) is tuple
         observed = {
             'case': case,
             'storage': storage,
             'outcome': 'success',
-            'payloads': copy.deepcopy(request.payloads),
+            'payloads': copy.deepcopy(list(request.payloads)),
             'warnings': [
                 {
                     'type': type(item.message).__name__,

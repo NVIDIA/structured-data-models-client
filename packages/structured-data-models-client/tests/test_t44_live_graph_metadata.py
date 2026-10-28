@@ -114,10 +114,11 @@ def failure(error):
 
 
 def observation(request, data):
+    assert type(request.payloads) is tuple
     observed = {
         'kind': 'success',
         'inspection': {
-            'payloads': copy.deepcopy(request.payloads),
+            'payloads': copy.deepcopy(list(request.payloads)),
             'context_rows': request.context_rows,
             'predict_rows': request.predict_rows,
         },
