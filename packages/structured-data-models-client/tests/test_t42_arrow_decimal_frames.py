@@ -298,10 +298,11 @@ def test_small_native_decimal_widths_use_the_same_constructor_stages(
     schema, _, (outcome, notices) = paired(monkeypatch, build)
     if key or scale <= 0:
         assert schema is None
+        kernel = 'unique' if key else 'dictionary_encode'
         _assert_native_failure(
             outcome,
             pa.ArrowNotImplementedError,
-            "Function 'dictionary_encode' has no kernel matching input types "
+            f"Function '{kernel}' has no kernel matching input types "
             f'(decimal{bits}(1, {scale}))',
         )
         assert notices == []
