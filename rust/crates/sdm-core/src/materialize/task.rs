@@ -713,6 +713,10 @@ pub(super) fn labelled_rows(
 }
 
 #[cfg(test)]
+#[path = "task/native_label_tests.rs"]
+mod native_label_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use arrow_array::cast::AsArray;
