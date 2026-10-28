@@ -261,7 +261,11 @@ fn declared_native_text_uses_shared_schema_rules_without_losing_points_or_ordina
 #[test]
 fn native_text_constructor_rejects_invalid_surrogatepass_and_wrong_binding() {
     for wrong_binding in [false, true] {
-        let values = vec![Some(vec![0xed, 0xa0])];
+        let values = vec![Some(if wrong_binding {
+            vec![0xed, 0xa0, 0x80]
+        } else {
+            vec![0xed, 0xa0]
+        })];
         let batch = RecordBatch::try_from_iter([("value", native_text_cells(&values))]).unwrap();
         let mut attached = inputs();
         attached.insert(AttachmentId(2), bytes(json!({
@@ -278,13 +282,15 @@ fn native_text_constructor_rejects_invalid_surrogatepass_and_wrong_binding() {
         let run = HostRun::start(&sdm_host::default_root(), &message(), attached)
             .unwrap_or_else(|out| panic!("start itself failed: {:?}", error(out)));
         loop {
-            match sdm_host::read(&run.next().unwrap()).unwrap() {
-                ControlMessage::Warnings { .. } => {}
-                ControlMessage::Error { error } => {
-                    assert_eq!(error.sentence, sdm_contract::Sentence::InvalidMessage);
+            match run.next() {
+                Err(out) => {
+                    assert_eq!(error(out).sentence, sdm_contract::Sentence::InvalidMessage);
                     break;
                 }
-                other => panic!("malformed native text was accepted: {other:?}"),
+                Ok(out) => match sdm_host::read(&out).unwrap() {
+                    ControlMessage::Warnings { .. } => {}
+                    other => panic!("malformed native text was accepted: {other:?}"),
+                },
             }
         }
     }
