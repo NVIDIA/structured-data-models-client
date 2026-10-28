@@ -1,4 +1,4 @@
-# T4.4: neutral casing facts and execution before expansion
+# T4.4: neutral native facts and execution before expansion
 
 This is the implementation plan for the owner's 2026-10-28 instruction to formally plan and fix the boundary and methodology defects.
 It refines the existing Phase 4 design and keeps the complete phase scope and acceptance obligations.
@@ -163,3 +163,16 @@ Generic request preparation must not inherit constructor-only warning presentati
 Preserve arbitrary native warning-handler exceptions, structured-error and interrupt passthrough, original cause ownership, warning order, handler mutations and sampler continuation.
 These observed failures are the next bounded repair, before any new feature layer or package expansion.
 The compiler, wheel and HostRun results retain their exact producer identity and do not provide a passing package stamp.
+
+## Native identity and meaning boundary closure
+
+The same candidate's quality-only diagnostic found six remaining library-vocabulary sites in native dtype identity, column-kind inference and a native large-string diagnostic.
+Treat this as the same producer/reader boundary family, rather than making another cosmetic rename or widening the architecture allowlist.
+Before changing those producers, trace which facts Rust actually interprets and which only participate in source/cache identity.
+The sufficient facts must describe actual native value representation, missingness, conversion outcome and scalar meaning without asking Rust to interpret pandas or NumPy class labels.
+Preserve invalidation when the original native representation changes, the reached conversion/error schedule and all supported native dtype owners.
+Keep host-specific display and native failure presentation in Python while shared Rust code retains its domain policy and typed resources.
+A native inference observation may be translated to a closed neutral value kind at its existing host read position; it must not move schema or model inference policy into the host.
+Retain exact unsupported native-family outcomes where the frozen reference requires them, including their complete messages, without embedding a Python API recipe in Rust.
+Review the connected producer, identity consumer, value-kind reader and failure presenter together before the next execution.
+The already observed import, handwritten formatting and Decimal annotation defects are bounded companion repairs, with no suppressions or changed expectations.
