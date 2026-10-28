@@ -1207,7 +1207,7 @@ fn native_text_context_projects_once_per_table_then_expands_each_column() {
         ["age", "note"]
     );
     let converted = ["age", "note"].into_iter().enumerate().map(|(at, name)| {
-        let id = AttachmentId(50000 + at as u64);
+        let id = AttachmentId(u32::try_from(50_000 + at).expect("fixture attachment ID fits u32"));
         stages.held.insert(id, arrow(vec![("text", Arc::new(StringArray::from_iter_values(unique.iter().map(|source| format!("{} {source}", if name == "age" { "SOURCE" } else { "NOTE" })))))], false));
         json!({"column":{"table":"users","column":name},"values":{"values":id,"encoding":"utf8"},"facts":{"mapping":"full_root","unicode_version":"14.0.0"}})
     }).collect::<Vec<_>>();
