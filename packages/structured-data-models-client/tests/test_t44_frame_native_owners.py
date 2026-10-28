@@ -105,6 +105,64 @@ def test_native_message_observations_preserve_native_chain_mutations():
     assert held.error.__context__ is changed
 
 
+@pytest.mark.parametrize('raised', [False, True])
+@pytest.mark.parametrize('mutation', ['none', 'context', 'traceback'])
+@pytest.mark.parametrize('observation', ['message', 'type_name'])
+def test_failed_native_observation_keeps_actual_traceback_and_chain_edits(
+    raised, mutation, observation
+):
+    failure = RuntimeError('actual native observation failure')
+    changed = KeyError('changed by the native observation')
+    try:
+        raise KeyError('native traceback owner')
+    except KeyError as native:
+        changed_traceback = native.__traceback__
+
+    def native_failure():
+        if mutation == 'context':
+            error.__context__ = changed
+        elif mutation == 'traceback':
+            error.__traceback__ = changed_traceback
+        raise failure
+
+    class Name(type):
+        def __getattribute__(cls, name):
+            if name == '__name__':
+                native_failure()
+            return super().__getattribute__(name)
+
+    class Unprintable(TypeError, metaclass=Name):
+        def __str__(self):
+            native_failure()
+
+    error = Unprintable()
+    if raised:
+        try:
+            raise error
+        except Unprintable:
+            pass
+    original_traceback = error.__traceback__
+    original_context = error.__context__
+    original_cause = error.__cause__
+    original_suppression = error.__suppress_context__
+    held = NativeFrameFailure.capture(error)
+    with pytest.raises(RuntimeError) as caught:
+        if observation == 'message':
+            held.read_message()
+        else:
+            held.read_type_name()
+    assert caught.value is failure
+    assert caught.value.__context__ is error
+    assert error.__traceback__ is (
+        changed_traceback if mutation == 'traceback' else original_traceback
+    )
+    assert error.__context__ is (
+        changed if mutation == 'context' else original_context
+    )
+    assert error.__cause__ is original_cause
+    assert error.__suppress_context__ is original_suppression
+
+
 def test_source_binding_uses_the_original_dtype_and_does_not_infer_aliases():
     dtype = pd.StringDtype(storage='python')
     columns = {'input_users': {'id': dtype}}

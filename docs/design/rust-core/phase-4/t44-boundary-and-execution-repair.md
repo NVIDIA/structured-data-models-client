@@ -424,3 +424,11 @@ The recorded original huge-probability failure remains immutable and is compared
 
 The R32 base-install consumer reaches direct Request construction but its test selected only one member of an indivisible constructor route group.
 Select the existing complete `DIRECT_CONSUMERS` inventory in the test, keeping the optional-package blocker and both public calls; do not relax routing validation.
+
+### Native exception observation without a suspended handler
+
+The actual R32 CP310 consumer exposes a traceback replacement when an exception display fails inside the generator-based native re-entry context.
+A bounded unchanged-R32 experiment with both supported interpreters confirms that suspending the generator overwrites both original and user-assigned traceback owners on CP310, while direct fixed native observation inside the handler preserves them.
+Keep native message, type-name, failed-index diagnosis and structured-part observations at the same reached positions, but perform each directly in its native handler after restoring the prior chain.
+Share only typed chain snapshot and restoration data, with no generic callback, interpreter, post-observation rollback, runtime-version branch or new native API.
+Add raised/unraised, message/type-name and legitimate context/traceback mutation consumers before implementation, preserving original exception identity and every native failure.
