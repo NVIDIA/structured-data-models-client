@@ -673,3 +673,20 @@ Final native wrapper presentation re-enters the exact retained native exception 
 This prevents the intermediate rejection placeholder from becoming the native cause's context, while keeping current cause, suppression, traceback and all subsequent native getter or display edits.
 Apply the same fixed handover to the selected and carried wrappers, and leave pass-through and shared provider error presentation unchanged.
 Do not restore a pre-presentation snapshot in a finally block, which could erase real subclass getter effects during presentation.
+
+### Executed R40 reader and fixture feedback
+
+R40 passes the full workspace compiler, strict Clippy, all 129 core tests, all 60 request tests and the five Rust multicall journeys.
+Its complete public group reaches 1,838 passes and one remaining expected-frame assertion; all native presentation controls and the complete later-Text error graph now pass.
+The retained old/current paired receipt shows that an omitted null prediction becomes native pandas NaN in the public frame even when its bool column has object dtype.
+Keep the item-level None oracle and exact frame dtype/order/value comparison, supplying that actual absent-cell NaN in the independent expected frame.
+
+The projection Host consumer must use the range selected by its actual completed temporal LINK task.
+Keep all 201 repeated prediction rows, assert the selected 200-row per-call cap and two-call layout, preserve the invalid whole-task range as a refusal control, and run its complete projection/malformed/readback assertions on the legal first range.
+The separate complete 201-row journey continues to cover both calls.
+Do not relax the core range guard or shrink the original input.
+
+The now-admitted capture journeys reach 706 passes and 26 failures in legacy tests that require a literal Predict operation.
+Trace those actual records and retain strict proof of native prediction through the same checked typed logical-event reader used by the comparator.
+Do not fabricate a legacy operation, substitute attempted entry for reached native work, or drop call/payload/refusal comparisons.
+Keep all actual R40 failures and profile receipts with their producer, and gather the matched CP310 profile before freezing the next grouped correction.
