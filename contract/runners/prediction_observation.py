@@ -343,7 +343,7 @@ def _entry(
             entry['completion'] == 'raised'
             and failure['run'] in records
             and _below(records[failure['run']]['entry'], ordinal, entries)
-            and failure['relation'] in ('selected', 'cause')
+            and failure['relation'] in ('selected', 'cause', 'refused')
             and records[failure['run']]['error'] is not None,
             'prediction terminal error has no actual native presentation association',
         )

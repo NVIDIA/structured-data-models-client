@@ -936,7 +936,8 @@ def _core_consistent(
         outer is not None
         and outer['completion'] == 'raised'
         and (
-            outer['failure'] is None or outer['failure']['relation'] == 'cause'
+            outer['failure'] is None
+            or outer['failure']['relation'] in ('cause', 'refused')
         )
     ):
         # A host/native failure has its independently observed public outcome.

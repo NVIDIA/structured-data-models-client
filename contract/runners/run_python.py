@@ -963,7 +963,7 @@ class _Capture:
         self._current_run: _CapturedRun | None = None
         self.predictions: list[dict[str, Any]] = []
         self._entries: list[int] = []
-        self._presented: list[tuple[BaseException, int]] = []
+        self._presented: list[tuple[BaseException, int, str]] = []
 
     def _run(self, owner: _CapturedRun | None) -> _CapturedRun:
         owner = self._current_run if owner is None else owner
@@ -1025,14 +1025,17 @@ class _Capture:
                 seen: set[int] = set()
                 while selected is not None and id(selected) not in seen:
                     seen.add(id(selected))
-                    run = next(
+                    matched = next(
                         (
-                            run
-                            for owner, run in self._presented
+                            (run, relation)
+                            for owner, run, relation in reversed(
+                                self._presented
+                            )
                             if owner is selected and self._within(run, ordinal)
                         ),
                         None,
                     )
+                    run = matched[0] if matched is not None else None
                     if run is None:
                         run = next(
                             (
@@ -1047,9 +1050,9 @@ class _Capture:
                         self.error = self._runs[run].error
                         entry['failure'] = {
                             'run': run,
-                            'relation': 'selected'
-                            if selected is error
-                            else 'cause',
+                            'relation': 'refused'
+                            if matched is not None and matched[1] == 'refused'
+                            else ('selected' if selected is error else 'cause'),
                         }
                         break
                     selected = BaseException.__cause__.__get__(selected)
@@ -1059,8 +1062,8 @@ class _Capture:
                 # Child identities remain useful for an exact outer rethrow.
                 # No exception owner survives the completed outer observation.
                 self._presented = [
-                    (owner, run)
-                    for owner, run in self._presented
+                    (owner, run, relation)
+                    for owner, run, relation in self._presented
                     if not self._within(run, ordinal)
                 ]
                 for run, owner in self._runs.items():
@@ -1074,7 +1077,15 @@ class _Capture:
             return
         for ordinal in self.predictions[self._entries[-1]]['runs']:
             if self._runs[ordinal].error_owner is internal:
-                self._presented.append((result, ordinal))
+                self._presented.append((result, ordinal, 'selected'))
+                return
+
+    def carried(self, error: BaseException, raised: BaseException) -> None:
+        if not self._entries:
+            return
+        for owner, run, _relation in reversed(self._presented):
+            if owner is error and self._within(run, self._entries[-1]):
+                self._presented.append((raised, run, 'refused'))
                 return
 
     @staticmethod
@@ -1878,9 +1889,11 @@ class _Boundary:
         self._native_before = run.native
         self._predict_before = relational_predict.predict
         self._presentation_before = errors.error_from_core
+        self._carried_before = run._carried
         imported = self._native_before
         predict_before = self._predict_before
         presentation_before = self._presentation_before
+        carried_before = self._carried_before
 
         def native() -> Any:
             return _Native(imported(), self.capture)
@@ -1906,12 +1919,23 @@ class _Boundary:
             capture.presented(value, kwargs.get('internal_context'))
             return value
 
+        def carried(*args: Any, **kwargs: Any) -> Any:
+            # Observe only a completed native handover, including its no-op
+            # metadata branch. Never inspect or replace either error owner.
+            value = carried_before(*args, **kwargs)
+            error = args[0] if args else kwargs['error']
+            raised = args[1] if len(args) > 1 else kwargs['raised']
+            self.capture.carried(error, raised)
+            return value
+
         self._native_hook = native
         self._predict_hook = predict
         self._presentation_hook = presentation
+        self._carried_hook = carried
         run.native = native
         relational_predict.predict = predict
         errors.error_from_core = presentation
+        run._carried = carried
 
     def reset(self) -> _Capture:
         if self._closed or self.capture._entries:
@@ -1932,6 +1956,7 @@ class _Boundary:
             run.native is not self._native_hook
             or relational_predict.predict is not self._predict_hook
             or errors.error_from_core is not self._presentation_hook
+            or run._carried is not self._carried_hook
         ):
             raise RunnerFailure(
                 'capture hooks must close in LIFO installation order'
@@ -1939,6 +1964,7 @@ class _Boundary:
         run.native = self._native_before
         relational_predict.predict = self._predict_before
         errors.error_from_core = self._presentation_before
+        run._carried = self._carried_before
         self._closed = True
 
 

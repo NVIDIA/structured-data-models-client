@@ -715,7 +715,8 @@
             "relation": {
               "enum": [
                 "selected",
-                "cause"
+                "cause",
+                "refused"
               ]
             }
           }
