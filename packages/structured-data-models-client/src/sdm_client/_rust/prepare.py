@@ -695,7 +695,7 @@ def predict(
         )
     else:
         call = _call(
-            {'stage': 'outputs', 'call': call, 'outputs': list(tuple(outputs))}
+            {'stage': 'outputs', 'call': call, 'outputs': list(outputs)}
         )
     capability_kind = request.task.kind
     anchored = bool(request.task.options.get('anchor_time_column'))

@@ -123,7 +123,7 @@ def _ids(kind: str, value: dict[str, Any]) -> list[int]:
     if kind == 'label_batch':
         return [value['owner']]
     if kind == 'population':
-        return _ids('graph', value['graph']) + [value['owner']]
+        return [*_ids('graph', value['graph']), value['owner']]
     if kind == 'labels':
         return _ids('graph', value['graph']) + (
             [] if value['context'] is None else [value['context']]
@@ -135,9 +135,9 @@ def _ids(kind: str, value: dict[str, Any]) -> list[int]:
             if value[name] is not None
         ]
     if kind == 'plan':
-        return _ids('task', value['task']) + [value['sampling_values']]
+        return [*_ids('task', value['task']), value['sampling_values']]
     if kind == 'references':
-        return _ids('plan', value['plan']) + [value['owner']]
+        return [*_ids('plan', value['plan']), value['owner']]
     if kind == 'context':
         return (
             _ids('plan', value['plan'])
