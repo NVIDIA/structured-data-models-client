@@ -516,3 +516,9 @@ Use builtin exception descriptors with cycle protection rather than user attribu
 
 A nested prediction keeps its native Run ownership, while an exact rethrow through an outer entry may link the same selected child failure without reassigning the Run or inferring the parent's model from the child.
 Retain those ephemeral presentation identities until the outermost observed entry completes, and validate any cross-entry failure link against the actual parent chain.
+
+A native model refusal is sometimes raised as its original transport exception instead of the reconstructed exception whose metadata it receives.
+Observe the existing successful run._carried(error, raised) return to link those two exact owners to the already known native Run, including its metadata no-op path.
+Keep that selected relation distinct as refused, forward once unchanged, and record no handover when the original function raises or when a later failure is a different owner.
+Preserve the actual terminal public error and paid partial results independently from the associated core diagnostic.
+Restore this finite handover observer in the same LIFO lifetime as the other hooks, without inspecting a Refused carrier, model callback or user exception property.
