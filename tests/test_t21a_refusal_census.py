@@ -71,6 +71,7 @@ RULELESS = {
     'rust/crates/sdm-contract/src/types.rs': 'unsupported_type',
     'rust/crates/sdm-host/src/admission.rs': 'unsupported',
     'rust/crates/sdm-request/src/predict.rs': 'unsupported',
+    'rust/crates/sdm-request/src/predict/validation.rs': 'unsupported',
 }
 # ---------------------------------------------------------------------------------
 
@@ -210,8 +211,15 @@ def test_every_site_has_a_probe() -> None:
             '    crate::unsupported_type(c, t)\n}\n',
             'rust/crates/sdm-contract/src/t21a_seeded.rs:2',
         ),
+        (
+            'rust/crates/sdm-request/src/predict/validation.rs',
+            'pub fn seeded() -> CoreError {\n'
+            '    unsupported(Sentence::NoContextRows, "model", "seeded")\n}\n',
+            'rust/crates/sdm-request/src/predict/validation.rs'
+            '::seeded::predict::unsupported#1',
+        ),
     ],
-    ids=['a named rule', 'a rule-less call'],
+    ids=['a named rule', 'a rule-less call', 'a moved private policy'],
 )
 def test_a_site_with_no_probe_fails_by_name(
     relative: str, code: str, named: str, tmp_path: Path
