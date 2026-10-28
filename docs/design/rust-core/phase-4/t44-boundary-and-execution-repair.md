@@ -638,3 +638,8 @@ A closed handwritten capture-capability product records which existing intercept
 Sparse replay omits unobserved answered fields, whereas a declared full observer must retain the top-level and per-Run fields and cannot advance past a missing reply.
 Current completed native products must retain their observed output supplement; only older products without the new interception declaration may lack that supplement.
 Compare carried supplements only when both producers observed them, while retaining every common call, native error and mandatory result comparison.
+
+
+The retained paid-partial negative fixture represents a full current observer, not a historical observer whose carried supplement is unavailable.
+Declare its actual full interceptions and matching Run-local error/answered products while preserving every existing body, Arrow, row-count, model, response-ID, metadata, output and missing-current-fact oracle.
+Keep the separate historical-unavailable positive and the product reader unchanged for this fixture correction.
