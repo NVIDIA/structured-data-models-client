@@ -43,7 +43,8 @@ pub(super) fn source(
     }
     let read = sdm_schema::held::read(schema.clone(), &BTreeMap::new(), true)?;
     let mut description = read.description;
-    consistent(&mut description, &read.types)?;
+    sdm_schema::assemble::mark_keys(&mut description);
+    sdm_schema::assemble::check_link_structure(&description, &read.types)?;
     reserved(&description)?;
     kept_checks(&description)?;
     Ok(FrameSourceMeaning { schema })

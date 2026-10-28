@@ -1149,6 +1149,25 @@ pub fn check_links(description: &SourceDescription, types: &HostTypes) -> Result
     Ok(())
 }
 
+/// Relationship structure after native casts and table metadata assignment.
+/// All edges must be constructible before the native graph checks their
+/// kinds in edge order. Reuse the caller's existing structural/key refusals;
+/// an induced type-family mismatch belongs to the later `check_edges` stage.
+pub fn check_link_structure(
+    description: &SourceDescription,
+    types: &HostTypes,
+) -> Result<(), CoreError> {
+    for link in &description.links {
+        match joins(&description.tables, link, types) {
+            Ok(()) | Err(Unjoinable::Types) => {}
+            Err(Unjoinable::Missing | Unjoinable::NotTheKey) => {
+                checked(&description.tables, link, types)?;
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Refuses the edges the reference's engine refuses when it validates the
 /// graph it built over the tables it read (`Graph.validate`'s
 /// `_edge_error`, run as `KumoRelational` is built, `relational.py:418`),
