@@ -474,6 +474,14 @@ fn labelled_rows(
                 })
                 .collect::<Result<Vec<_>, _>>()?,
         )),
+        Some(LinkValue::UInt(_)) => Arc::new(UInt64Array::from(
+            flat.iter()
+                .map(|value| match value {
+                    LinkValue::UInt(value) => Ok(*value),
+                    _ => Err(mixed()),
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+        )),
         Some(LinkValue::Float(_)) => Arc::new(Float32Array::from(
             flat.iter()
                 .map(|value| match value {
@@ -599,6 +607,13 @@ fn read_link_labels(
                     .iter()
                     .copied()
                     .map(LinkValue::Int)
+                    .collect(),
+                DataType::UInt64 => values
+                    .as_primitive::<UInt64Type>()
+                    .values()
+                    .iter()
+                    .copied()
+                    .map(LinkValue::UInt)
                     .collect(),
                 DataType::Float32 => values
                     .as_primitive::<Float32Type>()

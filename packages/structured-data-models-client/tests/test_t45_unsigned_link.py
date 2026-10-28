@@ -37,7 +37,8 @@ def test_unsigned_link_success_keeps_full_payload_and_public_result(
     expected = next(
         case['expected']
         for case in journey.REFERENCE['cases']
-        if case['kind'] == 'int64' and case['shape'] == shape
+        if case['kind'] == 'int64'
+        and case['shape'] == ('ordinary' if shape == 'null' else shape)
     )
     monkeypatch.setattr(journey, 'configure', configure)
     observed = []

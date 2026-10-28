@@ -275,6 +275,8 @@ impl FrameStages {
 #[test]
 fn unsigned_link_native_rows_survive_owner_rebinding_until_the_real_request_boundary() {
     use arrow_array::types::UInt64Type;
+    let mut baseline_labels = None;
+    let mut baseline_keys = None;
     for base in [0, (1_u64 << 53) + 1, (i64::MAX as u64) + 1] {
         let mut held = inputs("empty-one-neighborhood", false);
         // Same declared schema and graph shape as the frozen public case.
@@ -319,6 +321,7 @@ fn unsigned_link_native_rows_survive_owner_rebinding_until_the_real_request_boun
         let PreparedFrameValue::Graph(graph) = stages.stage(json!({"stage":"graph","schema":1,"frames":7,"checkpoint":null,"retained":null,"native_tables":native_tables,"values":5,"options":[],"prediction_rows":2,"limits":{}})).unwrap() else { panic!("graph") };
         let PreparedFrameValue::Population(population) = stages.stage(json!({"stage":"population","graph":graph,"query":2,"values":20,"seed":"0x7","entropy":7,"anchor_time":{"t":"ts","unit":"ns","v":"1677628800000000000"},"anchor_entity":false,"num_context_samples":null,"limits":{}})).unwrap() else { panic!("population") };
         let mut batches = Vec::new();
+        let mut native_labels = Vec::new();
         for start in (0..population.rows).step_by(population.batch_rows as usize) {
             let PreparedFrameValue::LabelBatch(batch) = stages.stage(json!({"stage":"label_batch","population":population,"range":{"start":start,"stop":population.rows.min(start + u64::from(population.batch_rows))},"previous":batches.last(),"converted":{"kind":"core_keys","values":null}})).unwrap() else { panic!("label batch") };
             let Attachment::FrameLabelBatch(owner) = &stages.held[&batch.owner] else {
@@ -338,11 +341,23 @@ fn unsigned_link_native_rows_survive_owner_rebinding_until_the_real_request_boun
                     .iter()
                     .all(|value| *value >= base && *value < base + 4)
             );
+            native_labels.push(
+                values
+                    .values()
+                    .iter()
+                    .map(|value| value - base)
+                    .collect::<Vec<_>>(),
+            );
             let complete = batch.complete;
             batches.push(batch);
             if complete {
                 break;
             }
+        }
+        if let Some(expected) = &baseline_labels {
+            assert_eq!(&native_labels, expected);
+        } else {
+            baseline_labels = Some(native_labels);
         }
         let PreparedFrameValue::Labels(labelled) = stages
             .stage(json!({"stage":"labels","population":population,"batches":batches}))
@@ -389,6 +404,16 @@ fn unsigned_link_native_rows_survive_owner_rebinding_until_the_real_request_boun
                 .iter()
                 .all(|value| *value >= base && *value < base + 4)
         );
+        let selected = keys
+            .values()
+            .iter()
+            .map(|value| value - base)
+            .collect::<Vec<_>>();
+        if let Some(expected) = &baseline_keys {
+            assert_eq!(&selected, expected);
+        } else {
+            baseline_keys = Some(selected);
+        }
         let output = stages.stage(json!({"stage":"payload","context":context,"text":{"outcome":"converted","columns":[]},"values":null}));
         if base > i64::MAX as u64 {
             let error = output.unwrap_err();

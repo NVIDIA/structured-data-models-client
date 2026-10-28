@@ -530,6 +530,7 @@ impl Labels {
 #[derive(Debug, Clone, PartialEq)]
 pub enum LinkValue {
     Int(i64),
+    UInt(u64),
     Float(f32),
     Bool(bool),
     Text(UnicodeText),
@@ -540,6 +541,7 @@ impl LinkValue {
     fn key(&self) -> Vec<u8> {
         match self {
             Self::Int(v) => v.to_le_bytes().to_vec(),
+            Self::UInt(v) => v.to_le_bytes().to_vec(),
             // pandas equality treats the two signed zeros as one value.
             Self::Float(v) => (v + 0.0).to_bits().to_le_bytes().to_vec(),
             Self::Bool(v) => vec![u8::from(*v)],
@@ -587,13 +589,14 @@ pub fn distinct(
         }
         let value = match column {
             Column::Int(v) => LinkValue::Int(v[row].unwrap_or_default()),
+            Column::UInt(v) => LinkValue::UInt(v[row].unwrap_or_default()),
             Column::Float(v) => LinkValue::Float(v[row].unwrap_or_default()),
             Column::Bool(v) => LinkValue::Bool(v[row].unwrap_or_default()),
             Column::Text(v) => LinkValue::Text(v[row].clone().unwrap_or_default()),
             Column::Decimal { values, scale, .. } => {
                 LinkValue::Decimal(values[row].unwrap_or_default(), *scale)
             }
-            Column::Time(_) | Column::UInt(_) => return Err(not_yet("target_type")),
+            Column::Time(_) => return Err(not_yet("target_type")),
         };
         if seen[at].insert(value.key()) {
             lists[at].push(value);

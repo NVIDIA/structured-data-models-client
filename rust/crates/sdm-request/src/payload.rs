@@ -541,6 +541,32 @@ fn float_key(cell: &Value) -> Result<Value, CoreError> {
     Value::float(value).ok_or_else(|| internal("an integer key is not finite"))
 }
 
+/// A missing example promotes an integer instance-reference column before
+/// request cell encoding. Read the actual physical integer directly, so a
+/// UInt64 key reaches the later range rule on its real related-table column.
+fn integer_reference_float(array: &ArrayRef, row: usize) -> Result<Value, CoreError> {
+    if array.is_null(row) {
+        return Ok(Value::Null);
+    }
+    macro_rules! small {
+        ($t:ty) => {
+            f64::from(array.as_primitive::<$t>().value(row))
+        };
+    }
+    let value = match array.data_type() {
+        DataType::Int8 => small!(Int8Type),
+        DataType::Int16 => small!(Int16Type),
+        DataType::Int32 => small!(Int32Type),
+        DataType::Int64 => array.as_primitive::<Int64Type>().value(row) as f64,
+        DataType::UInt8 => small!(UInt8Type),
+        DataType::UInt16 => small!(UInt16Type),
+        DataType::UInt32 => small!(UInt32Type),
+        DataType::UInt64 => array.as_primitive::<UInt64Type>().value(row) as f64,
+        _ => return Err(internal("a promoted integer reference is not an integer")),
+    };
+    Value::float(value).ok_or_else(|| internal("an integer key is not finite"))
+}
+
 /// `prefix`, or `prefix_1`, `prefix_2` and on, whichever `occupied` does not
 /// hold first.
 fn unique_name(occupied: &[String], prefix: &str) -> String {
@@ -745,6 +771,7 @@ fn target(
                             use sdm_engine::labels::LinkValue as L;
                             let text: UnicodeText = match value {
                                 L::Int(v) => v.to_string().into(),
+                                L::UInt(v) => v.to_string().into(),
                                 L::Float(v) => {
                                     if !v.is_finite() {
                                         return Err(not_finite(TARGET, f64::from(*v)));
@@ -980,6 +1007,7 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
             key_dtype(key_array)?
         };
         let promote = source_dtype == Dtype::Int64 && first.iter().any(Option::is_none);
+        let promote_integer = promote && key_array.data_type().is_integer();
         let dtype = if promote || source_dtype == Dtype::Float32 {
             Dtype::Float64
         } else {
@@ -990,6 +1018,12 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
             .enumerate()
             .map(|(at, row)| match row {
                 Some(row) => {
+                    if promote_integer {
+                        return integer_reference_float(key_array, *row).map_err(|e| {
+                            e.with_field("table", Detail::text(INSTANCE_TABLE))
+                                .with_field("row", count(at))
+                        });
+                    }
                     let value = match &native_strings {
                         Some(strings) => string_cell(strings, *row),
                         None => cell(key_array, *row, &reference, source_dtype),

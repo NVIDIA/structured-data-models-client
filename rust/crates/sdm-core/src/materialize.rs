@@ -1707,6 +1707,25 @@ fn condition_column(
     }
 }
 
+/// LIST_DISTINCT retains the actual unsigned value in its typed list.
+/// Other targets keep their existing signed and temporal admission rules.
+fn list_distinct_column(
+    array: &ArrayRef,
+    rows: &[usize],
+    encoding: Option<sdm_contract::data::strings::StringEncoding>,
+) -> Result<labels::Column, CoreError> {
+    if encoding.is_none() && array.data_type() == &DataType::UInt64 {
+        Ok(labels::Column::UInt(
+            take(array, rows)?
+                .as_primitive::<UInt64Type>()
+                .iter()
+                .collect(),
+        ))
+    } else {
+        static_column(array, rows, encoding)
+    }
+}
+
 /// The rows `rows` of `array`, in that order.
 fn take(array: &ArrayRef, rows: &[usize]) -> Result<ArrayRef, CoreError> {
     let indices = UInt32Array::from_iter_values(rows.iter().map(|r| *r as u32));
@@ -4847,7 +4866,7 @@ fn aggregate_target(
             .ok_or_else(|| unvalidated("a list target with no column"))?;
         let array = named(&fetched.rows, name)?;
         let rows: Vec<usize> = (0..array.len()).collect();
-        let values = static_column(array, &rows, fetched.strings.get(name).copied())?;
+        let values = list_distinct_column(array, &rows, fetched.strings.get(name).copied())?;
         return labels::distinct(
             examples,
             &fetched.batch,
