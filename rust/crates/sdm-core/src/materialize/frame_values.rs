@@ -1362,7 +1362,25 @@ pub(crate) fn task(
     );
     if let Some(hops) = options::hops_ignored(&deferred) {
         asker.warn(CoreWarning {
-            fields: [("num_hops".to_owned(), Detail::text(hops))].into(),
+            fields: [
+                ("num_hops".to_owned(), Detail::text(hops)),
+                // These are the already reached native engine guard facts.
+                // This notice shares a batch with unguarded ContextCapped;
+                // its native warning presentation must retain that boundary.
+                (
+                    "frame_native_rows_per_call".to_owned(),
+                    count(rows_per_call),
+                ),
+                (
+                    "frame_native_dropped_summary".to_owned(),
+                    bound
+                        .graph
+                        .dropped_summary()
+                        .map(Detail::text)
+                        .unwrap_or(Detail::Scalar(Scalar::Null)),
+                ),
+            ]
+            .into(),
             ..CoreWarning::new(
                 Sentence::HopsIgnored,
                 "num_hops is ignored where num_neighbors is given",

@@ -1005,6 +1005,7 @@ def warn_from_core(
     held: list[dict[str, Any]] | None = None,
     *,
     presentation: WarningPresentation = 'coded',
+    frame_part: dict[str, Any] | None = None,
 ) -> None:
     r"""Shows each warning of a ``warnings`` control message, in order, but
     those whose code ``quiet`` names: one the caller has shown already, or
@@ -1061,13 +1062,38 @@ def warn_from_core(
             presentation == 'frame_graph'
             and first['code'] == 'FRAME_ROWS_DROPPED'
         )
-        warnings.warn(
-            text if frame_notice else f'[{first["code"]}] {text}',
-            category=SDMWarning
-            if frame_notice
-            else WARNINGS.get(first['code'], SDMWarning),
-            stacklevel=caller_stacklevel(),
-        )
+        try:
+            warnings.warn(
+                text if frame_notice else f'[{first["code"]}] {text}',
+                category=SDMWarning
+                if frame_notice
+                else WARNINGS.get(first['code'], SDMWarning),
+                stacklevel=caller_stacklevel(),
+            )
+        except Exception as native_error:
+            # Only this frame-task notice was originally emitted inside the
+            # engine guard. CONTEXT_CAPPED in the same warning batch, graph
+            # advice and SQL sampler notices retain their unguarded scope.
+            fields = first.get('fields', {})
+            if not (
+                presentation == 'frame_graph'
+                and first['code'] == 'HOPS_IGNORED'
+                and 'frame_native_rows_per_call' in fields
+            ):
+                raise
+            from sdm_client._rust.frame_native import (
+                NativeFrameFailure,
+                guard_failure,
+            )
+
+            observed = decoded(fields)
+            guard_failure(
+                NativeFrameFailure.capture(native_error),
+                origin='engine',
+                dropped_summary=observed['frame_native_dropped_summary'],
+                rows_per_call=observed['frame_native_rows_per_call'],
+                part=frame_part,
+            )
 
 
 def _opening(template: str, fields: dict[str, Any]) -> str:

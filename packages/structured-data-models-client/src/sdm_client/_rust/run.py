@@ -188,6 +188,7 @@ def run(
     given: set[str] | None = None,
     kept: list[dict[str, Any]] | None = None,
     state: dict[str, Any] | None = None,
+    warning_presentation: errors.WarningPresentation | None = None,
 ) -> Finished:
     r"""Runs ``operation`` to its result, with the attachments its fields name.
 
@@ -218,16 +219,17 @@ def run(
         or operation['op'] == 'prepare_frames'
         or operation.get('direct') is not None
     )
-    warning_presentation: errors.WarningPresentation = 'coded'
-    if owned_frame and operation['op'] in (
-        'describe_source',
-        'prepare_request',
-    ):
-        warning_presentation = 'frame_schema'
-    elif operation.get('direct') is not None:
-        warning_presentation = 'frame_schema'
-    elif owned_frame and operation['op'] in ('materialize', 'prepare_frames'):
-        warning_presentation = 'frame_graph'
+    if warning_presentation is None:
+        warning_presentation = 'coded'
+        if owned_frame and operation['op'] == 'describe_source':
+            warning_presentation = 'frame_schema'
+        elif operation.get('direct') is not None:
+            warning_presentation = 'frame_schema'
+        elif owned_frame and operation['op'] in (
+            'materialize',
+            'prepare_frames',
+        ):
+            warning_presentation = 'frame_graph'
     held = None if state is None else state.get('held')
     if held is not None and operation['op'] != 'prepare_frames':
         memo = max(attachments, default=0) + 1
@@ -278,6 +280,7 @@ def run(
             owned_frame,
             warning_presentation,
             state if operation['op'] == 'prepare_frames' else None,
+            operation.get('part'),
         )
     except BaseException:
         if owned_frame:
@@ -343,6 +346,7 @@ def _steps(
     owned_frame: bool = False,
     warning_presentation: errors.WarningPresentation = 'coded',
     state: dict[str, Any] | None = None,
+    frame_part: dict[str, Any] | None = None,
 ) -> Finished:
     r"""The run's steps, each answered, to its result."""
     try:
@@ -357,7 +361,9 @@ def _steps(
                 internal_context = failed
                 if state is not None:
                     _keep(core, handle, state)
-                _warn(handle, quiet, given, kept, warning_presentation)
+                _warn(
+                    handle, quiet, given, kept, warning_presentation, frame_part
+                )
                 error = errors.error_from_core(
                     failed.control,
                     failed.attachments,
@@ -380,7 +386,7 @@ def _steps(
                 # can reenter this same materializer. Retained graph exports
                 # carry the same live owner, never a replayable raw snapshot.
                 _keep(core, handle, state)
-            _warn(handle, quiet, given, kept, warning_presentation)
+            _warn(handle, quiet, given, kept, warning_presentation, frame_part)
             step = codec.read(control, sent)
             if step['message'] != 'step':
                 raise StructuredDataError(
@@ -607,6 +613,7 @@ def _warn(
     given: set[str] | None,
     kept: list[dict[str, Any]] | None = None,
     warning_presentation: errors.WarningPresentation = 'coded',
+    frame_part: dict[str, Any] | None = None,
 ) -> None:
     taken = handle.take_warnings()
     # Warning filters may raise and retain this frame in a traceback. The
@@ -621,4 +628,5 @@ def _warn(
             given=given,
             held=kept,
             presentation=warning_presentation,
+            frame_part=frame_part,
         )
