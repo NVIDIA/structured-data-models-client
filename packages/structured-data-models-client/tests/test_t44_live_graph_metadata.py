@@ -15,8 +15,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
-from test_t44_text_frames import dt3_no_time_body, p3e2_warning_codes
 from t45_frame_routes import FRAME_ROUTES
+from test_t44_text_frames import dt3_no_time_body, p3e2_warning_codes
 
 from sdm_client import (
     KumoRelational,
