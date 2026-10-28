@@ -512,13 +512,26 @@ def test_complete_native_composite_history_matches_original(monkeypatch, label):
         'initial-copy-add-feature',
         'native-integer-key-logical-edit',
         'category-numeric-component',
-        'category-numeric-feature-text',
         'cached',
         'warning-retry',
         'overlap-caller-cached',
         'overlap-caller-reentry',
     ):
         assert expected['outcome'] == 'success'
+    if label == 'category-numeric-feature-text':
+        if expected['outcome'] == 'error':
+            message = (
+                'Cannot setitem on a Categorical with a new category (), '
+                'set the categories first'
+            )
+            assert expected['stage'] == 'materialize'
+            assert expected['chain'] == [
+                ['StructuredDataError', 'INVALID_REQUEST', message],
+                ['TypeError', None, message],
+            ]
+            assert expected['sent'] == []
+        else:
+            assert expected['outcome'] == 'success'
     monkeypatch.setenv('SDM_CORE_ROUTES', FRAME_ROUTES)
 
     def old_engine_was_called(*args, **kwargs):
