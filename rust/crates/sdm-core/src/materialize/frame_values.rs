@@ -464,6 +464,12 @@ fn label_windows(
 }
 
 fn one_column(data: &ArrowData) -> Result<ArrayRef, CoreError> {
+    if let [rows] = data.batches.as_slice()
+        && rows.num_columns() == 1
+        && data.schema == rows.schema()
+    {
+        return Ok(Arc::clone(rows.column(0)));
+    }
     let rows = one_batch(data)?;
     if rows.num_columns() != 1 {
         return Err(protocol("frame task input is not one column"));
