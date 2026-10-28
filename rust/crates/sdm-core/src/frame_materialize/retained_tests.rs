@@ -7,7 +7,7 @@
 use super::retained::RetainedFrameGraph;
 use super::*;
 use arrow_array::Int64Array;
-use sdm_contract::frames::materialize::{FrameNativeColumn, FrameNativeOrigin, FrameNativeTable};
+use sdm_contract::frames::materialize::{FrameNativeColumn, FrameNativeTable};
 use sdm_contract::ops::{ColumnRef, DescribedColumn, DescribedTable};
 
 pub(crate) fn neighbor_checkpoint(
@@ -74,7 +74,8 @@ pub(crate) fn owner() -> RetainedFrameGraph {
             source: "input_users".into(),
             columns: vec![FrameNativeColumn {
                 name: "id".into(),
-                origin: FrameNativeOrigin::BuiltinPrimitive,
+                declared: None,
+                logical_text: None,
                 strings: None,
             }],
         }],

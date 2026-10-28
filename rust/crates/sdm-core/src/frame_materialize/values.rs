@@ -13,8 +13,9 @@ use arrow_array::{Array, UInt64Array};
 use sdm_contract::data::strings::StringData;
 use sdm_contract::data::{AttachmentId, BATCH_COLUMN};
 use sdm_contract::frames::materialize::{
-    FRAME_MATERIALIZATION_VERSION, FrameNativeColumnRef, FrameNativeTable, FrameTextColumn,
-    PreparedFrameGraph, SampledFrameContext, SampledFrameLink, SampledFrameTable,
+    FRAME_MATERIALIZATION_VERSION, FrameNativeColumnRef, FrameNativeTable,
+    FramePhysicalDeclaration, FrameTextColumn, PreparedFrameGraph, SampledFrameContext,
+    SampledFrameLink, SampledFrameTable,
 };
 use sdm_engine::strings::StringColumn;
 
@@ -129,141 +130,88 @@ fn native_identity(source: &str, native: &[FrameNativeTable]) -> Result<String, 
 }
 
 #[cfg(test)]
-mod native_fact_tests {
-    use super::*;
-    use sdm_contract::frames::materialize::{
-        FrameLogicalText, FrameNativeColumn, FramePhysicalDeclaration, FrameTextBacking,
-        FrameTextMissing,
-    };
-
-    fn source(column: FrameNativeColumn) -> Vec<FrameNativeTable> {
-        vec![FrameNativeTable {
-            source: "input_users".into(),
-            columns: vec![column],
-        }]
-    }
-
-    fn logical() -> FrameNativeColumn {
-        FrameNativeColumn {
-            name: "id".into(),
-            declared: None,
-            logical_text: Some(FrameLogicalText {
-                backing: FrameTextBacking::ElementValues,
-                missing: FrameTextMissing::NullScalar,
-            }),
-            strings: Some(StringEncoding::Utf8),
-        }
-    }
-
-    #[test]
-    fn byte_identical_exports_keep_original_backing_missing_and_declaration_identity() {
-        let original = logical();
-        let mut offset = original.clone();
-        offset.logical_text.as_mut().unwrap().backing = FrameTextBacking::OffsetUtf8;
-        let mut floating = original.clone();
-        floating.logical_text.as_mut().unwrap().missing = FrameTextMissing::IeeeNan;
-        let mut fixed = original.clone();
-        fixed.logical_text = None;
-        fixed.declared = Some(FramePhysicalDeclaration::Physical {
-            physical: sdm_contract::ColumnType::Utf8,
-        });
-        let mut ordinary = original.clone();
-        ordinary.logical_text = None;
-        let identities = [original.clone(), offset, floating, fixed, ordinary]
-            .map(|column| native_identity("identical_exported_rows", &source(column)).unwrap());
-        assert_eq!(
-            identities.iter().collect::<BTreeSet<_>>().len(),
-            identities.len()
-        );
-        assert_eq!(
-            identities[0],
-            native_identity("identical_exported_rows", &source(original)).unwrap()
-        );
-    }
-
-    #[test]
-    fn malformed_native_declarations_cannot_bypass_canonical_identity() {
-        let owner = super::super::retained_tests::owner();
-        let frames = owner.frames();
-        let frames = lock(&frames);
-        let prepared = owner.prepared();
-        let description = &prepared.description;
-        let mut physical = FrameNativeColumn {
-            name: "id".into(),
-            declared: Some(FramePhysicalDeclaration::Physical {
-                physical: sdm_contract::ColumnType::Int64,
-            }),
-            logical_text: None,
-            strings: None,
-        };
-        assert!(validate_native(&frames, description, &source(physical.clone())).is_ok());
-        physical.logical_text = logical().logical_text;
-        assert!(validate_native(&frames, description, &source(physical.clone())).is_err());
-        physical.logical_text = None;
-        physical.declared = Some(FramePhysicalDeclaration::Physical {
-            physical: sdm_contract::ColumnType::Uint64,
-        });
-        assert!(validate_native(&frames, description, &source(physical.clone())).is_err());
-        physical.declared = Some(FramePhysicalDeclaration::Physical {
-            physical: sdm_contract::ColumnType::Decimal128 {
-                precision: 9,
-                scale: 0,
-            },
-        });
-        assert!(validate_native(&frames, description, &source(physical)).is_err());
-    }
-
-    #[test]
-    fn large_offsets_are_accepted_for_logical_text_and_refused_only_for_fixed_declaration() {
-        use arrow_array::LargeStringArray;
-        let owner = super::super::retained_tests::owner();
-        let frames = owner.frames();
-        let mut frames = lock(&frames);
-        let batch = RecordBatch::try_from_iter([(
-            "id",
-            Arc::new(LargeStringArray::from(vec![Some("a"), None])) as ArrayRef,
-        )])
-        .unwrap();
-        frames.tables[0].1 = ArrowData::new(batch.schema(), vec![batch]);
-        let prepared = owner.prepared();
-        let description = &prepared.description;
-        assert!(validate_native(&frames, description, &source(logical())).is_ok());
-        let mut fixed = logical();
-        fixed.logical_text = None;
-        fixed.declared = Some(FramePhysicalDeclaration::LargeUtf8);
-        let error = validate_native(&frames, description, &source(fixed)).unwrap_err();
-        assert_eq!(error.sentence, Sentence::FrameNativeInternal);
-        assert_eq!(
-            error.fields["native_declaration_reason"],
-            Detail::text("fixed_large_utf8")
-        );
-        assert!(!error.fields.contains_key("native_cause_message"));
-    }
-}
+mod native_fact_tests;
 
 pub(crate) fn unsupported_large_string(table: &str, column: &str) -> CoreError {
-    let message = format!(
-        "Encountered unsupported data type 'large_string[pyarrow]' for column '{}' in table '{}'. Please either cast the column to a supported type before building the table (for example df['{}'] = df['{}'].astype('int64')) or remove the column from this table.",
-        column, table, column, column
-    );
     let mut error = CoreError::new(
         Sentence::FrameNativeInternal,
-        "the native engine does not admit exact Arrow large_string dtype",
+        "native table construction does not admit a fixed LargeUtf8 declaration",
     )
-    .with_field("native_type", Detail::text("RuntimeError"))
     .with_field(
-        "message_points",
-        Detail::List(
-            message
-                .chars()
-                .map(|point| Scalar::UInt32(u32::from(point)))
-                .collect(),
-        ),
+        "native_declaration_reason",
+        Detail::text("fixed_large_utf8"),
     )
-    .with_field("native_cause_kind", Detail::text("runtime_error"))
-    .with_field("native_cause_message", Detail::text(message));
+    .with_field("table", Detail::text(table))
+    .with_field("column", Detail::text(column))
+    .with_field(
+        "native_declaration",
+        Detail::text(
+            serde_json::to_string(&FramePhysicalDeclaration::LargeUtf8)
+                .expect("a fixed physical declaration serializes"),
+        ),
+    );
     error.public_details = Some(Default::default());
     error
+}
+
+/// One canonical original declaration, shared by early table admission and
+/// later graph validation. This describes existing admitted native families;
+/// it does not admit a new source conversion or discard original Decimal scale.
+pub(crate) fn check_declaration(declaration: &FramePhysicalDeclaration) -> Result<(), CoreError> {
+    use sdm_contract::ColumnType;
+    use sdm_contract::frames::NativeDecimal;
+    match declaration {
+        FramePhysicalDeclaration::Physical { physical } => {
+            if !matches!(
+                physical,
+                ColumnType::Bool
+                    | ColumnType::Int8
+                    | ColumnType::Int16
+                    | ColumnType::Int32
+                    | ColumnType::Int64
+                    | ColumnType::Uint8
+                    | ColumnType::Uint16
+                    | ColumnType::Uint32
+                    | ColumnType::Uint64
+                    | ColumnType::Utf8
+                    | ColumnType::Timestamp { .. }
+            ) {
+                return Err(invalid(
+                    "native physical declaration has a noncanonical type",
+                ));
+            }
+            physical
+                .check()
+                .map_err(|_| invalid("native physical declaration has invalid parameters"))?;
+        }
+        FramePhysicalDeclaration::LargeUtf8 => {}
+        FramePhysicalDeclaration::Decimal { native } => {
+            let (precision, limit) = match native {
+                NativeDecimal::Decimal32 { precision, .. } => (*precision, 9),
+                NativeDecimal::Decimal64 { precision, .. } => (*precision, 18),
+                NativeDecimal::Decimal128 { precision, .. } => (*precision, 38),
+                NativeDecimal::Decimal256 { precision, .. } => (*precision, 76),
+            };
+            if precision == 0 || precision > limit {
+                return Err(invalid("native Decimal declaration has invalid precision"));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn declared_export(declaration: &FramePhysicalDeclaration) -> DataType {
+    use sdm_contract::frames::NativeDecimal;
+    match declaration {
+        FramePhysicalDeclaration::Physical { physical } => physical.to_arrow(),
+        FramePhysicalDeclaration::LargeUtf8 => DataType::LargeUtf8,
+        FramePhysicalDeclaration::Decimal { native } => match native {
+            NativeDecimal::Decimal32 { precision, .. }
+            | NativeDecimal::Decimal64 { precision, .. }
+            | NativeDecimal::Decimal128 { precision, .. } => DataType::Decimal128(*precision, 0),
+            NativeDecimal::Decimal256 { precision, .. } => DataType::Decimal256(*precision, 0),
+        },
+    }
 }
 
 fn validate_native(
@@ -302,9 +250,45 @@ fn validate_native(
             if column.name != *field.name() {
                 return Err(invalid("frame native origins change original column order"));
             }
-            if column.origin == sdm_contract::frames::materialize::FrameNativeOrigin::ArrowDtype
-                && field.data_type() == &DataType::LargeUtf8
-            {
+            if column.declared.is_some() && column.logical_text.is_some() {
+                return Err(invalid(
+                    "native source has contradictory physical and logical declarations",
+                ));
+            }
+            if column.logical_text.is_some() && column.strings.is_none() {
+                return Err(invalid(
+                    "logical text source lacks its exported string encoding",
+                ));
+            }
+            if let Some(declared) = &column.declared {
+                check_declaration(declared)?;
+                // Shared frame admission narrows large offsets to Utf8. The
+                // original fixed declaration must survive that transformation;
+                // logical text exporting the same buffers remains distinct.
+                let matches_export = if matches!(declared, FramePhysicalDeclaration::LargeUtf8) {
+                    matches!(field.data_type(), DataType::Utf8 | DataType::LargeUtf8)
+                } else {
+                    field.data_type() == &declared_export(declared)
+                };
+                if !matches_export {
+                    return Err(invalid(
+                        "native physical declaration differs from its exported storage",
+                    ));
+                }
+                let text = matches!(
+                    declared,
+                    FramePhysicalDeclaration::LargeUtf8
+                        | FramePhysicalDeclaration::Physical {
+                            physical: sdm_contract::ColumnType::Utf8
+                        }
+                );
+                if column.strings != text.then_some(StringEncoding::Utf8) {
+                    return Err(invalid(
+                        "native physical declaration differs from its exported encoding",
+                    ));
+                }
+            }
+            if column.declared == Some(FramePhysicalDeclaration::LargeUtf8) {
                 let name = description
                     .tables
                     .iter()

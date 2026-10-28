@@ -583,10 +583,11 @@ fn native_graph(mut attached: Attachments) {
                     );
                     json!({
                         "name":field.name(),
-                        "origin":if string {
-                            json!({"pandas_string":{"storage":"python","missing":"pandas_na"}})
+                        "declared":null,
+                        "logical_text":if string {
+                            json!({"backing":"element_values","missing":"null_scalar"})
                         } else {
-                            json!("builtin_primitive")
+                            Value::Null
                         },
                         "strings":if string {json!("utf8")} else {Value::Null}
                     })

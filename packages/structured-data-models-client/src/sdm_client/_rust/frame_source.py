@@ -17,6 +17,7 @@ import pandas as pd
 
 from sdm_client._rust import codec
 from sdm_client._rust.frame_decimals import native_decimal_type
+from sdm_client._rust.frame_facts import native_declaration, observed_content
 from sdm_client._rust.spec import held_column
 
 
@@ -30,7 +31,7 @@ def meaning(
     dtype = values.dtype
     object_dtype = pd.api.types.is_object_dtype(dtype)
     string_dtype = pd.api.types.is_string_dtype(dtype)
-    inferred = (
+    inferred = observed_content(
         pd.api.types.infer_dtype(values, skipna=True)
         if object_dtype or string_dtype
         else None
@@ -177,16 +178,13 @@ def table_meaning(
     table: dict[str, Any], frame: pd.DataFrame, state: dict[str, Any]
 ) -> dict[str, Any]:
     """Admit physical table types after all declared native casts."""
-    import pyarrow as pa
-
     from sdm_client._rust.frame_facade import _adopt, _Bindings, _prepare
 
     bindings = _Bindings()
     native = [
         {
             'name': column,
-            'arrow_large_string': type(dtype) is pd.ArrowDtype
-            and pa.types.is_large_string(dtype.pyarrow_dtype),
+            'declared': native_declaration(dtype),
         }
         for column, dtype in frame.dtypes.items()
     ]

@@ -67,38 +67,54 @@ pub struct RelationalOptions {
     pub output_type: String,
 }
 
-/// Native dtype identity, independently of logical schema dtype edits and
-/// physical Arrow offset width. No semantic inference policy lives here.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum FrameNativeOrigin {
-    BuiltinPrimitive,
-    PandasString {
-        storage: FrameStringStorage,
-        missing: FrameStringMissing,
+/// Original reconstruction declaration, independently of exported buffers.
+/// Native Decimal widths and full i32 scale are not narrowed to interchange
+/// admission's widened scale-zero physical representation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "declaration", rename_all = "snake_case", deny_unknown_fields)]
+pub enum FramePhysicalDeclaration {
+    /// Canonical non-Decimal scalar declaration. The shared reader rejects
+    /// Decimal interchange variants in favor of the original descriptor below.
+    Physical {
+        physical: ColumnType,
     },
-    ArrowDtype,
+    LargeUtf8,
+    Decimal {
+        native: super::NativeDecimal,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
-pub enum FrameStringStorage {
-    Python,
-    Pyarrow,
+pub enum FrameTextBacking {
+    ElementValues,
+    OffsetUtf8,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
-pub enum FrameStringMissing {
-    PandasNa,
-    FloatingNan,
+pub enum FrameTextMissing {
+    NullScalar,
+    IeeeNan,
+}
+
+/// Original logical text storage/missing semantics, not its exported offset
+/// width or its later reached lowercase operation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FrameLogicalText {
+    pub backing: FrameTextBacking,
+    pub missing: FrameTextMissing,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct FrameNativeColumn {
     pub name: String,
-    pub origin: FrameNativeOrigin,
+    /// At most one original declaration or logical-text fact may be present.
+    /// Neither is needed for ordinary primitive, object or category sources.
+    pub declared: Option<FramePhysicalDeclaration>,
+    pub logical_text: Option<FrameLogicalText>,
     /// Present only for logical string source data, explicitly binding an
     /// exceptional Binary buffer to its native Unicode meaning.
     pub strings: Option<StringEncoding>,
