@@ -87,29 +87,26 @@ fn stage(
     let run = HostRun::start(&sdm_host::default_root(), &message, attached)
         .unwrap_or_else(|out| panic!("{:?}", sdm_host::read(&out)));
     let mut warnings = vec![];
-    loop {
-        let next = run.next().unwrap();
-        if let Some(out) = run.take_warnings().unwrap() {
-            let ControlMessage::Warnings { warnings: notices } = sdm_host::read(&out).unwrap()
+    let next = run.next().unwrap();
+    if let Some(out) = run.take_warnings().unwrap() {
+        let ControlMessage::Warnings { warnings: notices } = sdm_host::read(&out).unwrap() else {
+            panic!("warning drain must return warnings")
+        };
+        warnings.extend(notices.into_iter().map(|n| n.sentence));
+        assert!(run.take_warnings().unwrap().is_none());
+    }
+    match sdm_host::read(&next).unwrap() {
+        ControlMessage::Step(Step::Done {
+            result: OperationResult::InferredFrames(result),
+            ..
+        }) => {
+            let Attachment::Bytes(bytes) = run.take_attachment(result.value).unwrap().unwrap()
             else {
-                panic!("warning drain must return warnings")
+                panic!("inference facts must be bytes")
             };
-            warnings.extend(notices.into_iter().map(|n| n.sentence));
-            assert!(run.take_warnings().unwrap().is_none());
+            (serde_json::from_slice(&bytes).unwrap(), warnings)
         }
-        match sdm_host::read(&next).unwrap() {
-            ControlMessage::Step(Step::Done {
-                result: OperationResult::InferredFrames(result),
-                ..
-            }) => {
-                let Attachment::Bytes(bytes) = run.take_attachment(result.value).unwrap().unwrap()
-                else {
-                    panic!("inference facts must be bytes")
-                };
-                return (serde_json::from_slice(&bytes).unwrap(), warnings);
-            }
-            other => panic!("time facts must not fetch or call a model: {other:?}"),
-        }
+        other => panic!("time facts must not fetch or call a model: {other:?}"),
     }
 }
 

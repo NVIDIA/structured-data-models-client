@@ -504,8 +504,8 @@ fn text_operand_projection_tracks_sorted_source_positions_and_strict_thresholds(
             .positions
             .iter()
             .map(|&at| equal_text[at as usize])
-            .count(),
-        3
+            .collect::<Vec<_>>(),
+        ["same", "same", "same"]
     );
     assert_eq!(projected.inverse, [2, 1, 2, 0, 1]);
 }
