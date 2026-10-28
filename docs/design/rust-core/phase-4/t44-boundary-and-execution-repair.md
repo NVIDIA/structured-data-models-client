@@ -177,6 +177,22 @@ Retain exact unsupported native-family outcomes where the frozen reference requi
 Review the connected producer, identity consumer, value-kind reader and failure presenter together before the next execution.
 The already observed import, handwritten formatting and Decimal annotation defects are bounded companion repairs, with no suppressions or changed expectations.
 
+## Complete current-journey feedback
+
+The remaining 19 existing public frame/LINK files ran on the unchanged approved candidate with 532 passes and 229 failures.
+The full actual output exposed stale per-file route opt-ins and JSON-observer container assumptions, as well as concrete product defects.
+Test opt-ins now derive complete families from the routing inventory, with prediction-only tests selecting only the complete prediction group.
+JSON observers retain the tuple API assertion and compare all values in the recorded array container; frozen expectations remain unchanged.
+
+Repair the observed current-journey defects before claiming its acceptance.
+LINK sampling and context revalidation must retain the primary key for both entity roles, while ordinary related tables keep their existing synthetic-key behavior.
+Derive the unique referenced role as metadata before sampling without moving the existing invalid-target or missing-history refusal positions.
+Restore the existing entity-filter notice after ordinary question validation and before native graph construction, preserving warning-handler effects, error scope and child-decomposition order.
+Native reference conversion retries must leave each failed-cast handler before entering the next cast, retaining the original last failure and caller-owned exception context.
+Reentry observers must mark the same reached normalization scope as the frozen witness, rather than triggering during unrelated earlier native inference.
+Use the existing complete frozen public consumers and pure Rust host journeys as the failing-first evidence, adding only tests needed to distinguish role ownership, malformed products and native observation/error timing.
+Keep any distinct remaining failure explicitly open until its full output and actual producer/reader rule are understood.
+
 The original fixed physical declaration cannot be represented by `ColumnType` alone.
 That admitted interchange vocabulary omits LargeUTF8 and Decimal32/64 and narrows Decimal scale to i8, while the already admitted native Decimal facts retain all four widths and full i32 scale.
 Compose the existing neutral physical vocabulary with an explicit LargeUTF8 declaration and the existing `NativeDecimal` descriptor; do not substitute the exported scale-zero/widened storage type for the native declaration.
