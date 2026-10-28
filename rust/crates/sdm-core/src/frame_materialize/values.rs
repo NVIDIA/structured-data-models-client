@@ -5,7 +5,7 @@
 //! Ownership and Arrow rebinding for the fixed frame value consumers.
 //! Pending final composition: this module is unlinked on the preserved base.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use arrow_array::cast::AsArray;
 use arrow_array::types::UInt64Type;
@@ -14,8 +14,8 @@ use sdm_contract::data::strings::StringData;
 use sdm_contract::data::{AttachmentId, BATCH_COLUMN};
 use sdm_contract::frames::materialize::{
     FRAME_MATERIALIZATION_VERSION, FrameNativeColumnRef, FrameNativeTable,
-    FramePhysicalDeclaration, FrameTextColumn, PreparedFrameGraph, SampledFrameContext,
-    SampledFrameLink, SampledFrameTable,
+    FramePhysicalDeclaration, FrameRowProjection, FrameTextColumn, PreparedFrameGraph,
+    SampledFrameContext, SampledFrameLink, SampledFrameTable,
 };
 use sdm_engine::strings::StringColumn;
 
@@ -498,6 +498,35 @@ impl BoundGraph {
     }
 }
 
+/// The local native sampler compacts repeated source nodes only above its
+/// strict redundancy threshold. Equal cell values never establish identity.
+/// Ineligible anchor-dependent features retain expanded occurrence order.
+#[allow(
+    clippy::cast_precision_loss,
+    reason = "the native redundancy comparison uses float64 lengths"
+)]
+pub(crate) fn text_row_projection(source: &[usize], eligible: bool) -> Option<FrameRowProjection> {
+    if !eligible {
+        return None;
+    }
+    let mut first = BTreeMap::new();
+    for (at, &row) in source.iter().enumerate() {
+        first.entry(row).or_insert((at, 0));
+    }
+    if source.len() as f64 <= 1.05 * first.len() as f64 {
+        return None;
+    }
+    let mut positions = Vec::with_capacity(first.len());
+    for (ordinal, (position, compact)) in first.values_mut().enumerate() {
+        positions.push(*position as u64);
+        *compact = ordinal as u64;
+    }
+    Some(FrameRowProjection {
+        positions,
+        inverse: source.iter().map(|row| first[row].1).collect(),
+    })
+}
+
 impl SampledContext {
     /// Export only actual raw sampled columns, ownership, source rows and links.
     /// The payload stage independently rebinds them to their immutable source.
@@ -554,7 +583,19 @@ impl SampledContext {
             columns.push((BATCH_COLUMN.to_owned(), positional(&table.batch)?));
             let rows = RecordBatch::try_from_iter(columns)
                 .map_err(|_| internal("sampled frame columns do not align"))?;
-            identity.value(&(&table.name, &source, &table.primary_key, &table.stypes))?;
+            // The admitted native graph has no end-time role. Its Text
+            // features are independent of the occurrence's anchor.
+            let text_rows = text_row_projection(
+                source_rows,
+                table.stypes.iter().any(|(_, stype)| *stype == Stype::Text),
+            );
+            identity.value(&(
+                &table.name,
+                &source,
+                &table.primary_key,
+                &table.stypes,
+                &text_rows,
+            ))?;
             identity.arrow(&ArrowData::new(rows.schema(), vec![rows.clone()]))?;
             let source_data =
                 RecordBatch::try_from_iter([("source_row", positional(source_rows)?)])
@@ -583,6 +624,7 @@ impl SampledContext {
                 primary_key: table.primary_key,
                 rows,
                 source_rows,
+                text_rows,
                 stypes: table.stypes,
             });
         }

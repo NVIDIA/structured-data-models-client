@@ -848,8 +848,11 @@ def _single(
                 )
                 rows = _table(context.owners[table['rows']])
                 native = selected['native']
+                operand = rows.column(selected['column']['column'])
+                if table['text_rows'] is not None:
+                    operand = operand.take(table['text_rows']['positions'])
                 selected_series = _native_series(
-                    rows.column(selected['column']['column']),
+                    operand,
                     columns,
                     native,
                     _string_encoding(graph.data, native),

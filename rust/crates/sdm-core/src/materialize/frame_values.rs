@@ -33,6 +33,7 @@ use crate::attached::{take_json, take_option_values, take_option_values_if};
 use crate::frame_materialize::identity::{Identity, ordered_coverage};
 use crate::frame_materialize::values::{
     BoundGraph, attach_array, attach_json, positions, take_array, take_arrow, take_strings,
+    text_row_projection,
 };
 use crate::run::Attachments;
 
@@ -2221,6 +2222,7 @@ fn bind_context(
             &table.source,
             &table.primary_key,
             &table.stypes,
+            &table.text_rows,
         ))?;
         identity.arrow(&rows)?;
         identity.arrow(&source_rows)?;
@@ -2230,6 +2232,15 @@ fn bind_context(
         if source_rows.len() != rows.num_rows() || batch.iter().any(|&row| row >= anchors.len()) {
             return Err(protocol(
                 "sampled frame rows do not align with source positions and task ownership",
+            ));
+        }
+        let expected_text_rows = text_row_projection(
+            &source_rows,
+            stypes.iter().any(|(_, stype)| *stype == Stype::Text),
+        );
+        if table.text_rows != expected_text_rows {
+            return Err(protocol(
+                "native text operand projection differs from its exact source rows",
             ));
         }
         let columns = rows
@@ -2472,7 +2483,14 @@ fn normalize_text(
             .iter()
             .find(|table| table.name == converted.column.table)
             .ok_or_else(|| protocol("converted native text names an absent sampled table"))?;
-        if array.len() != table.batch.len() || array.null_count() != 0 {
+        let operand_rows = context
+            .value
+            .tables
+            .iter()
+            .find(|value| value.name == table.name)
+            .and_then(|value| value.text_rows.as_ref())
+            .map_or(table.batch.len(), |projection| projection.positions.len());
+        if array.len() != operand_rows || array.null_count() != 0 {
             return Err(protocol(
                 "converted native text must cover every selected row after native fillna",
             )
@@ -2518,6 +2536,21 @@ fn normalize_text(
                     })
             })
             .collect::<Result<Vec<_>, CoreError>>()?;
+        let words = if let Some(projection) = context
+            .value
+            .tables
+            .iter()
+            .find(|value| value.name == table.name)
+            .and_then(|value| value.text_rows.as_ref())
+        {
+            projection
+                .inverse
+                .iter()
+                .map(|&at| words[at as usize].clone())
+                .collect()
+        } else {
+            words
+        };
         column.1 = payload::SampledColumn::Words(words);
     }
     Ok(())

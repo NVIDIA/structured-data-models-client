@@ -324,6 +324,15 @@ pub struct ResolvedFrameReferences {
     pub owner: AttachmentId,
 }
 
+/// Shared native operand positions and occurrence expansion for one table.
+/// Positions index its published raw rows, in original source-row order.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FrameRowProjection {
+    pub positions: Vec<u64>,
+    pub inverse: Vec<u64>,
+}
+
 /// Selected raw feature columns plus the existing batch ordinal column.
 /// This is Arrow context data, not partially encoded model JSON.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -336,6 +345,8 @@ pub struct SampledFrameTable {
     /// UInt64 original source positions for immutable native dtype conversion.
     /// Distinct from the example-ownership batch column in rows.
     pub source_rows: AttachmentId,
+    /// None preserves the expanded occurrence population and its order.
+    pub text_rows: Option<FrameRowProjection>,
     pub stypes: Vec<(String, Stype)>,
 }
 
