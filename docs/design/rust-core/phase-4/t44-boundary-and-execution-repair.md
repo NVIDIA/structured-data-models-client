@@ -255,3 +255,28 @@ The existing caller-provided `rows_per_call` refusal must preserve that provided
 Reuse the existing neutral JSON-given field and host G formatter for that presentation, keeping validation in Rust and preserving the absence of native graph work.
 Warning comparisons retain only the existing P3E-2 optional leading code difference, preserving complete bodies, categories, order and effects.
 These repairs do not change frozen expected records or grant a package pass.
+
+
+## Reached overlap observations and relational payload presentation
+
+The approved R24 public run leaves four complete composite-history comparisons failing: two missing relationship-overlap notices, one nested request-range cause chain, and one constructed categorical numeric column whose request dtype incorrectly follows exported physical storage.
+The existing frozen complete observations remain the failing-first oracle, and the source-only R25 repair keeps every payload, warning, error, callback and mutation assertion.
+
+Add one closed relationship-overlap evidence product on the existing frame preparation boundary after ordinary question checks and FILTER presentation and before native inputs.
+Input-sized evidence remains a JSON bytes attachment.
+Each ordered record owns its relationship endpoints and either unavailable native values or actual child distinct count, optionally reached parent distinct count and optionally reached intersection Boolean.
+Both native unique operations precede either length observation; child-empty suppresses parent length, and either empty side suppresses membership.
+Rust validates these finite optional shapes and selects all nonempty disjoint positions in traversal order without deduplication, emitting one aggregate notice only after all observations finish.
+Python retains the actual relationship objects locally for selected native string presentation and later first-link advice attribute reads, while Rust owns selection, singular/plural wording and the sentence.
+Ordinary decomposition children observe independently, their parent stays silent, and retained graphs do not skip this per-call observation.
+All native observations and warning-handler errors remain outside the engine guard, with no graph owner or random draw and fresh later graph reads after handler mutation.
+
+At the existing frame payload build boundary only, mark the exact PastInt64 error with a closed private presentation reason.
+Python removes only that private reason from public details and reconstructs the existing qualified ValueError caused by the value-free bare ValueError before adding any outer part suffix.
+Shared SQL and early scalar range readers retain their current behavior.
+
+A constructed String meaning over admitted primitive numeric or Boolean storage needs a distinct internal sampled-column carrier, independent of the exported Arrow datatype.
+Encode it only at the existing request-cell position using the shared primitive raw-value and string formatting kernels; validate relational nonfinite floats before stringification, retaining NaN/null behavior and exact widened Float32 spelling.
+Carry String through entity-reference dtype selection and disable integer missing-reference promotion for that meaning, while keeping physical Snapshot keys unchanged.
+Real UTF8 and surrogate-preserving string carriers retain their explicit encodings; raw callers without a completed constructed String meaning retain physical inference.
+Boundary consumers cover signed/unsigned widths, Boolean values, signed zero, JSON-safe and int64 limits, null/NaN/infinity, references, retained ownership and all overlap short-circuit/error/mutation cases before implementation.
