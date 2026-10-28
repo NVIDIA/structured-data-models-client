@@ -52,6 +52,8 @@ made='{tmp_path}/made-{differs}'
 mkdir -p "$made"
 runs=rust-host
 differs={differs}
+database=''
+database_args=()
 overlay=()
 worktrees=()
 {_observe()}

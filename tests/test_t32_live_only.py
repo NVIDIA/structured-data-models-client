@@ -276,6 +276,9 @@ def test_t32_a_java_leg_once_baselined_is_held_by_the_no_removal_rule() -> None:
                 return json.dumps(line) + '\n'
             return ''
 
+        def json_lines(self, path: str) -> list[dict[str, Any]]:
+            return ratchet.jsonl(self.read(path), path)
+
     held = ratchet.baselines(Tree())
     assert held['java'] == {line['case']: line}
     report = ratchet.Report()
