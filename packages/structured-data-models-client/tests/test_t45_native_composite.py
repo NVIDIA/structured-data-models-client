@@ -60,6 +60,10 @@ CASES = (
     'constructor-error',
     'constructor-later-table',
     'constructor-reset',
+    'constructor-columns-drop',
+    'constructor-columns-add',
+    'native-time-before-stype',
+    'native-key-before-time',
     'constructor-sample-mutation',
     'fold-copy',
     'fold-copy-error',
@@ -82,6 +86,7 @@ def _observe(label):
     constructor_resets = {}
     fold_copies = 0
     native_sample = None
+    column_mutation = False
     mutations = []
     schema = None
 
@@ -125,6 +130,13 @@ def _observe(label):
             return Rendered(value) if label == 'replace' else value
 
     data, primary, times, links, query = configure('int64', 'composite-history')
+    if label == 'native-time-before-stype':
+        data['buys'].insert(1, 'early', np.arange(len(data['buys'])))
+    if label == 'native-key-before-time':
+        data['users']['ts'] = pd.date_range(
+            '2020-01-01', periods=len(data['users'])
+        )
+        times['users'] = 'ts'
     if label == 'native-link-dtype':
         data['items']['item_id'] = data['items']['item_id'].astype(str)
         data['buys']['item_id'] = data['buys']['item_id'].astype(str)
@@ -190,6 +202,7 @@ def _observe(label):
         'constructor-error',
         'constructor-later-table',
         'constructor-sample-mutation',
+        'native-time-before-stype',
         'fold-copy',
         'fold-copy-error',
         'fold-copy-mutation',
@@ -224,7 +237,21 @@ def _observe(label):
         return result
 
     def reset(frame, *args, **kwargs):
-        nonlocal native_sample
+        nonlocal native_sample, column_mutation
+        if (
+            label.startswith('constructor-columns-')
+            and stage == 'materialize'
+            and not column_mutation
+            and 'user_id' in frame
+            and 'age' in frame
+            and 'buy_id' not in frame
+        ):
+            column_mutation = True
+            trace.append(('constructor-columns', tuple(frame.columns)))
+            if label.endswith('-drop'):
+                frame.drop(columns=['age'], inplace=True)
+            else:
+                frame['reset_added'] = 7
         if (
             label == 'constructor-reset'
             and stage == 'materialize'
@@ -279,6 +306,14 @@ def _observe(label):
                 time_columns=times,
                 relationships=links,
             )
+            if label == 'native-time-before-stype':
+                data['buys']['early'] = ['changed'] * len(data['buys'])
+                data['buys']['ts'] = np.arange(len(data['buys']))
+            if label == 'native-key-before-time':
+                data['users']['user_id'] = pd.date_range(
+                    '2020-01-01', periods=len(data['users'])
+                )
+                data['users']['ts'] = np.arange(len(data['users']))
             if label == 'category-numeric-feature-text':
                 schema['users']['age'].stype = 'text'
             if label == 'native-link-dtype':
@@ -397,6 +432,7 @@ def test_complete_native_composite_history_matches_original(monkeypatch, label):
         'collision-text-id',
         'replace',
         'constructor-reset',
+        'constructor-columns-add',
         'fold-copy',
         'fold-copy-mutation',
         'native-integer-key-logical-edit',

@@ -302,3 +302,23 @@ fn fixed_constructed_text_survives_numeric_export_without_bypassing_raw_type_gua
     column.constructed = Some(Dtype::Int);
     assert!(validate_native(&frames, &description, &source(column)).is_err());
 }
+
+#[test]
+fn native_timestamp_constructor_date_fact_matches_both_timestamp_wire_aliases() {
+    use arrow_array::TimestampMicrosecondArray;
+    let owner = super::super::retained_tests::owner();
+    let frames = owner.frames();
+    let mut frames = lock(&frames);
+    let batch = RecordBatch::try_from_iter([("id", Arc::new(TimestampMicrosecondArray::from(vec![1, 2])) as ArrayRef)]).unwrap();
+    frames.tables[0].1 = ArrowData::new(batch.schema(), vec![batch]);
+    let mut description = owner.prepared().description.clone();
+    description.tables[0].primary_key.clear();
+    description.tables[0].columns[0].stype = Stype::Timestamp;
+    let native = source(FrameNativeColumn { name: "id".into(), constructed: Some(Dtype::Date), declared: None, logical_text: None, strings: None });
+    for dtype in [Dtype::Date, Dtype::Time] {
+        description.tables[0].columns[0].dtype = dtype;
+        assert!(validate_native(&frames, &description, &native).is_ok());
+    }
+    description.tables[0].columns[0].dtype = Dtype::String;
+    assert!(validate_native(&frames, &description, &native).is_err());
+}

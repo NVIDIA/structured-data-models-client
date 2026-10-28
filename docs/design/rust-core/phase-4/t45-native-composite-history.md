@@ -214,3 +214,18 @@ The same typed fact is accepted from every host, participates in native source i
 Where the fact is absent because a raw host did not observe construction, retain the existing physical-buffer Text guard unchanged.
 This avoids both guessing numerical-category semantics from its exported numerical buffer and introducing a native-host bypass.
 No new inference, callback or source reread occurs in this reader.
+
+## Second whole-source feedback: stable names, role setters and temporal aliases
+
+Both R23 reports are fully read and remain immutable failed-review evidence.
+Freeze the original ordered physical column names before the first cached reset sample, while preserving mutable sample contents for later inference.
+A reset callback that removes a later field must retain the original native lookup failure; an added field must not become a new inferred constructor column.
+
+Use the same existing wire-type equivalence on both sides of constructed/source comparisons.
+The constructor's Date observation remains Date, while Date and Time share the timestamp wire alias and must compare coherently in both native graph and row-identity/checkpoint readers.
+Keep the closed constructed-domain check and all contradictory-type refusals.
+
+Before the caller-order stype loop, apply original scalar/compound primary-key ID assignment and then the live time-column timestamp assignment against the actual constructed types.
+Preserve competing-error precedence and native ValueError causes before any later table effect.
+The caller's column order still governs the following general stype assignments.
+No contract shape, published version, callback or route exception is needed for these reader/order corrections.

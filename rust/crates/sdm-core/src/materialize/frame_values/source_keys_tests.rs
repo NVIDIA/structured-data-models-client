@@ -238,3 +238,28 @@ fn native_stype_assignment_refuses_before_later_table_effects_with_a_native_caus
         Detail::text("metadata_validation")
     );
 }
+
+#[test]
+fn native_role_assignment_precedes_caller_column_stype_order() {
+    let mut fixed = table();
+    let mut ts = fixed.table.columns[1].clone();
+    ts.name = "ts".into(); ts.dtype = "timestamp[us]".into(); ts.stype = Stype::Timestamp;
+    fixed.table.time_column = Some("ts".into());
+    fixed.table.columns.push(ts);
+    fixed.constructed.push(FrameConstructedColumn { name: "ts".into(), dtype: Dtype::Int, stype: Stype::Categorical });
+    fixed.table.columns[0].stype = Stype::Numerical;
+    let key = source_keys::key(fixed.clone(), fixed.table.primary_key.clone()).unwrap();
+    let error = source_keys::metadata(reached_metadata(key, fixed.table)).unwrap_err();
+    assert_eq!(error.sentence, Sentence::IncompatibleSemanticType);
+    assert_eq!(error.fields["column"], Detail::text("ts"));
+    assert_eq!(error.fields["stype"], Detail::text("timestamp"));
+    let mut fixed = table();
+    fixed.table.primary_key = vec!["b".into()];
+    fixed.table.time_column = Some("a".into());
+    fixed.constructed[1].dtype = Dtype::Date;
+    fixed.constructed[1].stype = Stype::Timestamp;
+    let key = source_keys::key(fixed.clone(), fixed.table.primary_key.clone()).unwrap();
+    let error = source_keys::metadata(reached_metadata(key, fixed.table)).unwrap_err();
+    assert_eq!(error.fields["column"], Detail::text("b"));
+    assert_eq!(error.fields["stype"], Detail::text("ID"));
+}
