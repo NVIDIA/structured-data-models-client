@@ -47,6 +47,14 @@ def test_lossless_native_decimal_mantissa_view(bits, scale):
     make = getattr(pa, f'decimal{bits}')
     assert storage.type == make(1, 0)
     assert storage.num_chunks == len(chunks)
+    assert [len(chunk) for chunk in storage.chunks] == [3, 1, 0]
+    assert [chunk.offset for chunk in storage.chunks] == [1, 0, 0]
+    assert [chunk.null_count for chunk in storage.chunks] == [1, 0, 0]
+    assert [chunk.is_valid().to_pylist() for chunk in storage.chunks] == [
+        [True, False, True],
+        [True],
+        [],
+    ]
     for source, view in zip(chunks, storage.chunks, strict=True):
         assert len(view) == len(source)
         assert view.offset == source.offset
