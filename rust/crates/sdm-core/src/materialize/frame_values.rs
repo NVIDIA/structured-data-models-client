@@ -2020,6 +2020,10 @@ pub(crate) fn context(
                 hops: &hops,
                 neighbor_values: bound.deferred.neighbors.as_deref(),
                 excluded: &excluded,
+                link_target: super::link_target_role(
+                    &bound.task.labels.graph.prepared.graph,
+                    &bound.task.labels.asked.target,
+                ),
                 seed: (!bound.task.value.labelled.meaning.unseeded)
                     .then(|| bound.task.value.labelled.meaning.seed.to_u128())
                     .flatten(),
@@ -2092,7 +2096,10 @@ fn bind_context(
             .table(&table.name)
             .ok_or_else(|| protocol("sampled frame context names an absent table"))?;
         let stypes = crate::subgraph::features(&graph.prepared.graph, domain, &excluded);
-        let primary = if table.name == plan.task.value.labelled.meaning.entity.table {
+        let primary = if table.name == plan.task.value.labelled.meaning.entity.table
+            || super::link_target_role(&graph.prepared.graph, &plan.task.labels.asked.target)
+                == Some(table.name.as_str())
+        {
             domain.primary_key.clone()
         } else {
             None
@@ -2456,37 +2463,7 @@ pub(crate) fn payload_part(
     }
     let asked = &context.plan.task.labels.asked;
     let graph = &context.plan.task.labels.graph.prepared.graph;
-    let link_target = if let Shape::Aggregated(windowed) = &asked.target {
-        if windowed.aggregation == labels::Aggregation::ListDistinct {
-            let column = windowed
-                .column
-                .as_deref()
-                .ok_or_else(|| unvalidated("a list target with no column"))?;
-            let edges = graph
-                .edges
-                .iter()
-                .filter(|edge| edge.src == windowed.table && edge.fkey == column)
-                .collect::<Vec<_>>();
-            match edges.as_slice() {
-                [edge] => Some(edge.dst.clone()),
-                _ => {
-                    return Err(CoreError::new(
-                        Sentence::LinkTargetNotForeignKey,
-                        "the list target is not one foreign key",
-                    )
-                    .with_field(
-                        "column",
-                        Detail::text(format!("{}.{}", windowed.table, column)),
-                    )
-                    .into());
-                }
-            }
-        } else {
-            None
-        }
-    } else {
-        None
-    };
+    let link_target = super::link_target(graph, &asked.target)?;
     if let Some(target) = &link_target
         && !context
             .walked

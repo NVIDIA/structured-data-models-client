@@ -106,6 +106,7 @@ pub(crate) struct FrameWalkOptions<'a> {
     pub neighbor_values: Option<&'a [Value]>,
     pub excluded: &'a [(String, String)],
     pub seed: Option<u128>,
+    pub link_target: Option<&'a str>,
 }
 
 fn bound_tables(
@@ -634,6 +635,7 @@ impl FrameRun {
             neighbor_values,
             excluded,
             seed,
+            link_target,
         } = options;
         // The caller has resolved this batch's actual converted values
         // before resetting the continuing neighbor stream, independently
@@ -709,7 +711,8 @@ impl FrameRun {
                     .table(&table.name)
                     .ok_or_else(|| internal("sampled unknown frame"))?;
                 let features = crate::subgraph::features(graph, described, excluded);
-                let is_entity = table.name == entity.name;
+                let is_entity =
+                    table.name == entity.name || link_target == Some(table.name.as_str());
                 let columns = table
                     .rows
                     .schema()
@@ -930,6 +933,7 @@ mod parent_hop_tests {
                     neighbor_values: None,
                     excluded: &[],
                     seed: Some(99),
+                    link_target: None,
                 },
             )?;
             let before = frame.neighbors.checkpoint();
@@ -947,6 +951,7 @@ mod parent_hop_tests {
                             neighbor_values: None,
                             excluded: &[],
                             seed: Some(7),
+                            link_target: None,
                         }
                     )
                     .is_err()
@@ -993,6 +998,7 @@ mod parent_hop_tests {
                         neighbor_values: None,
                         excluded: &[],
                         seed: Some(99),
+                        link_target: None,
                     },
                 )?;
                 assert_ne!(frame.metadata.as_ref().unwrap().neighbors.position, 624);
@@ -1008,6 +1014,7 @@ mod parent_hop_tests {
                         neighbor_values: None,
                         excluded: &[],
                         seed: Some(7),
+                        link_target: None,
                     },
                 );
                 if refused {
@@ -1050,6 +1057,7 @@ mod parent_hop_tests {
                             neighbor_values: None,
                             excluded: &[],
                             seed: None,
+                            link_target: None,
                         },
                     )?
                     .into_walked(&frame.source())?;
