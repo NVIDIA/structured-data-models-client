@@ -59,6 +59,7 @@ CASES = (
     'render-error',
     'constructor-error',
     'constructor-later-table',
+    'constructor-reset',
     'replace',
     'cached',
     'warning-retry',
@@ -68,6 +69,8 @@ CASES = (
 def _observe(label):
     trace = []
     active = []
+    fold_started = False
+    constructor_resets = {}
     mutations = []
     schema = None
 
@@ -166,8 +169,21 @@ def _observe(label):
     if label in ('later-table', 'constructor-later-table'):
         data = {name: data[name] for name in ('buys', 'users', 'items')}
     original_map = pd.Series.map
+    original_reset = pd.DataFrame.reset_index
+
+    def reset(frame, *args, **kwargs):
+        if label == 'constructor-reset' and stage == 'materialize' and not fold_started:
+            columns = tuple(frame.columns)
+            trace.append(('constructor-reset', columns))
+            constructor_resets[columns] = constructor_resets.get(columns, 0) + 1
+            if constructor_resets[columns] > 1:
+                raise ValueError('a native constructor reset the same sample twice')
+        return original_reset(frame, *args, **kwargs)
 
     def mapped(values, *args, **kwargs):
+        nonlocal fold_started
+        if values.name == 'buy_id' and stage == 'materialize':
+            fold_started = True
         reached = values.name == 'part' and stage == 'materialize'
         if reached:
             active.append(True)
@@ -184,6 +200,7 @@ def _observe(label):
         warnings.catch_warnings(record=True) as notices,
         pd.option_context('future.infer_string', False),
         patch.object(pd.Series, 'map', mapped),
+        patch.object(pd.DataFrame, 'reset_index', reset),
     ):
         warnings.simplefilter('always')
         try:

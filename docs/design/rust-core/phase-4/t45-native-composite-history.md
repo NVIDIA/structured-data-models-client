@@ -176,7 +176,8 @@ The constructor-effects and constructor-stack receipts are immutable successful 
 Preserve native timestamp, multi-value and distinct observations in their original per-column short-circuit order, with Rust selecting the existing semantic predicates from sufficient neutral samples and counts.
 Do not suppress those operations merely because the final caller stype is already known.
 Native failures keep the original constructed-column RuntimeError wrapper and their real cause at this boundary.
-The actual native source sample resets its index before each original inference read; this must not freeze later source or metadata observations ahead of callbacks.
+The original physical table caches one actual reset-index sample for its dtype/stype reads across columns, and releases that cache when a derived key is assigned.
+Reuse that actual native sample owner rather than resetting independently for each observation; later table and caller metadata still remain live.
 A focused fixed constructor profile may own useful immutable dtype/name facts and native statistical observations; it cannot retain a callback, issue a generic instruction stream or change RunStep.
 
 The completed constructed column retains name, canonical dtype and initial stype in the table meaning.
@@ -184,3 +185,10 @@ An identity component projects only its fixed name and dtype; superseded initial
 A finite typed native constructor has explicit temporal, separator and distinct fact methods, with no generic next-action method or operation loop.
 Its Rust predicates select which fixed native sample is actually reached and validate fact order and count coherence.
 The categorical distinct count below twenty completes before a native sample-length read, matching the original short circuit.
+
+## Whole-source review feedback: constructor sample ownership
+
+The first R15 whole architecture review found that native `Table._source_sample_df` is a cached property, so independent resets per column or inference branch add observable native operations.
+Retain exactly one reset-index sample per constructed physical table, reuse it for both dtype and reached stype observations, and preserve its native column identities until the original key assignment releases it.
+The new public constructor reset observer and second-reset failure control must precede the source correction.
+The frozen R15 candidate remains untouched while its two independent reports complete, and the corrected candidate requires a fresh whole pair before any execution.
