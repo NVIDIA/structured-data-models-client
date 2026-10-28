@@ -648,7 +648,14 @@ def test_python_core_answers_each_case_as_the_reference_does(
         case, _ = cases()[case_key.split('@')[0]]
         identity = line['identity']
         assert identity['native_loaded'] and line['core'] is not None
-        missing = sorted(set(case['core']) - set(identity['operations']))
+        # Check the same actual prediction evidence as the common comparator.
+        # Unrelated preparation never earns a logical prediction role.
+        operations = (
+            runner()
+            ._sibling('prediction_observation')
+            .view(line['core'], identity['operations'])['operations']
+        )
+        missing = sorted(set(case['core']) - set(operations))
         assert not missing, f'{case_key}: core operations not run: {missing}'
         want = reference_lines()[case_key]
         assert same_outcome(_outcome(want), _outcome(line)), (

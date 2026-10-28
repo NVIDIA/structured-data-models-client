@@ -673,7 +673,13 @@ def test_python_core_answers_each_case_as_the_reference_does(
                     )
                 )
             )
-        ran = line['identity']['operations']
+        # Common roles require the complete checked native observation;
+        # physical prepare_request Runs stay unchanged in the artifact.
+        ran = (
+            runner()
+            ._sibling('prediction_observation')
+            .view(line['core'], line['identity']['operations'])['operations']
+        )
         asked = [
             each
             for each in line['core']['inputs']
