@@ -667,3 +667,9 @@ Keep the locked long-list item shape, item-by-item tail validation, full malform
 Commit current-schema, closed-reference, malformed-reference and deep-tail controls before implementation.
 Truthful fixture repairs keep unique wrong-step IDs, release test-owned exception holders and request explanation for one actually materialized entity.
 All actual R39 compiler, quality, public, capture and setup-only retry receipts remain attached to R39; the successor requires a new exact whole pair before execution.
+
+
+Final native wrapper presentation re-enters the exact retained native exception handler and restores only that re-entry before calling the shared presenter.
+This prevents the intermediate rejection placeholder from becoming the native cause's context, while keeping current cause, suppression, traceback and all subsequent native getter or display edits.
+Apply the same fixed handover to the selected and carried wrappers, and leave pass-through and shared provider error presentation unchanged.
+Do not restore a pre-presentation snapshot in a finally block, which could erase real subclass getter effects during presentation.
