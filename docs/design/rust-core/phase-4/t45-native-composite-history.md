@@ -51,6 +51,41 @@ They consume the same native graph and Snapshot rules as Python.
 Every new field has explicit attachment discovery and typed rebinding; arbitrary JSON integer traversal is forbidden.
 The current unpublished contract version remains coherent and published locks remain untouched until canonical authoring by the coordinator.
 
+## Concrete representation and admission boundaries
+
+`FrameTableColumnFacts` gains a closed neutral value representation beside the existing original physical declaration.
+The alternatives are typed physical scalar storage, enumerated values, or actual observed object scalar content.
+Object inference is observed at the constructed table boundary, using the original prefix and missingness schedule; the Rust reader maps those observations to its existing constructed dtype vocabulary.
+`FrameTableMeaning` retains those fixed ordered constructed columns and original row count alongside its existing cast-time declarations.
+It carries no future metadata position or callback.
+
+`FrameKeyMeaning` binds one table's captured ordered primary key to that immutable constructed table.
+Its optional `FrameCompositeDefinition` records the complete ordered constructed component types, selected derived name and any fixed pre-existing column under that name.
+Rust selects it at the reached key assignment, validates component presence, approximate types and maximum derived-name length, and emits no fold for scalar or absent keys.
+A derived-prefix collision is not an early refusal on the native route.
+`FrameKeyNulls` validates a reached component's actual `isna().any()` observation without storing an execution position.
+`FrameRowIdentity` binds that definition to one complete aligned typed string column with explicit encoding and original row order.
+Its completion validates shape/null representation and then performs the post-fold ID admission of any pre-existing derived column.
+The derived name contains the existing ID token `key`, so the existing native name/type kernel determines ID eligibility directly; this boundary does not need another value-based semantic inference engine.
+
+`MaterializeFrames` and detached `FrameCheckpointManifest` carry explicit row-identity bindings separately from ordinary source-table bindings.
+`FrameCheckpointMetadata` retains the complete immutable definitions and existing string-encoding facts needed to reconstruct the same snapshot, while actual arrays stay separately owned.
+Attachment discovery, Python take/rebind, core checkpoint publication and plain HostRun rebinding enumerate these typed resources explicitly.
+The source fingerprint includes actual identity values and their complete definitions and encodings, independently of call-local attachment ids.
+Retained graph owners continue to retain the same Snapshot directly.
+
+The engine's new native graph product contains the existing scalar traversal topology and full ordered source-key definitions.
+Its native constructor does not call or weaken SQL `Graph::new`.
+Snapshot consumes separately supplied identity columns for compound tables, while scalar keys keep their existing readers.
+A raw frame host can produce the same useful identity through the shared fixed standard encoder for its admitted primitive domain; its strings are another producer's observation, not a verifier for native callback output.
+Raw preparation and complete native preparation share this graph and sanitation consumer.
+
+Per-table metadata is captured after that table's actual fold and before advancing to the next table.
+Only relationships are serialized after the metadata loop; the existing relationship serializer can be reused without rereading earlier table declarations.
+The captured original primary key replaces any callback-mutated key in that table's final graph declaration, matching the original setter's already selected key.
+Native typed export follows these graph declarations and excludes a newly created internal derived column from feature projection.
+A pre-existing source column under that name retains the original native admission and post-fold behavior instead of being mistaken for a newly added feature.
+
 ## Snapshot and lifetime invariants
 
 Snapshot sanitation consumes the complete identity, preserving the first original occurrence before missing-time removal.
@@ -64,7 +99,8 @@ An internal identity must not leak as a new payload column or erase its componen
 Full metadata, identity data, string encodings and source rows participate in immutable source identity.
 Raw checkpoints export and rebind all sufficient typed identity data, while retained checkpoints reuse the same actual owner and indexes.
 Restore validates source/definition/value coherence and preserves the original neighbor checkpoint without another draw or source read.
-Forged identity columns, component order, source rows, encodings or metadata are protocol failures rather than alternative cache identities.
+Contradictory definition/source bindings, row cardinality, encoding, attachment types or checkpoint metadata are protocol failures rather than alternative cache identities.
+The actual native converted strings are authoritative; the core never attempts to replay arbitrary native rendering and compare them with a second mathematical encoding.
 
 ## Readers that change together
 
