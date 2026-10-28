@@ -232,3 +232,17 @@ Pass that original option through the existing ordinary question input and valid
 Exclude that member from the general option parser at this early boundary so it cannot preempt the original statistic validation.
 Reuse the existing dedicated batch-size reader and leave ranking, forecasting, valid batch sizes and late task readers unchanged.
 Tests precede implementation and cover invalid sizes, statistic precedence, no native copies or warnings, and the independent Rust metadata-only guard.
+
+
+## Recorded public validation feedback
+
+The revised whole public run passed 1,361 cases and failed 93 on exact candidate402a5fdc.
+Eighty failures came from the same new Arrow-mask fixture construction before the SDK was reached, and one stale Decimal rejection covered an already supported family.
+The remaining complete actual pairs separate two product defects, a caller-option wording defect and warning-comparison assumptions.
+A declared string column with 65 distinct surrogate-bearing strings has actual native distinct count1, while adding a missing value selects a native equality path that counts65.
+Carry the already existing observed distinct fact at its original inference position rather than guessing equality from exported Unicode points.
+A composite-key history table must use the local frame graph and row-identity rules, preserving original composite validation and native failures, instead of the SQL graph's reserved-name refusal.
+The existing caller-provided `rows_per_call` refusal must preserve that provided value in its selected diagnostic; the approved omission of source cell data does not apply to caller options.
+Reuse the existing neutral JSON-given field and host G formatter for that presentation, keeping validation in Rust and preserving the absence of native graph work.
+Warning comparisons retain only the existing P3E-2 optional leading code difference, preserving complete bodies, categories, order and effects.
+These repairs do not change frozen expected records or grant a package pass.

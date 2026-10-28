@@ -2186,3 +2186,20 @@ mod tests {
         }
     }
 }
+
+
+#[cfg(test)]
+mod rows_per_call_given_tests {
+    use super::*;
+
+    #[test]
+    fn invalid_batch_sizes_retain_caller_options_for_selected_presentation() {
+        for text in ["0", "-1", "true", "1.5", "\"2\""] {
+            let value = sdm_wire::json::read(text.as_bytes()).unwrap();
+            let error = rows_per_call(&value).unwrap_err();
+            assert_eq!(error.sentence, Sentence::RowsPerCall);
+            assert_eq!(error.fields["given"], Detail::text(text));
+        }
+        assert_eq!(rows_per_call(&Value::Null).unwrap(), None);
+    }
+}
