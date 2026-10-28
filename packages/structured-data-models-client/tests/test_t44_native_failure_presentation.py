@@ -11,6 +11,8 @@ branches while the facade's intermediate error handler is active.
 
 from __future__ import annotations
 
+import sys
+
 import pytest
 
 from sdm_client._rust.frame_native import NativeFrameFailure, guard_failure
@@ -201,3 +203,69 @@ def test_native_passthrough_keeps_identity_and_complete_original_chain(
     assert native.__context__ is (caller if ambient else None)
     assert native.__cause__ is cause
     assert native.__suppress_context__ is False
+
+
+@pytest.mark.parametrize('getter_fails', [False, True])
+def test_carried_cause_getter_keeps_edits_made_during_final_presentation(
+    getter_fails,
+):
+    changed = KeyError('context edited by final native getter')
+    changed_cause = LookupError('cause edited by final native getter')
+    getter_failure = RuntimeError('actual final native getter failed')
+    placeholder = StructuredDataError(
+        'private intermediate', code='INVALID_REQUEST'
+    )
+    try:
+        raise KeyError('traceback selected by final native getter')
+    except KeyError as error:
+        changed_traceback = error.__traceback__
+    observed = []
+
+    class NativeStructured(StructuredDataError):
+        def __getattribute__(self, name):
+            if name == '__cause__':
+                observed.append((self, sys.exc_info()[1]))
+                native.__context__ = changed
+                native.__cause__ = changed_cause
+                native.__suppress_context__ = True
+                native.__traceback__ = changed_traceback
+                if getter_fails:
+                    raise getter_failure
+            return BaseException.__getattribute__(self, name)
+
+    native = NativeStructured('native declined', code='INVALID_CONFIGURATION')
+    held = capture(native)
+    assert held.context is None
+    with pytest.raises(
+        RuntimeError if getter_fails else NativeStructured
+    ) as raised:
+        present(
+            held,
+            placeholder,
+            part={'kind': 'forecast', 'position': 2, 'parts': 3},
+        )
+    assert len(observed) == 1
+    wrapper, handled = observed[0]
+    assert wrapper is not native and wrapper is not placeholder
+    assert handled is native
+    # Inspect through the base descriptor so assertions do not invoke the
+    # native getter a second time and conceal an overwritten context.
+    assert BaseException.__getattribute__(wrapper, '__cause__') is native
+    assert BaseException.__getattribute__(native, '__context__') is changed
+    assert BaseException.__getattribute__(native, '__cause__') is changed_cause
+    assert native.__suppress_context__ is True
+    deepest = native.__traceback__
+    while deepest.tb_next is not None:
+        deepest = deepest.tb_next
+    assert deepest is changed_traceback
+    if getter_fails:
+        assert raised.value is getter_failure
+        assert getter_failure.__context__ is native
+        assert getter_failure.__cause__ is None
+    else:
+        assert raised.value is wrapper
+        assert (
+            wrapper.message == 'native declined. This is forecast step 2 of 3.'
+        )
+        assert wrapper.__context__ is native
+        assert wrapper.__suppress_context__ is True
