@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pickle
 import warnings
-from decimal import Decimal
+from decimal import ConversionSyntax, Decimal, InvalidOperation
 
 import numpy as np
 import pandas as pd
@@ -54,6 +54,22 @@ def paired(monkeypatch, build, **options):
         )
     assert outcomes[1] == outcomes[0]
     return schema, frames, outcomes[1]
+
+
+def test_decimal_constructor_error_graph_retains_cause_and_caller_context():
+    caller = LookupError('active caller')
+    bare = InvalidOperation([ConversionSyntax])
+    bare.__context__ = caller
+    qualified = ValueError('qualified decimal conversion')
+    qualified.__cause__ = bare
+    qualified.__context__ = bare
+    observed = _decimal_error_graph(qualified)
+    assert observed['context'] == 'same-as-cause'
+    assert observed['suppress'] is True
+    assert observed['cause']['type'] == 'decimal.InvalidOperation'
+    assert observed['cause']['context']['type'] == 'builtins.LookupError'
+    assert observed['cause']['context']['text'] == 'active caller'
+    assert observed['cause']['suppress'] is False
 
 
 @pytest.mark.parametrize('make', [pa.decimal128, pa.decimal256])
@@ -314,8 +330,9 @@ def test_repeated_key_error_uses_original_native_decimal_scalar(
 
 
 @pytest.mark.parametrize('bits', [128, 256])
+@pytest.mark.parametrize('mutated_scale', [2, 129])
 def test_missing_key_advice_can_change_later_decimal_scale_and_example(
-    monkeypatch, bits
+    monkeypatch, bits, mutated_scale
 ):
     outcomes = []
     make = pa.decimal128 if bits == 128 else pa.decimal256
@@ -340,7 +357,7 @@ def test_missing_key_advice_can_change_later_decimal_scale_and_example(
                     assert 'have no value for it' in str(message)
                     changed = True
                     frame['value_id'] = raw_series(
-                        bits, 3, 129, [1, 1] + list(range(2, 100))
+                        bits, 3, mutated_scale, [1, 1] + list(range(2, 100))
                     )
                 show(message, *args, **kwargs)
 
@@ -350,7 +367,8 @@ def test_missing_key_advice_can_change_later_decimal_scale_and_example(
         assert schema['rows']['value_id'].dtype == 'int64'
         assert schema['rows'].duplicate_keys == 1
         messages = [str(item.message) for item in caught]
-        assert any("Decimal('1E-129')" in message for message in messages)
+        example = repr(Decimal(1).scaleb(-mutated_scale))
+        assert any(example in message for message in messages)
         outcomes.append((projection(schema), messages))
     assert outcomes[0] == outcomes[1]
 
