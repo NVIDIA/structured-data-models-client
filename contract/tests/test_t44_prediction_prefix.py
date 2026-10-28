@@ -276,7 +276,6 @@ def actual_legacy_capture():
     """Run the real legacy Predict producer, then a native version refusal."""
     import duckdb
     import pandas as pd
-    from sdm_connectors import DuckDBSource
 
     from sdm_client import (
         PredictiveQuery,
@@ -287,6 +286,7 @@ def actual_legacy_capture():
     from sdm_client._rust import codec
     from sdm_client._rust.predict import _send
     from sdm_client._rust.run import run
+    from sdm_connectors import DuckDBSource
 
     with pytest.MonkeyPatch.context() as monkeypatch:
         serving = _module(
