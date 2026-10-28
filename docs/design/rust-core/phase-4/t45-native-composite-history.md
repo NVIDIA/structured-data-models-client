@@ -178,3 +178,9 @@ Do not suppress those operations merely because the final caller stype is alread
 Native failures keep the original constructed-column RuntimeError wrapper and their real cause at this boundary.
 The actual native source sample resets its index before each original inference read; this must not freeze later source or metadata observations ahead of callbacks.
 A focused fixed constructor profile may own useful immutable dtype/name facts and native statistical observations; it cannot retain a callback, issue a generic instruction stream or change RunStep.
+
+The completed constructed column retains name, canonical dtype and initial stype in the table meaning.
+An identity component projects only its fixed name and dtype; superseded initial stypes are not added to compound identity or its hash.
+A finite typed native constructor has explicit temporal, separator and distinct fact methods, with no generic next-action method or operation loop.
+Its Rust predicates select which fixed native sample is actually reached and validate fact order and count coherence.
+The categorical distinct count below twenty completes before a native sample-length read, matching the original short circuit.
