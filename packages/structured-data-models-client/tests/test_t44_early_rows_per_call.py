@@ -27,9 +27,11 @@ def test_rows_per_call_refuses_before_native_work_and_keeps_statistic_first(
         asked = query()
         effects = []
 
-        def native(*args, **kwargs):
-            effects.append('native graph work')
-            raise RuntimeError('native work reached before early option refusal')
+        def native(*args, _effects=effects, **kwargs):
+            _effects.append('native graph work')
+            raise RuntimeError(
+                'native work reached before early option refusal'
+            )
 
         options = {'rows_per_call': rows}
         if statistic is not None:
@@ -49,4 +51,6 @@ def test_rows_per_call_refuses_before_native_work_and_keeps_statistic_first(
         assert notices == []
         outcomes.append((type(error), error.code, str(error)))
     assert outcomes[1] == outcomes[0]
-    assert ('prediction_statistic' if statistic else 'rows_per_call') in outcomes[1][2]
+    assert (
+        'prediction_statistic' if statistic else 'rows_per_call'
+    ) in outcomes[1][2]

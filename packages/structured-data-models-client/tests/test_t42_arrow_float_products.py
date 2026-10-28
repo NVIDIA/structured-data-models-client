@@ -118,7 +118,7 @@ def observe(make, core, monkeypatch, *, options=None, table=False):
             )
     if before is not None:
         after = frame['user_id'].array.__arrow_array__()
-        for first, second in zip(before.chunks, after.chunks):
+        for first, second in zip(before.chunks, after.chunks, strict=True):
             assert first.type == second.type
             assert first.offset == second.offset
             assert [
@@ -276,9 +276,14 @@ def test_float_native_effect_order_first_candidate_stop_and_later_mutation(
                 original = getattr(pd.Series, name)
 
                 def record(
-                    series, *args, _name=name, _original=original, **kwargs
+                    series,
+                    *args,
+                    _name=name,
+                    _original=original,
+                    _trace=trace,
+                    **kwargs,
                 ):
-                    trace.append((_name, series.name, len(series)))
+                    _trace.append((_name, series.name, len(series)))
                     return _original(series, *args, **kwargs)
 
                 hooks.setattr(pd.Series, name, record)
@@ -286,11 +291,19 @@ def test_float_native_effect_order_first_candidate_stop_and_later_mutation(
                 warnings.simplefilter('always')
 
                 def show(
-                    message, category, filename, lineno, file=None, line=None
+                    message,
+                    category,
+                    filename,
+                    lineno,
+                    file=None,
+                    line=None,
+                    *,
+                    _trace=trace,
+                    _frame=frame,
                 ):
-                    trace.append(('warning', category.__name__, str(message)))
+                    _trace.append(('warning', category.__name__, str(message)))
                     if 'have no value' in str(message):
-                        frame['later_key'] = pd.Series(
+                        _frame['later_key'] = pd.Series(
                             pd.arrays.ArrowExtensionArray(
                                 pa.array(np.zeros(rows, dtype=f'float{width}'))
                             )
@@ -336,10 +349,17 @@ def test_float_warning_error_stops_before_later_table_export(
         touched = []
         original = pd.arrays.ArrowExtensionArray.__arrow_array__
 
-        def export(array, *args, **kwargs):
-            if array is later['value'].array:
-                touched.append('later')
-            return original(array, *args, **kwargs)
+        def export(
+            array,
+            *args,
+            _later=later,
+            _touched=touched,
+            _original=original,
+            **kwargs,
+        ):
+            if array is _later['value'].array:
+                _touched.append('later')
+            return _original(array, *args, **kwargs)
 
         with monkeypatch.context() as hooks:
             hooks.setattr(
@@ -380,10 +400,20 @@ def test_float_warning_mutation_is_seen_when_later_table_is_reached(
         with monkeypatch.context() as hooks, warnings.catch_warnings():
             warnings.simplefilter('always')
 
-            def show(message, category, filename, lineno, file=None, line=None):
-                notices.append((category.__name__, str(message)))
+            def show(
+                message,
+                category,
+                filename,
+                lineno,
+                file=None,
+                line=None,
+                *,
+                _notices=notices,
+                _later=later,
+            ):
+                _notices.append((category.__name__, str(message)))
                 if 'have no value' in str(message):
-                    later['item_id'] = raw_series(
+                    _later['item_id'] = raw_series(
                         width, bit_cases(width)['signed_zero']
                     )
 

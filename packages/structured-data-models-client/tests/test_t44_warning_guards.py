@@ -254,8 +254,8 @@ def test_context_cap_and_sql_hops_warning_handlers_remain_unguarded(
     ):
         native = ValueError('unguarded native warning handler')
 
-        def fail(*args, **kwargs):
-            raise native
+        def fail(*args, _native=native, **kwargs):
+            raise _native
 
         control = codec.encode(
             {

@@ -1067,7 +1067,12 @@ def _questions(
     bindings = _Bindings()
     kind = question.data['kind']
     names = {
-        None: ('prediction_statistic', 'num_hops', 'num_neighbors'),
+        None: (
+            'prediction_statistic',
+            'rows_per_call',
+            'num_hops',
+            'num_neighbors',
+        ),
         'ranking': ('top_k', 'rows_per_call'),
         'forecast': ('rows_per_call',),
     }[kind]

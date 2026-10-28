@@ -663,7 +663,14 @@ fn check_call(
     prediction_rows: u64,
     limits: &FrameLimits,
 ) -> Result<(), CoreError> {
-    let asked = options::values(values)?;
+    // The client validates its statistic before its batch size. Keep that
+    // reached policy separate from the general option parser, including
+    // for values whose insertion order puts the batch size first.
+    let early = values.cloned().map(|mut values| {
+        values.remove("rows_per_call");
+        values
+    });
+    let asked = options::values(early.as_ref())?;
     options::run_mode(
         asked.num_context_samples,
         asked.num_context_samples_given.as_deref(),
@@ -686,6 +693,7 @@ fn check_call(
     }
     refuse_entities(prediction_rows, 1, limits.entities)?;
     options::statistic(asked.prediction_statistic.as_deref())?;
+    super::asked_rows_per_call(values)?;
     Ok(())
 }
 
