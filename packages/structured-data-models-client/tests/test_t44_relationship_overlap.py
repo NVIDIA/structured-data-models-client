@@ -131,6 +131,7 @@ def test_selected_relationship_rendering_errors_are_not_formatter_defects():
 
 
 def test_later_relationship_native_failure_prevents_earlier_disjoint_notice():
+    unique = pd.Series.unique
     for core in [False, True]:
         schema = Tables(
             child=SimpleNamespace(data=pd.DataFrame({'fk': [1], 'later': [2]})),
@@ -140,7 +141,6 @@ def test_later_relationship_native_failure_prevents_earlier_disjoint_notice():
             Relationship('child', 'fk', 'parent', 'id'),
             Relationship('child', 'later', 'parent', 'id'),
         ]
-        unique = pd.Series.unique
 
         def native_unique(series):
             if series.name == 'later':

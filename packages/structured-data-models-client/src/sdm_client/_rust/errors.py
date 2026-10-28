@@ -680,8 +680,8 @@ def error_from_core(
     ``driver_class`` names the class of the driver exception behind a
     ``PROVIDER_ERROR``, which the run loop saw and the core never does.
     """
-    message = codec.read(control, attachments)
-    error = message['error']
+    envelope = codec.read(control, attachments)
+    error = envelope['error']
     code = error['code']
     cls = ERRORS[code]
     fields = _fields(error.get('fields', {}))
@@ -983,10 +983,12 @@ def error_from_core(
     elif native_key_cause is None:
         said = _said(sentence, fields)
     if frame_payload_range:
+        bare_cause = ValueError(_said('past_int64_bare', fields))
+        if internal_context is not None:
+            bare_cause.__context__ = internal_context.__context__
         native_key_cause = ValueError(said)
-        native_key_cause.__cause__ = ValueError(
-            _said('past_int64_bare', fields)
-        )
+        native_key_cause.__cause__ = bare_cause
+        native_key_cause.__context__ = bare_cause
     part = error.get('part')
     if part is not None:
         # The part of a question asked in parts it happened in, the core's

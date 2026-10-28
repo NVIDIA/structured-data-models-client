@@ -257,13 +257,13 @@ def constructor_values(values: pd.Series) -> dict[str, Any]:
     if pd.api.types.is_bool_dtype(dtype):
         physical = {'type': 'bool'}
     elif pd.api.types.is_integer_dtype(dtype):
-        width = getattr(dtype, 'itemsize') * 8
+        width = dtype.itemsize * 8
         prefix = (
             'uint' if pd.api.types.is_unsigned_integer_dtype(dtype) else 'int'
         )
         physical = {'type': prefix + str(width)}
     elif pd.api.types.is_float_dtype(dtype):
-        physical = {'type': 'float' + str(getattr(dtype, 'itemsize') * 8)}
+        physical = {'type': 'float' + str(dtype.itemsize * 8)}
     else:
         # String values can contain native surrogate points, independently
         # of the later Arrow representation selected for their export.

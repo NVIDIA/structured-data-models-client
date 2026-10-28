@@ -2,6 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
+use super::questions::relationship_overlap;
 use super::*;
 #[test]
 fn contradictory_reached_overlap_counts_are_protocol_errors() {

@@ -7,7 +7,6 @@
 import json
 
 import pytest
-
 from sdm_client import _native
 
 

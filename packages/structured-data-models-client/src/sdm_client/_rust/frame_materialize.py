@@ -73,8 +73,8 @@ def native_inputs(
     from sdm_client._rust.frame_native import NativeColumn, NativeFrameColumns
     from sdm_client._rust.frame_source import (
         source_meaning,
-        table_meaning,
         table_key,
+        table_meaning,
         table_metadata,
         time_feature,
         typed_table,

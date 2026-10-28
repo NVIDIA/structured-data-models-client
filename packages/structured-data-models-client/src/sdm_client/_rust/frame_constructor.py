@@ -8,12 +8,15 @@ from __future__ import annotations
 
 import json
 import warnings
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 from dateutil.parser import UnknownTimezoneWarning
 
 from sdm_client._rust import codec, errors
+
+if TYPE_CHECKING:
+    from sdm_client._rust.frame_facts import NativeDeclaration
 
 
 def column(
@@ -21,7 +24,7 @@ def column(
     name: str,
     sample: pd.DataFrame,
     facts: dict[str, Any],
-    declared: dict[str, Any] | None,
+    declared: NativeDeclaration | None,
 ) -> dict[str, Any]:
     """Complete each native sample before observing the following column.
 

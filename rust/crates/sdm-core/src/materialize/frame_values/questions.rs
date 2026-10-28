@@ -364,7 +364,3 @@ pub(super) fn relationship_overlap(
     });
     Ok((FrameRelationshipOverlap { disjoint }, notice))
 }
-
-#[cfg(test)]
-#[path = "overlap_tests.rs"]
-mod overlap_tests;

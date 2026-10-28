@@ -20,6 +20,8 @@ pub use questions::RetainedFrameQuestion;
 #[cfg(test)]
 mod native_guard_tests;
 #[cfg(test)]
+mod overlap_tests;
+#[cfg(test)]
 mod source_keys_tests;
 
 use arrow_array::UInt64Array;
