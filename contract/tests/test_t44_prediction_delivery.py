@@ -88,7 +88,7 @@ def test_no_independent_receipt_is_dropped_or_reassigned(change):
         reader().check_receipts(calls, received)
 
 
-def capture_attempt():
+def capture_attempt(*, take=True):
     captured = RUNNER._Capture()
     captured.started(
         json.dumps(
@@ -107,7 +107,8 @@ def capture_attempt():
         },
     )
     captured.stepped({'step': 'call_model', 'id': 7, 'body': 10})
-    captured.taken(10, json.dumps(attempt('A')['body']).encode())
+    if take:
+        captured.taken(10, json.dumps(attempt('A')['body']).encode())
     return captured
 
 
@@ -162,7 +163,7 @@ def test_taken_attempt_without_reply_stays_explicitly_unobserved():
 
 @pytest.mark.parametrize('bad', ['wrong-id', 'duplicate', 'before-take'])
 def test_reply_cannot_attach_to_a_different_or_unreached_attempt(bad):
-    captured = capture_attempt()
+    captured = capture_attempt(take=bad != 'before-take')
     reply = {
         'message': 'model_reply',
         'id': 8 if bad == 'wrong-id' else 7,
@@ -172,8 +173,6 @@ def test_reply_cannot_attach_to_a_different_or_unreached_attempt(bad):
             'retryable': False,
         },
     }
-    if bad == 'before-take':
-        captured.stepped({'step': 'call_model', 'id': 7, 'body': 11})
     if bad == 'duplicate':
         captured.replied(json.dumps(reply).encode(), {})
     with pytest.raises(RUNNER.RunnerFailure):
