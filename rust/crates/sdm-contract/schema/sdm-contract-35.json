@@ -9283,6 +9283,12 @@
             "$ref": "#/$defs/FrameInput"
           }
         },
+        "row_identities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FrameRowIdentity"
+          }
+        },
         "entropy": {
           "description": "Fresh OS entropy supplied by the host, consumed only by an unseeded\nentity/example sample. Neighbor continuation never reads this fact.",
           "type": [
@@ -9298,6 +9304,109 @@
         "tables"
       ]
     },
+    "FrameRowIdentity": {
+      "description": "Complete aligned native identity values in original source row order.",
+      "type": "object",
+      "properties": {
+        "definition": {
+          "$ref": "#/$defs/FrameCompositeDefinition"
+        },
+        "values": {
+          "$ref": "#/$defs/StringData"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "definition",
+        "values"
+      ]
+    },
+    "FrameCompositeDefinition": {
+      "description": "A complete ordered compound identity, not a conversion cursor or callback.",
+      "type": "object",
+      "properties": {
+        "table": {
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/Relation"
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FrameIdentityComponent"
+          }
+        },
+        "derived": {
+          "type": "string"
+        },
+        "codec": {
+          "$ref": "#/$defs/FrameIdentityCodec"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "table",
+        "source",
+        "columns",
+        "derived",
+        "codec"
+      ]
+    },
+    "FrameIdentityComponent": {
+      "description": "Fixed component type, projected independently of overwritten initial stype.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "dtype": {
+          "$ref": "#/$defs/Dtype"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "dtype"
+      ]
+    },
+    "FrameIdentityCodec": {
+      "type": "string",
+      "enum": [
+        "escaped_text_v1"
+      ]
+    },
+    "StringData": {
+      "type": "object",
+      "properties": {
+        "values": {
+          "$ref": "#/$defs/AttachmentId"
+        },
+        "encoding": {
+          "$ref": "#/$defs/StringEncoding"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "values",
+        "encoding"
+      ]
+    },
+    "StringEncoding": {
+      "description": "Closed value encodings, independently of native storage or casing.\nBoth Arrow offset widths retain their original physical buffers.",
+      "oneOf": [
+        {
+          "description": "Arrow Utf8 or LargeUtf8, whose values are ordinary Unicode scalars.",
+          "type": "string",
+          "const": "utf8"
+        },
+        {
+          "description": "Arrow Binary or LargeBinary, containing canonical UTF8 with\nsurrogatepass. Adjacent surrogate points remain distinct points.",
+          "type": "string",
+          "const": "utf8_surrogatepass"
+        }
+      ]
+    },
     "FrameCheckpointManifest": {
       "description": "Ownership bindings of a materializer's detached frame snapshot.\nThe metadata is JSON; every table remains a separately owned Arrow attachment.",
       "type": "object",
@@ -9309,6 +9418,12 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/FrameInput"
+          }
+        },
+        "row_identities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FrameRowIdentity"
           }
         },
         "retained": {
@@ -9342,6 +9457,18 @@
         },
         "neighbors": {
           "$ref": "#/$defs/Mt19937State"
+        },
+        "strings": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/$defs/StringEncoding"
+            }
+          }
         }
       },
       "additionalProperties": false,
@@ -9413,6 +9540,64 @@
             "stage": {
               "type": "string",
               "const": "table_meaning"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "input"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "table": {
+              "$ref": "#/$defs/FrameTableMeaning"
+            },
+            "primary_key": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "stage": {
+              "type": "string",
+              "const": "table_key"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "table",
+            "primary_key"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "input": {
+              "$ref": "#/$defs/FrameKeyNulls"
+            },
+            "stage": {
+              "type": "string",
+              "const": "key_nulls"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "input"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "input": {
+              "$ref": "#/$defs/FrameTableMetadata"
+            },
+            "stage": {
+              "type": "string",
+              "const": "table_metadata"
             }
           },
           "additionalProperties": false,
@@ -9666,6 +9851,17 @@
             },
             "query": {
               "$ref": "#/$defs/AttachmentId"
+            },
+            "question": {
+              "description": "The same original resolved query, before native metadata effects.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/AttachmentId"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "values": {
               "description": "Task-option observations after graph notice/list(indices).",
@@ -9966,11 +10162,39 @@
       "properties": {
         "table": {
           "$ref": "#/$defs/HeldTable"
+        },
+        "constructed": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FrameConstructedColumn"
+          }
         }
       },
       "additionalProperties": false,
       "required": [
-        "table"
+        "table",
+        "constructed"
+      ]
+    },
+    "FrameConstructedColumn": {
+      "description": "A core-derived constructed dtype, independent of later caller declarations.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "dtype": {
+          "$ref": "#/$defs/Dtype"
+        },
+        "stype": {
+          "$ref": "#/$defs/Stype"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "dtype",
+        "stype"
       ]
     },
     "FrameTableInputs": {
@@ -9984,12 +10208,17 @@
           "items": {
             "$ref": "#/$defs/FrameTableColumnFacts"
           }
+        },
+        "empty": {
+          "description": "Actual reached native container empty observation, before dtype reads.",
+          "type": "boolean"
         }
       },
       "additionalProperties": false,
       "required": [
         "table",
-        "native"
+        "native",
+        "empty"
       ]
     },
     "FrameTableColumnFacts": {
@@ -10008,11 +10237,19 @@
               "type": "null"
             }
           ]
+        },
+        "values": {
+          "$ref": "#/$defs/FrameConstructorValues"
+        },
+        "meaning": {
+          "$ref": "#/$defs/FrameConstructedColumn"
         }
       },
       "additionalProperties": false,
       "required": [
-        "name"
+        "name",
+        "values",
+        "meaning"
       ]
     },
     "FramePhysicalDeclaration": {
@@ -10066,6 +10303,175 @@
             "native"
           ]
         }
+      ]
+    },
+    "FrameConstructorValues": {
+      "description": "Neutral storage/content observed when the physical table is constructed.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "physical": {
+              "$ref": "#/$defs/ColumnType"
+            },
+            "storage": {
+              "type": "string",
+              "const": "typed"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "storage",
+            "physical"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "storage": {
+              "type": "string",
+              "const": "enumerated"
+            }
+          },
+          "required": [
+            "storage"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "description": "Native Unicode points; the later owned column states its encoding.",
+          "type": "object",
+          "properties": {
+            "storage": {
+              "type": "string",
+              "const": "text"
+            }
+          },
+          "required": [
+            "storage"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "storage": {
+              "type": "string",
+              "const": "temporal"
+            }
+          },
+          "required": [
+            "storage"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "storage": {
+              "type": "string",
+              "const": "duration"
+            }
+          },
+          "required": [
+            "storage"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "content": {
+              "$ref": "#/$defs/FrameElementContent"
+            },
+            "storage": {
+              "type": "string",
+              "const": "elements"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "storage",
+            "content"
+          ]
+        }
+      ]
+    },
+    "FrameElementContent": {
+      "type": "string",
+      "enum": [
+        "integer",
+        "real",
+        "boolean",
+        "duration",
+        "other"
+      ]
+    },
+    "FrameKeyNulls": {
+      "description": "The reached missingness observation of one declared component.",
+      "type": "object",
+      "properties": {
+        "definition": {
+          "$ref": "#/$defs/FrameCompositeDefinition"
+        },
+        "column": {
+          "type": "string"
+        },
+        "missing": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "definition",
+        "column",
+        "missing"
+      ]
+    },
+    "FrameTableMetadata": {
+      "description": "The reached same-table declarations after its selected key was assigned.",
+      "type": "object",
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/FrameKeyMeaning"
+        },
+        "table": {
+          "$ref": "#/$defs/HeldTable"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "table"
+      ]
+    },
+    "FrameKeyMeaning": {
+      "type": "object",
+      "properties": {
+        "table": {
+          "$ref": "#/$defs/FrameTableMeaning"
+        },
+        "primary_key": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "composite": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FrameCompositeDefinition"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "table",
+        "primary_key"
       ]
     },
     "FrameColumnInputs": {
@@ -10192,37 +10598,6 @@
         "text_feature_time",
         "native_time",
         "typed_time"
-      ]
-    },
-    "StringData": {
-      "type": "object",
-      "properties": {
-        "values": {
-          "$ref": "#/$defs/AttachmentId"
-        },
-        "encoding": {
-          "$ref": "#/$defs/StringEncoding"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "values",
-        "encoding"
-      ]
-    },
-    "StringEncoding": {
-      "description": "Closed value encodings, independently of native storage or casing.\nBoth Arrow offset widths retain their original physical buffers.",
-      "oneOf": [
-        {
-          "description": "Arrow Utf8 or LargeUtf8, whose values are ordinary Unicode scalars.",
-          "type": "string",
-          "const": "utf8"
-        },
-        {
-          "description": "Arrow Binary or LargeBinary, containing canonical UTF8 with\nsurrogatepass. Adjacent surrogate points remain distinct points.",
-          "type": "string",
-          "const": "utf8_surrogatepass"
-        }
       ]
     },
     "FrameQuestionInputs": {
@@ -12523,6 +12898,40 @@
           "properties": {
             "value": {
               "type": "string",
+              "const": "key_meaning"
+            },
+            "data": {
+              "$ref": "#/$defs/FrameKeyMeaning"
+            }
+          },
+          "required": [
+            "value",
+            "data"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "string",
+              "const": "key_nulls"
+            },
+            "data": {
+              "$ref": "#/$defs/FrameKeyNulls"
+            }
+          },
+          "required": [
+            "value",
+            "data"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "string",
               "const": "column_meaning"
             },
             "data": {
@@ -12831,6 +13240,17 @@
     "PreparedFrameQuestions": {
       "type": "object",
       "properties": {
+        "question": {
+          "description": "Ordinary query meaning retained across native graph conversion.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AttachmentId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "call_values": {
           "description": "Reached immutable early call observations, reused without rereading native option objects.",
           "anyOf": [
