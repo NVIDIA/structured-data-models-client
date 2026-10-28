@@ -405,7 +405,9 @@ def test_missing_key_advice_can_change_later_decimal_scale_and_example(
             warnings.simplefilter('always')
             show = warnings.showwarning
 
-            def mutate(message, *args, frame=frame, show=show, **kwargs):
+            def mutate(
+                message, *args, frame=frame, show=show, events=events, **kwargs
+            ):
                 nonlocal changed
                 events.append(('warning', str(message)))
                 if not changed:
