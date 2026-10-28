@@ -14,8 +14,7 @@ from __future__ import annotations
 
 import sys
 import unicodedata
-from collections.abc import Iterator, Mapping
-from contextlib import contextmanager
+from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType, TracebackType
 from typing import Any, Literal, NoReturn, TypeAlias, TypedDict, cast
@@ -24,6 +23,11 @@ import pandas as pd
 
 from sdm_client._rust.codec import relation_name
 from sdm_client.errors import StructuredDataError
+
+
+_ExceptionChain: TypeAlias = tuple[
+    TracebackType | None, BaseException | None, BaseException | None, bool
+]
 
 
 class FullRootCasingFacts(TypedDict):
@@ -153,38 +157,49 @@ class NativeFrameFailure:
 
     def read_message(self) -> str:
         """One reached native observation, deliberately neither cached nor caught."""
-        with self.active():
+        chain = self._chain()
+        try:
+            raise self.error
+        except Exception:
+            self._restore_chain(chain)
             return str(self.error)
 
     def read_type_name(self) -> str:
         """Observe the native class name only when selected for presentation."""
-        with self.active():
+        chain = self._chain()
+        try:
+            raise self.error
+        except Exception:
+            self._restore_chain(chain)
             return type(self.error).__name__
 
-    @contextmanager
-    def active(self) -> Iterator[None]:
-        """Observe within the actual preserved native exception context.
+    def _chain(self) -> _ExceptionChain:
+        """The current native chain, including edits from prior observations."""
+        return (
+            BaseException.__getattribute__(self.error, '__traceback__'),
+            BaseException.__getattribute__(self.error, '__cause__'),
+            BaseException.__getattribute__(self.error, '__context__'),
+            BaseException.__getattribute__(self.error, '__suppress_context__'),
+        )
 
-        Raising a stored error under an incidental core decoding exception
-        would replace its context. Restore the original native traceback and
-        chain before the observation, including when that observation fails.
-        This chooses no guard policy and catches no observation exception.
+    def _restore_chain(self, chain: _ExceptionChain) -> None:
+        """Remove only re-entry effects before a fixed native observation.
+
+        The observation stays in its direct handler: suspending a generator
+        there can overwrite a native traceback edit on older interpreters.
+        No state is rolled back after native code has run.
         """
-        chain = {
-            name: BaseException.__getattribute__(self.error, name)
-            for name in (
+        for name, value in zip(
+            (
                 '__traceback__',
                 '__cause__',
                 '__context__',
                 '__suppress_context__',
-            )
-        }
-        try:
-            raise self.error
-        except Exception:
-            for name, value in chain.items():
-                BaseException.__setattr__(self.error, name, value)
-            yield
+            ),
+            chain,
+            strict=True,
+        ):
+            BaseException.__setattr__(self.error, name, value)
 
 
 @dataclass(frozen=True, repr=False, eq=False)
@@ -339,7 +354,11 @@ class NativeFrameColumns:
         if not isinstance(failure.error, (TypeError, ValueError)):
             return {'outcome': 'not_reached'}, failure
         dtype = self.dtype(binding)
-        with failure.active():
+        chain = failure._chain()
+        try:
+            raise failure.error
+        except Exception:
+            failure._restore_chain(chain)
             try:
                 first: dict[str, Any] | None = None
                 for ordinal, value in enumerate(indices):
@@ -510,7 +529,11 @@ def guard_failure(
                 # structured exception reaches its forecast wrapper. Ranking
                 # already has a complete core-selected sentence and never
                 # observes this native detail or its truth conversion.
-                with native.active():
+                chain = native._chain()
+                try:
+                    raise native.error
+                except Exception:
+                    native._restore_chain(chain)
                     window_outran = bool(
                         (getattr(native.error, 'details', None) or {}).get(
                             'window_outran_the_data'
@@ -528,7 +551,11 @@ def guard_failure(
                 raise CodecError(
                     'native part classification lacks its presentation'
                 )
-            with native.active():
+            chain = native._chain()
+            try:
+                raise native.error
+            except Exception:
+                native._restore_chain(chain)
                 first = native.error.args[0].rstrip()
                 if first and first[-1] not in '.!?':
                     first += '.'
