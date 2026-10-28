@@ -1293,10 +1293,15 @@ fn declared_answers(payload: &Value, kind: &str) -> AnswerType {
     if !classifies(kind) {
         return AnswerType::Float;
     }
-    match target_dtype(payload) {
-        Some(d) if d.starts_with("bool") => AnswerType::Bool,
-        Some(d) if d.starts_with("int") => AnswerType::Int,
-        Some(d) if d.starts_with("float") => AnswerType::FloatClass,
+    declared_class_answers(target_dtype(payload).map(str::as_bytes))
+}
+
+/// Shared class-family selection over neutral declaration text.
+fn declared_class_answers(dtype: Option<&[u8]>) -> AnswerType {
+    match dtype {
+        Some(d) if d.starts_with(b"bool") => AnswerType::Bool,
+        Some(d) if d.starts_with(b"int") => AnswerType::Int,
+        Some(d) if d.starts_with(b"float") => AnswerType::FloatClass,
         _ => AnswerType::Text,
     }
 }

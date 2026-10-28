@@ -434,6 +434,7 @@ def present(finished: Finished, envelope: dict[str, Any]) -> CompletedResponse:
             'classification': classification,
             'dtype_truth': None,
             'numeric_prefix': None,
+            'dtype': None,
         }
         dtype = None
         if meaning['classification']:
@@ -443,27 +444,36 @@ def present(finished: Finished, envelope: dict[str, Any]) -> CompletedResponse:
                 target['numeric_prefix'] = bool(
                     dtype.startswith(tuple(meaning['numeric_prefixes']))
                 )
+            if isinstance(dtype, str):
+                target['dtype'] = _points(dtype)
         converted = []
         for row in rows:
             value = row['prediction']
             probabilities = row['probabilities']
             if target['numeric_prefix']:
                 value = _encoded_native(as_declared(_native(value), dtype))
-                if probabilities:
-                    probabilities = [
-                        (
-                            key
-                            if (restored := as_declared(key, dtype)) is key
-                            else str(restored),
-                            probability,
-                        )
-                        for key, probability in probabilities
-                    ]
+            native_probabilities = None
+            if probabilities is not None:
+                native_probabilities = []
+                for key, probability in probabilities:
+                    restored = (
+                        as_declared(key, dtype)
+                        if target['numeric_prefix']
+                        else key
+                    )
+                    name = key if restored is key else str(restored)
+                    native_probabilities.append(
+                        {
+                            'value': _encoded_native(restored),
+                            'name': name,
+                            'probability': probability,
+                        }
+                    )
             converted.append(
                 {
                     'ordinal': row['ordinal'],
                     'prediction': value,
-                    'probabilities': probabilities,
+                    'probabilities': native_probabilities,
                 }
             )
         part = {

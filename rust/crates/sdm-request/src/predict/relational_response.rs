@@ -608,7 +608,9 @@ pub fn layout(
     let meaning = target_meaning(&target.kind, target.classification)?;
     if (meaning.classification && target.dtype_truth.is_none())
         || (!meaning.classification
-            && (target.dtype_truth.is_some() || target.numeric_prefix.is_some()))
+            && (target.dtype_truth.is_some()
+                || target.numeric_prefix.is_some()
+                || target.dtype.is_some()))
         || (target.numeric_prefix.is_some() != (target.dtype_truth == Some(true)))
         || converted.len() != rows.len()
     {
@@ -617,6 +619,7 @@ pub fn layout(
         ));
     }
     let numeric = meaning.classification && target.numeric_prefix == Some(true);
+    let declared = super::declared_class_answers(target.dtype.as_ref().map(UnicodeText::as_bytes));
     // The established gathered regression admission is separate from the
     // reached native classification cast. A custom string can skip that cast
     // without turning a classification response into a regression response.
@@ -654,6 +657,8 @@ pub fn layout(
         true,
         if regression && !meaning.classification {
             AnswerType::Float
+        } else if meaning.classification {
+            declared
         } else {
             AnswerType::Text
         },
@@ -667,21 +672,24 @@ pub fn layout(
                 "native target conversions are not in response order",
             ));
         }
-        if !numeric
-            && (converted.prediction != decoded.prediction
-                || converted.probabilities != decoded.probabilities)
-        {
+        if !numeric && converted.prediction != decoded.prediction {
             return Err(protocol("an unconverted target changed its decoded values"));
         }
         if meaning.classification {
-            row.prediction = native_answer(&logical(&converted.prediction)?);
-        }
-        if numeric {
-            row.probabilities = renamed_probabilities(
-                decoded.probabilities.as_ref(),
-                converted.probabilities.as_ref(),
+            row.prediction = gathered_class_answer(
+                &logical(&decoded.prediction)?,
+                &converted.prediction,
+                declared,
+                numeric,
             )?;
         }
+        row.probabilities = renamed_probabilities(
+            decoded.probabilities.as_ref(),
+            converted.probabilities.as_ref(),
+            declared,
+            numeric,
+            float_text,
+        )?;
     }
     let lineage = rows
         .iter()
@@ -703,34 +711,109 @@ fn native_answer(value: &Value) -> Answer {
     }
 }
 
+/// Actual completed numeric products select the corresponding existing
+/// Gathered kernel; unchanged strings and containers retain declared meaning.
+fn converted_family(value: &NativeValue) -> Option<AnswerType> {
+    match value {
+        NativeValue::Boolean { .. } => Some(AnswerType::Bool),
+        NativeValue::Integer { .. } => Some(AnswerType::Int),
+        NativeValue::Float { .. } => Some(AnswerType::FloatClass),
+        _ => None,
+    }
+}
+
+fn gathered_class_answer(
+    raw: &Value,
+    converted: &NativeValue,
+    declared: AnswerType,
+    numeric: bool,
+) -> Result<Answer, CoreError> {
+    let native = logical(converted)?;
+    let family = if numeric {
+        converted_family(converted)
+    } else {
+        None
+    };
+    let strict = super::answer_of(
+        Some(raw),
+        family.unwrap_or(declared),
+        AnswerPolicy::Gathered,
+    )?;
+    if family.is_some()
+        && !matches!(
+            strict,
+            Answer::Written(_) | Answer::None | Answer::NonFinite(_)
+        )
+    {
+        return Ok(native_answer(&native));
+    }
+    Ok(if matches!(strict, Answer::Text(_)) {
+        native_answer(raw)
+    } else {
+        strict
+    })
+}
+
 fn renamed_probabilities(
     original: Option<&Vec<(String, Scalar)>>,
-    renamed: Option<&Vec<(String, Scalar)>>,
+    renamed: Option<&Vec<RelationalTargetProbability>>,
+    declared: AnswerType,
+    numeric: bool,
+    float_text: fn(f64) -> String,
 ) -> Result<Option<Vec<(String, f64)>>, CoreError> {
     match (original, renamed) {
         (None, None) => Ok(None),
         (Some(original), Some(renamed)) if original.len() == renamed.len() => {
-            let mut keys = BTreeSet::new();
-            for ((_, value), (key, actual)) in original.iter().zip(renamed) {
-                if value != actual {
+            let mut selected = Vec::with_capacity(original.len());
+            for ((key, value), actual) in original.iter().zip(renamed) {
+                if value != &actual.probability {
                     return Err(protocol("native probability rename changed a probability"));
                 }
-                keys.insert(key);
+                let raw = Value::text(key);
+                if !numeric && (actual.value != native(&raw)? || actual.name != *key) {
+                    return Err(protocol(
+                        "an unconverted probability changed its decoded value",
+                    ));
+                }
+                // Validate the complete native product even when strict
+                // admission ultimately selects the original decoded key.
+                logical(&actual.value)?;
+                let family = if numeric {
+                    converted_family(&actual.value)
+                } else {
+                    None
+                };
+                let family = family.unwrap_or(declared);
+                let strict = super::answer_of(Some(&raw), family, AnswerPolicy::Gathered)?;
+                let name = if matches!(strict, Answer::Written(_) | Answer::Text(_)) {
+                    key.clone()
+                } else if numeric && converted_family(&actual.value).is_some() {
+                    actual.name.clone()
+                } else {
+                    super::spelled_as(
+                        &[(key.clone(), 0.0)],
+                        family,
+                        float_text,
+                        AnswerPolicy::Gathered,
+                    )[0]
+                    .0
+                    .clone()
+                };
+                let Scalar::Float64(probability) = value else {
+                    return Err(protocol("decoded probability is not a finite double"));
+                };
+                if !probability.is_finite() {
+                    return Err(protocol("decoded probability is not a finite double"));
+                }
+                selected.push((name, *probability));
             }
-            let selected = if keys.len() == original.len() {
-                renamed
-            } else {
-                original
-            };
-            Ok(Some(
-                selected
-                    .iter()
-                    .map(|(key, value)| match value {
-                        Scalar::Float64(value) if value.is_finite() => Ok((key.clone(), *value)),
-                        _ => Err(protocol("decoded probability is not a finite double")),
-                    })
-                    .collect::<Result<_, _>>()?,
-            ))
+            let keys: BTreeSet<_> = selected.iter().map(|(key, _)| key).collect();
+            if keys.len() != selected.len() {
+                for ((key, _), (original, _)) in selected.iter_mut().zip(original) {
+                    *key = original.clone();
+                }
+            }
+            Ok(Some(selected))
         }
         _ => Err(protocol("native target rename changed probability shape")),
     }
@@ -1115,11 +1198,26 @@ mod tests {
             ("False".into(), Scalar::Float64(0.75)),
         ];
         let renamed = vec![
-            ("False".into(), Scalar::Float64(0.25)),
-            ("False".into(), Scalar::Float64(0.75)),
+            RelationalTargetProbability {
+                value: NativeValue::Boolean { value: false },
+                name: "False".into(),
+                probability: Scalar::Float64(0.25),
+            },
+            RelationalTargetProbability {
+                value: NativeValue::Boolean { value: false },
+                name: "False".into(),
+                probability: Scalar::Float64(0.75),
+            },
         ];
         assert_eq!(
-            renamed_probabilities(Some(&original), Some(&renamed)).unwrap(),
+            renamed_probabilities(
+                Some(&original),
+                Some(&renamed),
+                AnswerType::Bool,
+                true,
+                |n| n.to_string()
+            )
+            .unwrap(),
             Some(vec![("false".into(), 0.25), ("False".into(), 0.75)])
         );
     }

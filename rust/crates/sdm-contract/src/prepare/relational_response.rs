@@ -10,6 +10,7 @@
 use crate::Scalar;
 use crate::data::AttachmentId;
 use crate::scalar::native_value::NativeValue;
+use crate::scalar::unicode::UnicodeText;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -123,7 +124,16 @@ pub struct CheckedRelationalRows {
 pub struct RelationalTargetRow {
     pub ordinal: usize,
     pub prediction: NativeValue,
-    pub probabilities: Option<Vec<(String, Scalar)>>,
+    pub probabilities: Option<Vec<RelationalTargetProbability>>,
+}
+
+/// The completed native key conversion and its actual reached display.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RelationalTargetProbability {
+    pub value: NativeValue,
+    pub name: String,
+    pub probability: Scalar,
 }
 
 /// Independently useful, complete data for layout and later core merging.
@@ -147,6 +157,8 @@ pub struct RelationalTargetFacts {
     pub classification: bool,
     pub dtype_truth: Option<bool>,
     pub numeric_prefix: Option<bool>,
+    /// Builtin text of the held declaration, only when that read was reached.
+    pub dtype: Option<UnicodeText>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
