@@ -92,7 +92,10 @@ def wrapped(core, operations, *, runner='python-core'):
         'core': core,
         'public': {
             'payloads': [
-                {'parsed': copy.deepcopy(call['body'])}
+                {
+                    'parsed': copy.deepcopy(call['body']),
+                    'sha256': call['body_sha256'],
+                }
                 for call in calls
                 if call['body'] is not None
             ]
@@ -156,21 +159,25 @@ def test_failed_prediction_keeps_checked_paid_calls_and_partial_result():
 
 
 @pytest.mark.parametrize(
-    'tamper', [False, True], ids=['untampered', 'endpoint-body-changed']
+    'tamper',
+    [None, 'body', 'hash'],
+    ids=['untampered', 'endpoint-body-changed', 'endpoint-bytes-changed'],
 )
 def test_failure_body_is_bound_to_independently_received_request(tamper):
     core, operations = partial_observation()
     observation = wrapped(core, operations)
-    if tamper:
+    if tamper == 'body':
         observation['public']['payloads'][0]['parsed']['model'] = (
             'not-the-core-body'
         )
+    if tamper == 'hash':
+        observation['public']['payloads'][0]['sha256'] = '0' * 64
     report = COMPARE.Report()
     COMPARE._core_payload(
         report, {'id': 'partial-proof'}, 'python-core', observation, None
     )
-    assert bool(report.failures) is tamper
-    assert bool(CHECK.complete(observation)) is tamper
+    assert bool(report.failures) is (tamper is not None)
+    assert bool(CHECK.complete(observation)) is (tamper is not None)
 
 
 @pytest.mark.parametrize(
