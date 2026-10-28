@@ -204,3 +204,9 @@ Keep source hashing and exact retained-product equality over every neutral fact 
 Map the existing single native inferred-content read immediately to Text, Decimal, Temporal or Other, retaining None when no observation occurred and preserving all existing Rust predicate order.
 Select the existing fixed-LargeUTF8 refusal in Rust using the declaration and return its neutral reason, physical type and table/column location; Python renders the exact native recipe and RuntimeError cause only after that selection.
 Tests cover complete currently admitted declarations, original Decimal width/scale, equal exports with different original facts, malformed contradictions, owner rebinding, all observed-content branches and unchanged cached unsupported-source mutation behavior.
+
+Keep the existing caller dtype-name facts in the immutable resolved question owner and use them at the ordinary caller-schema consistency boundary before any native cast.
+The later engine checks retain their source-type semantics and existing diagnostics.
+After all native casts, validate relationship structure and keys before the existing native edge-kind check, allowing an induced type mismatch to reach `EdgeKeyTypes` rather than replaying the earlier caller `LinkTypes` refusal.
+The initial caller relationship check stays unchanged, so a subsequent call with the already-mutated schema still refuses before any native effect.
+Tests preserve the complete frozen live-graph and Decimal callback records, original exception chains and warning/callback order, and distinguish an early incompatible declared meaning from a later native edge mismatch and structural/key failure.
