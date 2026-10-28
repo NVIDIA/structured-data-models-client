@@ -385,6 +385,74 @@ def _error_record(error, seen=None):
     return result
 
 
+def _fault_as_recorded(observed, *, core):
+    if not core or observed['case'] != 'huge-integer-probability':
+        return observed
+    # P3E-5 retains the gathered decoder's branchable field/reason policy.
+    # Assert that exact addition before comparing every native observation
+    # with the unchanged original recording, whose details are empty.
+    assert observed['error']['details'] == {
+        'field': 'prediction.probabilities',
+        'reason': 'not_a_number',
+    }
+    projected = copy.deepcopy(observed)
+    projected['error']['details'] = {}
+    return projected
+
+
+@pytest.mark.parametrize(
+    'details',
+    [
+        {},
+        {'field': 'prediction.probabilities'},
+        {'field': 'prediction.row_index', 'reason': 'not_a_number'},
+        {'field': 'prediction.probabilities', 'reason': 'not_finite'},
+        {
+            'field': 'prediction.probabilities',
+            'reason': 'not_a_number',
+            'diagnostic': 'private native diagnostic',
+        },
+    ],
+)
+def test_huge_probability_comparison_requires_exact_gathered_details(details):
+    observed = copy.deepcopy(FAULT_REFERENCE['huge-integer-probability'])
+    observed['error']['details'] = details
+    with pytest.raises(AssertionError):
+        _fault_as_recorded(observed, core=True)
+
+
+@pytest.mark.parametrize('changed', ['cause', 'events', 'warnings'])
+def test_huge_probability_comparison_preserves_native_observation_record(
+    changed,
+):
+    expected = FAULT_REFERENCE['huge-integer-probability']
+    assert expected['error']['details'] == {}
+    observed = copy.deepcopy(expected)
+    observed['error']['details'] = {
+        'field': 'prediction.probabilities',
+        'reason': 'not_a_number',
+    }
+    before = copy.deepcopy(observed)
+    assert _fault_as_recorded(observed, core=True) == expected
+    assert observed == before
+    if changed == 'cause':
+        observed['error']['cause']['message'] = 'changed native cause'
+    elif changed == 'events':
+        observed['events'].append('unexpected native observation')
+    else:
+        observed['warnings'][0]['message'] = 'changed native warning'
+    assert _fault_as_recorded(observed, core=True) != expected
+
+
+@pytest.mark.parametrize(
+    ('core', 'case'),
+    [(False, 'huge-integer-probability'), (True, 'forecast-window-refusal')],
+)
+def test_gathered_details_comparison_is_limited_to_its_core_case(core, case):
+    observed = copy.deepcopy(FAULT_REFERENCE[case])
+    assert _fault_as_recorded(observed, core=core) is observed
+
+
 @pytest.mark.parametrize('core', [False, True], ids=['original', 'core'])
 @pytest.mark.parametrize('case', list(FAULT_REFERENCE))
 def test_native_part_fault_and_instance_comparison_parity(
@@ -482,7 +550,7 @@ def test_native_part_fault_and_instance_comparison_parity(
             for item in notices
         ]
     observed['events'] = events
-    assert observed == expected
+    assert _fault_as_recorded(observed, core=core) == expected
 
 
 @pytest.mark.parametrize('core', [False, True], ids=['original', 'core'])
