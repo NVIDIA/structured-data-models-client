@@ -102,6 +102,8 @@ pub struct Observed {
     pub answered: Option<Value>,
     /// Actual taken CallModel bodies, including calls whose response failed.
     pub model_calls: Vec<Value>,
+    /// Each actual legacy Predict keeps its own terminal products.
+    pub legacy_predictions: Vec<Value>,
     /// The explanation of `predict`'s result (T2.13), where the core gave
     /// one: its Arrow schema's `explanation` metadata, the JSON text the
     /// core wrote. Apart from the answer, whose shape a gate's checkpoint
@@ -371,6 +373,7 @@ pub fn run_edited(case: &Case, bases: &Bases, edits: &[SchemaEdit]) -> Result<Ob
         edits: vec![],
         answered: None,
         model_calls: Vec::new(),
+        legacy_predictions: Vec::new(),
         explanation: None,
     })
 }
@@ -1138,6 +1141,7 @@ fn describe_on(
         edits: Vec::new(),
         answered: None,
         model_calls: Vec::new(),
+        legacy_predictions: Vec::new(),
         explanation: None,
     };
     let handle = match HostRun::start(&source.root(), &message, attachments) {
@@ -1985,6 +1989,7 @@ pub fn materialize_repeatedly_holding(
             edits: Vec::new(),
             answered: None,
             model_calls: Vec::new(),
+            legacy_predictions: Vec::new(),
             explanation: None,
         };
         materialize(
@@ -2116,6 +2121,47 @@ fn list_cells(values: &dyn duckdb::arrow::array::Array) -> Result<Vec<Value>> {
 /// `predict` of the state `materialize` answered, handed back as this host
 /// held it: its model call answered by the scripted endpoint, in process.
 fn predict(
+    case: &Case,
+    spec: &PredictInput,
+    state: HeldState,
+    observed: &mut Observed,
+    root: &CompositionRoot,
+) -> Result<()> {
+    // Every invocation starts with no partial/explanation from its predecessor.
+    observed.answered = None;
+    observed.explanation = None;
+    let run = observed.operations.len();
+    let result = predict_run(case, spec, state, observed, root);
+    let (completion, predicted, error) = if result.is_ok() {
+        match &observed.answer {
+            Answer::Predicted(value) => {
+                let mut value = value.clone();
+                if let Some(explanation) = &observed.explanation {
+                    value["result"]["explanation"] = json!(explanation);
+                }
+                ("done", value, Value::Null)
+            }
+            Answer::Error { kind, code, .. } => {
+                ("error", Value::Null, json!({"kind": kind, "code": code}))
+            }
+            _ => ("unobserved", Value::Null, Value::Null),
+        }
+    } else {
+        ("unobserved", Value::Null, Value::Null)
+    };
+    if observed.operations.get(run).map(String::as_str) == Some("predict") {
+        observed.legacy_predictions.push(json!({
+            "run": run,
+            "completion": completion,
+            "result": predicted,
+            "error": error,
+            "answered": observed.answered,
+        }));
+    }
+    result
+}
+
+fn predict_run(
     case: &Case,
     spec: &PredictInput,
     state: HeldState,
@@ -2346,6 +2392,7 @@ fn predict(
                     "body": sent,
                     "model": predicted.model,
                     "request_id": predicted.request_id,
+                    "outputs": predicted.outputs,
                     "metadata": serde_json::from_slice::<Value>(&metadata)?,
                     "result": result_rows(&result)?,
                 });

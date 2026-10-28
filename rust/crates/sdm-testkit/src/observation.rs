@@ -108,6 +108,7 @@ pub fn write(
             // result's explanation where the core gave one, the JSON text
             // it wrote (T2.16a), as python-core records it.
             let mut predicted = answer.clone();
+            predicted.as_object_mut().unwrap().remove("outputs");
             if let (Some(explanation), Some(result)) = (
                 &observed.explanation,
                 predicted.get_mut("result").and_then(Value::as_object_mut),
@@ -151,6 +152,7 @@ pub fn write(
             "predicted": predicted,
             "error": error,
             "model_calls": observed.model_calls,
+            "legacy_predictions": observed.legacy_predictions,
             "answered": observed.answered,
         },
     });

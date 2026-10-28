@@ -289,6 +289,7 @@
           "properties": {
             "body": {"type": ["object", "null"]},
             "calls": {"description": "Where predict made more than one call (a forecast's steps, a request asked in several calls), every call's body in the order sent, body the last's (T2.1g); absent for one call.", "type": "array", "minItems": 2, "items": {"type": "object"}},
+            "outputs": {"type": "array", "items": {"type": "string"}},
             "model": {"type": "string"},
             "request_id": {"type": "string"},
             "metadata": {"type": "object"},
@@ -301,6 +302,22 @@
                 "rows": {"type": "array", "items": {"type": "array"}},
                 "explanation": {"description": "The result's explanation where the core gave one: its Arrow schema's metadata key explanation, the JSON text the core wrote, as text (T2.13; recorded by both core runners from T2.16a, so the gate holds the hosts to the same bytes); absent where it gave none. An item's explanation and metadata are the result's own columns, among the rows.", "type": "string"}
               }
+            }
+          }
+        },
+        "legacy_predictions": {
+          "description": "Run-local legacy prediction completion and actually taken products, in actual native Run order. No product is inherited from a predecessor.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["run", "completion", "result", "error", "answered"],
+            "properties": {
+              "run": {"type": "integer", "minimum": 0},
+              "completion": {"enum": ["done", "error", "unobserved"]},
+              "result": {"$ref": "#/$defs/legacyPredictionResult"},
+              "error": {"$ref": "#/properties/core/properties/error"},
+              "answered": {"$ref": "#/properties/core/properties/answered"}
             }
           }
         },
@@ -386,6 +403,65 @@
     }
   },
   "$defs": {
+    "legacyPredictionResult": {
+      "description": "The actual native completion, with each attachment product present only when the host actually took it.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "body",
+        "model",
+        "request_id",
+        "metadata",
+        "result"
+      ],
+      "properties": {
+        "body": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "calls": {
+          "description": "Where predict made more than one call (a forecast's steps, a request asked in several calls), every call's body in the order sent, body the last's (T2.1g); absent for one call.",
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "object"
+          }
+        },
+        "outputs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "model": {
+          "type": "string"
+        },
+        "request_id": {
+          "type": "string"
+        },
+        "metadata": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "result": {
+          "anyOf": [
+            {
+              "$ref": "#/properties/core/properties/predicted/properties/result"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
     "predictionCoreError": {
       "type": "object",
       "additionalProperties": false,

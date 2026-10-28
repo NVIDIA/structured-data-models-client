@@ -425,10 +425,18 @@ fn failure_observations_publish_actual_calls_and_carried_arrow() {
         assert_eq!(prediction["answered"], line["core"]["answered"], "{id}");
         assert_eq!(
             prediction["run"].as_u64().unwrap() as usize,
-            observed.operations.iter().position(|op| op == "predict").unwrap(),
+            observed
+                .operations
+                .iter()
+                .position(|op| op == "predict")
+                .unwrap(),
             "{id}"
         );
-        assert_eq!(line["core"]["legacy_predictions"], json!(observed.legacy_predictions), "{id}");
+        assert_eq!(
+            line["core"]["legacy_predictions"],
+            json!(observed.legacy_predictions),
+            "{id}"
+        );
         if let Some(answered) = &observed.answered {
             assert!(answered["model"].is_string(), "{id}");
             assert!(answered["request_id"].is_string(), "{id}");
@@ -454,7 +462,8 @@ fn failure_observations_publish_actual_calls_and_carried_arrow() {
 fn successful_prediction_keeps_its_complete_run_local_result() {
     use sdm_testkit::observation::{self, Identity};
     let bases = bases::load(&root().join("contract/bases.yaml")).unwrap();
-    let loaded = case::load(&[root().join("contract/cases/s1/multicall.rows-per-call-3.json")]).unwrap();
+    let loaded =
+        case::load(&[root().join("contract/cases/s1/multicall.rows-per-call-3.json")]).unwrap();
     let observed = host::run(&loaded[0].case, &bases).unwrap();
     let identity = Identity::new(&root()).unwrap();
     let line = observation::write(&identity, &loaded[0], &observed, None);

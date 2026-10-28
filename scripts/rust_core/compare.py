@@ -1063,16 +1063,151 @@ def shared_operations(
     None otherwise, and the hosts are held to each other whole."""
     if stop is None:
         return None
-    mine = _prediction_view(python)['operations']
-    theirs = _prediction_view(rust)['operations']
+    views = (_prediction_view(python), _prediction_view(rust))
+    mine, theirs = (view['operations'] for view in views)
     short, long = (mine, theirs) if len(mine) <= len(theirs) else (theirs, mine)
     if mine == theirs or long[: len(short)] != short:
+        return None
+    if any(
+        event['position'] < len(short) <= event['through']
+        for view in views
+        for event in view.get('events', [])
+    ):
         return None
     limit = STAGES.index(stop)
     for op in long[len(short) :]:
         if op not in STAGE_OF or STAGES.index(STAGE_OF[op]) < limit:
             return None
     return list(short)
+
+
+def _event_payload(body: Any, endpoint: Any, paths: tuple[Any, ...]) -> Any:
+    if body is None:
+        return None
+    check = _capture_check()
+    return _lossless(
+        check.masked_serving(body, paths)
+        if endpoint is not None
+        else check.masked(body, paths)
+    )
+
+
+def _event_product(value: Any, attempts: Any, paths: tuple[Any, ...]) -> Any:
+    if value is None:
+        return None
+
+    def payload(body: Any) -> Any:
+        # Products retain actual selected call bodies. Their envelope mode
+        # comes from that call's typed input, never a shape-based guess.
+        matched = [item for item in attempts or [] if item['body'] == body]
+        endpoint = matched[0]['model_endpoint'] if matched else None
+        return _event_payload(body, endpoint, paths)
+
+    result = dict(value)
+    if 'body' in result:
+        result['body'] = payload(result['body'])
+    if 'calls' in result:
+        result['calls'] = [payload(body) for body in result['calls']]
+    return result
+
+
+def _prediction_events_agree(
+    report: Report,
+    where: str,
+    mine: dict[str, Any],
+    theirs: dict[str, Any],
+    shared: list[str] | None = None,
+) -> None:
+    """Compare products owned by each actually shared logical prediction."""
+    events = [
+        [
+            event
+            for event in view['events']
+            if shared is None or event['position'] < len(shared)
+        ]
+        for view in (mine, theirs)
+    ]
+    if [event['position'] for event in events[0]] != [
+        event['position'] for event in events[1]
+    ]:
+        report.fail(f'{where}: prediction event positions differ', 'core')
+        return
+    for left, right in zip(*events, strict=True):
+        at = f'{where}: prediction[{left["position"]}]'
+        calls = [
+            None
+            if event['attempts'] is None
+            else [
+                _event_payload(
+                    item['body'], item['model_endpoint'], report.paths
+                )
+                for item in event['attempts']
+            ]
+            for event in (left, right)
+        ]
+        # Historical sole-run checkpoints expose bodies but no delivery
+        # observations. Their actual product remains available below.
+        if calls[0] != calls[1]:
+            _differ(
+                report,
+                at,
+                'core.model_calls',
+                None,
+                None,
+                show=False,
+                rule='payload',
+            )
+        for field in ('model', 'error'):
+            if left[field] != right[field]:
+                _differ(
+                    report,
+                    at,
+                    f'core.{field}',
+                    None,
+                    None,
+                    show=False,
+                    rule='core',
+                )
+        results = [
+            _event_product(event['result'], event['attempts'], report.paths)
+            for event in (left, right)
+        ]
+        if results[0] != results[1]:
+            _differ(
+                report,
+                at,
+                'core.predicted',
+                None,
+                None,
+                show=False,
+                rule='core',
+            )
+        partials = [event['partial'] for event in (left, right)]
+        if (partials[0]['observed'], partials[0]['answered']) != (
+            partials[1]['observed'],
+            partials[1]['answered'],
+        ):
+            _differ(
+                report, at, 'core.answered', None, None, show=False, rule='core'
+            )
+        if all(partial['results'] is not None for partial in partials):
+            partial_results = [
+                [
+                    _event_product(value, event['attempts'], report.paths)
+                    for value in event['partial']['results']
+                ]
+                for event in (left, right)
+            ]
+            if partial_results[0] != partial_results[1]:
+                _differ(
+                    report,
+                    at,
+                    'core.partial_results',
+                    None,
+                    None,
+                    show=False,
+                    rule='core',
+                )
 
 
 def _core_agree(
@@ -1105,10 +1240,33 @@ def _core_agree(
         _core_agree_shared(
             report,
             where,
-            {**python['core'], 'inputs': python_view['inputs']},
-            {**rust['core'], 'inputs': rust_view['inputs']},
+            {
+                **python['core'],
+                'inputs': [
+                    value
+                    for position, value in zip(
+                        python_view['input_positions'],
+                        python_view['inputs'],
+                        strict=True,
+                    )
+                    if position < len(shared)
+                ],
+            },
+            {
+                **rust['core'],
+                'inputs': [
+                    value
+                    for position, value in zip(
+                        rust_view['input_positions'],
+                        rust_view['inputs'],
+                        strict=True,
+                    )
+                    if position < len(shared)
+                ],
+            },
             shared,
         )
+        _prediction_events_agree(report, where, python_view, rust_view, shared)
         _same_contract(report, where, python, rust)
         return
     if python_view['operations'] != rust_view['operations']:
@@ -1125,48 +1283,7 @@ def _core_agree(
         return
     mine = {**mine, 'inputs': python_view['inputs']}
     theirs = {**theirs, 'inputs': rust_view['inputs']}
-    calls = [
-        None
-        if view['calls'] is None
-        else [_payload(body, report.paths) for body in view['calls']]
-        for view in (python_view, rust_view)
-    ]
-    if calls[0] != calls[1]:
-        _differ(
-            report,
-            where,
-            'core.model_calls',
-            None,
-            None,
-            show=False,
-            rule='payload',
-        )
-    partials = [view['partial'] for view in (python_view, rust_view)]
-    if (
-        partials[0]['observed'] != partials[1]['observed']
-        or partials[0]['answered'] != partials[1]['answered']
-    ):
-        _differ(
-            report, where, 'core.answered', None, None, show=False, rule='core'
-        )
-    if all(partial['results'] is not None for partial in partials):
-        results = [
-            [
-                _predicted({'predicted': result}, report.paths)
-                for result in partial['results']
-            ]
-            for partial in partials
-        ]
-        if results[0] != results[1]:
-            _differ(
-                report,
-                where,
-                'core.partial_results',
-                None,
-                None,
-                show=False,
-                rule='core',
-            )
+    _prediction_events_agree(report, where, python_view, rust_view)
     for field in ('inputs', 'fetches', 'described', 'materialized'):
         if _core_field(field, mine[field]) != _core_field(field, theirs[field]):
             _differ(
@@ -1178,10 +1295,6 @@ def _core_agree(
                 show=False,
                 rule='core',
             )
-    if _predicted(mine, report.paths) != _predicted(theirs, report.paths):
-        _differ(
-            report, where, 'core.predicted', None, None, show=False, rule='core'
-        )
     for field in ('accepted', 'error'):
         if mine[field] != theirs[field]:
             _differ(
@@ -1221,12 +1334,11 @@ def _core_agree_shared(
     r""":func:`_core_agree` on the operations both hosts ran (``shared``)."""
     if mine is None or theirs is None:
         return
-    count = len(shared)
     fetched = min(len(mine['fetches'] or []), len(theirs['fetches'] or []))
     held = {
         'inputs': (
-            (mine['inputs'] or [])[:count],
-            (theirs['inputs'] or [])[:count],
+            mine['inputs'] or [],
+            theirs['inputs'] or [],
         ),
         'fetches': (
             (mine['fetches'] or [])[:fetched],
@@ -1625,7 +1737,7 @@ def _lossless(value: Any) -> Any:
             # -0.0 and 0.0 differ while 1e-05 and 1e-5 agree.
             return ['number', kind, value, value.is_signed()]
         return {key: _lossless(item) for key, item in value.items()}
-    if isinstance(value, list):
+    if isinstance(value, (list, tuple)):
         return [_lossless(item) for item in value]
     return value
 
@@ -1758,14 +1870,8 @@ def _host_fields(
     )
     if found:
         report.fail(f'{where}: {found}', 'result')
-    sent = [
-        (each['method'], each['path'], _payload(each['parsed'], report.paths))
-        for each in mine['payloads']
-    ]
-    wanted = [
-        (each['method'], each['path'], _payload(each['parsed'], report.paths))
-        for each in theirs['payloads']
-    ]
+    sent = _lossless(_capture_check()._payloads(mine, report.paths))
+    wanted = _lossless(_capture_check()._payloads(theirs, report.paths))
     found = _path_of(sent, wanted, 'public.payloads', excused)
     if found:
         report.fail(f'{where}: {found}', 'payload')
@@ -2392,35 +2498,51 @@ def _core_payload(
                 f'{case["id"]}: {who}: model calls were not observed', 'payload'
             )
         return
-    bodies = [_payload(body, report.paths) for body in calls]
+    bodies = (
+        [
+            _event_payload(item['body'], item['model_endpoint'], report.paths)
+            for item in viewed['attempts']
+        ]
+        if viewed['attempts'] is not None
+        else [_payload(body, report.paths) for body in calls]
+    )
     if who == 'python-core':
         received = (observation.get('public') or {}).get('payloads', [])
-        if viewed['call_hashes'] is not None and viewed['call_hashes'] != [
-            each.get('sha256') for each in received
-        ]:
-            report.fail(
-                f'{case["id"]}: python-core: posted bytes differ from received bytes',
-                'payload',
-            )
-        sent = [_payload(each['parsed'], report.paths) for each in received]
-        found = _path_of(bodies, sent, named)
-        if found:
-            report.fail(
-                f'{case["id"]}: python-core: the call against the request '
-                f'received: {found}',
-                'payload',
-            )
+        if viewed['attempts'] is not None:
+            try:
+                _prediction_reader().check_receipts(
+                    viewed['attempts'], received
+                )
+            except _prediction_reader().ObservationError:
+                report.fail(
+                    f'{case["id"]}: python-core: actual attempts and received requests disagree',
+                    'payload',
+                )
+        else:
+            sent = [_payload(each['parsed'], report.paths) for each in received]
+            found = _path_of(bodies, sent, named)
+            if found:
+                report.fail(
+                    f'{case["id"]}: python-core: the call against the request '
+                    f'received: {found}',
+                    'payload',
+                )
     if (
         who in UNOBSERVING
         and reference is not None
         and stop in (None, 'predict')
     ):
+        # Validate/conserve the original journal above. The approved
+        # core-only column projection belongs solely to this reference
+        # comparison; it must never rewrite receipt/hash owner evidence.
+        named_columns = report.core_only.get(case['id'].partition('@')[0], {})
+        compared = [_without_in_payload(body, named_columns) for body in bodies]
         wanted = [
-            _payload(each['parsed'], report.paths)
-            for each in reference['public']['payloads']
+            _lossless(_capture_check().masked_request(item, report.paths))
+            for item in reference['public']['payloads']
         ]
         found = _path_of(
-            bodies,
+            compared,
             wanted,
             named,
             report.more_exact.get((case['id'], who), ()),
@@ -3593,7 +3715,9 @@ def compare(
             if named and who in MORE_EXACT_RUNNERS and ref is not None:
                 seen = without_core_only(observation, named)
                 against = without_left_out_warning(ref, named, observation)
-            _core_payload(report, case, who, seen, against, earlier or stop)
+            _core_payload(
+                report, case, who, observation, against, earlier or stop
+            )
             refused = (
                 statements_refused(report, case['id'], who, wanted, ref)
                 or earlier

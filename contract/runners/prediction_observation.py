@@ -647,6 +647,157 @@ def _partial_entry(
     return {'observed': True, 'answered': answered, 'results': results}
 
 
+def _legacy_partial(answered: Any, observed: bool) -> dict[str, Any]:
+    if answered is not None:
+        require(
+            isinstance(answered, dict)
+            and set(answered)
+            == {'rows', 'result', 'model', 'request_id', 'metadata', 'outputs'}
+            and _ordinal(answered['rows'])
+            and isinstance(answered['result'], dict)
+            and isinstance(answered['result']['columns'], list)
+            and isinstance(answered['result']['rows'], list)
+            and type(answered['model']) is str
+            and type(answered['request_id']) is str
+            and isinstance(answered['metadata'], dict)
+            and isinstance(answered['outputs'], list)
+            and all(type(value) is str for value in answered['outputs']),
+            'legacy carried partial result is malformed',
+        )
+    return {'observed': observed, 'answered': answered, 'results': None}
+
+
+def _legacy_product(value: Any) -> None:
+    if value is None:
+        return
+    require(
+        isinstance(value, dict)
+        and {'body', 'model', 'request_id', 'metadata', 'result'} <= set(value)
+        and set(value)
+        <= {
+            'body',
+            'calls',
+            'model',
+            'request_id',
+            'metadata',
+            'result',
+            'outputs',
+        }
+        and (value['body'] is None or isinstance(value['body'], dict))
+        and type(value['model']) is str
+        and type(value['request_id']) is str
+        and (value['metadata'] is None or isinstance(value['metadata'], dict))
+        and (value['result'] is None or isinstance(value['result'], dict)),
+        'legacy result is not an observed typed prediction product',
+    )
+    if 'outputs' in value:
+        require(
+            isinstance(value['outputs'], list)
+            and all(type(item) is str for item in value['outputs']),
+            'legacy result outputs are malformed',
+        )
+    if 'calls' in value:
+        require(
+            isinstance(value['calls'], list)
+            and len(value['calls']) >= 2
+            and all(isinstance(item, dict) for item in value['calls'])
+            and value['calls'][-1] == value['body'],
+            'legacy result call order is malformed',
+        )
+
+
+def _legacy_events(
+    core: dict[str, Any],
+    operations: list[str],
+    inputs: list[dict[str, Any]],
+    run_positions: dict[int, int],
+    attempts: list[dict[str, Any]] | None,
+) -> list[dict[str, Any]]:
+    """Read each legacy Run's products without borrowing its successor."""
+    legacy_runs = [run for run, op in enumerate(operations) if op == 'predict']
+    legacy_inputs = [record for record in inputs if record['op'] == 'predict']
+    require(
+        len(legacy_inputs) == len(legacy_runs),
+        'legacy prediction inputs lack actual Run owners',
+    )
+    journal = core.get('legacy_predictions')
+    if journal is None:
+        require(
+            len(legacy_runs) <= 1,
+            'multiple legacy predictions lack Run-local products',
+        )
+        journal = [
+            {
+                'run': run,
+                'completion': 'error'
+                if core.get('error') is not None
+                else 'done',
+                'result': core.get('predicted'),
+                'error': core.get('error'),
+                'answered': core.get('answered'),
+            }
+            for run in legacy_runs
+        ]
+    require(
+        isinstance(journal, list)
+        and all(
+            isinstance(item, dict) and _ordinal(item.get('run'))
+            for item in journal
+        )
+        and [item['run'] for item in journal] == legacy_runs,
+        'legacy prediction journal changes actual Run order or ownership',
+    )
+    events = []
+    for record, observed in zip(legacy_inputs, journal, strict=True):
+        require(
+            isinstance(observed, dict)
+            and set(observed)
+            == {'run', 'completion', 'result', 'error', 'answered'}
+            and observed['completion'] in ('done', 'error', 'unobserved')
+            and (
+                observed['error'] is None
+                or (
+                    isinstance(observed['error'], dict)
+                    and set(observed['error']) == {'kind', 'code'}
+                    and all(
+                        type(value) is str
+                        for value in observed['error'].values()
+                    )
+                )
+            )
+            and (observed['completion'] == 'done' or observed['result'] is None)
+            and (observed['completion'] == 'error' or observed['error'] is None)
+            and (
+                observed['completion'] != 'error'
+                or observed['error'] is not None
+            )
+            and (
+                observed['completion'] == 'error'
+                or observed['answered'] is None
+            ),
+            'legacy prediction journal has contradictory completion products',
+        )
+        _legacy_product(observed['result'])
+        events.append(
+            {
+                'position': run_positions[observed['run']],
+                'through': run_positions[observed['run']],
+                'model': record['model'],
+                'attempts': None
+                if attempts is None
+                else [
+                    item for item in attempts if item['run'] == observed['run']
+                ],
+                'result': observed['result'],
+                'error': observed['error'],
+                'partial': _legacy_partial(
+                    observed['answered'], observed['completion'] == 'error'
+                ),
+            }
+        )
+    return events
+
+
 def _view(core: dict[str, Any], operations: list[str]) -> dict[str, Any]:
     inputs = core['inputs']
     records = {}
@@ -736,17 +887,43 @@ def _view(core: dict[str, Any], operations: list[str]) -> dict[str, Any]:
     native = {entry['ordinal']: entry for entry in projected if entry['native']}
     emitted = set()
     logical_operations = []
+    run_positions = {}
+    entry_positions = {}
     for run, operation in enumerate(operations):
         entry = native.get(owners.get(run))
         if operation == 'prepare_request' and entry is not None:
             if entry['ordinal'] not in emitted:
+                entry_positions[entry['ordinal']] = len(logical_operations)
                 logical_operations.append('predict')
                 emitted.add(entry['ordinal'])
+            run_positions[run] = entry_positions[entry['ordinal']]
         else:
+            run_positions[run] = len(logical_operations)
             logical_operations.append(operation)
     logical_inputs = []
+    input_positions = []
     emitted = set()
+    cursor = 0
     for record in inputs:
+        if record['op'] == 'prepare_request':
+            run = record['run']
+        else:
+            run = next(
+                (
+                    at
+                    for at in range(cursor, len(operations))
+                    if operations[at] == record['op']
+                ),
+                None,
+            )
+            require(
+                run is not None,
+                'an actual input has no matching native operation',
+            )
+        require(
+            run >= cursor, 'actual input observations change native Run order'
+        )
+        cursor = run + 1
         if record['op'] == 'predict':
             state = record['state']
             if core.get('materialized') is not None:
@@ -755,15 +932,18 @@ def _view(core: dict[str, Any], operations: list[str]) -> dict[str, Any]:
                     'legacy prediction state differs from its own materialized answer',
                 )
             logical_inputs.append({'op': 'predict', 'model': record['model']})
+            input_positions.append(run_positions[run])
         elif record['op'] == 'prepare_request' and record['entry'] in native:
             entry = native[record['entry']]
             if entry['ordinal'] not in emitted:
                 logical_inputs.append(
                     {'op': 'predict', 'model': entry['model']}
                 )
+                input_positions.append(run_positions[run])
                 emitted.add(entry['ordinal'])
         else:
             logical_inputs.append(record)
+            input_positions.append(run_positions[run])
     last = next(
         (entry for entry in reversed(projected) if entry['parent'] is None),
         None,
@@ -832,32 +1012,55 @@ def _view(core: dict[str, Any], operations: list[str]) -> dict[str, Any]:
         )
         hashes = None
         attempts = None
-    partial = {
-        'observed': 'answered' in core and core.get('error') is not None,
-        'answered': core.get('answered'),
-        'results': None,
-    }
-    if partial['answered'] is not None:
-        answered = partial['answered']
-        require(
-            isinstance(answered, dict)
-            and set(answered)
-            == {'rows', 'result', 'model', 'request_id', 'metadata', 'outputs'}
-            and _ordinal(answered['rows'])
-            and isinstance(answered['result'], dict)
-            and isinstance(answered['result']['columns'], list)
-            and isinstance(answered['result']['rows'], list)
-            and type(answered['model']) is str
-            and type(answered['request_id']) is str
-            and isinstance(answered['metadata'], dict)
-            and isinstance(answered['outputs'], list)
-            and all(type(value) is str for value in answered['outputs']),
-            'legacy carried partial result is malformed',
-        )
+    partial = _legacy_partial(
+        core.get('answered'),
+        'answered' in core and core.get('error') is not None,
+    )
     if last is not None and last['completion'] == 'raised':
         partial = _partial_entry(
             entries[last['ordinal']], last['_results'], carries[last['ordinal']]
         )
+    events = _legacy_events(core, operations, inputs, run_positions, attempts)
+    for entry in projected:
+        if not entry['native']:
+            continue
+        raw = entries[entry['ordinal']]
+        failure = entry['failure']
+        rendered = entry['_rendered']
+        if rendered is not None:
+            rendered = {
+                **rendered,
+                'outputs': raw['results'][raw['final']]['data']['predicted'][
+                    'outputs'
+                ],
+            }
+        events.append(
+            {
+                'position': entry_positions[entry['ordinal']],
+                # A shared prefix cannot cut a still-owned nested invocation
+                # away from its parent's terminal product or handover.
+                'through': max(
+                    run_positions[run]
+                    for descendant in entries
+                    if _below(descendant['ordinal'], entry['ordinal'], entries)
+                    for run in descendant['runs']
+                ),
+                'model': entry['model'],
+                'attempts': [
+                    item for item in attempts if item['run'] in raw['runs']
+                ],
+                'result': rendered,
+                'error': records[failure['run']]['error']
+                if failure is not None
+                else None,
+                'partial': _partial_entry(
+                    raw, entry['_results'], carries[entry['ordinal']]
+                )
+                if entry['completion'] == 'raised'
+                else {'observed': False, 'answered': None, 'results': None},
+            }
+        )
+    events.sort(key=lambda item: item['position'])
     for entry in projected:
         del entry['_rendered']
         del entry['_calls']
@@ -865,10 +1068,12 @@ def _view(core: dict[str, Any], operations: list[str]) -> dict[str, Any]:
     return {
         'operations': logical_operations,
         'inputs': logical_inputs,
+        'input_positions': input_positions,
         'predictions': projected,
         'calls': calls,
         'call_hashes': hashes,
         'attempts': attempts,
+        'events': events,
         'partial': partial,
     }
 

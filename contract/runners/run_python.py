@@ -907,6 +907,9 @@ class _CapturedRun:
         self.call_record: dict[str, Any] | None = None
         self.result_record: dict[str, Any] | None = None
         self.error: dict[str, str] | None = None
+        self.completion = 'unobserved'
+        self.predicted: dict[str, Any] | None = None
+        self.partial: dict[str, Any] | None = None
         self.error_owner: BaseException | None = None
         self.carried: dict[str, Any] | None = None
         self.asked: dict[int, dict[str, Any]] = {}
@@ -1269,6 +1272,9 @@ class _Capture:
                 }
                 self.predictions[entry]['calls'].append(owner.call_record)
         if operation['op'] == 'predict':
+            self.predicted = None
+            self.partial = None
+            self.error = None
             owner.model_endpoint = operation.get('model_endpoint')
             state = operation['state']
             # The id each call carries: one call per step with rows to
@@ -1495,6 +1501,7 @@ class _Capture:
 
     def failed(self, error: Any, *, run: _CapturedRun | None = None) -> None:
         owner = self._run(run)
+        owner.completion = 'error'
         owner.error = {'kind': str(error.kind), 'code': str(error.code)}
         owner.error_owner = (
             error if owner.entry is not None and self._entries else None
@@ -1510,6 +1517,7 @@ class _Capture:
         self, result: dict[str, Any], *, run: _CapturedRun | None = None
     ) -> None:
         owner = self._run(run)
+        owner.completion = 'done'
         if result.get('op') == 'prepare_request':
             owner.prepared = result['value']
         if 'accepted' in result:
@@ -1527,7 +1535,7 @@ class _Capture:
                     'with rows to score'
                 )
             owner.answer = result
-            self.predicted = {
+            owner.predicted = {
                 'body': owner.body,
                 **({'calls': owner.bodies} if len(owner.bodies) > 1 else {}),
                 'model': result['model'],
@@ -1535,6 +1543,7 @@ class _Capture:
                 'metadata': None,
                 'result': None,
             }
+            self.predicted = owner.predicted
 
     def taken(
         self, attachment: int, value: Any, *, run: _CapturedRun | None = None
@@ -1584,7 +1593,9 @@ class _Capture:
                 self.model_calls.append(owner.pending_model)
         if owner.carried is not None and attachment == owner.carried['result']:
             if value is not None:
-                self.partial = _carried_result(value, owner.carried['rows'])
+                owner.partial = _carried_result(value, owner.carried['rows'])
+                if self._current_run is owner:
+                    self.partial = owner.partial
         if attachment == owner.prepared and isinstance(value, bytes):
             prepared = json.loads(value)
             if owner.input_record is not None:
@@ -1656,11 +1667,11 @@ class _Capture:
                         'final prediction Arrow answer indices disagree with lineage'
                     )
         answer = owner.answer
-        if answer is not None and self.predicted is not None:
+        if answer is not None and owner.predicted is not None:
             if attachment == answer['metadata'] and isinstance(value, bytes):
-                self.predicted['metadata'] = json.loads(value)
+                owner.predicted['metadata'] = json.loads(value)
             if attachment == answer['result'] and not isinstance(value, bytes):
-                self.predicted['result'] = _result_rows(value)
+                owner.predicted['result'] = _result_rows(value)
         if attachment == owner.description and isinstance(value, bytes):
             self.described = json.loads(value)
         state = owner.state
@@ -1695,6 +1706,22 @@ class _Capture:
             'predicted': self.predicted,
             'error': self.error,
             'model_calls': self.model_calls,
+            'legacy_predictions': [
+                {
+                    'run': owner.ordinal,
+                    'completion': owner.completion,
+                    'result': {
+                        **owner.predicted,
+                        'outputs': owner.answer['outputs'],
+                    }
+                    if owner.predicted is not None
+                    else None,
+                    'error': owner.error,
+                    'answered': owner.partial,
+                }
+                for owner in self._runs.values()
+                if owner.operation == 'predict'
+            ],
             'answered': self.partial,
         }
         if self.edits:
