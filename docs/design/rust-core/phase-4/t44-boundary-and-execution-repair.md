@@ -513,3 +513,6 @@ Observe the existing error_from_core return boundary transparently, pairing only
 Record no presentation pair if reconstruction itself raises a native failure.
 At entry completion, exact selected identity or an explicit builtin cause-chain relationship can retain that native association; ordinary context links remain incidental, and the actual outer public failure stays independently observed.
 Use builtin exception descriptors with cycle protection rather than user attribute access or formatting, release ephemeral exception owners at entry completion, and restore this presentation observer with the other harness hooks in the same LIFO lifetime.
+
+A nested prediction keeps its native Run ownership, while an exact rethrow through an outer entry may link the same selected child failure without reassigning the Run or inferring the parent's model from the child.
+Retain those ephemeral presentation identities until the outermost observed entry completes, and validate any cross-entry failure link against the actual parent chain.

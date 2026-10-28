@@ -767,3 +767,42 @@ def test_reconstruction_reraising_prior_sdk_owner_does_not_select_new_run(
     assert first['run'] != second['run']
     assert capture.error == first['error']
     assert entry['failure'] == {'run': first['run'], 'relation': 'selected'}
+
+
+def test_nested_refusal_keeps_its_actual_child_run_and_outer_error_identity(
+    monkeypatch,
+):
+    from sdm_client import StructuredDataError
+    from sdm_client._rust import relational_predict
+    from sdm_client._rust.prepare import _call
+
+    def predict(client, request, model, outputs):
+        if model == 'outer':
+            return relational_predict.predict(client, request, 'inner', outputs)
+        return _call({'stage': 'model_lookup', 'position': None})
+
+    monkeypatch.setattr(relational_predict, 'predict', predict)
+    boundary = RUNNER._Boundary()
+    capture = boundary.reset()
+    try:
+        with pytest.raises(StructuredDataError) as caught:
+            relational_predict.predict(None, None, 'outer', None)
+        selected = caught.value
+    finally:
+        boundary.close()
+    outer, child = entries(capture)
+    assert outer['parent'] is None and child['parent'] == outer['ordinal']
+    [lookup] = [
+        record for record in capture.inputs if record['op'] == 'prepare_request'
+    ]
+    assert lookup['entry'] == child['ordinal']
+    assert lookup['run'] in child['runs'] and lookup['run'] not in outer['runs']
+    assert outer['completion'] == child['completion'] == 'raised'
+    assert (
+        outer['failure']
+        == child['failure']
+        == {'run': lookup['run'], 'relation': 'selected'}
+    )
+    assert capture.error == lookup['error']
+    assert BaseException.__getattribute__(selected, '__cause__') is None
+    assert BaseException.__getattribute__(selected, '__context__') is None
