@@ -32,11 +32,11 @@ def sparse_trace(count):
         'model': 'kumo-relational',
         'request_id': requests[0],
         'state': {
-            'version': 35,
+            'version': 2,
             'query': 1,
             'payload': 2,
-            'forecast': [
-                {'request_id': request_id, 'payload': 3 + at}
+            'batches': [
+                {'request_id': request_id, 'payload': 3 + at, 'rows': 1}
                 for at, request_id in enumerate(requests[1:])
             ],
         },
