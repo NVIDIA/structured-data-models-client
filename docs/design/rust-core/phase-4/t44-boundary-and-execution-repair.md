@@ -522,3 +522,31 @@ Observe the existing successful run._carried(error, raised) return to link those
 Keep that selected relation distinct as refused, forward once unchanged, and record no handover when the original function raises or when a later failure is a different owner.
 Preserve the actual terminal public error and paid partial results independently from the associated core diagnostic.
 Restore this finite handover observer in the same LIFO lifetime as the other hooks, without inspecting a Refused carrier, model callback or user exception property.
+
+
+### Whole-review serving and observation-owner closure
+
+R34 remains frozen and unexecuted while both whole reviewers complete their source reports.
+The reached core call may wrap the actual encoded request for a serving endpoint, so the input bytes and actual posted bytes are distinct native products.
+Retain the exact original input bytes as base64 evidence beside their existing hash, without decoding or invoking any user protocol before the original core start.
+Retain the actual posted body and its hash independently.
+For the existing direct endpoint, require exact byte-hash equality and the original request ID.
+For the existing serving endpoint, require its fixed single-row request_json envelope, then bind the actual nested JSON text to the observed original input bytes using the standard JSON decoder with collision-free internal number and ordered-member tags.
+Compare exact number tokens, member order, duplicate members and nested values without reconstructing or re-encoding either body.
+Preserve actual posted bytes as the authoritative comparison product and preserve valid pre-call serving refusals with no fabricated call.
+No new SDK endpoint or wire policy belongs in this observer repair.
+
+Native exception identities are useful only for active observed prediction entries.
+Keep serialized kind and code for failed validation, description and materialization Runs, but do not retain their traceback-bearing exception owners outside those entries.
+Retain prediction-owned identities through the enclosing entry as required for selected and refused handovers, then release them at the established outer completion.
+Add outside-entry collectability controls and preserve exact nested owner associations.
+
+A failed prediction's actual paid calls and genuinely observed partial results remain comparison evidence even when no successful core.predicted exists.
+Expose checked partial observations separately from successful final prediction meaning.
+Compare actual posted calls against independently received endpoint requests on both success and failure, and compare actual common partial-call prefixes and genuinely observed result products across hosts.
+Extend the existing legacy Python and Rust testkit observers only from their reached native call and partial-result boundaries, with explicit absence where no result was observed.
+Never derive missing legacy evidence from public answers, another host, expected fixtures or a successful child.
+Keep public terminal errors, complete partial answers, call order and existing payload exclusions independent of the core error association.
+
+Independent serving-envelope, ordering/token/ID/hash tampering, pre-call refusal, outside-entry owner collection and paid-partial comparison consumers must precede the bounded implementation.
+Keep frozen observations and R34 untouched, update all closed observation readers together, and obtain two fresh whole CODE approvals before successor SDK execution.
