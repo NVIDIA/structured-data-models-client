@@ -70,6 +70,73 @@ def _same_snapshot(left: Any, right: Any) -> bool:
     return True
 
 
+def _reply_obligation(reply: Any) -> int:
+    if reply is None:
+        return 0
+    require(isinstance(reply, dict), 'model reply observation is malformed')
+    outcome = reply.get('outcome')
+    if outcome in ('response', 'failed'):
+        require(
+            set(reply) == {'outcome', 'status'}
+            and _ordinal(reply['status'])
+            and reply['status'] <= 65535,
+            'reported model response has no actual status',
+        )
+        return int(outcome == 'response')
+    require(
+        reply == {'outcome': 'transport_error'},
+        'unknown model reply observation',
+    )
+    return 0
+
+
+def check_receipts(
+    attempts: list[dict[str, Any]], receipts: list[dict[str, Any]]
+) -> None:
+    """Require a monotone receipt partition, without inventing retry counts."""
+    bodies: dict[str, Any] = {}
+    required = []
+    for attempt in attempts:
+        digest = attempt['body_sha256']
+        require(_sha256(digest), 'attempted body hash is unobserved')
+        if digest in bodies:
+            require(
+                _same_snapshot(bodies[digest], attempt['body']),
+                'one posted hash carries contradictory body observations',
+            )
+        else:
+            bodies[digest] = attempt['body']
+        required.append(_reply_obligation(attempt['reply']))
+    hashes = []
+    for receipt in receipts:
+        digest = receipt.get('sha256')
+        require(
+            _sha256(digest)
+            and digest in bodies
+            and _same_snapshot(bodies[digest], receipt['parsed']),
+            'endpoint receipt differs from every actual attempted body/hash',
+        )
+        hashes.append(digest)
+    # reachable[j] means earlier attempts can account for exactly the first
+    # j receipts. A response needs one; other observed outcomes may have none.
+    reachable = [True] + [False] * len(hashes)
+    for attempt, minimum in zip(attempts, required, strict=True):
+        following = [minimum == 0 and reachable[0]]
+        for at, digest in enumerate(hashes, start=1):
+            following.append(
+                (minimum == 0 and reachable[at])
+                or (
+                    digest == attempt['body_sha256']
+                    and (reachable[at - 1] or following[at - 1])
+                )
+            )
+        reachable = following
+    require(
+        reachable[-1],
+        'endpoint receipts have no ordered allocation satisfying model responses',
+    )
+
+
 def observed_call_body(call: dict[str, Any], encoded: dict[str, Any]) -> None:
     """Bind independently observed input bytes and the actual posted JSON.
 
