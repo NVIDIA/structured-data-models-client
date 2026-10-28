@@ -16,7 +16,6 @@ from test_t44_text_frames import REFERENCE, materialize, question, shop
 from test_t44_text_frames import core as core
 
 from sdm_client import StructuredDataError
-
 from sdm_client._rust.frame_facts import (
     native_declaration,
     native_source_facts,

@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from typing import Literal, TypeAlias, TypedDict
+from typing import Literal, Protocol, TypeAlias, TypedDict, TypeGuard
 
 import pandas as pd
 import pyarrow as pa
@@ -48,6 +48,18 @@ class NativeSourceFacts(TypedDict):
     logical_text: LogicalTextFacts | None
 
 
+class _NativeStringDtype(Protocol):
+    @property
+    def storage(self) -> str: ...
+
+    @property
+    def na_value(self) -> object: ...
+
+
+def _native_string_dtype(dtype: object) -> TypeGuard[_NativeStringDtype]:
+    return type(dtype) is pd.StringDtype
+
+
 def native_declaration(dtype: object) -> NativeDeclaration | None:
     """Keep the original declared type, never the converted export's type.
 
@@ -87,11 +99,7 @@ def native_declaration(dtype: object) -> NativeDeclaration | None:
 def native_source_facts(dtype: object) -> NativeSourceFacts:
     """Describe logical text separately from a fixed native declaration."""
     logical: LogicalTextFacts | None = None
-    if (
-        isinstance(dtype, pd.StringDtype)
-        and type(dtype) is pd.StringDtype
-        and dtype.storage in ('python', 'pyarrow')
-    ):
+    if _native_string_dtype(dtype) and dtype.storage in ('python', 'pyarrow'):
         logical = {
             'backing': 'element_values'
             if dtype.storage == 'python'
