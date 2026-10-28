@@ -159,7 +159,11 @@ def test_constructor_export_retains_original_string_dtype_and_lossless_rows():
     ]
     assert types['value'].descriptor == {
         'category': False,
-        'meaning': {'dtype': 'string', 'untyped': False},
+        'meaning': {
+            'dtype': 'string',
+            'untyped': False,
+            'distinct': int(frame['value'].nunique(dropna=True)),
+        },
     }
 
 

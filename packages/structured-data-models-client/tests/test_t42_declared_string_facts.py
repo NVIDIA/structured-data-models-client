@@ -179,7 +179,8 @@ def test_native_count_occurs_before_later_declared_string_column_is_resolved(
     monkeypatch,
 ):
     outcomes = []
-    for core in (False, True):
+
+    def run(core):
         monkeypatch.setenv('SDM_CORE_ROUTES', PATHS if core else '')
         frame = pd.DataFrame(
             {
@@ -228,6 +229,9 @@ def test_native_count_occurs_before_later_declared_string_column_is_resolved(
                 [(type(item.message), str(item.message)) for item in caught],
             )
         )
+
+    run(False)
+    run(True)
     assert outcomes[1] == outcomes[0]
 
 
@@ -235,7 +239,8 @@ def test_native_cardinality_failure_stops_before_later_source_observation(
     monkeypatch,
 ):
     outcomes = []
-    for core in (False, True):
+
+    def run(core):
         monkeypatch.setenv('SDM_CORE_ROUTES', PATHS if core else '')
         frame = pd.DataFrame(
             {
@@ -263,4 +268,7 @@ def test_native_cardinality_failure_stops_before_later_source_observation(
                 Schema.from_data({'rows': frame})
         assert error.value is native_error
         outcomes.append(trace)
+
+    run(False)
+    run(True)
     assert outcomes[1] == outcomes[0] == ['first']
