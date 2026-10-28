@@ -15,6 +15,7 @@ from unittest.mock import patch
 import numpy as np
 import pandas as pd
 import pytest
+from t45_frame_routes import FRAME_ROUTES
 
 from sdm_client import (
     KumoRelational,
@@ -29,14 +30,7 @@ from sdm_client.materializers.relational import RelationalMaterializer
 REFERENCE = json.loads(
     Path(__file__).with_name('t44_temporal_reference.json').read_text()
 )
-ROUTES = ','.join(
-    (
-        'schema.from-data/frames/frames',
-        'schema.from-data/mapping/frames',
-        'query.materialize/indices-regression/frames',
-        'client.predict/regression/frames',
-    )
-)
+ROUTES = FRAME_ROUTES
 
 
 @pytest.fixture(params=[False, True], ids=['original', 'core'])

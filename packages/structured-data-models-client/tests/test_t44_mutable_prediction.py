@@ -21,6 +21,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import requests
+from t45_frame_routes import FRAME_PREDICT_ROUTES
 
 from sdm_client import KumoRelational, PredictiveQuery, Schema, SDMClient
 from sdm_client.adapters.relational import RelationalAdapter
@@ -112,9 +113,7 @@ def _request(*, batched=False):
 @pytest.mark.parametrize('core', [False, True], ids=['original', 'core'])
 @pytest.mark.parametrize('case', list(REFERENCE))
 def test_live_native_prediction_boundaries(monkeypatch, core, case):
-    monkeypatch.setenv(
-        'SDM_CORE_ROUTES', 'client.predict/regression/frames' if core else ''
-    )
+    monkeypatch.setenv('SDM_CORE_ROUTES', FRAME_PREDICT_ROUTES if core else '')
     expected = REFERENCE[case]
     round_, scenario = case.split('/')
     wire = []
@@ -260,9 +259,7 @@ def test_live_native_prediction_boundaries(monkeypatch, core, case):
 def test_native_task_string_overrides_remain_at_reached_boundaries(
     monkeypatch, core, case
 ):
-    monkeypatch.setenv(
-        'SDM_CORE_ROUTES', 'client.predict/regression/frames' if core else ''
-    )
+    monkeypatch.setenv('SDM_CORE_ROUTES', FRAME_PREDICT_ROUTES if core else '')
     expected = copy.deepcopy(TASK_REFERENCE[case])
     events = []
 
@@ -390,9 +387,7 @@ def test_native_part_fault_and_instance_comparison_parity(
 ):
     from test_t44_decomposition_owners import question
 
-    monkeypatch.setenv(
-        'SDM_CORE_ROUTES', 'client.predict/regression/frames' if core else ''
-    )
+    monkeypatch.setenv('SDM_CORE_ROUTES', FRAME_PREDICT_ROUTES if core else '')
     expected = FAULT_REFERENCE[case]
     events = []
     observed = {'case': case}
@@ -490,9 +485,7 @@ def test_native_part_fault_and_instance_comparison_parity(
 def test_public_task_kind_observations_preserve_preparation_order(
     monkeypatch, core, case
 ):
-    monkeypatch.setenv(
-        'SDM_CORE_ROUTES', 'client.predict/regression/frames' if core else ''
-    )
+    monkeypatch.setenv('SDM_CORE_ROUTES', FRAME_PREDICT_ROUTES if core else '')
     expected = copy.deepcopy(NATIVE_KIND_REFERENCE[case])
     events = []
     hashes = 0
@@ -621,9 +614,7 @@ def test_public_task_kind_observations_preserve_preparation_order(
 def test_native_task_refusal_retains_repr_and_fresh_details(
     monkeypatch, core, case
 ):
-    monkeypatch.setenv(
-        'SDM_CORE_ROUTES', 'client.predict/regression/frames' if core else ''
-    )
+    monkeypatch.setenv('SDM_CORE_ROUTES', FRAME_PREDICT_ROUTES if core else '')
     cell = '310' if int(pd.__version__.split('.')[0]) == 2 else '312'
     expected = json.loads(
         Path(__file__)
@@ -711,9 +702,7 @@ def test_native_model_and_output_owners_keep_complete_public_journeys(
 ):
     from sdm_client.models import Model
 
-    monkeypatch.setenv(
-        'SDM_CORE_ROUTES', 'client.predict/regression/frames' if core else ''
-    )
+    monkeypatch.setenv('SDM_CORE_ROUTES', FRAME_PREDICT_ROUTES if core else '')
     expected = copy.deepcopy(MODEL_OUTPUT_REFERENCE[case])
     events = []
     retained = RuntimeError('retained native model/output failure')
@@ -889,9 +878,7 @@ MODEL_OUTPUT_SHAPE_REFERENCE = json.loads(
 def test_native_two_paid_call_output_shape_hash_boundary(
     monkeypatch, core, case
 ):
-    monkeypatch.setenv(
-        'SDM_CORE_ROUTES', 'client.predict/regression/frames' if core else ''
-    )
+    monkeypatch.setenv('SDM_CORE_ROUTES', FRAME_PREDICT_ROUTES if core else '')
     expected = copy.deepcopy(MODEL_OUTPUT_SHAPE_REFERENCE[case])
     events = []
     sent = []
@@ -995,9 +982,7 @@ def test_native_decomposed_output_owners_and_paid_boundaries(
 
     from sdm_client.result import PredictionResult
 
-    monkeypatch.setenv(
-        'SDM_CORE_ROUTES', 'client.predict/regression/frames' if core else ''
-    )
+    monkeypatch.setenv('SDM_CORE_ROUTES', FRAME_PREDICT_ROUTES if core else '')
     expected = copy.deepcopy(DECOMPOSED_OUTPUT_REFERENCE[case])
     if core and case == 'ranking-owner-control':
         expected['warnings'][-1]['message'] = (

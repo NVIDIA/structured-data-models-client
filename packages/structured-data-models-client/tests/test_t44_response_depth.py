@@ -14,6 +14,7 @@ from unittest.mock import patch
 
 import pytest
 import requests
+from t45_frame_routes import FRAME_PREDICT_ROUTES
 from test_t44_mutable_prediction import _request
 
 from sdm_client import KumoRelational, SDMClient
@@ -41,9 +42,7 @@ def test_public_builtin_response_depth_matches_frozen_client(
         for record in REFERENCE['cells'][cell]
         if record['levels'] == levels
     )
-    monkeypatch.setenv(
-        'SDM_CORE_ROUTES', 'client.predict/regression/frames' if core else ''
-    )
+    monkeypatch.setenv('SDM_CORE_ROUTES', FRAME_PREDICT_ROUTES if core else '')
     sent = []
     events = []
 
