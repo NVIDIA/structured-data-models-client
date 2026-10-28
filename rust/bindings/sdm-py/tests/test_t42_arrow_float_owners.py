@@ -122,8 +122,10 @@ def test_constructor_float_buffers_detach_before_producer_mutation_and_rebind(
     # Observe the producer's C-stream batch layout, including whatever it
     # exports for empty chunks, before independent SDK admission/detachment.
     exported = imported(table)
+    # C-data import may rebase the physical slice offset. Compare exact
+    # logical raw bits and validity for every exported chunk instead.
     expected = [
-        (chunk.offset, raw_bits(chunk, width), chunk.is_valid().to_pylist())
+        (raw_bits(chunk, width), chunk.is_valid().to_pylist())
         for chunk in exported.column('value').chunks
     ]
     run = inference('table', table)
@@ -143,7 +145,7 @@ def test_constructor_float_buffers_detach_before_producer_mutation_and_rebind(
     snapshot = imported(stream)
     actual = snapshot.column('value').chunks
     assert [
-        (chunk.offset, raw_bits(chunk, width), chunk.is_valid().to_pylist())
+        (raw_bits(chunk, width), chunk.is_valid().to_pylist())
         for chunk in actual
     ] == expected
     assert all(
@@ -162,7 +164,7 @@ def test_constructor_float_buffers_detach_before_producer_mutation_and_rebind(
     )
     again = imported(rebound.take_attachment(rebound_result['frame_rows']))
     assert [
-        (chunk.offset, raw_bits(chunk, width), chunk.is_valid().to_pylist())
+        (raw_bits(chunk, width), chunk.is_valid().to_pylist())
         for chunk in again.column('value').chunks
     ] == expected
     fresh = inference(
