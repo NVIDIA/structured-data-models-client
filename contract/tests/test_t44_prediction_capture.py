@@ -1083,3 +1083,69 @@ def test_forecast_endpoint_refusal_preserves_public_failure_and_paid_answers(
     assert [call['request_id'] for call in entry['calls']] == captured[
         'received'
     ]
+
+
+@pytest.mark.parametrize(
+    'operation', ['model', 'describe_source', 'materialize']
+)
+def test_failure_outside_prediction_retains_only_serialized_diagnostic(
+    operation,
+):
+    import gc
+    import weakref
+
+    class Payload:
+        pass
+
+    class NativeFailure(Exception):
+        kind = 'protocol'
+        code = 'INVALID_MESSAGE'
+
+    capture = RUNNER._Capture()
+    owner = RUNNER._CapturedRun(0, operation, None)
+    capture._runs[0] = owner
+    capture._current_run = owner
+    payload = Payload()
+    error = NativeFailure()
+    error.attachments = payload
+    error_ref = weakref.ref(error)
+    payload_ref = weakref.ref(payload)
+    capture.failed(error, run=owner)
+    assert capture.error == {'kind': 'protocol', 'code': 'INVALID_MESSAGE'}
+    assert owner.error == capture.error
+    del error, payload
+    gc.collect()
+    assert error_ref() is None
+    assert payload_ref() is None
+    assert owner.error_owner is None
+    assert capture._runs[0] is owner
+
+
+def test_prediction_failure_identity_is_released_only_at_outer_completion():
+    import gc
+    import weakref
+
+    class NativeFailure(Exception):
+        kind = 'protocol'
+        code = 'INVALID_MESSAGE'
+
+    capture = RUNNER._Capture()
+    parent = capture.enter_prediction('kumo-relational')
+    child = capture.enter_prediction('kumo-relational')
+    owner = RUNNER._CapturedRun(0, 'prepare_request', child)
+    capture._runs[0] = owner
+    capture.predictions[child]['runs'].append(0)
+    error = NativeFailure()
+    ref = weakref.ref(error)
+    capture.failed(error, run=owner)
+    capture.leave_prediction(child, error)
+    assert owner.error_owner is error
+    capture.leave_prediction(parent, error)
+    assert capture.predictions[parent]['failure'] == {
+        'run': 0,
+        'relation': 'selected',
+    }
+    assert owner.error_owner is None
+    del error
+    gc.collect()
+    assert ref() is None

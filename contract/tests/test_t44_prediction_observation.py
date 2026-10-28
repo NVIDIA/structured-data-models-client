@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import base64
 import copy
 import hashlib
 import importlib.util
@@ -187,6 +188,7 @@ def actual_observation(call_id=CALL_ID, endpoint_id='endpoint-r1'):
         'run': 3,
         'request_id': call_id,
         'input_body_sha256': hashlib.sha256(encoded).hexdigest(),
+        'input_body_base64': base64.b64encode(encoded).decode('ascii'),
         'body': body,
         'body_sha256': hashlib.sha256(encoded).hexdigest(),
         'scope': scope,
