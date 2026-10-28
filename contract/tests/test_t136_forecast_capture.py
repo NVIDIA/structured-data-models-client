@@ -216,6 +216,7 @@ def _ask(
     mode: str = 'both',
     model: Any = None,
     outputs: Any = None,
+    fail_call: int | None = None,
 ) -> dict[str, Any]:
     r"""Ask the real forecast and observe only actual typed call starts.
 
@@ -243,6 +244,15 @@ def _ask(
     if rewrite is not None:
         rewrite(rewritten)
     inner = run.native
+    original_carried = run._carried
+    handovers: list[tuple[Any, Any]] = []
+
+    def carried(error, raised):
+        result = original_carried(error, raised)
+        handovers.append((error, raised))
+        return result
+
+    monkeypatch.setattr(run, '_carried', carried)
     monkeypatch.setattr(
         run,
         'native',
@@ -258,6 +268,7 @@ def _ask(
         'capture': recorded,
         'tampered': reached,
         'planned': PLANNED_IDS.copy(),
+        'handovers': handovers,
     }
     connection = duckdb.connect()
     try:
@@ -272,7 +283,10 @@ def _ask(
             for step in empty:
                 part = request.parts[step - 1]
                 part.payloads[0]['predict']['instance_table']['rows'] = []
-            with SERVE() as (url, received), SDMClient(url) as client:
+            with (
+                SERVE(fail_call=fail_call) as (url, received),
+                SDMClient(url) as client,
+            ):
                 ids = [
                     value
                     for step, value in enumerate(PLANNED_IDS, 1)
@@ -304,6 +318,7 @@ def _ask(
         if boundary is not None:
             boundary.close()
         monkeypatch.setattr(run, 'native', inner)
+        monkeypatch.setattr(run, '_carried', original_carried)
     return out
 
 
