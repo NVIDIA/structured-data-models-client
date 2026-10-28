@@ -1242,6 +1242,30 @@ fn native_text_context_projects_once_per_table_then_expands_each_column() {
             "invalid_message"
         );
     }
+    let failure = json!({"builtin":{"ancestry":["value_error"]},"key_error":false,"structured_data_error":false,"relational_error":false,"deepest_module":null,"message_casing":{"mapping":"full_root","unicode_version":"14.0.0"}});
+    let failed = |completed: &[Value]| json!({"stage":"payload","context":context,"text":{"outcome":"failed","completed":completed,"column":{"table":"users","column":"note"},"failure":failure},"values":null});
+    let error = stages.stage(failed(&converted[..1])).unwrap_err();
+    assert_eq!(error["error"]["sentence"], "frame_native_failure");
+    assert_eq!(
+        error["error"]["fields"]["column"],
+        json!({"t":"utf8","v":"note"})
+    );
+    assert_eq!(
+        stages.stage(failed(&converted[1..])).unwrap_err()["error"]["sentence"],
+        "invalid_message"
+    );
+    for values in [vec![Some("short")], vec![None; unique.len()]] {
+        let mut columns = converted.clone();
+        stages.held.insert(
+            AttachmentId(60000),
+            arrow(vec![("text", Arc::new(StringArray::from(values)))], false),
+        );
+        columns[0]["values"]["values"] = json!(60000);
+        assert_eq!(
+            stages.stage(payload(&context, &columns)).unwrap_err()["error"]["sentence"],
+            "invalid_message"
+        );
+    }
     let PreparedFrameValue::Part(part) = stages.stage(payload(&context, &converted)).unwrap()
     else {
         panic!("part")
@@ -1262,6 +1286,7 @@ fn native_text_context_projects_once_per_table_then_expands_each_column() {
             assert_eq!(row[note], json!(["note", id]));
         }
     }
+    let expected_wire = owner.wire().to_vec();
     // A retained/rebound context consumes exactly the same projected product.
     let PreparedFrameValue::Part(repeated) = stages.stage(payload(&context, &converted)).unwrap()
     else {
@@ -1270,5 +1295,5 @@ fn native_text_context_projects_once_per_table_then_expands_each_column() {
     let Attachment::FramePayload(other) = &stages.held[&repeated.payload] else {
         panic!("retained payload")
     };
-    assert_eq!(other.wire(), owner.wire());
+    assert_eq!(other.wire(), expected_wire);
 }
