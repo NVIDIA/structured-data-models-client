@@ -176,3 +176,15 @@ A native inference observation may be translated to a closed neutral value kind 
 Retain exact unsupported native-family outcomes where the frozen reference requires them, including their complete messages, without embedding a Python API recipe in Rust.
 Review the connected producer, identity consumer, value-kind reader and failure presenter together before the next execution.
 The already observed import, handwritten formatting and Decimal annotation defects are bounded companion repairs, with no suppressions or changed expectations.
+
+The original fixed physical declaration cannot be represented by `ColumnType` alone.
+That admitted interchange vocabulary omits LargeUTF8 and Decimal32/64 and narrows Decimal scale to i8, while the already admitted native Decimal facts retain all four widths and full i32 scale.
+Compose the existing neutral physical vocabulary with an explicit LargeUTF8 declaration and the existing `NativeDecimal` descriptor; do not substitute the exported scale-zero/widened storage type for the native declaration.
+Bind that same declaration fact at early table admission and later source graph admission.
+Logical text instead carries mutually exclusive element-value or offset-UTF8 backing and null-scalar or IEEE-NaN missing facts; exported string encoding remains independent.
+Ordinary primitive, object and categorical sources retain their existing local dtype owners and carry neither declaration nor logical-text facts.
+Reject contradictory alternatives and declaration/storage inconsistencies through existing protocol errors.
+Keep source hashing and exact retained-product equality over every neutral fact while cached owner reuse continues to avoid all live source rereads.
+Map the existing single native inferred-content read immediately to Text, Decimal, Temporal or Other, retaining None when no observation occurred and preserving all existing Rust predicate order.
+Select the existing fixed-LargeUTF8 refusal in Rust using the declaration and return its neutral reason, physical type and table/column location; Python renders the exact native recipe and RuntimeError cause only after that selection.
+Tests cover complete currently admitted declarations, original Decimal width/scale, equal exports with different original facts, malformed contradictions, owner rebinding, all observed-content branches and unchanged cached unsupported-source mutation behavior.
