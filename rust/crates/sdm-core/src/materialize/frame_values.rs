@@ -1392,7 +1392,7 @@ pub(crate) fn task(
                 // its native warning presentation must retain that boundary.
                 (
                     "frame_native_rows_per_call".to_owned(),
-                    count(rows_per_call),
+                    Detail::Scalar(Scalar::UInt64(rows_per_call)),
                 ),
                 (
                     "frame_native_dropped_summary".to_owned(),

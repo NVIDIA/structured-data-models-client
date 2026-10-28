@@ -399,7 +399,10 @@ mod tests {
         }
         let mut input = declared("timestamp[us]");
         input.facts.inferred = Some(FrameObservedContent::Text);
-        assert_eq!(meaning(input).kind, FrameColumnKind::TextFeatureTime);
+        assert_eq!(
+            meaning(input.clone()).kind,
+            FrameColumnKind::TextFeatureTime
+        );
         // A typed Decimal observation wins even when native inference was not
         // performed; typed time remains separate from boxed temporal content.
         input.facts.object = false;
