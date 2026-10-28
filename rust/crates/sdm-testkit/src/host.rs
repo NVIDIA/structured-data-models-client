@@ -2271,6 +2271,8 @@ fn predict(
             "run": observed.operations.len() - 1,
             "body": bodies.last().unwrap(),
             "body_sha256": crate::case::sha256(&body),
+            "reply": null,
+            "model_endpoint": null,
         }));
         // The test's script where one stands in for the rule on this thread
         // (`endpoint::answered_by`), its bytes as they travel; else the
@@ -2310,6 +2312,8 @@ fn predict(
         }))
         .map_err(|_| anyhow!("a reply does not encode"))?;
         let answer = BTreeMap::from([(AttachmentId(1), Attachment::Bytes(answered))]);
+        observed.model_calls.last_mut().unwrap()["reply"] =
+            json!({"outcome": "response", "status": status});
         if let Err(failed) = handle.reply(&reply, answer) {
             observed.answer = error_of(&failed)?;
             observed.answered = answered_of(&handle, &failed)?;

@@ -310,11 +310,13 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["run", "body", "body_sha256"],
+            "required": ["run", "body", "body_sha256", "reply", "model_endpoint"],
             "properties": {
               "run": {"type": "integer", "minimum": 0},
               "body": {"type": "object"},
-              "body_sha256": {"$ref": "#/$defs/sha256"}
+              "body_sha256": {"$ref": "#/$defs/sha256"},
+              "reply": {"$ref": "#/$defs/modelReplyObservation"},
+              "model_endpoint": {"$ref": "#/$defs/modelEndpointObservation"}
             }
           }
         },
@@ -486,6 +488,35 @@
         }
       }
     },
+    "modelEndpointObservation": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["endpoint", "name", "max_request_bytes"],
+      "properties": {
+        "endpoint": {"const": "serving_endpoint"},
+        "name": {"type": "string"},
+        "max_request_bytes": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615}
+      }
+    },
+    "modelReplyObservation": {
+      "description": "A host-reported reply submitted to the native Run, before forwarding. Null is an actually unobserved reply, distinct from absent historical evidence; it is not physical endpoint delivery proof.",
+      "anyOf": [
+        {"type": "null"},
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["outcome", "status"],
+          "properties": {
+            "outcome": {"enum": ["response", "failed"]},
+            "status": {"type": "integer", "minimum": 0, "maximum": 65535}
+          }
+        },
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["outcome"],
+          "properties": {"outcome": {"const": "transport_error"}}
+        }
+      ]
+    },
     "predictionCallObservation": {
       "type": "object",
       "additionalProperties": false,
@@ -496,7 +527,8 @@
         "input_body_base64",
         "body",
         "body_sha256",
-        "scope"
+        "scope",
+        "reply"
       ],
       "properties": {
         "run": {
@@ -510,6 +542,7 @@
         "input_body_sha256": {
           "$ref": "#/$defs/sha256"
         },
+        "reply": {"$ref": "#/$defs/modelReplyObservation"},
         "input_body_base64": {
           "type": "string",
           "contentEncoding": "base64"

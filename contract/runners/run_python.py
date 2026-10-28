@@ -895,6 +895,9 @@ class _CapturedRun:
         self.request_ids: list[str] = []
         self.skippable: set[str] = set()
         self.call: int | None = None
+        self.call_id: int | None = None
+        self.pending_model: dict[str, Any] | None = None
+        self.model_endpoint: dict[str, Any] | None = None
         self.body: dict[str, Any] | None = None
         self.bodies: list[dict[str, Any]] = []
         self.answer: dict[str, Any] | None = None
@@ -1262,9 +1265,11 @@ class _Capture:
                     'body': None,
                     'body_sha256': None,
                     'scope': None,
+                    'reply': None,
                 }
                 self.predictions[entry]['calls'].append(owner.call_record)
         if operation['op'] == 'predict':
+            owner.model_endpoint = operation.get('model_endpoint')
             state = operation['state']
             # The id each call carries: one call per step with rows to
             # score, in step order, each with its own step's id (T1.36 fixes
@@ -1409,7 +1414,21 @@ class _Capture:
         elif self.driver_log is not None:
             self.driver_log.purpose = None
         if step.get('step') == 'call_model':
+            if (
+                owner.pending_model is not None
+                and owner.pending_model['reply'] is None
+                and (
+                    owner.call_id != step.get('id')
+                    or owner.call != step['body']
+                )
+            ):
+                raise RunnerFailure(
+                    'a new model call precedes the outstanding reply'
+                )
+            if owner.call_id != step.get('id') or owner.call != step['body']:
+                owner.pending_model = None
             owner.call = step['body']
+            owner.call_id = step.get('id')
 
     def replied(
         self,
@@ -1422,9 +1441,32 @@ class _Capture:
         fetch: its rows as an Arrow IPC stream in base64, or the provider's
         error, as the replay's recording holds it (``sdm-testkit``'s
         ``replay``)."""
+        reply = json.loads(message)
+        if reply.get('message') == 'model_reply':
+            owner = self._run(run)
+            call = owner.pending_model
+            if (
+                type(reply.get('id')) is not int
+                or type(owner.call_id) is not int
+                or reply['id'] != owner.call_id
+                or call is None
+                or call['reply'] is not None
+            ):
+                raise RunnerFailure(
+                    'model reply has no exact outstanding taken call'
+                )
+            try:
+                call['reply'] = _sibling('prediction_observation').model_reply(
+                    reply['outcome']
+                )
+            except (KeyError, TypeError, ValueError) as error:
+                raise RunnerFailure(
+                    'the model reply observation is malformed'
+                ) from error
+            owner.call = None
+            return
         if not self.recording:
             return
-        reply = json.loads(message)
         if reply.get('message') != 'fetch_reply':
             return
         asked = self._run(run).asked.pop(reply['id'], None)
@@ -1512,6 +1554,7 @@ class _Capture:
                     )
                 record['body'] = owner.body
                 record['body_sha256'] = digest(value)
+                owner.pending_model = record
                 reader = _sibling('prediction_observation')
                 try:
                     reader.observed_call_body(
@@ -1531,13 +1574,14 @@ class _Capture:
                     'was started with'
                 )
             if owner.call_record is None:
-                self.model_calls.append(
-                    {
-                        'run': owner.ordinal,
-                        'body': owner.body,
-                        'body_sha256': digest(value),
-                    }
-                )
+                owner.pending_model = {
+                    'run': owner.ordinal,
+                    'body': owner.body,
+                    'body_sha256': digest(value),
+                    'reply': None,
+                    'model_endpoint': owner.model_endpoint,
+                }
+                self.model_calls.append(owner.pending_model)
         if owner.carried is not None and attachment == owner.carried['result']:
             if value is not None:
                 self.partial = _carried_result(value, owner.carried['rows'])

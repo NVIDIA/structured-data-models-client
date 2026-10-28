@@ -90,6 +90,23 @@ def _reply_obligation(reply: Any) -> int:
     return 0
 
 
+def model_reply(outcome: dict[str, Any]) -> dict[str, Any]:
+    """The actual reported outcome/status, without provider diagnostics."""
+    kind = outcome['outcome']
+    fact = {
+        'outcome': kind,
+        **(
+            {'status': outcome['status']}
+            if kind == 'response'
+            else {'status': outcome['answer']['status']}
+            if kind == 'failed'
+            else {}
+        ),
+    }
+    _reply_obligation(fact)
+    return fact
+
+
 def check_receipts(
     attempts: list[dict[str, Any]], receipts: list[dict[str, Any]]
 ) -> None:
@@ -137,6 +154,21 @@ def check_receipts(
     )
 
 
+def _known_endpoint(endpoint: Any) -> None:
+    require(
+        endpoint is None
+        or (
+            isinstance(endpoint, dict)
+            and set(endpoint) == {'endpoint', 'name', 'max_request_bytes'}
+            and endpoint['endpoint'] == 'serving_endpoint'
+            and type(endpoint['name']) is str
+            and _ordinal(endpoint['max_request_bytes'])
+            and endpoint['max_request_bytes'] <= 2**64 - 1
+        ),
+        'prediction has an unknown model endpoint observation',
+    )
+
+
 def observed_call_body(call: dict[str, Any], encoded: dict[str, Any]) -> None:
     """Bind independently observed input bytes and the actual posted JSON.
 
@@ -157,6 +189,7 @@ def observed_call_body(call: dict[str, Any], encoded: dict[str, Any]) -> None:
         'prediction posted body/hash is unobserved',
     )
     endpoint = encoded.get('model_endpoint')
+    _known_endpoint(endpoint)
     if endpoint is None:
         require(
             call['body_sha256'] == call['input_body_sha256']
@@ -172,14 +205,6 @@ def observed_call_body(call: dict[str, Any], encoded: dict[str, Any]) -> None:
         )
         payload = body
     else:
-        require(
-            isinstance(endpoint, dict)
-            and set(endpoint) == {'endpoint', 'name', 'max_request_bytes'}
-            and endpoint['endpoint'] == 'serving_endpoint'
-            and type(endpoint['name']) is str
-            and _ordinal(endpoint['max_request_bytes']),
-            'prediction has an unknown model endpoint observation',
-        )
         rows = body.get('dataframe_records')
         require(
             set(body) == {'dataframe_records'}
@@ -455,12 +480,14 @@ def _entry(
             'prediction input request ID differs from its actual call',
         )
         body, scope = call['body'], call['scope']
+        _reply_obligation(call['reply'])
         observed_call_body(call, encoded)
         if body is None:
             require(
                 entry['completion'] == 'raised'
                 and scope is None
                 and call['body_sha256'] is None
+                and call['reply'] is None
                 and record['result'] is None,
                 'prediction call body is unobserved',
             )
@@ -476,7 +503,10 @@ def _entry(
                 isinstance(record['result'], dict)
                 and record['result']['scope'] == scope
                 and scope['call_request_id'] == call['request_id']
-                and _ordinal(scope['response_rows']),
+                and _ordinal(scope['response_rows'])
+                and call['reply'] is not None
+                and call['reply']['outcome'] == 'response'
+                and 200 <= call['reply']['status'] < 300,
                 'prediction response scope differs from its actual call result',
             )
     results = entry['results']
@@ -758,7 +788,8 @@ def _view(core: dict[str, Any], operations: list[str]) -> dict[str, Any]:
     taken = []
     for call in legacy_calls or []:
         require(
-            set(call) == {'run', 'body', 'body_sha256'}
+            set(call)
+            == {'run', 'body', 'body_sha256', 'reply', 'model_endpoint'}
             and _ordinal(call['run'])
             and call['run'] < len(operations)
             and operations[call['run']] == 'predict'
@@ -766,21 +797,32 @@ def _view(core: dict[str, Any], operations: list[str]) -> dict[str, Any]:
             and _sha256(call['body_sha256']),
             'legacy model call lacks an actual prediction Run/body/hash',
         )
-        taken.append((call['run'], call['body'], call['body_sha256']))
+        _reply_obligation(call['reply'])
+        _known_endpoint(call['model_endpoint'])
+        taken.append(dict(call))
     require(
-        [run for run, _body, _hash in taken]
-        == sorted(run for run, _body, _hash in taken),
+        [call['run'] for call in taken]
+        == sorted(call['run'] for call in taken),
         'legacy model call observations change actual Run order',
     )
     for entry in projected:
         taken.extend(
-            (call['run'], call['body'], call['body_sha256'])
+            {
+                'run': call['run'],
+                'body': call['body'],
+                'body_sha256': call['body_sha256'],
+                'reply': call['reply'],
+                'model_endpoint': records[call['run']]['input']['input'][
+                    'model_endpoint'
+                ],
+            }
             for call in entry['_calls']
             if call['body'] is not None
         )
-    taken.sort(key=lambda item: item[0])
-    calls = [body for _run, body, _hash in taken]
-    hashes = [hash_ for _run, _body, hash_ in taken]
+    taken.sort(key=lambda item: item['run'])
+    attempts = taken
+    calls = [call['body'] for call in taken]
+    hashes = [call['body_sha256'] for call in taken]
     if not entries and legacy_calls is None:
         predicted = core.get('predicted')
         calls = (
@@ -789,6 +831,7 @@ def _view(core: dict[str, Any], operations: list[str]) -> dict[str, Any]:
             else None
         )
         hashes = None
+        attempts = None
     partial = {
         'observed': 'answered' in core and core.get('error') is not None,
         'answered': core.get('answered'),
@@ -825,6 +868,7 @@ def _view(core: dict[str, Any], operations: list[str]) -> dict[str, Any]:
         'predictions': projected,
         'calls': calls,
         'call_hashes': hashes,
+        'attempts': attempts,
         'partial': partial,
     }
 
