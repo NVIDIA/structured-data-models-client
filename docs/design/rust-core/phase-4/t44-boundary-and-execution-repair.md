@@ -392,3 +392,9 @@ No product inference, native operation schedule, string normalization, profile b
 Apply the actual mandatory formatter diff to the handwritten logical-value presenter.
 Declare and canonically regenerate only the changed frozen schema-bridge fingerprints with actual source provenance before fresh whole reviews.
 These source corrections confer no execution or package acceptance credit.
+
+### Complete physical fixture consumers
+
+The actual R32 complete core library run passes 125 consumers, including retained-allocation identity, and exposes one shared fixture helper that incorrectly imposes the three-column layout on a one-column edge-error consumer.
+Each fixture must supply its complete physical layout explicitly, and the shared native dtype kernel must produce the corresponding canonical constructed facts.
+Keep the one-column Float64-to-Utf8 native-edge refusal and its exact fields, alongside the three-column post-cast meaning and noncanonical-fact refusal, without changing production guards.

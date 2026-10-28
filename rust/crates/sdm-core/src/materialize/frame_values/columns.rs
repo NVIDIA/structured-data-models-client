@@ -322,15 +322,10 @@ mod tests {
     use super::*;
     use sdm_contract::ops::HeldColumn;
 
-    fn typed(table: HeldTable) -> FrameTableMeaning {
-        let physical = [
-            sdm_contract::ColumnType::Int64,
-            sdm_contract::ColumnType::Int64,
-            sdm_contract::ColumnType::Timestamp {
-                unit: sdm_contract::TimestampUnit::Ns,
-                zone: None,
-            },
-        ];
+    fn typed<const N: usize>(
+        table: HeldTable,
+        physical: [sdm_contract::ColumnType; N],
+    ) -> FrameTableMeaning {
         assert_eq!(table.columns.len(), physical.len());
         let constructed = table
             .columns
@@ -391,7 +386,17 @@ mod tests {
             time_column: None,
             duplicate_keys: None,
         };
-        let typed = typed(table.clone());
+        let typed = typed(
+            table.clone(),
+            [
+                sdm_contract::ColumnType::Int64,
+                sdm_contract::ColumnType::Int64,
+                sdm_contract::ColumnType::Timestamp {
+                    unit: sdm_contract::TimestampUnit::Ns,
+                    zone: None,
+                },
+            ],
+        );
         let mut noncanonical = typed.clone();
         noncanonical.constructed[0].dtype = sdm_contract::ops::Dtype::Int64;
         assert_eq!(
@@ -609,6 +614,10 @@ mod tests {
             time_column: None,
             duplicate_keys: None,
         };
+        let typed = vec![
+            typed(items.clone(), [sdm_contract::ColumnType::Float64]),
+            typed(buys.clone(), [sdm_contract::ColumnType::Utf8]),
+        ];
         let tables = vec![items, buys];
         let error = source(
             HeldSchema {
@@ -624,7 +633,7 @@ mod tests {
                     },
                 ]],
             },
-            tables.into_iter().map(typed).collect(),
+            typed,
         )
         .unwrap_err();
         assert_eq!(error.sentence, Sentence::EdgeKeyTypes);
