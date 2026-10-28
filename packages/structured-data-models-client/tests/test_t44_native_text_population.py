@@ -45,6 +45,22 @@ OPTIONS = dict(
 )
 
 
+def constructor_notice(column):
+    # The schema infers categorical before this fixture declares Text.
+    return (
+        f'orders.{column} holds 64 distinct values in the '
+        '64 rows that have one, so the rows ran out before '
+        'the values did and the count is a measure of the frame '
+        'rather than of the column. It is read as categorical here '
+        'because 64 is at most 64; on more rows the same '
+        'column could pass that and be read as text, which the '
+        'models treat differently. If this frame is a sample, say '
+        'what the column is with '
+        f"schema['orders'][{column!r}].stype = 'categorical' (or "
+        "'text'), so that it does not change under a larger one."
+    )
+
+
 def points(values):
     # Preserve every actual native code point, including NUL and non-BMP text.
     return [
@@ -302,7 +318,11 @@ def test_native_text_uses_source_population_before_conversion(
     actual = observe(monkeypatch, core=True, case=case)
     assert_population(original, case)
     assert_public_source_rows(original, case)
+    constructor_notices = (
+        [] if case == 'equal-text' else [constructor_notice('note')]
+    )
     assert [notice['message'] for notice in original['warnings']] == [
+        *constructor_notices,
         HOPS,
         TEXT_UNREAD,
         CONTEXT_ANSWERS,
@@ -340,7 +360,11 @@ def test_later_native_text_failure_retains_compact_operands_and_draws(
     assert_population(original, 'front')
     assert original['outcome'] == 'error'
     assert original['retained_cause'] is True
-    assert [notice['message'] for notice in original['warnings']] == [HOPS]
+    assert [notice['message'] for notice in original['warnings']] == [
+        constructor_notice('note'),
+        constructor_notice('note_later'),
+        HOPS,
+    ]
     later = [
         item
         for item in original['conversions']

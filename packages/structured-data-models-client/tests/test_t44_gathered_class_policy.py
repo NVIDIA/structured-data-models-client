@@ -127,6 +127,17 @@ def assert_result(result, script, predictions, probabilities):
         expected_frame['probability_' + name] = [
             dict(row).get(name, float('nan')) for row in probabilities
         ]
+    if predictions[0] is None:
+        # The first public row omits its null prediction. Its probability
+        # columns therefore precede prediction in pandas' first-seen union.
+        expected_frame = expected_frame[
+            [
+                'row_index',
+                'id',
+                *['probability_' + name for name in names],
+                'prediction',
+            ]
+        ]
     pd.testing.assert_frame_equal(result.to_pandas(), expected_frame)
 
 
