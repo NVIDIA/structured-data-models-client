@@ -17,6 +17,15 @@ from sdm_client import Schema, StructuredDataError
 from sdm_client._rust.frames import _convert, _native_dtype
 
 
+@pytest.fixture(autouse=True)
+def native_string_options():
+    # Match the successful frozen Unicode journeys. With inferred strings,
+    # pandas 3 can choose Arrow while the old date hint casts to str, which
+    # rejects these points before either constructor is being compared.
+    with pd.option_context('future.infer_string', False):
+        yield
+
+
 @pytest.mark.parametrize(
     'values',
     [

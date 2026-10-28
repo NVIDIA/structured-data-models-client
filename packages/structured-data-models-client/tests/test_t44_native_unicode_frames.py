@@ -213,11 +213,11 @@ def test_native_unicode_keeps_full_inspection_wire_and_result_meaning(
         if core:
             assert request._core is not None
         with SDMClient('http://localhost:1', max_retries=0) as client:
-            original_predict = client._transport.predict
+            original_encode = client._transport.encode_prediction
 
-            def observe_predict(payload):
+            def observe_encode(payload):
                 native_sent.append(copy.deepcopy(payload))
-                return original_predict(payload)
+                return original_encode(payload)
 
             def local_post(url, *, data, **kwargs):
                 assert url.endswith('/v1/predictions')
@@ -233,7 +233,9 @@ def test_native_unicode_keeps_full_inspection_wire_and_result_meaning(
                 return response
 
             with (
-                patch.object(client._transport, 'predict', observe_predict),
+                patch.object(
+                    client._transport, 'encode_prediction', observe_encode
+                ),
                 patch.object(client._transport._session, 'post', local_post),
             ):
                 result = client.predict(
