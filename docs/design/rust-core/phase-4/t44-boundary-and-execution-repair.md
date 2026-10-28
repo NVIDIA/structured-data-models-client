@@ -590,3 +590,16 @@ Keep actual posted bodies and hashes unchanged, use no new exclusion, and never 
 Add independent-ID captured/uncaptured serving controls and absent/retyped ID and unrelated nested-value negatives.
 Add source-first true-carry, completed-but-not-carried, failed/stale/nested owner, every reply alternative, pre-send/retry, malformed/reordered receipt and shared-prefix body/Arrow/metadata/output controls.
 The successor needs two fresh independent whole CODE approvals before any SDK execution, with no package or Phase completion claim from these source steps.
+
+
+The observed successful carry relation proves that the SDK operation received that exact result owner; it is not a second read of arbitrary public error.details.
+A custom details setter may discard or replace the assigned value, so independent public observation remains authoritative for actual presented details.
+At terminal selection prefer the exact terminal owner, then its nearest explicit cause, and only then the latest applicable carry within that same owner.
+Retain wrapper-cycle protection and verify that the matched result Run has actual complete finish metadata and Arrow observations.
+
+Receipt alignment must support a response A, a zero-receipt transport failure B, and another response A against receipts A,A.
+Use a monotone finite partition of receipts among all attempts, not merely adjacent equal-body grouping, and claim no unique retry attribution when multiple partitions exist.
+Model replies must bind the actual outstanding CallModel identifier and already taken body before forwarding, including native rejection, and must not overwrite duplicates or attach to another Run.
+Keep a current unobserved reply separate from historical absent evidence.
+Per-Run legacy products must similarly distinguish native Done from attachments actually read and from later host presentation failure.
+For every shared comparison, use the same checked logical-event mapping as the ordinary comparison and preserve per-Run local initialization through every early return.
