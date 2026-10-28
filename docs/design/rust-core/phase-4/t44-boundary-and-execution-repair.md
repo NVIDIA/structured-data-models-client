@@ -348,3 +348,17 @@ Reconcile the refusal census with the actual moved constructors and retained nat
 No guard, route, input family or frozen expected result changes as part of this remaining-consumer correction.
 The independent compatibility review additionally requires the hand-authored census to retain valid standard JSON.
 Preserve the original `1e400` number spelling rather than emitting the nonstandard `Infinity` token, and pin both strict document parsing and the unchanged positive-infinity option value before that correction.
+
+
+## Native constructor semantic-error presentation
+
+The approved R29 diagnostic reaches matching Decimal duplicate-key errors but exposes the private core exception and suppresses context where the original constructor raises its semantic error normally.
+The same bounded reproduction covers numeric keys and run-based missing-key, missing-time and invalid-relationship refusals, including an active caller exception.
+Preserve the complete intrinsic cause/context/suppression oracle rather than filtering this difference.
+H17 remains the existing provider/driver privacy rule and does not approve this native constructor difference.
+An outer constructor catch keyed only on `_sentence` is insufficient: a native warning handler can legitimately re-raise an earlier SDK exception that already carries that identity, and its actual graph must stay intact.
+Use an explicit closed host error-presentation choice at the existing direct constructor bridge producers and the run-based constructor call, with the existing coded presentation as the default.
+For the reconstructed causeless `INVALID_REQUEST` semantic error at that selected boundary, raise the same public object normally and remove only its exact introduced core context, retaining the actual caller context.
+Actual native observation or warning-handler failures and selected explicit causes retain their existing paths and objects.
+Do not alter global provider privacy, inherit the choice into nested calls, add a callback or registry, or change any core decision, wire shape or supported family.
+Public and direct-presenter consumers precede implementation and retain the real traceback resource-release regression.
