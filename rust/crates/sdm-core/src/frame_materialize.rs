@@ -848,6 +848,72 @@ mod parent_hop_tests {
     }
 
     #[test]
+    fn both_entity_roles_keep_keys_without_changing_history_features_or_draws() {
+        let mut run = crate::Run::new(|asker| async move {
+            let mut checkpoints = Vec::new();
+            let mut features = Vec::new();
+            for link_target in [None, Some("orders"), Some("users")] {
+                let (mut frame, description, graph) = fixture();
+                frame.initialize(&asker, &description, &graph)?;
+                let keys: ArrayRef = Arc::new(Int64Array::from(vec![1]));
+                let sampled = frame.walk(
+                    &asker,
+                    &graph,
+                    &graph.tables[0],
+                    &keys,
+                    &[0],
+                    FrameWalkOptions {
+                        hops: &[Hop::Keep(3)],
+                        neighbor_values: None,
+                        excluded: &[],
+                        seed: Some(7),
+                        link_target,
+                    },
+                )?;
+                let entity = sampled
+                    .sampled
+                    .tables
+                    .iter()
+                    .find(|table| table.name == "users")
+                    .unwrap();
+                assert_eq!(entity.primary_key.as_deref(), Some("user_id"));
+                let history = sampled
+                    .sampled
+                    .tables
+                    .iter()
+                    .find(|table| table.name == "orders")
+                    .unwrap();
+                let rhs = link_target == Some("orders");
+                assert_eq!(history.primary_key.as_deref(), rhs.then_some("order_id"));
+                let names = history
+                    .columns
+                    .iter()
+                    .map(|(name, _)| name.as_str())
+                    .collect::<Vec<_>>();
+                assert_eq!(
+                    names.iter().position(|name| *name == "order_id"),
+                    rhs.then_some(0)
+                );
+                features.push(
+                    names
+                        .into_iter()
+                        .filter(|name| *name != "order_id")
+                        .map(str::to_owned)
+                        .collect::<Vec<_>>(),
+                );
+                checkpoints.push(frame.neighbors.checkpoint());
+            }
+            assert!(features.windows(2).all(|pair| pair[0] == pair[1]));
+            assert!(checkpoints.windows(2).all(|pair| pair[0] == pair[1]));
+            let value = asker.attach(Attachment::Bytes(Vec::new()))?;
+            Ok(sdm_contract::ops::OperationResult::PrepareRequest(
+                PreparedRequest { value },
+            ))
+        });
+        assert!(matches!(run.next().unwrap(), Step::Done { .. }));
+    }
+
+    #[test]
     fn missing_batch_references_fail_before_a_requested_neighbor_reset() {
         let mut run = crate::Run::new(|asker| async move {
             let (mut frame, description, graph) = fixture();
