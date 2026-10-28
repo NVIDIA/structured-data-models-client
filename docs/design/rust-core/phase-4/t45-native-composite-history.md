@@ -60,7 +60,7 @@ Object inference is observed at the constructed table boundary, using the origin
 It carries no future metadata position or callback.
 
 `FrameKeyMeaning` binds one table's captured ordered primary key to that immutable constructed table.
-Its optional `FrameCompositeDefinition` records the complete ordered constructed component types, selected derived name and any fixed pre-existing column under that name.
+Its optional `FrameCompositeDefinition` records the complete ordered constructed component types, selected derived name while the associated constructed-table meaning retains any pre-existing column under that name.
 Rust selects it at the reached key assignment, validates component presence, approximate types and maximum derived-name length, and emits no fold for scalar or absent keys.
 A derived-prefix collision is not an early refusal on the native route.
 `FrameKeyNulls` validates a reached component's actual `isna().any()` observation without storing an execution position.
@@ -72,7 +72,8 @@ The successful integer/text collision twins with explicit ID metadata prove this
 No new value-based semantic inference engine or fixed initial stype is required for this boundary.
 
 `MaterializeFrames` and detached `FrameCheckpointManifest` carry explicit row-identity bindings separately from ordinary source-table bindings.
-`FrameCheckpointMetadata` retains the complete immutable definitions and existing string-encoding facts needed to reconstruct the same snapshot, while actual arrays stay separately owned.
+`FrameCheckpointMetadata` retains the existing string-encoding facts needed to reconstruct the same snapshot.
+The detached manifest binds the complete immutable definitions to their separately owned arrays, and the metadata source fingerprint binds both.
 Attachment discovery, Python take/rebind, core checkpoint publication and plain HostRun rebinding enumerate these typed resources explicitly.
 The source fingerprint includes actual identity values and their complete definitions and encodings, independently of call-local attachment ids.
 Retained graph owners continue to retain the same Snapshot directly.
@@ -88,6 +89,21 @@ Only relationships are serialized after the metadata loop; the existing relation
 The captured original primary key replaces any callback-mutated key in that table's final graph declaration, matching the original setter's already selected key.
 Native typed export follows these graph declarations and excludes a newly created internal derived column from feature projection.
 A pre-existing source column under that name retains the original native admission and post-fold behavior instead of being mistaken for a newly added feature.
+
+## Resolved question lifetime through native metadata effects
+
+The existing retained question already owns the validated tree, canonical query, filter, initial source description, declared types and query facts before native export.
+Ordinary `Questions` must retain that same useful owner and explicitly rebind it into `Population`.
+Each decomposition child supplies its own ordinary question owner.
+Keep the exact raw query in that owner and require equality at consumption; equal query facts alone cannot identify it.
+An absent owner keeps raw hosts' existing reached query resolution, while a present wrong-kind or wrong-query owner is a protocol failure with no reparse fallback.
+This adds no stage, callback, cursor or second query representation.
+
+Population consumes the retained validation for query meaning and final native graph metadata for actual time bounds and topology.
+Do not reparse the query against metadata edited by the fold, and do not restore the old time column from its validation snapshot.
+The original context-time lookup can then fail with native `KeyError(table)` after successful sanitation and graph notices and before any entity or neighbor draw.
+Preserve that selected native cause at the existing frame error presentation boundary instead of returning an unrelated PQL or internal-error diagnostic.
+This closes the reached same-table time mutation in the recorded original journey.
 
 ## Snapshot and lifetime invariants
 
