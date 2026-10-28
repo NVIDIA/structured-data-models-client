@@ -168,8 +168,7 @@ pub(super) fn complete(
                 .ok_or_else(|| {
                     invalid("native identity component lacks its constructed source type")
                 })?;
-            let canonical = sdm_schema::held::wire_dtype(fixed.dtype.wire_name());
-            if component.dtype != canonical {
+            if !sdm_schema::frames::native_column::equivalent(fixed.dtype, component.dtype) {
                 return Err(invalid(
                     "native identity component type contradicts its constructed source",
                 ));

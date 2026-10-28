@@ -893,6 +893,21 @@ def error_from_core(
                 f"Column '{column}' received an incompatible semantic type "
                 f"(got dtype='{fields['dtype']}' and stype='{fields['stype']}')"
             )
+        elif key_reason == 'time_stype':
+            message = (
+                f"Time column '{column}' must have 'timestamp' semantic type "
+                f"(got '{fields['stype']}')"
+            )
+        elif key_reason == 'time_is_key':
+            message = (
+                f"Cannot specify column '{column}' as a time column since "
+                'it is already defined to be a primary key'
+            )
+        elif key_reason == 'role_missing':
+            native_key_cause = KeyError(
+                f"Column '{column}' not found in table '{table_name}'"
+            )
+            message = str(native_key_cause)
         elif key_reason == 'unregistered_list_target':
             message = (
                 'Multilabel-classification queries based on '

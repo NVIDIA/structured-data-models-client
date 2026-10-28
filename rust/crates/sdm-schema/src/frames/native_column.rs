@@ -53,6 +53,11 @@ pub fn canonical(dtype: Dtype) -> bool {
     )
 }
 
+/// Native Date and wire Time, like numerical widths, share one wire meaning.
+pub fn equivalent(left: Dtype, right: Dtype) -> bool {
+    crate::held::wire_dtype(left.wire_name()) == crate::held::wire_dtype(right.wire_name())
+}
+
 pub fn dtype(values: &FrameConstructorValues) -> Result<Dtype, CoreError> {
     use ColumnType as T;
     Ok(match values {

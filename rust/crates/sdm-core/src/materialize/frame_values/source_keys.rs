@@ -174,9 +174,16 @@ pub(super) fn metadata(input: FrameTableMetadata) -> Result<FrameTableMeaning, C
     }
     let mut table = input.table;
     let mut constructed = expected.table.constructed;
-    let operational = expected.composite.as_ref().map(|key| key.derived.as_str());
-    let new_column =
-        operational.filter(|name| !constructed.iter().any(|column| column.name == *name));
+    let operational = match expected.primary_key.as_slice() {
+        [] => None,
+        [one] => Some(one.as_str()),
+        _ => expected.composite.as_ref().map(|key| key.derived.as_str()),
+    };
+    let new_column = expected
+        .composite
+        .as_ref()
+        .map(|key| key.derived.as_str())
+        .filter(|name| !constructed.iter().any(|column| column.name == *name));
     match (new_column, input.derived) {
         (Some(name), Some(derived))
             if derived.name == name
@@ -197,15 +204,18 @@ pub(super) fn metadata(input: FrameTableMetadata) -> Result<FrameTableMeaning, C
         let fixed = constructed
             .iter()
             .find(|column| column.name == name)
-            .ok_or_else(|| protocol("native constructed key column is absent"))?;
-        if !crate::edit::supports(Stype::Id, fixed.dtype) {
-            return Err(native("key_dtype", &table.name, name)
-                .with_field(
-                    "dtype",
-                    Detail::text(super::super::name_of(serde_json::to_value(fixed.dtype))),
-                )
-                .with_field("stype", Detail::text("ID")));
+            .ok_or_else(|| native("role_missing", &table.name, name))?;
+        assignment(&table.name, fixed, Stype::Id)?;
+    }
+    if let Some(name) = table.time_column.as_deref() {
+        if operational == Some(name) {
+            return Err(native("time_is_key", &table.name, name));
         }
+        let fixed = constructed
+            .iter()
+            .find(|column| column.name == name)
+            .ok_or_else(|| native("role_missing", &table.name, name))?;
+        assignment(&table.name, fixed, Stype::Timestamp)?;
     }
     // Native metadata setters run in the caller's reached column order,
     // independently of the physical source order retained below.
@@ -213,26 +223,17 @@ pub(super) fn metadata(input: FrameTableMetadata) -> Result<FrameTableMeaning, C
         let Some(fixed) = constructed.iter().find(|column| column.name == live.name) else {
             continue;
         };
-        if !crate::edit::supports(live.stype, fixed.dtype) {
-            return Err(metadata_error(
-                super::super::not_carried(
-                    Sentence::IncompatibleSemanticType,
-                    &table.name,
-                    &live.name,
-                )
-                .with_field("reason", Detail::text("incompatible_semantic_type"))
-                .with_field(
-                    "dtype",
-                    Detail::text(super::super::name_of(serde_json::to_value(fixed.dtype))),
-                )
-                .with_field(
-                    "stype",
-                    Detail::text(super::super::name_of(serde_json::to_value(live.stype))),
-                ),
-            ));
-        }
+        assignment(&table.name, fixed, live.stype)?;
         if operational == Some(live.name.as_str()) && live.stype != Stype::Id {
             return Err(native("primary_stype", &table.name, &live.name).with_field(
+                "stype",
+                Detail::text(super::super::name_of(serde_json::to_value(live.stype))),
+            ));
+        }
+        if table.time_column.as_deref() == Some(live.name.as_str())
+            && live.stype != Stype::Timestamp
+        {
+            return Err(native("time_stype", &table.name, &live.name).with_field(
                 "stype",
                 Detail::text(super::super::name_of(serde_json::to_value(live.stype))),
             ));
@@ -249,7 +250,13 @@ pub(super) fn metadata(input: FrameTableMetadata) -> Result<FrameTableMeaning, C
                 .unwrap_or_else(|| sdm_contract::ops::HeldColumn {
                     name: fixed.name.clone(),
                     dtype: fixed.dtype.wire_name().into(),
-                    stype: fixed.stype,
+                    stype: if operational == Some(fixed.name.as_str()) {
+                        Stype::Id
+                    } else if table.time_column.as_deref() == Some(fixed.name.as_str()) {
+                        Stype::Timestamp
+                    } else {
+                        fixed.stype
+                    },
                     untyped: false,
                     stype_declared: false,
                     stype_before_key: None,
@@ -264,6 +271,24 @@ pub(super) fn metadata(input: FrameTableMetadata) -> Result<FrameTableMeaning, C
     table.primary_key = expected.primary_key;
     table.frame_key_form = expected.table.table.frame_key_form;
     Ok(FrameTableMeaning { table, constructed })
+}
+
+fn assignment(table: &str, fixed: &FrameConstructedColumn, stype: Stype) -> Result<(), CoreError> {
+    if crate::edit::supports(stype, fixed.dtype) {
+        return Ok(());
+    }
+    Err(metadata_error(
+        super::super::not_carried(Sentence::IncompatibleSemanticType, table, &fixed.name)
+            .with_field("reason", Detail::text("incompatible_semantic_type"))
+            .with_field(
+                "dtype",
+                Detail::text(super::super::name_of(serde_json::to_value(fixed.dtype))),
+            )
+            .with_field(
+                "stype",
+                Detail::text(super::super::name_of(serde_json::to_value(stype))),
+            ),
+    ))
 }
 
 /// Only actual native graph/column setters acquire the original native cause.

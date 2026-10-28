@@ -309,12 +309,22 @@ fn native_timestamp_constructor_date_fact_matches_both_timestamp_wire_aliases() 
     let owner = super::super::retained_tests::owner();
     let frames = owner.frames();
     let mut frames = lock(&frames);
-    let batch = RecordBatch::try_from_iter([("id", Arc::new(TimestampMicrosecondArray::from(vec![1, 2])) as ArrayRef)]).unwrap();
+    let batch = RecordBatch::try_from_iter([(
+        "id",
+        Arc::new(TimestampMicrosecondArray::from(vec![1, 2])) as ArrayRef,
+    )])
+    .unwrap();
     frames.tables[0].1 = ArrowData::new(batch.schema(), vec![batch]);
     let mut description = owner.prepared().description.clone();
     description.tables[0].primary_key.clear();
     description.tables[0].columns[0].stype = Stype::Timestamp;
-    let native = source(FrameNativeColumn { name: "id".into(), constructed: Some(Dtype::Date), declared: None, logical_text: None, strings: None });
+    let native = source(FrameNativeColumn {
+        name: "id".into(),
+        constructed: Some(Dtype::Date),
+        declared: None,
+        logical_text: None,
+        strings: None,
+    });
     for dtype in [Dtype::Date, Dtype::Time] {
         description.tables[0].columns[0].dtype = dtype;
         assert!(validate_native(&frames, &description, &native).is_ok());

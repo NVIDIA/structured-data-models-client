@@ -268,7 +268,7 @@ fn validate_native(
                             .iter()
                             .find(|fixed| fixed.name == column.name)
                     })
-                    && sdm_schema::held::wire_dtype(fixed.dtype.wire_name()) != constructed
+                    && !sdm_schema::frames::native_column::equivalent(fixed.dtype, constructed)
                 {
                     return Err(invalid(
                         "native fixed constructed type contradicts its source meaning",

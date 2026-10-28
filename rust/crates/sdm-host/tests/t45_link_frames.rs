@@ -1028,25 +1028,60 @@ fn native_identity_component_type_cannot_create_an_alternate_source_identity() {
 fn native_graph_and_identity_share_date_constructor_and_time_wire_equivalence() {
     use arrow_array::TimestampMicrosecondArray;
     for contradictory in [false, true] {
-        let mut stages = FrameStages { held: inputs("composite-history", false) };
-        let Attachment::Bytes(schema) = stages.held.get_mut(&AttachmentId(1)).unwrap() else { panic!("schema") };
+        let mut stages = FrameStages {
+            held: inputs("composite-history", false),
+        };
+        let Attachment::Bytes(schema) = stages.held.get_mut(&AttachmentId(1)).unwrap() else {
+            panic!("schema")
+        };
         let mut value: Value = serde_json::from_slice(schema).unwrap();
         value["tables"][2]["columns"][4]["dtype"] = json!("timestamp[us]");
         value["tables"][2]["columns"][4]["stype"] = json!("timestamp");
         *schema = serde_json::to_vec(&value).unwrap();
-        let Attachment::Arrow(history) = &stages.held[&AttachmentId(10)] else { panic!("history") };
+        let Attachment::Arrow(history) = &stages.held[&AttachmentId(10)] else {
+            panic!("history")
+        };
         let batch = &history.batches[0];
-        let columns = batch.schema().fields().iter().enumerate().map(|(index, field)| {
-            (field.name().clone(), if index == 4 {
-                Arc::new(TimestampMicrosecondArray::from((0..120).map(i64::from).collect::<Vec<_>>())) as ArrayRef
-            } else { batch.column(index).clone() })
-        }).collect::<Vec<_>>();
+        let columns = batch
+            .schema()
+            .fields()
+            .iter()
+            .enumerate()
+            .map(|(index, field)| {
+                (
+                    field.name().clone(),
+                    if index == 4 {
+                        Arc::new(TimestampMicrosecondArray::from(
+                            (0..120).map(i64::from).collect::<Vec<_>>(),
+                        )) as ArrayRef
+                    } else {
+                        batch.column(index).clone()
+                    },
+                )
+            })
+            .collect::<Vec<_>>();
         let batch = RecordBatch::try_from_iter(columns).unwrap();
-        stages.held.insert(AttachmentId(10), Attachment::Arrow(ArrowData::new(batch.schema(), vec![batch])));
-        stages.held.insert(AttachmentId(11), arrow(vec![("identity", Arc::new(arrow_array::StringArray::from(
-            (0..120).map(|row| format!("observed-{row}")).collect::<Vec<_>>()
-        )))], false));
-        let Attachment::Bytes(manifest) = stages.held.get_mut(&AttachmentId(7)).unwrap() else { panic!("manifest") };
+        stages.held.insert(
+            AttachmentId(10),
+            Attachment::Arrow(ArrowData::new(batch.schema(), vec![batch])),
+        );
+        stages.held.insert(
+            AttachmentId(11),
+            arrow(
+                vec![(
+                    "identity",
+                    Arc::new(arrow_array::StringArray::from(
+                        (0..120)
+                            .map(|row| format!("observed-{row}"))
+                            .collect::<Vec<_>>(),
+                    )),
+                )],
+                false,
+            ),
+        );
+        let Attachment::Bytes(manifest) = stages.held.get_mut(&AttachmentId(7)).unwrap() else {
+            panic!("manifest")
+        };
         let mut value: Value = serde_json::from_slice(manifest).unwrap();
         value["row_identities"] = json!([{
             "definition":{"table":"buys","source":{"source":["buys"]},"columns":[{"name":"buy_id","dtype":"int"},{"name":"part","dtype":if contradictory {"int"} else {"date"}}],"derived":"__kumo_key_6275795f6964_70617274","codec":"escaped_text_v1"},

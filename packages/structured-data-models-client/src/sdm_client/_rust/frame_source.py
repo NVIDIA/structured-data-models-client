@@ -191,8 +191,9 @@ def table_meaning(
     if not empty:
         # The original physical table caches this one actual sample owner.
         # Dtype and stype inference, including later columns, share it.
+        columns = list(frame.columns)
         sample = frame.reset_index(drop=True)
-        for name in frame.columns:
+        for name in columns:
             values = sample[name]
             dtype = values.dtype
             facts = constructor_values(values)

@@ -98,7 +98,9 @@ fn string_binary_and_numeric_share_thresholds_keep_their_own_defaults() {
 #[test]
 fn fixed_constructor_equivalence_normalizes_both_observation_and_source_aliases() {
     use sdm_schema::frames::native_column::equivalent;
-    for source in [Dtype::Date, Dtype::Time] { assert!(equivalent(source, Dtype::Date)); }
+    for source in [Dtype::Date, Dtype::Time] {
+        assert!(equivalent(source, Dtype::Date));
+    }
     assert!(equivalent(Dtype::Int64, Dtype::Int));
     assert!(equivalent(Dtype::Float32, Dtype::Float));
     assert!(!equivalent(Dtype::Date, Dtype::String));
