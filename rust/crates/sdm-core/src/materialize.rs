@@ -4986,6 +4986,71 @@ fn key_scalar(array: &dyn Array, row: usize) -> Scalar {
 #[cfg(test)]
 mod tests {
 
+    #[test]
+    fn filter_notice_is_one_shared_value_for_nonempty_scored_entities_only() {
+        let warning = filter_chose_examples(Some("users.user_id = 1"), 2).unwrap();
+        assert_eq!(warning.sentence, Sentence::FilterChoseExamples);
+        assert_eq!(
+            warning.fields["condition"],
+            Detail::text("users.user_id = 1")
+        );
+        assert_eq!(
+            warning.fields["entities"],
+            Detail::Scalar(Scalar::UInt64(2))
+        );
+        assert!(filter_chose_examples(None, 2).is_none());
+        assert!(filter_chose_examples(Some("users.user_id = 1"), 0).is_none());
+    }
+
+    #[test]
+    fn link_role_metadata_is_nonrefusing_and_strict_policy_retains_unique_edge_requirement() {
+        use sdm_engine::graph::Edge;
+        let target = Shape::Aggregated(Windowed {
+            aggregation: labels::Aggregation::ListDistinct,
+            table: "orders".into(),
+            column: Some("item".into()),
+            filter: None,
+            start: Offset::of(0, TimeUnit::Days),
+            end: Offset::of(30, TimeUnit::Days),
+        });
+        let mut graph = Graph {
+            tables: vec![],
+            edges: vec![],
+        };
+        assert_eq!(link_target_role(&graph, &target), None);
+        let error = link_target(&graph, &target).unwrap_err();
+        assert_eq!(error.sentence, Sentence::LinkTargetNotForeignKey);
+        assert_eq!(error.fields["column"], Detail::text("orders.item"));
+        graph.edges.push(Edge {
+            src: "orders".into(),
+            fkey: "item".into(),
+            dst: "items".into(),
+        });
+        assert_eq!(link_target_role(&graph, &target), Some("items"));
+        assert_eq!(link_target(&graph, &target).unwrap(), Some("items".into()));
+        graph.edges.push(Edge {
+            src: "orders".into(),
+            fkey: "item".into(),
+            dst: "other_items".into(),
+        });
+        assert_eq!(link_target_role(&graph, &target), None);
+        assert_eq!(
+            link_target(&graph, &target).unwrap_err().sentence,
+            Sentence::LinkTargetNotForeignKey
+        );
+        assert_eq!(link_target_role(&graph, &Shape::Column("age".into())), None);
+        assert_eq!(
+            link_target(&graph, &Shape::Column("age".into())).unwrap(),
+            None
+        );
+        let mut missing = target;
+        if let Shape::Aggregated(window) = &mut missing {
+            window.column = None;
+        }
+        assert_eq!(link_target_role(&graph, &missing), None);
+        assert!(link_target(&graph, &missing).is_err());
+    }
+
     /// An aggregate count is one row of one integer: a second row is the
     /// provider's answer not reading, never its first row taken (T3.6
     /// round 1; a catalog listing's first row is its dialect's to read).
