@@ -1170,7 +1170,17 @@ fn native_text_context_projects_once_per_table_then_expands_each_column() {
         panic!("plan")
     };
     let PreparedFrameValue::References(references) = stages.stage(json!({"stage":"references","plan":plan,"converted":{"kind":"core_keys","values":null}})).unwrap() else { panic!("references") };
-    let PreparedFrameValue::Context(context) = stages.stage(json!({"stage":"context","references":references,"range":{"start":0,"stop":201},"converted":{"kind":"core_keys","values":null}})).unwrap() else { panic!("context") };
+    // Temporal LINK caps each call at 200 even when the caller asks for 500.
+    // Keep the complete repeated 201-row task, and consume its selected range.
+    assert_eq!(
+        (task.prediction_rows, task.rows_per_call, task.calls),
+        (201, 200, 2)
+    );
+    let refused = stages
+        .stage(json!({"stage":"context","references":references,"range":{"start":0,"stop":201},"converted":{"kind":"core_keys","values":null}}))
+        .expect_err("a whole task cannot replace its core-selected call range");
+    assert_eq!(refused["error"]["code"], "INVALID_MESSAGE");
+    let PreparedFrameValue::Context(context) = stages.stage(json!({"stage":"context","references":references,"range":{"start":0,"stop":task.rows_per_call},"converted":{"kind":"core_keys","values":null}})).unwrap() else { panic!("context") };
     let users = context
         .tables
         .iter()
