@@ -22,7 +22,13 @@ from t38_forced_routes_record import bare
 from t45_frame_routes import FRAME_ROUTES
 from test_t45_frames import Scripted, configure
 
-from sdm_client import KumoRelational, PredictiveQuery, Schema, SDMClient
+from sdm_client import (
+    KumoRelational,
+    PredictiveQuery,
+    Relationship,
+    Schema,
+    SDMClient,
+)
 from sdm_client.materializers.relational import RelationalMaterializer
 
 CASES = (
@@ -139,7 +145,8 @@ def _observe(label):
     data, primary, times, links, query = configure('int64', 'composite-history')
     if label.startswith('overlap-caller-'):
         data['users']['age'] = data['users']['age'].astype(str)
-        data['buys']['item_id'] += 10000
+        data['users']['unused_fk'] = np.arange(len(data['users'])) + 10000
+        links.append(Relationship('users', 'unused_fk', 'items', 'item_id'))
     if label == 'native-time-before-stype':
         data['buys'].insert(1, 'early', np.arange(len(data['buys'])))
     if label == 'native-key-before-time':
