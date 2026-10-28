@@ -7746,6 +7746,7 @@
         "outputs_none",
         "not_finite",
         "past_int64",
+        "past_int64_bare",
         "column_time_past_nanoseconds",
         "lag_negative",
         "lag_not_whole",
@@ -7863,6 +7864,8 @@
         "tables_unreached_several",
         "columns_unread_several",
         "filter_chose_examples",
+        "relationships_disjoint_one",
+        "relationships_disjoint_several",
         "context_answers_windowed",
         "context_answers_static",
         "null_keys_left_out",
@@ -9709,6 +9712,23 @@
           "required": [
             "stage",
             "input"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "observations": {
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "stage": {
+              "type": "string",
+              "const": "relationship_overlap"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "observations"
           ]
         },
         {
@@ -13039,6 +13059,23 @@
           "properties": {
             "value": {
               "type": "string",
+              "const": "relationship_overlap"
+            },
+            "data": {
+              "$ref": "#/$defs/FrameRelationshipOverlap"
+            }
+          },
+          "required": [
+            "value",
+            "data"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "string",
               "const": "failure_assessment"
             },
             "data": {
@@ -13362,6 +13399,24 @@
       "required": [
         "query",
         "position"
+      ]
+    },
+    "FrameRelationshipOverlap": {
+      "description": "The ordered disjoint positions selected from complete reached observations.",
+      "type": "object",
+      "properties": {
+        "disjoint": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "disjoint"
       ]
     },
     "MaterializedFrames": {
