@@ -168,3 +168,12 @@ def test_actual_serving_prediction_is_unchanged_under_capture(
         [call] = entry['calls']
         assert call['body'] is None
     reader().view(observed.core(), observed.operations)
+
+
+def test_direct_body_snapshot_cannot_change_while_retaining_the_observed_hash():
+    core, operations = actual_observation()
+    call = core['predictions'][0]['calls'][0]
+    call['body']['model'] = 'changed-after-the-hash'
+    core['predicted']['body'] = copy.deepcopy(call['body'])
+    with pytest.raises(reader().ObservationError):
+        reader().view(core, operations)
