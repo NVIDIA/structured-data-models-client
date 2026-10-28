@@ -156,9 +156,31 @@ If a remaining incompatibility requires an owner choice, name the affected publi
 
 `T4.*` names units of work, not Cargo crates, distributions or installable packages.
 Only the paths listed above and tests/contracts needed by each journey are implementation scope; tooling defects ride with the affected work only when a concrete failure requires them.
-At most three packages run concurrently within eight vCPUs; full CI runs only nightly and at phase end.
+At most two Phase 4 packages run concurrently within eight vCPUs; full CI runs only nightly and at phase end.
 Tests are written before implementation, and both independent Sol 6.1 High reviewers approve the same exact candidate before its package tests, lint or cheap checks run.
 The owner's separate direction permits isolated foundation progress while Phase 3 validates; it does not approve a serialized contract bump, changed behavior, new live resources or a merge into `rust-core`.
+
+### Contract-family closure and bounded execution
+
+The owner requested an official boundary and methodology repair on 2026-10-28.
+The implementation and validation plan is [T4.4: neutral casing facts and execution before expansion](t44-boundary-and-execution-repair.md).
+Native text facts describe observed full-root Unicode semantics or an observed simple mapping identity, not pandas or NumPy target classes from which Rust infers that operation.
+The host observes the same reached native conversion and fixed input; Rust validates the supported identities and applies its existing kernels and policy.
+
+T4.1 retains its complete original scope, with these separately visible families.
+
+| Contract family | Current state | Closure evidence |
+|---|---|---|
+| Foundations and model-neutral direct preparation | Landed bounded foundations and direct numeric consumer | Existing exact-candidate reviews, validation and landing records; broader families are not implied |
+| Frame materialization and native observations | Current frame/LINK candidate, including the neutral casing repair | Canonical contract, Python and Rust-host consumers, native read order, malformed facts, ownership/error tests and complete package acceptance |
+| Tabular/index input facts and subset ordering | Defined kernels landed; full consumer and supported-family proof remain open | Actual filtered/sampled subset-order equivalence, malformed facts and mutation/lifetime tests through both hosts |
+| Session lifecycle | Design obligations remain open | Fit/predict/close consumers, pinned state, retry/cancellation ownership, lost create replies, empty DELETE success and existing binding compatibility |
+
+An individual journey may add its reviewed sufficient contract with its connected consumer, but may not imply that the full upstream family is frozen or complete.
+Use one feature author and at most one bounded companion with disjoint ownership, then the independent reviewers.
+Execute each approved vertical journey before expanding implementation to its next layer.
+The present coupled frame/LINK composition remains the next landing target and keeps all its acceptance requirements.
+The ordinary handoff and landing gates remain blocking even when separately approved diagnostic execution collects behavioral failures after a lint failure.
 
 ### T4.1 – Shared input, state and session contracts
 

@@ -9,3 +9,4 @@ Implementation and reviewer decisions belong in [design.md](design.md) and packa
 | # | Decision | Owner's words | Status |
 |---|---|---|---|
 | T42-PANDAS-ADVICE-2026-10-26 | Keep only the existing pandas dates-as-text advisory and its presentation order in Python; Rust retains all data, schema and prediction rules, with no pandas parser emulation, semantic callback or data-driving metadata. | "Keep pandas advice in Python (recommended)" | approved by owner 2026-10-26 |
+| T44-BOUNDARY-METHOD-2026-10-28 | Formally plan and implement the identified boundary correction and implementation-method repair, preserving the existing public behavior and review gates. | "You said there's a real boundary flaw? Plan and fix it. Same with the methodology failure. Plan this officially and then implement" | approved by owner 2026-10-28 |
