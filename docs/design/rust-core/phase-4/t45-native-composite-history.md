@@ -246,3 +246,14 @@ Remove only the two incorrect subset requirements comparing earlier caller HeldT
 Keep actual fact/constructed-name uniqueness, declaration/type/meaning checks, selected key/time lookup and support, table/source binding and completed source coherence.
 Do not relax the already corrected frozen-before-reset column list, whose later drop still produces the native lookup error.
 No new shape, native callback, route exception or provider is required.
+
+R24's fresh wheel and installed identity passed, and its public run completed with 1,503 passes and four failures, all in the new composite boundary file.
+The exact full records separate missing relationship-overlap warnings, a missing nested request-range cause chain and lost constructed String meaning over numerical category buffers.
+Its binding checks passed all eighteen cases; the selected constructor, identity and core fact/key tests also passed.
+The HostRun suite exposed a remaining SQL-only composite refusal in the raw materialize intake and a full-key marking inside the frame Text checker, plus a test setup that sampled only one of the two LINK hops.
+Keep the raw and native frame consumers on the same NativeGraph policy, preserving SQL refusal only when the input is a SQL/provider graph.
+Reuse one pure native operational projection for frame semantic checks, retaining the full source identity for graph, sanitation and checkpoints.
+The already-written complete HostRun consumers and immutable frozen expected records remain unchanged; repair only the new unsigned fixture's insufficient one-hop setup to its actual two-sided LINK graph.
+
+The narrow original-only initial-copy receipt confirms successful removal of an unused feature and successful addition of a native feature, while removing the selected key raises its native key lookup error before folding.
+Those four original observations are not candidate validation evidence.
