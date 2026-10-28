@@ -231,3 +231,32 @@ fn standard_codec_rejects_null_components_in_declared_order_before_sanitization(
         assert_eq!(error.fields["column"], sdm_contract::Detail::text(&key[0]));
     }
 }
+
+#[test]
+fn standard_codec_checks_all_approximate_types_before_any_component_nulls() {
+    let rows = RecordBatch::try_from_iter([
+        (
+            "missing",
+            Arc::new(Int64Array::from(vec![None, Some(1)])) as ArrayRef,
+        ),
+        (
+            "approximate",
+            Arc::new(arrow_array::Float64Array::from(vec![0.25, 0.5])) as ArrayRef,
+        ),
+    ])
+    .unwrap();
+    let error = encode(
+        &rows,
+        &["missing".into(), "approximate".into()],
+        &BTreeMap::new(),
+    )
+    .unwrap_err();
+    assert_eq!(
+        error.fields["native_key_reason"],
+        sdm_contract::Detail::text("approximate_component")
+    );
+    assert_eq!(
+        error.fields["column"],
+        sdm_contract::Detail::text("approximate")
+    );
+}
