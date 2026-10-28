@@ -29,17 +29,18 @@ def _render(value: object) -> str:
 
 def convert(
     frame: pd.DataFrame, definition: dict[str, Any], state: dict[str, Any]
-) -> pd.Series:
+) -> pd.DataFrame:
     """Convert only this immutable identity at its reached assignment position."""
     from sdm_client._rust import codec
     from sdm_client._rust.frame_facade import _adopt, _Bindings, _prepare
 
     if definition['codec'] != 'escaped_text_v1':
         raise codec.CodecError('unknown native identity encoding')
+    data = frame.copy(deep=False)
     rendered = []
     for column in definition['columns']:
         name = column['name']
-        values = frame[name]
+        values = data[name]
         missing = bool(values.isna().any())
         _adopt(
             _prepare(
@@ -68,6 +69,5 @@ def convert(
         joined = joined + '\x1f' + part
     # Use actual native assignment, including index alignment, on the same
     # retained shallow source owner. The complete aligned column is the fact.
-    data = frame.copy(deep=False)
     data[definition['derived']] = joined
-    return data[definition['derived']]
+    return data

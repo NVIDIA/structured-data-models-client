@@ -252,6 +252,29 @@ fn validate_native(
             if column.name != *field.name() {
                 return Err(invalid("frame native origins change original column order"));
             }
+            if let Some(constructed) = column.constructed {
+                if !sdm_schema::frames::native_column::canonical(constructed) {
+                    return Err(invalid(
+                        "native constructed type is outside the canonical constructor domain",
+                    ));
+                }
+                if let Some(fixed) = description
+                    .tables
+                    .iter()
+                    .find(|described| described.source == table.source)
+                    .and_then(|described| {
+                        described
+                            .columns
+                            .iter()
+                            .find(|fixed| fixed.name == column.name)
+                    })
+                    && sdm_schema::held::wire_dtype(fixed.dtype.wire_name()) != constructed
+                {
+                    return Err(invalid(
+                        "native fixed constructed type contradicts its source meaning",
+                    ));
+                }
+            }
             if column.declared.is_some() && column.logical_text.is_some() {
                 return Err(invalid(
                     "native source has contradictory physical and logical declarations",
@@ -334,7 +357,7 @@ impl BoundGraph {
         let prepared = {
             let mut frame = lock(&frames);
             validate_native(&frame, &description, &native)?;
-            frame.validate_text_types(&description)?;
+            frame.validate_native_text_types(&description, &native)?;
             frame.prepare_native_graph(asker, description, &native)?
         };
         let source = native_identity(&prepared.source, &native)?;

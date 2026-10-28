@@ -173,66 +173,112 @@ pub(super) fn metadata(input: FrameTableMetadata) -> Result<FrameTableMeaning, C
         ));
     }
     let mut table = input.table;
-    if let Some(definition) = &expected.composite {
-        if let Some(fixed) = expected
-            .table
-            .constructed
-            .iter()
-            .find(|column| column.name == definition.derived)
+    let mut constructed = expected.table.constructed;
+    let operational = expected.composite.as_ref().map(|key| key.derived.as_str());
+    let new_column =
+        operational.filter(|name| !constructed.iter().any(|column| column.name == *name));
+    match (new_column, input.derived) {
+        (Some(name), Some(derived))
+            if derived.name == name
+                && derived.stype == Stype::Id
+                && sdm_schema::frames::native_column::canonical(derived.dtype)
+                && crate::edit::supports(Stype::Id, derived.dtype) =>
         {
-            if !crate::edit::supports(Stype::Id, fixed.dtype) {
-                return Err(native("key_dtype", &table.name, &fixed.name)
-                    .with_field(
-                        "dtype",
-                        Detail::text(super::super::name_of(serde_json::to_value(fixed.dtype))),
-                    )
-                    .with_field("stype", Detail::text("ID")));
-            }
-            if let Some(column) = table
+            constructed.push(derived)
+        }
+        (None, None) => {}
+        _ => {
+            return Err(protocol(
+                "native derived column meaning differs from the captured construction",
+            ));
+        }
+    }
+    if let Some(name) = operational {
+        let fixed = constructed
+            .iter()
+            .find(|column| column.name == name)
+            .ok_or_else(|| protocol("native constructed key column is absent"))?;
+        if !crate::edit::supports(Stype::Id, fixed.dtype) {
+            return Err(native("key_dtype", &table.name, name)
+                .with_field(
+                    "dtype",
+                    Detail::text(super::super::name_of(serde_json::to_value(fixed.dtype))),
+                )
+                .with_field("stype", Detail::text("ID")));
+        }
+    }
+    // Native metadata setters run in the caller's reached column order,
+    // independently of the physical source order retained below.
+    for live in &table.columns {
+        let Some(fixed) = constructed.iter().find(|column| column.name == live.name) else {
+            continue;
+        };
+        if !crate::edit::supports(live.stype, fixed.dtype) {
+            return Err(metadata_error(
+                super::super::not_carried(
+                    Sentence::IncompatibleSemanticType,
+                    &table.name,
+                    &live.name,
+                )
+                .with_field("reason", Detail::text("incompatible_semantic_type"))
+                .with_field(
+                    "dtype",
+                    Detail::text(super::super::name_of(serde_json::to_value(fixed.dtype))),
+                )
+                .with_field(
+                    "stype",
+                    Detail::text(super::super::name_of(serde_json::to_value(live.stype))),
+                ),
+            ));
+        }
+        if operational == Some(live.name.as_str()) && live.stype != Stype::Id {
+            return Err(native("primary_stype", &table.name, &live.name).with_field(
+                "stype",
+                Detail::text(super::super::name_of(serde_json::to_value(live.stype))),
+            ));
+        }
+    }
+    table.columns = constructed
+        .iter()
+        .map(|fixed| {
+            let mut column = table
                 .columns
                 .iter()
-                .find(|column| column.name == definition.derived)
-            {
-                if !crate::edit::supports(column.stype, fixed.dtype) {
-                    return Err(native("key_dtype", &table.name, &column.name)
-                        .with_field(
-                            "dtype",
-                            Detail::text(super::super::name_of(serde_json::to_value(fixed.dtype))),
-                        )
-                        .with_field(
-                            "stype",
-                            Detail::text(super::super::name_of(serde_json::to_value(column.stype))),
-                        ));
-                }
-                if column.stype != Stype::Id {
-                    return Err(
-                        native("primary_stype", &table.name, &column.name).with_field(
-                            "stype",
-                            Detail::text(super::super::name_of(serde_json::to_value(column.stype))),
-                        ),
-                    );
-                }
-            }
-        }
-    }
-    // Later caller dtype edits cannot recast already constructed rows.
-    for column in &mut table.columns {
-        if let Some(frozen) = expected
-            .table
-            .table
-            .columns
-            .iter()
-            .find(|frozen| frozen.name == column.name)
-        {
-            column.dtype.clone_from(&frozen.dtype);
-        }
-    }
+                .find(|live| live.name == fixed.name)
+                .cloned()
+                .unwrap_or_else(|| sdm_contract::ops::HeldColumn {
+                    name: fixed.name.clone(),
+                    dtype: fixed.dtype.wire_name().into(),
+                    stype: fixed.stype,
+                    untyped: false,
+                    stype_declared: false,
+                    stype_before_key: None,
+                    source: None,
+                });
+            column.dtype = fixed.dtype.wire_name().into();
+            column.untyped = false;
+            column.stype_before_key = None;
+            column
+        })
+        .collect();
     table.primary_key = expected.primary_key;
     table.frame_key_form = expected.table.table.frame_key_form;
-    Ok(FrameTableMeaning {
-        table,
-        constructed: expected.table.constructed,
-    })
+    Ok(FrameTableMeaning { table, constructed })
+}
+
+/// Only actual native graph/column setters acquire the original native cause.
+pub(super) fn metadata_error(mut error: CoreError) -> CoreError {
+    if matches!(
+        error.sentence,
+        Sentence::IncompatibleSemanticType | Sentence::EdgeKeyTypes
+    ) {
+        error.fields.insert(
+            "native_key_reason".into(),
+            Detail::text("metadata_validation"),
+        );
+        error.public_details = Some(Box::default());
+    }
+    error
 }
 
 /// Native task classification reads the final registered graph before labels.

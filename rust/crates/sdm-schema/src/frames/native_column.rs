@@ -39,6 +39,20 @@ fn invalid() -> CoreError {
     )
 }
 
+/// The one canonical spelling emitted by admitted native type inference.
+pub fn canonical(dtype: Dtype) -> bool {
+    matches!(
+        dtype,
+        Dtype::Bool
+            | Dtype::Int
+            | Dtype::Float
+            | Dtype::String
+            | Dtype::Binary
+            | Dtype::Date
+            | Dtype::Timedelta
+    )
+}
+
 pub fn dtype(values: &FrameConstructorValues) -> Result<Dtype, CoreError> {
     use ColumnType as T;
     Ok(match values {

@@ -355,6 +355,22 @@ impl FrameRun {
     /// applying Text meaning. A logical dtype edit cannot turn numeric rows
     /// into a text column. Reuse the shared semantic rule and diagnostic.
     pub fn validate_text_types(&self, description: &SourceDescription) -> Result<(), CoreError> {
+        self.validate_text_types_with(description, None)
+    }
+
+    pub fn validate_native_text_types(
+        &self,
+        description: &SourceDescription,
+        native: &[FrameNativeTable],
+    ) -> Result<(), CoreError> {
+        self.validate_text_types_with(description, Some(native))
+    }
+
+    fn validate_text_types_with(
+        &self,
+        description: &SourceDescription,
+        native: Option<&[FrameNativeTable]>,
+    ) -> Result<(), CoreError> {
         let mut physical = description.clone();
         for table in &mut physical.tables {
             let (_, rows) = self
@@ -367,6 +383,19 @@ impl FrameRun {
                 .iter_mut()
                 .filter(|column| column.stype == Stype::Text)
             {
+                if let Some(constructed) = native
+                    .and_then(|tables| tables.iter().find(|native| native.source == table.source))
+                    .and_then(|native| {
+                        native
+                            .columns
+                            .iter()
+                            .find(|native| native.name == column.name)
+                    })
+                    .and_then(|native| native.constructed)
+                {
+                    column.dtype = constructed;
+                    continue;
+                }
                 let field = rows
                     .schema
                     .field_with_name(&column.name)

@@ -100,4 +100,7 @@ pub struct FrameRowIdentity {
 pub struct FrameTableMetadata {
     pub key: FrameKeyMeaning,
     pub table: HeldTable,
+    /// Actual completed new derived column; absent for a pre-existing column.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub derived: Option<FrameConstructedColumn>,
 }

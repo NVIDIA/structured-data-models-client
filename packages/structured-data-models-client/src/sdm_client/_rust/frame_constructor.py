@@ -19,7 +19,7 @@ from sdm_client._rust import codec, errors
 def column(
     table: str,
     name: str,
-    frame: pd.DataFrame,
+    sample: pd.DataFrame,
     facts: dict[str, Any],
     declared: dict[str, Any] | None,
 ) -> dict[str, Any]:
@@ -40,41 +40,42 @@ def column(
             error.control, error.attachments, internal_context=error
         )
     dtype = json.loads(meaning.dtype())
+    values = sample[name]
     try:
         if meaning.timestamp_sample():
-            sample = frame.reset_index(drop=True)[name].iloc[:100]
-            sample = sample.dropna()
-            sample = sample[sample != '']
-            if len(sample) == 0:
+            part = values.iloc[:100]
+            part = part.dropna()
+            part = part[part != '']
+            if len(part) == 0:
                 meaning.timestamp_counts(0, 0)
             else:
-                sample = sample.astype(str)
+                part = part.astype(str)
                 with warnings.catch_warnings():
                     warnings.simplefilter('ignore', UnknownTimezoneWarning)
                     warnings.filterwarnings(
                         'ignore', message='Could not infer format'
                     )
-                    mask = pd.to_datetime(sample, errors='coerce').notna()
+                    mask = pd.to_datetime(part, errors='coerce').notna()
                     meaning.timestamp_counts(int(mask.sum()), len(mask))
         if meaning.separated_sample():
-            sample = frame.reset_index(drop=True)[name].iloc[:500].dropna()
-            sample = sample.astype(str)
-            text = '\n'.join(sample)
+            part = values.iloc[:500].dropna()
+            part = part.astype(str)
+            text = '\n'.join(part)
             separator = meaning.separator([ord(char) for char in text])
             if separator is not None:
-                distinct = int(sample.nunique())
-                sample = sample.str.split(separator)
-                parts = int(sample.astype('object').explode().nunique())
+                distinct = int(part.nunique())
+                part = part.str.split(separator)
+                parts = int(part.astype('object').explode().nunique())
                 meaning.separated_counts(distinct, parts)
         if meaning.element_sample():
-            sample = frame.reset_index(drop=True)[name].iloc[:500].dropna()
+            part = values.iloc[:500].dropna()
             meaning.element_count(
-                int(sample.astype('object').explode().nunique())
+                int(part.astype('object').explode().nunique())
             )
         if meaning.distinct_sample():
-            sample = frame.reset_index(drop=True)[name].iloc[:1000].dropna()
-            if meaning.distinct_count(int(sample.nunique())):
-                meaning.population_count(len(sample))
+            part = values.iloc[:1000].dropna()
+            if meaning.distinct_count(int(part.nunique())):
+                meaning.population_count(len(part))
         return json.loads(meaning.meaning())
     except _native.CoreError as error:
         errors.raise_from_core(

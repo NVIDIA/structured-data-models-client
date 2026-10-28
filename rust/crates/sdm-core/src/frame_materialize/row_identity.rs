@@ -160,6 +160,21 @@ pub(super) fn complete(
             ));
         }
         crate::materialize::frame_values::source_keys::definition(definition)?;
+        for component in &definition.columns {
+            let fixed = table
+                .columns
+                .iter()
+                .find(|column| column.name == component.name)
+                .ok_or_else(|| {
+                    invalid("native identity component lacks its constructed source type")
+                })?;
+            let canonical = sdm_schema::held::wire_dtype(fixed.dtype.wire_name());
+            if component.dtype != canonical {
+                return Err(invalid(
+                    "native identity component type contradicts its constructed source",
+                ));
+            }
+        }
         complete.push(identity);
     }
     if !supplied.is_empty() {

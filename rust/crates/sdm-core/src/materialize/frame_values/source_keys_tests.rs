@@ -43,12 +43,25 @@ fn table() -> FrameTableMeaning {
 }
 
 fn reached_metadata(key: FrameKeyMeaning, table: HeldTable) -> FrameTableMetadata {
-    let derived = key.composite.as_ref().filter(|definition| {
-        !key.table.constructed.iter().any(|column| column.name == definition.derived)
-    }).map(|definition| FrameConstructedColumn {
-        name: definition.derived.clone(), dtype: Dtype::String, stype: Stype::Id,
-    });
-    FrameTableMetadata { key, table, derived }
+    let derived = key
+        .composite
+        .as_ref()
+        .filter(|definition| {
+            !key.table
+                .constructed
+                .iter()
+                .any(|column| column.name == definition.derived)
+        })
+        .map(|definition| FrameConstructedColumn {
+            name: definition.derived.clone(),
+            dtype: Dtype::String,
+            stype: Stype::Id,
+        });
+    FrameTableMetadata {
+        key,
+        table,
+        derived,
+    }
 }
 
 #[test]
@@ -114,10 +127,7 @@ fn preexisting_derived_column_is_admitted_then_current_primary_stype_is_checked(
         stype: Stype::Numerical,
     });
     let key = source_keys::key(fixed.clone(), fixed.table.primary_key.clone()).unwrap();
-    assert!(
-        source_keys::metadata(reached_metadata(key.clone(), fixed.table.clone()))
-        .is_ok()
-    );
+    assert!(source_keys::metadata(reached_metadata(key.clone(), fixed.table.clone())).is_ok());
     let mut live = fixed.table;
     live.columns[2].stype = Stype::Numerical;
     let error = source_keys::metadata(reached_metadata(key, live)).unwrap_err();
@@ -139,10 +149,7 @@ fn malformed_definition_or_table_key_companions_never_select_another_meaning() {
             2 => forged.composite.as_mut().unwrap().derived.push('x'),
             _ => forged.composite.as_mut().unwrap().columns[0].dtype = Dtype::Int64,
         }
-        assert!(
-            source_keys::metadata(reached_metadata(forged, fixed.table.clone()))
-            .is_err()
-        );
+        assert!(source_keys::metadata(reached_metadata(forged, fixed.table.clone())).is_err());
     }
 }
 
@@ -180,11 +187,30 @@ fn native_metadata_uses_fixed_types_and_requires_the_actual_new_derived_meaning(
         dtype: Dtype::String,
         stype: Stype::Id,
     };
-    assert!(source_keys::metadata(FrameTableMetadata { key: key.clone(), table: fixed.table.clone(), derived: None }).is_err());
+    assert!(
+        source_keys::metadata(FrameTableMetadata {
+            key: key.clone(),
+            table: fixed.table.clone(),
+            derived: None
+        })
+        .is_err()
+    );
     let mut wrong = derived.clone();
     wrong.name.push('x');
-    assert!(source_keys::metadata(FrameTableMetadata { key: key.clone(), table: fixed.table.clone(), derived: Some(wrong) }).is_err());
-    let value = source_keys::metadata(FrameTableMetadata { key, table: fixed.table, derived: Some(derived) }).unwrap();
+    assert!(
+        source_keys::metadata(FrameTableMetadata {
+            key: key.clone(),
+            table: fixed.table.clone(),
+            derived: Some(wrong)
+        })
+        .is_err()
+    );
+    let value = source_keys::metadata(FrameTableMetadata {
+        key,
+        table: fixed.table,
+        derived: Some(derived),
+    })
+    .unwrap();
     assert_eq!(value.table.columns[1].dtype, "int64");
     assert_eq!(value.table.columns.last().unwrap().stype, Stype::Id);
 }
@@ -194,9 +220,21 @@ fn native_stype_assignment_refuses_before_later_table_effects_with_a_native_caus
     let mut fixed = table();
     let key = source_keys::key(fixed.clone(), fixed.table.primary_key.clone()).unwrap();
     fixed.table.columns[0].stype = Stype::Numerical;
-    let derived = FrameConstructedColumn { name: key.composite.as_ref().unwrap().derived.clone(), dtype: Dtype::String, stype: Stype::Id };
-    let error = source_keys::metadata(FrameTableMetadata { key, table: fixed.table, derived: Some(derived) }).unwrap_err();
+    let derived = FrameConstructedColumn {
+        name: key.composite.as_ref().unwrap().derived.clone(),
+        dtype: Dtype::String,
+        stype: Stype::Id,
+    };
+    let error = source_keys::metadata(FrameTableMetadata {
+        key,
+        table: fixed.table,
+        derived: Some(derived),
+    })
+    .unwrap_err();
     assert_eq!(error.sentence, Sentence::IncompatibleSemanticType);
     assert_eq!(error.fields["column"], Detail::text("a"));
-    assert_eq!(error.fields["native_key_reason"], Detail::text("metadata_validation"));
+    assert_eq!(
+        error.fields["native_key_reason"],
+        Detail::text("metadata_validation")
+    );
 }

@@ -113,12 +113,34 @@ def native_inputs(
             state,
         )
         definition = key['composite']
+        derived = None
         if definition is not None:
-            aligned = convert_identity(frame, definition, state)
-            values, encoding = NativeColumn(aligned).arrow()
-            identities.append((definition, values, encoding))
+            frame = convert_identity(frame, definition, state)
+            constructed_tables[name] = (frame, constructed)
+            if not any(
+                column['name'] == definition['derived']
+                for column in constructed['constructed']
+            ):
+                from sdm_client._rust.frame_constructor import (
+                    column as construct_column,
+                )
+                from sdm_client._rust.frame_facts import native_declaration
+                from sdm_client._rust.frame_source import constructor_values
+
+                # Assignment releases the original constructor sample. A new
+                # native column reads one new cached sample at this position.
+                sample = frame.reset_index(drop=True)
+                values = sample[definition['derived']]
+                derived = construct_column(
+                    name,
+                    definition['derived'],
+                    sample,
+                    constructor_values(values),
+                    native_declaration(values.dtype),
+                )
+            identities.append((definition, frame))
         live = held_table(name, table)
-        metadata = table_metadata(key, live, state)
+        metadata = table_metadata(key, live, state, derived)
         completed_tables[name] = metadata
     # Graph.from_data's physical table order is independent of the later
     # metadata assignment order. Keep the captured values in that order.
@@ -131,10 +153,14 @@ def native_inputs(
         typed_tables,
         state,
     )
-    state['frame_row_identities'] = identities
-    for (name, frame, _), held in zip(
+    for (name, _, _), held in zip(
         physical_tables, graph_schema['tables'], strict=True
     ):
+        frame = constructed_tables[name][0]
+        constructed_types = {
+            column['name']: column['dtype']
+            for column in completed_tables[name]['constructed']
+        }
         frame = frame.copy(deep=False).reset_index(drop=True)
         arrays = []
         origins = []
@@ -190,6 +216,7 @@ def native_inputs(
             origins.append(
                 {
                     'name': column,
+                    'constructed': constructed_types.get(column),
                     **native_source_facts(dtype),
                     'strings': encoding,
                 }
@@ -202,6 +229,10 @@ def native_inputs(
         native_tables.append({'source': source, 'columns': origins})
         native_types[source_name] = types
         categorical[source_name] = category_arrays
+    state['frame_row_identities'] = [
+        (definition, *NativeColumn(frame[definition['derived']]).arrow())
+        for definition, frame in identities
+    ]
     return (
         exported,
         graph_schema,

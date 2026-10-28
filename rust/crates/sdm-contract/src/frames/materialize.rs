@@ -29,7 +29,7 @@ pub use native::{
 
 use crate::data::strings::StringEncoding;
 use crate::data::{AttachmentId, Relation};
-use crate::ops::{ColumnRef, Materialized, QueryFacts, Seed, Stype};
+use crate::ops::{ColumnRef, Dtype, Materialized, QueryFacts, Seed, Stype};
 use crate::pql::ValidatedQuery;
 use crate::{ColumnType, Scalar};
 use schemars::JsonSchema;
@@ -113,6 +113,9 @@ pub struct FrameLogicalText {
 #[serde(deny_unknown_fields)]
 pub struct FrameNativeColumn {
     pub name: String,
+    /// Earlier core-completed native type, independent of later export storage.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub constructed: Option<Dtype>,
     /// At most one original declaration or logical-text fact may be present.
     /// Neither is needed for ordinary primitive, object or category sources.
     pub declared: Option<FramePhysicalDeclaration>,

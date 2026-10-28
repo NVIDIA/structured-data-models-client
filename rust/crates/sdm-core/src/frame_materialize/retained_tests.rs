@@ -76,6 +76,7 @@ pub(crate) fn owner() -> RetainedFrameGraph {
             source: "input_users".into(),
             columns: vec![FrameNativeColumn {
                 name: "id".into(),
+                constructed: None,
                 declared: None,
                 logical_text: None,
                 strings: None,

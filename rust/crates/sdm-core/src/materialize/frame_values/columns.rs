@@ -55,7 +55,27 @@ pub(super) fn source(
         ));
     }
     for (live, typed) in schema.tables.iter_mut().zip(typed_tables) {
+        let constructed = typed.constructed;
         let typed = typed.table;
+        if typed
+            .columns
+            .iter()
+            .map(|column| &column.name)
+            .ne(constructed.iter().map(|column| &column.name))
+            || constructed
+                .iter()
+                .map(|column| &column.name)
+                .collect::<BTreeSet<_>>()
+                .len()
+                != constructed.len()
+            || constructed
+                .iter()
+                .any(|column| !sdm_schema::frames::native_column::canonical(column.dtype))
+        {
+            return Err(protocol(
+                "native constructed columns differ from their complete table meaning",
+            ));
+        }
         if live.name != typed.name
             || live.source != typed.source
             || live.columns.len() != typed.columns.len()
@@ -73,7 +93,11 @@ pub(super) fn source(
             // Native casts have already consumed the earlier declaration.
             // Key/time/stype remain the live graph facts observed only after
             // all casts, while a later dtype edit cannot recast typed rows.
-            column.dtype = frozen.dtype;
+            let fixed = constructed
+                .iter()
+                .find(|fixed| fixed.name == column.name)
+                .ok_or_else(|| protocol("native source lacks its fixed constructed column"))?;
+            column.dtype = fixed.dtype.wire_name().into();
         }
     }
     let read = sdm_schema::held::read(schema.clone(), &BTreeMap::new(), true)?;
@@ -81,7 +105,7 @@ pub(super) fn source(
     sdm_schema::assemble::mark_keys(&mut description);
     sdm_schema::assemble::check_link_structure(&description, &read.types)?;
     reserved(&description)?;
-    kept_checks(&description)?;
+    kept_checks(&description).map_err(super::source_keys::metadata_error)?;
     Ok(FrameSourceMeaning { schema })
 }
 

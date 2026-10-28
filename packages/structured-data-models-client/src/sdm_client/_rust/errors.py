@@ -915,9 +915,14 @@ def error_from_core(
             native_key_cause = ValueError(message)
         with holding(frame_native_message=lambda observed: message):
             said = _said(sentence, fields)
-    if key_reason == 'task_validation':
-        if sentence not in ('iterations_below_one', 'anchor_entity_not_shared'):
-            raise codec.CodecError('invalid native frame task error sentence')
+    if key_reason in ('task_validation', 'metadata_validation'):
+        if sentence not in (
+            'iterations_below_one',
+            'anchor_entity_not_shared',
+            'incompatible_semantic_type',
+            'edge_key_types',
+        ):
+            raise codec.CodecError('invalid native frame validation sentence')
         said = _said(sentence, fields)
         native_key_cause = ValueError(said)
     if sentence == 'frame_no_valid_rows':

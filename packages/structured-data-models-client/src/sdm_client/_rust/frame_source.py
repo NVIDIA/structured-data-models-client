@@ -189,10 +189,11 @@ def table_meaning(
 
     native = []
     if not empty:
+        # The original physical table caches this one actual sample owner.
+        # Dtype and stype inference, including later columns, share it.
+        sample = frame.reset_index(drop=True)
         for name in frame.columns:
-            # Source dtype and stype inference independently reset the native
-            # sample index in the original physical table constructor.
-            values = frame.reset_index(drop=True)[name]
+            values = sample[name]
             dtype = values.dtype
             facts = constructor_values(values)
             declared = native_declaration(dtype)
@@ -202,7 +203,7 @@ def table_meaning(
                     'declared': declared,
                     'values': facts,
                     'meaning': constructor_column(
-                        table['name'], name, frame, facts, declared
+                        table['name'], name, sample, facts, declared
                     ),
                 }
             )
@@ -285,13 +286,19 @@ def table_key(
 
 
 def table_metadata(
-    key: dict[str, Any], table: dict[str, Any], state: dict[str, Any]
+    key: dict[str, Any],
+    table: dict[str, Any],
+    state: dict[str, Any],
+    derived: dict[str, Any] | None,
 ) -> dict[str, Any]:
     from sdm_client._rust.frame_facade import _adopt, _Bindings, _prepare
 
     return _adopt(
         _prepare(
-            {'stage': 'table_metadata', 'input': {'key': key, 'table': table}},
+            {
+                'stage': 'table_metadata',
+                'input': {'key': key, 'table': table, 'derived': derived},
+            },
             _Bindings(),
             state,
         ),
