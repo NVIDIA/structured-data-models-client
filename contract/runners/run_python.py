@@ -966,6 +966,8 @@ class _Capture:
         self.predictions: list[dict[str, Any]] = []
         self._entries: list[int] = []
         self._presented: list[tuple[BaseException, int, str]] = []
+        self._result_presentations: list[tuple[Any, int]] = []
+        self._result_carries: list[tuple[BaseException, int]] = []
         self.model_calls: list[dict[str, Any]] = []
         self.partial: dict[str, Any] | None = None
 
@@ -989,6 +991,7 @@ class _Capture:
                 'calls': [],
                 'results': [],
                 'final': None,
+                'carried': None,
             }
         )
         self._entries.append(ordinal)
@@ -1029,6 +1032,23 @@ class _Capture:
                 seen: set[int] = set()
                 while selected is not None and id(selected) not in seen:
                     seen.add(id(selected))
+                    if entry['carried'] is None:
+                        carried = next(
+                            (
+                                run
+                                for owner, run in reversed(self._result_carries)
+                                if owner is selected
+                                and self._within(run, ordinal)
+                            ),
+                            None,
+                        )
+                        if carried is not None:
+                            entry['carried'] = {
+                                'run': carried,
+                                'relation': 'selected'
+                                if selected is error
+                                else 'cause',
+                            }
                     matched = next(
                         (
                             (run, relation)
@@ -1050,7 +1070,7 @@ class _Capture:
                             ),
                             None,
                         )
-                    if run is not None:
+                    if run is not None and 'failure' not in entry:
                         self.error = self._runs[run].error
                         entry['failure'] = {
                             'run': run,
@@ -1058,7 +1078,6 @@ class _Capture:
                             if matched is not None and matched[1] == 'refused'
                             else ('selected' if selected is error else 'cause'),
                         }
-                        break
                     selected = BaseException.__cause__.__get__(selected)
         finally:
             self._entries.pop()
@@ -1068,6 +1087,16 @@ class _Capture:
                 self._presented = [
                     (owner, run, relation)
                     for owner, run, relation in self._presented
+                    if not self._within(run, ordinal)
+                ]
+                self._result_presentations = [
+                    (owner, run)
+                    for owner, run in self._result_presentations
+                    if not self._within(run, ordinal)
+                ]
+                self._result_carries = [
+                    (owner, run)
+                    for owner, run in self._result_carries
                     if not self._within(run, ordinal)
                 ]
                 for run, owner in self._runs.items():
@@ -1090,6 +1119,29 @@ class _Capture:
         for owner, run, _relation in reversed(self._presented):
             if owner is error and self._within(run, self._entries[-1]):
                 self._presented.append((raised, run, 'refused'))
+                return
+
+    def presented_result(self, result: Any, owner: _CapturedRun | None) -> None:
+        if owner is None or not self._entries:
+            return
+        record = owner.result_record
+        if (
+            self._runs.get(owner.ordinal) is owner
+            and self._within(owner.ordinal, self._entries[-1])
+            and owner.preparation is not None
+            and owner.preparation['stage'] == 'finish_relational_response'
+            and record is not None
+            and record['metadata'] is not None
+            and record['result'] is not None
+        ):
+            self._result_presentations.append((result, owner.ordinal))
+
+    def carried_result(self, error: BaseException, result: Any) -> None:
+        if not self._entries:
+            return
+        for owner, run in reversed(self._result_presentations):
+            if owner is result and self._within(run, self._entries[-1]):
+                self._result_carries.append((error, run))
                 return
 
     @staticmethod
@@ -1926,10 +1978,15 @@ class _Boundary:
         self._predict_before = relational_predict.predict
         self._presentation_before = errors.error_from_core
         self._carried_before = run._carried
+        self._present_before = relational_predict._present
+        self._result_carry_before = relational_predict._carry
         imported = self._native_before
         predict_before = self._predict_before
         presentation_before = self._presentation_before
         carried_before = self._carried_before
+        present_before = self._present_before
+        result_carry_before = self._result_carry_before
+        finished_type = run.Finished
 
         def native() -> Any:
             return _Native(imported(), self.capture)
@@ -1964,14 +2021,61 @@ class _Boundary:
             self.capture.carried(error, raised)
             return value
 
+        def result_owner(finished: Any) -> _CapturedRun | None:
+            if type(finished) is not finished_type:
+                return None
+            handle = object.__getattribute__(finished, '_run')
+            seen = set()
+            while type(handle) is _Handle and id(handle) not in seen:
+                seen.add(id(handle))
+                if object.__getattribute__(handle, '_capture') is self.capture:
+                    owner = object.__getattribute__(handle, '_owner')
+                    control = object.__getattribute__(finished, 'result')
+                    if (
+                        type(owner) is _CapturedRun
+                        and type(control) is dict
+                        and set(control) == {'op', 'value'}
+                        and type(control['op']) is str
+                        and control['op'] == 'prepare_request'
+                        and type(control['value']) is int
+                        and control['value'] == owner.prepared
+                    ):
+                        return owner
+                    return None
+                handle = object.__getattribute__(handle, '_handle')
+            return None
+
+        def present(*args: Any, **kwargs: Any) -> Any:
+            finished = args[0] if args else kwargs.get('finished')
+            owner = result_owner(finished)
+            value = present_before(*args, **kwargs)
+            if (
+                type(value) is tuple
+                and len(value) == 2
+                and owner is result_owner(finished)
+            ):
+                self.capture.presented_result(value[0], owner)
+            return value
+
+        def result_carry(*args: Any, **kwargs: Any) -> Any:
+            value = result_carry_before(*args, **kwargs)
+            error = args[0] if args else kwargs.get('error')
+            result = args[1] if len(args) > 1 else kwargs.get('result')
+            self.capture.carried_result(error, result)
+            return value
+
         self._native_hook = native
         self._predict_hook = predict
         self._presentation_hook = presentation
         self._carried_hook = carried
+        self._present_hook = present
+        self._result_carry_hook = result_carry
         run.native = native
         relational_predict.predict = predict
         errors.error_from_core = presentation
         run._carried = carried
+        relational_predict._present = present
+        relational_predict._carry = result_carry
 
     def reset(self) -> _Capture:
         if self._closed or self.capture._entries:
@@ -1993,6 +2097,8 @@ class _Boundary:
             or relational_predict.predict is not self._predict_hook
             or errors.error_from_core is not self._presentation_hook
             or run._carried is not self._carried_hook
+            or relational_predict._present is not self._present_hook
+            or relational_predict._carry is not self._result_carry_hook
         ):
             raise RunnerFailure(
                 'capture hooks must close in LIFO installation order'
@@ -2001,6 +2107,8 @@ class _Boundary:
         relational_predict.predict = self._predict_before
         errors.error_from_core = self._presentation_before
         run._carried = self._carried_before
+        relational_predict._present = self._present_before
+        relational_predict._carry = self._result_carry_before
         self._closed = True
 
 

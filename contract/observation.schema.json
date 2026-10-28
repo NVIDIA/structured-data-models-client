@@ -646,7 +646,8 @@
         "runs",
         "calls",
         "results",
-        "final"
+        "final",
+        "carried"
       ],
       "properties": {
         "ordinal": {
@@ -732,6 +733,16 @@
               "type": "null"
             }
           ]
+        },
+        "carried": {
+          "description": "Successful SDK carry operation associated by terminal identity/explicit cause with this complete native result Run. This is not a readback of arbitrary public error.details.",
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": ["run", "relation"],
+          "properties": {
+            "run": {"type": "integer", "minimum": 0},
+            "relation": {"enum": ["selected", "cause"]}
+          }
         },
         "failure": {
           "type": "object",

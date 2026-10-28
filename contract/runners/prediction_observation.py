@@ -400,7 +400,7 @@ def _entry(
         'prediction model argument observation is malformed',
     )
     require(
-        entry['completion'] in ('returned', 'raised'),
+        entry['completion'] in ('returned', 'raised') and 'carried' in entry,
         'prediction entry remains active',
     )
     runs = entry['runs']
@@ -550,7 +550,7 @@ def _entry(
 def _partial_entry(
     entry: dict[str, Any],
     rendered: list[dict[str, Any]],
-    records: dict[int, Any],
+    carried: tuple[dict[str, Any], dict[str, Any]] | None,
 ) -> dict[str, Any]:
     results = []
     positions = {
@@ -587,18 +587,9 @@ def _partial_entry(
             }
         )
     answered = None
-    ranking = any(
-        records[run]['input']['stage'] == 'validate_relational_ranking'
-        for run in entry['runs']
-        if run in records
-    ) or any(result['aggregation'] == 'ranking' for result in results)
-    if (
-        results
-        and not ranking
-        and results[-1]['result'] is not None
-        and results[-1]['metadata'] is not None
-    ):
-        aggregation = entry['results'][-1]['input']['input']['aggregation']
+    if carried is not None:
+        raw, value = carried
+        aggregation = raw['input']['input']['aggregation']
         groups = (
             [aggregation]
             if aggregation['kind'] == 'calls'
@@ -608,26 +599,20 @@ def _partial_entry(
         for group in groups:
             require(
                 all(
-                    value is None or _ordinal(value)
-                    for value in group['counted']
+                    item is None or _ordinal(item) for item in group['counted']
                 ),
-                'partial prediction has malformed actual row counts',
+                'carried prediction has malformed actual row counts',
             )
-            rows += sum(
-                value for value in group['counted'] if value is not None
-            )
+            rows += sum(item for item in group['counted'] if item is not None)
+        # This describes the proved successful SDK handover, not a second
+        # readback of arbitrary public error.details or the public result.
         answered = {
             'rows': rows,
             **{
-                key: results[-1][key]
-                for key in (
-                    'result',
-                    'model',
-                    'request_id',
-                    'metadata',
-                    'outputs',
-                )
+                key: value[key]
+                for key in ('result', 'model', 'request_id', 'metadata')
             },
+            'outputs': raw['data']['predicted']['outputs'],
         }
     return {'observed': True, 'answered': answered, 'results': results}
 
@@ -669,6 +654,40 @@ def _view(core: dict[str, Any], operations: list[str]) -> dict[str, Any]:
         _entry(entry, at, records, operations, entries)
         for at, entry in enumerate(entries)
     ]
+    products = {}
+    for entry, projected_entry in zip(entries, projected, strict=True):
+        for raw, value in zip(
+            entry['results'], projected_entry['_results'], strict=True
+        ):
+            require(
+                raw['run'] not in products,
+                'a native result belongs to multiple entries',
+            )
+            products[raw['run']] = (raw, value)
+    carries = {}
+    for entry in entries:
+        carry = entry['carried']
+        if carry is None:
+            carries[entry['ordinal']] = None
+            continue
+        require(
+            entry['completion'] == 'raised'
+            and isinstance(carry, dict)
+            and set(carry) == {'run', 'relation'}
+            and _ordinal(carry['run'])
+            and carry['run'] in products
+            and carry['relation'] in ('selected', 'cause')
+            and _below(
+                records[carry['run']]['entry'], entry['ordinal'], entries
+            ),
+            'carried prediction has no owned successful native result association',
+        )
+        raw, value = products[carry['run']]
+        require(
+            raw['metadata'] is not None and raw['result'] is not None,
+            'carried prediction result was not completely observed',
+        )
+        carries[entry['ordinal']] = (raw, value)
     owners = {}
     for entry in entries:
         for run in entry['runs']:
@@ -794,7 +813,7 @@ def _view(core: dict[str, Any], operations: list[str]) -> dict[str, Any]:
         )
     if last is not None and last['completion'] == 'raised':
         partial = _partial_entry(
-            entries[last['ordinal']], last['_results'], records
+            entries[last['ordinal']], last['_results'], carries[last['ordinal']]
         )
     for entry in projected:
         del entry['_rendered']
