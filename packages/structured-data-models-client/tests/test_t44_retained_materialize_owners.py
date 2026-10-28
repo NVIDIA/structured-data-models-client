@@ -14,6 +14,7 @@ claim that an ordinary builtin conversion naturally invokes a callback.
 from __future__ import annotations
 
 import warnings
+from contextvars import ContextVar
 
 import pandas as pd
 from test_t44_text_frames import core as core
@@ -86,13 +87,39 @@ def test_native_conversion_reentry_uses_the_actual_shared_stream_between_draws(
     shared = query(schema())
     original = pd.Series.astype
     inner = []
+    normalizing = ContextVar('normalizing', default=False)
+
+    if core:
+        from sdm_client._rust import frame_facade
+
+        converter = frame_facade
+        method = 'convert_text'
+    else:
+        from sdm_relational_engine.rfm.base import sampler
+
+        converter = sampler
+        method = '_normalize_text'
+    original_normalize = getattr(converter, method)
+
+    def normalize(*args, **kwargs):
+        token = normalizing.set(True)
+        try:
+            return original_normalize(*args, **kwargs)
+        finally:
+            normalizing.reset(token)
 
     def reenter(values, dtype, *args, **kwargs):
-        if dtype is str and values.name == 'note' and not inner:
+        if (
+            normalizing.get()
+            and dtype is str
+            and values.name == 'note'
+            and not inner
+        ):
             inner.append(None)
             inner[0] = gather(shared, rows=2)
         return original(values, dtype, *args, **kwargs)
 
+    monkeypatch.setattr(converter, method, normalize)
     monkeypatch.setattr(pd.Series, 'astype', reenter)
     outer = gather(shared)
     assert len(inner) == 1

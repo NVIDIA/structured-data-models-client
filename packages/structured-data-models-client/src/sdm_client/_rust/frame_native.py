@@ -393,23 +393,24 @@ def _native_references(
             return NativeColumn(pd.Series(converted))
         except Exception as error:
             return NativeFrameFailure.capture(error)
-    try:
-        return NativeColumn(selected.astype(str))
-    except (TypeError, ValueError):
+    last: Exception | None = None
+    for target in (str, dtype):
         try:
-            return NativeColumn(selected.astype(dtype))
+            return NativeColumn(selected.astype(target))
         except (TypeError, ValueError) as error:
-            failure = NativeFrameFailure.capture(error)
-            # The old ValueError f-string observes list repr before dtype.
-            return NativeReferenceCastFailure(
-                failure,
-                input_repr=repr(selected.tolist()),
-                expected_dtype=str(dtype),
-            )
+            last = error
         except Exception as error:
             return NativeFrameFailure.capture(error)
-    except Exception as error:
-        return NativeFrameFailure.capture(error)
+    # Leave each handler before retrying, as the native key lookup does.
+    # The failed first cast must not become the second failure's context.
+    assert last is not None
+    failure = NativeFrameFailure.capture(last)
+    # The old ValueError f-string observes list repr before dtype.
+    return NativeReferenceCastFailure(
+        failure,
+        input_repr=repr(selected.tolist()),
+        expected_dtype=str(dtype),
+    )
 
 
 def convert_references(
