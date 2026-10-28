@@ -323,7 +323,10 @@ def _key_advice(
                 _show_held(json.loads(state.ambiguous_notices()))
             except _native.CoreError as error:
                 errors.raise_from_core(
-                    error.control, error.attachments, internal_context=error
+                    error.control,
+                    error.attachments,
+                    internal_context=error,
+                    presentation='frame_constructor',
                 )
     finally:
         examples.clear()
@@ -358,7 +361,10 @@ def _sample_notices(schema: Schema, columns: list[dict[str, Any]]) -> None:
             notices = _native.frame_sample_facts(codec.attachment(sample))
         except _native.CoreError as error:
             errors.raise_from_core(
-                error.control, error.attachments, internal_context=error
+                error.control,
+                error.attachments,
+                internal_context=error,
+                presentation='frame_constructor',
             )
         _show_held(json.loads(notices))
 
@@ -635,6 +641,7 @@ def _describe(
                 if held_notices is not None
                 else frozenset(),
                 kept=held_notices,
+                error_presentation='frame_constructor',
             )
     finally:
         rows = None
@@ -714,7 +721,10 @@ def _adopt(
                 )
             except _native.CoreError as error:
                 errors.raise_from_core(
-                    error.control, error.attachments, internal_context=error
+                    error.control,
+                    error.attachments,
+                    internal_context=error,
+                    presentation='frame_constructor',
                 )
             _show_held(json.loads(notices))
             return json.loads(adopted)

@@ -1018,12 +1018,18 @@ def _detail(value: Any) -> Any:
     return codec.decode_scalar(value)
 
 
+# Native constructor semantic refusals use the original ordinary raise.
+# Other boundaries keep the coded privacy/presentation behavior.
+ErrorPresentation = Literal['coded', 'frame_constructor']
+
+
 def raise_from_core(
     control: bytes,
     attachments: dict[int, Any],
     *,
     driver_class: str | None = None,
     internal_context: BaseException | None = None,
+    presentation: ErrorPresentation = 'coded',
 ) -> NoReturn:
     r"""Raise the public exception, retaining only its selected explicit cause."""
     error = error_from_core(
@@ -1032,7 +1038,9 @@ def raise_from_core(
         driver_class=driver_class,
         internal_context=internal_context,
     )
-    raise_error(error, internal_context=internal_context)
+    raise_error(
+        error, internal_context=internal_context, presentation=presentation
+    )
 
 
 def raise_native(
@@ -1060,9 +1068,23 @@ def raise_error(
     error: StructuredDataError,
     *,
     internal_context: BaseException | None = None,
+    presentation: ErrorPresentation = 'coded',
 ) -> NoReturn:
     """Keep the selected cause and its caller context at the public boundary."""
     cause = error.__cause__
+    if (
+        presentation == 'frame_constructor'
+        and error.code == 'INVALID_REQUEST'
+        and cause is None
+    ):
+        try:
+            raise error
+        finally:
+            if (
+                internal_context is not None
+                and error.__context__ is internal_context
+            ):
+                error.__context__ = internal_context.__context__
     if cause is None:
         raise error from None
     previous_context = cause.__context__

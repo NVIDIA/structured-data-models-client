@@ -189,6 +189,7 @@ def run(
     kept: list[dict[str, Any]] | None = None,
     state: dict[str, Any] | None = None,
     warning_presentation: errors.WarningPresentation | None = None,
+    error_presentation: errors.ErrorPresentation = 'coded',
 ) -> Finished:
     r"""Runs ``operation`` to its result, with the attachments its fields name.
 
@@ -263,7 +264,10 @@ def run(
             attachments.clear()
             held = None
         errors.raise_from_core(
-            refused.control, refused.attachments, internal_context=refused
+            refused.control,
+            refused.attachments,
+            internal_context=refused,
+            presentation=error_presentation,
         )
     if owned_frame:
         attachments.clear()
@@ -281,6 +285,7 @@ def run(
             warning_presentation,
             state if operation['op'] == 'prepare_frames' else None,
             operation.get('part'),
+            error_presentation=error_presentation,
         )
     except BaseException:
         if owned_frame:
@@ -347,6 +352,7 @@ def _steps(
     warning_presentation: errors.WarningPresentation = 'coded',
     state: dict[str, Any] | None = None,
     frame_part: dict[str, Any] | None = None,
+    error_presentation: errors.ErrorPresentation = 'coded',
 ) -> Finished:
     r"""The run's steps, each answered, to its result."""
     try:
@@ -380,7 +386,11 @@ def _steps(
                     _carried(error, refused.raised)
                     _of_the_part(error, refused.raised)
                     raise refused.raised
-                errors.raise_error(error, internal_context=internal_context)
+                errors.raise_error(
+                    error,
+                    internal_context=internal_context,
+                    presentation=error_presentation,
+                )
             if state is not None:
                 # Publish reached ownership before native warning handlers
                 # can reenter this same materializer. Retained graph exports

@@ -231,7 +231,7 @@
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::<module>": {
-      "refactor": "T4.4: add a presentation-only holder for a native repr already observed at its original boundary; no inference or diagnostic selection is performed by the holder."
+      "refactor": "T4.4: retain native repr presentation holders and declare the closed constructor error-presentation choice; no inference, admission or diagnostic selection moves into this host."
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_Words.convert_field": {
       "moved": "T4.4: honor the shared frame_native_first fact when presenting a core-selected timestamp diagnostic, preserving the reached native timestamp formatting primitive."
@@ -264,7 +264,7 @@
       "refactor": "T4.4: retain native presentation recipes, including qualified/bare frame-payload PastInt64 ValueError causes, original nested handler context and active caller context; private site metadata is omitted from public details, decoded-envelope naming is type-only, and unmarked SQL/direct readers are unchanged."
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::raise_from_core": {
-      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added; T4.6: use the shared public raise boundary so core-selected explicit native/generated causes survive while only the introduced internal CoreError context is removed"
+      "refactor": "T4.4: forward the explicit native constructor presentation choice for an already selected error; actual native failure rethrows and the default coded/provider privacy boundary are unchanged."
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::said": {
       "moved": "T3.17: a warning says its sentence; fix 1: host-held values from the call in progress (holding), the a and I conversions and the to() pairing"
@@ -594,7 +594,7 @@
       "refactor": "T4.6: propagate the selected actual exception instance and its native cause/context/suppression graph, removing only the explicitly identified internal CoreError; no admission or refusal classification"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::raise_error": {
-      "refactor": "T4.6: propagate the selected actual exception instance and its native cause/context/suppression graph, removing only the explicitly identified internal CoreError; no admission or refusal classification"
+      "refactor": "T4.4: restore ordinary native-constructor raising for the selected causeless INVALID_REQUEST error, removing only its exact introduced core context while retaining the actual caller; default coded privacy and explicit native causes remain unchanged."
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_payload": {
       "gone": "T4.4: removed early payload snapshot encoding; the actual transport encoder supplies authoritative per-call bytes."
