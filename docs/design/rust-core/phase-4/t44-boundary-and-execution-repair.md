@@ -129,5 +129,23 @@ Those passing artifacts remain evidence for that exact source, not for the corre
 The first execution under this plan records the existing focused public behavior on that unchanged approved candidate while the new source is authored separately.
 That diagnostic completed with 34 original-route cases passing and 34 core cases failing.
 The core failures expose an incomplete test route-family selection and an earlier StringDtype surrogate-conversion gap, rather than proving that the new fact representation has run.
-Repair the coherent test opt-in as a consumer companion; retain the constructor gap as an explicit next connected repair after this casing slice executes, with no skipped cases or rewritten expected outputs.
+Repair the coherent test opt-in as a consumer companion and retain the constructor gap as an explicit connected repair, with no skipped cases or rewritten expected outputs.
 The corrected source then receives its own reviews, canonical artifacts, wheel identity and full required checks.
+
+## Execution feedback and constructor prerequisite
+
+The first whole-source reviews of the neutral-casing candidate identified no further defect in that representation, but correctly withheld approval because the observed constructor failure prevents supported public inputs from reaching it.
+The admitted Python-backed StringDtype export still calls an ordinary UTF-8 Arrow conversion for values that contain surrogate points.
+Restore that already-supported string family before executing the combined candidate, rather than requesting approval around a known broken prerequisite.
+This is a dependency discovered by the planned public diagnostic and review, not permission to expand unrelated input families.
+
+Write the regression consumers before the restoration.
+Reuse the existing explicit lossless native-string representation and shared inference/admission rules.
+Preserve original row order, nulls, declared string meaning, native dtype ownership and the distinction between surrogate-pair points and supplementary scalars.
+The change must not introduce replacement characters, eager user conversions, language-specific core policy, new refusals or a generic host callback.
+Use builtin character extraction/encoding rather than invoking an arbitrary scalar override to obtain a neutral data fact.
+Keep ordinary string export behavior and header/native failure boundaries intact.
+Update each existing producer and reader needed to describe and materialize the restored values, and preserve the complete frozen text, categorical, key and boundary expectations.
+Run the public profile/Unicode/error consumers on both supported runtime cells and the corresponding Rust host consumers after fresh exact-candidate approvals.
+Also close the observed native import lint violation without suppressing the rule.
+The current frame/LINK package remains unaccepted until these and its broader existing acceptance gates pass.
