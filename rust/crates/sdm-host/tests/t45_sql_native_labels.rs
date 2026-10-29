@@ -626,6 +626,41 @@ fn fixture() -> (Stages, Value) {
     )
 }
 
+#[test]
+fn stored_time_spelling_probe_is_not_a_retained_native_source_read() {
+    let (mut stages, mut task) = fixture();
+    task["request"]["provider"]["dialect"] = json!("sqlite");
+    let PreparedMaterializeValue::Source(source) = stages.stage(task).unwrap() else {
+        panic!("actual source")
+    };
+    let PreparedMaterializeValue::Population(population) = stages
+        .stage(json!({"stage":"population","source":source}))
+        .unwrap()
+    else {
+        panic!("actual population")
+    };
+    let PreparedMaterializeValue::LabelInputs(inputs) = stages
+        .stage(json!({"stage":"label_inputs","population":population,
+            "range":{"start":0,"stop":population.rows},"previous":null}))
+        .unwrap()
+    else {
+        panic!("actual label inputs")
+    };
+    let probe = stages.issued.iter().find(|step| {
+        step["request"]["request"] == "scan" && step["request"]["limit"] == 1
+    }).expect("the actual SQLite stored-time spelling probe");
+    assert_eq!(probe["purpose"], "locate");
+    let Attachment::LabelInputs(owner) = &stages.held[&inputs.owner] else {
+        panic!("actual retained input owner")
+    };
+    let views = owner.temporal_sources().unwrap();
+    assert_eq!(views.len(), 2);
+    for (descriptor, _) in views {
+        let value: Value = serde_json::from_slice(&descriptor).unwrap();
+        assert_ne!(value["source_read"], probe["partition"]["first"]);
+    }
+}
+
 fn native(
     stages: &mut Stages,
     positions: Vec<u64>,

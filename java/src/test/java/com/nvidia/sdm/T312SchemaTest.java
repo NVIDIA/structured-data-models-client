@@ -24,6 +24,43 @@ import org.junit.jupiter.params.provider.ValueSource;
  * contract's {@code HeldSchema} ({@code toHeld}, the structure design's fix A).
  */
 class T312SchemaTest {
+  @SuppressWarnings("unchecked")
+  private static Map<String, Object> heldColumn(Schema schema, String table, String column) {
+    for (Object value : (List<Object>) schema.toHeld().get("tables")) {
+      Map<String, Object> each = (Map<String, Object>) value;
+      if (!table.equals(each.get("name"))) {
+        continue;
+      }
+      for (Object item : (List<Object>) each.get("columns")) {
+        Map<String, Object> field = (Map<String, Object>) item;
+        if (column.equals(field.get("name"))) {
+          return field;
+        }
+      }
+    }
+    throw new AssertionError("no actual held column " + table + "." + column);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"duckdb", "sqlite", "postgres"})
+  void heldFlagsKeepActualInitialAndEditedMeaningsRatherThanCurrentTimeRole(String database)
+      throws Exception {
+    try (Connection connection = T312Shop.open(database)) {
+      Schema initial = Schema.fromSource(T312Shop.source(database, connection));
+      assertEquals(Boolean.TRUE, heldColumn(initial, "orders", "ts").get("stype_declared"));
+      assertEquals(Boolean.FALSE, heldColumn(initial, "users", "age").get("stype_declared"));
+      assertEquals(Boolean.FALSE, heldColumn(initial, "users", "age").get("untyped"));
+      Schema cleared = initial.withoutTimeColumn("orders");
+      assertTrue(cleared.table("orders").timeColumn().isEmpty());
+      assertEquals(Boolean.TRUE, heldColumn(cleared, "orders", "ts").get("stype_declared"));
+      Schema edited = cleared.withStype("users", "age", "categorical");
+      assertEquals(Boolean.TRUE, heldColumn(edited, "users", "age").get("stype_declared"));
+      assertEquals(Boolean.FALSE, heldColumn(initial, "users", "age").get("stype_declared"));
+      assertEquals(Boolean.TRUE, heldColumn(edited.withRelationships(List.of()), "orders", "ts")
+          .get("stype_declared"));
+    }
+  }
+
   @ParameterizedTest
   @ValueSource(strings = {"duckdb", "sqlite", "postgres"})
   void theShopIsDescribedAsTheReferenceDescribesIt(String database) throws Exception {

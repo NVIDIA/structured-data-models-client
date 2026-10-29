@@ -18,6 +18,21 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.mark.parametrize('name', ['installed-wheel', 'runtime-install'])
+def test_installed_client_consumers_have_the_exact_historical_probe_objects(
+    name: str,
+) -> None:
+    jobs = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text())[
+        'jobs'
+    ]
+    checkout = next(
+        step
+        for step in jobs[name]['steps']
+        if step.get('uses', '').startswith('actions/checkout@')
+    )
+    assert checkout.get('with', {}).get('fetch-depth') == 0
+
+
 def test_the_general_client_matrix_has_the_legacy_route_dependency() -> None:
     jobs = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text())[
         'jobs'
