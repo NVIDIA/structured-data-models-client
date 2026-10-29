@@ -120,8 +120,12 @@ entity's `id`, or `(id, forecast_step)` on a forecast, since a forecast is
 keyed by the pair. It is kept out of `to_pandas()` itself.
 
 An entry holds `outputs`, the explained scores in order; `instance`, the
-entity's own row, with `columns` and `gradients` as `[output][column]`; and
-`related`, one block per related table the client gathered for that entity.
+engine's per-prediction row (the entity key, anchor time and its own
+bookkeeping, with few or no numerical columns), with `columns` and `gradients`
+as `[output][column]`; and `related`, one block per related table the client
+gathered for that entity. The entity's own feature row is one of those blocks,
+under its table's name, such as `related['users']`, so its features' gradients
+are there and not in `instance`.
 A block carries `keys`, each row's primary key, when the table has one, and
 always `rows`, each row's values as sent, with `columns` and `gradients` as
 `[output][row][column]`, aligned with those rows. A keyless table's rows are
@@ -132,7 +136,8 @@ datetimes may appear as derived columns, and a table without numerical
 features gives an empty list. The context rows get no gradients. A row reached
 through several paths appears once, with its total effect through all of them.
 `result.explanations.to_pandas()` flattens every entry into one line per (row,
-output, column), with `hop`, how many links the row is from the entity.
+output, column), with `hop`, how many links the row is from the entity. The
+entity shows on an `instance` line and on a line of its own table, both hop 0.
 
 A ranking refuses an explanation locally, and the shipping endpoint refuses it
 everywhere else, so treat `result.explanations` as possibly empty. A deployment
