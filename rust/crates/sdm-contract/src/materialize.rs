@@ -51,6 +51,8 @@ pub struct MaterializeSourceTable {
     /// Exact resolved/pinned read, including its captured projection.
     pub read: Relation,
     pub columns: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub time_column: Option<String>,
 }
 
 /// The actual data-read kind reported after an incomplete native source read.
@@ -170,6 +172,8 @@ pub struct PreparedLabelInputs {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_read: Option<crate::run::ReplyId>,
     pub target: FrameNativeColumnRef,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub time: Option<FrameNativeColumnRef>,
     pub form: TargetColumnForm,
     /// Resolved occurrence order, including repeated native reads of one column.
     pub condition_columns: Vec<FrameNativeColumnRef>,
@@ -226,6 +230,10 @@ pub struct NativeTargetValues {
     pub rows: AttachmentId,
     pub presence: Option<AttachmentId>,
     pub encoding: Option<StringEncoding>,
+    /// Full current values of the source's captured time owner at the
+    /// reached pre-window boundary, independently of target row selection.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub times: Option<AttachmentId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

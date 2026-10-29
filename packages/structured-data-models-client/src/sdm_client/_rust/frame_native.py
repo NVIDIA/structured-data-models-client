@@ -312,6 +312,10 @@ class NativeFrameColumns:
         """All source views are bound to this same retained frame snapshot."""
         return self
 
+    def time_series(self, binding: Mapping[str, Any]) -> pd.Series:
+        """Keep the captured time owner, independently of later frame assignment."""
+        return self._series[relation_name(binding['source'])][binding['column']]
+
     def dtype(self, binding: Mapping[str, Any]) -> Any:
         """Read exactly the source Relation/column resolved by the core graph."""
         source = relation_name(binding['source'])

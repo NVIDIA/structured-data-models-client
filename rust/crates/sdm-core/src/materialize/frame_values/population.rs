@@ -739,6 +739,10 @@ pub(super) async fn label_inputs(
         owner: AttachmentId(0),
         source_read: None,
         target,
+        time: Some(graph.native_binding(&ColumnRef {
+            table: window.table.clone(),
+            column: inputs.fetched[&window.table].time_column.clone(),
+        })?),
         form,
         condition_columns,
         source_role: Default::default(),

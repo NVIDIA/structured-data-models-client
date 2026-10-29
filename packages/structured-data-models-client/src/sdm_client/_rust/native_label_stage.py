@@ -29,6 +29,7 @@ class ColumnExport:
     rows: pa.Table
     presence: pa.Table | None
     encoding: str | None
+    times: pa.Table | None = None
 
     def bind(self, bindings: Bindings) -> dict[str, Any]:
         return {
@@ -37,11 +38,19 @@ class ColumnExport:
             if self.presence is None
             else bindings.add(self.presence),
             'encoding': self.encoding,
+            **(
+                {}
+                if self.times is None
+                else {'times': bindings.add(self.times)}
+            ),
         }
 
 
 def export_column(
-    column: NativeTargetColumn, *, presence: object | None
+    column: NativeTargetColumn,
+    *,
+    presence: object | None,
+    times: pd.Series | None = None,
 ) -> ColumnExport:
     values, encoding = NativeColumn(column.values).arrow()
     target = values.column(0)
@@ -63,6 +72,7 @@ def export_column(
         if presence is None
         else pa.table({'present': pa.array(presence, type=pa.bool_())}),
         encoding,
+        None if times is None else pa.table({'time': pa.array(times)}),
     )
 
 
@@ -70,6 +80,7 @@ class SourceColumns(Protocol):
     def target_series(
         self, binding: dict[str, Any], rows: list[int]
     ) -> pd.Series: ...
+    def time_series(self, binding: dict[str, Any]) -> pd.Series: ...
 
 
 class ConditionSources(Protocol):
@@ -184,11 +195,21 @@ def complete_target(
         .to_pylist()
     )
     try:
+        time_binding = inputs.data.get('time')
+        times = (
+            None if time_binding is None else source.time_series(time_binding)
+        )
         values = source.target_series(inputs.data['target'], rows)
         native = NativeTargetColumn.column(
             values, drop_missing=inputs.data['form'] == 'plain'
         )
-        converted = export_column(native, presence=native.present)
+        converted = export_column(
+            native,
+            presence=native.present,
+            times=None
+            if times is None or inputs.data['form'] != 'plain'
+            else times.iloc[rows],
+        )
     except Exception as error:
         preparation.native_failure(NativeFrameFailure.capture(error))
     column = preparation.target_column(inputs, converted)
@@ -222,7 +243,11 @@ def complete_target(
             )
             try:
                 native = native.filtered(np.asarray(selected, dtype=bool))
-                converted = export_column(native, presence=None)
+                converted = export_column(
+                    native,
+                    presence=None,
+                    times=None if times is None else times.iloc[rows],
+                )
             except Exception as error:
                 preparation.native_failure(NativeFrameFailure.capture(error))
             next_column = preparation.filtered_target(column, converted)

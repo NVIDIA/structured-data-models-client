@@ -358,6 +358,7 @@ pub(crate) async fn task(asker: Asker, inputs: Inputs) -> Result<OperationResult
                 .iter()
                 .map(|column| column.name.clone())
                 .collect(),
+            time_column: table.time_column.clone(),
         })
         .collect();
     let mut identity = Identity::new("provider-backed-native-source");
@@ -534,6 +535,9 @@ async fn label_inputs(
         owner: AttachmentId(0),
         source_read: Some(source_read),
         target: population.0.meaning.target.clone(),
+        time: Some(
+            population.column_binding(&window.table, &inputs.fetched[&window.table].time_column)?,
+        ),
         form: if window.filter.is_some() {
             TargetColumnForm::Filtered
         } else {

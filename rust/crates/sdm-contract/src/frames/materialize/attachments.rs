@@ -56,6 +56,7 @@ fn converted(value: &FrameReferenceValues, out: &mut Named) {
 fn native_values(value: &NativeTargetValues, out: &mut Named) {
     out.push((value.rows, AttachmentKind::Arrow));
     out.extend(value.presence.map(|id| (id, AttachmentKind::Arrow)));
+    out.extend(value.times.map(|id| (id, AttachmentKind::Arrow)));
 }
 fn target(value: &PreparedTargetColumn, out: &mut Named) {
     out.extend(value.input.attachments());

@@ -42,6 +42,7 @@ _HELPERS = (_BATCH, _MATCHES, '__kumo_row__', '__kumo_id__')
 class NativeSourceTable:
     source: dict[str, Any]
     frame: pd.DataFrame
+    time_column: str | None = None
 
 
 class SourceConstruction(Protocol):
@@ -296,7 +297,9 @@ class SourceCompletion:
             raise CodecError(
                 'source completion changed its complete issued row count'
             )
-        self.tables[first] = NativeSourceTable(binding['source'], frame)
+        self.tables[first] = NativeSourceTable(
+            binding['source'], frame, binding.get('time_column')
+        )
         return replies
 
     def _scalar(

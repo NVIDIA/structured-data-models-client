@@ -26,7 +26,10 @@ from sdm_client._rust.native_label_stage import (
     complete_what_if,
 )
 from sdm_client._rust.native_products import Bindings, Product
-from sdm_client._rust.native_source_completion import SourceCompletion
+from sdm_client._rust.native_source_completion import (
+    NativeSourceTable,
+    SourceCompletion,
+)
 from sdm_client._rust.native_source_rows import SourceReadFailure
 from sdm_client._rust.native_sql_products import adopt, bind, read, request
 from sdm_client._rust.native_target import export_groups
@@ -36,8 +39,18 @@ from sdm_client._rust.run import Finished, _driver, run
 class _FetchedColumns:
     """The actual frame of this one producing Run and its selected source read."""
 
-    def __init__(self, completion: SourceCompletion, inputs: Product) -> None:
-        self.table = completion.tables[inputs.data['source_read']]
+    def __init__(
+        self, table: NativeSourceTable, preparation: _Preparation
+    ) -> None:
+        self.table = table
+        try:
+            self.times = (
+                None
+                if table.time_column is None
+                else table.frame[table.time_column]
+            )
+        except Exception as error:
+            preparation.native_failure(NativeFrameFailure.capture(error))
 
     def target_series(
         self, binding: dict[str, Any], rows: list[int]
@@ -50,12 +63,33 @@ class _FetchedColumns:
             return pd.Series(np.ones(len(rows), dtype='int64'))
         return self.table.frame[binding['column']].iloc[rows]
 
+    def time_series(self, binding: dict[str, Any]) -> pd.Series:
+        if (
+            binding['source'] != self.table.source
+            or binding['column'] != self.table.time_column
+            or self.times is None
+        ):
+            raise codec.CodecError(
+                'native time values name another captured source'
+            )
+        return self.times
+
 
 class _Sources:
     def __init__(
-        self, entity: SourceCompletion, windowed: SourceCompletion
+        self,
+        entity: SourceCompletion,
+        windowed: SourceCompletion,
+        preparation: _Preparation,
     ) -> None:
-        self.entity, self.windowed = entity, windowed
+        self.entity = {
+            first: _FetchedColumns(table, preparation)
+            for first, table in entity.tables.items()
+        }
+        self.windowed = {
+            first: _FetchedColumns(table, preparation)
+            for first, table in windowed.tables.items()
+        }
 
     def columns(self, view: Product) -> _FetchedColumns:
         producing = (
@@ -63,7 +97,7 @@ class _Sources:
             if view.data.get('source_role') == 'entity'
             else self.windowed
         )
-        return _FetchedColumns(producing, view)
+        return producing[view.data['source_read']]
 
 
 class _Preparation:
@@ -375,7 +409,7 @@ def gather(
                     'native label input has no producing source Run'
                 )
             source_completions.append(completion)
-            sources = _Sources(entity_sources, completion)
+            sources = _Sources(entity_sources, completion, preparation)
             eligible = complete_eligibility(inputs, sources, preparation)
             products.append(eligible)
             column, native = complete_target(

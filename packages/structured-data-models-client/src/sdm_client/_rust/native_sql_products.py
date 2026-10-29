@@ -105,7 +105,7 @@ def _ids(kind: str, data: dict[str, Any]) -> list[int]:
     value = _object(
         data,
         fields,
-        ('source_read', 'source_role', 'eligibility')
+        ('source_read', 'source_role', 'eligibility', 'time')
         if kind == 'label_inputs'
         else ('restored', 'what_if')
         if kind == 'label_groups'
@@ -117,7 +117,7 @@ def _ids(kind: str, data: dict[str, Any]) -> list[int]:
         if not isinstance(value['tables'], list):
             raise CodecError('native SQL source tables are not an ordered list')
         for table in value['tables']:
-            _object(table, ('source', 'read', 'columns'))
+            _object(table, ('source', 'read', 'columns'), ('time_column',))
     if kind in ('label_inputs', 'label_groups', 'label_batch', 'lookup'):
         _object(value['range'], ('start', 'stop'))
     if kind == 'label_groups' and value['native_target'] is not None:
@@ -132,6 +132,8 @@ def _ids(kind: str, data: dict[str, Any]) -> list[int]:
             )
     if kind == 'label_inputs':
         _object(value['target'], ('source', 'column'))
+        if value.get('time') is not None:
+            _object(value['time'], ('source', 'column'))
         columns = value['condition_columns']
         if not isinstance(columns, list):
             raise CodecError(
@@ -181,11 +183,13 @@ def _ids(kind: str, data: dict[str, Any]) -> list[int]:
         condition = _object(condition, ('column', 'converted'))
         _object(condition['column'], ('source', 'column'))
         converted = _object(
-            condition['converted'], ('rows', 'presence', 'encoding')
+            condition['converted'], ('rows', 'presence', 'encoding'), ('times',)
         )
         ids.append(_attachment(converted['rows']))
         if converted['presence'] is not None:
             ids.append(_attachment(converted['presence']))
+        if converted.get('times') is not None:
+            ids.append(_attachment(converted['times']))
     return ids
 
 
@@ -297,6 +301,11 @@ def bind(product: Product, bindings: Bindings) -> dict[str, Any]:
                     'presence': None
                     if condition['converted']['presence'] is None
                     else bound[condition['converted']['presence']],
+                    **(
+                        {}
+                        if condition['converted'].get('times') is None
+                        else {'times': bound[condition['converted']['times']]}
+                    ),
                 },
             }
             for condition in data['condition_values']

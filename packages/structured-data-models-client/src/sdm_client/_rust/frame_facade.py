@@ -121,8 +121,8 @@ def _ids(kind: str, value: dict[str, Any]) -> list[int]:
             + [
                 attachment
                 for condition in value['condition_values']
-                for name in ('rows', 'presence')
-                if (attachment := condition['converted'][name]) is not None
+                for name in ('rows', 'presence', 'times')
+                if (attachment := condition['converted'].get(name)) is not None
             ]
         )
     if kind == 'population':
@@ -233,6 +233,13 @@ def _bind(product: _Product, into: _Bindings) -> dict[str, Any]:
                         'presence': None
                         if condition['converted']['presence'] is None
                         else bound[condition['converted']['presence']],
+                        **(
+                            {}
+                            if condition['converted'].get('times') is None
+                            else {
+                                'times': bound[condition['converted']['times']]
+                            }
+                        ),
                     },
                 }
                 for condition in value['condition_values']

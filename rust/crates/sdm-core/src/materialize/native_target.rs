@@ -187,6 +187,13 @@ impl RetainedLabelInputs {
             owner: AttachmentId(0),
             source_read,
             target: binding,
+            time: match &target {
+                Shape::Aggregated(window) => Some(self.data.root.binding(
+                    &window.table,
+                    &target_source(&self.data.inputs, window)?.time_column,
+                )?),
+                _ => None,
+            },
             form,
             condition_columns,
             source_role,
@@ -260,12 +267,20 @@ impl RetainedLabelInputs {
             source_rows.into_iter().map(|row| row as u64),
         ));
         let values = self.column_values(&rows)?;
-        let batch = RecordBatch::try_from_iter([
+        let mut columns = vec![
             ("position", positions),
             ("source_row", source_rows),
             ("target", values),
-        ])
-        .map_err(|_| invalid_target("native column view source rows do not align"))?;
+        ];
+        if let Shape::Aggregated(window) = &self.data.target {
+            let source = target_source(&self.data.inputs, window)?;
+            columns.push((
+                "time",
+                Arc::clone(named(&source.rows, &source.time_column)?),
+            ));
+        }
+        let batch = RecordBatch::try_from_iter(columns)
+            .map_err(|_| invalid_target("native column view source rows do not align"))?;
         Ok(ArrowData::new(batch.schema(), vec![batch]))
     }
 
@@ -391,6 +406,7 @@ struct ConvertedColumn {
     encoding: Option<StringEncoding>,
     positions: Vec<usize>,
     presence: Option<Vec<bool>>,
+    times: Option<ArrayRef>,
 }
 
 struct ConditionColumnData {
@@ -458,6 +474,23 @@ fn conversion(
         encoding: value.encoding,
         positions,
         presence,
+        times: value
+            .times
+            .map(|id| {
+                let Some(Attachment::Arrow(data)) = attachments.remove(&id) else {
+                    return Err(invalid_target(
+                        "native window lacks its actual captured time values",
+                    ));
+                };
+                let rows = one_batch(&data)?;
+                if rows.num_columns() != 1 {
+                    return Err(invalid_target(
+                        "native time values require one complete source column",
+                    ));
+                }
+                Ok(Arc::clone(rows.column(0)))
+            })
+            .transpose()?,
     })
 }
 
@@ -492,6 +525,7 @@ fn publish(
                     rows,
                     presence: Some(presence),
                     encoding: value.converted.encoding,
+                    times: None,
                 },
             })
         })
@@ -522,6 +556,7 @@ pub(super) fn column(
         encoding,
         positions,
         presence,
+        times,
         ..
     } = conversion(converted, attachments)?;
     let presence = presence.ok_or_else(|| {
@@ -546,6 +581,7 @@ pub(super) fn column(
         encoding,
         positions,
         &presence,
+        times,
     )?;
     publish(asker, input, data)
 }
@@ -563,9 +599,15 @@ pub(super) fn selected(
         encoding,
         positions,
         presence,
+        times,
         ..
     } = conversion(converted, attachments)?;
     let data = if window {
+        if times.is_some() {
+            return Err(invalid_target(
+                "window application cannot replace its captured time data",
+            ));
+        }
         let presence = presence.ok_or_else(|| {
             invalid_target(
                 "native window completion requires its complete second missingness observation",
@@ -578,7 +620,7 @@ pub(super) fn selected(
                 "condition-selected target cannot claim another missingness observation",
             ));
         }
-        TargetColumn::filtered(previous.data, values, encoding, positions)?
+        TargetColumn::filtered(previous.data, values, encoding, positions, times)?
     };
     publish(asker, previous.input, data)
 }
@@ -623,6 +665,7 @@ pub(super) struct TargetColumn {
     /// Complete condition/time selection over the actual predecessor values.
     pub(super) selection: Vec<bool>,
     first_presence: Vec<bool>,
+    times: Option<ArrayRef>,
     condition_values: Vec<Arc<ConditionColumnData>>,
     condition: conditions::ConditionInputs,
 }
@@ -663,8 +706,14 @@ impl TargetColumn {
         encoding: Option<StringEncoding>,
         positions: Vec<usize>,
         present: &[bool],
+        times: Option<ArrayRef>,
     ) -> Result<Arc<Self>, CoreError> {
         if let Shape::Column(column) = &target {
+            if times.is_some() {
+                return Err(invalid_target(
+                    "row conditions cannot name a target time window",
+                ));
+            }
             let source = inputs
                 .native_rows
                 .as_ref()
@@ -688,6 +737,7 @@ impl TargetColumn {
                 encoding,
                 selection: Vec::new(),
                 first_presence: present.to_vec(),
+                times: None,
                 condition_values: Vec::new(),
                 condition: Default::default(),
             }));
@@ -713,9 +763,14 @@ impl TargetColumn {
             encoding,
         )?;
         let selection = if window.filter.is_some() {
+            if times.is_some() {
+                return Err(invalid_target(
+                    "filtered target observes its time values after its condition",
+                ));
+            }
             Vec::new()
         } else {
-            window_selection(&inputs, window, &positions)?
+            window_selection(&inputs, window, &positions, times.as_ref())?
         };
         Ok(Arc::new(Self {
             inputs,
@@ -727,6 +782,7 @@ impl TargetColumn {
             encoding,
             selection,
             first_presence: present.to_vec(),
+            times,
             condition_values: Vec::new(),
             condition: conditions::ConditionInputs::default(),
         }))
@@ -737,6 +793,11 @@ impl TargetColumn {
         column: sdm_contract::frames::materialize::FrameNativeColumnRef,
         converted: ConvertedColumn,
     ) -> Result<Arc<Self>, CoreError> {
+        if converted.times.is_some() {
+            return Err(invalid_target(
+                "condition operands cannot replace target time data",
+            ));
+        }
         let window = target_window(&previous.target)?;
         let filter = window
             .filter
@@ -795,6 +856,7 @@ impl TargetColumn {
             values: Arc::clone(&previous.values),
             encoding: previous.encoding,
             first_presence: previous.first_presence.clone(),
+            times: previous.times.clone(),
             previous: Some(previous),
             derivation,
             selection,
@@ -808,6 +870,7 @@ impl TargetColumn {
         values: ArrayRef,
         encoding: Option<StringEncoding>,
         positions: Vec<usize>,
+        times: Option<ArrayRef>,
     ) -> Result<Arc<Self>, CoreError> {
         let window = target_window(&previous.target)?;
         if previous.derivation != Derivation::Conditioned || window.filter.is_none() {
@@ -818,11 +881,12 @@ impl TargetColumn {
         let expected = selected_positions(&previous.positions, &previous.selection)?;
         validate_positions(&expected, &positions, values.len())?;
         validate_values(&previous.values, previous.encoding, &values, encoding)?;
-        let selection = window_selection(&previous.inputs, window, &positions)?;
+        let selection = window_selection(&previous.inputs, window, &positions, times.as_ref())?;
         Ok(Arc::new(Self {
             inputs: Arc::clone(&previous.inputs),
             target: previous.target.clone(),
             first_presence: previous.first_presence.clone(),
+            times,
             condition_values: previous.condition_values.clone(),
             condition: previous.condition.clone(),
             previous: Some(previous),
@@ -861,6 +925,7 @@ impl TargetColumn {
             inputs: Arc::clone(&previous.inputs),
             target: previous.target.clone(),
             first_presence: previous.first_presence.clone(),
+            times: previous.times.clone(),
             condition_values: previous.condition_values.clone(),
             condition: previous.condition.clone(),
             previous: Some(previous),
@@ -923,6 +988,7 @@ fn window_selection(
     inputs: &task::LabelInputs,
     window: &Windowed,
     positions: &[usize],
+    times: Option<&ArrayRef>,
 ) -> Result<Vec<bool>, CoreError> {
     let source = target_source(inputs, window)?;
     let starts = shifted(
@@ -935,12 +1001,27 @@ fn window_selection(
         window.end,
         "anchor_time",
     )?;
-    // Window arithmetic reads the source-time snapshot retained with this
-    // actual fetched input, independently of the derived target values.
-    let times = times_ns(
-        named(&source.rows, &source.time_column)?,
-        &source.time_column,
-    )?;
+    let times = times
+        .ok_or_else(|| invalid_target("native window lacks its reached captured time values"))?;
+    if times.len() != source.rows.num_rows() {
+        return Err(invalid_target(
+            "captured native time values omit or add source rows",
+        ));
+    }
+    let unzoned = match times.data_type() {
+        DataType::Timestamp(unit, Some(_)) => Some(
+            arrow_cast::cast(times, &DataType::Timestamp(*unit, None)).map_err(|_| {
+                invalid_target("native time values have an invalid timestamp representation")
+            })?,
+        ),
+        DataType::Timestamp(_, None) => None,
+        _ => {
+            return Err(invalid_target(
+                "native time completion is not a timestamp column",
+            ));
+        }
+    };
+    let times = times_ns(unzoned.as_ref().unwrap_or(times), &source.time_column)?;
     Ok(positions
         .iter()
         .map(|&row| {
