@@ -16,7 +16,7 @@ fn entity(unique: bool) -> Table {
         columns: vec![DescribedColumn {
             name: "person_id".into(),
             untyped: false,
-            received: ColumnType::UInt64,
+            received: ColumnType::Uint64,
             dtype: Dtype::Int64,
             stype: Stype::Id,
             stype_before_key: None,
@@ -35,7 +35,10 @@ fn keys(values: Vec<u64>) -> ArrayRef {
 }
 
 fn rows(positions: Vec<i64>, matches: Option<Vec<i64>>) -> RecordBatch {
-    let mut columns = vec![(BATCH_COLUMN, Arc::new(Int64Array::from(positions)) as ArrayRef)];
+    let mut columns = vec![(
+        BATCH_COLUMN,
+        Arc::new(Int64Array::from(positions)) as ArrayRef,
+    )];
     if let Some(matches) = matches {
         columns.push((MATCHES_COLUMN, Arc::new(Int64Array::from(matches))));
     }
@@ -57,7 +60,10 @@ fn duplicates_name_distinct_full_width_caller_values_in_scored_order() {
             ("key".into(), Detail::text("person_id")),
             (
                 "keys".into(),
-                Detail::List(vec![Scalar::UInt64(u64::MAX), Scalar::UInt64(9_007_199_254_740_993)]),
+                Detail::List(vec![
+                    Scalar::UInt64(u64::MAX),
+                    Scalar::UInt64(9_007_199_254_740_993)
+                ]),
             ),
         ]
         .into()
@@ -86,7 +92,10 @@ fn repeated_occurrences_of_one_scored_value_use_the_singular_sentence() {
     )
     .unwrap_err();
     assert_eq!(error.sentence, Sentence::HeldBySeveralRowsOne);
-    assert_eq!(error.fields["keys"], Detail::List(vec![Scalar::UInt64(u64::MAX)]));
+    assert_eq!(
+        error.fields["keys"],
+        Detail::List(vec![Scalar::UInt64(u64::MAX)])
+    );
     assert!(!error.fields.contains_key("shown"));
     assert!(!error.fields.contains_key("more"));
 }
@@ -113,7 +122,14 @@ fn more_than_five_repeated_keys_keep_all_keys_and_the_first_five_separately() {
 fn declared_unique_key_may_omit_counts_but_a_present_count_is_still_read() {
     let scored = keys(vec![77]);
     assert_eq!(
-        validate(&entity(true), "person_id", &scored, 1, &rows(vec![1, 0], None)).unwrap(),
+        validate(
+            &entity(true),
+            "person_id",
+            &scored,
+            1,
+            &rows(vec![1, 0], None)
+        )
+        .unwrap(),
         vec![1, 0]
     );
     let error = validate(
@@ -139,7 +155,10 @@ fn missing_counts_are_not_inferred_unread_for_a_nonunique_key() {
     .unwrap_err();
     assert_eq!(error.sentence, Sentence::ProviderSchemaMismatch);
     assert_eq!(error.fields["column"], Detail::text(MATCHES_COLUMN));
-    assert_eq!(error.fields["reason"], Detail::text("an answer lacks a column it asked for"));
+    assert_eq!(
+        error.fields["reason"],
+        Detail::text("an answer lacks a column it asked for")
+    );
 }
 
 #[test]
@@ -165,22 +184,32 @@ fn invalid_seed_positions_precede_missing_counts_and_duplicate_refusal() {
             Arc::new(Int64Array::from(vec![position])) as ArrayRef,
         )])
         .unwrap();
-        let error = validate(&entity(false), "person_id", &keys(vec![77]), 1, &fetched).unwrap_err();
+        let error =
+            validate(&entity(false), "person_id", &keys(vec![77]), 1, &fetched).unwrap_err();
         assert_eq!(error.sentence, Sentence::ProviderSchemaMismatch);
         assert_eq!(error.fields["column"], Detail::text(BATCH_COLUMN));
-        assert_eq!(error.fields["reason"], Detail::text("a row names no seed asked for"));
+        assert_eq!(
+            error.fields["reason"],
+            Detail::text("a row names no seed asked for")
+        );
     }
 }
 
 #[test]
 fn helper_type_and_presence_errors_keep_the_original_diagnostics() {
     let wrong_batch = RecordBatch::try_from_iter([
-        (BATCH_COLUMN, Arc::new(Int32Array::from(vec![0])) as ArrayRef),
+        (
+            BATCH_COLUMN,
+            Arc::new(Int32Array::from(vec![0])) as ArrayRef,
+        ),
         (MATCHES_COLUMN, Arc::new(Int64Array::from(vec![3]))),
     ])
     .unwrap();
     let wrong_matches = RecordBatch::try_from_iter([
-        (BATCH_COLUMN, Arc::new(Int64Array::from(vec![0])) as ArrayRef),
+        (
+            BATCH_COLUMN,
+            Arc::new(Int64Array::from(vec![0])) as ArrayRef,
+        ),
         (MATCHES_COLUMN, Arc::new(StringArray::from(vec!["3"]))),
     ])
     .unwrap();
@@ -192,9 +221,14 @@ fn helper_type_and_presence_errors_keep_the_original_diagnostics() {
     for (fetched, column, reason) in [
         (wrong_batch, BATCH_COLUMN, "not int64"),
         (wrong_matches, MATCHES_COLUMN, "not int64"),
-        (missing_batch, BATCH_COLUMN, "an answer lacks a column it asked for"),
+        (
+            missing_batch,
+            BATCH_COLUMN,
+            "an answer lacks a column it asked for",
+        ),
     ] {
-        let error = validate(&entity(false), "person_id", &keys(vec![77]), 0, &fetched).unwrap_err();
+        let error =
+            validate(&entity(false), "person_id", &keys(vec![77]), 0, &fetched).unwrap_err();
         assert_eq!(error.sentence, Sentence::ProviderSchemaMismatch);
         assert_eq!(error.fields["check"], Detail::text("expected"));
         assert_eq!(error.fields["column"], Detail::text(column));
