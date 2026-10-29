@@ -63,6 +63,7 @@ def test_raw_start_keeps_actual_envelope_bytes_and_ordinal_without_a_role():
             'completion': 'active',
             'result': None,
             'value_reads': [],
+            'fetches': [],
             'error': None,
             'events': [],
         }
@@ -143,6 +144,37 @@ def test_reused_attachment_ids_and_interleaved_starts_keep_exact_run_ownership()
     assert records[0]['value_reads'] == [_bytes(2, one)]
     assert records[1]['value_reads'] == [_bytes(2, two)]
     assert capture.operations == ['prepare_materialize', 'prepare_materialize']
+    _validate(capture.core())
+
+
+def test_actual_source_partitions_keep_their_issued_ids_and_run_without_live_aliases():
+    capture = RUNNER._Capture()
+    first = _start(capture)
+    second = _start(capture)
+    requests = [
+        {
+            'id': number,
+            'request': {
+                'request': 'lookup',
+                'table': {'source': ['items']},
+                'columns': ['id'],
+            },
+            'plan': {'plan': 'host', 'expect': {'schema': 'discover'}},
+            'purpose': 'source_rows',
+            'partition': {'first': 2, 'ordinal': number - 2, 'parts': 2},
+        }
+        for number in (2, 3)
+    ]
+    expected = copy.deepcopy(requests)
+    capture.stepped({'step': 'fetch', 'requests': requests}, run=first)
+    requests[0]['request']['columns'].append('later mutation')
+    records = _records(capture)
+    assert records[0]['fetches'] == expected
+    assert records[0]['events'] == [{'event': 'fetch', 'requests': [2, 3]}]
+    assert records[1]['fetches'] == []
+    assert records[1]['events'] == []
+    assert all(record['completion'] == 'active' for record in records)
+    assert second.ordinal == 1
     _validate(capture.core())
 
 
