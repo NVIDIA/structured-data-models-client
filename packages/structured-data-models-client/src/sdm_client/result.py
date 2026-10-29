@@ -82,15 +82,17 @@ class Explanations(dict[Any, dict[str, Any]]):
     dict::
 
         {'outputs': [...],                       # the explained scores
-         'instance': {'columns': [...],
+         'instance': {'columns': [...],          # kumo-tabular only
                       'gradients': [...]},       # [output][column]
          'related': {table: {'keys': [...],      # absent for a keyless table
                              'rows': [{...}],    # each row's values as sent
                              'columns': [...],
                              'gradients': [...]}}}   # [output][row][column]
 
-    ``related`` is there for ``kumo-relational`` only. ``columns`` are the
-    model's preprocessed numerical columns, as the endpoint names them.
+    ``instance`` is there for ``kumo-tabular`` only, and ``related`` for
+    ``kumo-relational`` only, where it holds every table, the entity's own
+    among them. ``columns`` are the model's preprocessed numerical columns, as
+    the endpoint names them.
 
     Empty when no explanation was asked for, or none came back.
     """
@@ -114,8 +116,9 @@ class Explanations(dict[Any, dict[str, Any]]):
         r"""Every gradient, one line each, across all explained rows.
 
         One line per (row, table, related row, output, column). ``table`` is
-        ``'instance'`` for the row's own block and the table's name for a
-        related one. ``hop`` is how many links the row is from the entity: 0
+        ``'instance'`` for a ``kumo-tabular`` row's own block and the table's
+        name for a related one, the ``kumo-relational`` entity's own table
+        among them. ``hop`` is how many links the row is from the entity: 0
         for the entity itself, and ``None`` where the rows sent do not link
         it. ``key`` is the related row's primary key, ``None`` for a keyless
         table, and the row's own ``id`` for its instance block. ``row`` is the
@@ -126,26 +129,28 @@ class Explanations(dict[Any, dict[str, Any]]):
         for key, entry in self.items():
             named = key if len(self._keyed_by) > 1 else (key,)
             outputs = [_output_named(output) for output in entry['outputs']]
-            instance = entry['instance']
+            # A kumo-relational entry has none: its own row is in `related`.
+            instance = entry.get('instance')
             own = named[0] if self._keyed_by[0] == 'id' else None
-            for output, by_column in zip(
-                outputs, instance['gradients'], strict=True
-            ):
-                for column, gradient in zip(
-                    instance['columns'], by_column, strict=True
+            if instance is not None:
+                for output, by_column in zip(
+                    outputs, instance['gradients'], strict=True
                 ):
-                    lines.append(
-                        (
-                            *named,
-                            'instance',
-                            0,
-                            own,
-                            0,
-                            output,
-                            column,
-                            gradient,
+                    for column, gradient in zip(
+                        instance['columns'], by_column, strict=True
+                    ):
+                        lines.append(
+                            (
+                                *named,
+                                'instance',
+                                0,
+                                own,
+                                0,
+                                output,
+                                column,
+                                gradient,
+                            )
                         )
-                    )
             hops = self._hops.get(key, {})
             for table, block in entry.get('related', {}).items():
                 keys = block.get('keys') or [None] * len(block['rows'])

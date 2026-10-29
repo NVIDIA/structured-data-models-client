@@ -286,21 +286,15 @@ def test_every_entity_is_explained_under_its_id(explained):
     assert sorted(explained.explanations) == sorted(explained.to_pandas()['id'])
 
 
-def test_an_entity_has_its_own_instance_gradients(explained):
-    """The instance block is the record's own, as ``[output][column]``.
+def test_the_engines_question_row_is_not_an_entrys_block(explained):
+    """An entry has no ``instance``: that block explains the engine's question
+    row, not a row the caller sent, and the entity's own row is in ``related``.
 
     Assumptions:
-    - The NIM gives the record at row ``i`` the gradients ``-(i + 1)`` and
-      ``i + 1``.
+    - The NIM explains every record's ``instance_table`` as well.
     """
-    assert explained.explanations[5]['instance'] == {
-        'columns': ['anchor_dayofweek'],
-        'gradients': [[-1.0], [1.0]],
-    }
-    assert explained.explanations[7]['instance']['gradients'] == [
-        [-2.0],
-        [2.0],
-    ]
+    for entry in explained.explanations.values():
+        assert set(entry) == {'outputs', 'related'}
 
 
 def test_an_entity_has_a_block_for_every_related_table(explained):
@@ -398,7 +392,6 @@ def test_outputs_and_columns_are_passed_through(explained):
     entry = explained.explanations[5]
 
     assert entry['outputs'] == CLASSES
-    assert entry['instance']['columns'] == ['anchor_dayofweek']
     assert entry['related']['events']['columns'] == ['seconds']
 
 
@@ -590,21 +583,21 @@ def test_the_flat_table_has_a_line_per_row_table_output_and_column(explained):
     """One line per (entity, table, related row, output, column).
 
     Assumptions:
-    - Each block has one column and two outputs. User 5 has 1 instance row
-      and 1 + 2 + 2 + 2 related rows; user 7 has 1 and 1 + 1 + 1 + 1.
+    - Each block has one column and two outputs. User 5 has 1 + 2 + 2 + 2
+      related rows and user 7 has 1 + 1 + 1 + 1; the question row is dropped.
     """
     flat = explained.explanations.to_pandas()
 
-    assert len(flat) == 2 * (1 + 7) + 2 * (1 + 4)
+    assert len(flat) == 2 * 7 + 2 * 4
     assert len(flat[(flat['id'] == 5) & (flat['table'] == 'orders')]) == 4
 
 
 def test_the_flat_table_counts_hops_from_the_entity(explained):
-    """``hop`` is 0 for the instance and the entity's own row, 1 for a row
+    """``hop`` is 0 for the entity's own row, 1 for a row
     linked to it, and 2 for a row linked through one of those.
 
     Assumptions:
-    - ``users`` is reached from the instance, ``orders`` and ``events`` link
+    - ``users`` holds the entity, ``orders`` and ``events`` link
       to ``users``, and ``products`` is linked from ``orders``.
     """
     flat = explained.explanations.to_pandas()
@@ -613,7 +606,6 @@ def test_the_flat_table_counts_hops_from_the_entity(explained):
     hops = linked.groupby('table')['hop'].unique()
 
     assert {name: list(found) for name, found in hops.items()} == {
-        'instance': [0],
         'users': [0],
         'orders': [1],
         'events': [1],
@@ -637,7 +629,7 @@ def test_the_flat_table_leaves_the_hop_of_an_unlinked_row_empty(explained):
 
 def test_the_flat_table_names_rows_by_key_and_position(explained):
     """``key`` is a related row's key, empty for a keyless table, and the id
-    for the instance block; ``row`` is the position in ``rows``.
+    for the entity's own row; ``row`` is the position in ``rows``.
 
     Assumptions:
     - User 5 has two orders and two keyless events.
@@ -651,7 +643,8 @@ def test_the_flat_table_names_rows_by_key_and_position(explained):
         (1, 9004),
     ]
     assert five[five['table'] == 'events']['key'].isna().all()
-    assert set(five[five['table'] == 'instance']['key']) == {5}
+    assert set(five[five['table'] == 'users']['key']) == {5}
+    assert 'instance' not in set(flat['table'])
     gradient = orders[
         (orders['row'] == 1) & (orders['output'] == 'probability_yes')
     ]['gradient']
