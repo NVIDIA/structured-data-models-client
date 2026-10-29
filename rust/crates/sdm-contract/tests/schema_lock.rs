@@ -683,7 +683,7 @@ const JSON: [(&str, &str); 72] = [
 ];
 
 /// The other fields naming an attachment, and why the lock needs no entry.
-const OTHER: [(&str, &str); 64] = [
+const OTHER: [(&str, &str); 66] = [
     (
         "Materialize.indices",
         "Arrow actual task indices, shared with Operation/materialize.indices",
