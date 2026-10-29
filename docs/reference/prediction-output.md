@@ -131,8 +131,8 @@ result = client.predict(request, model=KumoRelational(),
 ### Keys
 
 `result.explanations` maps a row's key to that row's explanation. It is kept
-out of `result.to_pandas()`. There is no `result.explanation` and no
-`{'by_forecast_step': ...}`.
+out of `result.to_pandas()`. `result.explanation` is deprecated, see
+`result.explanations`; there is no `{'by_forecast_step': ...}`.
 
 The key is whatever identifies the row in `to_pandas()`, by the same rule on
 both models:
