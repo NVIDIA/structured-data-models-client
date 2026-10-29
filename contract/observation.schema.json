@@ -187,6 +187,8 @@
       "additionalProperties": false,
       "required": ["inputs", "fetches", "accepted", "described", "materialized", "predicted", "error"],
       "dependentRequired": {
+        "materialization_entries": ["materialization_preparations", "materialization_guards", "materialization_capture_capabilities"],
+        "materialization_guards": ["materialization_entries"],
         "materialization_preparations": ["materialization_capture_capabilities"],
         "materialization_capture_capabilities": ["materialization_preparations"]
       },
@@ -264,6 +266,16 @@
           "description": "Actual materialization preparation Runs in start order, their JSON boundaries and lifecycle events. This raw journal supplies no common materialize role or opaque-resource identity claim.",
           "type": "array",
           "items": {"$ref": "#/$defs/materializationPreparationObservation"}
+        },
+        "materialization_entries": {
+          "description": "Actual native SQL gather invocations and selected terminal Run or public/Core failure associations; completeness requires the referenced raw journal and actual later state takes.",
+          "type": "array",
+          "items": {"$ref": "#/$defs/materializationEntry"}
+        },
+        "materialization_guards": {
+          "description": "Actual prepare_frames failure assessment/report Runs scoped to a materialization entry, never invented provider replies.",
+          "type": "array",
+          "items": {"$ref": "#/$defs/materializationGuardObservation"}
         },
         "materialization_capture_capabilities": {
           "description": "Availability of the installed cancellation interceptor, independent of native failure classification or logical projection.",
@@ -535,7 +547,8 @@
           "required": ["event", "requests"],
           "properties": {
             "event": {"const": "fetch"},
-            "requests": {"type": "array", "items": {"type": "integer", "minimum": 1}}
+            "requests": {"type": "array", "items": {"type": "integer", "minimum": 1}},
+            "positions": {"type": "array", "items": {"type": "integer", "minimum": 0}}
           }
         },
         {
@@ -557,12 +570,150 @@
         }
       ]
     },
+    "materializationRunReference": {
+      "type": "object", "additionalProperties": false,
+      "required": ["run"],
+      "properties": {"run": {"type": "integer", "minimum": 0}}
+    },
+    "materializationFailureReference": {
+      "type": "object", "additionalProperties": false,
+      "required": ["run", "relation"],
+      "properties": {
+        "run": {"type": "integer", "minimum": 0},
+        "relation": {"enum": ["selected", "cause", "refused"]}
+      }
+    },
+    "materializationEntry": {
+      "type": "object", "additionalProperties": false,
+      "required": ["ordinal", "parent", "prediction_parent", "runs", "completion", "terminal", "failure"],
+      "properties": {
+        "ordinal": {"type": "integer", "minimum": 0},
+        "parent": {"type": ["integer", "null"], "minimum": 0},
+        "prediction_parent": {"type": ["integer", "null"], "minimum": 0},
+        "runs": {"type": "array", "items": {"type": "integer", "minimum": 0}},
+        "completion": {"enum": ["active", "returned", "raised"]},
+        "terminal": {"anyOf": [{"$ref": "#/$defs/materializationRunReference"}, {"type": "null"}]},
+        "failure": {"anyOf": [{"$ref": "#/$defs/materializationFailureReference"}, {"type": "null"}]}
+      }
+    },
+    "materializationReadOrigin": {
+      "type": "object", "additionalProperties": false,
+      "required": ["run", "first", "failed"],
+      "properties": {
+        "run": {"type": "integer", "minimum": 0},
+        "first": {"type": "integer", "minimum": 1},
+        "failed": {"type": ["integer", "null"], "minimum": 1}
+      }
+    },
+    "materializationOwnerTake": {
+      "oneOf": [
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["attachment", "origin"],
+          "properties": {
+            "attachment": {"type": "integer", "minimum": 0},
+            "origin": {"const": "result"}
+          }
+        },
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["attachment", "origin", "fetch_id"],
+          "properties": {
+            "attachment": {"type": "integer", "minimum": 0},
+            "origin": {"const": "fetch"},
+            "fetch_id": {"type": "integer", "minimum": 1}
+          }
+        }
+      ]
+    },
+    "materializationOwnerBind": {
+      "type": "object", "additionalProperties": false,
+      "required": ["attachment", "producer"],
+      "properties": {
+        "attachment": {"type": "integer", "minimum": 0},
+        "producer": {
+          "oneOf": [
+            {
+              "type": "object", "additionalProperties": false,
+              "required": ["run", "attachment", "origin"],
+              "properties": {
+                "run": {"type": "integer", "minimum": 0},
+                "attachment": {"type": "integer", "minimum": 0},
+                "origin": {"const": "result"}
+              }
+            },
+            {
+              "type": "object", "additionalProperties": false,
+              "required": ["run", "attachment", "origin", "fetch_id"],
+              "properties": {
+                "run": {"type": "integer", "minimum": 0},
+                "attachment": {"type": "integer", "minimum": 0},
+                "origin": {"const": "fetch"},
+                "fetch_id": {"type": "integer", "minimum": 1}
+              }
+            }
+          ]
+        }
+      }
+    },
+    "materializationInputRead": {
+      "oneOf": [
+        {"$ref": "#/$defs/materializationBytesObservation"},
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["attachment", "scalars"],
+          "properties": {
+            "attachment": {"type": "integer", "minimum": 0},
+            "scalars": {"type": "array", "items": {"type": "object"}}
+          }
+        }
+      ]
+    },
+    "materializationGuardObservation": {
+      "type": "object", "additionalProperties": false,
+      "required": ["run", "entry", "operation", "input", "completion", "result", "value_reads", "error", "events", "origin"],
+      "properties": {
+        "run": {"type": "integer", "minimum": 0},
+        "entry": {"type": "integer", "minimum": 0},
+        "operation": {
+          "type": "object", "additionalProperties": false,
+          "required": ["op", "input"],
+          "properties": {
+            "op": {"const": "prepare_frames"},
+            "input": {"type": "integer", "minimum": 0},
+            "part": {"type": "object"}
+          }
+        },
+        "input": {"$ref": "#/$defs/materializationBytesObservation"},
+        "completion": {"enum": ["active", "done", "error", "cancelled", "cancel_failed"]},
+        "result": {
+          "anyOf": [
+            {
+              "type": "object", "additionalProperties": false,
+              "required": ["op", "value"],
+              "properties": {"op": {"const": "prepare_frames"}, "value": {"type": "integer", "minimum": 0}}
+            },
+            {"type": "null"}
+          ]
+        },
+        "value_reads": {"type": "array", "items": {"$ref": "#/$defs/materializationBytesObservation"}},
+        "error": {"anyOf": [{"$ref": "#/$defs/predictionCoreError"}, {"type": "null"}]},
+        "events": {"type": "array", "items": {"$ref": "#/$defs/materializationLifecycleEvent"}},
+        "origin": {"anyOf": [{"$ref": "#/$defs/materializationReadOrigin"}, {"type": "null"}]}
+      }
+    },
     "materializationPreparationObservation": {
       "type": "object",
       "additionalProperties": false,
       "required": ["run", "operation", "input", "completion", "result", "value_reads", "fetches", "error", "events"],
       "properties": {
         "run": {"type": "integer", "minimum": 0},
+        "entry": {"type": "integer", "minimum": 0},
+        "input_reads": {"type": "array", "items": {"$ref": "#/$defs/materializationInputRead"}},
+        "owner_binds": {"type": "array", "items": {"$ref": "#/$defs/materializationOwnerBind"}},
+        "owner_takes": {"type": "array", "items": {"$ref": "#/$defs/materializationOwnerTake"}},
+        "output_reads": {"type": "array", "items": {"$ref": "#/$defs/materializationBytesObservation"}},
+        "origin": {"anyOf": [{"$ref": "#/$defs/materializationReadOrigin"}, {"type": "null"}]},
         "operation": {
           "type": "object",
           "additionalProperties": false,
