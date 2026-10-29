@@ -384,6 +384,20 @@ def _starts(text: str, key: str) -> list[int]:
 # --- baselines on each database the core is observed on -------------------------
 
 
+def test_aggregate_fixture_must_explicitly_request_all_database_scopes(
+    held: Path, tmp_path: Path
+) -> None:
+    checkpoint = git(held, 'rev-parse', 'HEAD')
+    files = _observe(held, tmp_path, keep=(X, SQLITE, POSTGRES))
+    commit(held, 'T2.0f: explicit aggregate scope control')
+    assert helpers.check(held, checkpoint, files, database=None) == []
+    scoped = helpers.check(held, checkpoint, files)
+    assert scoped and all(
+        'not a duckdb observation' in problem for problem in scoped
+    )
+    assert _naming(scoped, SQLITE) and _naming(scoped, POSTGRES)
+
+
 def test_a_database_recording_with_no_core_observation_needs_no_baseline(
     recorded: Path, tmp_path: Path
 ) -> None:
