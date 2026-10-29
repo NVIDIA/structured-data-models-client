@@ -7,9 +7,23 @@
 from __future__ import annotations
 
 import numpy as np
+import pandas as pd
 import pytest
 
-from sdm_client._rust.frame_native import NativeFrameColumns
+from sdm_client._rust.native_target import NativeTargetColumn
+
+
+def _column(owner, count):
+    class Derived(pd.Series):
+        @property
+        def array(self):
+            return owner
+
+    return NativeTargetColumn(
+        Derived(range(count)),
+        np.arange(count, dtype=np.intp),
+        np.ones(count, dtype=bool),
+    )
 
 
 @pytest.mark.parametrize('empty', [False, True])
@@ -27,14 +41,10 @@ def test_pointwise_result_retains_actual_native_return_and_original_owner(
             return result
 
     owner = Native()
-    columns = NativeFrameColumns(
-        {'items': {'id': object}}, {'items': {'id': owner}}
-    )
+    column = _column(owner, len(result))
     values = [] if empty else [[1, 2], []]
     before = [list(row) for row in values]
-    actual = columns.label_result(
-        {'source': {'source': ['items']}, 'column': 'id'}, values
-    )
+    actual = column.group_result(values)
     assert actual is result
     assert len(events) == 1 and events[0][0] is owner
     assert events[0][1].dtype == object
@@ -49,11 +59,7 @@ def test_failed_native_result_is_not_replaced_by_the_mathematical_groups():
         def _cast_pointwise_result(self, groups):
             raise failure
 
-    columns = NativeFrameColumns(
-        {'items': {'id': object}}, {'items': {'id': Native()}}
-    )
+    column = _column(Native(), 1)
     with pytest.raises(ValueError) as raised:
-        columns.label_result(
-            {'source': {'source': ['items']}, 'column': 'id'}, [[1]]
-        )
+        column.group_result([[1]])
     assert raised.value is failure
