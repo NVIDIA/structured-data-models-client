@@ -27,14 +27,22 @@ STUB = (
     REPO / 'packages/structured-data-models-client/src/sdm_client/_native.pyi'
 )
 CANARY = 'CANARY-5e0d'
-_FRAME_OWNERS = (
+_ATTACHMENT_OWNERS = (
     'FrameGraph',
     'FrameQuestion',
     'FramePopulation',
+    'FrameLabelGroups',
     'FrameLabelBatch',
+    'LabelInputs',
+    'TargetColumn',
     'FrameTask',
     'FrameReferences',
     'FramePayload',
+    'LookupRows',
+    'MaterializeSource',
+    'MaterializePopulation',
+    'MaterializeGroups',
+    'MaterializeBatch',
 )
 
 
@@ -76,7 +84,7 @@ def test_the_build_is_the_one_named(native_build: str) -> None:
 def test_the_stub_describes_the_module() -> None:
     names, members = _stub()
     assert _public(dir(_native)) == names
-    for cls in ('Run', 'ArrowStream', *_FRAME_OWNERS):
+    for cls in ('Run', 'ArrowStream', *_ATTACHMENT_OWNERS):
         declared = getattr(_native, cls).__dict__
         assert {m for m in declared if not m.startswith('__')} | {
             m for m in declared if m.startswith('__arrow')
@@ -163,10 +171,14 @@ def test_attachment_annotations_include_every_native_owner(
             return alternatives(node.left) | alternatives(node.right)
         raise AssertionError(f'{alias}: unexpected union {ast.unparse(node)}')
 
-    assert alternatives(aliases[alias]) == {'bytes', stream, *_FRAME_OWNERS}
+    assert alternatives(aliases[alias]) == {
+        'bytes',
+        stream,
+        *_ATTACHMENT_OWNERS,
+    }
 
 
-@pytest.mark.parametrize('name', _FRAME_OWNERS)
+@pytest.mark.parametrize('name', _ATTACHMENT_OWNERS)
 def test_native_owners_cannot_be_forged_or_subclassed(name: str) -> None:
     owner = getattr(_native, name)
     assert owner.__module__ == 'sdm_client._native'
