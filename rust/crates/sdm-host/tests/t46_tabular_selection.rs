@@ -4,7 +4,33 @@
 
 //! A Rust host supplies source facts to the same selection used by Python.
 
-use sdm_host::{TabularContext, TabularIndexSelection, tabular_labelled_rows};
+use sdm_host::{TabularContext, TabularIndexSelection, TabularScoringKeys, tabular_labelled_rows};
+
+#[test]
+fn supplied_population_binds_native_missingness_and_original_source_positions() {
+    let scoring = TabularScoringKeys::new(vec![11, 500]);
+    assert!(scoring.needs_source());
+    let source: Vec<i64> = (0..43).collect();
+    let population = scoring.source(&source).unwrap();
+    let retained = population.positions();
+    assert_eq!(retained.len(), 42);
+    assert!(!retained.contains(&11));
+    let known: Vec<bool> = retained.iter().map(|row| row % 7 != 0).collect();
+    let candidates = population.labelled_rows(&known).unwrap();
+    let context = population.context(&candidates, Some(5)).unwrap();
+    let actual: Vec<usize> = context
+        .positions()
+        .unwrap()
+        .iter()
+        .map(|&position| retained[candidates[position]])
+        .collect();
+    assert_eq!(actual, context.select());
+    assert!(population.labelled_rows(&[true]).is_err());
+    assert!(population.context(&[42], Some(1)).is_err());
+    assert!(population.context(&[2, 1], Some(1)).is_err());
+    assert!(!TabularScoringKeys::new(vec![]).needs_source());
+    assert!(TabularScoringKeys::new(vec![]).source(&source).is_err());
+}
 
 #[test]
 fn typed_host_filters_before_sampling_and_applies_candidate_positions() {
