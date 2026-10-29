@@ -220,7 +220,7 @@ fn result_metadata_has_its_own_purpose_and_does_not_claim_the_future_data_owner(
         }
     }
     let provider: ProviderChoice = serde_json::from_value(serde_json::json!({
-        "provider":"host","capabilities":{"optional":["scan"],"sampling":"seeded_stable","max_seed":u64::MAX}
+        "provider":"host","capabilities":{"optional":[],"sampling":"seeded_stable","max_seed":u64::MAX}
     })).unwrap();
     let root = crate::CompositionRoot::new(Arc::new(ProjectedInput));
     let observed = Arc::new(Mutex::new(None));
