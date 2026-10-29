@@ -752,7 +752,10 @@ def collection_verdict(
         raise SmokeFailed(
             f'{collection.name}: collected {collected}, passed {passed}'
         )
-    names = {str(nodeid).rsplit('/', 1)[-1] for nodeid in items}
+    names = set()
+    for nodeid in items:
+        filename, separator, suffix = str(nodeid).partition('::')
+        names.add(filename.rsplit('/', 1)[-1] + separator + suffix)
     missing = sorted(
         f'{name}::{test}'
         for name in counts
