@@ -6,8 +6,8 @@
 
 from __future__ import annotations
 
-import hashlib
 import copy
+import hashlib
 import json
 import warnings
 from decimal import Decimal
@@ -32,7 +32,7 @@ REFERENCE = json.loads(
 
 
 @pytest.mark.parametrize(
-    'changed', ['message', 'class', 'order', 'call', 'effect']
+    'changed', ['message', 'class', 'order', 'call', 'effect', 'graph']
 )
 def test_bounded_decimal_pair_keeps_all_native_warnings_and_call_effects(
     changed,
@@ -44,6 +44,9 @@ def test_bounded_decimal_pair_keeps_all_native_warnings_and_call_effects(
         == ('object', 'scale-minus129', 'float64', False)
     ]
     original = copy.deepcopy(case['expected'])
+    original['graphs'] = [
+        copy.deepcopy(call['error']) for call in original['calls']
+    ]
     _assert_decimal_profile(
         original, copy.deepcopy(original), case['expected'], core=False
     )
@@ -56,8 +59,13 @@ def test_bounded_decimal_pair_keeps_all_native_warnings_and_call_effects(
         actual['warnings'].reverse()
     elif changed == 'call':
         actual['calls'][0]['error']['message'] += ' changed'
-    else:
+    elif changed == 'effect':
         actual['effect_reached'] = True
+    else:
+        actual['graphs'][0]['message'] += ' changed'
+    if changed in ('call', 'effect'):
+        # Even matching twins cannot replace these unchanged pinned facts.
+        original = copy.deepcopy(actual)
     with pytest.raises(AssertionError):
         _assert_decimal_profile(actual, original, case['expected'], core=False)
 
@@ -187,33 +195,41 @@ def values(storage, shape, indexes, callback):
     return pd.Series(pd.arrays.ArrowExtensionArray(array))
 
 
-@pytest.mark.parametrize('core', [False, True], ids=['original', 'core'])
-@pytest.mark.parametrize(
-    'case',
-    REFERENCE['cases'],
-    ids=lambda case: '-'.join(
-        str(case[name]) for name in ('storage', 'shape', 'declared', 'mutation')
-    ),
-)
-def test_declared_decimal_materialize_matches_frozen_native_behavior(
-    monkeypatch, core, case
-):
-    monkeypatch.setenv('SDM_CORE_ROUTES', FRAME_ROUTES if core else '')
+def _decimal_error_graph(error, seen=None):
+    if error is None:
+        return None
+    if seen is None:
+        seen = {}
+    if id(error) in seen:
+        return ('reference', seen[id(error)])
+    seen[id(error)] = len(seen)
+    return (
+        type(error).__module__,
+        type(error).__name__,
+        str(error),
+        error.__suppress_context__,
+        _decimal_error_graph(error.__cause__, seen),
+        _decimal_error_graph(error.__context__, seen),
+    )
+
+
+def _assert_decimal_profile(actual, original, expected, *, core):
+    paired = copy.deepcopy(original)
     if core:
+        for warning in paired['warnings']:
+            warning['message'] = bare(warning['message'])
+    assert actual == paired
+    assert len(actual['graphs']) == len(expected['calls']) == 2
+    # Only this bounded case's actual native warning population is supplied
+    # by its fresh original twin. All pinned call and effect facts remain.
+    assert actual['calls'] == expected['calls']
+    assert actual['effect_reached'] == expected['effect_reached']
 
-        def legacy_model(*args, **kwargs):
-            raise AssertionError(
-                'core Decimal materialization called the Python engine'
-            )
 
-        monkeypatch.setattr(RelationalMaterializer, '_get_model', legacy_model)
-        monkeypatch.setattr(
-            'sdm_client.materializers.relational._as_typed', legacy_model
-        )
-        monkeypatch.setattr(
-            'sdm_client.materializers.relational._to_declared', legacy_model
-        )
+def _observe_decimal(case, *, capture_graphs=False):
     observed = {'calls': []}
+    if capture_graphs:
+        observed['graphs'] = []
     events = []
     effect_reached = False
     effects_active = False
@@ -266,6 +282,8 @@ def test_declared_decimal_materialize_matches_frozen_native_behavior(
                     anchor_time=pd.Timestamp('2023-03-01'),
                     random_seed=7,
                 )
+                if capture_graphs:
+                    observed['graphs'].append(None)
                 call = {
                     'outcome': 'success',
                     'payload_sha256': payload_digest(request.payloads),
@@ -273,6 +291,8 @@ def test_declared_decimal_materialize_matches_frozen_native_behavior(
                     'predict_rows': request.predict_rows,
                 }
             except Exception as error:
+                if capture_graphs:
+                    observed['graphs'].append(_decimal_error_graph(error))
                 call = {
                     'outcome': 'error',
                     'error': {
@@ -288,9 +308,61 @@ def test_declared_decimal_materialize_matches_frozen_native_behavior(
             for n in notices
         ]
     observed['effect_reached'] = effect_reached
+    return observed
+
+
+@pytest.mark.parametrize('core', [False, True], ids=['original', 'core'])
+@pytest.mark.parametrize(
+    'case',
+    REFERENCE['cases'],
+    ids=lambda case: '-'.join(
+        str(case[name]) for name in ('storage', 'shape', 'declared', 'mutation')
+    ),
+)
+def test_declared_decimal_materialize_matches_frozen_native_behavior(
+    monkeypatch, core, case
+):
+    bounded = (
+        case['storage'],
+        case['shape'],
+        case['declared'],
+        case['mutation'],
+    ) == (
+        'object',
+        'scale-minus129',
+        'float64',
+        False,
+    )
+
+    def observed_route(core_route):
+        with monkeypatch.context() as leg:
+            leg.setenv('SDM_CORE_ROUTES', FRAME_ROUTES if core_route else '')
+            if core_route:
+
+                def legacy_model(*args, **kwargs):
+                    raise AssertionError(
+                        'core Decimal materialization called the Python engine'
+                    )
+
+                leg.setattr(RelationalMaterializer, '_get_model', legacy_model)
+                leg.setattr(
+                    'sdm_client.materializers.relational._as_typed',
+                    legacy_model,
+                )
+                leg.setattr(
+                    'sdm_client.materializers.relational._to_declared',
+                    legacy_model,
+                )
+            return _observe_decimal(case, capture_graphs=bounded)
+
+    original = observed_route(False) if bounded else None
+    observed = observed_route(core) if core or not bounded else original
     if core:
         # P3E-2 permits only the core's leading notice code. Native effects,
         # warning classes/bodies/order and all complete payload hashes stay.
         for warning in observed['warnings']:
             warning['message'] = bare(warning['message'])
-    assert observed == case['expected']
+    if bounded:
+        _assert_decimal_profile(observed, original, case['expected'], core=core)
+    else:
+        assert observed == case['expected']
