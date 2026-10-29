@@ -280,17 +280,33 @@ def test_gathered_whole_float_index_admission_precedes_later_fields(
                 client.predict(request, model=KumoRelational())
         assert transport.calls == 1
         assert caught.value.code == 'INVALID_RESPONSE'
-        if mode != 'clean' and admitted:
-            expected = ('prediction.probabilities', 'not_an_object')
-        elif mode == 'clean' and token == '0':
-            # The approved predecessor reaches its later required ID guard.
-            expected = ('prediction.id', 'missing')
+        if mode == 'clean' and admitted:
+            # Native integer admission precedes the semantic bounds/ID check.
+            # Structural field/reason details belong to malformed decoding.
+            assert caught.value.details == {}
+            if token == '0':
+                assert caught.value._sentence == 'relational_id_missing'
+                message = (
+                    'the answer for row 0 carries no id, and this batch asked '
+                    'under 2, so the two cannot be matched'
+                )
+            else:
+                assert caught.value._sentence == 'relational_row_bounds'
+                message = (
+                    f'the response names row_index {int(json.loads(token))}, '
+                    'and this batch asked about 2 rows'
+                )
+            assert str(caught.value) == '[INVALID_RESPONSE] ' + message
         else:
-            expected = ('prediction.row_index', 'out_of_range')
-        assert (
-            caught.value.details['field'],
-            caught.value.details['reason'],
-        ) == expected
+            expected = (
+                ('prediction.probabilities', 'not_an_object')
+                if admitted
+                else ('prediction.row_index', 'out_of_range')
+            )
+            assert (
+                caught.value.details['field'],
+                caught.value.details['reason'],
+            ) == expected
     finally:
         connection.close()
 
