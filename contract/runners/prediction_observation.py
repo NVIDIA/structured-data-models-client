@@ -1632,7 +1632,7 @@ def _final(
         _presentation(
             final['presentation'],
             table,
-            ranking=final['input']['aggregation']['kind'] == 'ranking',
+            ranking=final['input']['input']['aggregation']['kind'] == 'ranking',
             outputs=predicted['outputs'],
         )
         names = [column['name'] for column in table['columns']]
