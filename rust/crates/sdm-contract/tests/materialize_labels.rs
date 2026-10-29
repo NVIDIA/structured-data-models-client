@@ -109,6 +109,37 @@ fn actual_target_completion_declares_the_source_owner_values_and_full_presence_f
 }
 
 #[test]
+fn condition_history_names_actual_column_views_and_completed_value_owners() {
+    let view = json!({"population":"population-1","range":{"start":0,"stop":2},"owner":21,
+        "target":{"source":{"source":["users"]},"column":"age"},
+        "form":"condition","condition_columns":[],"source_role":"entity"});
+    let mut completed = view.clone();
+    completed["owner"] = json!(22);
+    let value = json!({"stage":"eligibility_column","inputs":{
+        "population":"population-1","range":{"start":0,"stop":2},"owner":20,
+        "target":{"source":{"source":["buys"]},"column":"item_id"},
+        "form":"plain","condition_columns":[],
+        "eligibility":{"columns":[view.clone()],"values":[]}
+    },"column":{"input":completed,
+        "owner":23,"derivation":"column","rows":2,"condition_values":[]}});
+    let input: MaterializePreparation = serde_json::from_value(value.clone()).unwrap();
+    assert_eq!(
+        input.attachments(),
+        vec![
+            (AttachmentId(20), AttachmentKind::LabelInputs),
+            (AttachmentId(21), AttachmentKind::LabelInputs),
+            (AttachmentId(22), AttachmentKind::LabelInputs),
+            (AttachmentId(23), AttachmentKind::TargetColumn),
+        ]
+    );
+    for field in ["next_action", "accepted", "callback"] {
+        let mut bad = value.clone();
+        bad["inputs"]["eligibility"][field] = json!(true);
+        assert!(serde_json::from_value::<MaterializePreparation>(bad).is_err());
+    }
+}
+
+#[test]
 fn selected_target_completion_keeps_the_actual_predecessor_and_never_walks_row_counts_as_ids() {
     let value = json!({"stage":"windowed_target","column":{
         "input":{"population":"population-1","range":{"start":0,"stop":10000},"owner":21,
