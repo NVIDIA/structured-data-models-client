@@ -1708,7 +1708,7 @@ def _held_input_matches(actual: Any, described: Any, *, legacy: bool) -> bool:
     Every present flag and every other field stays exact.
     The observation itself is never filled or projected in place.
     """
-    if actual == described:
+    if legacy and actual == described:
         return True
     expected = copy.deepcopy(held_schema(described))
     try:
