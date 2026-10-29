@@ -21,6 +21,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod frame_identity;
 pub mod frames;
 pub mod graph;
 pub mod index_sort;
@@ -28,6 +29,7 @@ pub mod keys;
 pub mod labels;
 pub mod random;
 pub mod sample;
+pub mod strings;
 pub mod time;
 pub mod words;
 

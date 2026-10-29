@@ -4,6 +4,10 @@
 
 //! The fixed model-neutral constructor and per-call native observation boundary.
 
+mod relational;
+pub(crate) mod relational_response;
+pub(crate) mod relational_result;
+
 use crate::run::{ArrowData, Asker, Attachment, Attachments};
 use arrow_array::{RecordBatch, RecordBatchOptions};
 use arrow_schema::{Field, Schema};
@@ -280,7 +284,49 @@ pub(crate) async fn run(
     mut attached: Attachments,
 ) -> Result<OperationResult, CoreError> {
     let value = match input {
+        Preparation::CallRelational { input } => return relational::call(asker, input, attached).await,
+        Preparation::Relational { input } => serde_json::to_value(relational::prepare(&asker, input)?),
         Preparation::EncodeBody { input } => return encode_body(&asker, input, attached),
+        Preparation::RelationalReferenceColumn { facts } => serde_json::to_value(
+            sdm_request::predict::relational_response::reference_column(facts)?,
+        ),
+        Preparation::CheckRelationalRows { attribution, rows } => serde_json::to_value(
+            sdm_request::predict::relational_response::check_rows(attribution, rows)?,
+        ),
+        Preparation::CheckRelationalForecast { bound, forecasting } => serde_json::to_value(
+            sdm_request::predict::relational_response::check_forecast(bound, forecasting)?,
+        ),
+        Preparation::RelationalWithoutInstance { checked } => serde_json::to_value(
+            sdm_request::predict::relational_response::without_instance(checked)?,
+        ),
+        Preparation::AttributeRelationalInstance { checked, instance } => serde_json::to_value(
+            sdm_request::predict::relational_response::attribute_instance(checked, instance)?,
+        ),
+        Preparation::CheckRelationalCoverage { data, attribution, rows } => serde_json::to_value(
+            relational_response::coverage(data, attribution, rows, attached)?,
+        ),
+        Preparation::RelationalTargetMeaning { kind, classification } => serde_json::to_value(
+            sdm_request::predict::relational_response::target_meaning(&kind, classification)?,
+        ),
+        Preparation::CompleteRelationalResponse { part } => serde_json::to_value(
+            relational_response::complete(&asker, part, attached)?,
+        ),
+        Preparation::FinishRelationalResponse { input } => serde_json::to_value(
+            relational_result::finish(&asker, input, attached)?,
+        ),
+        Preparation::PrepareRelationalRankPopulation { source } => serde_json::to_value(
+            relational_result::prepare_ranking(source, attached)?,
+        ),
+        Preparation::RankRelationalScore { item } => serde_json::to_value(
+            relational_result::confidence(item)?,
+        ),
+        Preparation::ValidateRelationalRanking { outputs, native, selected, total_parts, cold, model } => serde_json::to_value(
+            relational_result::validate_ranking(&asker, outputs, native, selected, total_parts, cold, model)?,
+        ),
+        Preparation::RankingOutputVocabulary { named, nonempty } => serde_json::to_value(crate::ranking::native_output_vocabulary(named, nonempty)?),
+        Preparation::DescribeRelationalPart { scope } => serde_json::to_value(
+            relational_result::describe(scope)?,
+        ),
         Preparation::CheckResponseRows {
             scope,
             rows,
@@ -596,6 +642,23 @@ pub(crate) async fn run(
             };
             serde_json::to_value(PreparedDirectTask {kind:prepared.task,target:prepared.target,table:entity_table,dtype})
         }
+        Preparation::ModelCatalogue => serde_json::to_value(policy::model_catalogue()),
+        Preparation::ModelLookup { position } => {
+            let catalogue = policy::model_catalogue();
+            let model = match position {
+                Some(position) => catalogue.get(position).ok_or_else(|| invalid("native model position is invalid"))?,
+                None => {
+                    let mut names = catalogue.map(str::to_owned).to_vec();
+                    names.sort();
+                    let mut error = error(Sentence::DirectUnknownModel)
+                        .with_field("model", Detail::text(""))
+                        .with_field("known_models", text_list(names));
+                    error.public_details = Some(Box::new(error.fields.clone()));
+                    return Err(error.with_field("native_model", Detail::Scalar(Scalar::Bool(true))));
+                }
+            };
+            serde_json::to_value(CallPreparation::ModelResolved { version: CALL_PREPARATION_VERSION, model: (*model).to_owned() })
+        }
         Preparation::Model { model } => {
             let model = policy::resolve_model(&model)
                 .map_err(|_| {
@@ -604,9 +667,11 @@ pub(crate) async fn run(
                         .map(|spec| spec.model.to_owned())
                         .collect();
                     names.sort();
-                    error(Sentence::DirectUnknownModel)
+                    let mut refused = error(Sentence::DirectUnknownModel)
                         .with_field("model", Detail::text(&model))
-                        .with_field("known_models", text_list(names))
+                        .with_field("known_models", text_list(names));
+                    refused.public_details = Some(Box::new(refused.fields.clone()));
+                    refused
                 })?
                 .to_owned();
             serde_json::to_value(CallPreparation::ModelResolved {
@@ -614,18 +679,31 @@ pub(crate) async fn run(
                 model,
             })
         }
+        Preparation::CallVocabulary { call } => {
+            let CallPreparation::ModelResolved { version: v, model } = call else {
+                return Err(invalid("call vocabulary requires a model-resolved call"));
+            };
+            version(v, CALL_PREPARATION_VERSION)?;
+            serde_json::to_value(policy::call_vocabulary(&model)?)
+        }
         Preparation::Outputs {
             call,
             outputs,
             kind,
+            native_default,
         } => {
             let CallPreparation::ModelResolved { version: v, model } = call else {
                 return Err(invalid("outputs require a model-resolved call"));
             };
             version(v, CALL_PREPARATION_VERSION)?;
             let named = outputs.is_some();
-            let outputs =
-                policy::resolve_outputs(&model, kind.as_deref().unwrap_or(""), outputs.as_deref())?;
+            let outputs = match native_default {
+                Some(choice) if outputs.is_none() && kind.is_none() => {
+                    policy::resolve_native_defaults(&model, choice.position)?
+                }
+                Some(_) => return Err(invalid("native default lookup conflicts with named outputs or a task key")),
+                None => policy::resolve_outputs(&model, kind.as_deref().unwrap_or(""), outputs.as_deref())?,
+            };
             serde_json::to_value(CallPreparation::OutputsResolved {
                 version: v,
                 model,
@@ -639,6 +717,7 @@ pub(crate) async fn run(
             anchored,
             relationships,
             tables,
+            native,
         } => {
             let CallPreparation::OutputsResolved {
                 version: v,
@@ -650,7 +729,7 @@ pub(crate) async fn run(
                 return Err(invalid("capabilities require an outputs-resolved call"));
             };
             version(v, CALL_PREPARATION_VERSION)?;
-            policy::validate_shape(&model, &kind, anchored, relationships, tables)?;
+            policy::validate_native_shape(&model, &kind, anchored, relationships, tables, native.as_ref())?;
             serde_json::to_value(CallPreparation::ShapeAccepted {
                 version: v,
                 model,
@@ -661,10 +740,11 @@ pub(crate) async fn run(
                     anchored,
                     relationships,
                     tables,
+                    native,
                 },
             })
         }
-        Preparation::Task { call, kind } => {
+        Preparation::Task { call, kind, admitted, defer_outputs } => {
             let CallPreparation::ShapeAccepted {
                 version: v,
                 model,
@@ -676,7 +756,11 @@ pub(crate) async fn run(
                 return Err(invalid("task validation requires a shape-accepted call"));
             };
             version(v, CALL_PREPARATION_VERSION)?;
-            policy::validate_task_outputs(&model, &kind, &outputs)?;
+            policy::validate_native_task_outputs(&model, &kind, if defer_outputs { &[] } else { &outputs }, admitted)?;
+            if defer_outputs {
+                let admitted = admitted.ok_or_else(|| invalid("deferred output admission requires actual native task membership"))?;
+                serde_json::to_value(CallPreparation::TaskAdmitted { version: v, model, outputs, named, shape, kind, admitted })
+            } else {
             serde_json::to_value(CallPreparation::TaskAccepted {
                 version: v,
                 model,
@@ -684,7 +768,19 @@ pub(crate) async fn run(
                 named,
                 shape,
                 kind,
+                admitted,
+                native_outputs: false,
             })
+            }
+        }
+        Preparation::OutputAdmission { call, unsupported } => {
+            let CallPreparation::TaskAdmitted { version: v, model, outputs, named, shape, kind, admitted } = call else {
+                return Err(invalid("native output admission requires a task-admitted call"));
+            };
+            version(v, CALL_PREPARATION_VERSION)?;
+            policy::validate_native_task_outputs(&model, &kind, &[], Some(admitted))?;
+            policy::validate_native_outputs(&model, &outputs, &unsupported)?;
+            serde_json::to_value(CallPreparation::TaskAccepted { version:v, model, outputs, named, shape, kind, admitted:Some(admitted), native_outputs:true })
         }
         Preparation::Capacity { call, rows } => {
             let CallPreparation::TaskAccepted {
@@ -694,6 +790,8 @@ pub(crate) async fn run(
                 named,
                 shape,
                 kind,
+                admitted,
+                native_outputs,
             } = call
             else {
                 return Err(invalid("capacity requires a task-accepted call"));
@@ -707,6 +805,8 @@ pub(crate) async fn run(
                 named,
                 shape,
                 kind,
+                admitted,
+                native_outputs,
                 context_rows: rows,
             })
         }
@@ -741,6 +841,8 @@ fn checked_bound(call: &CallPreparation) -> Result<Bound<'_>, CoreError> {
         outputs,
         named,
         kind,
+        admitted,
+        native_outputs,
         shape,
         context_rows,
     } = call
@@ -749,14 +851,20 @@ fn checked_bound(call: &CallPreparation) -> Result<Bound<'_>, CoreError> {
     };
     version(*v, CALL_PREPARATION_VERSION)?;
     policy::resolve_model(model)?;
-    policy::validate_shape(
+    policy::validate_native_shape(
         model,
         &shape.kind,
         shape.anchored,
         shape.relationships,
         shape.tables,
+        shape.native.as_ref(),
     )?;
-    policy::validate_task_outputs(model, kind, outputs)?;
+    policy::validate_native_task_outputs(
+        model,
+        kind,
+        if *native_outputs { &[] } else { outputs },
+        *admitted,
+    )?;
     policy::validate_capacity(model, *context_rows)?;
     Ok(Bound {
         model,

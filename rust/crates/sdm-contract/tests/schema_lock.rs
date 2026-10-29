@@ -487,7 +487,13 @@ fn unaccounted(schema: &Value) -> Result<(), String> {
         }
         known.push(field);
     }
-    if listed.len() != JSON.len() {
+    // A typed payload can be named by both an operation's inline fields and
+    // the same struct retained inside another closed preparation product.
+    let locked = JSON
+        .iter()
+        .map(|(_, payload)| payload)
+        .collect::<std::collections::BTreeSet<_>>();
+    if listed.len() != locked.len() {
         return Err("the lock lists an attachment no field names".into());
     }
     for field in &found {
@@ -507,7 +513,23 @@ fn unaccounted(schema: &Value) -> Result<(), String> {
 
 /// The fields whose attachment is JSON of the contract's, with the entry of
 /// `$defs/Attachments` that locks it.
-const JSON: [(&str, &str); 38] = [
+const JSON: [(&str, &str); 72] = [
+    (
+        "Operation/prepare_materialize.input",
+        "PrepareMaterialize.input",
+    ),
+    (
+        "OperationResult/prepare_materialize.value",
+        "PreparedMaterialize.value",
+    ),
+    (
+        "MaterializePreparation/request.values",
+        "MaterializePreparation/request.values",
+    ),
+    ("Materialize.schema", "Materialize.schema"),
+    ("Materialize.query", "Materialize.query"),
+    ("Materialize.values", "Materialize.values"),
+    ("Materialize.candidates", "Materialize.candidates"),
     ("FrameManifest.inference", "FrameManifest.inference"),
     (
         "OperationResult/inferred_frames.value",
@@ -563,12 +585,121 @@ const JSON: [(&str, &str); 38] = [
         "OperationResult/describe_source.description",
         "DescribedSource.description",
     ),
+    (
+        "OperationResult/describe_source.frame_decimals",
+        "DescribedSource.frame_decimals",
+    ),
     ("OperationResult/predict.metadata", "Predicted.metadata"),
     ("SamplerState.memo", "SamplerState.memo"),
+    ("Operation/prepare_frames.input", "PrepareFrames.input"),
+    (
+        "OperationResult/prepare_frames.value",
+        "PreparedFrames.value",
+    ),
+    (
+        "FramePreparation/source_meaning.schema",
+        "FramePreparation/source_meaning.schema",
+    ),
+    (
+        "FramePreparation/caller_meaning.schema",
+        "FramePreparation/caller_meaning.schema",
+    ),
+    (
+        "FramePreparation/relationship_overlap.observations",
+        "FramePreparation/relationship_overlap.observations",
+    ),
+    (
+        "FramePreparation/question.schema",
+        "FramePreparation/question.schema",
+    ),
+    (
+        "FramePreparation/question.query",
+        "FramePreparation/question.query",
+    ),
+    (
+        "FramePreparation/graph.schema",
+        "FramePreparation/graph.schema",
+    ),
+    (
+        "FramePreparation/graph.frames",
+        "FramePreparation/graph.frames",
+    ),
+    (
+        "FramePreparation/graph.values",
+        "FramePreparation/graph.values",
+    ),
+    (
+        "FramePreparation/population.query",
+        "FramePreparation/population.query",
+    ),
+    (
+        "FramePreparation/population.values",
+        "FramePreparation/population.values",
+    ),
+    (
+        "FramePreparation/task.values",
+        "FramePreparation/task.values",
+    ),
+    (
+        "FramePreparation/plan.values",
+        "FramePreparation/plan.values",
+    ),
+    (
+        "FramePreparation/payload.values",
+        "FramePreparation/payload.values",
+    ),
+    (
+        "FrameQuestionInputs.candidates",
+        "FrameQuestionInputs.candidates",
+    ),
+    ("FrameQuestionInputs.values", "FrameQuestionInputs.values"),
+    (
+        "PreparedFrameQuestions.call_values",
+        "PreparedFrameQuestions.call_values",
+    ),
+    (
+        "FrameRequestPlan.sampling_values",
+        "FrameRequestPlan.sampling_values",
+    ),
+    ("NativePayload.wire", "NativePayload.wire"),
+    ("RelationalResponseData.rows", "RelationalResponseData.rows"),
+    ("RelationalResponsePart.rows", "RelationalResponsePart.rows"),
+    (
+        "RelationalResponsePart.target_rows",
+        "RelationalResponsePart.target_rows",
+    ),
+    (
+        "Preparation/check_relational_coverage.rows",
+        "CheckRelationalCoverage.rows",
+    ),
+    (
+        "RelationalAggregation/ranking.groups",
+        "RelationalAggregation/ranking.groups",
+    ),
+    (
+        "Predicted.metadata",
+        "RelationalResultData.predicted.metadata",
+    ),
 ];
 
 /// The other fields naming an attachment, and why the lock needs no entry.
-const OTHER: [(&str, &str); 27] = [
+const OTHER: [(&str, &str); 67] = [
+    (
+        "NativeTargetValues.times",
+        "Arrow complete current values of the actual captured source-time owner",
+    ),
+    (
+        "Materialize.indices",
+        "Arrow actual task indices, shared with Operation/materialize.indices",
+    ),
+    (
+        "PreparedFrameQuestions.question",
+        "Core-created immutable FrameQuestion resource",
+    ),
+    (
+        "FramePreparation/population.question",
+        "Core-created immutable FrameQuestion resource",
+    ),
     (
         "Preparation/context.context",
         "Arrow, with positional header facts",
@@ -641,6 +772,150 @@ const OTHER: [(&str, &str); 27] = [
     ("KeySet.attachment", "Arrow, with its schema"),
     ("OperationResult/predict.result", "Arrow, with its schema"),
     ("AnsweredParts.result", "Arrow, with its schema"),
+    (
+        "StringData.values",
+        "Arrow string column, interpreted only by its explicit StringEncoding",
+    ),
+    (
+        "TypedFrameSourceColumn.values",
+        "Arrow complete typed source column",
+    ),
+    (
+        "PreparedFrameGraph.owner",
+        "Core-created immutable FrameGraph resource",
+    ),
+    (
+        "PreparedFramePopulation.owner",
+        "Core-created immutable FramePopulation resource",
+    ),
+    (
+        "PreparedLookupRows.owner",
+        "Core-created immutable counted task lookup and actual issued read resource",
+    ),
+    (
+        "MaterializePreparation/lookup_rows.helpers",
+        "Arrow complete raw lookup helper rows before native business-column sanitation",
+    ),
+    (
+        "PreparedMaterializeValue.positions",
+        "Arrow actual validated lookup seed positions",
+    ),
+    (
+        "PreparedMaterializeSource.owner",
+        "Core-created immutable captured source/query resource",
+    ),
+    (
+        "PreparedMaterializePopulation.owner",
+        "Core-created immutable actual sampled population resource",
+    ),
+    (
+        "PreparedMaterializeBatch.owner",
+        "Core-created immutable completed label-batch resource",
+    ),
+    (
+        "PreparedFrameLabelGroups.owner",
+        "Core-created immutable evaluated-label resource, with its kind fixed by the closed frame or source producer",
+    ),
+    (
+        "RestoredFrameLabels.rows",
+        "Arrow complete aligned entity, anchor and restored target groups",
+    ),
+    (
+        "PreparedLabelInputs.owner",
+        "Core-created immutable reached label source rows and eligibility",
+    ),
+    (
+        "CompletedConditionValue.owner",
+        "Core-created immutable actual completed condition column resource",
+    ),
+    (
+        "PreparedTargetColumn.owner",
+        "Core-created immutable completed target values and actual predecessor lineage",
+    ),
+    (
+        "NativeTargetValues.rows",
+        "Arrow complete ordered source positions and actual target values",
+    ),
+    (
+        "NativeTargetValues.presence",
+        "Arrow complete native Boolean missingness observation at its reached extent",
+    ),
+    (
+        "PreparedFrameLabelBatch.owner",
+        "Core-created immutable FrameLabelBatch resource",
+    ),
+    (
+        "LabelledFrameTask.context",
+        "Arrow labelled entity, anchor and target rows",
+    ),
+    (
+        "CompletedFrameTask.prediction",
+        "Arrow complete narrowed prediction values",
+    ),
+    (
+        "CompletedFrameTask.owner",
+        "Core-created immutable FrameTask resource",
+    ),
+    (
+        "ResolvedFrameReferences.owner",
+        "Core-created immutable FrameReferences resource",
+    ),
+    (
+        "SampledFrameTable.rows",
+        "Arrow sampled feature rows and example ordinals",
+    ),
+    (
+        "SampledFrameTable.source_rows",
+        "Arrow original source-row ordinals",
+    ),
+    (
+        "SampledFrameLink.pairs",
+        "Arrow UInt64 sampled row-pair links",
+    ),
+    (
+        "SampledFrameContext.anchors",
+        "Arrow selected context anchors",
+    ),
+    (
+        "EncodedFramePart.payload",
+        "Core-created immutable FramePayload resource, not JSON bytes",
+    ),
+    (
+        "FramePreparation/graph.retained",
+        "Core-created immutable FrameGraph resource",
+    ),
+    (
+        "FramePredictionValues/core_keys.values",
+        "Arrow raw prediction keys",
+    ),
+    (
+        "FrameReferenceValues/core_keys.values",
+        "Arrow optional raw reference keys",
+    ),
+    (
+        "PreparedFrameQuestion.owner",
+        "Core-created immutable FrameQuestion resource",
+    ),
+    (
+        "FrameCheckpointManifest.retained",
+        "Core-created immutable FrameGraph resource",
+    ),
+    (
+        "NativePayload.value",
+        "Core-created immutable FramePayload resource for native inspection",
+    ),
+    (
+        "RelationalEncodedCall.body",
+        "Complete native-encoded model wire envelope",
+    ),
+    (
+        "RelationalResponseData.response",
+        "The already decoded external model wire response",
+    ),
+    (
+        "Predicted.result",
+        "Arrow laid-out relational result, with its schema",
+    ),
 ];
 
 fn generated() -> Value {
@@ -813,5 +1088,54 @@ fn the_writer_refuses_multiple_unmerged_entries_instead_of_guessing_history() {
 fn the_writer_refuses_unknown_or_unreadable_merged_version_proof() {
     for proof in [None, Some("not a lock entry"), Some("")] {
         assert!(updated_lock(MERGED_FOR_WRITER, proof, 30, "e", "sdm-contract-30.json").is_err());
+    }
+}
+
+#[test]
+fn native_overlap_and_caller_meaning_attachment_shapes_are_locked() {
+    let schema = generated();
+    let properties = &schema["$defs"]["Attachments"]["properties"];
+    assert_eq!(
+        properties["FramePreparation/relationship_overlap.observations"]["type"],
+        "array"
+    );
+    assert_eq!(
+        properties["FramePreparation/relationship_overlap.observations"]["items"]["$ref"],
+        "#/$defs/FrameRelationshipEvidence"
+    );
+    assert_eq!(
+        properties["FramePreparation/caller_meaning.schema"]["$ref"],
+        "#/$defs/HeldSchema"
+    );
+    let alternatives = schema["$defs"]["FrameRelationshipEvidence"]["oneOf"]
+        .as_array()
+        .unwrap();
+    assert_eq!(alternatives.len(), 2);
+    assert_eq!(
+        alternatives[0]["properties"]["observation"]["const"],
+        "unavailable"
+    );
+    assert_eq!(
+        alternatives[1]["properties"]["observation"]["const"],
+        "distinct"
+    );
+    assert_eq!(
+        schema["$defs"]["FrameCallerMeaning"]["properties"]["schema"]["$ref"],
+        "#/$defs/HeldSchema"
+    );
+    assert!(unaccounted(&schema).is_ok());
+}
+
+#[test]
+fn unavailable_native_overlap_evidence_is_a_closed_empty_fact() {
+    use sdm_contract::frames::materialize::FrameRelationshipEvidence;
+    let native = serde_json::json!({"observation":"unavailable"});
+    let observed: FrameRelationshipEvidence = serde_json::from_value(native.clone()).unwrap();
+    assert_eq!(serde_json::to_value(observed).unwrap(), native);
+    for extra in [
+        serde_json::json!({"observation":"unavailable","child":0}),
+        serde_json::json!({"observation":"unavailable","relationship":[]}),
+    ] {
+        assert!(serde_json::from_value::<FrameRelationshipEvidence>(extra).is_err());
     }
 }

@@ -313,6 +313,11 @@ pub struct CoreError {
     /// What callers branch on, by name.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub fields: BTreeMap<String, Detail>,
+    /// When native compatibility requires its exact public details, keep
+    /// presentation-only fields separate from what callers branch on.
+    /// Absence preserves the existing shared error details convention.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub public_details: Option<Box<BTreeMap<String, Detail>>>,
     /// The error this one was raised from.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cause: Option<Box<CoreError>>,
@@ -366,6 +371,7 @@ impl CoreError {
             part: None,
             message: message.into(),
             fields: BTreeMap::new(),
+            public_details: None,
             cause: None,
             retryable: false,
             drop_held: Vec::new(),
@@ -447,6 +453,15 @@ impl CoreError {
     #[must_use]
     pub fn with_field(mut self, name: &str, value: Detail) -> Self {
         self.fields.insert(name.to_owned(), value);
+        self
+    }
+
+    /// This error with each of `fields`.
+    #[must_use]
+    pub fn with_fields<'a>(mut self, fields: impl IntoIterator<Item = (&'a str, Detail)>) -> Self {
+        for (name, value) in fields {
+            self.fields.insert(name.to_owned(), value);
+        }
         self
     }
 
@@ -738,6 +753,7 @@ warning_codes! {
     TablesUnreached = "TABLES_UNREACHED",
     ColumnsUnread = "COLUMNS_UNREAD",
     FilterChoseExamples = "FILTER_CHOSE_EXAMPLES",
+    RelationshipsDisjoint = "RELATIONSHIPS_DISJOINT",
     ContextAnswers = "CONTEXT_ANSWERS",
     NullKeysLeftOut = "NULL_KEYS_LEFT_OUT",
     DateLiteralDayFirst = "DATE_LITERAL_DAY_FIRST",
@@ -829,6 +845,8 @@ sentences! {
     FrameKeyNotUnique = "frame_key_not_unique", E::InvalidRequest;
     FrameNameEmpty = "frame_name_empty", E::InvalidRequest;
     FrameNameCharacters = "frame_name_characters", E::InvalidRequest;
+    FrameCellBytes = "frame_cell_bytes", E::UnsupportedRequest;
+    FrameCellContainer = "frame_cell_container", E::UnsupportedRequest;
     FrameCategoricalSample = "frame_categorical_sample", W::FrameSchema;
     FrameKeyAmbiguous = "frame_key_ambiguous", W::FrameSchema;
     FrameKeylessShared = "frame_keyless_shared", W::FrameSchema;
@@ -850,6 +868,7 @@ sentences! {
     TimeColumnsRefusedBirthDate = "time_columns_refused_birth_date", W::TimeColumnsGuessed;
     ColumnsLeftOut = "columns_left_out", W::ColumnsLeftOut;
     TimeValuesUnread = "time_values_unread", W::TimeValuesUnread;
+    NativeTimeValuesUnread = "native_time_values_unread", W::TimeValuesUnread;
     DatesReadDayFirst = "dates_read_day_first", W::DatesReadDayFirst;
     KeyCandidatesTied = "key_candidates_tied", W::KeyCandidatesTied;
     LinkCannotJoinNotTheKey = "link_cannot_join_not_the_key", W::LinkCannotJoin;
@@ -916,6 +935,7 @@ sentences! {
     DirectFrame = "direct_frame", E::InvalidRequest;
     DirectRelated = "direct_related", E::UnsupportedRequest;
     DirectUnknownModel = "direct_unknown_model", E::UnknownModel;
+    RelationalOutputShapes = "relational_output_shapes", E::InternalError;
     DirectTask = "direct_task", E::InvalidRequest;
     DirectWireNonFinite = "direct_wire_non_finite", E::InvalidRequest;
     DirectWireFraction = "direct_wire_fraction", E::InvalidRequest;
@@ -925,6 +945,13 @@ sentences! {
     DirectPredictDtype = "direct_predict_dtype", E::InvalidRequest;
     DirectNullableCast = "direct_nullable_cast", E::InvalidRequest;
     DirectNativeFailure = "direct_native_failure", E::InvalidRequest;
+    FrameDecimalFraction = "frame_decimal_fraction", E::InvalidRequest;
+    FrameNativeFailure = "frame_native_failure", E::InvalidRequest;
+    FrameNativeInternal = "frame_native_internal", E::InternalError;
+    FrameNativeSignature = "frame_native_signature", E::InternalError;
+    FrameNativeCaller = "frame_native_caller", E::InvalidRequest;
+    FrameNativeBatchSmaller = "frame_native_batch_smaller", E::InvalidRequest;
+    FrameNativeBatchSingle = "frame_native_batch_single", E::InvalidRequest;
     DirectAnswersShown = "direct_answers_shown", W::FrameSchema;
     DirectLookup = "direct_lookup", E::InvalidRequest;
     DirectAmbiguous = "direct_ambiguous", E::InvalidRequest;
@@ -944,10 +971,20 @@ sentences! {
     DirectConstantClass = "direct_constant_class", W::FrameSchema;
     DirectTextCategorical = "direct_text_categorical", W::FrameSchema;
     DirectResponseContract = "direct_response_contract", E::InvalidResponse;
+    RelationalNotGathered = "relational_not_gathered", E::UnsupportedRequest;
+    RelationalRowsUncounted = "relational_rows_uncounted", E::InternalError;
     TabularRowBounds = "tabular_row_bounds", E::InvalidResponse;
     TabularRowRepeated = "tabular_row_repeated", E::InvalidResponse;
     TabularRowsUnanswered = "tabular_rows_unanswered", E::InvalidResponse;
     TabularIdMismatch = "tabular_id_mismatch", E::InvalidResponse;
+    RelationalRowMissing = "relational_row_missing", E::InvalidResponse;
+    RelationalRowBounds = "relational_row_bounds", E::InvalidResponse;
+    RelationalForecastStepMissing = "relational_forecast_step_missing", E::InvalidResponse;
+    RelationalForecastStepUnexpected = "relational_forecast_step_unexpected", E::InvalidResponse;
+    RelationalRowRepeated = "relational_row_repeated", E::InvalidResponse;
+    RelationalIdMissing = "relational_id_missing", E::InvalidResponse;
+    RelationalIdMismatch = "relational_id_mismatch", E::InvalidResponse;
+    RelationalRowsUnanswered = "relational_rows_unanswered", E::InvalidResponse;
     NotYetPredict = "not_yet_predict", E::UnsupportedRequest;
     ResponseUnread = "response_unread", E::InvalidResponse;
     ExplanationNotAMapping = "explanation_not_a_mapping", E::InvalidResponse;
@@ -978,6 +1015,7 @@ sentences! {
     OutputsNone = "outputs_none", E::InvalidRequest;
     NotFinite = "not_finite", E::InvalidRequest;
     PastInt64 = "past_int64", E::InvalidRequest;
+    PastInt64Bare = "past_int64_bare", E::InvalidRequest;
     ColumnTimePastNanoseconds = "column_time_past_nanoseconds", E::ValueOutOfRange;
     LagNegative = "lag_negative", E::InvalidRequest;
     LagNotWhole = "lag_not_whole", E::InvalidRequest;
@@ -1095,6 +1133,8 @@ sentences! {
     TablesUnreachedSeveral = "tables_unreached_several", W::TablesUnreached;
     ColumnsUnreadSeveral = "columns_unread_several", W::ColumnsUnread;
     FilterChoseExamples = "filter_chose_examples", W::FilterChoseExamples;
+    RelationshipsDisjointOne = "relationships_disjoint_one", W::RelationshipsDisjoint;
+    RelationshipsDisjointSeveral = "relationships_disjoint_several", W::RelationshipsDisjoint;
     ContextAnswersWindowed = "context_answers_windowed", W::ContextAnswers;
     ContextAnswersStatic = "context_answers_static", W::ContextAnswers;
     NullKeysLeftOut = "null_keys_left_out", W::NullKeysLeftOut;

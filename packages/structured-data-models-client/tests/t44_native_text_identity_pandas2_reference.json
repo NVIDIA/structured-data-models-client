@@ -1,0 +1,4604 @@
+{
+  "reference": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+  "python": "/home/awadaskar/.local/share/sdm-orchestration/phase-4/T4.4-text-features-20261027/fix1/pandas2-reference/bin/python",
+  "client": "/home/awadaskar/code/sdmc-reference/packages/structured-data-models-client/src/sdm_client/__init__.py",
+  "engine": "/home/awadaskar/.local/share/sdm-orchestration/phase-4/T4.4-text-features-20261027/fix1/pandas2-reference/lib/python3.12/site-packages/sdm_relational_engine/__init__.py",
+  "versions": {
+    "pandas": "2.2.3",
+    "numpy": "2.1.3",
+    "pyarrow": "19.0.1",
+    "unicode": "15.0.0"
+  },
+  "source_sha256": {
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py": "949cc50c1cc59d47e56505a9746848de7c07156308219de089481f7fc1fddc98",
+    "packages/structured-data-models-relational-engine/src/sdm_relational_engine/rfm/base/sampler.py": "096a7e020d906a01344608a21c0ae8b78d3432cf8f492dec60128487f262c072",
+    "packages/structured-data-models-relational-engine/src/sdm_relational_engine/rfm/rfm.py": "affd368eba23713043b5666ccbdea97c4faa697008c6ebc416415fdebe6c1f75",
+    "relationallib.cpython-312-x86_64-linux-gnu.so": "6f67fd89292364bc273828605d69e6e2f066f646c2a1d092274e643d211c4c41"
+  },
+  "probe_sha256": "a95b898aeeaa75bee8aa517478aa73f9b793978b3726815b37c83b97b3d17d24",
+  "bootstrap_sha256": "b5992fff92bb277dac21f7a1e92a1f86c70ee431a3a60ca95a8cc193ae3cae89",
+  "records": {
+    "ordinary-False": {
+      "payloads": [
+        {
+          "model": "kumo-relational",
+          "task": {
+            "kind": "regression",
+            "target": {
+              "column_name": "TARGET",
+              "dtype": "int64"
+            },
+            "entity_table_names": [
+              "users"
+            ],
+            "anchor_time_column": "__kumo_anchor_time"
+          },
+          "schema": {
+            "instance_table": {
+              "columns": {
+                "instance_id": {
+                  "dtype": "int64",
+                  "stype": "ID",
+                  "nullable": false
+                },
+                "__kumo_entity_ref_0": {
+                  "dtype": "int64",
+                  "stype": "ID"
+                },
+                "__kumo_anchor_time": {
+                  "dtype": "timestamp[us]",
+                  "stype": "timestamp",
+                  "nullable": false
+                },
+                "TARGET": {
+                  "dtype": "int64",
+                  "stype": "numerical"
+                }
+              },
+              "primary_key": "instance_id"
+            },
+            "related_tables": {
+              "users": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "nullable": false
+                  },
+                  "category": {
+                    "dtype": "string",
+                    "stype": "categorical"
+                  },
+                  "note": {
+                    "dtype": "stringlist",
+                    "stype": "text"
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "user_id"
+                ]
+              },
+              "orders": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "__node_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "marker": {
+                    "dtype": "int64",
+                    "stype": "numerical"
+                  },
+                  "note": {
+                    "dtype": "stringlist",
+                    "stype": "text"
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "stype": "ID"
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "__node_id"
+                ]
+              }
+            },
+            "relationships": [
+              {
+                "source_columns": [
+                  "__kumo_entity_ref_0"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              },
+              {
+                "source_table": "orders",
+                "source_columns": [
+                  "user_id"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              }
+            ]
+          },
+          "context": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time",
+                "TARGET"
+              ],
+              "rows": [
+                [
+                  0,
+                  1,
+                  "2262-04-11T23:47:16.709551Z",
+                  21
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id",
+                  "category",
+                  "note"
+                ],
+                "rows": [
+                  [
+                    0,
+                    1,
+                    "red",
+                    []
+                  ]
+                ]
+              },
+              "orders": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "note",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    0,
+                    0,
+                    3,
+                    [
+                      "\ud83d\ude3a"
+                    ],
+                    1
+                  ],
+                  [
+                    0,
+                    1,
+                    6,
+                    [
+                      "red"
+                    ],
+                    1
+                  ],
+                  [
+                    0,
+                    2,
+                    1,
+                    [],
+                    1
+                  ]
+                ]
+              }
+            }
+          },
+          "predict": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time"
+              ],
+              "rows": [
+                [
+                  3,
+                  7,
+                  "2262-04-11T23:47:16.709551Z"
+                ],
+                [
+                  4,
+                  8,
+                  "2262-04-11T23:47:16.709551Z"
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id",
+                  "category",
+                  "note"
+                ],
+                "rows": [
+                  [
+                    3,
+                    7,
+                    "blue",
+                    [
+                      "\u03bf\u03c2",
+                      "i\u0307"
+                    ]
+                  ],
+                  [
+                    4,
+                    8,
+                    "red",
+                    [
+                      "a\u03c2\u0301"
+                    ]
+                  ]
+                ]
+              },
+              "orders": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "note",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    3,
+                    9,
+                    53,
+                    [
+                      "\u6771\u4eac"
+                    ],
+                    7
+                  ],
+                  [
+                    3,
+                    10,
+                    51,
+                    [
+                      "\ud83d\ude3a"
+                    ],
+                    7
+                  ],
+                  [
+                    3,
+                    11,
+                    55,
+                    [
+                      "blue"
+                    ],
+                    7
+                  ],
+                  [
+                    4,
+                    12,
+                    58,
+                    [
+                      "\u00e9"
+                    ],
+                    8
+                  ],
+                  [
+                    4,
+                    13,
+                    57,
+                    [],
+                    8
+                  ],
+                  [
+                    4,
+                    14,
+                    62,
+                    [
+                      "red"
+                    ],
+                    8
+                  ]
+                ]
+              }
+            }
+          },
+          "output": {
+            "fields": [
+              "prediction"
+            ]
+          },
+          "inference": {
+            "run_mode": "fast",
+            "use_prediction_time": false,
+            "inference_config": {
+              "kind": "regression",
+              "num_estimators": 1,
+              "column_shuffle": false,
+              "category_shuffle": false,
+              "hop_shuffle": false,
+              "target_transforms": [
+                "quantile"
+              ],
+              "output_type": "median"
+            }
+          },
+          "metadata": {
+            "source_query": "PREDICT users.age FOR EACH users.user_id",
+            "num_context_examples": 3,
+            "num_prediction_examples": 2
+          }
+        }
+      ],
+      "result": {
+        "columns": [
+          "row_index",
+          "id",
+          "prediction"
+        ],
+        "index": [
+          0,
+          1
+        ],
+        "data": [
+          [
+            0,
+            7,
+            101.0
+          ],
+          [
+            1,
+            8,
+            101.0
+          ]
+        ]
+      },
+      "sent": [
+        {
+          "model": "kumo-relational",
+          "task": {
+            "kind": "regression",
+            "target": {
+              "column_name": "TARGET",
+              "dtype": "int64"
+            },
+            "entity_table_names": [
+              "users"
+            ],
+            "anchor_time_column": "__kumo_anchor_time"
+          },
+          "schema": {
+            "instance_table": {
+              "columns": {
+                "instance_id": {
+                  "dtype": "int64",
+                  "stype": "ID",
+                  "nullable": false
+                },
+                "__kumo_entity_ref_0": {
+                  "dtype": "int64",
+                  "stype": "ID"
+                },
+                "__kumo_anchor_time": {
+                  "dtype": "timestamp[us]",
+                  "stype": "timestamp",
+                  "nullable": false
+                },
+                "TARGET": {
+                  "dtype": "int64",
+                  "stype": "numerical"
+                }
+              },
+              "primary_key": "instance_id"
+            },
+            "related_tables": {
+              "users": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "nullable": false
+                  },
+                  "category": {
+                    "dtype": "string",
+                    "stype": "categorical"
+                  },
+                  "note": {
+                    "dtype": "stringlist",
+                    "stype": "text"
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "user_id"
+                ]
+              },
+              "orders": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "__node_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "marker": {
+                    "dtype": "int64",
+                    "stype": "numerical"
+                  },
+                  "note": {
+                    "dtype": "stringlist",
+                    "stype": "text"
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "stype": "ID"
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "__node_id"
+                ]
+              }
+            },
+            "relationships": [
+              {
+                "source_columns": [
+                  "__kumo_entity_ref_0"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              },
+              {
+                "source_table": "orders",
+                "source_columns": [
+                  "user_id"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              }
+            ]
+          },
+          "context": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time",
+                "TARGET"
+              ],
+              "rows": [
+                [
+                  0,
+                  1,
+                  "2262-04-11T23:47:16.709551Z",
+                  21
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id",
+                  "category",
+                  "note"
+                ],
+                "rows": [
+                  [
+                    0,
+                    1,
+                    "red",
+                    []
+                  ]
+                ]
+              },
+              "orders": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "note",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    0,
+                    0,
+                    3,
+                    [
+                      "\ud83d\ude3a"
+                    ],
+                    1
+                  ],
+                  [
+                    0,
+                    1,
+                    6,
+                    [
+                      "red"
+                    ],
+                    1
+                  ],
+                  [
+                    0,
+                    2,
+                    1,
+                    [],
+                    1
+                  ]
+                ]
+              }
+            }
+          },
+          "predict": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time"
+              ],
+              "rows": [
+                [
+                  3,
+                  7,
+                  "2262-04-11T23:47:16.709551Z"
+                ],
+                [
+                  4,
+                  8,
+                  "2262-04-11T23:47:16.709551Z"
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id",
+                  "category",
+                  "note"
+                ],
+                "rows": [
+                  [
+                    3,
+                    7,
+                    "blue",
+                    [
+                      "\u03bf\u03c2",
+                      "i\u0307"
+                    ]
+                  ],
+                  [
+                    4,
+                    8,
+                    "red",
+                    [
+                      "a\u03c2\u0301"
+                    ]
+                  ]
+                ]
+              },
+              "orders": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "note",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    3,
+                    9,
+                    53,
+                    [
+                      "\u6771\u4eac"
+                    ],
+                    7
+                  ],
+                  [
+                    3,
+                    10,
+                    51,
+                    [
+                      "\ud83d\ude3a"
+                    ],
+                    7
+                  ],
+                  [
+                    3,
+                    11,
+                    55,
+                    [
+                      "blue"
+                    ],
+                    7
+                  ],
+                  [
+                    4,
+                    12,
+                    58,
+                    [
+                      "\u00e9"
+                    ],
+                    8
+                  ],
+                  [
+                    4,
+                    13,
+                    57,
+                    [],
+                    8
+                  ],
+                  [
+                    4,
+                    14,
+                    62,
+                    [
+                      "red"
+                    ],
+                    8
+                  ]
+                ]
+              }
+            }
+          },
+          "output": {
+            "fields": [
+              "prediction"
+            ],
+            "prediction_statistic": "median"
+          },
+          "inference": {
+            "run_mode": "fast",
+            "use_prediction_time": false
+          },
+          "metadata": {
+            "source_query": "PREDICT users.age FOR EACH users.user_id",
+            "num_context_examples": 3,
+            "num_prediction_examples": 2,
+            "request_id": "portable-identity-ordinary-0"
+          }
+        }
+      ],
+      "local_events": [
+        {
+          "stage": "enter",
+          "neighbors": [
+            3
+          ],
+          "seed": 7
+        },
+        {
+          "stage": "exit",
+          "markers": [
+            1,
+            3,
+            6,
+            49,
+            50,
+            51,
+            53,
+            55,
+            57,
+            58,
+            60,
+            61,
+            62
+          ]
+        }
+      ],
+      "warnings": [
+        {
+          "type": "UserWarning",
+          "message": "Received custom 'num_neighbors' option; ignoring custom 'num_hops=1' option"
+        },
+        {
+          "type": "SDMWarning",
+          "message": "orders.note, users.note are typed text, which this model does not read, so the request is answered without them and they contribute nothing to the prediction. Type a column categorical if its values are labels rather than prose, or leave it out to say so."
+        },
+        {
+          "type": "SDMWarning",
+          "message": "2 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it."
+        },
+        {
+          "type": "SDMWarning",
+          "message": "every context row has the same users.age, so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ."
+        }
+      ],
+      "identity_observations": []
+    },
+    "ordinary-True": {
+      "payloads": [
+        {
+          "model": "kumo-relational",
+          "task": {
+            "kind": "regression",
+            "target": {
+              "column_name": "TARGET",
+              "dtype": "int64"
+            },
+            "entity_table_names": [
+              "users"
+            ],
+            "anchor_time_column": "__kumo_anchor_time"
+          },
+          "schema": {
+            "instance_table": {
+              "columns": {
+                "instance_id": {
+                  "dtype": "int64",
+                  "stype": "ID",
+                  "nullable": false
+                },
+                "__kumo_entity_ref_0": {
+                  "dtype": "int64",
+                  "stype": "ID"
+                },
+                "__kumo_anchor_time": {
+                  "dtype": "timestamp[us]",
+                  "stype": "timestamp",
+                  "nullable": false
+                },
+                "TARGET": {
+                  "dtype": "int64",
+                  "stype": "numerical"
+                }
+              },
+              "primary_key": "instance_id"
+            },
+            "related_tables": {
+              "users": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "nullable": false
+                  },
+                  "category": {
+                    "dtype": "string",
+                    "stype": "categorical"
+                  },
+                  "note": {
+                    "dtype": "stringlist",
+                    "stype": "text"
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "user_id"
+                ]
+              },
+              "orders": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "__node_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "marker": {
+                    "dtype": "int64",
+                    "stype": "numerical"
+                  },
+                  "note": {
+                    "dtype": "stringlist",
+                    "stype": "text"
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "stype": "ID"
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "__node_id"
+                ]
+              }
+            },
+            "relationships": [
+              {
+                "source_columns": [
+                  "__kumo_entity_ref_0"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              },
+              {
+                "source_table": "orders",
+                "source_columns": [
+                  "user_id"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              }
+            ]
+          },
+          "context": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time",
+                "TARGET"
+              ],
+              "rows": [
+                [
+                  0,
+                  1,
+                  "2262-04-11T23:47:16.709551Z",
+                  21
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id",
+                  "category",
+                  "note"
+                ],
+                "rows": [
+                  [
+                    0,
+                    1,
+                    "red",
+                    []
+                  ]
+                ]
+              },
+              "orders": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "note",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    0,
+                    0,
+                    3,
+                    [
+                      "\ud83d\ude3a"
+                    ],
+                    1
+                  ],
+                  [
+                    0,
+                    1,
+                    6,
+                    [
+                      "red"
+                    ],
+                    1
+                  ],
+                  [
+                    0,
+                    2,
+                    1,
+                    [],
+                    1
+                  ]
+                ]
+              }
+            }
+          },
+          "predict": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time"
+              ],
+              "rows": [
+                [
+                  3,
+                  7,
+                  "2262-04-11T23:47:16.709551Z"
+                ],
+                [
+                  4,
+                  8,
+                  "2262-04-11T23:47:16.709551Z"
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id",
+                  "category",
+                  "note"
+                ],
+                "rows": [
+                  [
+                    3,
+                    7,
+                    "blue",
+                    [
+                      "\u03bf\u03c2",
+                      "i\u0307"
+                    ]
+                  ],
+                  [
+                    4,
+                    8,
+                    "red",
+                    [
+                      "a\u03c2\u0301"
+                    ]
+                  ]
+                ]
+              },
+              "orders": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "note",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    3,
+                    9,
+                    53,
+                    [
+                      "\u6771\u4eac"
+                    ],
+                    7
+                  ],
+                  [
+                    3,
+                    10,
+                    51,
+                    [
+                      "\ud83d\ude3a"
+                    ],
+                    7
+                  ],
+                  [
+                    3,
+                    11,
+                    55,
+                    [
+                      "blue"
+                    ],
+                    7
+                  ],
+                  [
+                    4,
+                    12,
+                    58,
+                    [
+                      "\u00e9"
+                    ],
+                    8
+                  ],
+                  [
+                    4,
+                    13,
+                    57,
+                    [],
+                    8
+                  ],
+                  [
+                    4,
+                    14,
+                    62,
+                    [
+                      "red"
+                    ],
+                    8
+                  ]
+                ]
+              }
+            }
+          },
+          "output": {
+            "fields": [
+              "prediction"
+            ]
+          },
+          "inference": {
+            "run_mode": "fast",
+            "use_prediction_time": false,
+            "inference_config": {
+              "kind": "regression",
+              "num_estimators": 1,
+              "column_shuffle": false,
+              "category_shuffle": false,
+              "hop_shuffle": false,
+              "target_transforms": [
+                "quantile"
+              ],
+              "output_type": "median"
+            }
+          },
+          "metadata": {
+            "source_query": "PREDICT users.age FOR EACH users.user_id",
+            "num_context_examples": 3,
+            "num_prediction_examples": 2
+          }
+        }
+      ],
+      "result": {
+        "columns": [
+          "row_index",
+          "id",
+          "prediction"
+        ],
+        "index": [
+          0,
+          1
+        ],
+        "data": [
+          [
+            0,
+            7,
+            101.0
+          ],
+          [
+            1,
+            8,
+            101.0
+          ]
+        ]
+      },
+      "sent": [
+        {
+          "model": "kumo-relational",
+          "task": {
+            "kind": "regression",
+            "target": {
+              "column_name": "TARGET",
+              "dtype": "int64"
+            },
+            "entity_table_names": [
+              "users"
+            ],
+            "anchor_time_column": "__kumo_anchor_time"
+          },
+          "schema": {
+            "instance_table": {
+              "columns": {
+                "instance_id": {
+                  "dtype": "int64",
+                  "stype": "ID",
+                  "nullable": false
+                },
+                "__kumo_entity_ref_0": {
+                  "dtype": "int64",
+                  "stype": "ID"
+                },
+                "__kumo_anchor_time": {
+                  "dtype": "timestamp[us]",
+                  "stype": "timestamp",
+                  "nullable": false
+                },
+                "TARGET": {
+                  "dtype": "int64",
+                  "stype": "numerical"
+                }
+              },
+              "primary_key": "instance_id"
+            },
+            "related_tables": {
+              "users": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "nullable": false
+                  },
+                  "category": {
+                    "dtype": "string",
+                    "stype": "categorical"
+                  },
+                  "note": {
+                    "dtype": "stringlist",
+                    "stype": "text"
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "user_id"
+                ]
+              },
+              "orders": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "__node_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "marker": {
+                    "dtype": "int64",
+                    "stype": "numerical"
+                  },
+                  "note": {
+                    "dtype": "stringlist",
+                    "stype": "text"
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "stype": "ID"
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "__node_id"
+                ]
+              }
+            },
+            "relationships": [
+              {
+                "source_columns": [
+                  "__kumo_entity_ref_0"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              },
+              {
+                "source_table": "orders",
+                "source_columns": [
+                  "user_id"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              }
+            ]
+          },
+          "context": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time",
+                "TARGET"
+              ],
+              "rows": [
+                [
+                  0,
+                  1,
+                  "2262-04-11T23:47:16.709551Z",
+                  21
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id",
+                  "category",
+                  "note"
+                ],
+                "rows": [
+                  [
+                    0,
+                    1,
+                    "red",
+                    []
+                  ]
+                ]
+              },
+              "orders": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "note",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    0,
+                    0,
+                    3,
+                    [
+                      "\ud83d\ude3a"
+                    ],
+                    1
+                  ],
+                  [
+                    0,
+                    1,
+                    6,
+                    [
+                      "red"
+                    ],
+                    1
+                  ],
+                  [
+                    0,
+                    2,
+                    1,
+                    [],
+                    1
+                  ]
+                ]
+              }
+            }
+          },
+          "predict": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time"
+              ],
+              "rows": [
+                [
+                  3,
+                  7,
+                  "2262-04-11T23:47:16.709551Z"
+                ],
+                [
+                  4,
+                  8,
+                  "2262-04-11T23:47:16.709551Z"
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id",
+                  "category",
+                  "note"
+                ],
+                "rows": [
+                  [
+                    3,
+                    7,
+                    "blue",
+                    [
+                      "\u03bf\u03c2",
+                      "i\u0307"
+                    ]
+                  ],
+                  [
+                    4,
+                    8,
+                    "red",
+                    [
+                      "a\u03c2\u0301"
+                    ]
+                  ]
+                ]
+              },
+              "orders": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "note",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    3,
+                    9,
+                    53,
+                    [
+                      "\u6771\u4eac"
+                    ],
+                    7
+                  ],
+                  [
+                    3,
+                    10,
+                    51,
+                    [
+                      "\ud83d\ude3a"
+                    ],
+                    7
+                  ],
+                  [
+                    3,
+                    11,
+                    55,
+                    [
+                      "blue"
+                    ],
+                    7
+                  ],
+                  [
+                    4,
+                    12,
+                    58,
+                    [
+                      "\u00e9"
+                    ],
+                    8
+                  ],
+                  [
+                    4,
+                    13,
+                    57,
+                    [],
+                    8
+                  ],
+                  [
+                    4,
+                    14,
+                    62,
+                    [
+                      "red"
+                    ],
+                    8
+                  ]
+                ]
+              }
+            }
+          },
+          "output": {
+            "fields": [
+              "prediction"
+            ],
+            "prediction_statistic": "median"
+          },
+          "inference": {
+            "run_mode": "fast",
+            "use_prediction_time": false
+          },
+          "metadata": {
+            "source_query": "PREDICT users.age FOR EACH users.user_id",
+            "num_context_examples": 3,
+            "num_prediction_examples": 2,
+            "request_id": "portable-identity-ordinary-0"
+          }
+        }
+      ],
+      "local_events": [
+        {
+          "stage": "enter",
+          "neighbors": [
+            3
+          ],
+          "seed": 7
+        },
+        {
+          "stage": "exit",
+          "markers": [
+            1,
+            3,
+            6,
+            49,
+            50,
+            51,
+            53,
+            55,
+            57,
+            58,
+            60,
+            61,
+            62
+          ]
+        }
+      ],
+      "warnings": [
+        {
+          "type": "UserWarning",
+          "message": "Received custom 'num_neighbors' option; ignoring custom 'num_hops=1' option"
+        },
+        {
+          "type": "SDMWarning",
+          "message": "orders.note, users.note are typed text, which this model does not read, so the request is answered without them and they contribute nothing to the prediction. Type a column categorical if its values are labels rather than prose, or leave it out to say so."
+        },
+        {
+          "type": "SDMWarning",
+          "message": "2 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it."
+        },
+        {
+          "type": "SDMWarning",
+          "message": "every context row has the same users.age, so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ."
+        }
+      ],
+      "identity_observations": [
+        {
+          "input": "\u0130\u03a3\u2c2f\u1c89\ua7ce",
+          "output": "i\u03c3\u2c5f\u1c89\ua7ce",
+          "options_before": [
+            "pyarrow",
+            false
+          ],
+          "options_after": [
+            "pyarrow",
+            false
+          ],
+          "local_events_before": [
+            {
+              "stage": "enter",
+              "neighbors": [
+                3
+              ],
+              "seed": 7
+            },
+            {
+              "stage": "exit",
+              "markers": [
+                1,
+                3,
+                6,
+                49,
+                50,
+                51,
+                53,
+                55,
+                57,
+                58,
+                60,
+                61,
+                62
+              ]
+            }
+          ]
+        },
+        {
+          "input": "\u0130\u03a3\u2c2f\u1c89\ua7ce",
+          "output": "i\u03c3\u2c5f\u1c89\ua7ce",
+          "options_before": [
+            "pyarrow",
+            false
+          ],
+          "options_after": [
+            "pyarrow",
+            false
+          ],
+          "local_events_before": [
+            {
+              "stage": "enter",
+              "neighbors": [
+                3
+              ],
+              "seed": 7
+            },
+            {
+              "stage": "exit",
+              "markers": [
+                1,
+                3,
+                6,
+                49,
+                50,
+                51,
+                53,
+                55,
+                57,
+                58,
+                60,
+                61,
+                62
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "batched-False": {
+      "payloads": [
+        {
+          "model": "kumo-relational",
+          "task": {
+            "kind": "regression",
+            "target": {
+              "column_name": "TARGET",
+              "dtype": "int64"
+            },
+            "entity_table_names": [
+              "users"
+            ],
+            "anchor_time_column": "__kumo_anchor_time"
+          },
+          "schema": {
+            "instance_table": {
+              "columns": {
+                "instance_id": {
+                  "dtype": "int64",
+                  "stype": "ID",
+                  "nullable": false
+                },
+                "__kumo_entity_ref_0": {
+                  "dtype": "int64",
+                  "stype": "ID"
+                },
+                "__kumo_anchor_time": {
+                  "dtype": "timestamp[us]",
+                  "stype": "timestamp",
+                  "nullable": false
+                },
+                "TARGET": {
+                  "dtype": "int64",
+                  "stype": "numerical"
+                }
+              },
+              "primary_key": "instance_id"
+            },
+            "related_tables": {
+              "users": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "nullable": false
+                  },
+                  "category": {
+                    "dtype": "string",
+                    "stype": "categorical"
+                  },
+                  "note": {
+                    "dtype": "stringlist",
+                    "stype": "text"
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "user_id"
+                ]
+              },
+              "orders": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "__node_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "marker": {
+                    "dtype": "int64",
+                    "stype": "numerical"
+                  },
+                  "note": {
+                    "dtype": "stringlist",
+                    "stype": "text"
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "stype": "ID"
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "__node_id"
+                ]
+              }
+            },
+            "relationships": [
+              {
+                "source_columns": [
+                  "__kumo_entity_ref_0"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              },
+              {
+                "source_table": "orders",
+                "source_columns": [
+                  "user_id"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              }
+            ]
+          },
+          "context": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time",
+                "TARGET"
+              ],
+              "rows": [
+                [
+                  0,
+                  1,
+                  "2262-04-11T23:47:16.709551Z",
+                  21
+                ],
+                [
+                  2,
+                  8,
+                  "2262-04-11T23:47:16.709551Z",
+                  28
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id",
+                  "category",
+                  "note"
+                ],
+                "rows": [
+                  [
+                    0,
+                    1,
+                    "red",
+                    []
+                  ],
+                  [
+                    2,
+                    8,
+                    "red",
+                    [
+                      "a\u03c2\u0301"
+                    ]
+                  ]
+                ]
+              },
+              "orders": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "note",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    0,
+                    0,
+                    3,
+                    [
+                      "\ud83d\ude3a"
+                    ],
+                    1
+                  ],
+                  [
+                    0,
+                    1,
+                    6,
+                    [
+                      "red"
+                    ],
+                    1
+                  ],
+                  [
+                    0,
+                    2,
+                    1,
+                    [],
+                    1
+                  ],
+                  [
+                    2,
+                    6,
+                    61,
+                    [
+                      "\u6771\u4eac"
+                    ],
+                    8
+                  ],
+                  [
+                    2,
+                    7,
+                    57,
+                    [],
+                    8
+                  ],
+                  [
+                    2,
+                    8,
+                    60,
+                    [
+                      "a\u0000b"
+                    ],
+                    8
+                  ]
+                ]
+              }
+            }
+          },
+          "predict": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time"
+              ],
+              "rows": [
+                [
+                  3,
+                  7,
+                  "2262-04-11T23:47:16.709551Z"
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id",
+                  "category",
+                  "note"
+                ],
+                "rows": [
+                  [
+                    3,
+                    7,
+                    "blue",
+                    [
+                      "\u03bf\u03c2",
+                      "i\u0307"
+                    ]
+                  ]
+                ]
+              },
+              "orders": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "note",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    3,
+                    9,
+                    53,
+                    [
+                      "\u6771\u4eac"
+                    ],
+                    7
+                  ],
+                  [
+                    3,
+                    10,
+                    51,
+                    [
+                      "\ud83d\ude3a"
+                    ],
+                    7
+                  ],
+                  [
+                    3,
+                    11,
+                    55,
+                    [
+                      "blue"
+                    ],
+                    7
+                  ]
+                ]
+              }
+            }
+          },
+          "output": {
+            "fields": [
+              "prediction"
+            ]
+          },
+          "inference": {
+            "run_mode": "fast",
+            "use_prediction_time": false,
+            "inference_config": {
+              "kind": "regression",
+              "num_estimators": 1,
+              "column_shuffle": false,
+              "category_shuffle": false,
+              "hop_shuffle": false,
+              "target_transforms": [
+                "quantile"
+              ],
+              "output_type": "median"
+            }
+          },
+          "metadata": {
+            "source_query": "PREDICT users.age FOR EACH users.user_id",
+            "num_context_examples": 3,
+            "num_prediction_examples": 1
+          }
+        },
+        {
+          "model": "kumo-relational",
+          "task": {
+            "kind": "regression",
+            "target": {
+              "column_name": "TARGET",
+              "dtype": "int64"
+            },
+            "entity_table_names": [
+              "users"
+            ],
+            "anchor_time_column": "__kumo_anchor_time"
+          },
+          "schema": {
+            "instance_table": {
+              "columns": {
+                "instance_id": {
+                  "dtype": "int64",
+                  "stype": "ID",
+                  "nullable": false
+                },
+                "__kumo_entity_ref_0": {
+                  "dtype": "int64",
+                  "stype": "ID"
+                },
+                "__kumo_anchor_time": {
+                  "dtype": "timestamp[us]",
+                  "stype": "timestamp",
+                  "nullable": false
+                },
+                "TARGET": {
+                  "dtype": "int64",
+                  "stype": "numerical"
+                }
+              },
+              "primary_key": "instance_id"
+            },
+            "related_tables": {
+              "users": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "nullable": false
+                  },
+                  "category": {
+                    "dtype": "string",
+                    "stype": "categorical"
+                  },
+                  "note": {
+                    "dtype": "stringlist",
+                    "stype": "text"
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "user_id"
+                ]
+              },
+              "orders": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "__node_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "marker": {
+                    "dtype": "int64",
+                    "stype": "numerical"
+                  },
+                  "note": {
+                    "dtype": "stringlist",
+                    "stype": "text"
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "stype": "ID"
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "__node_id"
+                ]
+              }
+            },
+            "relationships": [
+              {
+                "source_columns": [
+                  "__kumo_entity_ref_0"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              },
+              {
+                "source_table": "orders",
+                "source_columns": [
+                  "user_id"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              }
+            ]
+          },
+          "context": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time",
+                "TARGET"
+              ],
+              "rows": [
+                [
+                  0,
+                  1,
+                  "2262-04-11T23:47:16.709551Z",
+                  21
+                ],
+                [
+                  1,
+                  7,
+                  "2262-04-11T23:47:16.709551Z",
+                  27
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id",
+                  "category",
+                  "note"
+                ],
+                "rows": [
+                  [
+                    0,
+                    1,
+                    "red",
+                    []
+                  ],
+                  [
+                    1,
+                    7,
+                    "blue",
+                    [
+                      "\u03bf\u03c2",
+                      "i\u0307"
+                    ]
+                  ]
+                ]
+              },
+              "orders": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "note",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    0,
+                    0,
+                    3,
+                    [
+                      "\ud83d\ude3a"
+                    ],
+                    1
+                  ],
+                  [
+                    0,
+                    1,
+                    6,
+                    [
+                      "red"
+                    ],
+                    1
+                  ],
+                  [
+                    0,
+                    2,
+                    1,
+                    [],
+                    1
+                  ],
+                  [
+                    1,
+                    3,
+                    50,
+                    [
+                      "\u00e9"
+                    ],
+                    7
+                  ],
+                  [
+                    1,
+                    4,
+                    49,
+                    [],
+                    7
+                  ],
+                  [
+                    1,
+                    5,
+                    51,
+                    [
+                      "\ud83d\ude3a"
+                    ],
+                    7
+                  ]
+                ]
+              }
+            }
+          },
+          "predict": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time"
+              ],
+              "rows": [
+                [
+                  3,
+                  8,
+                  "2262-04-11T23:47:16.709551Z"
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id",
+                  "category",
+                  "note"
+                ],
+                "rows": [
+                  [
+                    3,
+                    8,
+                    "red",
+                    [
+                      "a\u03c2\u0301"
+                    ]
+                  ]
+                ]
+              },
+              "orders": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "note",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    3,
+                    9,
+                    61,
+                    [
+                      "\u6771\u4eac"
+                    ],
+                    8
+                  ],
+                  [
+                    3,
+                    10,
+                    59,
+                    [
+                      "\ud83d\ude3a"
+                    ],
+                    8
+                  ],
+                  [
+                    3,
+                    11,
+                    63,
+                    [
+                      "blue"
+                    ],
+                    8
+                  ]
+                ]
+              }
+            }
+          },
+          "output": {
+            "fields": [
+              "prediction"
+            ]
+          },
+          "inference": {
+            "run_mode": "fast",
+            "use_prediction_time": false,
+            "inference_config": {
+              "kind": "regression",
+              "num_estimators": 1,
+              "column_shuffle": false,
+              "category_shuffle": false,
+              "hop_shuffle": false,
+              "target_transforms": [
+                "quantile"
+              ],
+              "output_type": "median"
+            }
+          },
+          "metadata": {
+            "source_query": "PREDICT users.age FOR EACH users.user_id",
+            "num_context_examples": 3,
+            "num_prediction_examples": 1
+          }
+        }
+      ],
+      "result": {
+        "columns": [
+          "row_index",
+          "id",
+          "prediction"
+        ],
+        "index": [
+          0,
+          1
+        ],
+        "data": [
+          [
+            0,
+            7,
+            101.0
+          ],
+          [
+            1,
+            8,
+            102.0
+          ]
+        ]
+      },
+      "sent": [
+        {
+          "model": "kumo-relational",
+          "task": {
+            "kind": "regression",
+            "target": {
+              "column_name": "TARGET",
+              "dtype": "int64"
+            },
+            "entity_table_names": [
+              "users"
+            ],
+            "anchor_time_column": "__kumo_anchor_time"
+          },
+          "schema": {
+            "instance_table": {
+              "columns": {
+                "instance_id": {
+                  "dtype": "int64",
+                  "stype": "ID",
+                  "nullable": false
+                },
+                "__kumo_entity_ref_0": {
+                  "dtype": "int64",
+                  "stype": "ID"
+                },
+                "__kumo_anchor_time": {
+                  "dtype": "timestamp[us]",
+                  "stype": "timestamp",
+                  "nullable": false
+                },
+                "TARGET": {
+                  "dtype": "int64",
+                  "stype": "numerical"
+                }
+              },
+              "primary_key": "instance_id"
+            },
+            "related_tables": {
+              "users": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "nullable": false
+                  },
+                  "category": {
+                    "dtype": "string",
+                    "stype": "categorical"
+                  },
+                  "note": {
+                    "dtype": "stringlist",
+                    "stype": "text"
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "user_id"
+                ]
+              },
+              "orders": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "__node_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "marker": {
+                    "dtype": "int64",
+                    "stype": "numerical"
+                  },
+                  "note": {
+                    "dtype": "stringlist",
+                    "stype": "text"
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "stype": "ID"
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "__node_id"
+                ]
+              }
+            },
+            "relationships": [
+              {
+                "source_columns": [
+                  "__kumo_entity_ref_0"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              },
+              {
+                "source_table": "orders",
+                "source_columns": [
+                  "user_id"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              }
+            ]
+          },
+          "context": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time",
+                "TARGET"
+              ],
+              "rows": [
+                [
+                  0,
+                  1,
+                  "2262-04-11T23:47:16.709551Z",
+                  21
+                ],
+                [
+                  2,
+                  8,
+                  "2262-04-11T23:47:16.709551Z",
+                  28
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id",
+                  "category",
+                  "note"
+                ],
+                "rows": [
+                  [
+                    0,
+                    1,
+                    "red",
+                    []
+                  ],
+                  [
+                    2,
+                    8,
+                    "red",
+                    [
+                      "a\u03c2\u0301"
+                    ]
+                  ]
+                ]
+              },
+              "orders": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "note",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    0,
+                    0,
+                    3,
+                    [
+                      "\ud83d\ude3a"
+                    ],
+                    1
+                  ],
+                  [
+                    0,
+                    1,
+                    6,
+                    [
+                      "red"
+                    ],
+                    1
+                  ],
+                  [
+                    0,
+                    2,
+                    1,
+                    [],
+                    1
+                  ],
+                  [
+                    2,
+                    6,
+                    61,
+                    [
+                      "\u6771\u4eac"
+                    ],
+                    8
+                  ],
+                  [
+                    2,
+                    7,
+                    57,
+                    [],
+                    8
+                  ],
+                  [
+                    2,
+                    8,
+                    60,
+                    [
+                      "a\u0000b"
+                    ],
+                    8
+                  ]
+                ]
+              }
+            }
+          },
+          "predict": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time"
+              ],
+              "rows": [
+                [
+                  3,
+                  7,
+                  "2262-04-11T23:47:16.709551Z"
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id",
+                  "category",
+                  "note"
+                ],
+                "rows": [
+                  [
+                    3,
+                    7,
+                    "blue",
+                    [
+                      "\u03bf\u03c2",
+                      "i\u0307"
+                    ]
+                  ]
+                ]
+              },
+              "orders": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "note",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    3,
+                    9,
+                    53,
+                    [
+                      "\u6771\u4eac"
+                    ],
+                    7
+                  ],
+                  [
+                    3,
+                    10,
+                    51,
+                    [
+                      "\ud83d\ude3a"
+                    ],
+                    7
+                  ],
+                  [
+                    3,
+                    11,
+                    55,
+                    [
+                      "blue"
+                    ],
+                    7
+                  ]
+                ]
+              }
+            }
+          },
+          "output": {
+            "fields": [
+              "prediction"
+            ],
+            "prediction_statistic": "median"
+          },
+          "inference": {
+            "run_mode": "fast",
+            "use_prediction_time": false
+          },
+          "metadata": {
+            "source_query": "PREDICT users.age FOR EACH users.user_id",
+            "num_context_examples": 3,
+            "num_prediction_examples": 1,
+            "request_id": "portable-identity-batched-0"
+          }
+        },
+        {
+          "model": "kumo-relational",
+          "task": {
+            "kind": "regression",
+            "target": {
+              "column_name": "TARGET",
+              "dtype": "int64"
+            },
+            "entity_table_names": [
+              "users"
+            ],
+            "anchor_time_column": "__kumo_anchor_time"
+          },
+          "schema": {
+            "instance_table": {
+              "columns": {
+                "instance_id": {
+                  "dtype": "int64",
+                  "stype": "ID",
+                  "nullable": false
+                },
+                "__kumo_entity_ref_0": {
+                  "dtype": "int64",
+                  "stype": "ID"
+                },
+                "__kumo_anchor_time": {
+                  "dtype": "timestamp[us]",
+                  "stype": "timestamp",
+                  "nullable": false
+                },
+                "TARGET": {
+                  "dtype": "int64",
+                  "stype": "numerical"
+                }
+              },
+              "primary_key": "instance_id"
+            },
+            "related_tables": {
+              "users": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "nullable": false
+                  },
+                  "category": {
+                    "dtype": "string",
+                    "stype": "categorical"
+                  },
+                  "note": {
+                    "dtype": "stringlist",
+                    "stype": "text"
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "user_id"
+                ]
+              },
+              "orders": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "__node_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "marker": {
+                    "dtype": "int64",
+                    "stype": "numerical"
+                  },
+                  "note": {
+                    "dtype": "stringlist",
+                    "stype": "text"
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "stype": "ID"
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "__node_id"
+                ]
+              }
+            },
+            "relationships": [
+              {
+                "source_columns": [
+                  "__kumo_entity_ref_0"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              },
+              {
+                "source_table": "orders",
+                "source_columns": [
+                  "user_id"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              }
+            ]
+          },
+          "context": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time",
+                "TARGET"
+              ],
+              "rows": [
+                [
+                  0,
+                  1,
+                  "2262-04-11T23:47:16.709551Z",
+                  21
+                ],
+                [
+                  1,
+                  7,
+                  "2262-04-11T23:47:16.709551Z",
+                  27
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id",
+                  "category",
+                  "note"
+                ],
+                "rows": [
+                  [
+                    0,
+                    1,
+                    "red",
+                    []
+                  ],
+                  [
+                    1,
+                    7,
+                    "blue",
+                    [
+                      "\u03bf\u03c2",
+                      "i\u0307"
+                    ]
+                  ]
+                ]
+              },
+              "orders": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "note",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    0,
+                    0,
+                    3,
+                    [
+                      "\ud83d\ude3a"
+                    ],
+                    1
+                  ],
+                  [
+                    0,
+                    1,
+                    6,
+                    [
+                      "red"
+                    ],
+                    1
+                  ],
+                  [
+                    0,
+                    2,
+                    1,
+                    [],
+                    1
+                  ],
+                  [
+                    1,
+                    3,
+                    50,
+                    [
+                      "\u00e9"
+                    ],
+                    7
+                  ],
+                  [
+                    1,
+                    4,
+                    49,
+                    [],
+                    7
+                  ],
+                  [
+                    1,
+                    5,
+                    51,
+                    [
+                      "\ud83d\ude3a"
+                    ],
+                    7
+                  ]
+                ]
+              }
+            }
+          },
+          "predict": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time"
+              ],
+              "rows": [
+                [
+                  3,
+                  8,
+                  "2262-04-11T23:47:16.709551Z"
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id",
+                  "category",
+                  "note"
+                ],
+                "rows": [
+                  [
+                    3,
+                    8,
+                    "red",
+                    [
+                      "a\u03c2\u0301"
+                    ]
+                  ]
+                ]
+              },
+              "orders": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "note",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    3,
+                    9,
+                    61,
+                    [
+                      "\u6771\u4eac"
+                    ],
+                    8
+                  ],
+                  [
+                    3,
+                    10,
+                    59,
+                    [
+                      "\ud83d\ude3a"
+                    ],
+                    8
+                  ],
+                  [
+                    3,
+                    11,
+                    63,
+                    [
+                      "blue"
+                    ],
+                    8
+                  ]
+                ]
+              }
+            }
+          },
+          "output": {
+            "fields": [
+              "prediction"
+            ],
+            "prediction_statistic": "median"
+          },
+          "inference": {
+            "run_mode": "fast",
+            "use_prediction_time": false
+          },
+          "metadata": {
+            "source_query": "PREDICT users.age FOR EACH users.user_id",
+            "num_context_examples": 3,
+            "num_prediction_examples": 1,
+            "request_id": "portable-identity-batched-1"
+          }
+        }
+      ],
+      "local_events": [
+        {
+          "stage": "enter",
+          "neighbors": [
+            3
+          ],
+          "seed": 7
+        },
+        {
+          "stage": "exit",
+          "markers": [
+            1,
+            3,
+            6,
+            49,
+            50,
+            51,
+            53,
+            55,
+            57,
+            60,
+            61
+          ]
+        },
+        {
+          "stage": "enter",
+          "neighbors": [
+            3
+          ],
+          "seed": 7
+        },
+        {
+          "stage": "exit",
+          "markers": [
+            1,
+            3,
+            6,
+            49,
+            50,
+            51,
+            57,
+            59,
+            60,
+            61,
+            63
+          ]
+        }
+      ],
+      "warnings": [
+        {
+          "type": "UserWarning",
+          "message": "Received custom 'num_neighbors' option; ignoring custom 'num_hops=1' option"
+        },
+        {
+          "type": "SDMWarning",
+          "message": "orders.note, users.note are typed text, which this model does not read, so the request is answered without them and they contribute nothing to the prediction. Type a column categorical if its values are labels rather than prose, or leave it out to say so."
+        },
+        {
+          "type": "SDMWarning",
+          "message": "2 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it."
+        }
+      ],
+      "identity_observations": []
+    },
+    "batched-True": {
+      "payloads": [
+        {
+          "model": "kumo-relational",
+          "task": {
+            "kind": "regression",
+            "target": {
+              "column_name": "TARGET",
+              "dtype": "int64"
+            },
+            "entity_table_names": [
+              "users"
+            ],
+            "anchor_time_column": "__kumo_anchor_time"
+          },
+          "schema": {
+            "instance_table": {
+              "columns": {
+                "instance_id": {
+                  "dtype": "int64",
+                  "stype": "ID",
+                  "nullable": false
+                },
+                "__kumo_entity_ref_0": {
+                  "dtype": "int64",
+                  "stype": "ID"
+                },
+                "__kumo_anchor_time": {
+                  "dtype": "timestamp[us]",
+                  "stype": "timestamp",
+                  "nullable": false
+                },
+                "TARGET": {
+                  "dtype": "int64",
+                  "stype": "numerical"
+                }
+              },
+              "primary_key": "instance_id"
+            },
+            "related_tables": {
+              "users": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "nullable": false
+                  },
+                  "category": {
+                    "dtype": "string",
+                    "stype": "categorical"
+                  },
+                  "note": {
+                    "dtype": "stringlist",
+                    "stype": "text"
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "user_id"
+                ]
+              },
+              "orders": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "__node_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "marker": {
+                    "dtype": "int64",
+                    "stype": "numerical"
+                  },
+                  "note": {
+                    "dtype": "stringlist",
+                    "stype": "text"
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "stype": "ID"
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "__node_id"
+                ]
+              }
+            },
+            "relationships": [
+              {
+                "source_columns": [
+                  "__kumo_entity_ref_0"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              },
+              {
+                "source_table": "orders",
+                "source_columns": [
+                  "user_id"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              }
+            ]
+          },
+          "context": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time",
+                "TARGET"
+              ],
+              "rows": [
+                [
+                  0,
+                  1,
+                  "2262-04-11T23:47:16.709551Z",
+                  21
+                ],
+                [
+                  2,
+                  8,
+                  "2262-04-11T23:47:16.709551Z",
+                  28
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id",
+                  "category",
+                  "note"
+                ],
+                "rows": [
+                  [
+                    0,
+                    1,
+                    "red",
+                    []
+                  ],
+                  [
+                    2,
+                    8,
+                    "red",
+                    [
+                      "a\u03c2\u0301"
+                    ]
+                  ]
+                ]
+              },
+              "orders": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "note",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    0,
+                    0,
+                    3,
+                    [
+                      "\ud83d\ude3a"
+                    ],
+                    1
+                  ],
+                  [
+                    0,
+                    1,
+                    6,
+                    [
+                      "red"
+                    ],
+                    1
+                  ],
+                  [
+                    0,
+                    2,
+                    1,
+                    [],
+                    1
+                  ],
+                  [
+                    2,
+                    6,
+                    61,
+                    [
+                      "\u6771\u4eac"
+                    ],
+                    8
+                  ],
+                  [
+                    2,
+                    7,
+                    57,
+                    [],
+                    8
+                  ],
+                  [
+                    2,
+                    8,
+                    60,
+                    [
+                      "a\u0000b"
+                    ],
+                    8
+                  ]
+                ]
+              }
+            }
+          },
+          "predict": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time"
+              ],
+              "rows": [
+                [
+                  3,
+                  7,
+                  "2262-04-11T23:47:16.709551Z"
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id",
+                  "category",
+                  "note"
+                ],
+                "rows": [
+                  [
+                    3,
+                    7,
+                    "blue",
+                    [
+                      "\u03bf\u03c2",
+                      "i\u0307"
+                    ]
+                  ]
+                ]
+              },
+              "orders": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "note",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    3,
+                    9,
+                    53,
+                    [
+                      "\u6771\u4eac"
+                    ],
+                    7
+                  ],
+                  [
+                    3,
+                    10,
+                    51,
+                    [
+                      "\ud83d\ude3a"
+                    ],
+                    7
+                  ],
+                  [
+                    3,
+                    11,
+                    55,
+                    [
+                      "blue"
+                    ],
+                    7
+                  ]
+                ]
+              }
+            }
+          },
+          "output": {
+            "fields": [
+              "prediction"
+            ]
+          },
+          "inference": {
+            "run_mode": "fast",
+            "use_prediction_time": false,
+            "inference_config": {
+              "kind": "regression",
+              "num_estimators": 1,
+              "column_shuffle": false,
+              "category_shuffle": false,
+              "hop_shuffle": false,
+              "target_transforms": [
+                "quantile"
+              ],
+              "output_type": "median"
+            }
+          },
+          "metadata": {
+            "source_query": "PREDICT users.age FOR EACH users.user_id",
+            "num_context_examples": 3,
+            "num_prediction_examples": 1
+          }
+        },
+        {
+          "model": "kumo-relational",
+          "task": {
+            "kind": "regression",
+            "target": {
+              "column_name": "TARGET",
+              "dtype": "int64"
+            },
+            "entity_table_names": [
+              "users"
+            ],
+            "anchor_time_column": "__kumo_anchor_time"
+          },
+          "schema": {
+            "instance_table": {
+              "columns": {
+                "instance_id": {
+                  "dtype": "int64",
+                  "stype": "ID",
+                  "nullable": false
+                },
+                "__kumo_entity_ref_0": {
+                  "dtype": "int64",
+                  "stype": "ID"
+                },
+                "__kumo_anchor_time": {
+                  "dtype": "timestamp[us]",
+                  "stype": "timestamp",
+                  "nullable": false
+                },
+                "TARGET": {
+                  "dtype": "int64",
+                  "stype": "numerical"
+                }
+              },
+              "primary_key": "instance_id"
+            },
+            "related_tables": {
+              "users": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "nullable": false
+                  },
+                  "category": {
+                    "dtype": "string",
+                    "stype": "categorical"
+                  },
+                  "note": {
+                    "dtype": "stringlist",
+                    "stype": "text"
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "user_id"
+                ]
+              },
+              "orders": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "__node_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "marker": {
+                    "dtype": "int64",
+                    "stype": "numerical"
+                  },
+                  "note": {
+                    "dtype": "stringlist",
+                    "stype": "text"
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "stype": "ID"
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "__node_id"
+                ]
+              }
+            },
+            "relationships": [
+              {
+                "source_columns": [
+                  "__kumo_entity_ref_0"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              },
+              {
+                "source_table": "orders",
+                "source_columns": [
+                  "user_id"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              }
+            ]
+          },
+          "context": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time",
+                "TARGET"
+              ],
+              "rows": [
+                [
+                  0,
+                  1,
+                  "2262-04-11T23:47:16.709551Z",
+                  21
+                ],
+                [
+                  1,
+                  7,
+                  "2262-04-11T23:47:16.709551Z",
+                  27
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id",
+                  "category",
+                  "note"
+                ],
+                "rows": [
+                  [
+                    0,
+                    1,
+                    "red",
+                    []
+                  ],
+                  [
+                    1,
+                    7,
+                    "blue",
+                    [
+                      "\u03bf\u03c2",
+                      "i\u0307"
+                    ]
+                  ]
+                ]
+              },
+              "orders": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "note",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    0,
+                    0,
+                    3,
+                    [
+                      "\ud83d\ude3a"
+                    ],
+                    1
+                  ],
+                  [
+                    0,
+                    1,
+                    6,
+                    [
+                      "red"
+                    ],
+                    1
+                  ],
+                  [
+                    0,
+                    2,
+                    1,
+                    [],
+                    1
+                  ],
+                  [
+                    1,
+                    3,
+                    50,
+                    [
+                      "\u00e9"
+                    ],
+                    7
+                  ],
+                  [
+                    1,
+                    4,
+                    49,
+                    [],
+                    7
+                  ],
+                  [
+                    1,
+                    5,
+                    51,
+                    [
+                      "\ud83d\ude3a"
+                    ],
+                    7
+                  ]
+                ]
+              }
+            }
+          },
+          "predict": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time"
+              ],
+              "rows": [
+                [
+                  3,
+                  8,
+                  "2262-04-11T23:47:16.709551Z"
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id",
+                  "category",
+                  "note"
+                ],
+                "rows": [
+                  [
+                    3,
+                    8,
+                    "red",
+                    [
+                      "a\u03c2\u0301"
+                    ]
+                  ]
+                ]
+              },
+              "orders": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "note",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    3,
+                    9,
+                    61,
+                    [
+                      "\u6771\u4eac"
+                    ],
+                    8
+                  ],
+                  [
+                    3,
+                    10,
+                    59,
+                    [
+                      "\ud83d\ude3a"
+                    ],
+                    8
+                  ],
+                  [
+                    3,
+                    11,
+                    63,
+                    [
+                      "blue"
+                    ],
+                    8
+                  ]
+                ]
+              }
+            }
+          },
+          "output": {
+            "fields": [
+              "prediction"
+            ]
+          },
+          "inference": {
+            "run_mode": "fast",
+            "use_prediction_time": false,
+            "inference_config": {
+              "kind": "regression",
+              "num_estimators": 1,
+              "column_shuffle": false,
+              "category_shuffle": false,
+              "hop_shuffle": false,
+              "target_transforms": [
+                "quantile"
+              ],
+              "output_type": "median"
+            }
+          },
+          "metadata": {
+            "source_query": "PREDICT users.age FOR EACH users.user_id",
+            "num_context_examples": 3,
+            "num_prediction_examples": 1
+          }
+        }
+      ],
+      "result": {
+        "columns": [
+          "row_index",
+          "id",
+          "prediction"
+        ],
+        "index": [
+          0,
+          1
+        ],
+        "data": [
+          [
+            0,
+            7,
+            101.0
+          ],
+          [
+            1,
+            8,
+            102.0
+          ]
+        ]
+      },
+      "sent": [
+        {
+          "model": "kumo-relational",
+          "task": {
+            "kind": "regression",
+            "target": {
+              "column_name": "TARGET",
+              "dtype": "int64"
+            },
+            "entity_table_names": [
+              "users"
+            ],
+            "anchor_time_column": "__kumo_anchor_time"
+          },
+          "schema": {
+            "instance_table": {
+              "columns": {
+                "instance_id": {
+                  "dtype": "int64",
+                  "stype": "ID",
+                  "nullable": false
+                },
+                "__kumo_entity_ref_0": {
+                  "dtype": "int64",
+                  "stype": "ID"
+                },
+                "__kumo_anchor_time": {
+                  "dtype": "timestamp[us]",
+                  "stype": "timestamp",
+                  "nullable": false
+                },
+                "TARGET": {
+                  "dtype": "int64",
+                  "stype": "numerical"
+                }
+              },
+              "primary_key": "instance_id"
+            },
+            "related_tables": {
+              "users": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "nullable": false
+                  },
+                  "category": {
+                    "dtype": "string",
+                    "stype": "categorical"
+                  },
+                  "note": {
+                    "dtype": "stringlist",
+                    "stype": "text"
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "user_id"
+                ]
+              },
+              "orders": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "__node_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "marker": {
+                    "dtype": "int64",
+                    "stype": "numerical"
+                  },
+                  "note": {
+                    "dtype": "stringlist",
+                    "stype": "text"
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "stype": "ID"
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "__node_id"
+                ]
+              }
+            },
+            "relationships": [
+              {
+                "source_columns": [
+                  "__kumo_entity_ref_0"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              },
+              {
+                "source_table": "orders",
+                "source_columns": [
+                  "user_id"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              }
+            ]
+          },
+          "context": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time",
+                "TARGET"
+              ],
+              "rows": [
+                [
+                  0,
+                  1,
+                  "2262-04-11T23:47:16.709551Z",
+                  21
+                ],
+                [
+                  2,
+                  8,
+                  "2262-04-11T23:47:16.709551Z",
+                  28
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id",
+                  "category",
+                  "note"
+                ],
+                "rows": [
+                  [
+                    0,
+                    1,
+                    "red",
+                    []
+                  ],
+                  [
+                    2,
+                    8,
+                    "red",
+                    [
+                      "a\u03c2\u0301"
+                    ]
+                  ]
+                ]
+              },
+              "orders": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "note",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    0,
+                    0,
+                    3,
+                    [
+                      "\ud83d\ude3a"
+                    ],
+                    1
+                  ],
+                  [
+                    0,
+                    1,
+                    6,
+                    [
+                      "red"
+                    ],
+                    1
+                  ],
+                  [
+                    0,
+                    2,
+                    1,
+                    [],
+                    1
+                  ],
+                  [
+                    2,
+                    6,
+                    61,
+                    [
+                      "\u6771\u4eac"
+                    ],
+                    8
+                  ],
+                  [
+                    2,
+                    7,
+                    57,
+                    [],
+                    8
+                  ],
+                  [
+                    2,
+                    8,
+                    60,
+                    [
+                      "a\u0000b"
+                    ],
+                    8
+                  ]
+                ]
+              }
+            }
+          },
+          "predict": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time"
+              ],
+              "rows": [
+                [
+                  3,
+                  7,
+                  "2262-04-11T23:47:16.709551Z"
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id",
+                  "category",
+                  "note"
+                ],
+                "rows": [
+                  [
+                    3,
+                    7,
+                    "blue",
+                    [
+                      "\u03bf\u03c2",
+                      "i\u0307"
+                    ]
+                  ]
+                ]
+              },
+              "orders": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "note",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    3,
+                    9,
+                    53,
+                    [
+                      "\u6771\u4eac"
+                    ],
+                    7
+                  ],
+                  [
+                    3,
+                    10,
+                    51,
+                    [
+                      "\ud83d\ude3a"
+                    ],
+                    7
+                  ],
+                  [
+                    3,
+                    11,
+                    55,
+                    [
+                      "blue"
+                    ],
+                    7
+                  ]
+                ]
+              }
+            }
+          },
+          "output": {
+            "fields": [
+              "prediction"
+            ],
+            "prediction_statistic": "median"
+          },
+          "inference": {
+            "run_mode": "fast",
+            "use_prediction_time": false
+          },
+          "metadata": {
+            "source_query": "PREDICT users.age FOR EACH users.user_id",
+            "num_context_examples": 3,
+            "num_prediction_examples": 1,
+            "request_id": "portable-identity-batched-0"
+          }
+        },
+        {
+          "model": "kumo-relational",
+          "task": {
+            "kind": "regression",
+            "target": {
+              "column_name": "TARGET",
+              "dtype": "int64"
+            },
+            "entity_table_names": [
+              "users"
+            ],
+            "anchor_time_column": "__kumo_anchor_time"
+          },
+          "schema": {
+            "instance_table": {
+              "columns": {
+                "instance_id": {
+                  "dtype": "int64",
+                  "stype": "ID",
+                  "nullable": false
+                },
+                "__kumo_entity_ref_0": {
+                  "dtype": "int64",
+                  "stype": "ID"
+                },
+                "__kumo_anchor_time": {
+                  "dtype": "timestamp[us]",
+                  "stype": "timestamp",
+                  "nullable": false
+                },
+                "TARGET": {
+                  "dtype": "int64",
+                  "stype": "numerical"
+                }
+              },
+              "primary_key": "instance_id"
+            },
+            "related_tables": {
+              "users": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "nullable": false
+                  },
+                  "category": {
+                    "dtype": "string",
+                    "stype": "categorical"
+                  },
+                  "note": {
+                    "dtype": "stringlist",
+                    "stype": "text"
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "user_id"
+                ]
+              },
+              "orders": {
+                "columns": {
+                  "instance_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "__node_id": {
+                    "dtype": "int64",
+                    "stype": "ID",
+                    "nullable": false
+                  },
+                  "marker": {
+                    "dtype": "int64",
+                    "stype": "numerical"
+                  },
+                  "note": {
+                    "dtype": "stringlist",
+                    "stype": "text"
+                  },
+                  "user_id": {
+                    "dtype": "int64",
+                    "stype": "ID"
+                  }
+                },
+                "primary_key": [
+                  "instance_id",
+                  "__node_id"
+                ]
+              }
+            },
+            "relationships": [
+              {
+                "source_columns": [
+                  "__kumo_entity_ref_0"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              },
+              {
+                "source_table": "orders",
+                "source_columns": [
+                  "user_id"
+                ],
+                "target_table": "users",
+                "target_columns": [
+                  "user_id"
+                ]
+              }
+            ]
+          },
+          "context": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time",
+                "TARGET"
+              ],
+              "rows": [
+                [
+                  0,
+                  1,
+                  "2262-04-11T23:47:16.709551Z",
+                  21
+                ],
+                [
+                  1,
+                  7,
+                  "2262-04-11T23:47:16.709551Z",
+                  27
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id",
+                  "category",
+                  "note"
+                ],
+                "rows": [
+                  [
+                    0,
+                    1,
+                    "red",
+                    []
+                  ],
+                  [
+                    1,
+                    7,
+                    "blue",
+                    [
+                      "\u03bf\u03c2",
+                      "i\u0307"
+                    ]
+                  ]
+                ]
+              },
+              "orders": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "note",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    0,
+                    0,
+                    3,
+                    [
+                      "\ud83d\ude3a"
+                    ],
+                    1
+                  ],
+                  [
+                    0,
+                    1,
+                    6,
+                    [
+                      "red"
+                    ],
+                    1
+                  ],
+                  [
+                    0,
+                    2,
+                    1,
+                    [],
+                    1
+                  ],
+                  [
+                    1,
+                    3,
+                    50,
+                    [
+                      "\u00e9"
+                    ],
+                    7
+                  ],
+                  [
+                    1,
+                    4,
+                    49,
+                    [],
+                    7
+                  ],
+                  [
+                    1,
+                    5,
+                    51,
+                    [
+                      "\ud83d\ude3a"
+                    ],
+                    7
+                  ]
+                ]
+              }
+            }
+          },
+          "predict": {
+            "instance_table": {
+              "format": "arrays",
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time"
+              ],
+              "rows": [
+                [
+                  3,
+                  8,
+                  "2262-04-11T23:47:16.709551Z"
+                ]
+              ]
+            },
+            "related_tables": {
+              "users": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "user_id",
+                  "category",
+                  "note"
+                ],
+                "rows": [
+                  [
+                    3,
+                    8,
+                    "red",
+                    [
+                      "a\u03c2\u0301"
+                    ]
+                  ]
+                ]
+              },
+              "orders": {
+                "format": "arrays",
+                "columns": [
+                  "instance_id",
+                  "__node_id",
+                  "marker",
+                  "note",
+                  "user_id"
+                ],
+                "rows": [
+                  [
+                    3,
+                    9,
+                    61,
+                    [
+                      "\u6771\u4eac"
+                    ],
+                    8
+                  ],
+                  [
+                    3,
+                    10,
+                    59,
+                    [
+                      "\ud83d\ude3a"
+                    ],
+                    8
+                  ],
+                  [
+                    3,
+                    11,
+                    63,
+                    [
+                      "blue"
+                    ],
+                    8
+                  ]
+                ]
+              }
+            }
+          },
+          "output": {
+            "fields": [
+              "prediction"
+            ],
+            "prediction_statistic": "median"
+          },
+          "inference": {
+            "run_mode": "fast",
+            "use_prediction_time": false
+          },
+          "metadata": {
+            "source_query": "PREDICT users.age FOR EACH users.user_id",
+            "num_context_examples": 3,
+            "num_prediction_examples": 1,
+            "request_id": "portable-identity-batched-1"
+          }
+        }
+      ],
+      "local_events": [
+        {
+          "stage": "enter",
+          "neighbors": [
+            3
+          ],
+          "seed": 7
+        },
+        {
+          "stage": "exit",
+          "markers": [
+            1,
+            3,
+            6,
+            49,
+            50,
+            51,
+            53,
+            55,
+            57,
+            60,
+            61
+          ]
+        },
+        {
+          "stage": "enter",
+          "neighbors": [
+            3
+          ],
+          "seed": 7
+        },
+        {
+          "stage": "exit",
+          "markers": [
+            1,
+            3,
+            6,
+            49,
+            50,
+            51,
+            57,
+            59,
+            60,
+            61,
+            63
+          ]
+        }
+      ],
+      "warnings": [
+        {
+          "type": "UserWarning",
+          "message": "Received custom 'num_neighbors' option; ignoring custom 'num_hops=1' option"
+        },
+        {
+          "type": "SDMWarning",
+          "message": "orders.note, users.note are typed text, which this model does not read, so the request is answered without them and they contribute nothing to the prediction. Type a column categorical if its values are labels rather than prose, or leave it out to say so."
+        },
+        {
+          "type": "SDMWarning",
+          "message": "2 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it."
+        }
+      ],
+      "identity_observations": [
+        {
+          "input": "\u0130\u03a3\u2c2f\u1c89\ua7ce",
+          "output": "i\u03c3\u2c5f\u1c89\ua7ce",
+          "options_before": [
+            "pyarrow",
+            false
+          ],
+          "options_after": [
+            "pyarrow",
+            false
+          ],
+          "local_events_before": [
+            {
+              "stage": "enter",
+              "neighbors": [
+                3
+              ],
+              "seed": 7
+            },
+            {
+              "stage": "exit",
+              "markers": [
+                1,
+                3,
+                6,
+                49,
+                50,
+                51,
+                53,
+                55,
+                57,
+                60,
+                61
+              ]
+            }
+          ]
+        },
+        {
+          "input": "\u0130\u03a3\u2c2f\u1c89\ua7ce",
+          "output": "i\u03c3\u2c5f\u1c89\ua7ce",
+          "options_before": [
+            "pyarrow",
+            false
+          ],
+          "options_after": [
+            "pyarrow",
+            false
+          ],
+          "local_events_before": [
+            {
+              "stage": "enter",
+              "neighbors": [
+                3
+              ],
+              "seed": 7
+            },
+            {
+              "stage": "exit",
+              "markers": [
+                1,
+                3,
+                6,
+                49,
+                50,
+                51,
+                53,
+                55,
+                57,
+                60,
+                61
+              ]
+            }
+          ]
+        },
+        {
+          "input": "\u0130\u03a3\u2c2f\u1c89\ua7ce",
+          "output": "i\u03c3\u2c5f\u1c89\ua7ce",
+          "options_before": [
+            "pyarrow",
+            false
+          ],
+          "options_after": [
+            "pyarrow",
+            false
+          ],
+          "local_events_before": [
+            {
+              "stage": "enter",
+              "neighbors": [
+                3
+              ],
+              "seed": 7
+            },
+            {
+              "stage": "exit",
+              "markers": [
+                1,
+                3,
+                6,
+                49,
+                50,
+                51,
+                53,
+                55,
+                57,
+                60,
+                61
+              ]
+            },
+            {
+              "stage": "enter",
+              "neighbors": [
+                3
+              ],
+              "seed": 7
+            },
+            {
+              "stage": "exit",
+              "markers": [
+                1,
+                3,
+                6,
+                49,
+                50,
+                51,
+                57,
+                59,
+                60,
+                61,
+                63
+              ]
+            }
+          ]
+        },
+        {
+          "input": "\u0130\u03a3\u2c2f\u1c89\ua7ce",
+          "output": "i\u03c3\u2c5f\u1c89\ua7ce",
+          "options_before": [
+            "pyarrow",
+            false
+          ],
+          "options_after": [
+            "pyarrow",
+            false
+          ],
+          "local_events_before": [
+            {
+              "stage": "enter",
+              "neighbors": [
+                3
+              ],
+              "seed": 7
+            },
+            {
+              "stage": "exit",
+              "markers": [
+                1,
+                3,
+                6,
+                49,
+                50,
+                51,
+                53,
+                55,
+                57,
+                60,
+                61
+              ]
+            },
+            {
+              "stage": "enter",
+              "neighbors": [
+                3
+              ],
+              "seed": 7
+            },
+            {
+              "stage": "exit",
+              "markers": [
+                1,
+                3,
+                6,
+                49,
+                50,
+                51,
+                57,
+                59,
+                60,
+                61,
+                63
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "sampling-error-True": {
+      "error": {
+        "type": "StructuredDataError",
+        "code": "INTERNAL_ERROR",
+        "message": "[INTERNAL_ERROR] the relational engine failed while building this request: RuntimeError: Type 'orders__user_id__users' in num_neighbors must have dtype int64."
+      },
+      "sent": [],
+      "local_events": [
+        {
+          "stage": "enter",
+          "neighbors": [
+            3.5
+          ],
+          "seed": 7
+        }
+      ],
+      "warnings": [
+        {
+          "type": "UserWarning",
+          "message": "Received custom 'num_neighbors' option; ignoring custom 'num_hops=1' option"
+        }
+      ],
+      "identity_observations": []
+    }
+  }
+}

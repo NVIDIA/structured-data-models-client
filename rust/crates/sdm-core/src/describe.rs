@@ -328,6 +328,7 @@ pub(crate) async fn run(
     let id = asker.attach(Attachment::Bytes(bytes))?;
     Ok(OperationResult::DescribeSource(DescribedSource {
         frame_rows: None,
+        frame_decimals: None,
         description: id,
         notes: Vec::new(),
     }))
@@ -1021,15 +1022,22 @@ pub(crate) async fn replies(
 pub(crate) fn data(reply: Reply, request: &'static str) -> Result<ArrowData, CoreError> {
     match reply {
         Reply::Fetch(FetchResult::Data(data)) => Ok(data),
-        Reply::Fetch(FetchResult::Error(error)) => {
-            Err(CoreError::provider(&error).with_field("request", Detail::text(request)))
-        }
+        Reply::Fetch(FetchResult::Error(error)) => Err(provider_error(error, request)),
         Reply::Failed(error) => Err(error),
         Reply::Model(_) => Err(internal("a fetch was answered by the model")),
         // The run reads a provider's pages as one answer before it reaches
         // the body.
         Reply::Fetch(FetchResult::Page { .. }) => Err(internal("a page reached the body")),
     }
+}
+
+/// The same terminal provider policy for an ordinary reply and a cancelled
+/// native source read's reported actual I/O facts. Driver text stays private.
+pub(crate) fn provider_error(
+    error: sdm_contract::data::ProviderError,
+    request: &'static str,
+) -> CoreError {
+    CoreError::provider(&error).with_field("request", Detail::text(request))
 }
 
 /// Requests awaited together: each is asked at the first poll, so they make

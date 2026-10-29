@@ -43,6 +43,11 @@ use sdm_host::{
     read,
 };
 
+mod frame_advice;
+mod frame_keys;
+mod frame_objects;
+mod native_values;
+
 create_exception!(
     sdm_client._native,
     CoreError,
@@ -208,6 +213,208 @@ fn capabilities() -> String {
 struct ArrowStream {
     schema: SchemaRef,
     batches: Vec<RecordBatch>,
+    received: SchemaRef,
+    /// True only for products of closed detached frame-domain operations.
+    /// An arbitrary provider-backed core stream is still foreign input.
+    retained: bool,
+}
+
+/// An exact core-created graph owner. No Python constructor or Arrow
+/// coercion exists; it contains only typed Rust snapshot/index/RNG owners.
+#[pyclass(frozen, module = "sdm_client._native")]
+struct FrameGraph {
+    owner: sdm_host::RetainedFrameGraph,
+}
+
+#[pymethods]
+impl FrameGraph {
+    /// Compare native resource ownership without interpreting source hashes.
+    fn same_owner(&self, other: PyRef<'_, FrameGraph>) -> bool {
+        self.owner.same_owner(&other.owner)
+    }
+}
+
+#[pyclass(frozen, module = "sdm_client._native")]
+struct FrameQuestion {
+    owner: sdm_host::RetainedFrameQuestion,
+}
+
+#[pyclass(frozen, module = "sdm_client._native")]
+struct FrameLabelGroups {
+    owner: sdm_host::RetainedFrameLabelGroups,
+}
+
+#[pyclass(frozen, module = "sdm_client._native")]
+struct LabelInputs {
+    owner: sdm_host::RetainedLabelInputs,
+}
+
+#[pymethods]
+impl LabelInputs {
+    fn temporal_sources(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let sources = self
+            .owner
+            .temporal_sources()
+            .map_err(|error| PyValueError::new_err(error.message))?;
+        let mut out = Vec::with_capacity(sources.len());
+        for (descriptor, rows) in sources {
+            out.push((
+                PyBytes::new(py, &descriptor).unbind(),
+                to_python(py, Attachment::Arrow(rows), true)?,
+            ));
+        }
+        Ok(PyTuple::new(py, out)?.into_any().unbind())
+    }
+
+    fn rows(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let rows = self
+            .owner
+            .rows()
+            .map_err(|error| PyValueError::new_err(error.message))?;
+        to_python(py, Attachment::Arrow(rows), true)
+    }
+}
+
+#[pyclass(frozen, module = "sdm_client._native")]
+struct TargetColumn {
+    owner: sdm_host::RetainedTargetColumn,
+}
+
+#[pymethods]
+impl TargetColumn {
+    fn rows(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let rows = self
+            .owner
+            .rows()
+            .map_err(|error| PyValueError::new_err(error.message))?;
+        to_python(py, Attachment::Arrow(rows), true)
+    }
+    fn selection(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let rows = self
+            .owner
+            .selection()
+            .map_err(|error| PyValueError::new_err(error.message))?;
+        to_python(py, Attachment::Arrow(rows), true)
+    }
+}
+
+#[pymethods]
+impl FrameLabelGroups {
+    fn rows(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let rows = self
+            .owner
+            .rows()
+            .map_err(|error| PyValueError::new_err(error.message))?;
+        to_python(py, Attachment::Arrow(rows), true)
+    }
+}
+
+#[pyclass(frozen, module = "sdm_client._native")]
+struct LookupRows {
+    owner: sdm_host::RetainedLookupRows,
+}
+
+#[pyclass(frozen, module = "sdm_client._native")]
+struct MaterializeSource {
+    owner: sdm_host::RetainedMaterializeSource,
+}
+
+#[pyclass(frozen, module = "sdm_client._native")]
+struct MaterializePopulation {
+    owner: sdm_host::RetainedMaterializePopulation,
+}
+
+#[pyclass(frozen, module = "sdm_client._native")]
+struct MaterializeGroups {
+    owner: sdm_host::RetainedMaterializeGroups,
+}
+
+#[pymethods]
+impl MaterializeGroups {
+    fn rows(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let rows = self
+            .owner
+            .rows()
+            .map_err(|error| PyValueError::new_err(error.message))?;
+        to_python(py, Attachment::Arrow(rows), true)
+    }
+}
+
+#[pyclass(frozen, module = "sdm_client._native")]
+struct MaterializeBatch {
+    owner: sdm_host::RetainedMaterializeBatch,
+}
+
+#[pyclass(frozen, module = "sdm_client._native")]
+struct FrameLabelBatch {
+    owner: sdm_host::RetainedFrameLabelBatch,
+}
+
+#[pymethods]
+impl FrameLabelBatch {
+    fn rows(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let rows = self
+            .owner
+            .rows()
+            .map_err(|error| PyValueError::new_err(error.message))?;
+        to_python(py, Attachment::Arrow(rows), true)
+    }
+}
+
+#[pyclass(frozen, module = "sdm_client._native")]
+struct FramePopulation {
+    owner: sdm_host::RetainedFramePopulation,
+}
+
+#[pymethods]
+impl FramePopulation {
+    fn keys(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        to_python(py, Attachment::Arrow(self.owner.keys()), true)
+    }
+}
+
+#[pyclass(frozen, module = "sdm_client._native")]
+struct FrameTask {
+    owner: sdm_host::RetainedFrameTask,
+}
+
+#[pymethods]
+impl FrameTask {
+    fn context(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        to_python(py, Attachment::Arrow(self.owner.context_rows()), true)
+    }
+    fn prediction(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        to_python(py, Attachment::Arrow(self.owner.prediction_rows()), true)
+    }
+}
+
+#[pyclass(frozen, module = "sdm_client._native")]
+struct FrameReferences {
+    owner: sdm_host::RetainedFrameReferences,
+}
+
+#[pymethods]
+impl FrameReferences {
+    fn nodes(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        to_python(py, Attachment::Arrow(self.owner.rows()), true)
+    }
+}
+
+/// Immutable complete payload data, without previous batches or a program.
+#[pyclass(frozen, module = "sdm_client._native")]
+struct FramePayload {
+    owner: sdm_host::RetainedFramePayload,
+}
+
+#[pymethods]
+impl FramePayload {
+    fn wire(&self, py: Python<'_>) -> Py<PyBytes> {
+        PyBytes::new(py, self.owner.wire()).unbind()
+    }
+
+    fn value(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        native_values::present(py, self.owner.logical())
+    }
 }
 
 #[pymethods]
@@ -247,7 +454,7 @@ impl ArrowStream {
 }
 
 /// One attachment as Python sees it: `bytes`, or an [`ArrowStream`].
-fn to_python(py: Python<'_>, attachment: Attachment) -> PyResult<Py<PyAny>> {
+fn to_python(py: Python<'_>, attachment: Attachment, retained: bool) -> PyResult<Py<PyAny>> {
     Ok(match attachment {
         Attachment::Bytes(bytes) => PyBytes::new(py, &bytes).into_any().unbind(),
         Attachment::Arrow(data) => Py::new(
@@ -255,9 +462,32 @@ fn to_python(py: Python<'_>, attachment: Attachment) -> PyResult<Py<PyAny>> {
             ArrowStream {
                 schema: data.schema,
                 batches: data.batches,
+                received: data.received,
+                retained,
             },
         )?
         .into_any(),
+        Attachment::FrameGraph(owner) => Py::new(py, FrameGraph { owner })?.into_any(),
+        Attachment::FrameLabelGroups(owner) => Py::new(py, FrameLabelGroups { owner })?.into_any(),
+        Attachment::LabelInputs(owner) => Py::new(py, LabelInputs { owner })?.into_any(),
+        Attachment::TargetColumn(owner) => Py::new(py, TargetColumn { owner })?.into_any(),
+        Attachment::LookupRows(owner) => Py::new(py, LookupRows { owner })?.into_any(),
+        Attachment::MaterializeSource(owner) => {
+            Py::new(py, MaterializeSource { owner })?.into_any()
+        }
+        Attachment::MaterializePopulation(owner) => {
+            Py::new(py, MaterializePopulation { owner })?.into_any()
+        }
+        Attachment::MaterializeGroups(owner) => {
+            Py::new(py, MaterializeGroups { owner })?.into_any()
+        }
+        Attachment::MaterializeBatch(owner) => Py::new(py, MaterializeBatch { owner })?.into_any(),
+        Attachment::FrameLabelBatch(owner) => Py::new(py, FrameLabelBatch { owner })?.into_any(),
+        Attachment::FramePopulation(owner) => Py::new(py, FramePopulation { owner })?.into_any(),
+        Attachment::FrameQuestion(owner) => Py::new(py, FrameQuestion { owner })?.into_any(),
+        Attachment::FrameTask(owner) => Py::new(py, FrameTask { owner })?.into_any(),
+        Attachment::FrameReferences(owner) => Py::new(py, FrameReferences { owner })?.into_any(),
+        Attachment::FramePayload(owner) => Py::new(py, FramePayload { owner })?.into_any(),
     })
 }
 
@@ -267,7 +497,7 @@ fn attachments_to_python<'py>(
 ) -> PyResult<Bound<'py, PyDict>> {
     let dict = PyDict::new(py);
     for (id, attachment) in attachments {
-        dict.set_item(id.0, to_python(py, attachment)?)?;
+        dict.set_item(id.0, to_python(py, attachment, false)?)?;
     }
     Ok(dict)
 }
@@ -504,14 +734,90 @@ fn read_arrow_stream(mut stream: FFI_ArrowArrayStream) -> Result<ArrowData, Unre
 /// set before it decides what an unreadable one means.
 fn attachments_from_python(
     attachments: &Bound<'_, PyMapping>,
-) -> PyResult<(Attachments, Unreadables)> {
+) -> PyResult<(
+    Attachments,
+    Unreadables,
+    std::collections::BTreeSet<AttachmentId>,
+)> {
     let py = attachments.py();
     let mut read: Attachments = BTreeMap::new();
     let mut unreadable = Unreadables::new();
+    let mut retained = std::collections::BTreeSet::new();
     for item in attachments.items()?.try_iter()? {
         let (id, value): (u32, Bound<'_, PyAny>) = item?.extract()?;
         let attachment = if let Ok(bytes) = value.cast::<PyBytes>() {
             Attachment::Bytes(bytes.as_bytes().to_vec())
+        } else if value.is_exact_instance_of::<FrameGraph>() {
+            Attachment::FrameGraph(value.extract::<PyRef<'_, FrameGraph>>()?.owner.clone())
+        } else if value.is_exact_instance_of::<LabelInputs>() {
+            Attachment::LabelInputs(value.extract::<PyRef<'_, LabelInputs>>()?.owner.clone())
+        } else if value.is_exact_instance_of::<LookupRows>() {
+            Attachment::LookupRows(value.extract::<PyRef<'_, LookupRows>>()?.owner.clone())
+        } else if value.is_exact_instance_of::<MaterializeSource>() {
+            Attachment::MaterializeSource(
+                value
+                    .extract::<PyRef<'_, MaterializeSource>>()?
+                    .owner
+                    .clone(),
+            )
+        } else if value.is_exact_instance_of::<MaterializePopulation>() {
+            Attachment::MaterializePopulation(
+                value
+                    .extract::<PyRef<'_, MaterializePopulation>>()?
+                    .owner
+                    .clone(),
+            )
+        } else if value.is_exact_instance_of::<MaterializeGroups>() {
+            Attachment::MaterializeGroups(
+                value
+                    .extract::<PyRef<'_, MaterializeGroups>>()?
+                    .owner
+                    .clone(),
+            )
+        } else if value.is_exact_instance_of::<MaterializeBatch>() {
+            Attachment::MaterializeBatch(
+                value
+                    .extract::<PyRef<'_, MaterializeBatch>>()?
+                    .owner
+                    .clone(),
+            )
+        } else if value.is_exact_instance_of::<TargetColumn>() {
+            Attachment::TargetColumn(value.extract::<PyRef<'_, TargetColumn>>()?.owner.clone())
+        } else if value.is_exact_instance_of::<FrameLabelGroups>() {
+            Attachment::FrameLabelGroups(
+                value
+                    .extract::<PyRef<'_, FrameLabelGroups>>()?
+                    .owner
+                    .clone(),
+            )
+        } else if value.is_exact_instance_of::<FrameLabelBatch>() {
+            Attachment::FrameLabelBatch(
+                value.extract::<PyRef<'_, FrameLabelBatch>>()?.owner.clone(),
+            )
+        } else if value.is_exact_instance_of::<FramePopulation>() {
+            Attachment::FramePopulation(
+                value.extract::<PyRef<'_, FramePopulation>>()?.owner.clone(),
+            )
+        } else if value.is_exact_instance_of::<FrameQuestion>() {
+            Attachment::FrameQuestion(value.extract::<PyRef<'_, FrameQuestion>>()?.owner.clone())
+        } else if value.is_exact_instance_of::<FrameTask>() {
+            Attachment::FrameTask(value.extract::<PyRef<'_, FrameTask>>()?.owner.clone())
+        } else if value.is_exact_instance_of::<FrameReferences>() {
+            Attachment::FrameReferences(
+                value.extract::<PyRef<'_, FrameReferences>>()?.owner.clone(),
+            )
+        } else if value.is_exact_instance_of::<FramePayload>() {
+            Attachment::FramePayload(value.extract::<PyRef<'_, FramePayload>>()?.owner.clone())
+        } else if value.is_exact_instance_of::<ArrowStream>() {
+            let owned = value.extract::<PyRef<'_, ArrowStream>>()?;
+            if owned.retained {
+                retained.insert(AttachmentId(id));
+            }
+            Attachment::Arrow(ArrowData {
+                schema: Arc::clone(&owned.schema),
+                batches: owned.batches.clone(),
+                received: Arc::clone(&owned.received),
+            })
         } else if value.hasattr("__arrow_c_stream__")? {
             // Only the public capsule path, never pyarrow's private export.
             match read_arrow(py, &value)? {
@@ -529,7 +835,7 @@ fn attachments_from_python(
         };
         read.insert(AttachmentId(id), attachment);
     }
-    Ok((read, unreadable))
+    Ok((read, unreadable, retained))
 }
 
 /// One core run; see [`HostRun`]. Calls may come from any thread; a call
@@ -537,6 +843,7 @@ fn attachments_from_python(
 #[pyclass(frozen, module = "sdm_client._native")]
 struct Run {
     run: HostRun,
+    retained_frames: bool,
 }
 
 #[pymethods]
@@ -546,8 +853,10 @@ impl Run {
     #[staticmethod]
     fn start(py: Python<'_>, message: &[u8], attachments: &Bound<'_, PyMapping>) -> PyResult<Run> {
         logging(py);
-        let (attachments, unreadable) = attachments_from_python(attachments)?;
+        let (attachments, unreadable, retained) = attachments_from_python(attachments)?;
         let message = message.to_vec();
+        let retained_frames = matches!(sdm_host::decode(&message), Ok(ControlMessage::Start(start))
+            if matches!(&start.operation, sdm_contract::ops::Operation::PrepareFrames(_)));
         // A valid frame start copies foreign buffers before inference. Keep
         // the GIL until that copy finishes: dropping the GIL first would let
         // another Python thread mutate a NumPy producer while we borrow it.
@@ -556,6 +865,7 @@ impl Run {
         let frames = matches!(sdm_host::decode(&message), Ok(ControlMessage::Start(start))
         if match &start.operation {
             sdm_contract::ops::Operation::PrepareRequest(_) => true,
+            sdm_contract::ops::Operation::PrepareFrames(_) => true,
             sdm_contract::ops::Operation::Predict(request) => request.direct.is_some(),
             sdm_contract::ops::Operation::DescribeSource(request) => matches!(
                 request.provider, sdm_contract::data::ProviderChoice::Frames { .. }),
@@ -566,15 +876,30 @@ impl Run {
         let result = if frames {
             core_result(
                 py,
-                HostRun::start_reading(&default_root(), &message, attachments, &unreadable),
+                HostRun::start_retaining(
+                    &default_root(),
+                    &message,
+                    attachments,
+                    &unreadable,
+                    &retained,
+                ),
             )?
         } else {
             core_call(py, || {
-                HostRun::start_reading(&default_root(), &message, attachments, &unreadable)
+                HostRun::start_retaining(
+                    &default_root(),
+                    &message,
+                    attachments,
+                    &unreadable,
+                    &retained,
+                )
             })?
         };
         result
-            .map(|run| Run { run })
+            .map(|run| Run {
+                run,
+                retained_frames,
+            })
             .map_err(|out| core_error(py, out))
     }
 
@@ -598,7 +923,7 @@ impl Run {
         logging(py);
         // An Arrow attachment that could not be read still answers the
         // fetch it was sent for, as sdm-host decides (decision H16).
-        let (attachments, unreadable) = attachments_from_python(attachments)?;
+        let (attachments, unreadable, _retained) = attachments_from_python(attachments)?;
         let message = message.to_vec();
         core_call(py, || {
             self.run.reply_reading(&message, attachments, &unreadable)
@@ -617,7 +942,7 @@ impl Run {
     fn take_attachment(&self, py: Python<'_>, id: u32) -> PyResult<Option<Py<PyAny>>> {
         logging(py);
         match core_call(py, || self.run.take_attachment(AttachmentId(id)))? {
-            Ok(Some(attachment)) => to_python(py, attachment).map(Some),
+            Ok(Some(attachment)) => to_python(py, attachment, self.retained_frames).map(Some),
             Ok(None) => Ok(None),
             Err(out) => Err(core_error(py, out)),
         }
@@ -685,6 +1010,28 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     )?;
     module.add("CoreError", py.get_type::<CoreError>())?;
     module.add_class::<ArrowStream>()?;
+    module.add_class::<FrameGraph>()?;
+    module.add_class::<FrameQuestion>()?;
+    module.add_class::<FramePopulation>()?;
+    module.add_class::<FrameLabelGroups>()?;
+    module.add_class::<LabelInputs>()?;
+    module.add_class::<TargetColumn>()?;
+    module.add_class::<LookupRows>()?;
+    module.add_class::<MaterializeSource>()?;
+    module.add_class::<MaterializePopulation>()?;
+    module.add_class::<MaterializeGroups>()?;
+    module.add_class::<MaterializeBatch>()?;
+    module.add_class::<FrameLabelBatch>()?;
+    module.add_class::<FrameTask>()?;
+    module.add_class::<FrameReferences>()?;
+    module.add_class::<FramePayload>()?;
+    module.add_class::<frame_objects::FrameObjectConstructor>()?;
+    module.add_class::<frame_objects::FrameNativeConstructor>()?;
+    module.add_class::<frame_objects::FrameKeyCandidates>()?;
+    module.add_class::<frame_keys::FrameKeyAdoption>()?;
+    module.add_class::<frame_advice::FrameKeyAdvice>()?;
+    module.add_function(wrap_pyfunction!(frame_advice::frame_sample_facts, module)?)?;
+    module.add_function(wrap_pyfunction!(frame_keys::check_frame_cell, module)?)?;
     module.add_class::<Run>()?;
     module.add_function(wrap_pyfunction!(reset_log_cache, module)?)?;
     module.add_function(wrap_pyfunction!(templates, module)?)?;

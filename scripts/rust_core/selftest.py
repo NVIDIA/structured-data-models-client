@@ -721,9 +721,19 @@ def freeze_cases(results: list[Result]) -> None:
     gather = f'{materialize}::gather'
     from_source = f'{schema}::from_source'
     gather_at = '    schema = materializer.schema\n'
+    provider_at = '    choice, provider = providers.for_source(schema.source)\n'
     method_at = (
         '    def check_consistent(self) -> None:\n        r"""Refuse any column'
     )
+
+    def replace_provider_choice(root: Path, replacement: str) -> None:
+        path = root / materialize
+        site = '\n' + provider_at
+        if path.read_text().count(site) != 1:
+            raise AssertionError(
+                f'{path}: expected one provider-selection site'
+            )
+        edit(path, site, '\n' + replacement)
 
     def case(
         name: str,
@@ -1106,22 +1116,20 @@ def freeze_cases(results: list[Result]) -> None:
         ),
         (
             'a swallowing try',
-            lambda r: edit(
-                r / materialize,
-                '        choice, provider = providers.for_source(schema.source)\n',
-                '        try:\n            choice, provider = providers.for_source(schema.source)\n'
-                '        except StructuredDataError:\n            pass\n',
+            lambda r: replace_provider_choice(
+                r,
+                '    try:\n        choice, provider = providers.for_source(schema.source)\n'
+                '    except StructuredDataError:\n        pass\n',
             ),
             gather,
         ),
         (
             'an aliased contextlib.suppress',
-            lambda r: edit(
-                r / materialize,
+            lambda r: replace_provider_choice(
+                r,
+                '    import contextlib\n\n    quiet = contextlib.suppress\n'
+                '    with quiet(ValueError):\n'
                 '        choice, provider = providers.for_source(schema.source)\n',
-                '        import contextlib\n\n        quiet = contextlib.suppress\n'
-                '        with quiet(ValueError):\n'
-                '            choice, provider = providers.for_source(schema.source)\n',
             ),
             gather,
         ),

@@ -500,7 +500,7 @@ fn sanitization_warning_boundary_can_cancel_before_any_neighbor_draw() {
 }
 
 #[test]
-fn boolean_key_capability_is_refused_before_a_frame_run_is_created() {
+fn incompatible_boolean_link_is_refused_before_a_snapshot_is_constructed() {
     use arrow_array::BooleanArray;
     let mut attached = inputs(3);
     let Attachment::Bytes(raw) = &attached[&AttachmentId(1)] else {
@@ -521,12 +521,38 @@ fn boolean_key_capability_is_refused_before_a_frame_run_is_created() {
         AttachmentId(8),
         Attachment::Arrow(ArrowData::new(batch.schema(), vec![batch])),
     );
-    let failed = HostRun::start(&sdm_host::default_root(), &message(), attached)
-        .err()
-        .expect("unsupported numeric-key capability");
-    assert_eq!(decoded(&failed)["error"]["code"], "UNSUPPORTED_REQUEST");
+    let run = HostRun::start(&sdm_host::default_root(), &message(), attached).unwrap();
+    let failed = terminal(&run).expect_err("integer foreign key cannot match a boolean key");
+    assert_eq!(decoded(&failed)["error"]["code"], "INVALID_REQUEST");
+    assert_eq!(decoded(&failed)["error"]["sentence"], "link_types");
     assert_eq!(
-        decoded(&failed)["error"]["fields"]["rule"],
-        json!({"t":"utf8","v":"frame_boolean_key"})
+        decoded(&failed)["error"]["fields"]["source_dtype"],
+        json!({"t":"utf8","v":"int64"})
+    );
+    assert_eq!(
+        decoded(&failed)["error"]["fields"]["target_dtype"],
+        json!({"t":"utf8","v":"bool"})
+    );
+    let state = run
+        .take_sampler_state()
+        .unwrap()
+        .expect("generic sampler memo");
+    let written = decoded(&state);
+    assert!(written["state"].get("frame_checkpoint").is_none());
+    let memo_id = AttachmentId(written["state"]["memo"].as_u64().unwrap() as u32);
+    let Attachment::Bytes(raw) = run.take_attachment(memo_id).unwrap().unwrap() else {
+        panic!("sampler memo")
+    };
+    let memo: sdm_contract::ops::SamplerMemo = serde_json::from_slice(&raw).unwrap();
+    assert!(memo.bounds.is_empty());
+    assert!(memo.rows.is_empty());
+
+    let valid = HostRun::start(&sdm_host::default_root(), &message(), inputs(3)).unwrap();
+    terminal(&valid).expect("matching integer relationship remains admitted");
+    let (_, owned) = checkpoint(&valid);
+    assert!(
+        owned
+            .values()
+            .any(|value| matches!(value, Attachment::Arrow(_)))
     );
 }

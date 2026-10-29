@@ -5,19 +5,39 @@
 //! Materialize's fixed frame consumer and its owned checkpoint.
 //! Metadata is JSON, rows are Arrow, and every exported id is call-local.
 
+pub(crate) mod identity;
+mod retained;
+mod row_identity;
+use row_identity::OwnedIdentity;
+pub(crate) mod time_columns;
+pub(crate) mod values;
+
+pub use retained::RetainedFrameGraph;
+
+#[cfg(test)]
+mod identity_tests;
+#[cfg(test)]
+pub(crate) mod retained_tests;
+
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use arrow_array::{ArrayRef, RecordBatch};
+use arrow_schema::DataType;
+use sdm_contract::data::strings::StringEncoding;
 use sdm_contract::data::{AttachmentId, Relation};
+use sdm_contract::frames::materialize::{
+    FrameCompositeDefinition, FrameIdentityCodec, FrameIdentityComponent, FrameNativeTable,
+    FrameRowIdentity,
+};
 use sdm_contract::frames::{
     FRAME_CHECKPOINT_VERSION, FrameCheckpoint, FrameCheckpointManifest, FrameCheckpointMetadata,
     MaterializeFrames,
 };
-use sdm_contract::ops::{Dtype, HeldSchema, SamplerMemo, SourceDescription};
+use sdm_contract::ops::{Dtype, HeldSchema, SamplerMemo, SourceDescription, Stype};
 use sdm_contract::{CoreError, CoreWarning, Detail, HeldState, Scalar, Sentence};
 use sdm_engine::frames::Snapshot;
-use sdm_engine::graph::{Graph, Table};
+use sdm_engine::graph::{Graph, NativeGraph, Table};
 use sdm_engine::random::Mt19937;
 use sdm_request::options::Hop;
 use sdm_request::payload::{SampledColumn, SampledLink, SampledTable};
@@ -41,14 +61,50 @@ fn invalid(message: &str) -> CoreError {
 pub(crate) struct OwnedCheckpoint {
     pub metadata: FrameCheckpointMetadata,
     pub tables: Vec<(Relation, ArrowData)>,
+    pub row_identities: Vec<OwnedIdentity>,
+}
+
+/// A fully constructed immutable graph, independently of any task or walk.
+/// The source binds its meanings and retained Arrow rows, never attachment ids.
+pub(crate) struct PreparedGraph {
+    pub source: String,
+    pub description: SourceDescription,
+    pub graph: NativeGraph,
+}
+
+/// Actual selected raw tables and links of one graph snapshot. The useful
+/// context exists before native Text facts or request encoding are reached.
+/// Arrow arrays remain independently owned and are not serialized as model JSON.
+pub(crate) struct SampledContext {
+    source: String,
+    sampled: crate::subgraph::Walked,
+    native_rows: BTreeMap<String, Vec<usize>>,
+}
+
+impl SampledContext {
+    fn check_source(&self, source: &str) -> Result<(), CoreError> {
+        if self.source != source {
+            return Err(invalid("sampled context belongs to another frame graph"));
+        }
+        Ok(())
+    }
+
+    pub fn into_walked(self, source: &str) -> Result<crate::subgraph::Walked, CoreError> {
+        self.check_source(source)?;
+        Ok(self.sampled)
+    }
 }
 
 pub(crate) struct FrameRun {
+    row_identities: Vec<OwnedIdentity>,
     tables: Vec<(Relation, ArrowData)>,
     metadata: Option<FrameCheckpointMetadata>,
     snapshot: Option<Snapshot>,
     neighbors: Mt19937,
     pub entropy: Option<u64>,
+    /// Core-created live owners retain the actual graph/state directly.
+    /// Their standard state handoff must not re-export every raw table.
+    retained_owner: bool,
 }
 
 /// Per-walk sampling options, borrowed from this materialization call.
@@ -57,6 +113,7 @@ pub(crate) struct FrameWalkOptions<'a> {
     pub neighbor_values: Option<&'a [Value]>,
     pub excluded: &'a [(String, String)],
     pub seed: Option<u128>,
+    pub link_target: Option<&'a str>,
 }
 
 fn bound_tables(
@@ -66,6 +123,14 @@ fn bound_tables(
     bindings
         .into_iter()
         .map(|binding| {
+            // This unfinished materializer has not implemented logical
+            // native Decimal values. Never silently treat a constructor's
+            // scale-zero mantissa attachment as its model-input values.
+            if !binding.decimals.is_empty() {
+                return Err(invalid(
+                    "native Decimal declarations require a materializer logical-value consumer",
+                ));
+            }
             let Some(Attachment::Arrow(data)) = attachments.remove(&binding.rows) else {
                 return Err(invalid("a frame binding lacks its Arrow rows"));
             };
@@ -81,9 +146,10 @@ pub(crate) fn take(
     attachments: &mut Attachments,
 ) -> Result<Context, CoreError> {
     let input: MaterializeFrames = take_json(attachments, manifest)?;
-    let (tables, metadata, neighbors) = match checkpoint {
+    let (tables, row_identities, metadata, neighbors) = match checkpoint {
         None => (
             bound_tables(input.tables, attachments)?,
+            row_identity::bind(input.row_identities, attachments)?,
             None,
             Mt19937::seeded(123),
         ),
@@ -103,24 +169,35 @@ pub(crate) fn take(
                 )
                 .dropping(HeldState::SamplerState));
             }
-            if !input.tables.is_empty() {
+            if !input.tables.is_empty() || !input.row_identities.is_empty() {
                 return Err(invalid("a resumed frame run must not reread caller frames"));
             }
             let manifest: FrameCheckpointManifest = take_json(attachments, checkpoint.manifest)?;
+            if manifest.retained.is_some() {
+                return Err(invalid(
+                    "a retained graph must be rebound through its fixed frame value",
+                ));
+            }
             let metadata: FrameCheckpointMetadata = take_json(attachments, manifest.metadata)?;
             let neighbors = Mt19937::from_checkpoint(&metadata.neighbors).ok_or_else(|| {
                 invalid("invalid frame neighbor checkpoint").dropping(HeldState::SamplerState)
             })?;
             (
                 bound_tables(manifest.tables, attachments)?,
+                row_identity::bind(manifest.row_identities, attachments)?,
                 Some(metadata),
                 neighbors,
             )
         }
     };
     if let Some(metadata) = &metadata {
-        let source = fingerprint(&metadata.description, &tables)
-            .map_err(|error| error.dropping(HeldState::SamplerState))?;
+        let source = fingerprint(
+            &metadata.description,
+            &tables,
+            &row_identities,
+            metadata.strings.as_ref(),
+        )
+        .map_err(|error| error.dropping(HeldState::SamplerState))?;
         if metadata.source != source {
             return Err(
                 invalid("frame checkpoint no longer matches its logical snapshot")
@@ -130,10 +207,12 @@ pub(crate) fn take(
     }
     Ok(Arc::new(Mutex::new(FrameRun {
         tables,
+        row_identities,
         metadata,
         snapshot: None,
         neighbors,
         entropy: input.entropy,
+        retained_owner: false,
     })))
 }
 
@@ -149,18 +228,6 @@ pub(crate) fn description(
         .as_ref()
         .map(|state| state.description.clone())
         .unwrap_or_else(|| read.description.clone());
-    // This first opt-in consumer accepts numeric scalar identifiers.
-    // Boolean feature columns and all constructor admission stay unchanged.
-    if description.tables.iter().any(|table| {
-        table.primary_key.iter().any(|key| {
-            table
-                .columns
-                .iter()
-                .any(|column| column.name == *key && column.dtype == Dtype::Bool)
-        })
-    }) {
-        return Err(sdm_engine::not_yet("frame_boolean_key"));
-    }
     Ok((description, read.types))
 }
 
@@ -169,6 +236,8 @@ pub(crate) fn description(
 fn fingerprint(
     description: &SourceDescription,
     tables: &[(Relation, ArrowData)],
+    row_identities: &[OwnedIdentity],
+    strings: Option<&BTreeMap<String, BTreeMap<String, StringEncoding>>>,
 ) -> Result<String, CoreError> {
     let mut hash = 0xcbf2_9ce4_8422_2325_u64;
     let mut feed = |bytes: &[u8]| {
@@ -213,6 +282,32 @@ fn fingerprint(
             feed(bytes);
         }
     }
+    if let Some(strings) = strings {
+        feed(b"native-string-encodings-v1");
+        feed(
+            &serde_json::to_vec(strings)
+                .map_err(|_| internal("native text encodings do not serialize"))?,
+        );
+    }
+    for identity in row_identities {
+        feed(b"native-row-identity-v1");
+        feed(
+            &serde_json::to_vec(&(&identity.definition, identity.encoding))
+                .map_err(|_| internal("native identity facts do not serialize"))?,
+        );
+        let batch = crate::materialize::one_batch(&identity.values)?;
+        let converter = arrow_row::RowConverter::new(vec![arrow_row::SortField::new(
+            batch.column(0).data_type().clone(),
+        )])
+        .map_err(|_| invalid("native identity type cannot be fingerprinted"))?;
+        let values = converter
+            .convert_columns(batch.columns())
+            .map_err(|_| invalid("native identity values cannot be fingerprinted"))?;
+        for row in values.iter() {
+            feed(&(row.as_ref().len() as u64).to_le_bytes());
+            feed(row.as_ref());
+        }
+    }
     Ok(format!("{hash:016x}"))
 }
 
@@ -252,7 +347,167 @@ fn native_hops(graph: &Graph, values: &[Value]) -> Result<Vec<i64>, CoreError> {
     Ok(hops)
 }
 
+/// Meaning checks consume the same folded operational key as the actual
+/// native graph. Full ordered source identity remains in the caller value.
+pub(crate) fn native_projection(description: &SourceDescription) -> SourceDescription {
+    let mut projected = description.clone();
+    for table in &mut projected.tables {
+        // Native columns already received their reached current metadata.
+        // Caller-schema historical marks must not release those assignments.
+        for column in &mut table.columns {
+            column.stype_before_key = None;
+        }
+        if table.primary_key.len() > 1 {
+            table.primary_key = vec![sdm_engine::graph::folded_name(&table.primary_key)];
+        }
+    }
+    projected
+}
+
 impl FrameRun {
+    pub(crate) fn retain_owner(&mut self) {
+        self.retained_owner = true;
+    }
+    /// Native table construction infers the physical primitive family before
+    /// applying Text meaning. A logical dtype edit cannot turn numeric rows
+    /// into a text column. Reuse the shared semantic rule and diagnostic.
+    pub fn validate_text_types(&self, description: &SourceDescription) -> Result<(), CoreError> {
+        self.validate_text_types_with(description, None)
+    }
+
+    pub fn validate_native_text_types(
+        &self,
+        description: &SourceDescription,
+        native: &[FrameNativeTable],
+    ) -> Result<(), CoreError> {
+        self.validate_text_types_with(description, Some(native))
+    }
+
+    fn validate_text_types_with(
+        &self,
+        description: &SourceDescription,
+        native: Option<&[FrameNativeTable]>,
+    ) -> Result<(), CoreError> {
+        let mut physical = description.clone();
+        for table in &mut physical.tables {
+            let (_, rows) = self
+                .tables
+                .iter()
+                .find(|(source, _)| source == &table.source)
+                .ok_or_else(|| invalid("a materialized frame lacks its source"))?;
+            for column in table
+                .columns
+                .iter_mut()
+                .filter(|column| column.stype == Stype::Text)
+            {
+                if let Some(constructed) = native
+                    .and_then(|tables| tables.iter().find(|native| native.source == table.source))
+                    .and_then(|native| {
+                        native
+                            .columns
+                            .iter()
+                            .find(|native| native.name == column.name)
+                    })
+                    .and_then(|native| native.constructed)
+                {
+                    column.dtype = constructed;
+                    continue;
+                }
+                let field = rows
+                    .schema
+                    .field_with_name(&column.name)
+                    .map_err(|_| invalid("a frame lacks a described column"))?;
+                let dtype = field.data_type();
+                if dtype.is_integer() {
+                    column.dtype = Dtype::Int;
+                } else if dtype.is_floating() {
+                    column.dtype = Dtype::Float;
+                } else if dtype == &DataType::Boolean {
+                    column.dtype = Dtype::Bool;
+                }
+            }
+        }
+        crate::materialize::meanings_carried(&native_projection(&physical), None)
+    }
+
+    fn table_shapes(&self, description: &SourceDescription) -> Result<(), CoreError> {
+        for table in &description.tables {
+            let (_, data) = self
+                .tables
+                .iter()
+                .find(|(source, _)| source == &table.source)
+                .ok_or_else(|| invalid("a native graph lacks its constructed source table"))?;
+            if data.schema.fields().is_empty()
+                || data.batches.iter().all(|batch| batch.num_rows() == 0)
+            {
+                return Err(sdm_engine::frame_identity::refusal(
+                    "empty_frame",
+                    &table.name,
+                    "",
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// Prepare a useful graph artifact before task-native input conversion.
+    /// Construction retains the snapshot before its separate drop notice is
+    /// presented, so warning-as-error does not reread mutated caller frames.
+    pub fn prepare_graph(
+        &mut self,
+        asker: &Asker,
+        description: SourceDescription,
+    ) -> Result<PreparedGraph, CoreError> {
+        self.table_shapes(&description)?;
+        let graph = NativeGraph::new(&description)?;
+        self.initialize_strings(asker, &description, &graph, None)?;
+        Ok(PreparedGraph {
+            source: self.source(),
+            description,
+            graph,
+        })
+    }
+
+    /// Core-validated native origins supply explicit logical text encodings
+    /// exactly once while building the same immutable graph/index owners.
+    pub fn prepare_native_graph(
+        &mut self,
+        asker: &Asker,
+        description: SourceDescription,
+        native: &[FrameNativeTable],
+    ) -> Result<PreparedGraph, CoreError> {
+        self.table_shapes(&description)?;
+        let graph = NativeGraph::new(&description)?;
+        let strings = description
+            .tables
+            .iter()
+            .map(|table| {
+                let native = native
+                    .iter()
+                    .find(|native| native.source == table.source)
+                    .ok_or_else(|| invalid("native frame graph lacks its source facts"))?;
+                Ok((
+                    table.name.clone(),
+                    native
+                        .columns
+                        .iter()
+                        .filter_map(|column| {
+                            column
+                                .strings
+                                .map(|encoding| (column.name.clone(), encoding))
+                        })
+                        .collect(),
+                ))
+            })
+            .collect::<Result<BTreeMap<_, _>, CoreError>>()?;
+        self.initialize_strings(asker, &description, &graph, Some(strings))?;
+        Ok(PreparedGraph {
+            source: self.source(),
+            description,
+            graph,
+        })
+    }
+
     /// Publish an already validated retained owner at Run construction,
     /// before its body can fail or be cancelled without ever being polled.
     pub fn carry(&mut self, asker: &Asker, memo: Option<&SamplerMemo>) {
@@ -264,6 +519,16 @@ impl FrameRun {
             self.keep(asker);
         }
     }
+    pub fn string_encodings(
+        &self,
+        table: &str,
+    ) -> Result<BTreeMap<String, StringEncoding>, CoreError> {
+        self.snapshot
+            .as_ref()
+            .ok_or_else(|| internal("frame graph is not constructed"))?
+            .string_encodings(table)
+    }
+
     pub fn source(&self) -> String {
         self.metadata
             .as_ref()
@@ -272,11 +537,28 @@ impl FrameRun {
     }
     /// Called at the existing materializer's graph-build stage, before
     /// entity validation. Failed construction publishes no snapshot.
+    #[cfg(test)]
     pub fn initialize(
         &mut self,
         asker: &Asker,
         description: &SourceDescription,
         graph: &Graph,
+    ) -> Result<(), CoreError> {
+        let native = NativeGraph::new(description)?;
+        if &native.topology != graph {
+            return Err(invalid(
+                "native topology differs from its complete source identity",
+            ));
+        }
+        self.initialize_strings(asker, description, &native, None)
+    }
+
+    fn initialize_strings(
+        &mut self,
+        asker: &Asker,
+        description: &SourceDescription,
+        graph: &NativeGraph,
+        strings: Option<BTreeMap<String, BTreeMap<String, StringEncoding>>>,
     ) -> Result<(), CoreError> {
         if self.snapshot.is_some() {
             return Ok(());
@@ -286,9 +568,27 @@ impl FrameRun {
         // retains those immutable rows; failed construction caches none.
         // Resumed rows and identity were validated once at the ownership
         // boundary, before carry. Immutable owners need no second full scan.
+        let strings = strings.or_else(|| {
+            self.metadata
+                .as_ref()
+                .and_then(|metadata| metadata.strings.clone())
+        });
+        row_identity::complete(
+            &mut self.row_identities,
+            &self.tables,
+            self.metadata.is_some(),
+            description,
+            graph,
+            strings.as_ref(),
+        )?;
         let source = match &self.metadata {
             Some(metadata) => metadata.source.clone(),
-            None => fingerprint(description, &self.tables)?,
+            None => fingerprint(
+                description,
+                &self.tables,
+                &self.row_identities,
+                strings.as_ref(),
+            )?,
         };
         let rows = description
             .tables
@@ -302,11 +602,31 @@ impl FrameRun {
                 Ok((table.name.clone(), crate::materialize::one_batch(rows)?))
             })
             .collect::<Result<BTreeMap<_, _>, CoreError>>()?;
-        self.snapshot = Some(Snapshot::new(graph, rows)?);
+        let identities = self
+            .row_identities
+            .iter()
+            .map(|identity| {
+                let batch = crate::materialize::one_batch(&identity.values)?;
+                Ok((
+                    identity.definition.table.clone(),
+                    sdm_engine::frame_identity::IdentityColumn {
+                        values: Arc::clone(batch.column(0)),
+                        encoding: identity.encoding,
+                    },
+                ))
+            })
+            .collect::<Result<BTreeMap<_, _>, CoreError>>()?;
+        self.snapshot = Some(Snapshot::new_frame(
+            graph,
+            rows,
+            strings.clone(),
+            identities,
+        )?);
         self.metadata = Some(FrameCheckpointMetadata {
             source,
             description: description.clone(),
             neighbors: self.neighbors.checkpoint(),
+            strings,
         });
         self.keep(asker);
         Ok(())
@@ -315,9 +635,13 @@ impl FrameRun {
     pub fn keep(&mut self, asker: &Asker) {
         if let Some(metadata) = &mut self.metadata {
             metadata.neighbors = self.neighbors.checkpoint();
+            if self.retained_owner {
+                return;
+            }
             asker.keep_frame(OwnedCheckpoint {
                 metadata: metadata.clone(),
                 tables: self.tables.clone(),
+                row_identities: self.row_identities.clone(),
             });
         }
     }
@@ -353,6 +677,18 @@ impl FrameRun {
             .entities(&table.name, columns, limit, seed)
     }
 
+    pub fn source_keys(
+        &self,
+        table: &Table,
+        column: &str,
+        values: &ArrayRef,
+    ) -> Result<Vec<Option<sdm_engine::keys::Key>>, CoreError> {
+        self.snapshot
+            .as_ref()
+            .ok_or_else(|| internal("frame graph not initialized"))?
+            .source_keys(&table.name, column, values)
+    }
+
     pub fn time_bounds(&self, table: &Table) -> Result<(Option<i64>, Option<i64>), CoreError> {
         self.snapshot
             .as_ref()
@@ -372,6 +708,59 @@ impl FrameRun {
             .lookup(&table.name, keys, columns)
     }
 
+    /// Useful node-reference rows of the complete native-converted task.
+    /// This must finish before any later batch can reset or advance neighbors.
+    pub fn resolve_references(
+        &self,
+        table: &Table,
+        columns: &[&ArrayRef],
+    ) -> Result<Vec<usize>, CoreError> {
+        self.snapshot
+            .as_ref()
+            .ok_or_else(|| internal("frame graph not initialized"))?
+            .entity_rows_many(&table.name, columns)
+    }
+
+    pub fn resolve_encoded_references(
+        &self,
+        table: &Table,
+        columns: &[(&ArrayRef, Option<StringEncoding>)],
+    ) -> Result<Vec<usize>, CoreError> {
+        self.snapshot
+            .as_ref()
+            .ok_or_else(|| internal("frame graph not initialized"))?
+            .entity_rows_encoded(&table.name, columns)
+    }
+
+    /// Actual immutable rows selected by the same existing primary-key map.
+    /// Native candidate conversions change lookup values, not attribution IDs.
+    pub fn source_rows(
+        &self,
+        table: &Table,
+        rows: &[usize],
+        columns: &[String],
+    ) -> Result<RecordBatch, CoreError> {
+        self.snapshot
+            .as_ref()
+            .ok_or_else(|| internal("frame graph not initialized"))?
+            .selected_rows(&table.name, rows, columns)
+    }
+
+    /// Existing immutable frame adjacency supplies temporal label rows.
+    /// This operation does not borrow or advance the neighbor generator.
+    pub fn temporal_rows(
+        &self,
+        edge: &sdm_engine::graph::Edge,
+        keys: &ArrayRef,
+        windows: &[sdm_engine::frames::TemporalWindow],
+        columns: &[String],
+    ) -> Result<sdm_engine::frames::WalkedTable, CoreError> {
+        self.snapshot
+            .as_ref()
+            .ok_or_else(|| internal("frame graph not initialized"))?
+            .temporal_rows(edge, keys, windows, columns)
+    }
+
     pub fn walk(
         &mut self,
         asker: &Asker,
@@ -380,13 +769,31 @@ impl FrameRun {
         keys: &ArrayRef,
         anchors: &[i64],
         options: FrameWalkOptions<'_>,
-    ) -> Result<crate::subgraph::Walked, CoreError> {
+    ) -> Result<SampledContext, CoreError> {
+        // Native key conversion must finish before a seed reset or draw.
+        let entity_rows = self.resolve_references(entity, &[keys])?;
+        self.walk_rows(asker, graph, entity, &entity_rows, anchors, options)
+    }
+
+    pub fn walk_rows(
+        &mut self,
+        asker: &Asker,
+        graph: &Graph,
+        entity: &Table,
+        entity_rows: &[usize],
+        anchors: &[i64],
+        options: FrameWalkOptions<'_>,
+    ) -> Result<SampledContext, CoreError> {
         let FrameWalkOptions {
             hops,
             neighbor_values,
             excluded,
             seed,
+            link_target,
         } = options;
+        // The caller has resolved this batch's actual converted values
+        // before resetting the continuing neighbor stream, independently
+        // of the earlier whole-task reference validation.
         if let Some(seed) = seed {
             let seed = u32::try_from(seed)
                 .ok()
@@ -418,7 +825,7 @@ impl FrameRun {
                         }
                         Hop::Stop => Value::Number("0".into()),
                         Hop::Negative(value) => Value::Number(value.as_str().into()),
-                        Hop::Expression(text) => Value::Text(text.clone()),
+                        Hop::Expression(text) => Value::Text(text.clone().into()),
                     })
                     .collect::<Vec<_>>();
                 projected.as_slice()
@@ -437,10 +844,10 @@ impl FrameRun {
             .snapshot
             .as_ref()
             .ok_or_else(|| internal("frame graph not initialized"))?
-            .walk(
+            .walk_resolved(
                 graph,
                 &entity.name,
-                keys,
+                entity_rows,
                 anchors,
                 &hops,
                 &mut self.neighbors,
@@ -448,15 +855,18 @@ impl FrameRun {
         // A later cap, encoding error or cancellation must not replay draws.
         self.keep(asker);
         let sampled = sampled?;
+        let mut native_rows = BTreeMap::new();
         let tables = sampled
             .tables
             .into_iter()
             .map(|table| {
+                native_rows.insert(table.name.clone(), table.source_rows);
                 let described = graph
                     .table(&table.name)
                     .ok_or_else(|| internal("sampled unknown frame"))?;
                 let features = crate::subgraph::features(graph, described, excluded);
-                let is_entity = table.name == entity.name;
+                let is_entity =
+                    table.name == entity.name || link_target == Some(table.name.as_str());
                 let columns = table
                     .rows
                     .schema()
@@ -493,7 +903,11 @@ impl FrameRun {
                 pairs: link.pairs,
             })
             .collect();
-        Ok(crate::subgraph::Walked { tables, links })
+        Ok(SampledContext {
+            source: self.source(),
+            sampled: crate::subgraph::Walked { tables, links },
+            native_rows,
+        })
     }
 }
 
@@ -551,11 +965,13 @@ mod parent_hop_tests {
             .collect();
         (
             FrameRun {
+                row_identities: Vec::new(),
                 tables,
                 metadata: None,
                 snapshot: None,
                 neighbors: Mt19937::seeded(123),
                 entropy: None,
+                retained_owner: false,
             },
             description,
             graph,
@@ -590,6 +1006,122 @@ mod parent_hop_tests {
     }
 
     #[test]
+    fn both_entity_roles_keep_keys_without_changing_history_features_or_draws() {
+        let mut run = crate::Run::new(|asker| async move {
+            let mut checkpoints = Vec::new();
+            let mut features = Vec::new();
+            for link_target in [None, Some("orders"), Some("users")] {
+                let (mut frame, description, graph) = fixture();
+                frame.initialize(&asker, &description, &graph)?;
+                let keys: ArrayRef = Arc::new(Int64Array::from(vec![1]));
+                let sampled = frame.walk(
+                    &asker,
+                    &graph,
+                    &graph.tables[0],
+                    &keys,
+                    &[0],
+                    FrameWalkOptions {
+                        hops: &[Hop::Keep(3)],
+                        neighbor_values: None,
+                        excluded: &[],
+                        seed: Some(7),
+                        link_target,
+                    },
+                )?;
+                let entity = sampled
+                    .sampled
+                    .tables
+                    .iter()
+                    .find(|table| table.name == "users")
+                    .unwrap();
+                assert_eq!(entity.primary_key.as_deref(), Some("user_id"));
+                let history = sampled
+                    .sampled
+                    .tables
+                    .iter()
+                    .find(|table| table.name == "orders")
+                    .unwrap();
+                let rhs = link_target == Some("orders");
+                assert_eq!(history.primary_key.as_deref(), rhs.then_some("order_id"));
+                let names = history
+                    .columns
+                    .iter()
+                    .map(|(name, _)| name.as_str())
+                    .collect::<Vec<_>>();
+                assert_eq!(
+                    names.iter().position(|name| *name == "order_id"),
+                    rhs.then_some(0)
+                );
+                features.push(
+                    names
+                        .into_iter()
+                        .filter(|name| *name != "order_id")
+                        .map(str::to_owned)
+                        .collect::<Vec<_>>(),
+                );
+                checkpoints.push(frame.neighbors.checkpoint());
+            }
+            assert!(features.windows(2).all(|pair| pair[0] == pair[1]));
+            assert!(checkpoints.windows(2).all(|pair| pair[0] == pair[1]));
+            let value = asker.attach(Attachment::Bytes(Vec::new()))?;
+            Ok(sdm_contract::ops::OperationResult::PrepareRequest(
+                PreparedRequest { value },
+            ))
+        });
+        assert!(matches!(run.next().unwrap(), Step::Done { .. }));
+    }
+
+    #[test]
+    fn missing_batch_references_fail_before_a_requested_neighbor_reset() {
+        let mut run = crate::Run::new(|asker| async move {
+            let (mut frame, description, graph) = fixture();
+            frame.initialize(&asker, &description, &graph)?;
+            let keys: ArrayRef = Arc::new(Int64Array::from(vec![1]));
+            frame.walk(
+                &asker,
+                &graph,
+                &graph.tables[0],
+                &keys,
+                &[0],
+                FrameWalkOptions {
+                    hops: &[Hop::Keep(3)],
+                    neighbor_values: None,
+                    excluded: &[],
+                    seed: Some(99),
+                    link_target: None,
+                },
+            )?;
+            let before = frame.neighbors.checkpoint();
+            let missing: ArrayRef = Arc::new(Int64Array::from(vec![999]));
+            assert!(
+                frame
+                    .walk(
+                        &asker,
+                        &graph,
+                        &graph.tables[0],
+                        &missing,
+                        &[0],
+                        FrameWalkOptions {
+                            hops: &[Hop::Keep(3)],
+                            neighbor_values: None,
+                            excluded: &[],
+                            seed: Some(7),
+                            link_target: None,
+                        }
+                    )
+                    .is_err()
+            );
+            assert_eq!(frame.neighbors.checkpoint(), before);
+            assert_eq!(frame.metadata.as_ref().unwrap().neighbors, before);
+            let value = asker.attach(Attachment::Bytes(Vec::new()))?;
+            Ok(sdm_contract::ops::OperationResult::PrepareRequest(
+                PreparedRequest { value },
+            ))
+        });
+        assert!(matches!(run.next().unwrap(), Step::Done { .. }));
+    }
+
+    #[test]
     fn projected_hops_keep_native_signed_counts_errors_and_seed_continuation() {
         for (hop, refused, whole) in [
             (
@@ -621,6 +1153,7 @@ mod parent_hop_tests {
                         neighbor_values: None,
                         excluded: &[],
                         seed: Some(99),
+                        link_target: None,
                     },
                 )?;
                 assert_ne!(frame.metadata.as_ref().unwrap().neighbors.position, 624);
@@ -636,6 +1169,7 @@ mod parent_hop_tests {
                         neighbor_values: None,
                         excluded: &[],
                         seed: Some(7),
+                        link_target: None,
                     },
                 );
                 if refused {
@@ -648,7 +1182,9 @@ mod parent_hop_tests {
                         Mt19937::seeded(7).checkpoint()
                     );
                 } else {
-                    let first = selected.unwrap_or_else(|error| panic!("{error:?}"));
+                    let first = selected
+                        .unwrap_or_else(|error| panic!("{error:?}"))
+                        .into_walked(&frame.source())?;
                     assert_eq!(
                         order_ids(&first),
                         if whole {
@@ -664,19 +1200,22 @@ mod parent_hop_tests {
                         );
                     }
                 }
-                let continued = frame.walk(
-                    &asker,
-                    &graph,
-                    &graph.tables[0],
-                    &keys,
-                    &[0],
-                    FrameWalkOptions {
-                        hops: &[Hop::Keep(3)],
-                        neighbor_values: None,
-                        excluded: &[],
-                        seed: None,
-                    },
-                )?;
+                let continued = frame
+                    .walk(
+                        &asker,
+                        &graph,
+                        &graph.tables[0],
+                        &keys,
+                        &[0],
+                        FrameWalkOptions {
+                            hops: &[Hop::Keep(3)],
+                            neighbor_values: None,
+                            excluded: &[],
+                            seed: None,
+                            link_target: None,
+                        },
+                    )?
+                    .into_walked(&frame.source())?;
                 let selected = order_ids(&continued);
                 // Recorded native sampler vectors: a reset/error or a whole
                 // neighborhood consumes no draw; an earlier partial walk does.

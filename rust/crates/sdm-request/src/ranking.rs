@@ -540,60 +540,44 @@ fn how_sure(probabilities: Option<&Vec<(String, f64)>>) -> Option<f64> {
         .map(|(_, p)| *p)
 }
 
-/// The answers to a ranking's questions put back together (`_ranked`):
-/// each candidate's answer, by its position among those given and as the
-/// result names it, in the order asked. One row per row asked about, keyed by its row and entity, in the
-/// order the answers first name it; each candidate scored by how sure its
-/// answer was ([`how_sure`]), an answer that does not say refused
-/// (`INTERNAL_ERROR`, naming the candidate and the classes it gave); sorted
-/// best first, ties in the order asked, a NaN last (register PD-1), and
-/// cut to `top_k`.
-pub fn rank(answers: &[(u32, String, Part)], top_k: Option<u32>) -> Result<Vec<Row>, CoreError> {
-    let mut rows: Vec<Row> = Vec::new();
-    let mut at: BTreeMap<(i64, String), usize> = BTreeMap::new();
-    for (candidate, named, part) in answers {
-        for answer in &part.rows {
-            let Some(score) = how_sure(answer.probabilities.as_ref()) else {
-                let mut classes: Vec<&str> = answer
-                    .probabilities
-                    .iter()
-                    .flatten()
-                    .map(|(class, _)| class.as_str())
-                    .collect();
-                classes.sort_unstable();
-                return Err(CoreError::new(
-                    if classes.is_empty() {
-                        Sentence::ProbabilitiesNone
-                    } else {
-                        Sentence::ProbabilitiesUnread
-                    },
-                    "the endpoint answered a candidate's question without saying how sure it was",
-                )
-                .with_field("field", Detail::text("probabilities"))
-                .with_field("candidate", Detail::Scalar(Scalar::UInt32(*candidate)))
-                .with_field(
-                    "classes",
-                    Detail::List(
-                        classes
-                            .into_iter()
-                            .map(|c| Scalar::Utf8(c.to_owned()))
-                            .collect(),
-                    ),
-                ));
-            };
-            let key = (answer.row_index, format!("{:?}", answer.id));
-            let row = *at.entry(key).or_insert_with(|| {
-                rows.push(Row {
-                    row_index: answer.row_index,
-                    id: answer.id.clone(),
-                    ranked: Vec::new(),
-                });
-                rows.len() - 1
-            });
-            rows[row].ranked.push((*candidate, named.clone(), score));
-        }
-    }
-    for row in &mut rows {
+/// Positive-class confidence shared by provider and native response paths.
+pub fn confidence(
+    probabilities: Option<&Vec<(String, f64)>>,
+    candidate: u32,
+) -> Result<f64, CoreError> {
+    let Some(score) = how_sure(probabilities) else {
+        let mut classes: Vec<&str> = probabilities
+            .into_iter()
+            .flatten()
+            .map(|(class, _)| class.as_str())
+            .collect();
+        classes.sort_unstable();
+        return Err(CoreError::new(
+            if classes.is_empty() {
+                Sentence::ProbabilitiesNone
+            } else {
+                Sentence::ProbabilitiesUnread
+            },
+            "the endpoint answered a candidate's question without saying how sure it was",
+        )
+        .with_field("field", Detail::text("probabilities"))
+        .with_field("candidate", Detail::Scalar(Scalar::UInt32(candidate)))
+        .with_field(
+            "classes",
+            Detail::List(
+                classes
+                    .into_iter()
+                    .map(|c| Scalar::Utf8(c.to_owned()))
+                    .collect(),
+            ),
+        ));
+    };
+    Ok(score)
+}
+
+/// Stable score ordering and top-k policy shared by both grouping paths.
+pub fn order(rows: &mut [Row], top_k: Option<u32>) {
+    for row in rows {
         // Stable, best first, as Python's sort with `reverse=True` keeps
         // equal scores in the order asked; a NaN last (PD-1).
         row.ranked
@@ -607,6 +591,35 @@ pub fn rank(answers: &[(u32, String, Part)], top_k: Option<u32>) -> Result<Vec<R
             row.ranked.truncate(k as usize);
         }
     }
+}
+
+/// The answers to a ranking's questions put back together (`_ranked`):
+/// each candidate's answer, by its position among those given and as the
+/// result names it, in the order asked. One row per row asked about, keyed by its row and entity, in the
+/// order the answers first name it; each candidate scored by how sure its
+/// answer was ([`how_sure`]), an answer that does not say refused
+/// (`INTERNAL_ERROR`, naming the candidate and the classes it gave); sorted
+/// best first, ties in the order asked, a NaN last (register PD-1), and
+/// cut to `top_k`.
+pub fn rank(answers: &[(u32, String, Part)], top_k: Option<u32>) -> Result<Vec<Row>, CoreError> {
+    let mut rows: Vec<Row> = Vec::new();
+    let mut at: BTreeMap<(i64, String), usize> = BTreeMap::new();
+    for (candidate, named, part) in answers {
+        for answer in &part.rows {
+            let score = confidence(answer.probabilities.as_ref(), *candidate)?;
+            let key = (answer.row_index, format!("{:?}", answer.id));
+            let row = *at.entry(key).or_insert_with(|| {
+                rows.push(Row {
+                    row_index: answer.row_index,
+                    id: answer.id.clone(),
+                    ranked: Vec::new(),
+                });
+                rows.len() - 1
+            });
+            rows[row].ranked.push((*candidate, named.clone(), score));
+        }
+    }
+    order(&mut rows, top_k);
     Ok(rows)
 }
 

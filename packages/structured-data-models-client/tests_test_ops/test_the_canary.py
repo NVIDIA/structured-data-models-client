@@ -24,6 +24,11 @@ driven through it:
 - panic: the test-only operation, panicking in the run's body with the
   sentinel as its payload.
 
+The privacy cases keep private response metadata outside the native
+response contract's displayed operands.
+Separate public prediction twins retain the original endpoint operands
+and compare their complete native diagnostic graphs.
+
 None of our sentinels may appear in the core's error (its message, every
 field and every cause, as the control message carried it), in ``str`` or
 ``repr`` of the exception, in its formatted traceback, in any warning
@@ -207,6 +212,10 @@ def _watching(
     seen.records = records  # type: ignore[attr-defined]
     seen.stderr = captured.err  # type: ignore[attr-defined]
     seen.warnings = [str(w.message) for w in shown]  # type: ignore[attr-defined]
+    seen.warning_records = [  # type: ignore[attr-defined]
+        (f'{w.category.__module__}.{w.category.__qualname__}', str(w.message))
+        for w in shown
+    ]
 
 
 def _raised(seen: _Seen, call: Callable[[], Any]) -> StructuredDataError:
@@ -234,7 +243,9 @@ def _endpoint() -> Any:
 
 
 @contextmanager
-def _answering(body: bytes, status: int = 200) -> Iterator[str]:
+def _answering(
+    body: bytes, status: int = 200, *, requests: list[bytes] | None = None
+) -> Iterator[str]:
     r"""An endpoint answering every request ``status`` with ``body``; its
     URL carries the fake credential."""
 
@@ -245,7 +256,11 @@ def _answering(body: bytes, status: int = 200) -> Iterator[str]:
             pass
 
         def do_POST(self) -> None:  # noqa: N802 - http.server's name
-            self.rfile.read(int(self.headers.get('Content-Length') or 0))
+            received = self.rfile.read(
+                int(self.headers.get('Content-Length') or 0)
+            )
+            if requests is not None:
+                requests.append(received)
             # An endpoint that echoes the credential it was sent: the
             # Authorization header the transport built of the URL's
             # userinfo, wherever the body says {AUTH}.
@@ -357,21 +372,116 @@ def _provider_error(kind: str) -> Callable[[], Any]:
     return call
 
 
+def _codec_bodies(*, private_diagnostic: bool) -> dict[str, bytes]:
+    ids = (DATA, DSN) if private_diagnostic else ('wrong-row-0', 'wrong-row-1')
+    metadata = (
+        {} if private_diagnostic else {'private_data': DATA, 'credential': DSN}
+    )
+    return {
+        'mismatch': json.dumps(
+            {
+                'id': 'r1',
+                'model': 'kumo-relational',
+                'metadata': metadata,
+                'predictions': [
+                    {'id': ids[0], 'row_index': 0, 'prediction': 1.0},
+                    {'id': ids[1], 'row_index': 1, 'prediction': 1.0},
+                ],
+            }
+        ).encode(),
+        'contract': json.dumps(
+            {
+                'id': [DATA] if private_diagnostic else [],
+                'model': DSN if private_diagnostic else 'kumo-relational',
+                'metadata': metadata,
+                'predictions': [],
+            }
+        ).encode(),
+    }
+
+
+def _diagnostic_graph(error: BaseException | None) -> Any:
+    if error is None:
+        return None
+    return {
+        'type': f'{type(error).__module__}.{type(error).__qualname__}',
+        'code': getattr(error, 'code', None),
+        'text': str(error),
+        'details': getattr(error, 'details', None),
+        'cause': _diagnostic_graph(error.__cause__),
+        'context': 'same-as-cause'
+        if error.__context__ is error.__cause__
+        else _diagnostic_graph(error.__context__),
+        'suppress': error.__suppress_context__,
+    }
+
+
+@pytest.mark.parametrize('kind', ['mismatch', 'contract'])
+def test_endpoint_response_display_operands_keep_native_diagnostics(
+    kind: str,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    # Both legs use the same public Core preparation, as the E47 twins do;
+    # only prediction changes route. This floor cell has no old engine.
+    body = _codec_bodies(private_diagnostic=True)[kind]
+    assert DATA.encode() in body and DSN.encode() in body
+    observed = {}
+    for name, routes in (
+        ('core', CORE),
+        (
+            'old',
+            ','.join(_routing.FROM_SOURCE_DUCKDB + _routing.MATERIALIZE_DUCKDB),
+        ),
+    ):
+        requests: list[bytes] = []
+        with monkeypatch.context() as scoped:
+            scoped.setenv(_routing.ENVIRONMENT, routes)
+            with (
+                _watching(scoped, capfd) as seen,
+                _answering(body, requests=requests) as url,
+            ):
+                error = _raised(seen, lambda: _predict(url))
+            assert error.code == 'INVALID_RESPONSE'
+            assert DATA in str(error)
+            assert all(DSN not in text for _, text in seen.texts)
+            assert len(requests) == 1
+            raw = requests[0]
+            assert DATA.encode() in raw and DSN.encode() in raw
+            request = json.loads(
+                raw,
+                parse_int=lambda token: {'integer': token},
+                parse_float=lambda token: {'float': token},
+            )
+            request_id = request['metadata']['request_id']
+            assert type(request_id) is str and request_id
+            request['metadata']['request_id'] = '<request-id>'
+            observed[name] = {
+                'graph': _diagnostic_graph(error),
+                'warnings': seen.warning_records,  # type: ignore[attr-defined]
+                'request': request,
+            }
+    core, old = observed['core'], observed['old']
+    assert core['warnings'] == old['warnings']
+    assert core['request'] == old['request']
+    if kind == 'contract':
+        assert old['graph']['details'] == {}
+        assert core['graph']['details'] == {'field': 'id', 'reason': 'not_text'}
+        assert core['graph']['cause']['type'] == (
+            'sdm_api.generated.tfm_api.ResponseContractError'
+        )
+        assert DATA in old['graph']['cause']['text']
+        core['graph']['details'] = {}
+    else:
+        assert core['graph']['cause'] is old['graph']['cause'] is None
+        assert core['graph']['suppress'] is True
+        assert old['graph']['suppress'] is False
+        core['graph']['suppress'] = False
+    assert core['graph'] == old['graph']
+
+
 def _scenarios() -> dict[str, Callable[[], Any]]:
-    answer_under_another_id = json.dumps(
-        {
-            'id': 'r1',
-            'model': 'kumo-relational',
-            'metadata': {},
-            'predictions': [
-                {'id': DATA, 'row_index': 0, 'prediction': 1.0},
-                {'id': DSN, 'row_index': 1, 'prediction': 1.0},
-            ],
-        }
-    ).encode()
-    answer_not_the_contract_s = json.dumps(
-        {'id': [DATA], 'model': DSN, 'metadata': {}, 'predictions': []}
-    ).encode()
+    bodies = _codec_bodies(private_diagnostic=False)
 
     def answered(body: bytes, status: int = 200) -> Callable[[], Any]:
         def call() -> Any:
@@ -410,12 +520,8 @@ def _scenarios() -> dict[str, Callable[[], Any]]:
     return {
         'codec: an operation the contract cannot read': operation,
         'codec: an attachment that is not its JSON': attachment,
-        'codec: an answer under another row s id': answered(
-            answer_under_another_id
-        ),
-        'codec: an answer not the contract s': answered(
-            answer_not_the_contract_s
-        ),
+        'codec: an answer under another row s id': answered(bodies['mismatch']),
+        'codec: an answer not the contract s': answered(bodies['contract']),
         'provider: a statement failing on the credential': _provider_error(
             'dsn'
         ),
@@ -458,6 +564,23 @@ def test_no_sentinel_reaches_anything_written(
         assert error.__cause__ is None and error.__context__ is None, name
         if 'own words' in name:
             _shows_the_endpoint_s_own_words(error)
+    elif name == 'codec: an answer not the contract s':
+        from sdm_api.generated.tfm_api import ResponseContractError
+
+        assert error.code == 'INVALID_RESPONSE'
+        assert getattr(error, '_sentence') == 'direct_response_contract'
+        cause = error.__cause__
+        assert type(cause) is ResponseContractError
+        assert str(cause) == (
+            "PredictionResponse response has 'id' = [], "
+            'where the contract requires a string'
+        )
+        assert error.__context__ is cause
+        assert error.__suppress_context__ is True
+        assert cause.__cause__ is None and cause.__context__ is None
+        assert cause.__suppress_context__ is False
+        assert error.details == {'field': 'id', 'reason': 'not_text'}
+        assert any(where == 'core error' for where, _ in seen.texts), name
     else:
         # The error is the core's, raised with no cause chained.
         assert error.__cause__ is None and error.__suppress_context__, name
@@ -475,6 +598,8 @@ def test_no_sentinel_reaches_anything_written(
 def test_each_sentinel_is_on_the_path_that_fails(
     capfd: pytest.CaptureFixture[str],
 ) -> None:
+    for body in _codec_bodies(private_diagnostic=False).values():
+        assert DATA.encode() in body and DSN.encode() in body
     # Data and the credential: the driver's own message quotes each.
     for kind, sentinel in (('data', DATA), ('dsn', DSN)):
         with pytest.raises(duckdb.Error) as driver:

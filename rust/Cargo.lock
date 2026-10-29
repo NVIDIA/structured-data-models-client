@@ -1632,6 +1632,7 @@ version = "1.0.0"
 dependencies = [
  "arrow-array",
  "arrow-buffer",
+ "arrow-cast",
  "arrow-data",
  "arrow-ipc",
  "arrow-row",
@@ -1675,6 +1676,7 @@ dependencies = [
  "jiff",
  "sdm-contract",
  "sdm-schema",
+ "serde",
  "serde_json",
 ]
 

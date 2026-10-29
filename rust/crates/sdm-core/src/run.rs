@@ -44,6 +44,21 @@ use crate::compose::{DataAccess, Route};
 pub enum Attachment {
     Bytes(Vec<u8>),
     Arrow(ArrowData),
+    FrameGraph(crate::RetainedFrameGraph),
+    FrameQuestion(crate::RetainedFrameQuestion),
+    FramePopulation(crate::RetainedFramePopulation),
+    FrameLabelGroups(crate::RetainedFrameLabelGroups),
+    LabelInputs(crate::RetainedLabelInputs),
+    TargetColumn(crate::RetainedTargetColumn),
+    LookupRows(crate::RetainedLookupRows),
+    MaterializeSource(crate::RetainedMaterializeSource),
+    MaterializePopulation(crate::RetainedMaterializePopulation),
+    MaterializeGroups(crate::RetainedMaterializeGroups),
+    MaterializeBatch(crate::RetainedMaterializeBatch),
+    FrameLabelBatch(crate::RetainedFrameLabelBatch),
+    FrameTask(crate::RetainedFrameTask),
+    FrameReferences(crate::RetainedFrameReferences),
+    FramePayload(crate::RetainedFramePayload),
 }
 
 /// The attachments one message carries, by the ids it names them with.
@@ -164,6 +179,7 @@ struct Shared {
     memo: Option<SamplerMemo>,
     /// Separately owned frame tables and opaque metadata, never buffers in JSON.
     frame_checkpoint: Option<crate::frame_materialize::OwnedCheckpoint>,
+    frame_graph: Option<crate::RetainedFrameGraph>,
     /// Answered, not yet taken by the body.
     replies: BTreeMap<ReplyId, Reply>,
     /// The fetches whose answers are kept as the provider handed them over,
@@ -180,9 +196,11 @@ struct Shared {
     located: Option<sdm_contract::ops::SourceDescription>,
     /// Why the run asks its fetches now ([`Asker::asking_for`]).
     purpose: Option<sdm_contract::run::FetchPurpose>,
+    /// Publish exact bound-read partitions for a completed native source.
+    describe_partitions: bool,
 }
 
-fn lock(shared: &Mutex<Shared>) -> MutexGuard<'_, Shared> {
+fn lock<T>(shared: &Mutex<T>) -> MutexGuard<'_, T> {
     // A panic while the lock is held panics the body, and that poisons the
     // run, so a poisoned lock is never read in a half-changed state that
     // matters.
@@ -252,27 +270,34 @@ impl Asker {
         let shared = lock(&self.shared);
         let catalog = matches!(request, DataRequest::Describe { .. });
         for relation in request.relations_mut() {
-            let named = relation.clone();
-            if let Some(pinned) = shared.pinned.get(&named) {
-                relation.source = pinned.source.clone();
-            }
-            // A catalog read names the table itself.
-            if catalog {
-                continue;
-            }
-            if let Some(columns) = shared.guarded.get(&named) {
-                relation.found = true;
-                relation.columns = columns
-                    .iter()
-                    .map(|name| RelationColumn {
-                        name: name.clone(),
-                        column: Some(name.clone()),
-                        expression: None,
-                    })
-                    .collect();
-            }
+            *relation = Self::resolved_relation(&shared, relation, catalog);
         }
         request
+    }
+
+    /// The same captured source relation used by the actual data planner.
+    /// This reads only already held core facts, never source metadata or I/O.
+    pub(crate) fn relation_for_read(&self, relation: &Relation) -> Relation {
+        Self::resolved_relation(&lock(&self.shared), relation, false)
+    }
+
+    fn resolved_relation(shared: &Shared, named: &Relation, catalog: bool) -> Relation {
+        let mut relation = named.clone();
+        if let Some(pinned) = shared.pinned.get(named) {
+            relation.source = pinned.source.clone();
+        }
+        if !catalog && let Some(columns) = shared.guarded.get(named) {
+            relation.found = true;
+            relation.columns = columns
+                .iter()
+                .map(|name| RelationColumn {
+                    name: name.clone(),
+                    column: Some(name.clone()),
+                    expression: None,
+                })
+                .collect();
+        }
+        relation
     }
 
     /// The schema as the source holds it at this run, once the run has read
@@ -285,6 +310,10 @@ impl Asker {
     /// is cleared (`None`).
     pub(crate) fn asking_for(&self, purpose: Option<sdm_contract::run::FetchPurpose>) {
         lock(&self.shared).purpose = purpose;
+    }
+
+    pub(crate) fn describe_fetch_partitions(&self) {
+        lock(&self.shared).describe_partitions = true;
     }
 
     /// Keeps `located`, the schema as the source holds it at this run, for
@@ -324,7 +353,14 @@ impl Asker {
             Route::Plan(plan) => {
                 if let Some(metadata) = data.result_metadata(&request, &plan)? {
                     let plans = self.bind_with(data, &request, metadata, true)?;
-                    let metadata = Box::new(self.ask_bound(request.clone(), plans));
+                    let mut metadata = self.ask_bound(request.clone(), plans);
+                    let future_read = lock(&self.shared)
+                        .describe_partitions
+                        .then(|| Arc::new(Mutex::new(None)));
+                    if future_read.is_some() {
+                        metadata.set_purpose(sdm_contract::run::FetchPurpose::DescribeResult);
+                    }
+                    let metadata = Box::new(metadata);
                     return Ok(Ask {
                         shared: Arc::clone(&self.shared),
                         state: AskState::Projection(Box::new(ProjectionAsk {
@@ -333,9 +369,14 @@ impl Asker {
                             plan,
                             metadata,
                             actual: None,
+                            future_read,
+                            lookup: None,
                         })),
                         budget: None,
                         raw: false,
+                        partition: None,
+                        purpose: None,
+                        lookup: None,
                     });
                 }
                 let plans = self.bind(data, &request, plan)?;
@@ -361,6 +402,9 @@ impl Asker {
             ))),
             budget: None,
             raw: false,
+            partition: None,
+            purpose: None,
+            lookup: None,
         })
     }
 
@@ -584,19 +628,35 @@ impl Asker {
     /// in one step: their answers joined in order, and the first that
     /// failed, in order, failing it.
     fn ask_bound(&self, request: DataRequest, mut plans: Vec<FetchPlan>) -> Ask {
+        let partition = lock(&self.shared)
+            .describe_partitions
+            .then(|| Arc::new(Mutex::new(None)));
+        let parts = u32::try_from(plans.len()).unwrap_or(u32::MAX);
         if plans.len() == 1
             && let Some(plan) = plans.pop()
         {
-            return self.ask_planned(request, plan);
+            let mut ask = self.ask_planned(request, plan);
+            ask.partition = partition.map(|first| ReadPartition {
+                first,
+                ordinal: 0,
+                parts,
+            });
+            return ask;
         }
         let expect = plans
             .first()
             .map_or(ExpectedSchema::Discover {}, |plan| plan.expect().clone());
         let parts = plans
             .into_iter()
-            .map(|plan| {
+            .enumerate()
+            .map(|(ordinal, plan)| {
                 let mut part = self.ask_planned(request.clone(), plan);
                 part.raw = true;
+                part.partition = partition.as_ref().map(|first| ReadPartition {
+                    first: Arc::clone(first),
+                    ordinal: ordinal as u32,
+                    parts,
+                });
                 Part::Asking(Box::new(part))
             })
             .collect();
@@ -609,15 +669,30 @@ impl Asker {
             })),
             budget: None,
             raw: false,
+            partition: None,
+            purpose: None,
+            lookup: None,
         }
     }
 
     fn ask_planned(&self, request: DataRequest, plan: FetchPlan) -> Ask {
+        let purpose = (lock(&self.shared).describe_partitions
+            && matches!(
+                &request,
+                DataRequest::Scan { .. }
+                    | DataRequest::SampleEntities { .. }
+                    | DataRequest::Neighbors { .. }
+                    | DataRequest::Lookup { .. }
+            ))
+        .then_some(sdm_contract::run::FetchPurpose::SourceRows);
         Ask {
             shared: Arc::clone(&self.shared),
             state: AskState::New(Asked::Fetch(Box::new((request, plan)))),
             budget: None,
             raw: false,
+            partition: None,
+            purpose,
+            lookup: None,
         }
     }
 
@@ -632,6 +707,9 @@ impl Asker {
             }),
             budget: None,
             raw: false,
+            partition: None,
+            purpose: None,
+            lookup: None,
         }
     }
 
@@ -671,7 +749,22 @@ impl Asker {
     }
 
     pub(crate) fn keep_frame(&self, checkpoint: crate::frame_materialize::OwnedCheckpoint) {
-        lock(&self.shared).frame_checkpoint = Some(checkpoint);
+        let mut shared = lock(&self.shared);
+        if shared.frame_graph.is_none() {
+            shared.frame_checkpoint = Some(checkpoint);
+        }
+    }
+
+    pub(crate) fn keep_retained_frame(&self, owner: crate::RetainedFrameGraph) {
+        let mut shared = lock(&self.shared);
+        shared.frame_checkpoint = None;
+        if shared.memo.is_none() {
+            shared.memo = Some(SamplerMemo {
+                source: owner.prepared().source.clone(),
+                ..SamplerMemo::default()
+            });
+        }
+        shared.frame_graph = Some(owner);
     }
 }
 
@@ -735,6 +828,101 @@ pub struct Ask {
     /// the provider handed it over, read (`DataAccess::conform`) and held
     /// to its schema only once the request's chunks are joined.
     raw: bool,
+    partition: Option<ReadPartition>,
+    purpose: Option<sdm_contract::run::FetchPurpose>,
+    lookup: Option<Arc<PendingLookup>>,
+}
+
+struct PendingLookup {
+    context: Arc<crate::materialize::native_lookup::LookupContext>,
+    owner: Mutex<Option<(AttachmentId, crate::RetainedLookupRows)>>,
+}
+
+struct ReadPartition {
+    first: Arc<Mutex<Option<ReplyId>>>,
+    ordinal: u32,
+    parts: u32,
+}
+
+/// Historical identity of the issued logical read retained by its consumer.
+/// It is populated when the real first request is issued, never by a host.
+pub(crate) struct FetchReadIdentity(Arc<Mutex<Option<ReplyId>>>);
+
+impl FetchReadIdentity {
+    pub(crate) fn first(&self) -> Option<ReplyId> {
+        *lock(&self.0)
+    }
+}
+
+impl Ask {
+    /// Attach the actual counted task data only to the finite native read.
+    /// Metadata preflights and ordinary/raw fetches publish no such owner.
+    pub(crate) fn with_lookup(
+        mut self,
+        context: Arc<crate::materialize::native_lookup::LookupContext>,
+    ) -> Self {
+        if self.source_read().is_some() {
+            self.bind_lookup(Arc::new(PendingLookup {
+                context,
+                owner: Mutex::new(None),
+            }));
+        }
+        self
+    }
+
+    fn bind_lookup(&mut self, lookup: Arc<PendingLookup>) {
+        match &mut self.state {
+            AskState::Chunks(chunks) => {
+                for part in &mut chunks.parts {
+                    if let Part::Asking(ask) = part {
+                        ask.bind_lookup(Arc::clone(&lookup));
+                    }
+                }
+            }
+            _ => self.lookup = Some(lookup),
+        }
+    }
+
+    pub(crate) fn source_read(&self) -> Option<FetchReadIdentity> {
+        match &self.state {
+            AskState::Projection(projected) => projected
+                .future_read
+                .as_ref()
+                .map(|first| FetchReadIdentity(Arc::clone(first))),
+            AskState::Chunks(chunked) => chunked.parts.first().and_then(|part| match part {
+                Part::Asking(ask) => ask.source_read(),
+                Part::Answered(_) => None,
+            }),
+            _ => self
+                .partition
+                .as_ref()
+                .map(|part| FetchReadIdentity(Arc::clone(&part.first))),
+        }
+    }
+
+    fn set_purpose(&mut self, purpose: sdm_contract::run::FetchPurpose) {
+        self.purpose = Some(purpose);
+        if let AskState::Chunks(chunked) = &mut self.state {
+            for part in &mut chunked.parts {
+                if let Part::Asking(ask) = part {
+                    ask.set_purpose(purpose);
+                }
+            }
+        }
+    }
+
+    fn bind_source_read(&mut self, first: &Arc<Mutex<Option<ReplyId>>>) {
+        if let Some(partition) = &mut self.partition {
+            partition.first = Arc::clone(first);
+        }
+        if let AskState::Chunks(chunked) = &mut self.state {
+            for part in &mut chunked.parts {
+                if let Part::Asking(ask) = part {
+                    ask.bind_source_read(first);
+                }
+            }
+        }
+    }
 }
 
 /// What one fetch's answer may hold, the in-memory fallback's limits on a
@@ -897,6 +1085,8 @@ struct ProjectionAsk {
     plan: FetchPlan,
     metadata: Box<Ask>,
     actual: Option<Box<Ask>>,
+    future_read: Option<Arc<Mutex<Option<ReplyId>>>>,
+    lookup: Option<Arc<PendingLookup>>,
 }
 
 fn poll_projection(
@@ -928,8 +1118,14 @@ fn poll_projection(
             }
         };
         let mut actual = projected.asker.ask_bound(projected.request.clone(), plans);
+        if let Some(first) = &projected.future_read {
+            actual.bind_source_read(first);
+        }
         actual.budget = budget.take();
         actual.raw = raw;
+        if let Some(lookup) = &projected.lookup {
+            actual.bind_lookup(Arc::clone(lookup));
+        }
         projected.actual = Some(Box::new(actual));
     }
     match projected.actual.as_mut() {
@@ -1061,6 +1257,9 @@ impl Future for Ask {
     fn poll(self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<Reply> {
         let this = self.get_mut();
         if let AskState::Projection(projected) = &mut this.state {
+            if projected.lookup.is_none() {
+                projected.lookup = this.lookup.take();
+            }
             return poll_projection(projected, &mut this.budget, this.raw, context);
         }
         // The fallback's own asks, and a chunked request's fetches, lock the
@@ -1098,13 +1297,43 @@ impl Future for Ask {
                         if this.raw {
                             shared.raw.insert(id);
                         }
-                        let purpose = shared.purpose;
+                        let purpose = this.purpose.or(shared.purpose);
+                        let partition = this.partition.as_ref().map(|read| {
+                            let first = *lock(&read.first).get_or_insert(id);
+                            sdm_contract::run::FetchPartition {
+                                first,
+                                ordinal: read.ordinal,
+                                parts: read.parts,
+                            }
+                        });
+                        let lookup = match (&this.lookup, &partition, &request) {
+                            (Some(pending), Some(partition), DataRequest::Lookup { table, .. }) => {
+                                let mut current = lock(&pending.owner);
+                                if current.is_none() {
+                                    let owner = crate::RetainedLookupRows::new(
+                                        Arc::clone(&pending.context),
+                                        table.clone(),
+                                        partition.first,
+                                    );
+                                    let Ok(attachment) =
+                                        attach(&mut shared, Attachment::LookupRows(owner.clone()))
+                                    else {
+                                        return Poll::Pending;
+                                    };
+                                    *current = Some((attachment, owner));
+                                }
+                                current.as_ref().map(|(id, owner)| owner.meaning(*id))
+                            }
+                            _ => None,
+                        };
                         shared.fetches.push(FetchStep {
                             id,
                             request,
                             plan,
                             continuation: None,
                             purpose,
+                            partition,
+                            lookup,
                         });
                         fetch = Some(asked);
                     }
@@ -1160,13 +1389,17 @@ impl Future for Ask {
                         shared.raw.insert(next);
                     }
                     let (request, plan) = (*asked).clone();
-                    let purpose = shared.purpose;
+                    let purpose = this.purpose.or(shared.purpose);
                     shared.fetches.push(FetchStep {
                         id: next,
                         request,
                         plan,
                         continuation: Some(continuation),
                         purpose,
+                        // A paged continuation is a later I/O read, not
+                        // another initial chunk of the described partition.
+                        partition: None,
+                        lookup: None,
                     });
                     this.state = AskState::Asked {
                         id: next,
@@ -1548,33 +1781,83 @@ impl Run {
         let bytes =
             serde_json::to_vec(&memo).map_err(|_| internal("a sampler memo does not serialize"))?;
         let id = attach(&mut shared, Attachment::Bytes(bytes))?;
-        let frame_checkpoint = match shared.frame_checkpoint.take() {
-            None => None,
-            Some(checkpoint) => {
-                let metadata = attach(
-                    &mut shared,
-                    Attachment::Bytes(
-                        serde_json::to_vec(&checkpoint.metadata)
-                            .map_err(|_| internal("frame metadata does not serialize"))?,
-                    ),
-                )?;
-                let mut tables = Vec::new();
-                for (source, data) in checkpoint.tables {
-                    let rows = attach(&mut shared, Attachment::Arrow(data))?;
-                    tables.push(sdm_contract::frames::FrameInput { source, rows });
+        let retained = shared.frame_graph.clone();
+        let frame_checkpoint = if let Some(owner) = retained {
+            let metadata = owner.checkpoint_metadata()?;
+            let metadata = attach(
+                &mut shared,
+                Attachment::Bytes(
+                    serde_json::to_vec(&metadata)
+                        .map_err(|_| internal("retained frame metadata does not serialize"))?,
+                ),
+            )?;
+            let retained = attach(&mut shared, Attachment::FrameGraph(owner))?;
+            let manifest = sdm_contract::frames::FrameCheckpointManifest {
+                metadata,
+                tables: Vec::new(),
+                row_identities: Vec::new(),
+                retained: Some(retained),
+            };
+            let manifest = attach(
+                &mut shared,
+                Attachment::Bytes(
+                    serde_json::to_vec(&manifest)
+                        .map_err(|_| internal("retained frame manifest does not serialize"))?,
+                ),
+            )?;
+            Some(sdm_contract::frames::FrameCheckpoint {
+                version: sdm_contract::frames::FRAME_CHECKPOINT_VERSION,
+                manifest,
+            })
+        } else {
+            match shared.frame_checkpoint.take() {
+                None => None,
+                Some(checkpoint) => {
+                    let metadata = attach(
+                        &mut shared,
+                        Attachment::Bytes(
+                            serde_json::to_vec(&checkpoint.metadata)
+                                .map_err(|_| internal("frame metadata does not serialize"))?,
+                        ),
+                    )?;
+                    let mut tables = Vec::new();
+                    for (source, data) in checkpoint.tables {
+                        let rows = attach(&mut shared, Attachment::Arrow(data))?;
+                        tables.push(sdm_contract::frames::FrameInput {
+                            source,
+                            rows,
+                            decimals: vec![],
+                            objects: vec![],
+                        });
+                    }
+                    let mut row_identities = Vec::new();
+                    for identity in checkpoint.row_identities {
+                        let values = attach(&mut shared, Attachment::Arrow(identity.values))?;
+                        row_identities.push(sdm_contract::frames::materialize::FrameRowIdentity {
+                            definition: identity.definition,
+                            values: sdm_contract::data::strings::StringData {
+                                values,
+                                encoding: identity.encoding,
+                            },
+                        });
+                    }
+                    let manifest = sdm_contract::frames::FrameCheckpointManifest {
+                        metadata,
+                        tables,
+                        row_identities,
+                        retained: None,
+                    };
+                    let manifest = attach(
+                        &mut shared,
+                        Attachment::Bytes(serde_json::to_vec(&manifest).map_err(|_| {
+                            internal("frame ownership manifest does not serialize")
+                        })?),
+                    )?;
+                    Some(sdm_contract::frames::FrameCheckpoint {
+                        version: sdm_contract::frames::FRAME_CHECKPOINT_VERSION,
+                        manifest,
+                    })
                 }
-                let manifest = sdm_contract::frames::FrameCheckpointManifest { metadata, tables };
-                let manifest = attach(
-                    &mut shared,
-                    Attachment::Bytes(
-                        serde_json::to_vec(&manifest)
-                            .map_err(|_| internal("frame ownership manifest does not serialize"))?,
-                    ),
-                )?;
-                Some(sdm_contract::frames::FrameCheckpoint {
-                    version: sdm_contract::frames::FRAME_CHECKPOINT_VERSION,
-                    manifest,
-                })
             }
         };
         Ok(Some(SamplerState {
@@ -1799,3 +2082,6 @@ fn page_budgets_measure_logical_slices_at_exact_and_over_limits() {
     budget.rows = 1;
     assert_eq!(budget.exceeded(&data).unwrap().message, "rows");
 }
+
+#[cfg(test)]
+mod native_fetch_partition_tests;

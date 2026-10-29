@@ -421,6 +421,27 @@ pub(crate) async fn call_response(
     endpoint: Option<&ModelEndpoint>,
     direct: bool,
 ) -> Result<(Value, PredictionResponse), CoreError> {
+    call_response_with_contract(asker, bytes, endpoint, direct, None).await
+}
+
+/// Native gathered calls keep gathered integer widths and the generated
+/// decoder's exact selected error presentation as separate choices.
+pub(crate) async fn call_native_response(
+    asker: &Asker,
+    bytes: Vec<u8>,
+    endpoint: Option<&ModelEndpoint>,
+    model: &str,
+) -> Result<(Value, PredictionResponse), CoreError> {
+    call_response_with_contract(asker, bytes, endpoint, false, Some(model)).await
+}
+
+async fn call_response_with_contract(
+    asker: &Asker,
+    bytes: Vec<u8>,
+    endpoint: Option<&ModelEndpoint>,
+    direct: bool,
+    native_model: Option<&str>,
+) -> Result<(Value, PredictionResponse), CoreError> {
     let serving = endpoint.map(
         |ModelEndpoint::ServingEndpoint {
              name,
@@ -505,17 +526,39 @@ pub(crate) async fn call_response(
     };
     let decoded = if direct {
         PredictionResponse::read_direct(&answer)
+    } else if native_model.is_some() {
+        PredictionResponse::read_native_gathered(&answer)
     } else {
         PredictionResponse::read(&answer)
     };
     let response = decoded.map_err(|error| {
-        if direct {
+        if let Some(model) = native_model {
+            native_gathered_contract_error(&answer, error, model)
+        } else if direct {
             direct_contract_error(&answer, error)
         } else {
             refused(error)
         }
     })?;
     Ok((answer, response))
+}
+
+fn native_gathered_contract_error(
+    answer: &Value,
+    error: sdm_wire::response::Refused,
+    model: &str,
+) -> CoreError {
+    let details = refused(error.clone()).fields;
+    let mut selected = direct_contract_error(answer, error)
+        .with_field("model", Detail::text(model))
+        .with_field(
+            "native_relational_contract",
+            Detail::Scalar(Scalar::Bool(true)),
+        );
+    // Native wording/cause facts stay private; the established gathered
+    // structural diagnostics remain available to callers under P3E-5.
+    selected.public_details = Some(Box::new(details));
+    selected
 }
 
 /// Present the shared decoder's selected field/value fault, without parsing
@@ -643,7 +686,7 @@ fn direct_contract_error(_answer: &Value, error: sdm_wire::response::Refused) ->
                         Value::Object(vec![("index".into(), Value::Number(at.to_string()))])
                     }
                     sdm_wire::response::RefusalAt::Member(name) => {
-                        Value::Object(vec![("member".into(), Value::Text(name.clone()))])
+                        Value::Object(vec![("member".into(), Value::Text(name.clone().into()))])
                     }
                 })
                 .collect(),
@@ -673,4 +716,94 @@ fn direct_contract_error(_answer: &Value, error: sdm_wire::response::Refused) ->
         );
     }
     selected
+}
+
+#[cfg(test)]
+mod native_contract_tests {
+    use super::*;
+
+    #[test]
+    fn gathered_native_contract_faults_keep_structural_details_and_private_cause_facts_separate() {
+        for (body, field, reason) in [
+            (
+                r#"{"id":"r","model":"kumo-relational","metadata":3,"predictions":[]}"#,
+                "metadata",
+                "not_an_object",
+            ),
+            (
+                r#"{"id":"r","model":"kumo-relational","metadata":{},"predictions":[{"row_index":0,"probabilities":[] }]}"#,
+                "prediction.probabilities",
+                "not_an_object",
+            ),
+            (
+                r#"{"id":"r","model":"kumo-relational","metadata":{},"predictions":[{"row_index":170141183460469231731687303715884105728}]}"#,
+                "prediction.row_index",
+                "out_of_range",
+            ),
+            (
+                r#"{"model":"kumo-relational","metadata":{},"predictions":[]}"#,
+                "id",
+                "missing",
+            ),
+        ] {
+            let answer = json::read_answer(body.as_bytes()).unwrap();
+            let refused = PredictionResponse::read_native_gathered(&answer).unwrap_err();
+            assert_eq!((refused.field, refused.reason), (field, reason));
+            let selected = native_gathered_contract_error(&answer, refused, "kumo-relational");
+            assert_eq!(selected.code, sdm_contract::ErrorCode::InvalidResponse);
+            assert_eq!(
+                selected.public_details.as_deref(),
+                Some(
+                    &[
+                        ("field".to_owned(), Detail::text(field)),
+                        ("reason".to_owned(), Detail::text(reason)),
+                    ]
+                    .into()
+                )
+            );
+            assert_eq!(selected.fields["model"], Detail::text("kumo-relational"));
+            assert_eq!(
+                selected.fields["native_relational_contract"],
+                Detail::Scalar(Scalar::Bool(true))
+            );
+            if field == "metadata" {
+                assert!(!selected.fields.contains_key("native"));
+                assert!(selected.fields.contains_key("offending"));
+            }
+        }
+    }
+
+    #[test]
+    fn gathered_native_mapping_fault_keeps_the_actual_private_dict_product() {
+        let answer = json::read_answer(
+            br#"{"id":"r","model":"kumo-relational","metadata":{},"predictions":[{"row_index":0,"explanation":3}]}"#,
+        )
+        .unwrap();
+        let refused = PredictionResponse::read_native_gathered(&answer).unwrap_err();
+        assert_eq!(
+            (refused.field, refused.reason),
+            ("prediction.explanation", "not_a_mapping")
+        );
+        assert_eq!(refused.native, Some(sdm_wire::response::NativeFault::Dict));
+        assert_eq!(refused.value, Some(json::read_answer(b"3").unwrap()));
+        let selected = native_gathered_contract_error(&answer, refused, "kumo-relational");
+        assert_eq!(selected.code, sdm_contract::ErrorCode::InvalidResponse);
+        assert_eq!(
+            selected.public_details.as_deref(),
+            Some(
+                &[
+                    ("field".to_owned(), Detail::text("prediction.explanation")),
+                    ("reason".to_owned(), Detail::text("not_a_mapping")),
+                ]
+                .into()
+            )
+        );
+        assert_eq!(selected.fields["model"], Detail::text("kumo-relational"));
+        assert_eq!(
+            selected.fields["native_relational_contract"],
+            Detail::Scalar(Scalar::Bool(true))
+        );
+        assert_eq!(selected.fields["native"], Detail::text("dict"));
+        assert_eq!(selected.fields["offending"], Detail::text("3"));
+    }
 }

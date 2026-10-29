@@ -4,21 +4,21 @@
   "files": {
     "packages/structured-data-models-client/src/sdm_client/_rust/schema.py": {
       "<module>": {
-        "fingerprint": "b29fe101355f7102a2e1097b9633f1d40c4e0c564d45554dff0c00ce0945cccc"
+        "fingerprint": "ccbe06125049775f5accd5dcfb472abb90559cac037cd5d33a1e5e1df08eaea3"
       },
       "build": {
-        "fingerprint": "8da2d6e402eebd0f818746e4d9137225dc24e068b3f4e1d8b3451149adb2651c"
+        "fingerprint": "3f0bd92ca2685ca4e6a70c65a64e5db1d034386cd6ce725635989c6bbff8732d"
       },
       "conversion_notes": {
         "fingerprint": "508ac21006be52f300b68ce0ac50cfb65c45ab8ae95a20270866b9fc418f9de1"
       },
       "from_source": {
-        "fingerprint": "20e26258e82b0520a361d3a91dd2e701785919b997768744ac85d5515a6d02cc"
+        "fingerprint": "fb7f2d9e713a880cdfdad8ad22405bab80f45af30a9ef4fec0bcfe60a8438930"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py": {
       "<module>": {
-        "fingerprint": "067965988a80ede5f2bc3732a824dafedbd91742ba8e5be596d2401039459cc9"
+        "fingerprint": "d76b43db580e504d9527c5d061429a32115a2e8ba0fe78091f7ebf9e49fe2e46"
       },
       "_anchor": {
         "fingerprint": "8845c755285774562396f76aecab772e0dc002483f9f9ada1951406a3ebe523f"
@@ -42,12 +42,12 @@
         "fingerprint": "32485edb4f50fd57ef9c965f6d5eebcfdb8b2f520cb1c260b9cd8596a91390d5"
       },
       "gather": {
-        "fingerprint": "a9c13eb9945271fdecc36a60f534fd4ed71cb9d4ff963187dc137cac027733f4"
+        "fingerprint": "e3ca38471dd8b1753ffe3561664bc9965bbba773796add9dedf7d537cefbe15e"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py": {
       "<module>": {
-        "fingerprint": "db297da379478e32ed2cddfac1c4da4b4bfc4e4fa1745c54064af792ac6c6381"
+        "fingerprint": "7e29ef07396f6ab9e9928fd02768350de8703fff2ded3542097f2934b31bb67f"
       },
       "_adapter": {
         "fingerprint": "f40725046a4dc6e6d4843f595dc9907a872a039e056a9e7794cefc585046fef9"
@@ -67,23 +67,14 @@
       "_forecast_step": {
         "fingerprint": "fdb844ff2c7d65419671be4f1022f396ce490cf4fb0c73ebe147566f447330ee"
       },
-      "_from_state": {
-        "fingerprint": "9b6df2aaf794183a1f111799c8c1854b075449b4d9f7ef273e1a6aa370383b18"
-      },
-      "_held": {
-        "fingerprint": "574a48453f1ab4a0c6b59c54f92325244b89a5123b646334813ae0e58dc8f882"
-      },
       "_id": {
         "fingerprint": "3764d1340a4dca22de9a464014a412e6e383425eae4dfc90696f346838c72f8e"
       },
       "_mapping": {
         "fingerprint": "c8ae3478810326504c0608ccf9f86cea198a97a107ba4246d2debccdb91d2e47"
       },
-      "_payload": {
-        "fingerprint": "d9061a285f7423ab88ce87416e10788d5cc95ec3f6ff8387d64ace6f55f15016"
-      },
       "_ranked": {
-        "fingerprint": "d05af3045aec44d954660349b07ce21e1dfcee45fde24186dc64b2c4a2f81de0"
+        "fingerprint": "ab5783fe06cc7b9be1dff23aacff1f8c6039c796bc00ce162d96df69eb01d467"
       },
       "_refusal": {
         "fingerprint": "e77c413784f97bb64785920923f9bfa9ccf2cf43293f9997ead0fef5bfa46a4d"
@@ -107,7 +98,7 @@
         "fingerprint": "34815e94beb5e40441aba62d1800f3cb07ddb670aca7a3578d7b3c82a25cef70"
       },
       "predict": {
-        "fingerprint": "fb2c2913195dc538451d4281297186f2bb88d661b2cbde4ebb0583432d0989c5"
+        "fingerprint": "a6d06c38435f326ab574a7678a544043bfdfd4a57f74a6c6021fc6c83e05e175"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/codec.py": {
@@ -221,7 +212,7 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py": {
       "<module>": {
-        "fingerprint": "d7e1e024c8274e82d4bd86b663db81b0d8641275d8eaedf7dd7080eca3b62108"
+        "fingerprint": "b184483d5040b16402e730a9bf4ec24c444ac303022e379aa5df38e78111289a"
       },
       "_Held.__getattr__": {
         "fingerprint": "1c11f042b8200ddeeed1c4f0ca22f07fa367d50bc7957f1262c3f92fde717fca"
@@ -241,11 +232,17 @@
       "_HostValues.__len__": {
         "fingerprint": "4c55dede8ddfefc3b1682eead3bbca6586791faaa5d398f058624a83ecd9620b"
       },
+      "_ObservedRepr.__init__": {
+        "fingerprint": "5b5721acd963a23968a6bb751f68b70aa914e94d1f7b85fff2635fa5cfe770f1"
+      },
+      "_ObservedRepr.__repr__": {
+        "fingerprint": "056580b873ec6f692e8b0f3bd1cf9b21d3eb8a85f7c6ceb876ef864115852ea3"
+      },
       "_Words.__init__": {
         "fingerprint": "ceb1736bb28db2efb30697d89bd65e6e317c9765f8eae2dae4ec8ace2daf7c35"
       },
       "_Words.convert_field": {
-        "fingerprint": "2a134e0435ea06f95c0b62f9431fc9f3aedb36480601ff56ce6a16aed7fdd217"
+        "fingerprint": "b38d9d1b1b5439afd09594fea40a0f311f72c47dd1536c017003f798514a8e49"
       },
       "_Words.format_field": {
         "fingerprint": "3cba91f64b95d55cd79284ce3610ad69e8001907fdbdb370d47ab8f3bcb86cc3"
@@ -263,7 +260,7 @@
         "fingerprint": "edb6f965c0e33245cc434242746e2ce3da0de3143f48ec65de6af5c840193215"
       },
       "_fields": {
-        "fingerprint": "05d15afd67d3afa16ed9300303935a1c36c5d3d0162991a6b3b2d7f12e9abf59"
+        "fingerprint": "ec584ff5bf4581b920d37b15ea7d8b30cb5a9ccc2a7507a0dc98e96e499092d3"
       },
       "_held": {
         "fingerprint": "963db01ff1c1072e79a947953b1a2a77b8982b34124589d1c3e6141c660e9022"
@@ -275,7 +272,7 @@
         "fingerprint": "c5c5a3198bdd3d95859c7ed6ae1fa6d30702581bd5a3b3cdc2ae86a13b9f3c91"
       },
       "_said": {
-        "fingerprint": "6afd24b6a4a58432d5d195936877378a1bf1caa0a414cdc2b84aab99ae3b72b9"
+        "fingerprint": "50fa6efa0859cef4d1ebba7afa9d5734c27f420cae1952bfd44528f3e928dfb0"
       },
       "_shown_timestamp": {
         "fingerprint": "a1ba25863eb7cf178935cfb0ad856e3a0f31562be01d203b17a8aa830413d62c"
@@ -290,7 +287,7 @@
         "fingerprint": "4c0cd92b0d16c9578b5dd4422038951893cd46dbc685e3afe4d005ba3cc85107"
       },
       "error_from_core": {
-        "fingerprint": "3c08bbf32c2e2d7245c54072df476c6cae96c2cdd41cd004810dceae29a01cc7"
+        "fingerprint": "aa70df5d434029108d1069ecad3f4584f67ccd7deb8525ec191aa691801c3195"
       },
       "holding": {
         "fingerprint": "9e64ecd7e71e03b647320abf8b92f74c8f5a13dcb9189888250b145cb9dffaf2"
@@ -299,10 +296,10 @@
         "fingerprint": "d152c028f851318aa7d29ee83b460d95e35eae190dfc5df59bbea6fc0df046ea"
       },
       "raise_error": {
-        "fingerprint": "5c267f3dccd2400760d3bd09ad708b182aeeaaa3bb7cf6997fcc882c0531f3ac"
+        "fingerprint": "2b58bc9c0efe8c294af62fa104d9faf5dd6285bd515ca0728536539ca7adaa6c"
       },
       "raise_from_core": {
-        "fingerprint": "086f183a7690d27e1fbd2eb073ca29af340e017b223f695d7ab33885b678f281"
+        "fingerprint": "8655a06c317fcf48c327964bb73d6989e1d2200811afc188c8b4b4d9c395b3ea"
       },
       "raise_native": {
         "fingerprint": "11e405489163409f760abc3b1d57841b7fba64d21ab8c2a8201e1804f6c16b1c"
@@ -320,7 +317,7 @@
         "fingerprint": "0d4dfdebd8bbd6257ced1784723a96e754324c9301f1f918e112a9ed35fd8625"
       },
       "warn_from_core": {
-        "fingerprint": "ed6bba10804f00a79d3414f2ed82e21c2fd1340b113e157cab2ef126b5725f7b"
+        "fingerprint": "b398b83eefbe562658b526a08cd0fff99342882062131c7b10b75b46a7ec88f5"
       },
       "warn_held": {
         "fingerprint": "bfd36139c92eefac64653070dee6a6402f13bb6bbbe3f60573a86a3c2c24e1d3"
@@ -328,27 +325,39 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py": {
       "<module>": {
-        "fingerprint": "c9d86a4f0f9663e0207aa985419d54d449a09112086936ea7965c0f6fb39c5fc"
+        "fingerprint": "f4ba71720733a690c68b3d8ee0b4b69ec9341bde66109c4f5a28a3b6352a67b0"
       },
       "PostgresProvider.__call__": {
-        "fingerprint": "0aa28c4347a8faf44f42e8e6e264171dafe8a8dc8ce8dd2ddde613f560f1bfef"
+        "fingerprint": "4a7a9c4466559a1ef839570af2d4d83800fd7358ede7455b9901c18f326edc35"
       },
       "PostgresProvider.__init__": {
         "fingerprint": "3e278560d028fd3cf21e43d5d3da95154b0daf3e1dc8cca7683d4ca59c9f97f4"
+      },
+      "PostgresProvider.source_rows": {
+        "fingerprint": "1026170a2bd2ab6ee6d95eb4ea4d92e4b3114a24bed8ac0d14862dfd5d0b5fb0"
+      },
+      "_ColumnDescription.name": {
+        "fingerprint": "57924436a09a1a0195d6dcf559924c4328a206d44ed338491709da98305a5846"
+      },
+      "_ColumnDescription.precision": {
+        "fingerprint": "649bb427bd30fc4384e856c0f925a99f1579966310f93d41289405b03734c411"
+      },
+      "_ColumnDescription.scale": {
+        "fingerprint": "728dfb6a44f3991ef7aa663ba37e08244d4ab9f8583e8184b20042ec227b487a"
+      },
+      "_ColumnDescription.type_code": {
+        "fingerprint": "68eb6b901f78cb19f5773ca71338cf581326e0c752fe750036368d5c4a6a7bfb"
       },
       "_own_transaction": {
         "fingerprint": "223bfb1d59011dcd424a1deafdb3a04f4dccdb0546daccf2ab5b981647467684"
       },
       "_psycopg_text": {
         "fingerprint": "0bca2858b29ddcf9c6f04be6ed0ce8a5fc119d122f171022b31bb8358319f828"
-      },
-      "_result": {
-        "fingerprint": "e661aeed8eb9d870a929ed2eebe1390316ced0294ee58af8177ea74cb37418bd"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres_arrow.py": {
       "<module>": {
-        "fingerprint": "3a398505d3992ea5a2496ef9bb010cf4867ced751d9d548eb37fc43c20b8f8d7"
+        "fingerprint": "00371e7413cae79e95c0ddbd1ebc37c52dac43ae5b769a24cc48c3a8cc2a6439"
       },
       "_array": {
         "fingerprint": "8373cfcd4c2046e8068c0336c4d292064110aa7cf69989a24bd449f2323ed33d"
@@ -387,7 +396,7 @@
         "fingerprint": "cea6477af1ca7a4d35ac934e1ab6c9b6dce11e130a2f1f4d01dfc3c6ab5b5241"
       },
       "rows_arrow": {
-        "fingerprint": "768c36d7f1b2d08e8a0db0eae8ecd22ac5079005fd333baf992634895173c141"
+        "fingerprint": "07356e433eccc63d844ff23dd5caa5508cb587b84c53509843a42e47652a39f3"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/client.py": {
@@ -395,7 +404,7 @@
         "fingerprint": "c1ad25dff22f0033cd83cf7c765f4d9897f2c819aa72a64cd666c53cf9b808d2"
       },
       "SDMClient._answer_in_parts": {
-        "fingerprint": "e3f044d106b0b279755b61032b1d1aa1ebdbd545fa2e132e7a3925b9c9d9637a"
+        "fingerprint": "8966b6d5e4ea638ac246c4f77bc7ad3d188a855764c0ab55ef6bcf59126c21ed"
       },
       "SDMClient._prepare": {
         "fingerprint": "7445da483034ad0cfce45c8edde75798bddf6e3c8ce1aad2c98082ad91e0bcea"

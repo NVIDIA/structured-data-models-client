@@ -116,6 +116,447 @@ fn primitive_frame_is_described_without_any_fetch() {
 }
 
 #[test]
+fn native_float_cardinality_and_quality_are_independent_host_constructor_products() {
+    use arrow_array::{ArrayRef, Float32Array, Float64Array};
+    use sdm_contract::frames::FrameInference;
+    use sdm_contract::ops::{Dtype, Stype};
+    use sdm_contract::{Detail, Sentence};
+    for narrow in [false, true] {
+        let (sign, quiet, signaling, one, two) = if narrow {
+            (
+                1_u64 << 31,
+                0x7fc0_0000,
+                0x7f80_0001,
+                0x3f80_0000,
+                0x4000_0000,
+            )
+        } else {
+            (
+                1_u64 << 63,
+                0x7ff8_0000_0000_0000,
+                0x7ff0_0000_0000_0001,
+                0x3ff0_0000_0000_0000,
+                0x4000_0000_0000_0000,
+            )
+        };
+        for (bits, native_distinct, duplicate) in [
+            ([0, sign], 2, true),
+            ([quiet, quiet | sign], 2, true),
+            ([quiet | 1, quiet | 2], 2, true),
+            ([signaling, quiet | 1], 2, true),
+            ([0, 0], 1, true),
+            ([quiet, quiet], 1, true),
+            ([one, two], 2, false),
+        ] {
+            let column: ArrayRef = if narrow {
+                Arc::new(Float32Array::from(
+                    bits.map(|bits| f32::from_bits(bits as u32)).to_vec(),
+                ))
+            } else {
+                Arc::new(Float64Array::from(bits.map(f64::from_bits).to_vec()))
+            };
+            let batch = RecordBatch::try_from_iter([("user_id", column)]).unwrap();
+            let mut attached = inputs();
+            attached.insert(AttachmentId(2), bytes(json!({"stage":"column_meanings","tables":[{"source":{"source":["users"]},"rows":3}]})));
+            attached.insert(
+                AttachmentId(3),
+                Attachment::Arrow(ArrowData::new(batch.schema(), vec![batch])),
+            );
+            let run = HostRun::start(&sdm_host::default_root(), &message(), attached).unwrap();
+            let product = loop {
+                match sdm_host::read(&run.next().unwrap()).unwrap() {
+                    ControlMessage::Step(Step::Done {
+                        result: OperationResult::InferredFrames(result),
+                    }) => {
+                        let Some(Attachment::Bytes(product)) =
+                            run.take_attachment(result.value).unwrap()
+                        else {
+                            panic!("column meanings")
+                        };
+                        break product;
+                    }
+                    ControlMessage::Warnings { .. } => {}
+                    other => panic!("native float meanings cannot fetch/model/callback: {other:?}"),
+                }
+            };
+            let FrameInference::ColumnMeanings(table) = serde_json::from_slice(&product).unwrap()
+            else {
+                panic!("typed meanings")
+            };
+            assert!(table.primary_key.is_empty());
+            assert_eq!(
+                table.columns[0].dtype,
+                if narrow {
+                    Dtype::Float32
+                } else {
+                    Dtype::Float64
+                }
+            );
+            assert_eq!(table.columns[0].stype, Stype::Numerical);
+            let mut candidates = sdm_host::frame_constructors::key_candidates(&product, 2).unwrap();
+            assert_eq!(candidates.column(), Some("user_id"));
+            candidates.observe(native_distinct, 2).unwrap();
+            assert!(candidates.column().is_none());
+            let (nomination, notices) = sdm_host::frame_constructors::finish_key_candidates(
+                candidates,
+                (native_distinct == 2).then_some((false, 0)),
+            )
+            .unwrap();
+            assert!(
+                serde_json::from_slice::<Vec<sdm_contract::CoreWarning>>(&notices)
+                    .unwrap()
+                    .is_empty()
+            );
+            let mut adoption = sdm_host::frame_constructors::key_adoption(&nomination).unwrap();
+            if native_distinct == 1 {
+                assert!(adoption.validation_columns().is_none());
+                adoption.adopt(None).unwrap();
+            } else {
+                assert_eq!(adoption.validation_columns(), Some(vec!["user_id".into()]));
+                adoption.validation_empty(false);
+                let quality = sdm_host::frame_constructors::key_quality(&serde_json::to_vec(&json!({"missing":0,"duplicates":u64::from(duplicate),"example_row":duplicate.then_some(1)})).unwrap()).unwrap();
+                adoption.validation_quality(quality.clone()).unwrap();
+                assert!(adoption.missing_columns().is_empty());
+                assert!(adoption.validation_needs_rows());
+                let validation = adoption.validate(vec![], Some(2));
+                if duplicate {
+                    let error = validation.unwrap_err();
+                    assert_eq!(error.sentence, Sentence::FrameKeyNotUnique);
+                    assert_eq!(
+                        error.fields["native_quality"],
+                        Detail::Scalar(Scalar::Bool(true))
+                    );
+                    assert_eq!(
+                        error.fields["example_row"],
+                        Detail::Scalar(Scalar::UInt64(1))
+                    );
+                    assert_eq!(error.fields["table"], Detail::text("users"));
+                    continue;
+                }
+                validation.unwrap();
+                adoption.adopt(Some(quality)).unwrap();
+            }
+            assert!(adoption.discriminators().unwrap().is_empty());
+            assert!(adoption.usable_columns().unwrap().is_empty());
+            let (product, notices) =
+                sdm_host::frame_constructors::finish_key_adoption(adoption, None).unwrap();
+            assert!(
+                serde_json::from_slice::<Vec<sdm_contract::CoreWarning>>(&notices)
+                    .unwrap()
+                    .is_empty()
+            );
+            let FrameInference::Adoption(adopted) = serde_json::from_slice(&product).unwrap()
+            else {
+                panic!("typed adoption")
+            };
+            assert_eq!(
+                adopted.table.primary_key,
+                if native_distinct == 1 {
+                    vec![]
+                } else {
+                    vec!["user_id"]
+                }
+            );
+        }
+    }
+}
+
+/// The Python constructor uses this existing FrameScalar tuple for declared
+/// strings whose exact native points cannot be represented by Arrow UTF8.
+fn native_text_cells(values: &[Option<Vec<u8>>]) -> arrow_array::ArrayRef {
+    use arrow_array::{ArrayRef, BinaryArray, StructArray, UInt8Array, new_null_array};
+    use arrow_schema::{DataType, Field};
+
+    let definitions = [
+        ("kind", DataType::UInt8),
+        ("negative", DataType::Boolean),
+        ("digits", DataType::Utf8),
+        ("exponent", DataType::Int64),
+        ("special", DataType::UInt8),
+        ("boolean", DataType::Boolean),
+        ("integer", DataType::Utf8),
+        ("float_bits", DataType::UInt64),
+        ("text", DataType::Binary),
+    ];
+    let fields = definitions
+        .into_iter()
+        .enumerate()
+        .map(|(at, (name, dtype))| {
+            let array: ArrayRef = match at {
+                0 => Arc::new(UInt8Array::from(
+                    values
+                        .iter()
+                        .map(|value| if value.is_some() { 6 } else { 1 })
+                        .collect::<Vec<_>>(),
+                )),
+                8 => Arc::new(BinaryArray::from_iter(values.iter().map(Option::as_deref))),
+                _ => new_null_array(&dtype, values.len()),
+            };
+            (Arc::new(Field::new(name, dtype, at != 0)), array)
+        })
+        .collect::<Vec<_>>();
+    Arc::new(StructArray::from(fields))
+}
+
+#[test]
+fn observed_string_cardinality_changes_meaning_without_changing_exact_native_rows() {
+    use arrow_array::cast::AsArray;
+    use sdm_contract::frames::FrameInference;
+    use sdm_contract::ops::{Dtype, Stype};
+
+    let values = (0..65)
+        .map(|number| Some([number.to_string().as_bytes(), &[0xed, 0xa0, 0x80]].concat()))
+        .chain([
+            None,
+            Some(vec![0xed, 0xa0, 0xbd, 0xed, 0xb8, 0xba]),
+            Some("😺".as_bytes().to_vec()),
+        ])
+        .collect::<Vec<_>>();
+    let cells = native_text_cells(&values);
+    let batch = RecordBatch::try_from_iter([("value", Arc::clone(&cells))]).unwrap();
+    for (distinct, expected) in [
+        (Some(0), Stype::Categorical),
+        (Some(1), Stype::Categorical),
+        (Some(64), Stype::Categorical),
+        (Some(65), Stype::Text),
+        (None, Stype::Text),
+    ] {
+        let mut attached = inputs();
+        attached.insert(AttachmentId(2), bytes(json!({"stage":"column_meanings","tables":[{"source":{"source":["users"]},"rows":3,"objects":[{"column":0,"name":"value","category":false,"meaning":{"dtype":"string","untyped":false,"distinct":distinct}}]}]})));
+        attached.insert(
+            AttachmentId(3),
+            Attachment::Arrow(ArrowData::new(batch.schema(), vec![batch.clone()])),
+        );
+        let run = HostRun::start(&sdm_host::default_root(), &message(), attached).unwrap();
+        let next = run.next().unwrap();
+        let ControlMessage::Step(Step::Done {
+            result: OperationResult::InferredFrames(result),
+        }) = sdm_host::read(&next).unwrap()
+        else {
+            panic!("native column meanings")
+        };
+        let Some(Attachment::Bytes(product)) = run.take_attachment(result.value).unwrap() else {
+            panic!("meaning bytes")
+        };
+        let FrameInference::ColumnMeanings(table) = serde_json::from_slice(&product).unwrap()
+        else {
+            panic!("fixed meaning")
+        };
+        assert_eq!(table.columns[0].dtype, Dtype::String);
+        assert_eq!(table.columns[0].stype, expected);
+        assert!(!table.columns[0].untyped);
+        assert!(table.primary_key.is_empty());
+        // The host-reported count selects the existing semantic threshold;
+        // exact Unicode scalar data remains separate and unchanged.
+        let text = cells
+            .as_struct()
+            .column_by_name("text")
+            .unwrap()
+            .as_binary::<i32>();
+        assert_eq!(
+            text.iter()
+                .map(|value| value.map(<[u8]>::to_vec))
+                .collect::<Vec<_>>(),
+            values
+        );
+    }
+}
+
+#[test]
+fn malformed_declared_string_facts_keep_the_existing_protocol_boundary() {
+    use sdm_contract::Sentence;
+    let valid = json!({"column":0,"name":"value","category":false,"meaning":{"dtype":"string","untyped":false,"distinct":1}});
+    for mode in [
+        "name",
+        "ordinal",
+        "negative_count",
+        "meaning",
+        "repeated",
+        "invalid_points",
+    ] {
+        let mut descriptor = valid.clone();
+        match mode {
+            "name" => descriptor["name"] = json!("absent"),
+            "ordinal" => descriptor["column"] = json!(1),
+            "negative_count" => descriptor["meaning"]["distinct"] = json!(-1),
+            "meaning" => {
+                descriptor["meaning"]["dtype"] = json!("bool");
+                descriptor["meaning"]["untyped"] = json!(true);
+            }
+            _ => {}
+        }
+        let objects = if mode == "repeated" {
+            vec![descriptor.clone(), descriptor]
+        } else {
+            vec![descriptor]
+        };
+        let cells = native_text_cells(&[Some(if mode == "invalid_points" {
+            vec![0xff]
+        } else {
+            vec![0xed, 0xa0, 0x80]
+        })]);
+        let batch = RecordBatch::try_from_iter([("value", cells)]).unwrap();
+        let mut attached = inputs();
+        attached.insert(AttachmentId(2), bytes(json!({"stage":"column_meanings","tables":[{"source":{"source":["users"]},"rows":3,"objects":objects}]})));
+        attached.insert(
+            AttachmentId(3),
+            Attachment::Arrow(ArrowData::new(batch.schema(), vec![batch])),
+        );
+        let failed = match HostRun::start(&sdm_host::default_root(), &message(), attached) {
+            Err(out) => out,
+            Ok(run) => run
+                .next()
+                .expect_err("malformed native string data must be refused"),
+        };
+        assert_eq!(error(failed).sentence, Sentence::InvalidMessage, "{mode}");
+    }
+}
+
+#[test]
+fn declared_native_text_uses_shared_schema_rules_without_losing_points_or_ordinals() {
+    use arrow_array::ArrayRef;
+    use sdm_contract::ops::{Dtype, SourceDescription, Stype};
+
+    // These are distinct Python strings, although a JSON surrogate pair can
+    // decode to the same supplementary scalar if passed through ordinary JSON.
+    let pair = vec![0xed, 0xa0, 0xbd, 0xed, 0xb8, 0xba];
+    let scalar = "😺".as_bytes().to_vec();
+    for (name, values, expected_stype, expected_key) in [
+        (
+            "value_id",
+            vec![Some(pair.clone()), Some(scalar.clone())],
+            Stype::Id,
+            true,
+        ),
+        (
+            "value_id",
+            vec![Some(pair.clone()), None, Some(scalar.clone())],
+            Stype::Categorical,
+            false,
+        ),
+        (
+            "value",
+            vec![Some(vec![0xed, 0xa0, 0x80]), Some(Vec::new()), None],
+            Stype::Categorical,
+            false,
+        ),
+        (
+            "value",
+            (0..65)
+                .map(|number| Some([number.to_string().as_bytes(), &[0xed, 0xa0, 0x80]].concat()))
+                .collect(),
+            Stype::Text,
+            false,
+        ),
+    ] {
+        let length = values.len();
+        let cells = native_text_cells(&values);
+        let batch = RecordBatch::try_from_iter([
+            (
+                "before",
+                Arc::new(Int16Array::from(vec![0; length])) as ArrayRef,
+            ),
+            (name, Arc::clone(&cells)),
+            (
+                "after",
+                Arc::new(Int16Array::from(vec![1; length])) as ArrayRef,
+            ),
+        ])
+        .unwrap();
+        let mut attached = inputs();
+        attached.insert(
+            AttachmentId(2),
+            bytes(json!({
+                "stage":"schema", "tables":[{
+                    "source":{"source":["users"]}, "rows":3,
+                    "objects":[{"column":1,"name":name,"category":false,
+                        "meaning":{"dtype":"string","untyped":false}}]
+                }]
+            })),
+        );
+        attached.insert(
+            AttachmentId(3),
+            Attachment::Arrow(ArrowData::new(batch.schema(), vec![batch])),
+        );
+        let run = HostRun::start(&sdm_host::default_root(), &message(), attached)
+            .unwrap_or_else(|out| panic!("{:?}", error(out)));
+        loop {
+            match sdm_host::read(&run.next().unwrap()).unwrap() {
+                ControlMessage::Warnings { .. } => {}
+                ControlMessage::Step(Step::Done {
+                    result: OperationResult::DescribeSource(result),
+                    ..
+                }) => {
+                    let Attachment::Bytes(data) =
+                        run.take_attachment(result.description).unwrap().unwrap()
+                    else {
+                        panic!("description bytes")
+                    };
+                    let description: SourceDescription = serde_json::from_slice(&data).unwrap();
+                    let table = &description.tables[0];
+                    assert_eq!(
+                        table
+                            .columns
+                            .iter()
+                            .map(|column| column.name.as_str())
+                            .collect::<Vec<_>>(),
+                        vec!["before", name, "after"]
+                    );
+                    assert_eq!(table.columns[1].dtype, Dtype::String);
+                    assert!(!table.columns[1].untyped);
+                    assert_eq!(table.columns[1].stype, expected_stype);
+                    assert_eq!(!table.primary_key.is_empty(), expected_key);
+                    // The neutral native tuple itself retains exact row/null
+                    // spelling, including the empty string versus a missing row.
+                    assert_eq!(cells.len(), length);
+                    assert_eq!(cells.null_count(), 0);
+                    break;
+                }
+                other => panic!("native text inference must not fetch or call a model: {other:?}"),
+            }
+        }
+    }
+}
+
+#[test]
+fn native_text_constructor_rejects_invalid_surrogatepass_and_wrong_binding() {
+    for wrong_binding in [false, true] {
+        let values = vec![Some(if wrong_binding {
+            vec![0xed, 0xa0, 0x80]
+        } else {
+            vec![0xed, 0xa0]
+        })];
+        let batch = RecordBatch::try_from_iter([("value", native_text_cells(&values))]).unwrap();
+        let mut attached = inputs();
+        attached.insert(AttachmentId(2), bytes(json!({
+            "stage":"schema", "tables":[{
+                "source":{"source":["users"]}, "rows":3,
+                "objects":[{"column":0,"name":if wrong_binding {"other"} else {"value"},"category":false,
+                    "meaning":{"dtype":"string","untyped":false}}]
+            }]
+        })));
+        attached.insert(
+            AttachmentId(3),
+            Attachment::Arrow(ArrowData::new(batch.schema(), vec![batch])),
+        );
+        let run = HostRun::start(&sdm_host::default_root(), &message(), attached)
+            .unwrap_or_else(|out| panic!("start itself failed: {:?}", error(out)));
+        loop {
+            match run.next() {
+                Err(out) => {
+                    assert_eq!(error(out).sentence, sdm_contract::Sentence::InvalidMessage);
+                    break;
+                }
+                Ok(out) => match sdm_host::read(&out).unwrap() {
+                    ControlMessage::Warnings { .. } => {}
+                    other => panic!("malformed native text was accepted: {other:?}"),
+                },
+            }
+        }
+    }
+}
+
+#[test]
 fn native_temporal_whole_frame_rebinds_with_exact_units_and_nanosecond_equality() {
     use arrow_array::{
         ArrayRef, TimestampMicrosecondArray, TimestampMillisecondArray, TimestampNanosecondArray,

@@ -43,6 +43,11 @@
 
 use crate::json::{Value, is_integer_token, whole};
 
+// Model responses enter through json::read_answer, which retains the
+// registered lone-surrogate replacement policy. Their textual identifiers
+// and JSON member names therefore have ordinary UTF-8 views even though
+// request-side logical values can now retain exceptional native text.
+
 /// Why a response is not one the contract describes: the field, and the
 /// fault, never the value.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -206,13 +211,22 @@ pub struct PredictionResponse {
 impl PredictionResponse {
     /// Reads `value` as the bindings read a response.
     pub fn read(value: &Value) -> Result<PredictionResponse, Refused> {
-        Self::read_inner(value, false)
+        Self::read_inner(value, false, false)
     }
     /// The direct adapter applies row bounds before result width constraints.
     pub fn read_direct(value: &Value) -> Result<PredictionResponse, Refused> {
-        Self::read_inner(value, true)
+        Self::read_inner(value, true, true)
     }
-    fn read_inner(value: &Value, keep_wide_index: bool) -> Result<PredictionResponse, Refused> {
+    /// Generated native field diagnostics/order with the established gathered
+    /// row-index and forecast-step admission retained independently.
+    pub fn read_native_gathered(value: &Value) -> Result<PredictionResponse, Refused> {
+        Self::read_inner(value, false, true)
+    }
+    fn read_inner(
+        value: &Value,
+        keep_wide_index: bool,
+        native_fields: bool,
+    ) -> Result<PredictionResponse, Refused> {
         let Value::Object(_) = value else {
             return Err(refused("response", "not_an_object").with_value(value));
         };
@@ -224,15 +238,17 @@ impl PredictionResponse {
                 .iter()
                 .enumerate()
                 .map(|(ordinal, item)| {
-                    PredictionItem::read(item, keep_wide_index).map_err(|mut error| {
-                        error.item = Some(ordinal);
-                        let selected = error
-                            .field
-                            .strip_prefix("prediction.")
-                            .and_then(|field| item.get(field))
-                            .unwrap_or(item);
-                        error.with_value(selected)
-                    })
+                    PredictionItem::read(item, keep_wide_index, native_fields).map_err(
+                        |mut error| {
+                            error.item = Some(ordinal);
+                            let selected = error
+                                .field
+                                .strip_prefix("prediction.")
+                                .and_then(|field| item.get(field))
+                                .unwrap_or(item);
+                            error.with_value(selected)
+                        },
+                    )
                 })
                 .collect::<Result<_, _>>()?,
             // An object iterates over its names, each of which is text and
@@ -240,7 +256,7 @@ impl PredictionResponse {
             Some(Value::Object(members)) if members.is_empty() => vec![],
             Some(Value::Object(values)) => {
                 return Err(refused("prediction", "not_an_object")
-                    .with_value(&Value::Text(values[0].0.clone())));
+                    .with_value(&Value::Text(values[0].0.clone().into())));
             }
             Some(value) => return Err(refused("predictions", "not_a_sequence").with_value(value)),
         };
@@ -259,13 +275,21 @@ impl PredictionResponse {
 }
 
 impl PredictionItem {
-    fn read(value: &Value, keep_wide_index: bool) -> Result<PredictionItem, Refused> {
+    fn read(
+        value: &Value,
+        keep_wide_index: bool,
+        native_fields: bool,
+    ) -> Result<PredictionItem, Refused> {
         let Value::Object(_) = value else {
             return Err(refused("prediction", "not_an_object"));
         };
         let id = match value.get("id") {
             None | Some(Value::Null) => None,
-            Some(Value::Text(text)) => Some(text.clone()),
+            Some(Value::Text(text)) => Some(
+                text.utf8()
+                    .ok_or_else(|| refused("prediction.id", "not_text"))?
+                    .to_owned(),
+            ),
             Some(_) => return Err(refused("prediction.id", "not_text")),
         };
         let row_index = match value.get("row_index") {
@@ -299,7 +323,7 @@ impl PredictionItem {
                     .map(|(class, p)| {
                         Ok((
                             class.clone(),
-                            read_number(p, "prediction.probabilities", keep_wide_index)
+                            read_number(p, "prediction.probabilities", native_fields)
                                 .map_err(|fault| fault.at(RefusalAt::Member(class.clone())))?,
                         ))
                     })
@@ -314,7 +338,7 @@ impl PredictionItem {
                     .iter()
                     .enumerate()
                     .map(|(at, v)| {
-                        read_number(v, "prediction.scores", keep_wide_index)
+                        read_number(v, "prediction.scores", native_fields)
                             .map_err(|fault| fault.at(RefusalAt::Index(at)))
                     })
                     .collect::<Result<_, Refused>>()?,
@@ -333,7 +357,7 @@ impl PredictionItem {
                         .iter()
                         .enumerate()
                         .map(|(at, v)| {
-                            read_number(v, "prediction.embeddings", keep_wide_index)
+                            read_number(v, "prediction.embeddings", native_fields)
                                 .map_err(|fault| fault.at(RefusalAt::Index(at)))
                         })
                         .collect::<Result<_, Refused>>()?,
@@ -348,7 +372,7 @@ impl PredictionItem {
                 Some(given @ Value::Object(_)) => Some(numbers(
                     mapping(given, "prediction.quantiles")?,
                     "prediction.quantiles",
-                    keep_wide_index,
+                    native_fields,
                 )?),
                 Some(_) => return Err(refused("prediction.quantiles", "not_an_object")),
             };
@@ -368,7 +392,7 @@ impl PredictionItem {
             };
             Ok(result)
         };
-        let (embeddings, quantiles, explanation, metadata) = if keep_wide_index {
+        let (embeddings, quantiles, explanation, metadata) = if native_fields {
             (
                 read_embeddings()?,
                 read_quantiles()?,
@@ -407,7 +431,10 @@ impl PredictionItem {
 fn required_text(value: &Value, name: &str, field: &'static str) -> Result<String, Refused> {
     match value.get(name) {
         None => Err(refused(field, "missing")),
-        Some(Value::Text(text)) => Ok(text.clone()),
+        Some(text @ Value::Text(_)) => text
+            .as_text()
+            .map(str::to_owned)
+            .ok_or_else(|| refused(field, "not_text").with_value(text)),
         Some(value) => Err(refused(field, "not_text").with_value(value)),
     }
 }
@@ -439,14 +466,14 @@ fn whole_of(value: &Value, field: &'static str) -> Result<i128, Refused> {
 /// holds one: each value read as [`number`] reads it (refused naming
 /// `field`), and written as the double it reads as, so text a float reads
 /// and an integer alike are that double.
-fn numbers(mapping: Value, field: &'static str, direct: bool) -> Result<Value, Refused> {
+fn numbers(mapping: Value, field: &'static str, native_fields: bool) -> Result<Value, Refused> {
     let Value::Object(members) = mapping else {
         return Err(refused(field, "not_an_object"));
     };
     members
         .into_iter()
         .map(|(name, v)| {
-            let read = read_number(&v, field, direct)
+            let read = read_number(&v, field, native_fields)
                 .map_err(|fault| fault.at(RefusalAt::Member(name.clone())))?;
             Ok((
                 name,
@@ -482,7 +509,10 @@ pub fn mapping(member: &Value, field: &'static str) -> Result<Value, Refused> {
         let (Some(a), Some(b), None) = (chars.next(), chars.next(), chars.next()) else {
             return None;
         };
-        Some((Value::Text(a.to_string()), Value::Text(b.to_string())))
+        Some((
+            Value::Text(a.to_string().into()),
+            Value::Text(b.to_string().into()),
+        ))
     };
     match member {
         Value::Object(_) => Ok(member.clone()),
@@ -496,11 +526,12 @@ pub fn mapping(member: &Value, field: &'static str) -> Result<Value, Refused> {
                         [key, value] => (key.clone(), value.clone()),
                         _ => return Err(not()),
                     },
-                    Value::Text(text) => pair_of(text).ok_or_else(not)?,
+                    Value::Text(text) => text.utf8().and_then(pair_of).ok_or_else(not)?,
                     Value::Object(two) => match two.as_slice() {
-                        [(first, _), (second, _)] => {
-                            (Value::Text(first.clone()), Value::Text(second.clone()))
-                        }
+                        [(first, _), (second, _)] => (
+                            Value::Text(first.clone().into()),
+                            Value::Text(second.clone().into()),
+                        ),
                         _ => return Err(not()),
                     },
                     _ => return Err(not()),
@@ -518,11 +549,13 @@ pub fn mapping(member: &Value, field: &'static str) -> Result<Value, Refused> {
                 Ok(Value::Object(
                     built
                         .into_iter()
-                        .filter_map(|(k, v)| match k {
-                            Value::Text(name) => Some((name, v)),
-                            _ => None,
+                        .map(|(k, v)| match k {
+                            Value::Text(name) => {
+                                name.into_utf8().map(|name| (name, v)).map_err(|_| not())
+                            }
+                            _ => Err(not()),
                         })
-                        .collect(),
+                        .collect::<Result<_, _>>()?,
                 ))
             } else {
                 Ok(Value::Array(
@@ -551,12 +584,14 @@ pub fn mappings(value: &Value) -> Result<Vec<Value>, Refused> {
             .map(|(at, member)| one(member).map_err(|fault| fault.at(RefusalAt::Index(at))))
             .collect(),
         Value::Text(text) => text
+            .utf8()
+            .ok_or_else(|| refused(FIELD, "not_a_mapping").native(NativeFault::Iter, value))?
             .chars()
-            .map(|c| one(&Value::Text(c.to_string())))
+            .map(|c| one(&Value::Text(c.to_string().into())))
             .collect(),
         Value::Object(members) => members
             .iter()
-            .map(|(name, _)| one(&Value::Text(name.clone())))
+            .map(|(name, _)| one(&Value::Text(name.clone().into())))
             .collect(),
         _ => Err(refused(FIELD, "not_a_mapping").native(NativeFault::Iter, value)),
     }
@@ -573,7 +608,7 @@ pub fn mappings(value: &Value) -> Result<Vec<Value>, Refused> {
 /// `{NaN: 2}`).
 fn key_of(key: &Value) -> Option<String> {
     match key {
-        Value::Text(text) => Some(crate::key::text(text)),
+        Value::Text(text) => text.utf8().map(crate::key::text),
         Value::Null => Some(crate::key::MISSING.to_owned()),
         Value::Bool(b) => Some(crate::key::boolean(*b)),
         Value::Number(token) if is_integer_token(token) => Some(crate::key::exact(token)),
@@ -591,7 +626,7 @@ fn key_of(key: &Value) -> Option<String> {
 fn number(value: &Value, field: &'static str) -> Result<f64, Refused> {
     let read = match value {
         Value::Number(token) => token.parse::<f64>().ok(),
-        Value::Text(text) => numeric_text(text),
+        Value::Text(text) => text.utf8().and_then(numeric_text),
         _ => None,
     };
     match read {
@@ -601,17 +636,17 @@ fn number(value: &Value, field: &'static str) -> Result<f64, Refused> {
     }
 }
 
-fn read_number(value: &Value, field: &'static str, direct: bool) -> Result<f64, Refused> {
+fn read_number(value: &Value, field: &'static str, native_fields: bool) -> Result<f64, Refused> {
     number(value, field).map_err(|mut fault| {
         // float(huge Python int) raises OverflowError; float(huge text)
-        // returns infinity. The generated direct decoder distinguishes them.
-        if direct
+        // returns infinity. The generated native decoder distinguishes them.
+        if native_fields
             && fault.reason == "not_finite"
             && matches!(value, Value::Number(token) if is_integer_token(token))
         {
             fault.reason = "not_a_number";
         }
-        if direct && fault.reason == "not_a_number" && !matches!(value, Value::Bool(_)) {
+        if native_fields && fault.reason == "not_a_number" && !matches!(value, Value::Bool(_)) {
             fault = fault.native(NativeFault::Float, value);
         }
         fault
@@ -760,6 +795,60 @@ mod tests {
     /// taken (`json::read_answer`).
     fn answer(text: &str) -> Value {
         crate::json::read_answer(text.as_bytes()).unwrap()
+    }
+
+    #[test]
+    fn native_gathered_faults_do_not_widen_gathered_row_indices() {
+        let value =
+            answer(r#"{"id":"r","model":"m","metadata":{},"predictions":[{"row_index":1e50}]}"#);
+        let legacy = PredictionResponse::read(&value).unwrap_err();
+        let native = PredictionResponse::read_native_gathered(&value).unwrap_err();
+        assert_eq!((native.field, native.reason), (legacy.field, legacy.reason));
+        assert!(PredictionResponse::read_direct(&value).is_ok());
+    }
+
+    #[test]
+    fn native_gathered_integer_overflow_keeps_generated_number_diagnostic() {
+        let value = answer(&format!(
+            r#"{{"id":"r","model":"m","metadata":{{}},"predictions":[{{"row_index":0,"probabilities":{{"true":1{}}}}}]}}"#,
+            "0".repeat(400),
+        ));
+        let legacy = PredictionResponse::read(&value).unwrap_err();
+        assert_eq!(legacy.reason, "not_finite");
+        let native = PredictionResponse::read_native_gathered(&value).unwrap_err();
+        assert_eq!(native.reason, "not_a_number");
+        assert_eq!(native.native, Some(NativeFault::Float));
+    }
+
+    #[test]
+    fn native_gathered_field_order_matches_generated_bindings() {
+        let value = answer(
+            r#"{"id":"r","model":"m","metadata":{},"predictions":[{"row_index":0,"embeddings":"bad","explanation":true}]}"#,
+        );
+        assert_eq!(
+            PredictionResponse::read(&value).unwrap_err().field,
+            "prediction.explanation"
+        );
+        assert_eq!(
+            PredictionResponse::read_native_gathered(&value)
+                .unwrap_err()
+                .field,
+            "prediction.embeddings"
+        );
+    }
+
+    #[test]
+    fn response_text_retains_the_registered_answer_decoding_policy() {
+        let value = answer(
+            r#"{"id":"\ud800","model":"\ud83d\ude3a","predictions":[{"id":"\udfff","row_index":0,"rankings":[["\ud800x"]],"scores":["1.5"]}],"metadata":{}}"#,
+        );
+        let response = PredictionResponse::read(&value).unwrap();
+        assert_eq!(response.id, "�");
+        assert_eq!(response.model, "😺");
+        let item = &response.predictions[0];
+        assert_eq!(item.id.as_deref(), Some("�"));
+        assert_eq!(item.rankings, Some(vec![answer(r#"{"�":"x"}"#)]));
+        assert_eq!(item.scores, Some(vec![1.5]));
     }
 
     /// T2.13: `dict(value)` as the bindings' `_dict_or_none` makes it, each

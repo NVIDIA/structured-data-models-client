@@ -21,7 +21,7 @@
 use crate::infer::TimeChoicePolicy;
 use std::collections::{BTreeMap, BTreeSet};
 
-use sdm_contract::frames::{FrameKeyForm, FrameRelationship};
+use sdm_contract::frames::{FrameDecimalExponent, FrameKeyForm, FrameRelationship, FrameScalar};
 use sdm_contract::ops::{
     self, ColumnRef, DescribedColumn, DescribedTable, Dtype, ExactNumber, SourceDescription, Stype,
 };
@@ -371,6 +371,7 @@ pub fn described_table(table: InferredTable, duplicates: Option<Scalar>) -> Desc
             .columns
             .into_iter()
             .map(|c| DescribedColumn {
+                untyped: c.untyped,
                 name: c.name,
                 received: c.received,
                 dtype: c.dtype,
@@ -1148,6 +1149,25 @@ pub fn check_links(description: &SourceDescription, types: &HostTypes) -> Result
     Ok(())
 }
 
+/// Relationship structure after native casts and table metadata assignment.
+/// All edges must be constructible before the native graph checks their
+/// kinds in edge order. Reuse the caller's existing structural/key refusals;
+/// an induced type-family mismatch belongs to the later `check_edges` stage.
+pub fn check_link_structure(
+    description: &SourceDescription,
+    types: &HostTypes,
+) -> Result<(), CoreError> {
+    for link in &description.links {
+        match joins(&description.tables, link, types) {
+            Ok(()) | Err(Unjoinable::Types) => {}
+            Err(Unjoinable::Missing | Unjoinable::NotTheKey) => {
+                checked(&description.tables, link, types)?;
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Refuses the edges the reference's engine refuses when it validates the
 /// graph it built over the tables it read (`Graph.validate`'s
 /// `_edge_error`, run as `KumoRelational` is built, `relational.py:418`),
@@ -1416,6 +1436,47 @@ fn cannot_join(tables: &[DescribedTable], link: &[ColumnRef], why: Unjoinable) -
 /// The lines saying `column`, taken, was among the columns the rows read
 /// would pass over, kept because the whole table's answer failed
 /// (`taken_unchecked`), each with the reason the rows read give.
+fn native_first_fields(first: &FrameScalar, fields: &mut Vec<(&'static str, Detail)>) {
+    fields.push(("frame_native_first", Detail::Scalar(Scalar::Bool(true))));
+    match first {
+        FrameScalar::Native => fields.push(("value", Detail::Scalar(Scalar::Null))),
+        FrameScalar::Text { value } => {
+            fields.push(("value", Detail::Scalar(Scalar::Null)));
+            fields.push((
+                "frame_native_text",
+                Detail::List(value.points().map(Scalar::UInt32).collect()),
+            ));
+        }
+        FrameScalar::Value { value } => fields.push(("value", Detail::Scalar(value.clone()))),
+        FrameScalar::Decimal {
+            negative,
+            digits,
+            exponent,
+        } => {
+            // A useful exact native tuple, never a formatted Decimal or a
+            // physical scale-zero mantissa mistaken for its logical value.
+            fields.push(("value", Detail::text(digits)));
+            fields.push((
+                "frame_decimal_negative",
+                Detail::Scalar(Scalar::Bool(*negative)),
+            ));
+            let kind = match exponent {
+                FrameDecimalExponent::Finite { value } => {
+                    fields.push((
+                        "frame_decimal_exponent",
+                        Detail::Scalar(Scalar::Int64(*value)),
+                    ));
+                    "finite"
+                }
+                FrameDecimalExponent::Infinity => "infinity",
+                FrameDecimalExponent::Nan => "nan",
+                FrameDecimalExponent::SignalingNan => "signaling_nan",
+            };
+            fields.push(("frame_decimal_kind", Detail::text(kind)));
+        }
+    }
+}
+
 fn unchecked(
     choice: &TimeChoice,
     column: &str,
@@ -1429,6 +1490,34 @@ fn unchecked(
         .map(|(_, why)| {
             let mut fields = at(column);
             let (variant, sentence) = match why {
+                PassedOver::FrameConstant {
+                    first,
+                    missing,
+                    rows,
+                } => {
+                    fields.push(("missing", count(*missing)));
+                    fields.push(("rows", count(*rows)));
+                    match first {
+                        None => (
+                            "taken_unchecked_empty",
+                            Sentence::TimeColumnsTakenUncheckedEmpty,
+                        ),
+                        Some(first) => {
+                            native_first_fields(first, &mut fields);
+                            if *missing > 0 {
+                                (
+                                    "taken_unchecked_constant_where_held",
+                                    Sentence::TimeColumnsTakenUncheckedConstantWhereHeld,
+                                )
+                            } else {
+                                (
+                                    "taken_unchecked_constant",
+                                    Sentence::TimeColumnsTakenUncheckedConstant,
+                                )
+                            }
+                        }
+                    }
+                }
                 PassedOver::Constant {
                     value,
                     missing,
@@ -1550,6 +1639,28 @@ fn guessed_time_columns(
                     let mut fields = at(column);
                     fields.push(("reason", Detail::text(why.reason())));
                     let (variant, sentence) = match why {
+                        PassedOver::FrameConstant {
+                            first,
+                            missing,
+                            rows,
+                        } => {
+                            fields.push(("missing", count(*missing)));
+                            fields.push(("rows", count(*rows)));
+                            match first {
+                                None => ("refused_empty", Sentence::TimeColumnsRefusedEmpty),
+                                Some(first) => {
+                                    native_first_fields(first, &mut fields);
+                                    if *missing > 0 {
+                                        (
+                                            "refused_constant_where_held",
+                                            Sentence::TimeColumnsRefusedConstantWhereHeld,
+                                        )
+                                    } else {
+                                        ("refused_constant", Sentence::TimeColumnsRefusedConstant)
+                                    }
+                                }
+                            }
+                        }
                         PassedOver::Constant {
                             value,
                             missing,

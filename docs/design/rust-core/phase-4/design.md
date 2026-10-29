@@ -53,7 +53,8 @@ Do not promote [`sdm-testkit::memory`](../../../../rust/crates/sdm-testkit/src/m
 
 ## Contract and API boundaries
 
-T4.1 owns the common contract change, provisionally version 30 if Phase 3 finishes at 29.
+T4.1 owns the shared input, state and session contracts across the phase.
+The original provisional version allocation assumed a Phase 3 result that has since been superseded; published locks and exact candidate artifacts determine actual versions.
 The following are proposed contract responsibilities; T4.1 must complete the proof checkpoint below before proposing serialized shapes and state versions for approval and dependent implementation.
 
 1. **Frames enter as data, not as a Python provider.**
@@ -118,8 +119,9 @@ These are bounded additions to existing contracts, not a new abstraction for eve
 
 The recommendation is to preserve observed legacy ordering and per-call native mutability.
 Earlier recommendations for an original-input-row-order default and an early custom-conversion timing exception are withdrawn; both behavior differences remain unapproved.
-The owner's request for further investigation approves design work only, with no interface freeze, implementation, contract bump or new model experiment.
+The earlier request for further investigation authorized design work for that draft only, with no interface freeze, implementation, contract bump or new model experiment.
 The fourth private interface draft remains a historical, unactivated checkpoint rather than a complete input representation.
+Later bounded internal-message authorizations permit proved connected contract/consumer slices; they do not approve the withdrawn ordering/timing exceptions or freeze the unresolved index/session families.
 
 1. **Preserve the actual context-order policies and measure their consequences.**
    Over-cap tabular materialization filters, samples with seed 42 and sorts the selected rows by pandas index labels; candidates within the cap and direct `Request` context retain their supplied order.
@@ -156,9 +158,31 @@ If a remaining incompatibility requires an owner choice, name the affected publi
 
 `T4.*` names units of work, not Cargo crates, distributions or installable packages.
 Only the paths listed above and tests/contracts needed by each journey are implementation scope; tooling defects ride with the affected work only when a concrete failure requires them.
-At most three packages run concurrently within eight vCPUs; full CI runs only nightly and at phase end.
+At most two Phase 4 packages run concurrently within eight vCPUs; full CI runs only nightly and at phase end.
 Tests are written before implementation, and both independent Sol 6.1 High reviewers approve the same exact candidate before its package tests, lint or cheap checks run.
-The owner's separate direction permits isolated foundation progress while Phase 3 validates; it does not approve a serialized contract bump, changed behavior, new live resources or a merge into `rust-core`.
+The earlier separate direction permitted isolated foundation progress during Phase 3 validation; subsequent bounded interface and live-resource authorizations retain their specific scope and do not approve different public behavior or a merge into `rust-core`.
+
+### Contract-family closure and bounded execution
+
+The owner requested an official boundary and methodology repair on 2026-10-28.
+The implementation and validation plan is [T4.4: neutral casing facts and execution before expansion](t44-boundary-and-execution-repair.md).
+Native text facts describe observed full-root Unicode semantics or an observed simple mapping identity, not pandas or NumPy target classes from which Rust infers that operation.
+The host observes the same reached native conversion and fixed input; Rust validates the supported identities and applies its existing kernels and policy.
+
+T4.1 retains its complete original scope, with these separately visible families.
+
+| Contract family | Current state | Closure evidence |
+|---|---|---|
+| Foundations and model-neutral direct preparation | Landed bounded foundations and direct numeric consumer | Existing exact-candidate reviews, validation and landing records; broader families are not implied |
+| Frame materialization and native observations | Current frame/LINK candidate, including the neutral casing repair | Canonical contract, Python and Rust-host consumers, native read order, malformed facts, ownership/error tests and complete package acceptance |
+| Tabular/index input facts and subset ordering | Defined kernels landed; full consumer and supported-family proof remain open | Actual filtered/sampled subset-order equivalence, malformed facts and mutation/lifetime tests through both hosts |
+| Session lifecycle | Design obligations remain open | Fit/predict/close consumers, pinned state, retry/cancellation ownership, lost create replies, empty DELETE success and existing binding compatibility |
+
+An individual journey may add its reviewed sufficient contract with its connected consumer, but may not imply that the full upstream family is frozen or complete.
+Use one feature author and at most one bounded companion with disjoint ownership, then the independent reviewers.
+Execute each approved vertical journey before expanding implementation to its next layer.
+The present coupled frame/LINK composition remains the next landing target and keeps all its acceptance requirements.
+The ordinary handoff and landing gates remain blocking even when separately approved diagnostic execution collects behavioral failures after a lint failure.
 
 ### T4.1 – Shared input, state and session contracts
 
@@ -169,7 +193,8 @@ The owner's separate direction permits isolated foundation progress while Phase 
   The representation above is a candidate, not a claim of completeness; if that proof finds a real unsupported behavior or necessary boundary exception, bring the concrete source reproduction and alternatives to the owner rather than adding a callback, approximation or refusal.
 - Distinguish/version model-neutral prepared state from model-bound materialized state, preserving later model selection, immediate generic constructor checks and existing incompatible gathered-payload diagnostics.
 - Write round-trip, unknown-version, attachment-kind, index-fact validation and core subset-order equivalence, empty-delete-reply and existing Java-call compatibility tests first.
-- Dependency: final Phase 3 contract/source reconciliation; T4.2, T4.3, T4.5 and T4.6 may develop against this reviewed interface after it lands.
+- Dependency: final Phase 3 contract/source reconciliation and a reviewed sufficient contract/ownership/read-schedule design for each connected consumer.
+  A bounded contract slice may land with its producer and both host consumers after validation, using established foundations rather than pretending every future index/session detail is already frozen.
 
 ### T4.2 – Frame conversion, schema and large-offset admission
 
@@ -192,11 +217,14 @@ T4.2 remains one canonical package, with these explicit implementation substeps:
    Java only receives compatible explicit timestamp-unit rendering for representable existing scalar paths; no Java frame API or extra-wide Java.time value domain is added.
    The StringDtype constructor substep admits built-in Python/pyarrow storage and their supported pandas missing-value forms through the same conversion, shared UTF8 admission and owned Table/Schema stages.
    Empty/all-null strings retain their known string type; Rust infers meaning, identifiers and links from the whole detached column without parsing date-shaped strings as timestamps.
-   The ArrowDtype constructor substep admits exact built-in ArrowExtensionArray columns for signed/unsigned 8/16/32/64, Boolean and UTF8/LargeUTF8 physical families through the same Table/Schema stages.
+   The ArrowDtype constructor substep admits exact built-in ArrowExtensionArray columns for signed/unsigned 8/16/32/64, Float32/Float64, Boolean and UTF8/LargeUTF8 physical families through the same Table/Schema stages.
    Their native Arrow validity, chunks and widths enter the existing checked admission and detachment path.
    Native diagnostic reconstruction uses only core-selected scalars, preserving integer/string scalar and mixed-row presentation without changing schema meaning or equality.
-   Arrow float32/64 remain unfinished as whole native types: frozen two-row signed-zero and NaN-sign/payload witnesses show Arrow distinct counts nominate keys using bit distinctions that pandas duplicate-key equality merges, while the current shared frame mode represents only the latter equality.
-   Supporting both facts requires a separately reviewed shared representation; no bit normalization, native-origin policy flag or default SDK behavior change is introduced by this bounded substep.
+   Arrow float32/64 use the existing separately reached native candidate-cardinality and key-quality products: frozen two-row signed-zero and NaN-sign/payload witnesses show Arrow distinct counts nominate keys using bit distinctions that pandas duplicate-key equality merges.
+   The host reports the actual selected native counts and example row while Rust retains eligibility, thresholds, key policy and notices.
+   Generic Arrow-only compatibility stages retain canonical `Floats::Frame` equality; they do not replace those native observations.
+   Exact float-width physical declarations bind the same original dtype at early table and later graph admission.
+   The [bounded float prerequisite plan](t42-arrow-float-native-products.md) requires two fresh whole CODE approvals and corrected-source public/binding execution before the new family can be claimed validated; no bit normalization, native-origin flag or default route change is introduced.
    Arrow s/ms/us/ns timestamps also remain unfinished as whole native types, including every zone and ordinary/empty/all-null columns.
    Frozen coarse-unit extreme-count witnesses raise native scalar-boxing OverflowError only when consumed first, while a valid ns minimum count boxes NaT and changes time choice when its row moves first.
    Preserving these stage-sensitive native read and comparison facts requires a separately reviewed representation; the converter adds no eager cell boxing, content-range gate, MIN-to-null normalization or timestamp diagnostic reconstruction.
@@ -250,6 +278,11 @@ It does not settle temporal aggregation, timed entities, text-time rules, rankin
 - Implement RS-3 and RS-4 using the registered algorithms and explicit state; retain the already shipped RS-1/RS-2 behavior and verify no regression in SQL paths.
 - Enable `TextTimes::ClientRules` using `sdm-engine::time::text`'s fixed-format reader and whole-column shape/day-order decisions, preserving existing approved out-of-format refusals.
   Remove both `text_time_rules` refusals in `sdm-core::materialize`, including timestamp features as well as time columns; no call delegates parsing to pandas.
+  The native frame source already prepares complete original columns before selection and supplies typed arrays through its existing owner.
+  A raw Arrow Host declaring `ClientRules` supplies a complete column through the existing unfiltered, unlimited `Scan` request before its bounds or selected timestamp values are interpreted.
+  The core retains only a run-local fixed reading plan and typed bounds for that column, so a late deciding or conflicting original row governs selected rows too.
+  A designated time column accepts offsets converted to UTC; an ordinary timestamp feature preserves the fixed reader's mixed-offset refusal.
+  This adds no source provider or sampler, host parser, persistent cache, or change to SQL providers' `ValueByValue` reading.
 - Test indices and supplied predict frames, zero/missing/repeated keys, null and duplicate time/key sanitization, static/temporal/keyless neighbors, tied cuts, composite/decimal relationships, seeded/unseeded call sequences and failure-state continuation.
 - Include frame ranking and multi-step forecasting, UTC/named-zone/fold cases, DT-3's public frame/H24 proof, schema mutation and result inspection/merge through Python and rust-host.
 - Dependencies: T4.2 and T4.3; preserve each path's observed ordering/null behavior, and obtain approval before accepting any proposed changed model inputs.

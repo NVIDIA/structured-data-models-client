@@ -236,7 +236,7 @@ def test_a_wheel_with_no_native_library_is_no_control(
         smoke.without_native(wheel, tmp_path / 'control')
 
 
-COUNTS = {'test_binding.py': {'passed': 12}}
+COUNTS = {'test_binding.py': {'passed': 30}}
 ITEMS = [
     f'rust/bindings/sdm-py/tests/test_binding.py::{name}'
     for name in smoke.EXPECTED['test_binding.py']
@@ -268,6 +268,36 @@ def test_a_collection_of_every_expected_test_passed_is_taken(
 ) -> None:
     home = tmp_path / 'env'
     smoke.collection_verdict(_collection(tmp_path, _record(home)), COUNTS, home)
+
+
+@pytest.mark.parametrize('fault', [None, 'replaced', 'missing'])
+def test_complete_temporal_collection_keeps_parameter_slashes(
+    tmp_path: pathlib.Path, fault: str | None
+) -> None:
+    home = tmp_path / 'env'
+    filename = 'test_t42_temporal_ownership.py'
+    test = 'test_temporal_table_owns_exact_unit_zone_counts_and_validity_after_run_drop'
+    prefix = f'outside/tree/rust/bindings/sdm-py/tests/{filename}::{test}'
+    items = [
+        f'{prefix}[{wide}-{zone}-{unit}]'
+        for wide in (False, True)
+        for zone in ('None', 'America/Los_Angeles')
+        for unit in ('s', 'ms', 'us', 'ns')
+    ]
+    assert len(items) == 16
+    named_zone = f'{prefix}[False-America/Los_Angeles-s]'
+    if fault == 'replaced':
+        items[items.index(named_zone)] = f'{prefix}[False-America/New_York-s]'
+    elif fault == 'missing':
+        items.remove(named_zone)
+        items.append(items[0])
+    counts = {filename: {'passed': 16}}
+    collection = _collection(tmp_path, _record(home, items=items))
+    if fault is None:
+        smoke.collection_verdict(collection, counts, home)
+    else:
+        with pytest.raises(smoke.SmokeFailed, match='not run:'):
+            smoke.collection_verdict(collection, counts, home)
 
 
 def _faults(home: pathlib.Path) -> list[tuple[Any, str]]:
@@ -408,6 +438,82 @@ def test_the_expected_tests_are_the_files_own() -> None:
                 assert with_parameters and not bare, (name, test)
             else:
                 assert len(with_parameters) == count and not bare, (name, test)
+
+
+def test_constructor_and_binding_owner_inventory_is_independent_and_complete() -> (
+    None
+):
+    binding = set(smoke.EXPECTED['test_binding.py'])
+    assert (
+        'test_base_frame_schema_and_request_do_not_load_optional_sources'
+        in binding
+    )
+    aliases = {
+        'test_attachment_annotations_include_every_native_owner[_AttachmentIn-_ArrowStreamExportable]',
+        'test_attachment_annotations_include_every_native_owner[_AttachmentOut-ArrowStream]',
+    }
+    owners = {
+        f'test_native_owners_cannot_be_forged_or_subclassed[{name}]'
+        for name in (
+            'FrameGraph',
+            'FrameQuestion',
+            'FramePopulation',
+            'FrameLabelGroups',
+            'FrameLabelBatch',
+            'LabelInputs',
+            'TargetColumn',
+            'FrameTask',
+            'FrameReferences',
+            'FramePayload',
+            'LookupRows',
+            'MaterializeSource',
+            'MaterializePopulation',
+            'MaterializeGroups',
+            'MaterializeBatch',
+        )
+    }
+    assert {
+        name
+        for name in binding
+        if name.startswith('test_attachment_annotations_')
+    } == aliases
+    assert {
+        name for name in binding if name.startswith('test_native_owners_')
+    } == owners
+    assert len(binding) == len(smoke.EXPECTED['test_binding.py']) == 30
+    assert set(smoke.EXPECTED['test_frame_native_constructor.py']) == {
+        'test_native_constructor_binds_name_source_type_and_completed_meaning',
+        'test_fixed_native_declaration_cannot_be_replaced_by_exported_storage',
+    }
+    assert set(smoke.EXPECTED['test_t42_arrow_float_owners.py']) == {
+        f'test_constructor_float_buffers_detach_before_producer_mutation_and_rebind[{chunked}-{offset}-{width}]'
+        for chunked in (False, True)
+        for offset in (0, 1, 3, 7)
+        for width in (32, 64)
+    }
+
+
+@pytest.mark.parametrize(
+    'missing',
+    [
+        'test_base_frame_schema_and_request_do_not_load_optional_sources',
+        'test_attachment_annotations_include_every_native_owner[_AttachmentOut-ArrowStream]',
+        'test_native_owners_cannot_be_forged_or_subclassed[MaterializeBatch]',
+    ],
+)
+def test_collection_refuses_a_missing_new_binding_consumer_at_the_same_count(
+    tmp_path: pathlib.Path, missing: str
+) -> None:
+    home = tmp_path / 'env'
+    assert len(ITEMS) == 30
+    smoke.collection_verdict(_collection(tmp_path, _record(home)), COUNTS, home)
+    items = [item for item in ITEMS if item.rsplit('::', 1)[1] != missing]
+    assert len(items) == 29
+    items.append(items[0])
+    with pytest.raises(smoke.SmokeFailed, match='not run:'):
+        smoke.collection_verdict(
+            _collection(tmp_path, _record(home, items=items)), COUNTS, home
+        )
 
 
 def test_production_smoke_includes_the_frame_ownership_tests() -> None:

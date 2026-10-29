@@ -24,7 +24,9 @@
 use serde_json::Value;
 
 /// The attachments the core reads from a `start`, by the lock's names.
-const READ: [&str; 17] = [
+const READ: [&str; 19] = [
+    "PrepareMaterialize.input",
+    "PrepareFrames.input",
     "PrepareRequest.input",
     "Predict.direct",
     "ValidateQuery.query",
@@ -150,7 +152,11 @@ fn mismatches(source: &str) -> Vec<String> {
     let mut problems = Vec::new();
     for (name, decoded) in &found {
         match locked(attachments, name) {
-            Some(ty) if ty == *decoded => {}
+            Some(ty)
+                if ty == *decoded
+                    || (name == "PrepareFrames.input"
+                        && ty == "FramePreparation"
+                        && decoded == "sdm_contract::frames::materialize::FramePreparation") => {}
             Some(ty) => problems.push(format!("{name}: dispatch decodes {decoded}, the lock {ty}")),
             None => problems.push(format!("{name}: decoded by dispatch, not in the lock")),
         }
@@ -182,10 +188,20 @@ fn dispatch_decodes_each_attachment_as_the_lock_types_it() {
     assert_eq!(mismatches(&source), Vec::<String>::new());
 }
 
+/// Every fault starts from a clean source and changes exactly one reader.
+fn seeded(source: &str, before: &str, after: &str) -> String {
+    assert_eq!(mismatches(source), Vec::<String>::new());
+    assert_eq!(source.matches(before).count(), 1, "ambiguous fault seed");
+    let changed = source.replace(before, after);
+    assert_ne!(changed, source);
+    changed
+}
+
 #[test]
 fn a_retyped_or_dropped_decode_fails() {
     let source = dispatch();
-    let retyped = source.replace(
+    let retyped = seeded(
+        &source,
         "let source: SourceSpec =",
         "let source: SourceDescription =",
     );
@@ -194,7 +210,8 @@ fn a_retyped_or_dropped_decode_fails() {
         mismatches(&retyped),
         ["DescribeSource.source: dispatch decodes SourceDescription, the lock SourceSpec"]
     );
-    let dropped = source.replace(
+    let dropped = seeded(
+        &source,
         "let query: String = take_json(attachments, request_state.query)?;",
         "",
     );
@@ -205,13 +222,18 @@ fn a_retyped_or_dropped_decode_fails() {
     );
     // M1: the decodes read before T2.1b missed, the two-line one and the
     // one from a forecast's step, are each held too.
-    let retyped = source.replace("let memo: SamplerMemo =", "let memo: SamplerState =");
+    let retyped = seeded(
+        &source,
+        "let memo: SamplerMemo =",
+        "let memo: SamplerState =",
+    );
     assert_ne!(retyped, source);
     assert_eq!(
         mismatches(&retyped),
         ["SamplerState.memo: dispatch decodes SamplerState, the lock SamplerMemo"]
     );
-    let dropped = source.replace(
+    let dropped = seeded(
+        &source,
         "let query: String = take_json(attachments, step.query)?;",
         "",
     );
@@ -220,4 +242,66 @@ fn a_retyped_or_dropped_decode_fails() {
         mismatches(&dropped),
         ["ForecastStep.query: in the lock, not decoded by dispatch"]
     );
+}
+
+#[test]
+fn each_preparation_input_is_required_and_keeps_its_locked_type() {
+    let source = dispatch();
+    let retyped = seeded(
+        &source,
+        "let input: MaterializePreparation =",
+        "let input: Preparation =",
+    );
+    assert_eq!(
+        mismatches(&retyped),
+        ["PrepareMaterialize.input: dispatch decodes Preparation, the lock MaterializePreparation"]
+    );
+    let dropped = seeded(
+        &source,
+        "let input: MaterializePreparation = take_json(&mut attachments, request.input)?;",
+        "",
+    );
+    assert_eq!(
+        mismatches(&dropped),
+        ["PrepareMaterialize.input: in the lock, not decoded by dispatch"]
+    );
+    let retyped = seeded(
+        &source,
+        "let input: sdm_contract::frames::materialize::FramePreparation =",
+        "let input: MaterializePreparation =",
+    );
+    assert_eq!(
+        mismatches(&retyped),
+        ["PrepareFrames.input: dispatch decodes MaterializePreparation, the lock FramePreparation"]
+    );
+    let dropped = seeded(
+        &source,
+        "let input: sdm_contract::frames::materialize::FramePreparation =\n                take_json(&mut attachments, request.input)",
+        "let input: sdm_contract::frames::materialize::FramePreparation =\n                unread_json(&mut attachments, request.input)",
+    );
+    assert_eq!(
+        mismatches(&dropped),
+        ["PrepareFrames.input: in the lock, not decoded by dispatch"]
+    );
+}
+
+#[test]
+fn a_matching_terminal_identifier_in_another_module_is_not_the_locked_type() {
+    let source = dispatch();
+    for spelling in [
+        "another::frames::materialize::FramePreparation",
+        "sdm_contract::another::FramePreparation",
+    ] {
+        let changed = seeded(
+            &source,
+            "let input: sdm_contract::frames::materialize::FramePreparation =",
+            &format!("let input: {spelling} ="),
+        );
+        assert_eq!(
+            mismatches(&changed),
+            [format!(
+                "PrepareFrames.input: dispatch decodes {spelling}, the lock FramePreparation"
+            )]
+        );
+    }
 }

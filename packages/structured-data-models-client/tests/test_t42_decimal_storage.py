@@ -1,0 +1,167 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+"""The typed native Decimal export retains buffers without scalar conversion."""
+
+from __future__ import annotations
+
+import gc
+
+import pandas as pd
+import pyarrow as pa
+import pytest
+
+from sdm_client import StructuredDataError
+from sdm_client._rust.frame_decimals import native_decimal_column
+
+
+def arrays(bits, precision, scale):
+    make = getattr(pa, f'decimal{bits}')
+    dtype = make(precision, scale)
+    raw = b''.join(
+        value.to_bytes(bits // 8, byteorder='little', signed=True)
+        for value in (0, 1, -1, 2)
+    )
+    base = pa.Array.from_buffers(
+        dtype, 4, [pa.py_buffer(b'\x0b'), pa.py_buffer(raw)]
+    )
+    return dtype, [base.slice(1, 3), base.slice(0, 1), base.slice(0, 0)]
+
+
+def test_capsule_reader_retains_sliced_decimal_buffers_after_producer_release():
+    dtype, chunks = arrays(128, 1, 0)
+    table = pa.table({'value': pa.chunked_array(chunks, type=dtype)})
+    value_address = chunks[0].buffers()[1].address
+    bitmap_address = chunks[0].buffers()[0].address
+    capsule = table.__arrow_c_stream__()
+    reader = pa.RecordBatchReader._import_from_c_capsule(capsule)
+    del table, chunks, capsule
+    gc.collect()
+    batch = reader.read_next_batch()
+    column = batch.column(0)
+    assert column.type == dtype
+    assert len(column) == 3 and column.offset == 1
+    assert column.null_count == 1
+    assert column.buffers()[1].address == value_address
+    assert column.buffers()[0].address == bitmap_address
+    del batch, reader
+    gc.collect()
+    assert column.is_valid().to_pylist() == [True, False, True]
+    assert [
+        str(value) if value is not None else None
+        for value in column.to_pylist()
+    ] == [
+        '1',
+        None,
+        '2',
+    ]
+
+
+@pytest.mark.parametrize(
+    'bits',
+    [bits for bits in (32, 64, 128, 256) if hasattr(pa, f'decimal{bits}')],
+)
+@pytest.mark.parametrize('scale', [-129, -128, -1, 0, 1, 2, 129])
+def test_lossless_native_decimal_mantissa_view(bits, scale):
+    dtype, chunks = arrays(bits, 1, scale)
+    original = pa.chunked_array(chunks, type=dtype)
+    series = pd.Series(pd.arrays.ArrowExtensionArray(original))
+    storage, descriptor = native_decimal_column(series)
+    assert descriptor == {
+        'type': f'decimal{bits}',
+        'precision': 1,
+        'scale': scale,
+    }
+    make = getattr(pa, f'decimal{bits}')
+    assert storage.type == make(1, 0)
+    assert storage.num_chunks == len(chunks)
+    assert [len(chunk) for chunk in storage.chunks] == [3, 1, 0]
+    assert [chunk.offset for chunk in storage.chunks] == [1, 0, 0]
+    assert [chunk.null_count for chunk in storage.chunks] == [1, 0, 0]
+    assert [chunk.is_valid().to_pylist() for chunk in storage.chunks] == [
+        [True, False, True],
+        [True],
+        [],
+    ]
+    for source, view in zip(chunks, storage.chunks, strict=True):
+        assert len(view) == len(source)
+        assert view.offset == source.offset
+        assert view.null_count == source.null_count
+        assert view.buffers()[1].address == source.buffers()[1].address
+        assert view.buffers()[1].size == source.buffers()[1].size
+        assert view.is_valid().to_pylist() == source.is_valid().to_pylist()
+        if source.null_count:
+            # A nullable slice needs its bitmap. An all-valid or empty slice
+            # may omit that redundant buffer while retaining every value.
+            assert view.buffers()[0].address == source.buffers()[0].address
+    # The C stream carries representable typed mantissas, with the original
+    # full native descriptor retained separately and no per-cell tree.
+    table = pa.table({'value': storage})
+    reader = pa.RecordBatchReader._import_from_c_capsule(
+        table.__arrow_c_stream__()
+    )
+    restored = reader.read_all()['value']
+    del original, series, chunks, storage, table, reader, source, view
+    gc.collect()
+    assert restored.null_count == 1
+    assert restored.is_valid().to_pylist() == [True, False, True, True]
+    values = [
+        str(value) if value is not None else None
+        for value in restored.to_pylist()
+    ]
+    assert values == ['1', None, '2', '0']
+
+
+@pytest.mark.parametrize('dtype', [pa.int64(), pa.binary(), pa.string()])
+def test_ordinary_storage_is_not_interpreted_as_decimal(dtype):
+    values = (
+        [1]
+        if pa.types.is_integer(dtype)
+        else [b'1']
+        if pa.types.is_binary(dtype)
+        else ['1']
+    )
+    series = pd.Series(
+        pd.arrays.ArrowExtensionArray(pa.array(values, type=dtype))
+    )
+    assert native_decimal_column(series) is None
+
+
+def test_table_result_preserves_logical_type_attachment_with_owned_rows():
+    from sdm_client._rust import results
+
+    table = results.expect(
+        {
+            'op': 'describe_source',
+            'description': 1,
+            'frame_rows': 2,
+            'frame_decimals': 3,
+        },
+        results.Described,
+    )
+    assert table.frame_rows == 2
+    assert table.frame_decimals == 3
+    sql = results.expect(
+        {'op': 'describe_source', 'description': 1}, results.Described
+    )
+    assert sql.frame_rows is None
+    assert sql.frame_decimals is None
+
+
+@pytest.mark.parametrize('value', [True, -1, '3', 1.5, [], {}])
+def test_table_result_rejects_malformed_logical_type_attachment(value):
+    from sdm_client._rust import results
+
+    with pytest.raises(
+        StructuredDataError, match='frame_decimals is not a count'
+    ):
+        results.expect(
+            {
+                'op': 'describe_source',
+                'description': 1,
+                'frame_rows': 2,
+                'frame_decimals': value,
+            },
+            results.Described,
+        )

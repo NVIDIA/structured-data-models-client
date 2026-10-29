@@ -314,7 +314,12 @@ def test_an_item_field_that_is_no_mapping_is_refused_as_on_the_old_route(
     assert (type(core), core.code) == (type(old), old.code)
     assert core.code == 'INVALID_RESPONSE'
     assert core.details['field'] == f'prediction.{field}'
-    assert f"item's {field}" in str(core)
+    assert core.details['reason'] == 'not_a_mapping'
+    from test_t42_arrow_decimal_frames import _decimal_error_graph
+
+    native_type = ValueError if field == 'explanation' else TypeError
+    assert type(core.__cause__) is type(old.__cause__) is native_type
+    assert _decimal_error_graph(core) == _decimal_error_graph(old)
 
 
 def test_an_explanation_of_two_entities_is_refused_as_on_the_old_route(

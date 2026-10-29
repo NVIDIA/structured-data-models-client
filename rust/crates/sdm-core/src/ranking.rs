@@ -59,23 +59,19 @@ pub(crate) fn candidates_on_no_ranking() -> CoreError {
     )
 }
 
-/// A member of the call's option values, as the host gave it.
-fn given<'a>(inputs: &'a Inputs, name: &str) -> Option<&'a Value> {
-    inputs.values.as_ref().and_then(|values| values.get(name))
+/// Complete independently useful ranking questions before any graph or rows
+/// are read. Both provider materialization and frame preparation use this
+/// exact preflight, literal writer, candidate order and capacity policy.
+pub(crate) struct RankedQuestions {
+    pub top_k: Option<u32>,
+    pub parts: Vec<(u32, String, String)>,
 }
 
-/// A ranking gathered: each distinct candidate's question, in the order
-/// the candidates were given, each gathered as the client's `_in_parts`
-/// gathers a part.
-pub(crate) async fn materialize(
-    asker: Asker,
-    inputs: Inputs,
-    plan: RankingPlan,
-    facts: Option<QueryFacts>,
-) -> Result<OperationResult, CoreError> {
+/// Admission before any native candidate or option value is observed.
+pub(crate) fn admit_question(plan: &RankingPlan, statistic_given: bool) -> Result<(), CoreError> {
     // `parts_of`: a statistic is a regression's, and each part is a
     // classification.
-    if given(&inputs, "prediction_statistic").is_some() {
+    if statistic_given {
         return Err(refused(
             Sentence::RankingStatistic,
             "prediction_statistic applies only to a regression, and a ranking is ordered by how \
@@ -84,7 +80,7 @@ pub(crate) async fn materialize(
         ));
     }
     // `_per_candidate`, in its order.
-    let Some(ranked) = plan.ranked else {
+    let Some(ranked) = plan.ranked.as_ref() else {
         return Err(refused(
             Sentence::RankingColumn,
             "a ranking is asked one candidate at a time, about what an entity reaches in a \
@@ -100,7 +96,28 @@ pub(crate) async fn materialize(
             "query",
         ));
     }
-    let Some(given_candidates) = &inputs.candidates else {
+    Ok(())
+}
+
+pub(crate) fn questions(
+    description: &sdm_contract::ops::SourceDescription,
+    candidates: Option<&[sdm_contract::ops::GivenCandidate]>,
+    values: Option<&Value>,
+    plan: RankingPlan,
+    entities: u64,
+    most_parts: Option<u32>,
+    most_entities: Option<u64>,
+) -> Result<RankedQuestions, CoreError> {
+    admit_question(
+        &plan,
+        values
+            .and_then(|value| value.get("prediction_statistic"))
+            .is_some(),
+    )?;
+    let ranked = plan
+        .ranked
+        .ok_or_else(|| crate::run::internal("an admitted ranking lost its ranked column"))?;
+    let Some(given_candidates) = candidates else {
         return Err(refused(
             Sentence::CandidatesMissing,
             "a ranking is over candidates, which have to be named",
@@ -127,7 +144,7 @@ pub(crate) async fn materialize(
             "candidates",
         ));
     }
-    let most = inputs.most_parts.unwrap_or(MOST_PARTS);
+    let most = most_parts.unwrap_or(MOST_PARTS);
     if kept.len() > most as usize {
         return Err(refused(
             Sentence::TooManyCandidates,
@@ -139,8 +156,7 @@ pub(crate) async fn materialize(
     }
     // How the column ranked travels (`_how_the_column_travels`), which
     // decides how each candidate is written.
-    let dtype = inputs
-        .description
+    let dtype = description
         .tables
         .iter()
         .find(|t| t.name == ranked.table)
@@ -160,7 +176,7 @@ pub(crate) async fn materialize(
         questions.push((*position, named, question));
     }
     // `_candidates_to_rank`: the call's `top_k`, else the query's.
-    let top_k = match given(&inputs, "top_k") {
+    let top_k = match values.and_then(|value| value.get("top_k")) {
         Some(value) => Some(sdm_request::options::top_k(value)?),
         None => plan
             .top_k
@@ -176,12 +192,7 @@ pub(crate) async fn materialize(
     // each question gathers whole, held as many times over as there are
     // questions (`refuse_more_entities_than_fit_in_memory`), past the
     // host's limit, 100,000 where it names none.
-    let per_call =
-        sdm_request::options::rows_one_call_scores(asked_rows_per_call(inputs.values.as_ref())?);
-    let entities = inputs.indices.as_ref().map_or(0, |data| {
-        data.batches.iter().map(|b| b.num_rows()).sum::<usize>()
-    });
-    let entities = u64::try_from(entities).unwrap_or(u64::MAX);
+    let per_call = sdm_request::options::rows_one_call_scores(asked_rows_per_call(values)?);
     let parts = u64::try_from(kept.len()).unwrap_or(u64::MAX);
     if entities > per_call {
         return Err(CoreError::new(
@@ -195,7 +206,40 @@ pub(crate) async fn materialize(
         .with_field("parts", Detail::Scalar(Scalar::UInt64(parts)))
         .with_field("rows_per_call", Detail::Scalar(Scalar::UInt64(per_call))));
     }
-    refuse_entities(entities, parts, inputs.most_entities)?;
+    refuse_entities(entities, parts, most_entities)?;
+    Ok(RankedQuestions {
+        top_k,
+        parts: questions,
+    })
+}
+
+/// A ranking gathered: each distinct candidate's question, in the order
+/// the candidates were given, each gathered as the client's `_in_parts`
+/// gathers a part.
+pub(crate) async fn materialize(
+    asker: Asker,
+    inputs: Inputs,
+    plan: RankingPlan,
+    facts: Option<QueryFacts>,
+) -> Result<OperationResult, CoreError> {
+    let entities = inputs.indices.as_ref().map_or(0, |data| {
+        data.batches
+            .iter()
+            .map(|batch| batch.num_rows())
+            .sum::<usize>()
+    });
+    let RankedQuestions {
+        top_k,
+        parts: questions,
+    } = questions(
+        &inputs.description,
+        inputs.candidates.as_deref(),
+        inputs.values.as_ref(),
+        plan,
+        u64::try_from(entities).unwrap_or(u64::MAX),
+        inputs.most_parts,
+        inputs.most_entities,
+    )?;
     // Each question gathered with the call's values but `top_k`, which is
     // the whole ranking's, each by a materializer of its own, so with no
     // memo of another's reads; the materializer's own memo is left as it
@@ -275,32 +319,25 @@ pub(crate) async fn materialize(
 const RANKING_OUTPUTS: [&str; 2] = ["prediction", "rankings"];
 const RANKING_PARTS: [&str; 2] = ["prediction", "probabilities"];
 
+pub(crate) fn part_outputs() -> Vec<String> {
+    RANKING_PARTS.map(str::to_owned).to_vec()
+}
+
 /// A ranking's question as `predict` asks it: the candidate, by its
 /// position among those given and as the result names it, and the
 /// question's payload, query and the id its call carries.
 pub(crate) type Question = (u32, String, Vec<u8>, String, String);
 
-/// A ranking predicted (`_answer_in_parts` for a ranking): `questions` in
-/// the order asked, the first the state's own.
-pub(crate) async fn predict(
-    asker: Asker,
-    inputs: crate::predict::Inputs,
-    questions: Vec<Question>,
-    top_k: Option<u32>,
-) -> Result<OperationResult, CoreError> {
-    use sdm_request::predict::{body, preflight, prepare};
-
-    // `_refuse_outputs_a_ranking_cannot_give`.
-    if !inputs.default_outputs {
-        if inputs.outputs.is_empty() {
+pub(crate) fn selected_outputs(outputs: Option<&[String]>) -> Result<Vec<String>, CoreError> {
+    if let Some(outputs) = outputs {
+        if outputs.is_empty() {
             return Err(refused(
                 Sentence::RankingOutputsNone,
                 "outputs must name at least one field",
                 "outputs",
             ));
         }
-        let unknown: Vec<&String> = inputs
-            .outputs
+        let unknown: Vec<&String> = outputs
             .iter()
             .filter(|name| !RANKING_OUTPUTS.contains(&name.as_str()))
             .collect();
@@ -321,6 +358,133 @@ pub(crate) async fn predict(
             ));
         }
     }
+    Ok(outputs.map_or_else(
+        || RANKING_OUTPUTS.map(str::to_owned).to_vec(),
+        <[String]>::to_vec,
+    ))
+}
+
+pub(crate) fn native_output_vocabulary(
+    named: bool,
+    nonempty: Option<bool>,
+) -> Result<sdm_contract::prepare::RankingOutputVocabulary, CoreError> {
+    if named != nonempty.is_some() {
+        return Err(CoreError::protocol(
+            Sentence::InvalidMessage,
+            "native ranking output form is inconsistent",
+        ));
+    }
+    if nonempty == Some(false) {
+        let mut error = refused(
+            Sentence::RankingOutputsNone,
+            "outputs must name at least one field",
+            "outputs",
+        );
+        error.public_details = Some(Default::default());
+        return Err(error);
+    }
+    Ok(sdm_contract::prepare::RankingOutputVocabulary {
+        outputs: RANKING_OUTPUTS.map(str::to_owned).to_vec(),
+        prediction: RANKING_OUTPUTS[0].to_owned(),
+        rankings: RANKING_OUTPUTS[1].to_owned(),
+    })
+}
+
+pub(crate) fn native_selected_outputs(
+    outputs: Option<&[String]>,
+    facts: &sdm_contract::prepare::NativeRankingOutputFacts,
+) -> Result<Vec<String>, CoreError> {
+    let names = outputs.unwrap_or(&[]);
+    if facts.unsupported.windows(2).any(|pair| pair[0] >= pair[1])
+        || facts
+            .unsupported
+            .iter()
+            .any(|position| *position >= names.len())
+    {
+        return Err(CoreError::protocol(
+            Sentence::InvalidMessage,
+            "native ranking output positions are invalid",
+        ));
+    }
+    if !facts.unsupported.is_empty() {
+        let mut error = refused(
+            if facts.unsupported.len() > 1 {
+                Sentence::RankingOutputsUnknown
+            } else {
+                Sentence::RankingOutputUnknown
+            },
+            "a native ranking output is unsupported",
+            "outputs",
+        )
+        .with_field(
+            "unsupported",
+            Detail::List(
+                facts
+                    .unsupported
+                    .iter()
+                    .map(|position| Scalar::Utf8(names[*position].clone()))
+                    .collect(),
+            ),
+        )
+        .with_field("native_ranking_outputs", Detail::Scalar(Scalar::Bool(true)));
+        error.public_details = Some(Default::default());
+        return Err(error);
+    }
+    Ok(outputs.map_or_else(
+        || RANKING_OUTPUTS.map(str::to_owned).to_vec(),
+        <[String]>::to_vec,
+    ))
+}
+
+pub(crate) fn selected_candidates(
+    asker: &Asker,
+    model: &str,
+    total: usize,
+    cold: &[u32],
+) -> Result<(), CoreError> {
+    let positions = |at: &[u32]| Detail::List(at.iter().map(|p| Scalar::UInt32(*p)).collect());
+    let several = cold.len() > 1;
+    if cold.len() == total {
+        return Err(CoreError::new(
+            if several {
+                Sentence::RankingUnscoredSeveral
+            } else {
+                Sentence::RankingUnscoredOne
+            },
+            "the context gathered for every candidate holds one answer only, so there is \
+             nothing to rank and nothing was sent",
+        )
+        .with_field("model", Detail::text(model))
+        .with_field("candidates", positions(cold))
+        .with_field("classes_in_context", count(1)));
+    }
+    if !cold.is_empty() {
+        asker.warn(
+            sdm_contract::CoreWarning::new(
+                if several {
+                    Sentence::CandidatesUnscoredSeveral
+                } else {
+                    Sentence::CandidatesUnscoredOne
+                },
+                "candidates are left out of the ranking, unscored",
+            )
+            .with_field("candidates", positions(cold)),
+        );
+    }
+    Ok(())
+}
+
+/// A ranking predicted (`_answer_in_parts` for a ranking): `questions` in
+/// the order asked, the first the state's own.
+pub(crate) async fn predict(
+    asker: Asker,
+    inputs: crate::predict::Inputs,
+    questions: Vec<Question>,
+    top_k: Option<u32>,
+) -> Result<OperationResult, CoreError> {
+    use sdm_request::predict::{body, preflight, prepare};
+
+    selected_outputs((!inputs.default_outputs).then_some(inputs.outputs.as_slice()))?;
     let parts = u64::try_from(questions.len()).unwrap_or(u64::MAX);
     let tagged = |position: u32| {
         move |e: CoreError| {
@@ -364,35 +528,7 @@ pub(crate) async fn predict(
             cold.push(*position);
         }
     }
-    let positions = |at: &[u32]| Detail::List(at.iter().map(|p| Scalar::UInt32(*p)).collect());
-    let several = cold.len() > 1;
-    if cold.len() == questions.len() {
-        return Err(CoreError::new(
-            if several {
-                Sentence::RankingUnscoredSeveral
-            } else {
-                Sentence::RankingUnscoredOne
-            },
-            "the context gathered for every candidate holds one answer only, so there is \
-             nothing to rank and nothing was sent",
-        )
-        .with_field("model", Detail::text(&inputs.model))
-        .with_field("candidates", positions(&cold))
-        .with_field("classes_in_context", count(1)));
-    }
-    if !cold.is_empty() {
-        asker.warn(
-            sdm_contract::CoreWarning::new(
-                if several {
-                    Sentence::CandidatesUnscoredSeveral
-                } else {
-                    Sentence::CandidatesUnscoredOne
-                },
-                "candidates are left out of the ranking, unscored",
-            )
-            .with_field("candidates", positions(&cold)),
-        );
-    }
+    selected_candidates(&asker, &inputs.model, questions.len(), &cold)?;
     // Each question left asked as a classification, in order, a refusal
     // said of its candidate, with how many were answered before it.
     let mut answers = Vec::with_capacity(questions.len() - cold.len());

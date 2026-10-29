@@ -37,7 +37,8 @@ from sdm_connectors import DuckDBSource
 
 from sdm_client import PredictiveQuery, Schema
 from sdm_client._routing import FROM_SOURCE_DUCKDB, MATERIALIZE_DUCKDB
-from sdm_client._rust import materialize as bridge
+from sdm_client._rust import native_sql
+from sdm_client._rust.run import run
 
 CONTRACT = Path(__file__).resolve().parents[3] / 'contract'
 CASES = (
@@ -108,17 +109,25 @@ def _core_examples(
         'SDM_CORE_ROUTES', ','.join(FROM_SOURCE_DUCKDB + MATERIALIZE_DUCKDB)
     )
     labelled: dict[str, Any] = {}
-    real = bridge.run
+    calls = 0
 
     def labels_in_place(
-        operation: dict[str, Any], attachments: Any, **kw: Any
+        operation: dict[str, Any],
+        attachments: Any,
+        provider: Any,
+        state: dict[str, Any],
+        _options: dict[str, Any],
     ) -> Any:
+        nonlocal calls
+        calls += 1
+        assert calls == 1
         assert operation['op'] == 'materialize'
         materialize = {k: v for k, v in operation.items() if k != 'op'}
-        finished = real(
+        finished = run(
             {'op': 'test', 'test': 'labels', 'materialize': materialize},
             attachments,
-            provider=kw['provider'],
+            provider=provider,
+            state=state,
         )
         stream = finished.take(finished.result['data'])
         labelled['table'] = pa.RecordBatchReader._import_from_c_capsule(
@@ -127,7 +136,7 @@ def _core_examples(
         labelled['rows'] = finished.result['rows']
         raise _Labelled
 
-    monkeypatch.setattr(bridge, 'run', labels_in_place)
+    monkeypatch.setattr(native_sql, 'gather', labels_in_place)
     schema = Schema.from_source(DuckDBSource(connection))
     arguments: dict[str, Any] = {'indices': given['materialize']['indices']}
     if 'anchor_time' in given['materialize']:
@@ -136,8 +145,10 @@ def _core_examples(
         )
     with pytest.raises(_Labelled):
         PredictiveQuery(given['pql'], schema).materialize(**arguments)
+    assert calls == 1
     table = labelled['table']
     assert table.num_rows == labelled['rows']
+    assert table.num_rows > 0
     out = []
     for entity, anchor, target in zip(
         table['entity'].to_pylist(),

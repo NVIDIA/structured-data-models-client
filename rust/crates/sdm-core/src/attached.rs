@@ -13,6 +13,7 @@ use sdm_contract::data::{AttachmentId, ProviderChoice};
 use sdm_contract::frames::{FrameCheckpointManifest, FrameManifest, MaterializeFrames};
 use sdm_contract::ops::{AttachmentKind, Operation};
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
+use sdm_wire::json::{self, ReadError, Value};
 use serde::de::DeserializeOwned;
 
 use crate::run::{Attachment, Attachments};
@@ -31,6 +32,69 @@ pub fn resolved_attachments(
 ) -> Result<Vec<(AttachmentId, AttachmentKind)>, CoreError> {
     let mut named = operation.attachments();
     match operation {
+        Operation::PrepareFrames(request) => {
+            if let Some(Attachment::Bytes(bytes)) = attachments.get(&request.input) {
+                use sdm_contract::frames::materialize::FramePreparation;
+                let input: FramePreparation = serde_json::from_slice(bytes)
+                    .map_err(|_| invalid("unreadable frame preparation input", request.input))?;
+                named.extend(input.attachments());
+                if let FramePreparation::Graph {
+                    frames, checkpoint, ..
+                } = input
+                {
+                    let read = |id| match attachments.get(&id) {
+                        Some(Attachment::Bytes(bytes)) => Ok(bytes.as_slice()),
+                        _ => Err(invalid("a frame graph manifest lacks bytes", id)),
+                    };
+                    let manifest: MaterializeFrames = serde_json::from_slice(read(frames)?)
+                        .map_err(|_| invalid("unreadable frame graph source manifest", frames))?;
+                    named.extend(
+                        manifest
+                            .row_identities
+                            .iter()
+                            .map(|identity| (identity.values.values, AttachmentKind::Arrow)),
+                    );
+                    declare_frame_rows(manifest.tables, &mut named)?;
+                    if let Some(checkpoint) = checkpoint {
+                        let manifest: FrameCheckpointManifest =
+                            serde_json::from_slice(read(checkpoint.manifest)?).map_err(|_| {
+                                invalid(
+                                    "unreadable frame graph checkpoint manifest",
+                                    checkpoint.manifest,
+                                )
+                            })?;
+                        if manifest.retained.is_some() {
+                            return Err(invalid(
+                                "raw frame fallback cannot also declare a retained graph owner",
+                                checkpoint.manifest,
+                            ));
+                        }
+                        named.push((manifest.metadata, AttachmentKind::Bytes));
+                        named.extend(
+                            manifest
+                                .row_identities
+                                .iter()
+                                .map(|identity| (identity.values.values, AttachmentKind::Arrow)),
+                        );
+                        declare_frame_rows(manifest.tables, &mut named)?;
+                    }
+                }
+            }
+            return Ok(named);
+        }
+        Operation::PrepareMaterialize(request) => {
+            if let Some(Attachment::Bytes(bytes)) = attachments.get(&request.input) {
+                let input: sdm_contract::materialize::MaterializePreparation =
+                    serde_json::from_slice(bytes).map_err(|_| {
+                        invalid(
+                            "unreadable materialization preparation input",
+                            request.input,
+                        )
+                    })?;
+                named.extend(input.attachments());
+            }
+            return Ok(named);
+        }
         Operation::PrepareRequest(request) => {
             if let Some(Attachment::Bytes(bytes)) = attachments.get(&request.input) {
                 let input: sdm_contract::prepare::Preparation = serde_json::from_slice(bytes)
@@ -45,7 +109,55 @@ pub fn resolved_attachments(
                             .map(|id| (id, AttachmentKind::Bytes)),
                     );
                 }
+                match &input {
+                    sdm_contract::prepare::Preparation::CheckRelationalCoverage {
+                        data,
+                        rows,
+                        ..
+                    } => {
+                        named.extend(
+                            [data.response, data.rows, *rows]
+                                .into_iter()
+                                .map(|id| (id, AttachmentKind::Bytes)),
+                        );
+                    }
+                    sdm_contract::prepare::Preparation::CompleteRelationalResponse { part } => {
+                        named.extend(
+                            [
+                                part.data.response,
+                                part.data.rows,
+                                part.rows,
+                                part.target_rows,
+                            ]
+                            .into_iter()
+                            .map(|id| (id, AttachmentKind::Bytes)),
+                        );
+                    }
+                    sdm_contract::prepare::Preparation::FinishRelationalResponse { input } => {
+                        named.extend(
+                            input
+                                .attachments()
+                                .into_iter()
+                                .map(|id| (id, AttachmentKind::Bytes)),
+                        );
+                    }
+                    sdm_contract::prepare::Preparation::PrepareRelationalRankPopulation {
+                        source,
+                    } => {
+                        named.extend(
+                            source
+                                .attachments()
+                                .into_iter()
+                                .map(|id| (id, AttachmentKind::Bytes)),
+                        );
+                    }
+                    _ => {}
+                }
                 let rows = match input {
+                    sdm_contract::prepare::Preparation::CallRelational { input } => {
+                        named.push((input.body, AttachmentKind::Bytes));
+                        None
+                    }
                     sdm_contract::prepare::Preparation::EncodeBody { input } => {
                         Some((input.context, input.predict))
                     }
@@ -147,9 +259,15 @@ pub fn resolved_attachments(
             frame.tables
         }
         Operation::Materialize(request) => {
-            let mut tables = serde_json::from_slice::<MaterializeFrames>(read(manifest)?)
-                .map_err(|_| invalid("unreadable materialize frame manifest", manifest))?
-                .tables;
+            let input = serde_json::from_slice::<MaterializeFrames>(read(manifest)?)
+                .map_err(|_| invalid("unreadable materialize frame manifest", manifest))?;
+            named.extend(
+                input
+                    .row_identities
+                    .iter()
+                    .map(|identity| (identity.values.values, AttachmentKind::Arrow)),
+            );
+            let mut tables = input.tables;
             if let Some(checkpoint) = request
                 .sampler_state
                 .as_ref()
@@ -160,14 +278,28 @@ pub fn resolved_attachments(
                         invalid("unreadable frame checkpoint manifest", checkpoint.manifest)
                     })?;
                 named.push((checkpoint_manifest.metadata, AttachmentKind::Bytes));
+                named.extend(
+                    checkpoint_manifest
+                        .row_identities
+                        .iter()
+                        .map(|identity| (identity.values.values, AttachmentKind::Arrow)),
+                );
                 tables.extend(checkpoint_manifest.tables);
             }
             tables
         }
         _ => unreachable!(),
     };
+    declare_frame_rows(std::mem::take(&mut tables), &mut named)?;
+    Ok(named)
+}
+
+fn declare_frame_rows(
+    tables: Vec<sdm_contract::frames::FrameInput>,
+    named: &mut Vec<(AttachmentId, AttachmentKind)>,
+) -> Result<(), CoreError> {
     let mut relations = BTreeSet::new();
-    for table in tables.drain(..) {
+    for table in tables {
         if table.source.source.len() != 1
             || table.source.source[0].is_empty()
             || !table.source.columns.is_empty()
@@ -182,7 +314,7 @@ pub fn resolved_attachments(
         }
         named.push((table.rows, AttachmentKind::Arrow));
     }
-    Ok(named)
+    Ok(())
 }
 
 /// Checks that `attachments` holds exactly the ids `named`, each once and
@@ -216,13 +348,53 @@ pub fn check_attachments(
                     *id,
                 ));
             }
-            _ => {}
+            (Some(Attachment::Bytes(_)), AttachmentKind::Bytes)
+            | (Some(Attachment::Arrow(_)), AttachmentKind::Arrow)
+            | (Some(Attachment::FrameGraph(_)), AttachmentKind::FrameGraph) => {}
+            (Some(Attachment::LookupRows(_)), AttachmentKind::LookupRows)
+            | (Some(Attachment::MaterializeSource(_)), AttachmentKind::MaterializeSource)
+            | (Some(Attachment::MaterializePopulation(_)), AttachmentKind::MaterializePopulation)
+            | (Some(Attachment::MaterializeGroups(_)), AttachmentKind::MaterializeGroups)
+            | (Some(Attachment::MaterializeBatch(_)), AttachmentKind::MaterializeBatch)
+            | (Some(Attachment::FrameLabelGroups(_)), AttachmentKind::FrameLabelGroups)
+            | (Some(Attachment::LabelInputs(_)), AttachmentKind::LabelInputs)
+            | (Some(Attachment::TargetColumn(_)), AttachmentKind::TargetColumn)
+            | (Some(Attachment::FrameLabelBatch(_)), AttachmentKind::FrameLabelBatch)
+            | (Some(Attachment::FramePopulation(_)), AttachmentKind::FramePopulation)
+            | (Some(Attachment::FrameQuestion(_)), AttachmentKind::FrameQuestion)
+            | (Some(Attachment::FrameTask(_)), AttachmentKind::FrameTask)
+            | (Some(Attachment::FrameReferences(_)), AttachmentKind::FrameReferences)
+            | (Some(Attachment::FramePayload(_)), AttachmentKind::FramePayload) => {}
+            _ => {
+                return Err(invalid(
+                    "the attachment does not have its declared kind",
+                    *id,
+                ));
+            }
         }
     }
     if let Some(id) = attachments.keys().find(|id| !seen.contains(id)) {
         return Err(invalid("an attachment is not named by its message", *id));
     }
     Ok(())
+}
+
+fn take_bytes(attachments: &mut Attachments, id: AttachmentId) -> Result<Vec<u8>, CoreError> {
+    let Some(Attachment::Bytes(bytes)) = attachments.remove(&id) else {
+        return Err(invalid(
+            "the message names a bytes attachment it does not attach",
+            id,
+        ));
+    };
+    Ok(bytes)
+}
+
+fn unreadable_json(id: AttachmentId, error: ReadError) -> CoreError {
+    let count = |n: usize| Detail::Scalar(Scalar::UInt64(u64::try_from(n).unwrap_or(u64::MAX)));
+    invalid("an attachment is not the JSON its message names", id)
+        .with_field("category", Detail::text(error.category))
+        .with_field("line", count(error.line))
+        .with_field("column", count(error.column))
 }
 
 /// Takes the bytes attachment `id` and reads it as the UTF-8 JSON of a `T`.
@@ -232,12 +404,7 @@ pub fn take_json<T: DeserializeOwned>(
     attachments: &mut Attachments,
     id: AttachmentId,
 ) -> Result<T, CoreError> {
-    let Some(Attachment::Bytes(bytes)) = attachments.remove(&id) else {
-        return Err(invalid(
-            "the message names a bytes attachment it does not attach",
-            id,
-        ));
-    };
+    let bytes = take_bytes(attachments, id)?;
     serde_json::from_slice(&bytes).map_err(|e| {
         let category = match e.classify() {
             serde_json::error::Category::Io => "io",
@@ -245,11 +412,14 @@ pub fn take_json<T: DeserializeOwned>(
             serde_json::error::Category::Data => "data",
             serde_json::error::Category::Eof => "eof",
         };
-        let count = |n: usize| Detail::Scalar(Scalar::UInt64(u64::try_from(n).unwrap_or(u64::MAX)));
-        invalid("an attachment is not the JSON its message names", id)
-            .with_field("category", Detail::text(category))
-            .with_field("line", count(e.line()))
-            .with_field("column", count(e.column()))
+        unreadable_json(
+            id,
+            ReadError {
+                category,
+                line: e.line(),
+                column: e.column(),
+            },
+        )
     })
 }
 
@@ -260,4 +430,121 @@ pub fn take_json_if<T: DeserializeOwned>(
     id: Option<AttachmentId>,
 ) -> Result<Option<T>, CoreError> {
     id.map(|id| take_json(attachments, id)).transpose()
+}
+
+/// Takes one option-values attachment through the existing option reader.
+/// Numeric tokens, including NaN and infinities, remain exact facts for
+/// downstream option policy; object order and native text are retained.
+pub fn take_option_values(
+    attachments: &mut Attachments,
+    id: AttachmentId,
+) -> Result<Value, CoreError> {
+    let bytes = take_bytes(attachments, id)?;
+    json::read_options(&bytes).map_err(|error| unreadable_json(id, error))
+}
+
+/// The optional form of [`take_option_values`], leaving attachments untouched
+/// when no value is named.
+pub fn take_option_values_if(
+    attachments: &mut Attachments,
+    id: Option<AttachmentId>,
+) -> Result<Option<Value>, CoreError> {
+    id.map(|id| take_option_values(attachments, id)).transpose()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::run::ArrowData;
+    use arrow_array::RecordBatch;
+    use arrow_schema::Schema;
+    use sdm_contract::ErrorCode;
+    use std::sync::Arc;
+
+    #[test]
+    fn option_attachment_keeps_numeric_tokens_member_order_and_unicode() {
+        let id = AttachmentId(1);
+        let bytes = br#"{"z":123456789012345678901234567890,"a":1,"negative_zero":-0,"fraction":1.2500e-42,"nan":NaN,"positive":Infinity,"negative":-Infinity,"text":"\u0000\u03a9\ud83d\ude3a","a":2.00}"#;
+        let mut attachments = Attachments::from([(id, Attachment::Bytes(bytes.to_vec()))]);
+        let decoded = take_option_values(&mut attachments, id).unwrap();
+        assert!(attachments.is_empty());
+        assert_eq!(
+            decoded,
+            Value::Object(vec![
+                (
+                    "z".to_owned(),
+                    Value::Number("123456789012345678901234567890".to_owned())
+                ),
+                ("a".to_owned(), Value::Number("2.00".to_owned())),
+                ("negative_zero".to_owned(), Value::Number("-0".to_owned())),
+                (
+                    "fraction".to_owned(),
+                    Value::Number("1.2500e-42".to_owned())
+                ),
+                ("nan".to_owned(), Value::Number("NaN".to_owned())),
+                ("positive".to_owned(), Value::Number("Infinity".to_owned())),
+                ("negative".to_owned(), Value::Number("-Infinity".to_owned())),
+                ("text".to_owned(), Value::Text("\0Ω😺".into())),
+            ])
+        );
+    }
+
+    #[test]
+    fn unreadable_option_attachment_preserves_reader_diagnostics() {
+        for bytes in [b"[".as_slice(), br#""\ud800""#.as_slice()] {
+            let expected = json::read_options(bytes).unwrap_err();
+            let id = AttachmentId(3);
+            let mut attachments = Attachments::from([(id, Attachment::Bytes(bytes.to_vec()))]);
+            let error = take_option_values(&mut attachments, id).unwrap_err();
+            assert_eq!(error.code, ErrorCode::InvalidMessage);
+            assert_eq!(error.sentence, Sentence::InvalidMessage);
+            assert_eq!(
+                error.fields["attachment"],
+                Detail::Scalar(Scalar::UInt32(3))
+            );
+            assert_eq!(error.fields["category"], Detail::text(expected.category));
+            assert_eq!(
+                error.fields["line"],
+                Detail::Scalar(Scalar::UInt64(u64::try_from(expected.line).unwrap()))
+            );
+            assert_eq!(
+                error.fields["column"],
+                Detail::Scalar(Scalar::UInt64(u64::try_from(expected.column).unwrap()))
+            );
+            assert_eq!(
+                error.message,
+                "an attachment is not the JSON its message names"
+            );
+            assert!(attachments.is_empty());
+        }
+    }
+
+    #[test]
+    fn optional_option_values_check_kind_and_consume_only_the_named_owner() {
+        let id = AttachmentId(4);
+        let spare = AttachmentId(5);
+        let schema = Arc::new(Schema::empty());
+        let arrow = ArrowData::new(schema.clone(), vec![RecordBatch::new_empty(schema)]);
+        let mut attachments = Attachments::from([
+            (id, Attachment::Arrow(arrow)),
+            (spare, Attachment::Bytes(b"null".to_vec())),
+        ]);
+        assert_eq!(take_option_values_if(&mut attachments, None).unwrap(), None);
+        assert_eq!(attachments.len(), 2);
+        let error = take_option_values_if(&mut attachments, Some(id)).unwrap_err();
+        assert_eq!(error.code, ErrorCode::InvalidMessage);
+        assert_eq!(
+            error.fields["attachment"],
+            Detail::Scalar(Scalar::UInt32(4))
+        );
+        assert!(!error.fields.contains_key("category"));
+        assert!(!attachments.contains_key(&id));
+        assert!(attachments.contains_key(&spare));
+        assert_eq!(take_option_values(&mut attachments, id).unwrap_err(), error);
+        assert_eq!(
+            take_option_values_if(&mut attachments, Some(spare)).unwrap(),
+            Some(Value::Null)
+        );
+        assert!(attachments.is_empty());
+    }
 }

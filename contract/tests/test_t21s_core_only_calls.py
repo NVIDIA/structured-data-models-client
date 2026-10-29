@@ -15,12 +15,16 @@ column the entry does not name still fails, in any call.
 
 from __future__ import annotations
 
+import copy
+import hashlib
 import importlib.util
 import json
 import sys
 from pathlib import Path
 from types import ModuleType
 from typing import Any
+
+from test_t44_prediction_observation import legacy_observation, reader
 
 ROOT = Path(__file__).resolve().parents[2]
 CASE = {'id': 'rank.odd-column', 'until': 'predict'}
@@ -66,6 +70,16 @@ def _kept(body: dict[str, Any], table: str, column: str) -> None:
         row.insert(0, {'number': str(at)})
 
 
+def _body_hash(body: dict[str, Any]) -> str:
+    """Hash the fixture's actual integer wire tokens before capture tags."""
+
+    def integer_token(value: dict[str, Any]) -> Any:
+        return int(value['number']) if set(value) == {'number'} else value
+
+    raw = json.loads(json.dumps(body), object_hook=integer_token)
+    return hashlib.sha256(json.dumps(raw).encode()).hexdigest()
+
+
 def _failures(
     tmp: Path, bodies: list[dict[str, Any]], named: bool
 ) -> list[str]:
@@ -93,16 +107,37 @@ def _failures(
     register.write_text(json.dumps({'entries': entries}), encoding='utf-8')
     report = COMPARE.Report({'payload': 'gate'})
     report.core_only = COMPARE.core_only_columns(register)
-    predicted: dict[str, Any] = {'body': bodies[-1]}
+    core, operations = legacy_observation()
+    predicted = core['predicted']
+    predicted['body'] = copy.deepcopy(bodies[-1])
     if len(bodies) > 1:
-        predicted['calls'] = bodies
-    seen = COMPARE.without_core_only(
-        {'core': {'predicted': predicted}},
-        report.core_only.get(CASE['id'], {}),
-    )
+        predicted['calls'] = copy.deepcopy(bodies)
+    core['model_calls'] = [
+        {
+            'run': 2,
+            'body': copy.deepcopy(body),
+            'body_sha256': _body_hash(body),
+            'reply': {'outcome': 'response', 'status': 200},
+            'model_endpoint': None,
+        }
+        for body in bodies
+    ]
+    core['legacy_predictions'] = [
+        {
+            'run': 2,
+            'completion': 'done',
+            'result': copy.deepcopy(predicted),
+            'error': None,
+            'answered': None,
+        }
+    ]
+    seen = {'identity': {'operations': operations}, 'core': core}
+    reader().view(core, operations)
+    untouched = copy.deepcopy(seen)
     sent = [{'parsed': _call(n)} for n in range(len(bodies))]
     reference = {'public': {'payloads': sent}}
     COMPARE._core_payload(report, CASE, 'rust-host', seen, reference)
+    assert seen == untouched
     return [text for _, text in report.failures]
 
 
@@ -123,14 +158,14 @@ def test_a_named_core_only_column_is_left_out_of_every_call(
     bodies = _core_bodies()
     # Not vacuous: with no entry the kept columns fail, by the call's path.
     found = _failures(tmp_path, bodies, named=False)
-    assert found and 'core.predicted.calls/0/' in found[0], found
+    assert found and 'core.model_calls/0/' in found[0], found
     assert _failures(tmp_path, bodies, named=True) == []
     # As in a single call's body, which the rule already reads.
     assert _failures(tmp_path, bodies[:1], named=True) == []
     # Beside them, a column the entry does not name is the one reported.
     _kept(bodies[1], 'items', 'other')
     [found] = _failures(tmp_path, bodies, named=True)
-    assert 'core.predicted.calls/1/' in found, found
+    assert 'core.model_calls/1/' in found, found
 
 
 def test_an_unnamed_column_in_a_call_still_fails(tmp_path: Path) -> None:
@@ -139,4 +174,4 @@ def test_an_unnamed_column_in_a_call_still_fails(tmp_path: Path) -> None:
     bodies = [_call(0), _call(1)]
     _kept(bodies[1], 'items', 'other')
     [found] = _failures(tmp_path, bodies, named=True)
-    assert 'core.predicted.calls/1/' in found, found
+    assert 'core.model_calls/1/' in found, found

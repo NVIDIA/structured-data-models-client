@@ -24,6 +24,11 @@ core asks again with the same request and the page's ``continuation`` in
 the step (``step['continuation']``), until the provider returns its last
 page as an answer; the core reads the pages as one answer.
 
+A host adapter that reached a native conversion failure returns
+:class:`FetchRefused`, holding that actual exception. The loop cancels the
+run and propagates it before constructing a fetch reply or attaching Arrow.
+It does not inspect that failure as a database diagnostic.
+
 A model call (from T1.11d, ``predict``'s) is answered by the caller's
 ``model``: given the body's bytes, it returns the answer's bytes, which the
 core reads as the endpoint's 200; it raises :class:`TransportFailed` when
@@ -40,29 +45,24 @@ and class), and names (T3.13).
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from types import ModuleType
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    # Named for annotations only: the warehouse package is an optional
-    # dependency, and a core route over frames needs none of it.
-    from sdm_connectors.providers import Provider
+from typing import Any, NoReturn, Protocol
 
 from sdm_client._routing import RouteError
 from sdm_client._rust import codec, errors, facts
 from sdm_client.core.transport import EndpointFailed
 from sdm_client.errors import StructuredDataError
 
-# A provider (``sdm_connectors.providers.Provider``) answers one fetch, the
-# ``FetchStep`` as the contract writes it, with an object that exports Arrow
-# through ``__arrow_c_stream__``, or with a :class:`Page` of it; the key
-# sets its plan names are handed over with it, by attachment id, each an
-# object exporting Arrow the same way.
-
 #: A model: answers one call, given its body's bytes, with the bytes of the
 #: endpoint's answer.
 Model = Callable[[bytes], bytes]
+
+
+class ArrowData(Protocol):
+    """A provider's data product, exported through Arrow's stream protocol."""
+
+    def __arrow_c_stream__(self, requested_schema: Any = None) -> Any: ...
 
 
 class Page:
@@ -76,6 +76,52 @@ class Page:
     def __init__(self, data: Any, continuation: str) -> None:
         self.data = data
         self.continuation = continuation
+
+
+class FetchRefused:
+    """A reached source fetch failed, holding its selected actual owner.
+
+    Returned by a host adapter, never raised as a provider I/O failure.
+    Native conversion failures and a separately core-presented terminal
+    source I/O diagnostic share this cancellation handover. It carries no
+    model response, retry policy or host-selected error classification.
+    """
+
+    __slots__ = ('raised',)
+
+    def __init__(self, raised: Exception) -> None:
+        if not isinstance(raised, Exception):
+            raise TypeError('a fetch refusal holds an Exception')
+        self.raised = raised
+
+
+class FetchProvider(Protocol):
+    """Answer one core fetch with Arrow, a page, or a native failure owner.
+
+    The request is the contract's FetchStep; keys are its attachment owners.
+    I/O exceptions are raised normally for the existing provider error path.
+    No optional connector package is imported to express this host boundary.
+    """
+
+    def __call__(
+        self, step: dict[str, Any], keys: Mapping[int, Any] | None = None
+    ) -> ArrowData | Page | FetchRefused: ...
+
+
+class SourceBatchProvider(Protocol):
+    """Complete one actual issued source partition before any data reply.
+
+    The fixed I/O adapter owns raw rows and native source construction.
+    Its terminal selected failure crosses as FetchRefused; arbitrary raised
+    host exceptions are not reclassified as an ordinary driver failure.
+    """
+
+    def __call__(
+        self,
+        requests: Sequence[dict[str, Any]],
+        keys: Mapping[int, Mapping[int, Any]],
+        /,
+    ) -> Mapping[int, ArrowData] | FetchRefused: ...
 
 
 class TransportFailed(Exception):
@@ -182,12 +228,16 @@ def run(
     operation: dict[str, Any],
     attachments: Mapping[int, Any],
     *,
-    provider: Provider | None = None,
+    provider: FetchProvider | None = None,
     model: Model | None = None,
     quiet: frozenset[str] = frozenset(),
     given: set[str] | None = None,
     kept: list[dict[str, Any]] | None = None,
     state: dict[str, Any] | None = None,
+    warning_presentation: errors.WarningPresentation | None = None,
+    error_presentation: errors.ErrorPresentation = 'coded',
+    source_provider: SourceBatchProvider | None = None,
+    driver_class: str | None = None,
 ) -> Finished:
     r"""Runs ``operation`` to its result, with the attachments its fields name.
 
@@ -215,20 +265,26 @@ def run(
     owned_frame = (
         operation.get('provider', {}).get('provider') == 'frames'
         or operation['op'] == 'prepare_request'
+        or operation['op'] == 'prepare_frames'
+        or operation['op'] == 'prepare_materialize'
         or operation.get('direct') is not None
     )
-    warning_presentation: errors.WarningPresentation = 'coded'
-    if owned_frame and operation['op'] in (
-        'describe_source',
-        'prepare_request',
-    ):
-        warning_presentation = 'frame_schema'
-    elif operation.get('direct') is not None:
-        warning_presentation = 'frame_schema'
-    elif owned_frame and operation['op'] == 'materialize':
-        warning_presentation = 'frame_graph'
+    if warning_presentation is None:
+        warning_presentation = 'coded'
+        if owned_frame and operation['op'] == 'describe_source':
+            warning_presentation = 'frame_schema'
+        elif operation.get('direct') is not None:
+            warning_presentation = 'frame_schema'
+        elif owned_frame and operation['op'] in (
+            'materialize',
+            'prepare_frames',
+        ):
+            warning_presentation = 'frame_graph'
     held = None if state is None else state.get('held')
-    if held is not None:
+    if held is not None and operation['op'] not in (
+        'prepare_frames',
+        'prepare_materialize',
+    ):
         memo = max(attachments, default=0) + 1
         operation = {
             **operation,
@@ -260,7 +316,11 @@ def run(
             attachments.clear()
             held = None
         errors.raise_from_core(
-            refused.control, refused.attachments, internal_context=refused
+            refused.control,
+            refused.attachments,
+            internal_context=refused,
+            presentation=error_presentation,
+            driver_class=driver_class,
         )
     if owned_frame:
         attachments.clear()
@@ -276,6 +336,13 @@ def run(
             kept,
             owned_frame,
             warning_presentation,
+            state
+            if operation['op'] in ('prepare_frames', 'prepare_materialize')
+            else None,
+            operation.get('part'),
+            error_presentation=error_presentation,
+            source_provider=source_provider,
+            initial_driver_class=driver_class,
         )
     except BaseException:
         if owned_frame:
@@ -314,6 +381,7 @@ def _keep(core: Any, handle: Any, state: dict[str, Any]) -> None:
             return
         message = codec.read(*taken)
         left = message['state']
+        previous = state.get('held')
         state['held'] = {
             'version': left['version'],
             'memo': handle.take_attachment(left['memo']),
@@ -324,6 +392,7 @@ def _keep(core: Any, handle: Any, state: dict[str, Any]) -> None:
             state['held']['frame_checkpoint'] = frame_materialize.take(
                 handle, left['frame_checkpoint']
             )
+            frame_materialize.publish(state, previous)
     except (core.CoreError, codec.CodecError):
         return
 
@@ -331,17 +400,22 @@ def _keep(core: Any, handle: Any, state: dict[str, Any]) -> None:
 def _steps(
     core: Any,
     handle: Any,
-    provider: Provider | None,
+    provider: FetchProvider | None,
     model: Model | None,
     quiet: frozenset[str],
     given: set[str] | None,
     kept: list[dict[str, Any]] | None = None,
     owned_frame: bool = False,
     warning_presentation: errors.WarningPresentation = 'coded',
+    state: dict[str, Any] | None = None,
+    frame_part: dict[str, Any] | None = None,
+    error_presentation: errors.ErrorPresentation = 'coded',
+    source_provider: SourceBatchProvider | None = None,
+    initial_driver_class: str | None = None,
 ) -> Finished:
     r"""The run's steps, each answered, to its result."""
     try:
-        driver_class: str | None = None
+        driver_class: str | None = initial_driver_class
         refused: Refused | None = None
         while True:
             error: StructuredDataError | None = None
@@ -350,7 +424,11 @@ def _steps(
                 control, sent = handle.next()
             except core.CoreError as failed:
                 internal_context = failed
-                _warn(handle, quiet, given, kept, warning_presentation)
+                if state is not None:
+                    _keep(core, handle, state)
+                _warn(
+                    handle, quiet, given, kept, warning_presentation, frame_part
+                )
                 error = errors.error_from_core(
                     failed.control,
                     failed.attachments,
@@ -367,8 +445,17 @@ def _steps(
                     _carried(error, refused.raised)
                     _of_the_part(error, refused.raised)
                     raise refused.raised
-                errors.raise_error(error, internal_context=internal_context)
-            _warn(handle, quiet, given, kept, warning_presentation)
+                errors.raise_error(
+                    error,
+                    internal_context=internal_context,
+                    presentation=error_presentation,
+                )
+            if state is not None:
+                # Publish reached ownership before native warning handlers
+                # can reenter this same materializer. Retained graph exports
+                # carry the same live owner, never a replayable raw snapshot.
+                _keep(core, handle, state)
+            _warn(handle, quiet, given, kept, warning_presentation, frame_part)
             step = codec.read(control, sent)
             if step['message'] != 'step':
                 raise StructuredDataError(
@@ -394,30 +481,80 @@ def _steps(
             # read it falls back from, T1.32e), and a later error is no other
             # step's.
             driver_class = None
-            for request in step['requests']:
+            source_answers: dict[int, ArrowData] = {}
+            for ordinal, request in enumerate(step['requests']):
                 attached: dict[int, Any] = {}
-                try:
-                    # A later page's step names the key sets the first took.
-                    keys = (
-                        {}
-                        if request.get('continuation')
-                        else _key_sets(handle, request)
-                    )
-                    answer = provider(request, keys)
-                    outcome: dict[str, Any] = {'outcome': 'data', 'data': 1}
-                    if isinstance(answer, Page):
-                        attached[1] = answer.data
-                        outcome['continuation'] = answer.continuation
+                outcome: dict[str, Any]
+                if (
+                    source_provider is not None
+                    and request.get('purpose') == 'source_rows'
+                ):
+                    if request['id'] not in source_answers:
+                        try:
+                            partition = _source_partition(
+                                step['requests'], ordinal
+                            )
+                        except codec.CodecError:
+                            handle.cancel()
+                            raise
+                        bound_keys = {
+                            member['id']: _key_sets(handle, member)
+                            for member in partition
+                        }
+                        lookup = request.get('lookup')
+                        if lookup is not None:
+                            # The one actual counted task owner is shared by
+                            # every chunk of this issued logical lookup.
+                            owner = handle.take_attachment(lookup['owner'])
+                            for member in partition:
+                                bound_keys[member['id']][lookup['owner']] = (
+                                    owner
+                                )
+                        completed = source_provider(partition, bound_keys)
+                        if isinstance(completed, FetchRefused):
+                            _raise_fetch_refused(handle, completed)
+                        if set(completed) != {
+                            member['id'] for member in partition
+                        }:
+                            handle.cancel()
+                            raise codec.CodecError(
+                                'native source result does not cover its complete issued partition'
+                            )
+                        source_answers.update(completed)
+                    outcome = {'outcome': 'data', 'data': 1}
+                    attached[1] = source_answers.pop(request['id'])
+                else:
+                    try:
+                        # A later page's step names the key sets the first took.
+                        keys = (
+                            {}
+                            if request.get('continuation')
+                            else _key_sets(handle, request)
+                        )
+                        answer = provider(request, keys)
+                    except RouteError:
+                        # The route itself failed (an import of the old engine on
+                        # it, say), which is no provider's error to hand the core.
+                        handle.cancel()
+                        raise
+                    except Exception as failure:  # noqa: BLE001 - the provider's
+                        provided, driver_class = _driver(failure, provider)
+                        outcome = {
+                            'outcome': 'error',
+                            'error': provided,
+                        }
                     else:
-                        attached[1] = answer
-                except RouteError:
-                    # The route itself failed (an import of the old engine on
-                    # it, say), which is no provider's error to hand the core.
-                    handle.cancel()
-                    raise
-                except Exception as failure:  # noqa: BLE001 - the provider's
-                    provided, driver_class = _driver(failure, provider)
-                    outcome = {'outcome': 'error', 'error': provided}
+                        # Native conversion is a host boundary, not an I/O
+                        # diagnostic or a core/model refusal. In particular this
+                        # handover must be outside the provider's error handler.
+                        if isinstance(answer, FetchRefused):
+                            _raise_fetch_refused(handle, answer)
+                        outcome = {'outcome': 'data', 'data': 1}
+                        if isinstance(answer, Page):
+                            attached[1] = answer.data
+                            outcome['continuation'] = answer.continuation
+                        else:
+                            attached[1] = answer
                 reply = codec.encode(
                     {
                         'message': 'fetch_reply',
@@ -438,6 +575,69 @@ def _steps(
         if owned_frame:
             handle = None
         raise
+
+
+def _raise_fetch_refused(handle: Any, refused: FetchRefused) -> NoReturn:
+    try:
+        try:
+            handle.cancel()
+        except Exception:
+            # Preserve the selected actual owner across ordinary cleanup errors;
+            # process-control exceptions retain their normal propagation.
+            errors.raise_native(refused.raised)
+        errors.raise_native(refused.raised)
+    finally:
+        # Native tracebacks belong to callers; the cancelled Run does not.
+        handle = None
+
+
+def _source_partition(
+    requests: Sequence[dict[str, Any]], start: int
+) -> Sequence[dict[str, Any]]:
+    first = requests[start]
+    shape = first.get('partition')
+    if not isinstance(shape, dict) or set(shape) != {
+        'first',
+        'ordinal',
+        'parts',
+    }:
+        raise codec.CodecError(
+            'native source read lacks its complete issued partition'
+        )
+    if (
+        any(type(shape[name]) is not int for name in shape)
+        or shape['first'] != first['id']
+        or shape['ordinal'] != 0
+        or shape['parts'] <= 0
+    ):
+        raise codec.CodecError(
+            'native source read has an invalid first partition'
+        )
+    parts = requests[start : start + shape['parts']]
+    if len(parts) != shape['parts']:
+        raise codec.CodecError('native source read omits an issued chunk')
+    ids: set[int] = set()
+    for ordinal, member in enumerate(parts):
+        expected = {
+            'first': first['id'],
+            'ordinal': ordinal,
+            'parts': len(parts),
+        }
+        if (
+            member.get('purpose') != 'source_rows'
+            or member.get('continuation') is not None
+            or member.get('partition') != expected
+            or member.get('request') != first.get('request')
+            or member.get('lookup') != first.get('lookup')
+            or type(member.get('id')) is not int
+            or member['id'] <= 0
+            or member['id'] in ids
+        ):
+            raise codec.CodecError(
+                'native source chunks do not retain their exact ordered read partition'
+            )
+        ids.add(member['id'])
+    return parts
 
 
 def _call(
@@ -595,6 +795,7 @@ def _warn(
     given: set[str] | None,
     kept: list[dict[str, Any]] | None = None,
     warning_presentation: errors.WarningPresentation = 'coded',
+    frame_part: dict[str, Any] | None = None,
 ) -> None:
     taken = handle.take_warnings()
     # Warning filters may raise and retain this frame in a traceback. The
@@ -609,4 +810,5 @@ def _warn(
             given=given,
             held=kept,
             presentation=warning_presentation,
+            frame_part=frame_part,
         )

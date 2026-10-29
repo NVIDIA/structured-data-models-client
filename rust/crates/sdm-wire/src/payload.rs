@@ -32,6 +32,7 @@
 
 use schemars::JsonSchema;
 use sdm_contract::ops::Stype;
+use sdm_contract::scalar::unicode::UnicodeText;
 use serde::Serialize;
 use serde::ser::SerializeMap;
 
@@ -126,7 +127,9 @@ pub struct Target {
 pub struct ClassTarget {
     pub column_name: String,
     pub dtype: Dtype,
-    pub classes: Vec<String>,
+    #[serde(serialize_with = "crate::json::serialize_texts")]
+    #[schemars(with = "Vec<String>")]
+    pub classes: Vec<UnicodeText>,
     /// A binary task's positive class; a multiclass task names none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(with = "String")]
@@ -500,6 +503,12 @@ pub enum AnyConfig {
 }
 
 impl<K: Serialize, C: Serialize> StatePayload<K, C> {
+    /// The same typed model schema as owned logical values, before encoding
+    /// or native presentation. No model body is parsed to recover this data.
+    pub fn logical(&self) -> Result<crate::json::Value, crate::json::LogicalError> {
+        crate::json::from_serializable(self)
+    }
+
     /// The payload's UTF-8 JSON text: compact, members in the order the
     /// types declare them, open maps in the order written, each cell's
     /// number its token.

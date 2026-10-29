@@ -768,6 +768,10 @@ class Transport:
             raise _to_nim_error(status_code, content)
 
     def _post(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
+        return self._post_body(path, self.encode_prediction(payload))
+
+    def encode_prediction(self, payload: dict[str, Any]) -> bytes:
+        """Encode native containers once at their reached transport boundary."""
         self._require_open()
         # Encode before sending, so a value with no JSON form is named here
         # rather than raising a TypeError from inside `requests` that mentions
@@ -790,7 +794,7 @@ class Transport:
         # body to httplib, which encodes latin-1, so this is only safe today
         # because `json.dumps` defaults to `ensure_ascii=True`. Not a default
         # worth depending on.
-        return self._post_body(path, body.encode('utf-8'))
+        return body.encode('utf-8')
 
     def _post_body(self, path: str, body: bytes) -> dict[str, Any]:
         return _decoded_object(self._post_raw(path, body), self._url + path)

@@ -587,6 +587,113 @@ def public_differs(
     )
 
 
+def _core_operations(line: dict[str, Any]) -> list[str]:
+    """Actual native evidence, checked before reading its logical roles."""
+    identity = line['identity']
+    assert identity['native_loaded'] and line['core'] is not None
+    observed = _module(
+        't221_prediction_observation',
+        ROOT / 'contract/runners/prediction_observation.py',
+    ).view(line['core'], identity['operations'])
+    return observed['operations']
+
+
+@pytest.mark.parametrize(
+    'producer', ['current-predict', 'current-materialize', 'legacy']
+)
+def test_route_helper_reads_proved_current_and_legacy_operations(
+    producer: str,
+) -> None:
+    from test_t44_prediction_observation import (
+        actual_observation,
+        legacy_observation,
+    )
+    from test_t45_materialization_observations import actual_materialization
+
+    if producer == 'current-materialize':
+        core, operations = actual_materialization(), ['prepare_materialize']
+        expected = ['materialize']
+    else:
+        core, operations = (
+            actual_observation()
+            if producer == 'current-predict'
+            else legacy_observation()
+        )
+        expected = ['describe_source', 'materialize', 'predict']
+    line = {
+        'identity': {'native_loaded': True, 'operations': operations},
+        'core': core,
+    }
+    original = copy.deepcopy(line)
+    assert _core_operations(line) == expected
+    assert line == original
+    if producer == 'current-predict':
+        assert operations[-3:] == ['prepare_request'] * 3
+        assert 'predict' not in operations
+    elif producer == 'current-materialize':
+        assert 'materialize' not in operations
+
+
+@pytest.mark.parametrize(
+    'changed',
+    [
+        'missing-task-read',
+        'foreign-task-owner',
+        'missing-call',
+        'foreign-call-owner',
+    ],
+)
+def test_route_helper_cannot_earn_roles_from_incomplete_or_foreign_evidence(
+    changed: str,
+) -> None:
+    from test_t44_prediction_observation import actual_observation
+    from test_t45_materialization_observations import actual_materialization
+
+    if changed in ('missing-task-read', 'foreign-task-owner'):
+        core, operations = actual_materialization(), ['prepare_materialize']
+        if changed == 'missing-task-read':
+            core['materialization_preparations'][0]['input_reads'].pop(0)
+        else:
+            core['materialization_preparations'][0]['entry'] = 1
+    else:
+        core, operations = actual_observation()
+        if changed == 'missing-call':
+            core['predictions'][0]['calls'].clear()
+        else:
+            core['inputs'][3]['entry'] = 1
+    line = {
+        'identity': {'native_loaded': True, 'operations': operations},
+        'core': core,
+    }
+    original = copy.deepcopy(line)
+    with pytest.raises(ValueError):
+        _core_operations(line)
+    assert line == original
+
+
+@pytest.mark.parametrize(
+    'changed', ['native-not-loaded', 'no-core', 'no-operations']
+)
+def test_route_helper_keeps_native_and_required_identity_guards(
+    changed: str,
+) -> None:
+    from test_t44_prediction_observation import legacy_observation
+
+    core, operations = legacy_observation()
+    line = {
+        'identity': {'native_loaded': True, 'operations': operations},
+        'core': core,
+    }
+    if changed == 'native-not-loaded':
+        line['identity']['native_loaded'] = False
+    elif changed == 'no-core':
+        line['core'] = None
+    else:
+        del line['identity']['operations']
+    with pytest.raises((AssertionError, KeyError)):
+        _core_operations(line)
+
+
 @pytest.mark.parametrize('case_key', CASE_KEYS)
 def test_python_core_answers_each_case_as_the_reference_does(
     case_key: str,
@@ -613,7 +720,7 @@ def test_python_core_answers_each_case_as_the_reference_does(
         case, _ = cases()[case_key.split('@')[0]]
         identity = line['identity']
         assert identity['native_loaded'] and line['core'] is not None
-        missing = sorted(set(case['core']) - set(identity['operations']))
+        missing = sorted(set(case['core']) - set(_core_operations(line)))
         assert not missing, f'{case_key}: core operations not run: {missing}'
         want = reference_lines()[case_key]
         assert _outcome(line) == _outcome(want), (

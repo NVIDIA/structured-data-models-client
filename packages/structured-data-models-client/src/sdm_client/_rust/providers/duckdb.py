@@ -26,7 +26,8 @@ reference's is.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from typing import Any
 
 from sdm_connectors import providers
@@ -50,6 +51,14 @@ class DuckDBProvider:
     def __call__(
         self, step: dict[str, Any], keys: Mapping[int, Any] | None = None
     ) -> Any:
+        with self.source_rows(step, keys) as source:
+            return source
+
+    @contextmanager
+    def source_rows(
+        self, step: dict[str, Any], keys: Mapping[int, Any] | None = None
+    ) -> Iterator[object]:
+        """Read once and keep the original cursor open for its data consumer."""
         statements = providers.statements(step, 'duckdb')
         relations = providers.bound_relations(statements, keys)
         with self._connection.cursor() as cursor:
@@ -57,4 +66,4 @@ class DuckDBProvider:
                 cursor.register(relation, arrow_table((keys or {})[attachment]))
             for statement in statements:
                 cursor.execute(statement['text'])
-            return cursor.to_arrow_table(self._batch_rows)
+            yield cursor.to_arrow_table(self._batch_rows)

@@ -231,6 +231,8 @@ pub fn messages() -> Vec<ControlMessage> {
                 },
                 continuation: None,
                 purpose: None,
+                partition: None,
+                lookup: None,
             }],
         }),
         ControlMessage::Step(Step::Fetch {
@@ -272,6 +274,8 @@ pub fn messages() -> Vec<ControlMessage> {
                     },
                     continuation: None,
                     purpose: None,
+                    partition: None,
+                    lookup: None,
                 },
                 FetchStep {
                     id: ReplyId(3),
@@ -286,6 +290,8 @@ pub fn messages() -> Vec<ControlMessage> {
                     },
                     continuation: None,
                     purpose: None,
+                    partition: None,
+                    lookup: None,
                 },
                 FetchStep {
                     id: ReplyId(4),
@@ -306,6 +312,8 @@ pub fn messages() -> Vec<ControlMessage> {
                     },
                     continuation: None,
                     purpose: None,
+                    partition: None,
+                    lookup: None,
                 },
                 FetchStep {
                     id: ReplyId(5),
@@ -320,6 +328,8 @@ pub fn messages() -> Vec<ControlMessage> {
                     },
                     continuation: None,
                     purpose: None,
+                    partition: None,
+                    lookup: None,
                 },
                 FetchStep {
                     id: ReplyId(6),
@@ -336,6 +346,8 @@ pub fn messages() -> Vec<ControlMessage> {
                     },
                     continuation: None,
                     purpose: None,
+                    partition: None,
+                    lookup: None,
                 },
                 FetchStep {
                     id: ReplyId(7),
@@ -348,6 +360,8 @@ pub fn messages() -> Vec<ControlMessage> {
                     },
                     continuation: None,
                     purpose: None,
+                    partition: None,
+                    lookup: None,
                 },
                 FetchStep {
                     id: ReplyId(8),
@@ -360,6 +374,8 @@ pub fn messages() -> Vec<ControlMessage> {
                     },
                     continuation: None,
                     purpose: None,
+                    partition: None,
+                    lookup: None,
                 },
                 FetchStep {
                     id: ReplyId(9),
@@ -372,6 +388,8 @@ pub fn messages() -> Vec<ControlMessage> {
                     },
                     continuation: None,
                     purpose: None,
+                    partition: None,
+                    lookup: None,
                 },
             ],
         }),
@@ -436,6 +454,7 @@ pub fn messages() -> Vec<ControlMessage> {
         ControlMessage::Step(Step::Done {
             result: OperationResult::DescribeSource(DescribedSource {
                 frame_rows: None,
+                frame_decimals: None,
                 description: AttachmentId(9),
                 notes: Vec::new(),
             }),

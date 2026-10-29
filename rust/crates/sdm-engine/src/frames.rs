@@ -19,10 +19,12 @@ use arrow_array::{
     UInt64Array,
 };
 use arrow_schema::{DataType, Field, Schema, TimeUnit};
+use sdm_contract::data::strings::StringEncoding;
 use sdm_contract::data::{BATCH_COLUMN, MATCHES_COLUMN};
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 
-use crate::graph::{Edge, Graph};
+use crate::frame_identity::IdentityColumn;
+use crate::graph::{Edge, Graph, NativeGraph};
 use crate::keys::{self, Key};
 use crate::random::Mt19937;
 use crate::time::Instant;
@@ -65,6 +67,16 @@ fn read_keys(array: &ArrayRef) -> Result<Vec<Option<Key>>, CoreError> {
     Ok(values)
 }
 
+fn encoded_keys(
+    array: &ArrayRef,
+    encoding: Option<StringEncoding>,
+) -> Result<Vec<Option<Key>>, CoreError> {
+    match encoding {
+        Some(encoding) => keys::read_strings(array, encoding),
+        None => read_keys(array),
+    }
+}
+
 fn take(batch: &RecordBatch, rows: &[usize], columns: &[String]) -> Result<RecordBatch, CoreError> {
     let indices = UInt64Array::from(rows.iter().map(|&row| row as u64).collect::<Vec<_>>());
     let arrays = columns
@@ -88,6 +100,9 @@ struct Table {
     index: BTreeMap<Key, usize>,
     /// Original instants in nanoseconds; cuts use their floor seconds.
     time: Option<Vec<Option<i64>>>,
+    bounds: Option<(Option<i64>, Option<i64>)>,
+    key_encoding: Option<StringEncoding>,
+    strings: BTreeMap<String, StringEncoding>,
 }
 
 struct Adjacency {
@@ -175,6 +190,9 @@ pub struct WalkedTable {
     pub name: String,
     pub rows: RecordBatch,
     pub batch: Vec<usize>,
+    /// Original snapshot positions, in the exact selected feature-row order.
+    /// These retain native ownership meaning independently of task batches.
+    pub source_rows: Vec<usize>,
 }
 
 pub struct WalkedLink {
@@ -187,29 +205,115 @@ pub struct Walked {
     pub links: Vec<WalkedLink>,
 }
 
+/// Native temporal-hop bounds in floor seconds. Calendar offsets are
+/// widened by the existing core offset policy before entering this read;
+/// the label executor subsequently applies its exact nanosecond bounds.
+#[derive(Debug, Clone, Copy)]
+pub struct TemporalWindow {
+    pub lower: Option<i128>,
+    pub upper: i128,
+}
+
 impl Snapshot {
-    pub fn new(graph: &Graph, mut input: BTreeMap<String, RecordBatch>) -> Result<Self, CoreError> {
+    pub fn new(graph: &Graph, input: BTreeMap<String, RecordBatch>) -> Result<Self, CoreError> {
+        Self::prepare(graph, input, None, BTreeMap::new())
+    }
+
+    /// Explicit native logical text bindings are validated once with the
+    /// same admitted immutable source. Ordinary/provider construction keeps
+    /// its existing boundary; arbitrary Binary does not become text.
+    pub fn new_native(
+        graph: &Graph,
+        input: BTreeMap<String, RecordBatch>,
+        strings: BTreeMap<String, BTreeMap<String, StringEncoding>>,
+    ) -> Result<Self, CoreError> {
+        Self::prepare(graph, input, Some(strings), BTreeMap::new())
+    }
+
+    /// Complete native identity data is independent of scalar feature rows.
+    pub fn new_frame(
+        graph: &NativeGraph,
+        input: BTreeMap<String, RecordBatch>,
+        strings: Option<BTreeMap<String, BTreeMap<String, StringEncoding>>>,
+        identities: BTreeMap<String, IdentityColumn>,
+    ) -> Result<Self, CoreError> {
+        graph.validate()?;
+        let expected = graph
+            .primary_keys
+            .iter()
+            .filter(|(_, key)| key.len() > 1)
+            .map(|(name, _)| name)
+            .collect::<BTreeSet<_>>();
+        if expected != identities.keys().collect::<BTreeSet<_>>() {
+            return Err(invalid(
+                "native graph lacks complete compound identity bindings",
+            ));
+        }
+        Self::prepare(&graph.topology, input, strings, identities)
+    }
+
+    fn prepare(
+        graph: &Graph,
+        mut input: BTreeMap<String, RecordBatch>,
+        mut strings: Option<BTreeMap<String, BTreeMap<String, StringEncoding>>>,
+        mut identities: BTreeMap<String, IdentityColumn>,
+    ) -> Result<Self, CoreError> {
         let mut tables = BTreeMap::new();
         let mut dropped = Vec::new();
+        let native = strings.is_some();
         let timed = graph.tables.iter().any(|table| table.time_column.is_some());
         for table in &graph.tables {
             // The frozen native text normalizer selects different Unicode
             // lowercase semantics across supported runtimes. Categorical
             // strings need no normalization; the whole Text semantic family
             // remains unfinished until its native execution profile is held.
-            if table
-                .columns
-                .iter()
-                .any(|column| column.stype == sdm_contract::ops::Stype::Text)
+            if !native
+                && table
+                    .columns
+                    .iter()
+                    .any(|column| column.stype == sdm_contract::ops::Stype::Text)
             {
                 return Err(crate::not_yet("frame_text_features"));
             }
             let rows = input
                 .remove(&table.name)
                 .ok_or_else(|| invalid("a frame source lacks one table"))?;
-            // Timestamp features on an otherwise untimed graph retain the
-            // separate no-time/DT-3 acceptance obligation of the full phase.
-            if !timed
+            let encodings = strings
+                .as_mut()
+                .and_then(|strings| strings.remove(&table.name))
+                .unwrap_or_default();
+            if native
+                && rows.schema().fields().iter().any(|field| {
+                    matches!(
+                        field.data_type(),
+                        DataType::Utf8
+                            | DataType::LargeUtf8
+                            | DataType::Binary
+                            | DataType::LargeBinary
+                    ) && !encodings.contains_key(field.name())
+                })
+            {
+                return Err(invalid(
+                    "native string source lacks its explicit logical encoding",
+                ));
+            }
+            for (name, encoding) in &encodings {
+                let values =
+                    crate::strings::StringColumn::new(named(&rows, name)?.as_ref(), *encoding)
+                        .map_err(|_| {
+                            invalid("native frame text encoding does not match its source column")
+                        })?;
+                for row in 0..values.len() {
+                    values.get(row).map_err(|_| {
+                        invalid("native frame source contains invalid text encoding")
+                    })?;
+                }
+            }
+            // The complete native source consumer has already resolved text
+            // timestamps before sanitization. Older raw-only consumers retain
+            // their separate no-time admission boundary.
+            if !native
+                && !timed
                 && rows
                     .schema()
                     .fields()
@@ -219,23 +323,24 @@ impl Snapshot {
                 return Err(crate::not_yet("frame_untimed_timestamp_features"));
             }
             if rows.schema().fields().iter().any(|f| {
-                !matches!(
-                    f.data_type(),
-                    DataType::Boolean
-                        | DataType::Int8
-                        | DataType::Int16
-                        | DataType::Int32
-                        | DataType::Int64
-                        | DataType::UInt8
-                        | DataType::UInt16
-                        | DataType::UInt32
-                        | DataType::UInt64
-                        | DataType::Float32
-                        | DataType::Float64
-                        | DataType::Timestamp(_, _)
-                        | DataType::Utf8
-                        | DataType::LargeUtf8
-                )
+                !encodings.contains_key(f.name())
+                    && !matches!(
+                        f.data_type(),
+                        DataType::Boolean
+                            | DataType::Int8
+                            | DataType::Int16
+                            | DataType::Int32
+                            | DataType::Int64
+                            | DataType::UInt8
+                            | DataType::UInt16
+                            | DataType::UInt32
+                            | DataType::UInt64
+                            | DataType::Float32
+                            | DataType::Float64
+                            | DataType::Timestamp(_, _)
+                            | DataType::Utf8
+                            | DataType::LargeUtf8
+                    )
             }) {
                 return Err(invalid(
                     "the frame consumer received an unsupported native family",
@@ -259,6 +364,24 @@ impl Snapshot {
                         .collect::<Vec<_>>())
                 })
                 .transpose()?;
+            let identity = identities.remove(&table.name);
+            if identity.as_ref().is_some_and(|identity| {
+                identity.values.len() != rows.num_rows() || identity.values.null_count() != 0
+            }) {
+                return Err(invalid(
+                    "native identity differs from its complete aligned source rows",
+                ));
+            }
+            let key_encoding = identity
+                .as_ref()
+                .map(|identity| identity.encoding)
+                .or_else(|| {
+                    table
+                        .primary_key
+                        .as_ref()
+                        .and_then(|key| encodings.get(key))
+                        .copied()
+                });
             let mut index = BTreeMap::new();
             let mut seen = BTreeSet::new();
             let mut null_keys = 0;
@@ -274,27 +397,32 @@ impl Snapshot {
             };
             let valid: Vec<usize> = match &table.primary_key {
                 None => (0..rows.num_rows()).filter(|&row| has_time(row)).collect(),
-                Some(key) => read_keys(named(&rows, key)?)?
-                    .into_iter()
-                    .enumerate()
-                    .filter_map(|(row, key)| {
-                        let Some(key) = key else {
-                            null_keys += 1;
-                            return None;
-                        };
-                        // Duplicate detection precedes time removal, so a
-                        // later duplicate cannot replace a missing-time row.
-                        if !seen.insert(key.clone()) {
-                            duplicate_keys += 1;
-                            None
-                        } else if !has_time(row) {
-                            None
-                        } else {
-                            index.insert(key, row);
-                            Some(row)
-                        }
-                    })
-                    .collect(),
+                Some(key) => encoded_keys(
+                    identity
+                        .as_ref()
+                        .map_or_else(|| named(&rows, key), |identity| Ok(&identity.values))?,
+                    key_encoding,
+                )?
+                .into_iter()
+                .enumerate()
+                .filter_map(|(row, key)| {
+                    let Some(key) = key else {
+                        null_keys += 1;
+                        return None;
+                    };
+                    // Duplicate detection precedes time removal, so a
+                    // later duplicate cannot replace a missing-time row.
+                    if !seen.insert(key.clone()) {
+                        duplicate_keys += 1;
+                        None
+                    } else if !has_time(row) {
+                        None
+                    } else {
+                        index.insert(key, row);
+                        Some(row)
+                    }
+                })
+                .collect(),
             };
             if table.primary_key.is_some() && valid.is_empty() {
                 return Err(CoreError::new(
@@ -320,6 +448,10 @@ impl Snapshot {
                     null_times,
                 });
             }
+            let bounds = time.as_ref().map(|time| {
+                let values = valid.iter().filter_map(|&row| time[row]);
+                (values.clone().min(), values.max())
+            });
             tables.insert(
                 table.name.clone(),
                 Table {
@@ -327,8 +459,17 @@ impl Snapshot {
                     valid,
                     index,
                     time,
+                    bounds,
+                    key_encoding,
+                    strings: encodings,
                 },
             );
+        }
+        if strings.is_some_and(|strings| !strings.is_empty()) {
+            return Err(invalid("native text bindings name an absent frame table"));
+        }
+        if !identities.is_empty() {
+            return Err(invalid("native identity names an absent frame table"));
         }
         if !input.is_empty() {
             return Err(invalid("a snapshot binds an undescribed frame"));
@@ -337,7 +478,10 @@ impl Snapshot {
         for edge in &graph.edges {
             let src = &tables[&edge.src];
             let dst = &tables[&edge.dst];
-            let keys = read_keys(named(&src.rows, &edge.fkey)?)?;
+            let keys = encoded_keys(
+                named(&src.rows, &edge.fkey)?,
+                src.strings.get(&edge.fkey).copied(),
+            )?;
             let mut forward = vec![Vec::new(); dst.rows.num_rows()];
             let mut reverse = vec![Vec::new(); src.rows.num_rows()];
             // DF-1: stable grouping by destination, preserving source row
@@ -418,12 +562,9 @@ impl Snapshot {
             .tables
             .get(table)
             .ok_or_else(|| invalid("unknown timed frame"))?;
-        let time = table
-            .time
-            .as_ref()
-            .ok_or_else(|| invalid("an untimed frame was bounded in time"))?;
-        let values = table.valid.iter().filter_map(|&row| time[row]);
-        Ok((values.clone().min(), values.max()))
+        table
+            .bounds
+            .ok_or_else(|| invalid("an untimed frame was bounded in time"))
     }
 
     /// Entity sampling uses the sanitized primary-key map, before RS-1.
@@ -460,20 +601,165 @@ impl Snapshot {
         take(&table.rows, &rows, columns)
     }
 
+    /// Rebind an already selected raw context to this immutable snapshot.
+    /// Positions are original source ordinals, including repetitions, and
+    /// must have survived sanitization. This does not reset or draw a stream.
+    pub fn selected_rows(
+        &self,
+        table: &str,
+        rows: &[usize],
+        columns: &[String],
+    ) -> Result<RecordBatch, CoreError> {
+        let table = self
+            .tables
+            .get(table)
+            .ok_or_else(|| invalid("selected rows name an unknown frame"))?;
+        if rows
+            .iter()
+            .any(|row| table.valid.binary_search(row).is_err())
+        {
+            return Err(invalid(
+                "selected rows name an absent or sanitized frame position",
+            ));
+        }
+        take(&table.rows, rows, columns)
+    }
+
+    /// Replay one selected relationship using immutable source positions and
+    /// example ownership. No stream is read and no neighborhood is resampled.
+    pub fn selected_link_pairs(
+        &self,
+        edge: &Edge,
+        source_rows: &[usize],
+        source_batch: &[usize],
+        target_rows: &[usize],
+        target_batch: &[usize],
+    ) -> Result<Vec<(usize, usize)>, CoreError> {
+        if source_rows.len() != source_batch.len() || target_rows.len() != target_batch.len() {
+            return Err(invalid(
+                "selected relationship rows do not align with example ownership",
+            ));
+        }
+        let source = self
+            .tables
+            .get(&edge.src)
+            .ok_or_else(|| invalid("selected relationship source is absent"))?;
+        let target = self
+            .tables
+            .get(&edge.dst)
+            .ok_or_else(|| invalid("selected relationship target is absent"))?;
+        if source_rows
+            .iter()
+            .any(|row| source.valid.binary_search(row).is_err())
+            || target_rows
+                .iter()
+                .any(|row| target.valid.binary_search(row).is_err())
+        {
+            return Err(invalid(
+                "selected relationship names an absent or sanitized source position",
+            ));
+        }
+        let targets = target_rows
+            .iter()
+            .zip(target_batch)
+            .enumerate()
+            .map(|(position, (&row, &batch))| ((batch, row), position))
+            .collect::<BTreeMap<_, _>>();
+        if targets.len() != target_rows.len() {
+            return Err(invalid(
+                "selected relationship repeats a source position within one example",
+            ));
+        }
+        let selected = take(&source.rows, source_rows, std::slice::from_ref(&edge.fkey))?;
+        let keys = encoded_keys(
+            named(&selected, &edge.fkey)?,
+            source.strings.get(&edge.fkey).copied(),
+        )?;
+        Ok(source_rows
+            .iter()
+            .zip(source_batch)
+            .enumerate()
+            .filter_map(|(position, (_, &batch))| {
+                let target_row = keys[position]
+                    .as_ref()
+                    .and_then(|key| target.index.get(key))?;
+                targets
+                    .get(&(batch, *target_row))
+                    .map(|&target_position| (position, target_position))
+            })
+            .collect())
+    }
+
     pub fn entity_rows(&self, table: &str, keys: &ArrayRef) -> Result<Vec<usize>, CoreError> {
+        self.entity_rows_many(table, &[keys])
+    }
+
+    /// Small immutable logical text descriptors, independent of fetched rows.
+    pub fn string_encodings(
+        &self,
+        table: &str,
+    ) -> Result<BTreeMap<String, StringEncoding>, CoreError> {
+        self.tables
+            .get(table)
+            .map(|table| table.strings.clone())
+            .ok_or_else(|| invalid("unknown frame source table"))
+    }
+
+    /// Keys selected from this snapshot retain the source column's explicit
+    /// native encoding. This is distinct from later native cast outcomes.
+    pub fn source_keys(
+        &self,
+        table: &str,
+        column: &str,
+        values: &ArrayRef,
+    ) -> Result<Vec<Option<Key>>, CoreError> {
+        let table = self
+            .tables
+            .get(table)
+            .ok_or_else(|| invalid("unknown frame source column"))?;
+        encoded_keys(values, table.strings.get(column).copied())
+    }
+
+    /// Resolve a complete task's ordered key columns without concatenating
+    /// or copying their Arrow buffers. Validation is independent of neighbor
+    /// seed/reset/draw state and reports every unresolved task reference.
+    pub fn entity_rows_many(
+        &self,
+        table: &str,
+        columns: &[&ArrayRef],
+    ) -> Result<Vec<usize>, CoreError> {
+        let columns = columns
+            .iter()
+            .map(|column| (*column, None))
+            .collect::<Vec<_>>();
+        self.entity_rows_encoded(table, &columns)
+    }
+
+    /// Actual native reference encodings remain explicit at complete-task
+    /// and later per-batch positions, independently of the source encoding.
+    pub fn entity_rows_encoded(
+        &self,
+        table: &str,
+        columns: &[(&ArrayRef, Option<StringEncoding>)],
+    ) -> Result<Vec<usize>, CoreError> {
         let named_table = self
             .tables
             .get(table)
             .ok_or_else(|| invalid("unknown entity table"))?;
-        let wanted = read_keys(keys)?;
-        let found = wanted
-            .iter()
-            .map(|key| {
+        let mut found = Vec::new();
+        for (column, encoding) in columns {
+            let encoding = encoding.or_else(|| {
+                (named_table.key_encoding.is_some()
+                    && matches!(column.data_type(), DataType::Utf8 | DataType::LargeUtf8))
+                .then_some(StringEncoding::Utf8)
+            });
+            let wanted = encoded_keys(column, encoding)?;
+            found.extend(wanted.iter().map(|key| {
                 key.as_ref()
                     .and_then(|key| named_table.index.get(key))
                     .copied()
-            })
-            .collect::<Vec<_>>();
+            }));
+        }
         let missing = found.iter().filter(|row| row.is_none()).count();
         if missing > 0 {
             return Err(CoreError::new(
@@ -520,6 +806,71 @@ impl Snapshot {
             .map_err(|_| invalid("frame lookup columns do not align"))
     }
 
+    /// A complete temporal neighborhood for label computation, without a
+    /// provider, random draw, source scan or second adjacency index.
+    /// The original LocalSampler query hop uses this same sanitized CSC
+    /// order and a native mapper keyed by (example, original source row).
+    pub fn temporal_rows(
+        &self,
+        edge: &Edge,
+        keys: &ArrayRef,
+        windows: &[TemporalWindow],
+        columns: &[String],
+    ) -> Result<WalkedTable, CoreError> {
+        if windows.len() != keys.len() {
+            return Err(invalid("frame label windows do not align with entity keys"));
+        }
+        let adjacency = self
+            .adjacency
+            .iter()
+            .find(|adjacency| !adjacency.reversed && adjacency.edge == *edge)
+            .ok_or_else(|| invalid("frame label read names an absent relationship"))?;
+        let source = &self.tables[&edge.src];
+        let time = source
+            .time
+            .as_ref()
+            .ok_or_else(|| invalid("frame label read requires a temporal source"))?;
+        let entity = self
+            .tables
+            .get(&edge.dst)
+            .ok_or_else(|| invalid("frame label entity is absent"))?;
+        let entities = self.entity_rows_encoded(&edge.dst, &[(keys, entity.key_encoding)])?;
+        let mut selected = Vec::new();
+        let mut seen = BTreeSet::new();
+        if edge.src == edge.dst {
+            // The native mapper starts with all entity seeds, even for a
+            // self relationship, before appending reached temporal nodes.
+            for (batch, &row) in entities.iter().enumerate() {
+                selected.push((batch, row));
+                seen.insert((batch, row));
+            }
+        }
+        for (batch, (&entity, window)) in entities.iter().zip(windows).enumerate() {
+            let group = &adjacency.groups[entity];
+            let second = |row: usize| {
+                // Adjacency contains only rows that survived null-time
+                // sanitization, and groups sort by this exact coarse time.
+                i128::from(time[row].unwrap().div_euclid(NANOS_PER_SECOND))
+            };
+            let begin = window.lower.map_or(0, |lower| {
+                group.partition_point(|&row| second(row) <= lower)
+            });
+            let end = begin + group[begin..].partition_point(|&row| second(row) <= window.upper);
+            for &row in &group[begin..end] {
+                if edge.src != edge.dst || seen.insert((batch, row)) {
+                    selected.push((batch, row));
+                }
+            }
+        }
+        let source_rows = selected.iter().map(|&(_, row)| row).collect::<Vec<_>>();
+        Ok(WalkedTable {
+            name: edge.src.clone(),
+            rows: take(&source.rows, &source_rows, columns)?,
+            batch: selected.iter().map(|&(batch, _)| batch).collect(),
+            source_rows,
+        })
+    }
+
     /// The local sampler's node mapper and edge order, per example and hop.
     pub fn walk(
         &self,
@@ -531,8 +882,35 @@ impl Snapshot {
         rng: &mut Mt19937,
     ) -> Result<Walked, CoreError> {
         let entity_rows = self.entity_rows(entity, keys)?;
+        self.walk_resolved(graph, entity, &entity_rows, anchors, hops, rng)
+    }
+
+    /// Walk concrete node references after task/native key conversion.
+    /// The caller binds the task and graph identity; this boundary also
+    /// rejects rows removed by sanitization before consuming any draws.
+    /// Repeated rows retain their distinct ordered example identities.
+    pub fn walk_resolved(
+        &self,
+        graph: &Graph,
+        entity: &str,
+        entity_rows: &[usize],
+        anchors: &[i64],
+        hops: &[i64],
+        rng: &mut Mt19937,
+    ) -> Result<Walked, CoreError> {
+        let table = self
+            .tables
+            .get(entity)
+            .filter(|_| graph.table(entity).is_some())
+            .ok_or_else(|| invalid("unknown resolved frame entity table"))?;
         if anchors.len() != entity_rows.len() {
             return Err(invalid("frame anchors do not align with entity rows"));
+        }
+        if entity_rows
+            .iter()
+            .any(|row| table.valid.binary_search(row).is_err())
+        {
+            return Err(invalid("a frame reference names a removed or unknown row"));
         }
         let mut nodes: BTreeMap<String, Vec<(usize, usize)>> = graph
             .tables
@@ -544,7 +922,7 @@ impl Snapshot {
             .iter()
             .map(|t| (t.name.clone(), BTreeMap::new()))
             .collect();
-        for (batch, row) in entity_rows.into_iter().enumerate() {
+        for (batch, row) in entity_rows.iter().copied().enumerate() {
             let at = nodes[entity].len();
             nodes.get_mut(entity).unwrap().push((batch, row));
             maps.get_mut(entity).unwrap().insert((batch, row), at);
@@ -620,6 +998,7 @@ impl Snapshot {
                 name: table.name.clone(),
                 rows: take(&self.tables[&table.name].rows, &rows, &columns)?,
                 batch: nodes.iter().map(|&(batch, _)| batch).collect(),
+                source_rows: rows,
             });
         }
         let links = self

@@ -280,17 +280,33 @@ def test_gathered_whole_float_index_admission_precedes_later_fields(
                 client.predict(request, model=KumoRelational())
         assert transport.calls == 1
         assert caught.value.code == 'INVALID_RESPONSE'
-        if mode != 'clean' and admitted:
-            expected = ('prediction.probabilities', 'not_an_object')
-        elif mode == 'clean' and token == '0':
-            # The approved predecessor reaches its later required ID guard.
-            expected = ('prediction.id', 'missing')
+        if mode == 'clean' and admitted:
+            # Native integer admission precedes the semantic bounds/ID check.
+            # Structural field/reason details belong to malformed decoding.
+            assert caught.value.details == {}
+            if token == '0':
+                assert caught.value._sentence == 'relational_id_missing'
+                message = (
+                    'the answer for row 0 carries no id, and this batch asked '
+                    'under 2, so the two cannot be matched'
+                )
+            else:
+                assert caught.value._sentence == 'relational_row_bounds'
+                message = (
+                    f'the response names row_index {int(json.loads(token))}, '
+                    'and this batch asked about 2 rows'
+                )
+            assert str(caught.value) == '[INVALID_RESPONSE] ' + message
         else:
-            expected = ('prediction.row_index', 'out_of_range')
-        assert (
-            caught.value.details['field'],
-            caught.value.details['reason'],
-        ) == expected
+            expected = (
+                ('prediction.probabilities', 'not_an_object')
+                if admitted
+                else ('prediction.row_index', 'out_of_range')
+            )
+            assert (
+                caught.value.details['field'],
+                caught.value.details['reason'],
+            ) == expected
     finally:
         connection.close()
 
@@ -362,17 +378,56 @@ def test_the_result_on_the_core_is_the_old_route_s(
 def test_another_request_state_version_is_refused_by_name(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from sdm_client._rust import codec
+    from sdm_client._rust.run import run
+
     request = _materialized(monkeypatch)
-    # Version 1, the state contract v25 wrote: not the current version.
-    request._core = CoreRequest(version=1)
-    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
-    with _endpoint().serve() as (url, received):
-        with pytest.raises(StructuredDataError) as refused:
-            _predict(url, request)
+    calls = []
+    reached = ValueError('the accepted state reached its model call')
+
+    def model(body):
+        calls.append(body)
+        raise reached
+
+    operation = {
+        'op': 'predict',
+        'state': {'version': 1, 'payload': 1, 'query': 2},
+        'model': 'kumo-relational',
+        'request_id': 'sdm-state-version-control',
+        'outputs': ['prediction'],
+        'default_outputs': False,
+        'inference_asked': [],
+    }
+    attachments = {
+        1: codec.attachment(request.payloads[0]),
+        2: codec.attachment(request.query),
+    }
+    # This is the RequestState actually consumed by the existing native Run,
+    # rather than an unused cached field on the mutable public Request.
+    with pytest.raises(StructuredDataError) as refused:
+        run(operation, attachments, model=model)
     assert refused.value.code == 'INVALID_REQUEST'
     assert refused.value.details['field'] == 'state.version'
     assert refused.value.details['version'] == 1
-    assert received.requests == []
+    assert calls == []
+    operation['state']['version'] = 2
+    with pytest.raises(ValueError) as accepted:
+        run(operation, attachments, model=model)
+    assert accepted.value is reached
+    assert len(calls) == 1 and isinstance(calls[0], bytes)
+
+
+def test_unused_cached_request_state_does_not_override_current_public_inputs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request = _materialized(monkeypatch)
+    request._core = CoreRequest(version=1)
+    with _endpoint().serve() as (url, received):
+        core, old = _both(monkeypatch, request, url)
+    assert not isinstance(core, Exception), core
+    pd.testing.assert_frame_equal(core.to_pandas(), old.to_pandas())
+    assert core.items == old.items
+    assert len(received.requests) == 2
 
 
 def test_a_request_the_core_did_not_materialize_predicts_as_on_the_old_route(
@@ -773,7 +828,11 @@ def test_a_payload_json_cannot_hold_is_refused_as_the_transport_refuses_it(
         core, old = _both(monkeypatch, request, url)
     assert (type(core), core.code) == (type(old), old.code)
     assert core.code == 'INVALID_REQUEST'
-    assert core.__cause__ is None and core.__context__ is None
+    from test_t42_arrow_decimal_frames import _decimal_error_graph
+
+    assert type(core.__cause__) is type(old.__cause__) is ValueError
+    assert _decimal_error_graph(core) == _decimal_error_graph(old)
+    assert core.details == old.details
     assert received.requests == []
 
 
@@ -939,58 +998,74 @@ def _sent(
 def test_the_bytes_sent_are_the_core_s_and_held_to_the_limit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Register PD-2 (fix round 1, Codex P2-1): the HTTP transport sends the
-    # core's call as the core wrote it, so the bytes the endpoint receives
-    # are the bytes the core counted against the limit, characters past
-    # ASCII as their own bytes, never json.dumps' escapes. At the limit's
-    # edge the call is sent, at most the limit; one character past it,
-    # nothing is sent. Since the reference's 26ecdd28 (T2.0c) the call
-    # leaves out the engine's inference config, which the payload holds,
-    # so the payload is the larger and meets the limit first: the edge is
-    # the payload's, which materialize names in its refusal, and one past
-    # it materialize refuses (the call's own refusal, past the limit with
-    # the payload within it, is sdm-core's
-    # a_call_past_the_limit_is_refused_before_it_is_sent).
+    from payload_attachment_observer import record_payload_bytes
+
+    # Materialization counts its actual UTF-8 payload. The gathered path
+    # additionally holds the actual reached native transport encoding, whose
+    # default JSON escapes emoji and can therefore meet the call limit first.
+    # Neither representation's byte count stands in for the other's.
     limit = 30 * 1024 * 1024
+    payloads = []
+    record_payload_bytes(monkeypatch, payloads)
     lengths = []
     for emoji, ascii in ((0, 0), (1, 0), (0, 1)):
-        written, received, _ = _sent(
+        written, received, refused = _sent(
             monkeypatch, _emoji_request(monkeypatch, emoji, ascii)
         )
-        assert written == received
+        assert refused.code == 'RECORDED'
+        assert written == received and len(received) == 1
         lengths.append(len(received[0]))
+    assert len(payloads) == 3
     base, wide, narrow = (
         lengths[0],
         lengths[1] - lengths[0],
         lengths[2] - lengths[0],
     )
-    assert wide % 4 == 0 and narrow == 1
-    emoji = (limit - base) // wide
-    ascii = (limit - base - emoji * wide) // narrow
-    # The call's edge is past the payload's: materialize refuses it, naming
-    # the payload's size, and the payload's edge is that much nearer.
-    with pytest.raises(StructuredDataError) as over:
-        _emoji_request(monkeypatch, emoji, ascii)
-    details = over.value.details
-    assert over.value.code == 'INVALID_REQUEST'
-    assert details['field'] == 'payload' and details['limit'] == limit
-    excess = details['bytes'] - limit
-    assert 0 < excess < wide * 64
-    room = emoji * wide + ascii * narrow - excess
-    emoji = room // wide
-    ascii = (room - emoji * wide) // narrow
-    written, received, refused = _sent(
-        monkeypatch, _emoji_request(monkeypatch, emoji, ascii)
+    payload_base, payload_wide, payload_narrow = (
+        len(payloads[0]),
+        len(payloads[1]) - len(payloads[0]),
+        len(payloads[2]) - len(payloads[0]),
     )
+    assert payload_wide > 0 and payload_wide % 4 == 0
+    assert wide == payload_wide * 3
+    assert narrow == payload_narrow == 1
+
+    # Native call exactly at the limit, then one ASCII byte past it.
+    emoji = (limit - base) // wide
+    ascii = limit - base - emoji * wide
+    request = _emoji_request(monkeypatch, emoji, ascii)
+    assert len(payloads[-1]) == payload_base + emoji * payload_wide + ascii
+    assert len(payloads[-1]) < limit
+    written, received, refused = _sent(monkeypatch, request)
     assert refused.code == 'RECORDED'
-    assert written == received
-    assert len(received[0]) == base + emoji * wide + ascii * narrow <= limit
-    assert b'\\ud83d' not in received[0]
-    assert '\U0001f600'.encode() in received[0]
+    assert written == received and len(received) == 1
+    assert len(received[0]) == limit
+    assert b'\\ud83d\\ude00' in received[0]
+    assert '\U0001f600'.encode() not in received[0]
+    request = _emoji_request(monkeypatch, emoji, ascii + 1)
+    assert len(payloads[-1]) < limit
+    written, received, refused = _sent(monkeypatch, request)
+    assert written == received == []
+    assert refused.code == 'INVALID_REQUEST'
+    assert refused.details['field'] == 'call'
+    assert refused.details['limit'] == limit
+    assert refused.details['bytes'] == limit + 1
+
+    # The independently measured materialization payload also retains its
+    # exact limit and one-byte refusal, without sending an oversized call.
+    emoji = (limit - payload_base) // payload_wide
+    ascii = limit - payload_base - emoji * payload_wide
+    _emoji_request(monkeypatch, emoji, ascii)
+    assert len(payloads[-1]) == limit
+    assert '\U0001f600'.encode() in payloads[-1]
+    assert b'\\ud83d' not in payloads[-1]
+    before = len(payloads)
     with pytest.raises(StructuredDataError) as past:
         _emoji_request(monkeypatch, emoji, ascii + 1)
+    assert len(payloads) == before
     assert past.value.code == 'INVALID_REQUEST'
     assert past.value.details['field'] == 'payload'
+    assert past.value.details['limit'] == limit
     assert past.value.details['bytes'] == limit + 1
 
 

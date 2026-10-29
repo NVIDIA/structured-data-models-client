@@ -306,6 +306,7 @@ pub fn read(
                 retyped.insert(at, facts.dtype);
             }
             columns.push(DescribedColumn {
+                untyped: column.untyped,
                 name: column.name.clone(),
                 dtype,
                 received: facts.received,

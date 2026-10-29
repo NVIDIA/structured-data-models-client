@@ -124,6 +124,7 @@ fn a_different_link_fallback_does_not_inherit_a_raw_columns_reason() {
 
 fn column(name: &str, dtype: Dtype, stype: Stype) -> InferredColumn {
     InferredColumn {
+        untyped: false,
         name: name.into(),
         dtype,
         stype,
@@ -548,6 +549,7 @@ fn the_columns_joined_on_are_marked_again_from_what_the_host_holds() {
     let mut stamped = description();
     stamped.links.clear();
     stamped.tables[0].columns[1] = DescribedColumn {
+        untyped: false,
         name: "user_id".into(),
         received: ColumnType::Int64,
         dtype: Dtype::Date,
@@ -613,6 +615,65 @@ fn a_link_that_cannot_join_is_refused_by_the_consistency_check() {
     assert_eq!(err.code, ErrorCode::InvalidRequest);
     assert_eq!(err.fields["field"], Detail::text("relationships"));
     assert_eq!(err.fields["source_column"], Detail::text(&foreign.column));
+}
+
+#[test]
+fn native_link_structure_precedes_edge_kinds_and_keeps_each_stage_order() {
+    let types = assemble::HostTypes::default();
+    let mut schema = description();
+    schema.tables[0].columns[1].dtype = Dtype::String;
+    assert_eq!(
+        assemble::check_links(&schema, &types).unwrap_err().sentence,
+        Sentence::LinkTypes
+    );
+    assert!(assemble::check_link_structure(&schema, &types).is_ok());
+    assert_eq!(
+        assemble::check_edges(&schema).unwrap_err().sentence,
+        Sentence::EdgeKeyTypes
+    );
+    // Native graph.link and target-key checks finish before Graph.validate
+    // compares any edge kinds, including an earlier mismatched edge.
+    let mut later = schema.links[0].clone();
+    later[0].column = "gone".into();
+    schema.links.push(later);
+    assert_ne!(
+        assemble::check_link_structure(&schema, &types)
+            .unwrap_err()
+            .sentence,
+        Sentence::EdgeKeyTypes
+    );
+    assert_eq!(
+        assemble::check_link_structure(&schema, &types)
+            .unwrap_err()
+            .fields["column"],
+        Detail::text("gone")
+    );
+    schema.links.pop();
+    schema.tables.push(schema.tables[1].clone());
+    schema.tables[2].name = "without_key".into();
+    schema.tables[2].primary_key.clear();
+    let mut later = schema.links[0].clone();
+    later[1].table = "without_key".into();
+    schema.links.push(later);
+    assert_eq!(
+        assemble::check_link_structure(&schema, &types)
+            .unwrap_err()
+            .sentence,
+        Sentence::LinkNoKey
+    );
+    schema.links.pop();
+    // Two type mismatches retain native edge order after structure succeeds.
+    let mut later = schema.links[0].clone();
+    schema.tables[2].primary_key = vec![later[1].column.clone()];
+    later[1].table = "without_key".into();
+    schema.links.push(later);
+    assert!(assemble::check_link_structure(&schema, &types).is_ok());
+    let error = assemble::check_edges(&schema).unwrap_err();
+    assert_eq!(error.sentence, Sentence::EdgeKeyTypes);
+    assert_eq!(
+        error.fields["target_table"],
+        Detail::text(&schema.links[0][1].table)
+    );
 }
 
 #[test]
@@ -883,10 +944,10 @@ fn relationships_given_are_the_schema_s_and_checked() {
     assert!(made.warnings.is_empty(), "{:?}", made.warnings);
 }
 
-/// The warnings the assembly gives are the ones `assemble::WARNINGS` lists,
-/// each code with its variants, and every listed pair is given by some
-/// schema here: what a host words is the list the binding exports
-/// (decision E59(d)), checked by what the assembly does, not by its text.
+/// Every assembly-owned sentence is observed from a real schema here.
+/// Native time conversion has its own Core producer and producer test;
+/// its sentence shares the existing code, not assembly ownership.
+/// Their disjoint inventories exactly cover these warning codes (E59(d)).
 #[test]
 fn every_warning_given_is_listed_and_every_listed_one_is_given() {
     use sdm_schema::infer::{LeftOut, UnreadTimes};
@@ -1135,7 +1196,20 @@ fn every_warning_given_is_listed_and_every_listed_one_is_given() {
         .filter(|s| matches!(s.code(), Code::Warning(code) if codes.contains(&code)))
         .map(|s| s.as_str())
         .collect();
-    assert_eq!(seen, listed);
+    // Produced by materialize::native_source::time_notice and covered by
+    // native_time_conversion_notice_is_completed_data_with_existing_warning_policy
+    // in sdm-core, with full native facts and held-warning fields.
+    let native = BTreeSet::from([Sentence::NativeTimeValuesUnread.as_str()]);
+    assert!(native.is_subset(&listed));
+    assert!(seen.is_disjoint(&native));
+    assert_eq!(
+        seen,
+        listed.difference(&native).copied().collect::<BTreeSet<_>>()
+    );
+    assert_eq!(
+        seen.union(&native).copied().collect::<BTreeSet<_>>(),
+        listed
+    );
 }
 
 /// Once every table is read, the tied key candidates of each table are

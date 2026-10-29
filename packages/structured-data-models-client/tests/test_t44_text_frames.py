@@ -16,6 +16,7 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
+from t45_frame_routes import FRAME_ROUTES
 
 from sdm_client import (
     KumoRelational,
@@ -25,20 +26,12 @@ from sdm_client import (
     SDMWarning,
     StructuredDataError,
 )
-from sdm_client._routing import RouteError
 from sdm_client.materializers.relational import RelationalMaterializer
 
 REFERENCE = json.loads(
     Path(__file__).with_name('t44_text_reference.json').read_text()
 )
-ROUTES = ','.join(
-    (
-        'schema.from-data/frames/frames',
-        'schema.from-data/mapping/frames',
-        'query.materialize/indices-regression/frames',
-        'client.predict/regression/frames',
-    )
-)
+ROUTES = FRAME_ROUTES
 
 
 # DT-3 and P3E-2 are approved register changes, not comparator exclusions.
@@ -73,11 +66,15 @@ def assert_no_time_body(body):
 
 
 def p3e2_warning_codes(notices):
-    # These exact three notices are core-owned in the observed journeys.
+    # These exact captured notices are core-owned in the observed journeys.
     codes = {
         "Received custom 'num_neighbors' option; ignoring custom 'num_hops=1' option": 'HOPS_IGNORED',
+        '1 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it.': 'CONTEXT_ANSWERS',
+        "the entity filter 'users.user_id = 1' selects the labelled examples the model learns from, and does not narrow the 2 rows named for scoring. Those are scored as given, whether or not they satisfy it. Pass only indices that satisfy the condition if that is what you meant.": 'FILTER_CHOSE_EXAMPLES',
         '2 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it.': 'CONTEXT_ANSWERS',
         'every context row has the same users.age, so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ.': 'CONTEXT_CONSTANT',
+        'users.note is typed text, which this model does not read, so the request is answered without it and it contributes nothing to the prediction. Type a column categorical if its values are labels rather than prose, or leave it out to say so.': 'COLUMNS_UNREAD',
+        'orders.note, users.note are typed text, which this model does not read, so the request is answered without them and they contribute nothing to the prediction. Type a column categorical if its values are labels rather than prose, or leave it out to say so.': 'COLUMNS_UNREAD',
     }
     return [
         {
@@ -249,7 +246,7 @@ def predict(request, target, frames, expected):
 @pytest.mark.parametrize('storage', ['python', 'pyarrow', 'utf8'])
 @pytest.mark.parametrize('target', ['age', 'category'])
 @pytest.mark.parametrize(
-    'variant', ['ordinary', 'chunks', 'allnull', 'batched']
+    'variant', ['ordinary', 'chunks', 'allnull', 'batched', 'prose']
 )
 def test_text_journey_keeps_complete_frozen_payloads_and_results(
     core, storage, target, variant
@@ -362,46 +359,24 @@ def test_text_warning_as_error_keeps_the_detached_snapshot(core):
     )
 
 
-@pytest.mark.parametrize('storage', ['python', 'pyarrow', 'utf8', 'largeutf8'])
-def test_text_graph_keys_remain_an_explicit_unfinished_core_family(
-    monkeypatch, storage
-):
-    monkeypatch.setenv('SDM_CORE_ROUTES', ROUTES)
-    frames = shop(storage)
-    frames['users']['user_id'] = text([f'u{i}' for i in range(1, 9)], storage)
-    frames['orders']['user_id'] = text(
-        [f'u{i}' for i in range(1, 9) for _ in range(8)], storage
-    )
-    asked = question(frames)
-    with pytest.raises((StructuredDataError, RouteError)) as failed:
-        asked.materialize(
-            indices=['u7', 'u8'],
-            num_context_samples=3,
-            num_neighbors=[3],
-            random_seed=7,
-        )
-    if storage != 'largeutf8':
-        assert isinstance(failed.value, StructuredDataError)
-        assert failed.value.code == 'UNSUPPORTED_REQUEST'
-        assert failed.value.details['rule'] == 'frame_text_key'
-
-
 def test_exact_largeutf8_native_materialization_keeps_its_frozen_failure_boundary(
     core,
 ):
     expected = REFERENCE['records']['largeutf8-age-ordinary']
     asked = question(shop('largeutf8'))
-    if core:
-        with pytest.raises(RouteError, match='large.*string'):
-            materialize(asked)
-    else:
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
         with pytest.raises(StructuredDataError) as failed:
             materialize(asked)
-        assert {
-            'type': type(failed.value).__name__,
-            'code': failed.value.code,
-            'message': str(failed.value),
-        } == expected['error']
+    assert {
+        'type': type(failed.value).__name__,
+        'code': failed.value.code,
+        'message': str(failed.value),
+    } == expected['error']
+    assert [
+        {'type': type(item.message).__name__, 'message': str(item.message)}
+        for item in caught
+    ] == expected['warnings']
 
 
 @pytest.mark.parametrize('invalid', ['duplicate', 'nonstring', 'object'])
@@ -413,8 +388,15 @@ def test_exact_largeutf8_guard_follows_existing_fresh_conversion_errors(
     asked = question(frames)
     if invalid == 'duplicate':
         frames['users'].columns = ['user_id', 'age', 'category', 'category']
-        with pytest.raises(StructuredDataError, match='duplicate column name'):
+        # The native declared cast reaches the duplicated name before header
+        # admission and receives a DataFrame, as on the Python route.
+        with pytest.raises(StructuredDataError) as failed:
             materialize(asked)
+        assert failed.value.code == 'INTERNAL_ERROR'
+        assert type(failed.value.__cause__) is AttributeError
+        assert str(failed.value.__cause__) == (
+            "'DataFrame' object has no attribute 'dtype'"
+        )
     elif invalid == 'nonstring':
         frames['users'].columns = ['user_id', 'age', 'category', 7]
         with pytest.raises(
@@ -423,8 +405,15 @@ def test_exact_largeutf8_guard_follows_existing_fresh_conversion_errors(
             materialize(asked)
     else:
         frames['users']['note'] = pd.Series(['object'] * 8, dtype=object)
-        with pytest.raises(RouteError, match='supports only NumPy'):
+        # The untouched category column still reaches the same native
+        # LargeUTF8 refusal, even when a later column becomes object text.
+        with pytest.raises(StructuredDataError) as failed:
             materialize(asked)
+        assert {
+            'type': type(failed.value).__name__,
+            'code': failed.value.code,
+            'message': str(failed.value),
+        } == REFERENCE['records']['largeutf8-age-ordinary']['error']
 
 
 def test_cached_text_snapshot_does_not_read_new_unsupported_native_values(core):
@@ -447,46 +436,29 @@ def runtime_reference(name):
 
 
 @pytest.mark.parametrize('storage', ['python', 'pyarrow', 'utf8'])
-@pytest.mark.parametrize('target', ['age', 'category'])
-def test_whole_text_stype_family_remains_unfinished_until_native_profiles_exist(
-    core, storage, target
-):
-    frames = shop(storage)
-    asked = question(frames, target, prose=True)
-    if core:
-        with pytest.raises(StructuredDataError) as failed:
-            materialize(asked, target)
-        assert failed.value.code == 'UNSUPPORTED_REQUEST'
-        assert failed.value.details['rule'] == 'frame_text_features'
-    else:
-        expected = REFERENCE['records'][f'{storage}-{target}-prose']
-        request = materialize(asked, target)
-        assert inspection(request) == {
-            key: expected[key] for key in inspection(request)
-        }
-        predict(request, target, frames, expected)
-
-
-@pytest.mark.parametrize('storage', ['python', 'pyarrow', 'utf8'])
-def test_unicode_text_reference_bodies_require_distinct_native_profiles(
+def test_unicode_text_reference_bodies_keep_distinct_native_profiles(
     core, storage
 ):
     frames = shop(storage)
     frames['users'].loc[6, 'note'] = 'ΟΣ'
     frames['users'].loc[7, 'note'] = 'İ'
     asked = question(frames, prose=True)
-    if core:
-        with pytest.raises(StructuredDataError) as failed:
-            materialize(asked)
-        assert failed.value.code == 'UNSUPPORTED_REQUEST'
-        assert failed.value.details['rule'] == 'frame_text_features'
-    else:
-        expected = runtime_reference('boundary')[f'unicode-{storage}']
+    expected = approved_no_time(
+        runtime_reference('boundary')[f'unicode-{storage}'], core
+    )
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
         request = materialize(asked)
         assert inspection(request) == {
             key: expected[key] for key in inspection(request)
         }
+        if core:
+            assert request._core is not None
         predict(request, 'age', frames, expected)
+    assert [
+        {'type': type(item.message).__name__, 'message': str(item.message)}
+        for item in caught
+    ] == expected['warnings']
 
 
 @pytest.mark.parametrize('with_text', [False, True])

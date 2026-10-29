@@ -563,8 +563,82 @@ fn unknown_entity_failure_retains_the_text_snapshot_before_neighbor_draws() {
     );
 }
 
+// Native text input facts enter the useful PrepareFrames graph boundary.
+// The legacy raw materialize entry has no native dtype/encoding owner.
+fn native_graph(mut attached: Attachments) {
+    let native_tables: Vec<_> = [(8, "users"), (9, "orders")]
+        .into_iter()
+        .map(|(id, name)| {
+            let Attachment::Arrow(data) = &attached[&AttachmentId(id)] else {
+                panic!("native source rows")
+            };
+            let columns: Vec<_> = data
+                .schema
+                .fields()
+                .iter()
+                .map(|field| {
+                    let string = matches!(
+                        field.data_type(),
+                        arrow_schema::DataType::Utf8 | arrow_schema::DataType::LargeUtf8
+                    );
+                    json!({
+                        "name":field.name(),
+                        "declared":null,
+                        "logical_text":if string {
+                            json!({"backing":"element_values","missing":"null_scalar"})
+                        } else {
+                            Value::Null
+                        },
+                        "strings":if string {json!("utf8")} else {Value::Null}
+                    })
+                })
+                .collect();
+            json!({"source":{"source":[name]},"columns":columns})
+        })
+        .collect();
+    attached.remove(&AttachmentId(2));
+    attached.remove(&AttachmentId(3));
+    attached.insert(
+        AttachmentId(100),
+        bytes(json!({
+            "stage":"graph","schema":1,"frames":7,"checkpoint":null,
+            "retained":null,"native_tables":native_tables,"values":5,
+            "options":[],"prediction_rows":2,"limits":{}
+        })),
+    );
+    let run = HostRun::start(
+        &sdm_host::default_root(),
+        &message(json!({"op":"prepare_frames","input":100})),
+        attached,
+    )
+    .unwrap_or_else(|error| panic!("{:?}", decoded(&error)));
+    let out = run
+        .next()
+        .unwrap_or_else(|error| panic!("{:?}", decoded(&error)));
+    let ControlMessage::Step(Step::Done {
+        result: OperationResult::PrepareFrames(value),
+        ..
+    }) = sdm_host::read(&out).unwrap()
+    else {
+        panic!("native graph must finish without model calls, fetches or warnings")
+    };
+    let Attachment::Bytes(raw) = run.take_attachment(value.value).unwrap().unwrap() else {
+        panic!("complete prepared graph data")
+    };
+    let graph: Value = serde_json::from_slice(&raw).unwrap();
+    assert_eq!(graph["value"], "graph");
+    assert_eq!(graph["data"]["native_tables"], json!(native_tables));
+    assert_eq!(graph["data"]["dropped_summary"], Value::Null);
+    let owner = AttachmentId(graph["data"]["owner"].as_u64().unwrap() as u32);
+    let Attachment::FrameGraph(owner) = run.take_attachment(owner).unwrap().unwrap() else {
+        panic!("a real retained FrameGraph, never a JSON token")
+    };
+    assert_eq!(graph["data"]["source"], owner.source());
+    assert!(!owner.source().is_empty());
+}
+
 #[test]
-fn text_identifying_columns_stay_explicitly_unfinished_for_both_offsets() {
+fn native_text_identifying_columns_own_a_valid_graph_for_both_offsets() {
     for large in [false, true] {
         let mut attached = inputs("age", "ordinary", large, 7);
         let Attachment::Bytes(raw) = &attached[&AttachmentId(1)] else {
@@ -608,31 +682,88 @@ fn text_identifying_columns_stay_explicitly_unfinished_for_both_offsets() {
                 false,
             ),
         );
-        let failed = HostRun::start(&sdm_host::default_root(), &materialize_message(), attached);
-        let error = match failed {
-            Ok(run) => terminal(&run).expect_err("text key remains unfinished"),
-            Err(error) => error,
-        };
-        assert_eq!(
-            decoded(&error)["error"]["fields"]["rule"],
-            json!({"t":"utf8","v":"frame_text_key"})
-        );
+        native_graph(attached);
     }
 }
 
 #[test]
-fn whole_text_semantic_family_is_unfinished_without_a_native_execution_profile() {
+fn native_text_semantic_columns_own_a_valid_graph_for_both_offsets() {
     for large in [false, true] {
-        let run = HostRun::start(
-            &sdm_host::default_root(),
-            &materialize_message(),
-            inputs("age", "prose", large, 7),
-        )
-        .unwrap();
-        let failed = terminal(&run).expect_err("unrepresented native lowercase profile");
+        for target in ["age", "category"] {
+            native_graph(inputs(target, "prose", large, 7));
+        }
+    }
+}
+
+#[test]
+fn physical_numeric_text_retains_the_frozen_native_graph_failure() {
+    use arrow_array::{BooleanArray, Float32Array, Float64Array};
+
+    let observed: Value = serde_json::from_str(include_str!(
+        "../../../../packages/structured-data-models-client/tests/t44_native_text_numeric_pandas3_reference.json"
+    )).unwrap();
+    for (kind, dtype) in [
+        ("numpy-int64", "int"),
+        ("numpy-float32", "float"),
+        ("numpy-float64", "float"),
+        ("numpy-bool", "bool"),
+    ] {
+        let record = &observed["records"][format!("{kind}-python-True-False")];
+        assert_eq!(record["error"]["code"], "INVALID_REQUEST");
         assert_eq!(
-            decoded(&failed)["error"]["fields"]["rule"],
-            json!({"t":"utf8","v":"frame_text_features"})
+            record["error"]["message"],
+            format!(
+                "[INVALID_REQUEST] Column 'note' received an incompatible semantic type (got dtype='{dtype}' and stype='text')"
+            )
+        );
+        assert!(record["trace"].as_array().unwrap().is_empty());
+        let mut attached = inputs("age", "prose", false, 7);
+        for id in [AttachmentId(8), AttachmentId(9)] {
+            let Attachment::Arrow(data) = &attached[&id] else {
+                panic!("frame rows")
+            };
+            let batch = &data.batches[0];
+            let mut columns = batch.columns().to_vec();
+            let note = batch.schema().index_of("note").unwrap();
+            columns[note] = match kind {
+                "numpy-int64" => ints(0..batch.num_rows() as i64),
+                "numpy-float32" => Arc::new(Float32Array::from(vec![1.0; batch.num_rows()])),
+                "numpy-float64" => Arc::new(Float64Array::from(vec![1.0; batch.num_rows()])),
+                "numpy-bool" => Arc::new(BooleanArray::from(vec![true; batch.num_rows()])),
+                _ => unreachable!(),
+            };
+            let rows = RecordBatch::try_from_iter(
+                batch
+                    .schema()
+                    .fields()
+                    .iter()
+                    .zip(columns)
+                    .map(|(field, array)| (field.name().clone(), array)),
+            )
+            .unwrap();
+            attached.insert(
+                id,
+                Attachment::Arrow(ArrowData::new(rows.schema(), vec![rows])),
+            );
+        }
+        let run =
+            HostRun::start(&sdm_host::default_root(), &materialize_message(), attached).unwrap();
+        let failed =
+            terminal(&run).expect_err("native graph rejects a physical numeric Text column");
+        let error = decoded(&failed);
+        assert_eq!(error["error"]["kind"], "invalid_request");
+        assert_eq!(error["error"]["code"], "INVALID_REQUEST");
+        assert_eq!(error["error"]["sentence"], "incompatible_semantic_type");
+        assert_eq!(
+            error["error"]["fields"],
+            json!({
+                "field":{"t":"utf8","v":"schema"},
+                "table":{"t":"utf8","v":"users"},
+                "column":{"t":"utf8","v":"note"},
+                "dtype":{"t":"utf8","v":dtype},
+                "stype":{"t":"utf8","v":"text"},
+                "reason":{"t":"utf8","v":"incompatible_semantic_type"},
+            })
         );
     }
 }
@@ -688,6 +819,95 @@ fn logical_string_key_metadata_retains_actual_numeric_identifying_arrays() {
         };
         predict(&run, materialized, "age", &expected);
     }
+}
+
+fn complete_reference_arguments(attached: &mut Attachments, indices: [i64; 2], unseeded: bool) {
+    attached.insert(
+        AttachmentId(2),
+        bytes(json!(
+            "PREDICT users.age FOR EACH users.user_id WHERE users.user_id = 1"
+        )),
+    );
+    attached.insert(
+        AttachmentId(3),
+        arrow(vec![("index", ints(indices))], false),
+    );
+    attached.insert(AttachmentId(5), bytes(json!({"num_context_samples":1,"num_neighbors":[3],"num_hops":1,"rows_per_call":1,"random_seed":if unseeded {Value::Null} else {json!(7)}})));
+    let Attachment::Bytes(manifest) = &attached[&AttachmentId(7)] else {
+        panic!("frame manifest")
+    };
+    let mut manifest: Value = serde_json::from_slice(manifest).unwrap();
+    manifest["entropy"] = json!(7);
+    attached.insert(AttachmentId(7), bytes(manifest));
+}
+
+fn checkpoint_neighbors(state: &Value, attached: &Attachments) -> Value {
+    let manifest = AttachmentId(state["frame_checkpoint"]["manifest"].as_u64().unwrap() as u32);
+    let Attachment::Bytes(raw) = &attached[&manifest] else {
+        panic!("checkpoint manifest")
+    };
+    let manifest: Value = serde_json::from_slice(raw).unwrap();
+    let metadata = AttachmentId(manifest["metadata"].as_u64().unwrap() as u32);
+    let Attachment::Bytes(raw) = &attached[&metadata] else {
+        panic!("checkpoint metadata")
+    };
+    serde_json::from_slice::<Value>(raw).unwrap()["neighbors"].clone()
+}
+
+#[test]
+fn complete_task_reference_validation_precedes_draws_and_seed_resets() {
+    let observed: Value = serde_json::from_str(include_str!(
+        "../../../../packages/structured-data-models-client/tests/t44_complete_task_references_reference.json"
+    )).unwrap();
+    let mut attached = inputs("age", "batched", false, 7);
+    complete_reference_arguments(&mut attached, [9999, 8], false);
+    let mut message = materialize_message();
+    let mut first_neighbors = None;
+    for (number, indices) in [[9999, 8], [7, 9999]].into_iter().enumerate() {
+        complete_reference_arguments(&mut attached, indices, false);
+        let run = HostRun::start(&sdm_host::default_root(), &message, attached).unwrap();
+        let failed = terminal(&run).expect_err("the complete task has one unresolved entity");
+        let error = decoded(&failed);
+        assert_eq!(
+            observed["records"][number]["error"]["code"],
+            "INVALID_REQUEST"
+        );
+        assert_eq!(error["error"]["code"], "INVALID_REQUEST");
+        assert_eq!(error["error"]["sentence"], "frame_task_references");
+        assert_eq!(
+            error["error"]["fields"],
+            json!({"table":{"t":"utf8","v":"users"},"rows":{"t":"u64","v":"1"},"detail":{"t":"utf8","v":""}})
+        );
+        let (state, owned) = checkpoint(&run);
+        let neighbors = checkpoint_neighbors(&state, &owned);
+        assert_eq!(neighbors["position"], 624);
+        if let Some(first) = &first_neighbors {
+            assert_eq!(&neighbors, first);
+        } else {
+            first_neighbors = Some(neighbors);
+        }
+        (message, attached) = rebound(&state, &owned, false, false);
+    }
+    complete_reference_arguments(&mut attached, [7, 8], true);
+    let continued = HostRun::start(&sdm_host::default_root(), &message, attached).unwrap();
+    let materialized = terminal(&continued).unwrap_or_else(|error| panic!("{:?}", decoded(&error)));
+    let expected = dt3_no_time_record(
+        json!({"payloads":observed["records"][2]["inspection"]["payloads"],"sent":observed["records"][2]["sent"],"result":observed["records"][2]["result"]}),
+    );
+    predict(&continued, materialized, "age", &expected);
+    let (state, owned) = checkpoint(&continued);
+    let continued_neighbors = checkpoint_neighbors(&state, &owned);
+    assert_eq!(continued_neighbors["position"], 12);
+    let mut fresh = inputs("age", "batched", false, 7);
+    complete_reference_arguments(&mut fresh, [7, 8], true);
+    let fresh = HostRun::start(&sdm_host::default_root(), &materialize_message(), fresh).unwrap();
+    let materialized = terminal(&fresh).unwrap_or_else(|error| panic!("{:?}", decoded(&error)));
+    let expected = dt3_no_time_record(
+        json!({"payloads":observed["records"][3]["inspection"]["payloads"],"sent":observed["records"][3]["sent"],"result":observed["records"][3]["result"]}),
+    );
+    predict(&fresh, materialized, "age", &expected);
+    let (state, owned) = checkpoint(&fresh);
+    assert_eq!(checkpoint_neighbors(&state, &owned), continued_neighbors);
 }
 
 fn anchor_inputs(timed: bool) -> Attachments {
@@ -834,4 +1054,117 @@ fn unresolved_entities_share_the_same_drop_summary_as_the_graph_notice() {
         decoded(&failed)["error"]["fields"]["detail"],
         json!({"t":"utf8","v":format!(" {expected}")})
     );
+}
+
+#[test]
+fn neutral_message_casing_crosses_hostrun_without_library_taxonomy() {
+    let points = |text: &str| text.chars().map(u32::from).collect::<Vec<_>>();
+    for (version, sentence) in [
+        ("14.0.0", "frame_native_caller"),
+        ("12.0.0", "invalid_message"),
+    ] {
+        let report = json!({
+            "stage":"report_failure",
+            "report":{
+                "assessment":{
+                    "origin":"engine",
+                    "failure":{
+                        "builtin":{"ancestry":["value_error"]},
+                        "key_error":false,"structured_data_error":false,
+                        "relational_error":false,"deepest_module":null,
+                        "message_casing":{"mapping":"full_root","unicode_version":version}
+                    },
+                    "signature":null,"category":"caller_data","part":null
+                },
+                "native_type":null,"refusal":points("we would need data bacK to"),
+                "said":[55296,33],"dropped_summary":null,"rows_per_call":null
+            }
+        });
+        let run = HostRun::start(
+            &sdm_host::default_root(),
+            &message(json!({"op":"prepare_frames","input":100})),
+            Attachments::from([(AttachmentId(100), bytes(report))]),
+        )
+        .unwrap_or_else(|error| panic!("{:?}", decoded(&error)));
+        let error = run
+            .next()
+            .expect_err("the report returns its classified error");
+        let error = decoded(&error);
+        assert_eq!(error["error"]["sentence"], sentence);
+        if version == "14.0.0" {
+            assert_eq!(
+                error["error"]["public_details"]["window_outran_the_data"],
+                json!({"t":"bool","v":true})
+            );
+            assert_eq!(
+                error["error"]["fields"]["message_points"],
+                json!([
+                    {"t":"u32","v":"55296"},{"t":"u32","v":"33"}
+                ])
+            );
+        }
+    }
+}
+
+#[test]
+fn both_neutral_casing_facts_cross_hostrun_without_early_message_reads() {
+    use sdm_contract::frames::materialize::{
+        FrameErrorOrigin, FrameNativeFailure, FramePreparation, NativeTextFacts,
+    };
+    use sdm_contract::prepare::NativeFailure;
+
+    for mapping in [
+        NativeTextFacts::FullRoot {
+            unicode_version: "15.0.0".into(),
+        },
+        NativeTextFacts::Simple {
+            identity: "iσⱟᲊ꟏".into(),
+        },
+        // An unguarded failure does not reach message normalization and must
+        // not validate or replace an identity it has not consumed.
+        NativeTextFacts::Simple {
+            identity: "not-consumed".into(),
+        },
+    ] {
+        let expected = serde_json::to_value(&mapping).unwrap();
+        let input = FramePreparation::AssessFailure {
+            origin: FrameErrorOrigin::Unguarded,
+            failure: FrameNativeFailure {
+                builtin: NativeFailure { ancestry: vec![] },
+                key_error: false,
+                structured_data_error: false,
+                relational_error: false,
+                deepest_module: None,
+                message_casing: mapping,
+            },
+            signature: None,
+            window_outran: None,
+        };
+        let run = HostRun::start(
+            &sdm_host::default_root(),
+            &message(json!({"op":"prepare_frames","input":100})),
+            Attachments::from([(
+                AttachmentId(100),
+                bytes(serde_json::to_value(input).unwrap()),
+            )]),
+        )
+        .unwrap_or_else(|error| panic!("{:?}", decoded(&error)));
+        let out = run
+            .next()
+            .unwrap_or_else(|error| panic!("{:?}", decoded(&error)));
+        let ControlMessage::Step(Step::Done {
+            result: OperationResult::PrepareFrames(value),
+            ..
+        }) = sdm_host::read(&out).unwrap()
+        else {
+            panic!("failure facts need no native action or model call")
+        };
+        let Attachment::Bytes(raw) = run.take_attachment(value.value).unwrap().unwrap() else {
+            panic!("complete failure assessment")
+        };
+        let assessment: Value = serde_json::from_slice(&raw).unwrap();
+        assert_eq!(assessment["value"], "failure_assessment");
+        assert_eq!(assessment["data"]["category"], "pass_through");
+        assert_eq!(assessment["data"]["failure"]["message_casing"], expected);
+    }
 }

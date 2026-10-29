@@ -57,9 +57,9 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from payload_attachment_observer import record_payload_bytes
 
 from sdm_client import _routing
-from sdm_client._rust import run as _rust_run
 
 HERE = Path(__file__).resolve().parent
 RECORDED = json.loads(
@@ -125,18 +125,7 @@ def _on_the_core(
     bytes as the core's runs gave them."""
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     taken: list[bytes] = []
-    take = _rust_run.Finished.take
-
-    def recording(self: Any, attachment: int) -> Any:
-        got = take(self, attachment)
-        state = (
-            self.result.get('state') if isinstance(self.result, dict) else None
-        )
-        if isinstance(state, dict) and attachment == state.get('payload'):
-            taken.append(bytes(got))
-        return got
-
-    monkeypatch.setattr(_rust_run.Finished, 'take', recording)
+    record_payload_bytes(monkeypatch, taken)
     return R.observe(spec), taken
 
 

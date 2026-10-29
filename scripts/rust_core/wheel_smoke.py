@@ -137,6 +137,24 @@ EXPECTED: dict[str, tuple[str, ...]] = {
     'test_binding.py': (
         'test_the_build_is_the_one_named',
         'test_the_stub_describes_the_module',
+        'test_base_frame_schema_and_request_do_not_load_optional_sources',
+        'test_attachment_annotations_include_every_native_owner[_AttachmentIn-_ArrowStreamExportable]',
+        'test_attachment_annotations_include_every_native_owner[_AttachmentOut-ArrowStream]',
+        'test_native_owners_cannot_be_forged_or_subclassed[FrameGraph]',
+        'test_native_owners_cannot_be_forged_or_subclassed[FrameQuestion]',
+        'test_native_owners_cannot_be_forged_or_subclassed[FramePopulation]',
+        'test_native_owners_cannot_be_forged_or_subclassed[FrameLabelGroups]',
+        'test_native_owners_cannot_be_forged_or_subclassed[FrameLabelBatch]',
+        'test_native_owners_cannot_be_forged_or_subclassed[LabelInputs]',
+        'test_native_owners_cannot_be_forged_or_subclassed[TargetColumn]',
+        'test_native_owners_cannot_be_forged_or_subclassed[FrameTask]',
+        'test_native_owners_cannot_be_forged_or_subclassed[FrameReferences]',
+        'test_native_owners_cannot_be_forged_or_subclassed[FramePayload]',
+        'test_native_owners_cannot_be_forged_or_subclassed[LookupRows]',
+        'test_native_owners_cannot_be_forged_or_subclassed[MaterializeSource]',
+        'test_native_owners_cannot_be_forged_or_subclassed[MaterializePopulation]',
+        'test_native_owners_cannot_be_forged_or_subclassed[MaterializeGroups]',
+        'test_native_owners_cannot_be_forged_or_subclassed[MaterializeBatch]',
         'test_the_contract_version_is_the_contract_crate_s',
         'test_the_error_codes_are_the_contract_s_in_its_order',
         'test_a_query_is_validated_through_a_run',
@@ -147,6 +165,10 @@ EXPECTED: dict[str, tuple[str, ...]] = {
         'test_a_start_with_an_unnamed_failing_stream_is_an_invalid_message',
         'test_only_the_test_ops_build_takes_a_test_operation',
         'test_importing_the_module_changes_nothing_in_the_process',
+    ),
+    'test_frame_native_constructor.py': (
+        'test_native_constructor_binds_name_source_type_and_completed_meaning',
+        'test_fixed_native_declaration_cannot_be_replaced_by_exported_storage',
     ),
     'test_paged_schema.py': (
         'test_the_unpaged_reply_with_a_null_is_refused',
@@ -167,6 +189,24 @@ EXPECTED: dict[str, tuple[str, ...]] = {
         'test_a_result_of_another_shape_is_refused_by_name[predict]',
         'test_a_result_of_another_shape_is_refused_by_name[validate_query]',
         'test_an_operation_the_host_does_not_know_is_refused_by_name',
+    ),
+    'test_t42_arrow_float_owners.py': (
+        'test_constructor_float_buffers_detach_before_producer_mutation_and_rebind[False-0-32]',
+        'test_constructor_float_buffers_detach_before_producer_mutation_and_rebind[False-0-64]',
+        'test_constructor_float_buffers_detach_before_producer_mutation_and_rebind[False-1-32]',
+        'test_constructor_float_buffers_detach_before_producer_mutation_and_rebind[False-1-64]',
+        'test_constructor_float_buffers_detach_before_producer_mutation_and_rebind[False-3-32]',
+        'test_constructor_float_buffers_detach_before_producer_mutation_and_rebind[False-3-64]',
+        'test_constructor_float_buffers_detach_before_producer_mutation_and_rebind[False-7-32]',
+        'test_constructor_float_buffers_detach_before_producer_mutation_and_rebind[False-7-64]',
+        'test_constructor_float_buffers_detach_before_producer_mutation_and_rebind[True-0-32]',
+        'test_constructor_float_buffers_detach_before_producer_mutation_and_rebind[True-0-64]',
+        'test_constructor_float_buffers_detach_before_producer_mutation_and_rebind[True-1-32]',
+        'test_constructor_float_buffers_detach_before_producer_mutation_and_rebind[True-1-64]',
+        'test_constructor_float_buffers_detach_before_producer_mutation_and_rebind[True-3-32]',
+        'test_constructor_float_buffers_detach_before_producer_mutation_and_rebind[True-3-64]',
+        'test_constructor_float_buffers_detach_before_producer_mutation_and_rebind[True-7-32]',
+        'test_constructor_float_buffers_detach_before_producer_mutation_and_rebind[True-7-64]',
     ),
     'test_t42_frames.py': (
         'test_frame_start_detaches_numpy_producer_before_later_steps[numbers]',
@@ -752,7 +792,10 @@ def collection_verdict(
         raise SmokeFailed(
             f'{collection.name}: collected {collected}, passed {passed}'
         )
-    names = {str(nodeid).rsplit('/', 1)[-1] for nodeid in items}
+    names = set()
+    for nodeid in items:
+        filename, separator, suffix = str(nodeid).partition('::')
+        names.add(filename.rsplit('/', 1)[-1] + separator + suffix)
     missing = sorted(
         f'{name}::{test}'
         for name in counts

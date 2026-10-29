@@ -1,0 +1,67 @@
+{
+  "format": "sdm-case/1",
+  "id": "view.metric.link",
+  "status": "acceptance",
+  "slice": "S2",
+  "warehouses": [
+    "databricks-sql",
+    "databricks-spark"
+  ],
+  "paths": [
+    "schema.from-source/semantic-model/databricks-metric-view",
+    "query.materialize/indices-link-prediction/databricks-metric-view",
+    "client.predict/link-prediction/databricks-metric-view"
+  ],
+  "routes": [
+    "schema.from-source/semantic-model/databricks-metric-view",
+    "query.materialize/indices-binary/databricks-metric-view",
+    "query.materialize/indices-multiclass/databricks-metric-view",
+    "query.materialize/indices-regression/databricks-metric-view",
+    "query.materialize/indices-link-prediction/databricks-metric-view",
+    "query.materialize/indices-ranking/databricks-metric-view",
+    "query.materialize/indices-forecast/databricks-metric-view",
+    "client.predict/binary/databricks-metric-view",
+    "client.predict/multiclass/databricks-metric-view",
+    "client.predict/regression/databricks-metric-view",
+    "client.predict/link-prediction/databricks-metric-view",
+    "client.predict/ranking/databricks-metric-view",
+    "client.predict/forecast/databricks-metric-view"
+  ],
+  "cells": [
+    "int64/primary-key",
+    "int64/foreign-key",
+    "timestamp-us/time-column"
+  ],
+  "input": {
+    "base": "shop",
+    "setup": [
+      "CREATE TABLE items AS SELECT i::BIGINT AS item_id, ['a', 'b', 'c', 'd'][1 + i] AS kind FROM range(4) t(i)",
+      "CREATE TABLE buys AS SELECT i::BIGINT AS buy_id, (i % 8)::BIGINT AS user_id, ((i * 3) % 4)::BIGINT AS item_id, TIMESTAMP '2023-01-01' + to_days((i * 5)::INTEGER) AS ts FROM range(120) t(i)"
+    ],
+    "pql": "PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1,
+        2
+      ],
+      "anchor_time": "2023-06-01"
+    },
+    "view": {
+      "kind": "metric_view",
+      "name": "view_metric_link",
+      "yaml": "version: 0.1\nsource: \"`{catalog}`.`{schema}`.buys\"\njoins:\n  - name: users\n    source: \"`{catalog}`.`{schema}`.users\"\n    on: source.user_id = users.user_id\n  - name: items\n    source: \"`{catalog}`.`{schema}`.items\"\n    on: source.item_id = items.item_id\ndimensions:\n  - name: buy_id\n    expr: source.buy_id\n  - name: user_id\n    expr: source.user_id\n  - name: item_id\n    expr: source.item_id\n  - name: ts\n    expr: source.ts\n  - name: kind\n    expr: items.kind\n  - name: country\n    expr: users.country\nmeasures:\n  - name: purchases\n    expr: COUNT(1)\n"
+    }
+  },
+  "until": "predict",
+  "expect": {
+    "outcome": "refusal",
+    "stage": "predict",
+    "error": "NimRequestError",
+    "code": null,
+    "message": "[400] {\"error\": \"no_classes\"}",
+    "today": "This uses the original scripted endpoint, whose classification-only answer has no LINK classes. The public successful LINK response seam is covered separately by the endpoint parity tests."
+  },
+  "why": "A temporal foreign-key LIST_DISTINCT query through the existing metric view, without ranking decomposition. Both ordered entity roles and list labels must survive view conversion, materialization and the original scripted endpoint refusal.",
+  "source": "T4.5 LINK coverage, reusing the existing view schema and original scripted endpoint; authored from the frozen Python public API at43e55f4f. Reference execution and recorded capture are required before admission."
+}

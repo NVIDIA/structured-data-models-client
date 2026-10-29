@@ -364,8 +364,8 @@ pub fn values(given: Option<&Value>) -> Result<Asked, CoreError> {
             ("exclude_cols_dict", v) => asked.exclude_cols_dict = Some(v.clone()),
             ("use_prediction_time", v) => asked.use_prediction_time = Some(v.clone()),
             ("return_embeddings", v) => asked.return_embeddings = Some(v.clone()),
-            ("prediction_statistic", Value::Text(text)) => {
-                asked.prediction_statistic = Some(text.clone());
+            ("prediction_statistic", Value::Text(text)) if text.utf8().is_some() => {
+                asked.prediction_statistic = text.utf8().map(str::to_owned);
             }
             ("prediction_statistic", v) => {
                 return Err(mistyped(Sentence::StatisticUnknown, name, "not_text")
@@ -436,8 +436,20 @@ fn lax_boolean(field: &str, value: &Value) -> Result<bool, CoreError> {
             Ok(1.0) => Ok(true),
             _ => Err(refused()),
         },
-        Value::Text(text) if FALSE.iter().any(|w| w.eq_ignore_ascii_case(text)) => Ok(false),
-        Value::Text(text) if TRUE.iter().any(|w| w.eq_ignore_ascii_case(text)) => Ok(true),
+        Value::Text(text)
+            if FALSE
+                .iter()
+                .any(|w| text.utf8().is_some_and(|text| w.eq_ignore_ascii_case(text))) =>
+        {
+            Ok(false)
+        }
+        Value::Text(text)
+            if TRUE
+                .iter()
+                .any(|w| text.utf8().is_some_and(|text| w.eq_ignore_ascii_case(text))) =>
+        {
+            Ok(true)
+        }
         _ => Err(refused()),
     }
 }
@@ -650,6 +662,7 @@ fn hop(given: &Value) -> Result<Hop, CoreError> {
         Value::Text(text) => {
             // A number DuckDB reads as written into the SQL: white space
             // around it, a sign, digits with a point and an exponent.
+            let text = text.utf8().ok_or_else(refused)?;
             let number = text.trim_ascii();
             let plain = number.bytes().any(|b| b.is_ascii_digit())
                 && number
@@ -660,13 +673,13 @@ fn hop(given: &Value) -> Result<Hop, CoreError> {
                 .ok()
                 .filter(|size| plain && size.is_finite())
             else {
-                return Ok(Hop::Expression(text.clone()));
+                return Ok(Hop::Expression(text.to_owned()));
             };
             if size < 0.0 {
                 // Preserve the caller's text origin: warehouse sizing
                 // arithmetic refuses text before SQL, while SQL-only
                 // providers evaluate the original expression in place.
-                return Ok(Hop::Expression(text.clone()));
+                return Ok(Hop::Expression(text.to_owned()));
             }
             // `'0' == 0` is false: a zero spelled as text ends nothing.
             return Ok(if size >= 1.0 {
@@ -746,7 +759,7 @@ fn context_anchor(given: &Value) -> Result<AskedAnchor, CoreError> {
     };
     match given {
         Value::Null => Ok(AskedAnchor::Absent),
-        Value::Text(text) if text == "entity" => Ok(AskedAnchor::Entity),
+        Value::Text(text) if text.utf8() == Some("entity") => Ok(AskedAnchor::Entity),
         Value::Object(_) => {
             // The contract's `ts` scalar: `t`, the value `v` as decimal
             // text, `unit` and `zone`.
@@ -782,17 +795,22 @@ pub fn rows_per_call(given: &Value) -> Result<Option<u64>, CoreError> {
     if matches!(given, Value::Null) {
         return Ok(None);
     }
-    let Integer {
-        negative,
-        magnitude,
-    } = magnitude("rows_per_call", given)?;
-    match magnitude {
-        _ if negative || magnitude == Some(0) => {
-            Err(invalid(Sentence::RowsPerCall, "rows_per_call", "below_one"))
+    let read = || {
+        let Integer {
+            negative,
+            magnitude,
+        } = magnitude("rows_per_call", given)?;
+        match magnitude {
+            _ if negative || magnitude == Some(0) => {
+                Err(invalid(Sentence::RowsPerCall, "rows_per_call", "below_one"))
+            }
+            Some(n) => Ok(Some(u64::try_from(n).unwrap_or(u64::MAX))),
+            None => Ok(Some(u64::MAX)),
         }
-        Some(n) => Ok(Some(u64::try_from(n).unwrap_or(u64::MAX))),
-        None => Ok(Some(u64::MAX)),
-    }
+    };
+    // This is a caller option, not a source cell. Its JSON form lets each
+    // host present the original provided value only after this refusal.
+    read().map_err(|error| error.with_field("given", given_text(given)))
 }
 
 /// The most rows one model call scores (`predict_rows_max`, the serving
@@ -999,7 +1017,7 @@ pub fn statistic(given: Option<&str>) -> Result<Option<String>, CoreError> {
             "prediction_statistic",
             "not_a_statistic",
         )
-        .with_field("given", given_text(&Value::Text(name.to_owned())))),
+        .with_field("given", given_text(&Value::Text(name.to_owned().into())))),
     }
 }
 
@@ -1017,32 +1035,19 @@ pub fn statistic_for(kind: Kind, statistic: Option<&String>) -> Result<(), CoreE
     Ok(())
 }
 
-/// The inference options, read as the engine's config classes read them.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Options {
-    pub num_estimators: u64,
-    pub column_shuffle: bool,
-    pub category_shuffle: bool,
-    pub hop_shuffle: bool,
-    /// A classification's.
-    pub class_shuffle: bool,
-    /// A regression's; a null one is none.
-    pub target_transforms: Vec<Option<String>>,
-    /// A regression's.
-    pub output_type: String,
-}
+/// Shared data only. Request defaults, validation and rendering stay here.
+pub use sdm_contract::frames::materialize::RelationalOptions as Options;
 
-impl Default for Options {
-    fn default() -> Self {
-        Options {
-            num_estimators: 1,
-            column_shuffle: false,
-            category_shuffle: false,
-            hop_shuffle: false,
-            class_shuffle: false,
-            target_transforms: vec![Some("quantile".to_owned())],
-            output_type: "median".to_owned(),
-        }
+/// The inference config classes' existing defaults, owned by request policy.
+pub fn default_options() -> Options {
+    Options {
+        num_estimators: 1,
+        column_shuffle: false,
+        category_shuffle: false,
+        hop_shuffle: false,
+        class_shuffle: false,
+        target_transforms: vec![Some("quantile".to_owned())],
+        output_type: "median".to_owned(),
     }
 }
 
@@ -1188,7 +1193,10 @@ fn boolean(key: &str, value: &Value) -> Result<bool, CoreError> {
                 Err(option_refused(key, "not_a_boolean"))
             }
         }
-        Value::Text(text) => boolean_text(text).ok_or_else(|| option_refused(key, "not_a_boolean")),
+        Value::Text(text) => text
+            .utf8()
+            .and_then(boolean_text)
+            .ok_or_else(|| option_refused(key, "not_a_boolean")),
         _ => Err(option_refused(key, "not_a_boolean")),
     }
 }
@@ -1202,7 +1210,7 @@ fn estimators(key: &str, value: &Value) -> Result<u64, CoreError> {
         Value::Number(token) => {
             whole(token).ok_or_else(|| option_refused(key, "not_a_whole_number"))?
         }
-        Value::Text(text) => match whole_text(text) {
+        Value::Text(text) => match text.utf8().and_then(whole_text) {
             Some(Ok(n)) => n,
             Some(Err(_)) => return Err(option_refused(key, "out_of_range")),
             None => return Err(option_refused(key, "not_a_whole_number")),
@@ -1220,7 +1228,7 @@ fn estimators(key: &str, value: &Value) -> Result<u64, CoreError> {
 /// rest the class's defaults; a key the class does not hold, or a value it
 /// refuses, is `INVALID_REQUEST`. `None` is the defaults.
 pub fn options(kind: Kind, given: Option<&Value>) -> Result<Options, CoreError> {
-    let mut options = Options::default();
+    let mut options = default_options();
     let Some(given) = given else {
         return Ok(options);
     };
@@ -1268,16 +1276,20 @@ pub fn options(kind: Kind, given: Option<&Value>) -> Result<Options, CoreError> 
                         // A null transform, which the engine's type takes
                         // (`TargetTransform | None`) and writes as null.
                         Value::Null => Ok(None),
-                        Value::Text(name) if TRANSFORMS.contains(&name.as_str()) => {
-                            Ok(Some(name.clone()))
+                        Value::Text(name)
+                            if name.utf8().is_some_and(|name| TRANSFORMS.contains(&name)) =>
+                        {
+                            Ok(name.utf8().map(str::to_owned))
                         }
                         _ => Err(option_refused(key, "not_a_transform")),
                     })
                     .collect::<Result<_, _>>()?;
             }
             "output_type" if kind == Kind::Regression => match value {
-                Value::Text(name) if OUTPUT_TYPES.contains(&name.as_str()) => {
-                    options.output_type = name.clone();
+                Value::Text(name)
+                    if name.utf8().is_some_and(|name| OUTPUT_TYPES.contains(&name)) =>
+                {
+                    options.output_type = name.utf8().unwrap().to_owned();
                 }
                 _ => return Err(option_refused(key, "not_an_output_type")),
             },
@@ -1287,42 +1299,41 @@ pub fn options(kind: Kind, given: Option<&Value>) -> Result<Options, CoreError> 
     Ok(options)
 }
 
-impl Options {
-    /// A link task's shared inference options, with no classification or
-    /// regression-only members.
-    pub fn base(&self) -> BaseConfig {
-        BaseConfig {
-            kind: "base".to_owned(),
-            num_estimators: self.num_estimators,
-            column_shuffle: self.column_shuffle,
-            category_shuffle: self.category_shuffle,
-            hop_shuffle: self.hop_shuffle,
-        }
+/// A link task's shared inference options, with no classification or
+/// regression-only members.
+pub fn base(options: &Options) -> BaseConfig {
+    BaseConfig {
+        kind: "base".to_owned(),
+        num_estimators: options.num_estimators,
+        column_shuffle: options.column_shuffle,
+        category_shuffle: options.category_shuffle,
+        hop_shuffle: options.hop_shuffle,
     }
-    /// A regression's options as the engine writes them.
-    pub fn regression(&self) -> InferenceConfig {
-        InferenceConfig {
-            kind: "regression".to_owned(),
-            num_estimators: self.num_estimators,
-            column_shuffle: self.column_shuffle,
-            category_shuffle: self.category_shuffle,
-            hop_shuffle: self.hop_shuffle,
-            class_shuffle: None,
-            target_transforms: self.target_transforms.clone(),
-            output_type: self.output_type.clone(),
-        }
-    }
+}
 
-    /// A classification's options as the engine writes them.
-    pub fn classification(&self) -> ClassificationConfig {
-        ClassificationConfig {
-            kind: "classification".to_owned(),
-            num_estimators: self.num_estimators,
-            column_shuffle: self.column_shuffle,
-            category_shuffle: self.category_shuffle,
-            hop_shuffle: self.hop_shuffle,
-            class_shuffle: Some(self.class_shuffle),
-        }
+/// A regression's options as the engine writes them.
+pub fn regression(options: &Options) -> InferenceConfig {
+    InferenceConfig {
+        kind: "regression".to_owned(),
+        num_estimators: options.num_estimators,
+        column_shuffle: options.column_shuffle,
+        category_shuffle: options.category_shuffle,
+        hop_shuffle: options.hop_shuffle,
+        class_shuffle: None,
+        target_transforms: options.target_transforms.clone(),
+        output_type: options.output_type.clone(),
+    }
+}
+
+/// A classification's options as the engine writes them.
+pub fn classification(options: &Options) -> ClassificationConfig {
+    ClassificationConfig {
+        kind: "classification".to_owned(),
+        num_estimators: options.num_estimators,
+        column_shuffle: options.column_shuffle,
+        category_shuffle: options.category_shuffle,
+        hop_shuffle: options.hop_shuffle,
+        class_shuffle: Some(options.class_shuffle),
     }
 }
 
@@ -2178,5 +2189,21 @@ mod tests {
                 task_table(&asked(&format!(r#"{{"context_anchor_time": {given}}}"#))).unwrap_err();
             assert_eq!(reason(&e), Detail::text("not_a_time"), "{given}");
         }
+    }
+}
+
+#[cfg(test)]
+mod rows_per_call_given_tests {
+    use super::*;
+
+    #[test]
+    fn invalid_batch_sizes_retain_caller_options_for_selected_presentation() {
+        for text in ["0", "-1", "true", "1.5", "\"2\""] {
+            let value = sdm_wire::json::read(text.as_bytes()).unwrap();
+            let error = rows_per_call(&value).unwrap_err();
+            assert_eq!(error.sentence, Sentence::RowsPerCall);
+            assert_eq!(error.fields["given"], Detail::text(text));
+        }
+        assert_eq!(rows_per_call(&Value::Null).unwrap(), None);
     }
 }

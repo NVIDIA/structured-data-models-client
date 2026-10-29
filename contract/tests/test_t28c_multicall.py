@@ -648,7 +648,14 @@ def test_python_core_answers_each_case_as_the_reference_does(
         case, _ = cases()[case_key.split('@')[0]]
         identity = line['identity']
         assert identity['native_loaded'] and line['core'] is not None
-        missing = sorted(set(case['core']) - set(identity['operations']))
+        # Check the same actual prediction evidence as the common comparator.
+        # Unrelated preparation never earns a logical prediction role.
+        operations = (
+            runner()
+            ._sibling('prediction_observation')
+            .view(line['core'], identity['operations'])['operations']
+        )
+        missing = sorted(set(case['core']) - set(operations))
         assert not missing, f'{case_key}: core operations not run: {missing}'
         want = reference_lines()[case_key]
         assert same_outcome(_outcome(want), _outcome(line)), (
@@ -811,3 +818,55 @@ def test_python_core_keeps_the_answers_when_a_call_raises(
         assert not found, f'{case_key}: ' + '; '.join(found)
 
     held(f'py-raised:{case_key}', check)
+
+
+@pytest.mark.parametrize(
+    'producer',
+    ['gathered', 'legacy', 'unrelated', 'missing-result', 'foreign-owner'],
+)
+def test_core_route_uses_only_checked_actual_prediction_evidence(producer):
+    from test_t44_prediction_observation import (
+        actual_observation,
+        legacy_observation,
+    )
+
+    core, operations = (
+        legacy_observation() if producer == 'legacy' else actual_observation()
+    )
+    if producer == 'unrelated':
+        core.pop('predictions')
+        core['predicted'] = None
+        core['inputs'] = core['inputs'][:2] + [
+            {
+                'op': 'prepare_request',
+                'run': 2,
+                'entry': None,
+                'input': {'stage': 'model', 'model': 'kumo-relational'},
+                'result': {
+                    'phase': 'model_resolved',
+                    'version': 1,
+                    'model': 'kumo-relational',
+                },
+                'error': None,
+            }
+        ]
+        operations = operations[:3]
+    elif producer == 'missing-result':
+        core['predictions'][0]['results'] = []
+    elif producer == 'foreign-owner':
+        core['inputs'][2]['entry'] = 100
+    untouched = copy.deepcopy((core, operations))
+    reader = runner()._sibling('prediction_observation')
+    if producer in ('missing-result', 'foreign-owner'):
+        with pytest.raises(reader.ObservationError):
+            reader.view(core, operations)
+    else:
+        checked = reader.view(core, operations)['operations']
+        assert checked == (
+            ['describe_source', 'materialize', 'prepare_request']
+            if producer == 'unrelated'
+            else ['describe_source', 'materialize', 'predict']
+        )
+        if producer == 'gathered':
+            assert 'predict' not in operations
+    assert (core, operations) == untouched

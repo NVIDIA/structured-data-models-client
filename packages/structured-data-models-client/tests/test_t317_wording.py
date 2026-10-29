@@ -19,10 +19,12 @@ held to the old client's words.
 
 from __future__ import annotations
 
+import copy
 import importlib.util
 import json
 import re
 import string
+import subprocess
 import sys
 import tempfile
 import warnings
@@ -490,6 +492,235 @@ def test_no_refusal_on_the_census_s_core_route_says_a_generic_sentence(
 #: (one line a probe: its site, outcome and message), so the comparison
 #: runs wherever the suite does (T3.17 review r2, P1).
 WORDS = ROOT / 'contract/census-words/duckdb.jsonl'
+#: The last probe/word recording commit. Its words identify the clean old
+#: client separately; neither input history nor recorded words are rewritten.
+WORDS_PROBES = '322bde853a9b5dd494bef10ba2fbd1f8070d47f9'
+WORDS_REFERENCE = '43e55f4f58924384c3cb52f67c8ed2e73ba45fa1'
+
+
+def _historical_probes(census: Any) -> list[dict[str, Any]]:
+    raw = subprocess.check_output(
+        [
+            'git',
+            '-C',
+            str(ROOT),
+            'show',
+            f'{WORDS_PROBES}:contract/refusal-census.json',
+        ],
+        stdin=subprocess.DEVNULL,
+        timeout=30,
+    )
+    document = json.loads(raw)
+    assert document['format'] == 'sdm-refusal-census/1'
+    assert isinstance(document['probes'], list)
+    return [
+        probe
+        for probe in document['probes']
+        if 'duckdb' in probe.get('databases', census.DATABASES)
+    ]
+
+
+def _matched_words(
+    probes: list[dict[str, Any]], rows: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    probe_sites = [probe['site'] for probe in probes]
+    word_sites = [row['site'] for row in rows]
+    assert len(set(probe_sites)) == len(probe_sites)
+    assert len(set(word_sites)) == len(word_sites)
+    assert set(probe_sites) == set(word_sites)
+    assert all(
+        row['reference'] == {'sha': WORDS_REFERENCE, 'clean': True}
+        for row in rows
+    )
+    recorded = {row['site']: row for row in rows}
+    return [recorded[site] for site in probe_sites]
+
+
+def _probe_input(probe: dict[str, Any]) -> dict[str, Any]:
+    # These are exactly the executable fields written by _routed. A new
+    # scanner label or reachability explanation changes none of its calls.
+    return {
+        'input': probe['input'],
+        'until': probe['until'],
+        'options': probe.get('options', {}),
+        'model': probe.get('model', 'KumoRelational'),
+    }
+
+
+def _new_probe_inputs(
+    historical: list[dict[str, Any]], current: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    seen = [_probe_input(probe) for probe in historical]
+    chosen = []
+    for probe in current:
+        given = _probe_input(probe)
+        if given not in seen:
+            chosen.append(probe)
+            seen.append(given)
+    return chosen
+
+
+def _completed_materialization_pair(
+    original: list[dict[str, Any]], core: list[dict[str, Any]]
+) -> None:
+    # The sole new executable input is ordinary SQL shop materialization.
+    # Its success demonstrates neither raw frame nor direct guard reachability.
+    # Matching import/installation errors cannot stand in for that operation.
+    assert (
+        original == core == [{'result': 'success', 'stage': 'materialize'}]
+    ), (
+        original,
+        core,
+    )
+
+
+def test_frozen_words_correspond_to_their_exact_historical_probe_inputs() -> (
+    None
+):
+    probes = _historical_probes(_census())
+    rows = [json.loads(line) for line in WORDS.read_text().splitlines()]
+    before = copy.deepcopy((probes, rows))
+    assert len(probes) == len(rows) == 41
+    assert _matched_words(probes, rows) == rows
+    assert (probes, rows) == before
+
+
+@pytest.mark.parametrize(
+    'changed',
+    [
+        'duplicate-probe',
+        'duplicate-words',
+        'missing-probe',
+        'missing-words',
+        'wrong-reference',
+        'dirty-reference',
+    ],
+)
+def test_historical_word_correspondence_refuses_missing_or_duplicate_evidence(
+    changed: str,
+) -> None:
+    probes = _historical_probes(_census())
+    raw = WORDS.read_bytes()
+    rows = [json.loads(line) for line in raw.splitlines()]
+    assert len(_matched_words(probes, rows)) == 41
+    if changed == 'duplicate-probe':
+        probes.append(copy.deepcopy(probes[0]))
+    elif changed == 'duplicate-words':
+        rows.append(copy.deepcopy(rows[0]))
+    elif changed == 'missing-probe':
+        probes.pop()
+    elif changed == 'missing-words':
+        rows.pop()
+    elif changed == 'wrong-reference':
+        rows[0]['reference']['sha'] = '0' * 40
+    else:
+        rows[0]['reference']['clean'] = False
+    with pytest.raises(AssertionError):
+        _matched_words(probes, rows)
+    assert WORDS.read_bytes() == raw
+
+
+def test_current_census_still_covers_every_current_site_once() -> None:
+    census = _census()
+    sites = census.sites(ROOT)
+    probes = census.probes(ROOT)
+    assert len(sites) == len(probes) == 51
+    assert len({site['id'] for site in sites}) == len(sites)
+    assert len({probe['site'] for probe in probes}) == len(probes)
+    assert {site['id'] for site in sites} == {probe['site'] for probe in probes}
+    assert census.check(ROOT) == []
+
+
+@pytest.mark.parametrize('changed', ['input', 'options', 'model', 'until'])
+def test_current_input_selection_keeps_executable_changes_but_not_site_labels(
+    changed: str,
+) -> None:
+    historical = _historical_probes(_census())
+    unchanged = copy.deepcopy(historical[0])
+    unchanged.update(site='a relocated site', why='different scanner location')
+    new = copy.deepcopy(unchanged)
+    new['site'] = 'a new executable input'
+    if changed == 'input':
+        new['input']['pql'] += ' '
+    elif changed == 'options':
+        new['options'] = {'num_context_samples': 5}
+    elif changed == 'model':
+        new['model'] = 'KumoTabular'
+    else:
+        new['until'] = 'predict'
+    repeated = copy.deepcopy(new)
+    repeated['site'] = 'the same executable input at another site'
+    assert _new_probe_inputs(historical, [unchanged, new, repeated]) == [new]
+
+
+def test_the_only_new_current_executable_input_has_its_own_two_route_pair(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    census = _census()
+    current = [
+        probe
+        for probe in census.probes(ROOT)
+        if 'duckdb' in probe.get('databases', census.DATABASES)
+    ]
+    [new] = _new_probe_inputs(_historical_probes(census), current)
+    assert _probe_input(new) == {
+        'input': {
+            'base': 'shop',
+            'pql': 'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id',
+            'materialize': {'indices': [0, 1], 'anchor_time': '2024-03-01'},
+        },
+        'until': 'materialize',
+        'options': {},
+        'model': 'KumoRelational',
+    }
+    monkeypatch.setenv(census.MESSAGES, '1')
+    original = _routed(census, [new], core=False)
+    core = _routed(census, [new], core=True)
+    _completed_materialization_pair(original, core)
+
+
+@pytest.mark.parametrize(
+    'error',
+    ['MissingExtraError', 'ImportError', 'ModuleNotFoundError', 'OSError'],
+)
+@pytest.mark.parametrize('side', ['original', 'core', 'both'])
+def test_new_sql_input_pair_cannot_pass_on_an_environment_refusal(
+    error: str, side: str
+) -> None:
+    success = [{'result': 'success', 'stage': 'materialize'}]
+    _completed_materialization_pair(success, copy.deepcopy(success))
+    refused = [{'result': 'refusal', 'stage': 'materialize', 'error': error}]
+    original = refused if side in ('original', 'both') else success
+    core = refused if side in ('core', 'both') else success
+    with pytest.raises(AssertionError):
+        _completed_materialization_pair(original, core)
+
+
+@pytest.mark.parametrize('core_route', [False, True])
+def test_words_route_forwards_the_selected_original_or_core_route_once(
+    monkeypatch: pytest.MonkeyPatch, core_route: bool
+) -> None:
+    census = _census()
+    [probe, *_] = _historical_probes(census)
+    called = []
+    expected = [{'result': 'success', 'stage': 'materialize'}]
+
+    def recording(cases: Path, out: Path, database: str, core: bool) -> None:
+        assert database == 'duckdb'
+        assert json.loads((cases / '0.json').read_text()) == {
+            'case': census._case(probe, 0, []),
+            'options': probe.get('options', {}),
+            'model': probe.get('model', 'KumoRelational'),
+        }
+        called.append(core)
+        out.write_text(json.dumps(expected))
+
+    monkeypatch.setattr(census, '_routes', lambda: [])
+    monkeypatch.setattr(census, 'route', recording)
+    assert _routed(census, [probe], core=core_route) == expected
+    assert called == [core_route]
+
+
 #: Each census probe whose refusal, in a sentence of the core's, the core
 #: route says in other words than the reference's, with the register entry
 #: that records why: each one where the reference refuses otherwise, by
@@ -523,8 +754,10 @@ DIFFERS: dict[str, str] = {
 }
 
 
-def _routed(census: Any, probes: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    r"""Each probe's outcome with its words, on the core route."""
+def _routed(
+    census: Any, probes: list[dict[str, Any]], *, core: bool = True
+) -> list[dict[str, Any]]:
+    r"""Each probe's actual outcome with its words, on the selected route."""
     routes = census._routes()
     with tempfile.TemporaryDirectory(prefix='sdm-t317-') as scratch:
         cases = Path(scratch)
@@ -539,7 +772,7 @@ def _routed(census: Any, probes: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 )
             )
         out = cases / 'out.json'
-        census.route(cases, out, 'duckdb', core=True)
+        census.route(cases, out, 'duckdb', core=core)
         found: list[dict[str, Any]] = json.loads(out.read_text())
         return found
 
@@ -558,28 +791,22 @@ def _finite_validator_words(message: str) -> str:
 def test_the_census_s_refusals_say_the_old_client_s_words_or_a_registered_difference(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Every census probe on DuckDB, on the core route and as the old client
-    # answered it (the recording):
+    # Every recorded census probe on DuckDB, with its original inputs, on
+    # the core route and as the clean old client answered it (the recording):
     # where both refuse, the core route says the old client's words, unless
     # the probe's difference is registered; and no refusal says the defect
     # a sentence with fields missing would (T3.17 review r1, P2-1).
     census = _census()
     monkeypatch.setenv(census.MESSAGES, '1')
-    probes = [
-        probe
-        for probe in census.probes(ROOT)
-        if 'duckdb' in probe.get('databases', census.DATABASES)
-    ]
+    probes = _historical_probes(census)
     core = _routed(census, probes)
-    recorded = {
-        line['site']: line
-        for line in map(
-            json.loads, WORDS.read_text(encoding='utf-8').splitlines()
-        )
-    }
-    # The recording holds every probe, and only the probes.
-    assert set(recorded) == {probe['site'] for probe in probes}
-    old = [recorded[probe['site']] for probe in probes]
+    old = _matched_words(
+        probes,
+        [
+            json.loads(line)
+            for line in WORDS.read_text(encoding='utf-8').splitlines()
+        ],
+    )
     defect = errors.DEFECT.split('{sentence!r}')[1]
     differs = {}
 

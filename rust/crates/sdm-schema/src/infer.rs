@@ -20,6 +20,7 @@ use std::collections::BTreeSet;
 use arrow_array::RecordBatch;
 use arrow_schema::{DataType, Field, Schema};
 use sdm_contract::data::{EXACT_NUMBER_MARKED, EXACT_NUMBER_MARKER, Relation};
+use sdm_contract::frames::FrameTimeFirst;
 use sdm_contract::ops::{Dtype, ExactNumber, SourceFacts, Stype};
 use sdm_contract::{ColumnType, CoreError, Detail, Scalar, Sentence, TimestampUnit};
 
@@ -65,6 +66,7 @@ pub enum TextUnread {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InferredColumn {
     pub name: String,
+    pub untyped: bool,
     pub dtype: Dtype,
     pub stype: Stype,
     /// What the column meant before a key named after inference made it an
@@ -368,6 +370,8 @@ pub fn choose_among(
             instants: &previewed.instants,
             presence: &previewed.presence,
             firsts: &previewed.firsts,
+            native: None,
+            missing: None,
         },
         previewed.rows,
         &table.primary_key,
@@ -432,6 +436,8 @@ fn choose(
             instants: &instants,
             presence: &presence,
             firsts: &firsts,
+            native: None,
+            missing: None,
         },
         rows,
         &table.primary_key,
@@ -749,6 +755,7 @@ fn preview_with(
             primary.push(declared.name.clone());
         }
         columns.push(InferredColumn {
+            untyped: false,
             name: declared.name.clone(),
             dtype,
             stype,
@@ -940,13 +947,15 @@ fn stype_of(
         let first: Vec<Option<Value>> = sample.iter().take(1_000).cloned().collect();
         let held = first.iter().flatten().count();
         let distinct = values::distinct(&first);
-        let share = |limit: f64| held > 0 && (distinct as f64 / held as f64) <= limit;
-        let categorical = distinct < 20
-            || if dtype == Dtype::String {
-                share(0.5)
+        let categorical = native_categorical_share(
+            if dtype == Dtype::Binary {
+                Dtype::Int
             } else {
-                share(0.05)
-            };
+                dtype
+            },
+            distinct as u64,
+            held as u64,
+        );
         if categorical {
             return Ok(Stype::Categorical);
         }
@@ -1074,7 +1083,7 @@ fn text_holds_categories(sample: &[Option<Value>]) -> bool {
         .flat_map(|text| text.split(separator))
         .collect();
     // `values > 1.5 * parts`, in integers.
-    2 * values.len() > 3 * parts.len() && parts.len() <= MOST_CATEGORIES
+    native_multicategory_share(values.len() as u64, parts.len() as u64)
 }
 
 /// What guessing a table's key found.
@@ -1274,6 +1283,8 @@ struct Read<'a> {
     instants: &'a [Result<Vec<Option<i128>>, TextUnread>],
     presence: &'a [Vec<Option<Value>>],
     firsts: &'a [Option<Scalar>],
+    native: Option<&'a [Option<&'a FrameTimeFirst>]>,
+    missing: Option<&'a [bool]>,
 }
 
 /// The first real day: a value before it, such as 0001-01-01 or
@@ -1351,7 +1362,7 @@ pub fn first_values_past_the_years(
 
 /// The timestamps a table's time column is chosen among, in table order:
 /// every column of a timestamp's meaning but the key.
-fn candidates(columns: &[InferredColumn], key: &[String]) -> Vec<usize> {
+pub(crate) fn candidates(columns: &[InferredColumn], key: &[String]) -> Vec<usize> {
     (0..columns.len())
         .filter(|&i| columns[i].stype == Stype::Timestamp && !key.contains(&columns[i].name))
         .collect()
@@ -1535,7 +1546,11 @@ fn choose_time_column(
             continue;
         }
         let over = whole.and_then(|w| w.range(name).map(|r| (w.rows, r)));
-        let why = refused_for_values(&read.presence[i], read.firsts[i].as_ref(), rows, over);
+        let why = if let Some(native) = read.native.and_then(|facts| facts[i]) {
+            refused_for_native_values(native)
+        } else {
+            refused_for_values(&read.presence[i], read.firsts[i].as_ref(), rows, over)
+        };
         if let Some(why) = &why {
             if !failed {
                 refused.push((name.clone(), why.clone()));
@@ -1648,11 +1663,61 @@ pub(crate) fn frame_time(
             instants: &instants,
             presence,
             firsts: &firsts,
+            native: None,
+            missing: None,
         },
         rows,
         key,
         None,
         false,
+    )
+}
+
+/// The existing time policy over original metadata, completed native first
+/// reads, and later physical columns. Missing arrays matter only if the
+/// shared policy reaches their earliest-value read.
+pub(crate) fn frame_time_observed(
+    columns: &[InferredColumn],
+    presence: &[Vec<Option<Value>>],
+    batches: &[RecordBatch],
+    bindings: &[Option<usize>],
+    firsts: &[Option<&FrameTimeFirst>],
+    rows: usize,
+    key: &[String],
+) -> Result<TimeChoice, CoreError> {
+    let instants: Vec<_> = bindings
+        .iter()
+        .map(|binding| Ok(binding.map_or_else(Vec::new, |at| values::frame_instants(batches, at))))
+        .collect();
+    let missing: Vec<_> = bindings.iter().map(Option::is_none).collect();
+    let scalar_firsts = vec![None; columns.len()];
+    choose_time_column(
+        columns,
+        &Read {
+            instants: &instants,
+            presence,
+            firsts: &scalar_firsts,
+            native: Some(firsts),
+            missing: Some(&missing),
+        },
+        rows,
+        key,
+        None,
+        false,
+    )
+}
+
+fn refused_for_native_values(first: &FrameTimeFirst) -> Option<PassedOver> {
+    let missing = first.rows - first.held;
+    refused_for_counts(
+        first.rows,
+        first.held,
+        first.same,
+        PassedOver::FrameConstant {
+            first: first.first.clone(),
+            missing,
+            rows: first.rows,
+        },
     )
 }
 
@@ -1685,24 +1750,34 @@ fn refused_for_values(
         ),
     };
     let missing = rows.saturating_sub(held);
-    if held == 0 {
-        return Some(PassedOver::Constant {
-            value: None,
+    refused_for_counts(
+        rows,
+        held,
+        same,
+        PassedOver::Constant {
+            value: if held == 0 { None } else { first },
             missing,
             rows,
-        });
+        },
+    )
+}
+
+/// Shared sparse/constant policy; the constructor and SQL paths differ
+/// only in the already converted scalar retained for native presentation.
+fn refused_for_counts(
+    rows: usize,
+    held: usize,
+    same: bool,
+    constant: PassedOver,
+) -> Option<PassedOver> {
+    if held == 0 {
+        return Some(constant);
     }
-    if 2 * missing > rows {
+    let missing = rows.saturating_sub(held);
+    if missing > rows / 2 {
         return Some(PassedOver::Sparse { missing, rows });
     }
-    if rows > 1 && same {
-        return Some(PassedOver::Constant {
-            value: first,
-            missing,
-            rows,
-        });
-    }
-    None
+    (rows > 1 && same).then_some(constant)
 }
 
 /// Whether an instant is a real start: not before 1901 and not the epoch's
@@ -1727,6 +1802,13 @@ fn earliest(
 ) -> Result<usize, CoreError> {
     let mut best: Option<(i128, usize)> = None;
     for &i in among {
+        if read.missing.is_some_and(|missing| missing[i]) {
+            return Err(CoreError::new(
+                Sentence::DirectSchemaMissing,
+                "a timestamp candidate is absent from the current frame",
+            )
+            .with_field("name", Detail::text(&columns[i].name)));
+        }
         let over = whole
             .and_then(|w| w.range(&columns[i].name))
             .and_then(|r| r.start)
@@ -1752,6 +1834,27 @@ fn earliest(
         }
     }
     Ok(best.map_or(among[0], |(_, i)| i))
+}
+
+/// Native statistics use the original floating-point score and thresholds.
+pub(crate) fn native_timestamp_share(name: &str, parsed: u64, present: u64) -> bool {
+    present > 0
+        && (if names::says_time(name) { 0.3 } else { 0.0 }) + parsed as f64 / present as f64 >= 1.0
+}
+
+pub(crate) fn native_multicategory_share(whole: u64, parts: u64) -> bool {
+    whole as f64 > 1.5 * parts as f64 && parts <= MOST_CATEGORIES as u64
+}
+
+pub(crate) fn native_categorical_share(dtype: Dtype, distinct: u64, present: u64) -> bool {
+    distinct < 20
+        || present > 0
+            && distinct as f64 / present as f64
+                <= if matches!(dtype, Dtype::String | Dtype::Binary) {
+                    0.5
+                } else {
+                    0.05
+                }
 }
 
 #[cfg(test)]

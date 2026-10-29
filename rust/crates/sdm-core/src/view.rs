@@ -569,6 +569,7 @@ pub(crate) fn describe(
                 expression: column.expr.clone(),
             });
             columns.push(DescribedColumn {
+                untyped: false,
                 name: column.name.clone(),
                 received,
                 dtype: column.dtype,
@@ -834,6 +835,7 @@ pub(crate) async fn describe_source(
     let id = asker.attach(Attachment::Bytes(bytes))?;
     Ok(OperationResult::DescribeSource(DescribedSource {
         frame_rows: None,
+        frame_decimals: None,
         description: id,
         notes,
     }))

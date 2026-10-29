@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 from test_t44_prediction_observation import actual_observation, reader
-from test_t136_forecast_capture import _module
+from test_t136_forecast_capture import RUNNER, _module
 
 ROOT = Path(__file__).parents[2]
 CHECK = _module(
@@ -105,6 +105,105 @@ def test_serving_reader_rejects_changed_binding_without_rebuilding_body(tamper):
     core['predicted']['body'] = copy.deepcopy(call['body'])
     with pytest.raises(reader().ObservationError):
         reader().view(core, operations)
+
+
+@pytest.mark.parametrize('limit', [None, 1], ids=['success', 'pre-call-limit'])
+def test_actual_serving_prediction_is_unchanged_under_capture(
+    monkeypatch, limit
+):
+    from sdm_client import _routing
+
+    serving = _module(
+        't44_capture_serving_route_controls',
+        ROOT
+        / 'packages/structured-data-models-client/tests/test_t313_serving_route.py',
+    )
+    serving._old.__wrapped__(monkeypatch)
+
+    def legacy_prepare(*args, **kwargs):
+        raise AssertionError('core serving fixture called legacy _prepare')
+
+    monkeypatch.setattr(serving.SDMClient, '_prepare', legacy_prepare)
+    request = serving._materialized(monkeypatch, unicode_feature=True)
+    # Fixture helpers own only their original three routes. The actual new
+    # producer requires the full existing preparation inventory as well.
+    from test_t136_forecast_capture import EN
+
+    routes = ','.join(list(_routing.S0) + EN.core_routes({}))
+
+    def ask(captured):
+        boundary = RUNNER._Boundary() if captured else None
+        observed = boundary.reset() if boundary else None
+        try:
+            result, received = serving._predict(
+                monkeypatch, request, routes, max_request_bytes=limit
+            )
+            return result, received, observed
+        finally:
+            if boundary:
+                boundary.close()
+
+    plain, plain_received, _ = ask(False)
+    captured, received, observed = ask(True)
+    assert observed is not None
+    if limit is None:
+        assert not isinstance(plain, Exception), plain
+        assert not isinstance(captured, Exception), captured
+        assert captured.to_pandas().equals(plain.to_pandas())
+        assert captured.items == plain.items
+        assert captured.metadata == plain.metadata
+        assert all(
+            path == serving.INVOCATIONS
+            for path, _, _ in [*plain_received, *received]
+        )
+        plain_body = json.loads(plain_received[0][1])
+        captured_body = json.loads(received[0][1])
+        plain_id = json.loads(
+            plain_body['dataframe_records'][0]['request_json']
+        )['metadata']['request_id']
+        captured_id = json.loads(
+            captured_body['dataframe_records'][0]['request_json']
+        )['metadata']['request_id']
+        assert plain_id != captured_id
+        assert [
+            CHECK.masked_serving(json.loads(body)) for _, body, _ in received
+        ] == [
+            CHECK.masked_serving(json.loads(body))
+            for _, body, _ in plain_received
+        ]
+        [entry] = observed.core()['predictions']
+        [call] = entry['calls']
+        assert call['body_sha256'] == hashlib.sha256(received[0][1]).hexdigest()
+        assert call['body'] == json.loads(received[0][1])
+        assert call['input_body_sha256'] != call['body_sha256']
+        assert (
+            hashlib.sha256(
+                base64.b64decode(call['input_body_base64'])
+            ).hexdigest()
+            == call['input_body_sha256']
+        )
+    else:
+        assert type(captured) is type(plain)
+        assert (captured.code, captured.message, captured.details) == (
+            plain.code,
+            plain.message,
+            plain.details,
+        )
+        assert received == plain_received == []
+        [entry] = observed.core()['predictions']
+        [call] = entry['calls']
+        assert call['body'] is None
+    checked = reader().view(observed.core(), observed.operations)
+    reader().check_receipts(
+        checked['attempts'],
+        [
+            {
+                'parsed': json.loads(body),
+                'sha256': hashlib.sha256(body).hexdigest(),
+            }
+            for _, body, _ in received
+        ],
+    )
 
 
 def test_direct_body_snapshot_cannot_change_while_retaining_the_observed_hash():

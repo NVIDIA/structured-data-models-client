@@ -108,6 +108,7 @@ pub(crate) fn run(
             facts,
             Arc::clone(&zones),
             true,
+            false,
         )?,
         TestOperation::Finish { result } => {
             let result: OperationResult = take_json(attachments, result)?;

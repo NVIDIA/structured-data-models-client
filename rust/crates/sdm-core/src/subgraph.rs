@@ -426,22 +426,25 @@ impl Walk<'_> {
                 }
                 let seeds = take_array(named(&frame, fkey)?, &first_row)?;
                 let columns = sample_columns(self.graph, dst_table, self.excluded);
-                let answer = self.times.read(
-                    self.asker,
-                    dst_table,
-                    one_batch(
-                        &ask(
-                            self.asker,
-                            sample::by_pkey(
-                                dst_table,
-                                columns.clone(),
-                                key_set(self.asker, sample::seeds(seeds, vec![])?)?,
-                                false,
-                            )?,
-                        )
-                        .await?,
-                    )?,
-                )?;
+                let answer = self
+                    .times
+                    .read(
+                        self.asker,
+                        dst_table,
+                        one_batch(
+                            &ask(
+                                self.asker,
+                                sample::by_pkey(
+                                    dst_table,
+                                    columns.clone(),
+                                    key_set(self.asker, sample::seeds(seeds, vec![])?)?,
+                                    false,
+                                )?,
+                            )
+                            .await?,
+                        )?,
+                    )
+                    .await?;
                 if answer.num_rows() > 0 {
                     let positions = batches(&answer, distinct.len())?;
                     let mut answered: Vec<Option<usize>> = vec![None; distinct.len()];
@@ -603,7 +606,8 @@ impl Walk<'_> {
             let src_table = table_named(self.graph, src)?;
             let answer = self
                 .times
-                .read(self.asker, src_table, one_batch(&answer)?)?;
+                .read(self.asker, src_table, one_batch(&answer)?)
+                .await?;
             if answer.num_rows() == 0 {
                 continue;
             }
@@ -914,17 +918,88 @@ fn first_of_each_key(
 }
 
 /// A text feature's values as the reference's words.
-fn words(array: &ArrayRef) -> Result<Vec<Vec<String>>, CoreError> {
-    use arrow_array::Array;
-    use arrow_array::cast::AsArray;
+fn words(
+    array: &ArrayRef,
+) -> Result<Vec<Vec<sdm_contract::scalar::unicode::UnicodeText>>, CoreError> {
     if array.data_type() != &arrow_schema::DataType::Utf8 {
         // The schema's consistency check holds a text feature to text.
         return Err(internal("a text feature's values are not text"));
     }
-    let text = array.as_string::<i32>();
-    Ok((0..text.len())
-        .map(|i| sdm_engine::words::normalize((!text.is_null(i)).then(|| text.value(i))))
-        .collect())
+    words_with(array, sdm_engine::words::normalize)
+}
+
+/// A native frame's selected strings, using its reached lowercase profile.
+/// Offset widths remain physical facts; neither path narrows or casts arrays.
+#[cfg(test)]
+pub(crate) fn frame_words(
+    array: &ArrayRef,
+    profile: sdm_engine::words::CasingProfile,
+) -> Result<Vec<Vec<sdm_contract::scalar::unicode::UnicodeText>>, CoreError> {
+    words_with(array, |value| {
+        sdm_engine::words::normalize_with_profile(value, profile)
+    })
+}
+
+fn words_with(
+    array: &ArrayRef,
+    normalize: impl Fn(Option<&str>) -> Vec<String>,
+) -> Result<Vec<Vec<sdm_contract::scalar::unicode::UnicodeText>>, CoreError> {
+    use arrow_array::cast::AsArray;
+
+    match array.data_type() {
+        arrow_schema::DataType::Utf8 => Ok(array
+            .as_string::<i32>()
+            .iter()
+            .map(|value| normalize(value).into_iter().map(Into::into).collect())
+            .collect()),
+        arrow_schema::DataType::LargeUtf8 => Ok(array
+            .as_string::<i64>()
+            .iter()
+            .map(|value| normalize(value).into_iter().map(Into::into).collect())
+            .collect()),
+        _ => Err(internal("a text feature's values are not text")),
+    }
+}
+
+#[cfg(test)]
+mod frame_words_tests {
+    use std::sync::Arc;
+
+    use arrow_array::{ArrayRef, LargeStringArray, StringArray};
+    use sdm_engine::words::{CasingProfile, UnicodeDataVersion};
+
+    #[test]
+    fn native_profiles_read_both_string_offset_widths_and_selected_slices() {
+        let values = [
+            Some("unselected"),
+            Some("ΟΣ İ a\0b"),
+            None,
+            Some("東京"),
+            Some("unselected"),
+        ];
+        for array in [
+            Arc::new(StringArray::from(values.to_vec())) as ArrayRef,
+            Arc::new(LargeStringArray::from(values.to_vec())) as ArrayRef,
+        ] {
+            let selected = array.slice(1, 3);
+            let before = selected.to_data();
+            assert_eq!(
+                super::frame_words(
+                    &selected,
+                    CasingProfile::FullRoot(UnicodeDataVersion::V15_0)
+                )
+                .unwrap(),
+                [vec!["ος", "i\u{307}", "a\0b"], vec![], vec!["東京"]]
+            );
+            assert_eq!(
+                super::frame_words(&selected, CasingProfile::Simple(UnicodeDataVersion::V17_0))
+                    .unwrap(),
+                [vec!["οσ", "i", "a\0b"], vec![], vec!["東京"]]
+            );
+            assert_eq!(selected.to_data(), before);
+            assert_eq!(array.len(), 5);
+        }
+    }
 }
 
 #[cfg(test)]

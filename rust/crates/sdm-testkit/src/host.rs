@@ -99,8 +99,13 @@ pub struct Observed {
     /// What a failed `predict` had answered before it failed, as the core
     /// carried it on its error (`CoreError.answered`, T2.1g): the result's
     /// columns and rows, as a predicted answer's, and the rows those calls
-    /// score. In process only; no observation writes it yet.
+    /// score. Published separately from a successful prediction so failed
+    /// paid work remains independent observation evidence.
     pub answered: Option<Value>,
+    /// Actual taken CallModel bodies, including calls whose response failed.
+    pub model_calls: Vec<Value>,
+    /// Each actual legacy Predict keeps its own terminal products.
+    pub legacy_predictions: Vec<Value>,
     /// The explanation of `predict`'s result (T2.13), where the core gave
     /// one: its Arrow schema's `explanation` metadata, the JSON text the
     /// core wrote. Apart from the answer, whose shape a gate's checkpoint
@@ -223,6 +228,10 @@ fn answered_of(handle: &HostRun, out: &Outgoing) -> Result<Option<Value>> {
     Ok(Some(json!({
         "result": result_rows(&result)?,
         "rows": answered.rows,
+        "model": result.schema.metadata().get("model").context("carried model is absent")?,
+        "request_id": result.schema.metadata().get("request_id").context("carried request id is absent")?,
+        "metadata": serde_json::from_str::<Value>(result.schema.metadata().get("metadata").context("carried metadata is absent")?)?,
+        "outputs": serde_json::from_str::<Value>(result.schema.metadata().get("outputs").context("carried outputs are absent")?)?,
     })))
 }
 
@@ -365,6 +374,8 @@ pub fn run_edited(case: &Case, bases: &Bases, edits: &[SchemaEdit]) -> Result<Ob
         driver: None,
         edits: vec![],
         answered: None,
+        model_calls: Vec::new(),
+        legacy_predictions: Vec::new(),
         explanation: None,
     })
 }
@@ -959,7 +970,11 @@ fn drive(
                     let mut fetched = json!({"request": step.request, "plan": step.plan});
                     // Plan B's read of a table as it stands, marked as the
                     // core marks it (T3.4), on the fetch and its statements.
-                    log.purpose = step.purpose.map(|_| "locate");
+                    log.purpose = step.purpose.map(|purpose| match purpose {
+                        sdm_contract::run::FetchPurpose::Locate => "locate",
+                        sdm_contract::run::FetchPurpose::DescribeResult => "describe_result",
+                        sdm_contract::run::FetchPurpose::SourceRows => "source_rows",
+                    });
                     if let Some(purpose) = step.purpose {
                         fetched["purpose"] = json!(purpose);
                     }
@@ -1131,6 +1146,8 @@ fn describe_on(
         driver: None,
         edits: Vec::new(),
         answered: None,
+        model_calls: Vec::new(),
+        legacy_predictions: Vec::new(),
         explanation: None,
     };
     let handle = match HostRun::start(&source.root(), &message, attachments) {
@@ -1977,6 +1994,8 @@ pub fn materialize_repeatedly_holding(
             driver: None,
             edits: Vec::new(),
             answered: None,
+            model_calls: Vec::new(),
+            legacy_predictions: Vec::new(),
             explanation: None,
         };
         materialize(
@@ -2114,6 +2133,47 @@ fn predict(
     observed: &mut Observed,
     root: &CompositionRoot,
 ) -> Result<()> {
+    // Every invocation starts with no partial/explanation from its predecessor.
+    observed.answered = None;
+    observed.explanation = None;
+    let run = observed.operations.len();
+    let result = predict_run(case, spec, state, observed, root);
+    let (completion, predicted, error) = if result.is_ok() {
+        match &observed.answer {
+            Answer::Predicted(value) => {
+                let mut value = value.clone();
+                if let Some(explanation) = &observed.explanation {
+                    value["result"]["explanation"] = json!(explanation);
+                }
+                ("done", value, Value::Null)
+            }
+            Answer::Error { kind, code, .. } => {
+                ("error", Value::Null, json!({"kind": kind, "code": code}))
+            }
+            _ => ("unobserved", Value::Null, Value::Null),
+        }
+    } else {
+        ("unobserved", Value::Null, Value::Null)
+    };
+    if observed.operations.get(run).map(String::as_str) == Some("predict") {
+        observed.legacy_predictions.push(json!({
+            "run": run,
+            "completion": completion,
+            "result": predicted,
+            "error": error,
+            "answered": observed.answered,
+        }));
+    }
+    result
+}
+
+fn predict_run(
+    case: &Case,
+    spec: &PredictInput,
+    state: HeldState,
+    observed: &mut Observed,
+    root: &CompositionRoot,
+) -> Result<()> {
     observed.operations.push("predict".into());
     observed.inputs.push(json!({
         "op": "predict",
@@ -2223,10 +2283,8 @@ fn predict(
             return Ok(());
         }
     };
-    // Each model call answered in turn, a forecast's one per step (T1.36
-    // fix 21); the body recorded is the last call's, as the Python runner
-    // records `core.predicted.body`, and every call's is kept in the
-    // answer's `calls`, which the observation leaves out (T1.36 fix 22).
+    // Each actual call remains observed even if a later reply fails.
+    // A successful result also retains its existing last/all body fields.
     let mut bodies: Vec<Value> = Vec::new();
     // The scripted endpoint over the calls in order, failing the case's
     // `fail_call` (T2.1a), as the Python runner serves it.
@@ -2261,6 +2319,13 @@ fn predict(
             );
         }
         bodies.push(sent);
+        observed.model_calls.push(json!({
+            "run": observed.operations.len() - 1,
+            "body": bodies.last().unwrap(),
+            "body_sha256": crate::case::sha256(&body),
+            "reply": null,
+            "model_endpoint": null,
+        }));
         // The test's script where one stands in for the rule on this thread
         // (`endpoint::answered_by`), its bytes as they travel; else the
         // scripted endpoint, failing the case's call, and answering beside
@@ -2299,8 +2364,11 @@ fn predict(
         }))
         .map_err(|_| anyhow!("a reply does not encode"))?;
         let answer = BTreeMap::from([(AttachmentId(1), Attachment::Bytes(answered))]);
+        observed.model_calls.last_mut().unwrap()["reply"] =
+            json!({"outcome": "response", "status": status});
         if let Err(failed) = handle.reply(&reply, answer) {
             observed.answer = error_of(&failed)?;
+            observed.answered = answered_of(&handle, &failed)?;
             return Ok(());
         }
         next = handle.next();
@@ -2330,6 +2398,7 @@ fn predict(
                     "body": sent,
                     "model": predicted.model,
                     "request_id": predicted.request_id,
+                    "outputs": predicted.outputs,
                     "metadata": serde_json::from_slice::<Value>(&metadata)?,
                     "result": result_rows(&result)?,
                 });

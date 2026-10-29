@@ -44,7 +44,7 @@ from sdm_client import (
     _routing,
 )
 from sdm_client._rust import codec
-from sdm_client._rust import materialize as _rust_materialize
+from sdm_client._rust import native_sql as _rust_native_sql
 from sdm_client._rust import run as _rust_run
 from sdm_client._rust import schema as _rust_schema
 from sdm_client._rust.run import run
@@ -1310,13 +1310,14 @@ def test_a_source_of_5000_columns_is_described_and_materialized_on_the_core(
         taken.append(operation['op'])
         return finished
 
-    for module in (_rust_schema, _rust_materialize):
+    for module in (_rust_schema, _rust_native_sql):
         monkeypatch.setattr(module, 'run', counted)
     request = _materialize(
         f'CREATE OR REPLACE TABLE users AS SELECT *, {features} FROM users'
     )
-    # Each core run finished with its result: Done.
-    assert taken == ['describe_source', 'materialize']
+    # The actual task Run returns its nested materialized request at Done;
+    # no legacy materialize start is synthesized by the native SQL adapter.
+    assert taken == ['describe_source', 'prepare_materialize']
     users = request._payloads[0]['context']['related_tables']['users']
     assert len(users['columns']) == 5_001
 

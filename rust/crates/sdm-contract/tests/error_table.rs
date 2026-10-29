@@ -5,10 +5,42 @@
 //! The table of the kinds each code may carry (decision E22): every code
 //! and every kind against it, through each public constructor.
 
+use std::collections::BTreeMap;
 use std::panic::catch_unwind;
 
 use sdm_contract::data::ProviderError;
 use sdm_contract::{Code, CoreError, Detail, ErrorCode, ErrorKind, Sentence};
+
+#[test]
+fn optional_presentation_details_leave_the_common_error_small() {
+    let error = CoreError::new(Sentence::Internal, "message");
+    assert!(std::mem::size_of_val(&error) <= 128);
+}
+
+#[test]
+fn public_details_preserve_absent_empty_and_named_wire_forms() {
+    for details in [
+        None,
+        Some(BTreeMap::new()),
+        Some(BTreeMap::from([("model".to_owned(), Detail::text("m"))])),
+    ] {
+        let mut error = CoreError::new(Sentence::Internal, "message")
+            .with_field("rule", Detail::text("private"));
+        error.public_details = details.clone().map(Box::new);
+        let encoded = serde_json::to_value(&error).unwrap();
+        match &details {
+            None => assert!(encoded.get("public_details").is_none()),
+            Some(details) => assert_eq!(
+                encoded.get("public_details"),
+                Some(&serde_json::to_value(details).unwrap())
+            ),
+        }
+        let decoded: CoreError = serde_json::from_value(encoded).unwrap();
+        assert_eq!(decoded, error);
+        assert_eq!(decoded.public_details.as_deref(), details.as_ref());
+        assert_eq!(decoded.fields["rule"], Detail::text("private"));
+    }
+}
 
 /// The table as this test states it, one row per code; the crate's must
 /// agree with it pair by pair.

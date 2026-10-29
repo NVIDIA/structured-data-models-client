@@ -1175,24 +1175,40 @@ pub(crate) fn value_text(
 pub(crate) fn json_value_repr(value: &sdm_wire::json::Value) -> String {
     use parser::float_repr::Shown;
     use sdm_wire::json::{self, Value};
-    fn shown(value: &Value) -> Shown {
-        match value {
-            Value::Null => Shown::None,
-            Value::Bool(v) => Shown::Bool(*v),
-            Value::Text(v) => Shown::Text(v.clone()),
-            Value::Number(v) if json::is_integer_token(v) => {
-                Shown::Int(sdm_wire::response::integer_text(v).unwrap_or_else(|| v.clone()))
-            }
-            Value::Number(v) => Shown::Float(v.parse().unwrap_or(f64::NAN)),
-            Value::Array(v) => Shown::List(v.iter().map(shown).collect()),
-            Value::Object(v) => Shown::Dict(
-                v.iter()
-                    .map(|(k, v)| (Shown::Text(k.clone()), shown(v)))
-                    .collect(),
-            ),
+    match value {
+        Value::Null => "None".to_owned(),
+        Value::Bool(true) => "True".to_owned(),
+        Value::Bool(false) => "False".to_owned(),
+        Value::Text(value) => match value.utf8() {
+            Some(text) => parser::float_repr::text_repr(text),
+            None => parser::float_repr::points_repr(value.points()),
+        },
+        Value::Number(value) if json::is_integer_token(value) => {
+            Shown::Int(sdm_wire::response::integer_text(value).unwrap_or_else(|| value.clone()))
+                .repr()
         }
+        Value::Number(value) => Shown::Float(value.parse().unwrap_or(f64::NAN)).repr(),
+        Value::Array(values) => format!(
+            "[{}]",
+            values
+                .iter()
+                .map(json_value_repr)
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+        Value::Object(values) => format!(
+            "{{{}}}",
+            values
+                .iter()
+                .map(|(key, value)| format!(
+                    "{}: {}",
+                    parser::float_repr::text_repr(key),
+                    json_value_repr(value)
+                ))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
     }
-    shown(value).repr()
 }
 
 /// Python's `repr` of a text, as the old client quotes a piece of an

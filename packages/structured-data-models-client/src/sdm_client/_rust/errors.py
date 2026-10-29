@@ -348,7 +348,10 @@ class _Words(string.Formatter):
             return type(given).__name__
         if conversion == 't':
             native = _held().get('frame_timestamp')
-            if native is not None and isinstance(value, codec.Temporal):
+            if native is not None and (
+                isinstance(value, codec.Temporal)
+                or self._fields.get('frame_native_first') is True
+            ):
                 return native({**self._fields, 'value': value})
             if isinstance(value, str):
                 return str(_as_timestamp(value))
@@ -456,6 +459,15 @@ def _said(sentence: str, fields: dict[str, Any]) -> str:
     r""":func:`render` with the values the call in progress holds
     (:func:`holding`), or, where the core gave a sentence its fields cannot
     fill, the defect named: never a sentence the core did not choose."""
+    if sentence in (
+        'relationships_disjoint_one',
+        'relationships_disjoint_several',
+    ):
+        present = _held().get('frame_relationship_overlap')
+        if present is not None:
+            # Actual native relationship rendering is outside the template
+            # defect guard, just as it was outside the engine guard.
+            fields = {**fields, **present(fields)}
     try:
         return render(sentence, fields, _HostValues(_held(), fields))
     except (KeyError, IndexError, TypeError, ValueError, AttributeError):
@@ -485,8 +497,30 @@ def source_values(source: Any) -> dict[str, Callable[[dict[str, Any]], Any]]:
     return values
 
 
+class _ObservedRepr:
+    """A native repr already reached before the core selected its sentence."""
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+    def __repr__(self) -> str:
+        return self.text
+
+
 def _fields(given: Mapping[str, Any]) -> dict[str, Any]:
-    return {name: _detail(value) for name, value in given.items()}
+    fields = {name: _detail(value) for name, value in given.items()}
+    if 'native_absent_repr_points' in fields:
+        fields['absent'] = _ObservedRepr(
+            ''.join(map(chr, fields['native_absent_repr_points']))
+        )
+    if fields.get('native_relational_constant'):
+        if 'target_points' in fields:
+            fields['target'] = ''.join(map(chr, fields['target_points']))
+        if 'question_repr_points' in fields:
+            fields['question'] = _ObservedRepr(
+                ''.join(map(chr, fields['question_repr_points']))
+            )
+    return fields
 
 
 def _timestamp(value: codec.Temporal) -> Any:
@@ -646,8 +680,8 @@ def error_from_core(
     ``driver_class`` names the class of the driver exception behind a
     ``PROVIDER_ERROR``, which the run loop saw and the core never does.
     """
-    message = codec.read(control, attachments)
-    error = message['error']
+    envelope = codec.read(control, attachments)
+    error = envelope['error']
     code = error['code']
     cls = ERRORS[code]
     fields = _fields(error.get('fields', {}))
@@ -656,12 +690,71 @@ def error_from_core(
         'kind': error['kind'],
         'retryable': bool(error.get('retryable', False)),
     }
+    if error.get('public_details') is not None:
+        details = _fields(error['public_details'])
+    frame_payload_range = fields.get('frame_payload_range') is True
+    if frame_payload_range:
+        if error['sentence'] != 'past_int64':
+            raise codec.CodecError('invalid frame request range presentation')
+        details.pop('frame_payload_range', None)
     response_cause: Exception | None = None
     if code == 'PROVIDER_ERROR' and driver_class is not None:
         details['driver_class'] = driver_class
     if (code, details.get('rule')) in AS_THE_BASE_CLASS:
         cls = StructuredDataError
     sentence = error['sentence']
+    if (
+        sentence in {'ranking_output_unknown', 'ranking_outputs_unknown'}
+        and fields.get('native_ranking_outputs')
+        and (present := _held().get('relational_ranking_outputs')) is not None
+    ):
+        fields['unsupported'] = [
+            _ObservedRepr(shown) for shown in present(fields)
+        ]
+    if (
+        sentence == 'relational_output_shapes'
+        and (present := _held().get('relational_output_shapes')) is not None
+    ):
+        fields['shapes'] = _ObservedRepr(present(fields))
+    if (
+        sentence == 'direct_unknown_model'
+        and fields.get('native_model')
+        and (present := _held().get('relational_model')) is not None
+    ):
+        shown, actual = present(fields)
+        fields['model'] = _ObservedRepr(shown)
+        details['model'] = actual
+    if (
+        sentence == 'model_lacks_outputs'
+        and fields.get('native_model_outputs')
+        and (present := _held().get('relational_model_outputs')) is not None
+    ):
+        shown, actual = present(fields)
+        fields['unsupported_outputs'] = _ObservedRepr(shown)
+        details['unsupported_outputs'] = actual
+    if (
+        sentence == 'model_lacks_task'
+        and fields.get('native_model_task')
+        and (present := _held().get('relational_model_task')) is not None
+    ):
+        # Execute actual repr only after Rust selects this refusal, outside
+        # _said's formatting-defect catch. Details retain the later native
+        # owner read, including any mutation caused by that repr.
+        shown, actual = present(fields)
+        fields['task'] = _ObservedRepr(shown)
+        details['task'] = actual
+        details.pop('native_model_task', None)
+    if (
+        fields.get('native_relational_constant')
+        and (present := _held().get('relational_target')) is not None
+    ):
+        details['target'] = present(fields)
+    if (
+        fields.get('native_relational_inference')
+        and (present := _held().get('relational_unsupported')) is not None
+    ):
+        fields['unsupported'] = present(fields)
+        details['unsupported'] = fields['unsupported']
     if (
         sentence == 'no_table'
         and (present := _held().get('direct_task_tables')) is not None
@@ -692,6 +785,29 @@ def error_from_core(
         # itself raise under active runtime limits, as at the reference f-string.
         # Keep it outside _said's formatting-defect catch.
         fields['index'] = present(fields)
+    if (
+        sentence
+        in {
+            'relational_row_bounds',
+            'relational_forecast_step_unexpected',
+            'relational_row_repeated',
+            'relational_id_missing',
+            'relational_id_mismatch',
+        }
+        and (present := _held().get('relational_response_value')) is not None
+    ):
+        # Rust selected the exact gathered-response diagnostic and value.
+        # Its native str/repr runs only now, outside _said's template-defect
+        # catch, so a real native formatting fault remains that actual fault.
+        fields[fields['native_field']] = present(fields)
+    if (
+        sentence in {'probabilities_none', 'probabilities_unread'}
+        and (present := _held().get('relational_rank_candidate')) is not None
+    ):
+        # Native candidate repr is part of this selected diagnostic. The
+        # ranking host holds its displayed value for the template, so the
+        # actual repr runs exactly once and outside _said's defect catch.
+        present(fields)
     if (
         sentence
         in {
@@ -746,8 +862,140 @@ def error_from_core(
                     fields['diagnostic'] = (
                         fields['before'] + repr(value) + fields['after']
                     )
-        details['diagnostic'] = fields['diagnostic']
-    said = _said(sentence, fields)
+        if not fields.get('native_relational_contract'):
+            details['diagnostic'] = fields['diagnostic']
+    native_key_cause: Exception | None = None
+    key_reason = fields.get('native_key_reason')
+    if (
+        sentence in ('frame_native_caller', 'frame_native_internal')
+        and key_reason is not None
+    ):
+        # Core selected the admission and location. These are the original
+        # native ValueError recipes at the reached presentation boundary.
+        column, table_name = fields['column'], fields['table']
+        if key_reason == 'component_null':
+            message = (
+                f"composite key column '{column}' holds a null value; every "
+                "part of a row's identity has to be present"
+            )
+        elif key_reason == 'approximate_component':
+            message = (
+                f"composite key column '{column}' is {fields['dtype']}; a floating-point "
+                "column cannot be part of a row's identity because its text "
+                'is not reproducible. Use an exact column, or add a column '
+                'holding the identity you intend.'
+            )
+        elif key_reason == 'name_long':
+            message = (
+                f'An identity over {fields["columns"]!r} needs a column name longer '
+                f'than {fields["limit"]} characters, which a warehouse will not '
+                'accept. Add a column holding that identity and declare it '
+                'instead.'
+            )
+        elif key_reason == 'components_missing':
+            message = (
+                f'Cannot use {fields["columns"]!r} as a composite primary key of '
+                f"table '{table_name}': column(s) {fields['missing']!r} are not present"
+            )
+        elif key_reason == 'primary_stype':
+            message = (
+                f"Primary key '{column}' must have 'ID' semantic type "
+                f"(got '{fields['stype']}')"
+            )
+        elif key_reason == 'key_dtype':
+            message = (
+                f"Column '{column}' received an incompatible semantic type "
+                f"(got dtype='{fields['dtype']}' and stype='{fields['stype']}')"
+            )
+        elif key_reason == 'time_stype':
+            message = (
+                f"Time column '{column}' must have 'timestamp' semantic type "
+                f"(got '{fields['stype']}')"
+            )
+        elif key_reason == 'time_is_key':
+            message = (
+                f"Cannot specify column '{column}' as a time column since "
+                'it is already defined to be a primary key'
+            )
+        elif key_reason == 'role_missing':
+            native_key_cause = KeyError(
+                f"Column '{column}' not found in table '{table_name}'"
+            )
+            message = str(native_key_cause)
+        elif key_reason == 'unregistered_list_target':
+            message = (
+                'Multilabel-classification queries based on '
+                "'LIST_DISTINCT' are not supported yet. If you "
+                'planned to write a link prediction query instead, '
+                f"make sure to register '{column}' as a foreign key."
+            )
+            native_key_cause = NotImplementedError(message)
+            fields['native_type'] = type(native_key_cause).__name__
+        elif key_reason == 'time_bound_missing':
+            native_key_cause = KeyError(table_name)
+            message = str(native_key_cause)
+        elif key_reason == 'empty_frame':
+            message = 'Data frame is empty'
+        else:
+            raise codec.CodecError(
+                'unknown core-selected native identity refusal'
+            )
+        if native_key_cause is None:
+            native_key_cause = ValueError(message)
+        with holding(frame_native_message=lambda observed: message):
+            said = _said(sentence, fields)
+    if key_reason in ('task_validation', 'metadata_validation'):
+        if sentence not in (
+            'iterations_below_one',
+            'anchor_entity_not_shared',
+            'context_too_restrictive',
+            'no_entity_at_anchor',
+            'no_entity_at_anchor_later',
+            'no_entity_passed',
+            'no_entity_passed_several',
+            'anchor_too_late',
+            'anchor_too_late_several',
+            'incompatible_semantic_type',
+            'edge_key_types',
+        ):
+            raise codec.CodecError('invalid native frame validation sentence')
+        said = _said(sentence, fields)
+        native_key_cause = ValueError(said)
+    if sentence == 'frame_no_valid_rows':
+        said = _said(sentence, fields)
+        native_key_cause = ValueError(said)
+    native_graph_cause = (
+        sentence == 'frame_native_internal'
+        and fields.get('native_declaration_reason') == 'fixed_large_utf8'
+    )
+    if native_graph_cause:
+        # Rust selected this original fixed declaration and its location.
+        # The native dtype spelling and Python recipe belong to this host's
+        # reached presentation, independently of the shared outer wording.
+        column, table_name = fields['column'], fields['table']
+        fields['native_type'] = 'RuntimeError'
+        fields['native_cause_message'] = (
+            "Encountered unsupported data type 'large_string[pyarrow]' for "
+            f"column '{column}' in table '{table_name}'. Please either cast "
+            'the column to a supported type before building the table '
+            f"(for example df['{column}'] = df['{column}'].astype('int64')) "
+            'or remove the column from this table.'
+        )
+        with holding(
+            frame_native_message=lambda observed: observed[
+                'native_cause_message'
+            ]
+        ):
+            said = _said(sentence, fields)
+    elif native_key_cause is None:
+        said = _said(sentence, fields)
+    if frame_payload_range:
+        bare_cause = ValueError(_said('past_int64_bare', fields))
+        if internal_context is not None:
+            bare_cause.__context__ = internal_context.__context__
+        native_key_cause = ValueError(said)
+        native_key_cause.__cause__ = bare_cause
+        native_key_cause.__context__ = bare_cause
     part = error.get('part')
     if part is not None:
         # The part of a question asked in parts it happened in, the core's
@@ -758,6 +1006,10 @@ def error_from_core(
         said = f'{said} {_said(part, fields)}'
     made = _instance(cls, said, code, details)
     made._sentence = sentence
+    if native_graph_cause:
+        made.__cause__ = RuntimeError(fields['native_cause_message'])
+    if native_key_cause is not None:
+        made.__cause__ = native_key_cause
     if sentence == 'direct_response_contract':
         made.__cause__ = (
             response_cause
@@ -773,12 +1025,18 @@ def _detail(value: Any) -> Any:
     return codec.decode_scalar(value)
 
 
+# Native constructor semantic refusals use the original ordinary raise.
+# Other boundaries keep the coded privacy/presentation behavior.
+ErrorPresentation = Literal['coded', 'frame_constructor']
+
+
 def raise_from_core(
     control: bytes,
     attachments: dict[int, Any],
     *,
     driver_class: str | None = None,
     internal_context: BaseException | None = None,
+    presentation: ErrorPresentation = 'coded',
 ) -> NoReturn:
     r"""Raise the public exception, retaining only its selected explicit cause."""
     error = error_from_core(
@@ -787,7 +1045,9 @@ def raise_from_core(
         driver_class=driver_class,
         internal_context=internal_context,
     )
-    raise_error(error, internal_context=internal_context)
+    raise_error(
+        error, internal_context=internal_context, presentation=presentation
+    )
 
 
 def raise_native(
@@ -815,9 +1075,23 @@ def raise_error(
     error: StructuredDataError,
     *,
     internal_context: BaseException | None = None,
+    presentation: ErrorPresentation = 'coded',
 ) -> NoReturn:
     """Keep the selected cause and its caller context at the public boundary."""
     cause = error.__cause__
+    if (
+        presentation == 'frame_constructor'
+        and error.code == 'INVALID_REQUEST'
+        and cause is None
+    ):
+        try:
+            raise error
+        finally:
+            if (
+                internal_context is not None
+                and error.__context__ is internal_context
+            ):
+                error.__context__ = internal_context.__context__
     if cause is None:
         raise error from None
     previous_context = cause.__context__
@@ -886,6 +1160,7 @@ def warn_from_core(
     held: list[dict[str, Any]] | None = None,
     *,
     presentation: WarningPresentation = 'coded',
+    frame_part: dict[str, Any] | None = None,
 ) -> None:
     r"""Shows each warning of a ``warnings`` control message, in order, but
     those whose code ``quiet`` names: one the caller has shown already, or
@@ -942,13 +1217,38 @@ def warn_from_core(
             presentation == 'frame_graph'
             and first['code'] == 'FRAME_ROWS_DROPPED'
         )
-        warnings.warn(
-            text if frame_notice else f'[{first["code"]}] {text}',
-            category=SDMWarning
-            if frame_notice
-            else WARNINGS.get(first['code'], SDMWarning),
-            stacklevel=caller_stacklevel(),
-        )
+        try:
+            warnings.warn(
+                text if frame_notice else f'[{first["code"]}] {text}',
+                category=SDMWarning
+                if frame_notice
+                else WARNINGS.get(first['code'], SDMWarning),
+                stacklevel=caller_stacklevel(),
+            )
+        except Exception as native_error:
+            # Only this frame-task notice was originally emitted inside the
+            # engine guard. CONTEXT_CAPPED in the same warning batch, graph
+            # advice and SQL sampler notices retain their unguarded scope.
+            fields = first.get('fields', {})
+            if not (
+                presentation == 'frame_graph'
+                and first['code'] == 'HOPS_IGNORED'
+                and 'frame_native_rows_per_call' in fields
+            ):
+                raise
+            from sdm_client._rust.frame_native import (
+                NativeFrameFailure,
+                guard_failure,
+            )
+
+            observed = decoded(fields)
+            guard_failure(
+                NativeFrameFailure.capture(native_error),
+                origin='engine',
+                dropped_summary=observed['frame_native_dropped_summary'],
+                rows_per_call=observed['frame_native_rows_per_call'],
+                part=frame_part,
+            )
 
 
 def _opening(template: str, fields: dict[str, Any]) -> str:

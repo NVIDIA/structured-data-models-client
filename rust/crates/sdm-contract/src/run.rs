@@ -87,6 +87,22 @@ pub struct FetchStep {
     /// of the operation's own.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub purpose: Option<FetchPurpose>,
+    /// Complete issued-plan partition of one logical read, when requested
+    /// by a consumer that constructs an actual whole native source column.
+    /// Independent reads of the same relation have different first IDs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub partition: Option<FetchPartition>,
+    /// Counted task lookup data, before native business-column construction.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lookup: Option<crate::materialize::PreparedLookupRows>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FetchPartition {
+    pub first: ReplyId,
+    pub ordinal: u32,
+    pub parts: u32,
 }
 
 /// Why a run asks a fetch ([`FetchStep::purpose`]).
@@ -95,6 +111,11 @@ pub struct FetchStep {
 pub enum FetchPurpose {
     /// A read of a table as it stands at this `materialize`.
     Locate,
+    /// Schema-only facts used to select the actual data representation.
+    DescribeResult,
+    /// Actual source rows whose original native column construction is
+    /// completed through the finite provider-backed materialization port.
+    SourceRows,
 }
 
 /// Which model endpoint a call goes to.

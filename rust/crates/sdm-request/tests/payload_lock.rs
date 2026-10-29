@@ -25,7 +25,7 @@ use arrow_array::{
 use sdm_contract::ops::Stype;
 use sdm_contract::schema_check::check;
 use sdm_engine::labels::Labels;
-use sdm_request::options::{Kind, Options, RunMode};
+use sdm_request::options::{Kind, RunMode};
 use sdm_request::payload::{Sampled, SampledColumn, SampledLink, SampledTable, build};
 use sdm_request::predict::INFERENCE_OPTIONS;
 use serde_json::{Value, json};
@@ -53,7 +53,7 @@ fn shop() -> Sampled {
         run_mode: RunMode::Fast,
         use_prediction_time: false,
         return_embeddings: false,
-        options: Options::default(),
+        options: sdm_request::options::default_options(),
         statistic: Some("mean".into()),
         top_k: None,
         rows_per_call: 1,
@@ -138,7 +138,7 @@ fn family() -> Sampled {
         run_mode: RunMode::Best,
         use_prediction_time: false,
         return_embeddings: false,
-        options: Options::default(),
+        options: sdm_request::options::default_options(),
         statistic: None,
         top_k: None,
         rows_per_call: 1,
@@ -178,6 +178,207 @@ fn family() -> Sampled {
         entity_table: "Users".into(),
         link_target: None,
         source_query: String::new(),
+    }
+}
+
+fn unsigned_link_sample(keys: ArrayRef, batch: Vec<usize>, target: u64) -> Sampled {
+    use sdm_engine::labels::LinkValue;
+    Sampled {
+        num_train: 2,
+        num_test: 1,
+        anchors: vec![NO_ANCHOR; 3],
+        kind: Kind::TemporalLink,
+        labels: Labels::Lists(vec![
+            vec![LinkValue::UInt(target)],
+            vec![LinkValue::UInt(target)],
+        ]),
+        windowed: true,
+        run_mode: RunMode::Fast,
+        use_prediction_time: false,
+        return_embeddings: false,
+        options: sdm_request::options::default_options(),
+        statistic: None,
+        top_k: None,
+        rows_per_call: 1,
+        lags: vec![],
+        float_text: |value| format!("{value:?}"),
+        tables: vec![
+            SampledTable {
+                name: "users".into(),
+                primary_key: Some("user_id".into()),
+                batch: vec![0, 1, 2],
+                columns: vec![("user_id".into(), array(Int64Array::from(vec![0, 1, 2])))],
+                stypes: vec![],
+            },
+            SampledTable {
+                name: "items".into(),
+                primary_key: Some("item_id".into()),
+                batch,
+                columns: vec![("item_id".into(), SampledColumn::Arrow(keys))],
+                stypes: vec![],
+            },
+        ],
+        links: vec![],
+        entity_table: "users".into(),
+        link_target: Some("items".into()),
+        source_query: "unsigned link boundary".into(),
+    }
+}
+
+#[test]
+fn unsigned_link_targets_are_exact_decimal_text_through_the_complete_u64_range() {
+    for value in [
+        0,
+        (1_u64 << 53) - 1,
+        1_u64 << 53,
+        (1_u64 << 53) + 1,
+        i64::MAX as u64,
+        (i64::MAX as u64) + 1,
+        u64::MAX,
+    ] {
+        let sampled =
+            unsigned_link_sample(Arc::new(UInt64Array::from(vec![7, 8])), vec![0, 2], value);
+        let payload = built(&sampled);
+        assert_eq!(check("StatePayload", &payload), Ok(()));
+        let table = &payload["context"]["instance_table"];
+        let at = table["columns"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .position(|name| name == "TARGET")
+            .unwrap();
+        assert_eq!(table["rows"][0][at], json!([value.to_string()]));
+    }
+}
+
+#[test]
+fn missing_integer_references_promote_actual_values_before_the_related_key_range_check() {
+    for value in [(i64::MAX as u64) + 1, u64::MAX] {
+        let sampled = unsigned_link_sample(
+            Arc::new(UInt64Array::from(vec![value, value])),
+            vec![0, 2],
+            value,
+        );
+        let error = build(&sampled).unwrap_err();
+        assert_eq!(error.sentence, sdm_contract::Sentence::PastInt64);
+        assert_eq!(error.fields["table"], sdm_contract::Detail::text("items"));
+        assert_eq!(
+            error.fields["column"],
+            sdm_contract::Detail::text("item_id")
+        );
+        assert_eq!(
+            error.fields["row"],
+            sdm_contract::Detail::Scalar(sdm_contract::Scalar::UInt64(0))
+        );
+        let complete = unsigned_link_sample(
+            Arc::new(UInt64Array::from(vec![value; 3])),
+            vec![0, 1, 2],
+            value,
+        );
+        let error = build(&complete).unwrap_err();
+        assert_eq!(
+            error.fields["table"],
+            sdm_contract::Detail::text("instance_table")
+        );
+        assert_eq!(
+            error.fields["column"],
+            sdm_contract::Detail::text("__kumo_entity_ref_1")
+        );
+    }
+    let sampled = unsigned_link_sample(
+        Arc::new(UInt64Array::from(vec![7, u64::MAX])),
+        vec![0, 2],
+        7,
+    );
+    let error = build(&sampled).unwrap_err();
+    assert_eq!(error.fields["table"], sdm_contract::Detail::text("items"));
+    assert_eq!(
+        error.fields["row"],
+        sdm_contract::Detail::Scalar(sdm_contract::Scalar::UInt64(1))
+    );
+}
+
+#[test]
+fn all_current_integer_families_keep_missing_reference_float_inference_and_nulls() {
+    use arrow_array::{Int8Array, Int16Array, UInt8Array, UInt16Array, UInt32Array};
+    for keys in [
+        Arc::new(Int8Array::from(vec![7, 8])) as ArrayRef,
+        Arc::new(Int16Array::from(vec![7, 8])),
+        Arc::new(Int32Array::from(vec![7, 8])),
+        Arc::new(Int64Array::from(vec![7, 8])),
+        Arc::new(UInt8Array::from(vec![7, 8])),
+        Arc::new(UInt16Array::from(vec![7, 8])),
+        Arc::new(UInt32Array::from(vec![7, 8])),
+        Arc::new(UInt64Array::from(vec![7, 8])),
+    ] {
+        let payload = built(&unsigned_link_sample(keys, vec![0, 2], u64::MAX));
+        assert_eq!(
+            payload["schema"]["instance_table"]["columns"]["__kumo_entity_ref_1"]["dtype"],
+            "float64"
+        );
+        let table = &payload["context"]["instance_table"];
+        let at = table["columns"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .position(|name| name == "__kumo_entity_ref_1")
+            .unwrap();
+        assert_eq!(table["rows"][0][at], json!(7.0));
+        assert_eq!(table["rows"][1][at], Value::Null);
+    }
+    for value in [
+        (1_u64 << 53) - 1,
+        1_u64 << 53,
+        (1_u64 << 53) + 1,
+        i64::MAX as u64,
+    ] {
+        let payload = built(&unsigned_link_sample(
+            Arc::new(UInt64Array::from(vec![value, value])),
+            vec![0, 2],
+            value,
+        ));
+        let table = &payload["context"]["instance_table"];
+        let at = table["columns"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .position(|name| name == "__kumo_entity_ref_1")
+            .unwrap();
+        assert_eq!(table["rows"][0][at].as_f64().unwrap(), value as f64);
+        let related = &payload["context"]["related_tables"]["items"];
+        let at = related["columns"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .position(|name| name == "item_id")
+            .unwrap();
+        assert_eq!(
+            related["rows"][0][at],
+            if value > (1_u64 << 53) - 1 {
+                json!(value.to_string())
+            } else {
+                json!(value)
+            }
+        );
+    }
+    for keys in [
+        Arc::new(Int64Array::from(vec![None, Some(8)])) as ArrayRef,
+        Arc::new(UInt64Array::from(vec![None, Some(8)])),
+    ] {
+        let payload = built(&unsigned_link_sample(keys, vec![0, 2], 8));
+        let table = &payload["context"]["instance_table"];
+        let at = table["columns"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .position(|name| name == "__kumo_entity_ref_1")
+            .unwrap();
+        assert_eq!(table["rows"][0][at], Value::Null);
+        assert_eq!(table["rows"][1][at], Value::Null);
+        assert_eq!(
+            payload["predict"]["instance_table"]["rows"][0][at],
+            json!(8.0)
+        );
     }
 }
 
@@ -694,5 +895,193 @@ fn entirely_invalid_partial_maps_leave_the_edge_absent() {
             .unwrap()
             .iter()
             .all(|name| name != "user_id")
+    );
+}
+
+#[test]
+fn native_identifiers_and_classes_share_lossless_logical_payload_values() {
+    use sdm_contract::data::strings::StringEncoding;
+    use sdm_contract::scalar::unicode::UnicodeText;
+    use sdm_wire::json::Value as Logical;
+    let pair = UnicodeText::from_points([0xd83d, 0xde3a]).unwrap();
+    let scalar = UnicodeText::from("😺");
+    let lone = UnicodeText::from_points([0xd800]).unwrap();
+    let mut sample = family();
+    sample.kind = Kind::Multiclass;
+    sample.labels = Labels::Text(vec![pair.clone(), scalar.clone()]);
+    let (keys, encoding) =
+        sdm_engine::strings::encode(&[pair.clone(), scalar.clone(), lone.clone()]);
+    assert_eq!(encoding, StringEncoding::Utf8Surrogatepass);
+    sample.tables[0].columns[0].1 = SampledColumn::Strings(keys, encoding);
+    let built = build(&sample).unwrap();
+    let classes = built
+        .logical
+        .get("task")
+        .unwrap()
+        .get("target")
+        .unwrap()
+        .get("classes")
+        .unwrap();
+    assert_eq!(
+        classes,
+        &Logical::Array(vec![
+            Logical::Text(pair.clone()),
+            Logical::Text(scalar.clone())
+        ])
+    );
+    let related = built
+        .logical
+        .get("predict")
+        .unwrap()
+        .get("related_tables")
+        .unwrap()
+        .get("Users")
+        .unwrap()
+        .get("rows")
+        .unwrap();
+    let Logical::Array(rows) = related else {
+        panic!("related rows")
+    };
+    let Logical::Array(cells) = &rows[0] else {
+        panic!("related cells")
+    };
+    assert_eq!(cells[1], Logical::Text(lone));
+    // Inspection retains distinct points, while model JSON keeps the same
+    // native transport escapes and is not reparsed to reconstruct them.
+    assert!(
+        built
+            .bytes
+            .windows(12)
+            .any(|bytes| bytes == br"\ud83d\ude3a")
+    );
+}
+
+#[test]
+fn constructed_string_values_keep_width_and_missingness_at_the_payload_boundary() {
+    use arrow_array::{BooleanArray, Float32Array, Int8Array, UInt8Array};
+    let variants: Vec<(ArrayRef, Vec<Value>)> = vec![
+        (
+            Arc::new(Int8Array::from(vec![
+                Some(-1),
+                None,
+                Some(0),
+                Some(1),
+                Some(2),
+            ])),
+            json!(["-1", null, "0", "1", "2"])
+                .as_array()
+                .unwrap()
+                .clone(),
+        ),
+        (
+            Arc::new(UInt8Array::from(vec![0, 1, 2, 3, 255])),
+            json!(["0", "1", "2", "3", "255"])
+                .as_array()
+                .unwrap()
+                .clone(),
+        ),
+        (
+            Arc::new(UInt64Array::from(vec![
+                0,
+                9_007_199_254_740_993,
+                i64::MAX as u64,
+                (i64::MAX as u64) + 1,
+                u64::MAX,
+            ])),
+            json!([
+                "0",
+                "9007199254740993",
+                "9223372036854775807",
+                "9223372036854775808",
+                "18446744073709551615"
+            ])
+            .as_array()
+            .unwrap()
+            .clone(),
+        ),
+        (
+            Arc::new(BooleanArray::from(vec![
+                Some(true),
+                Some(false),
+                None,
+                Some(true),
+                Some(false),
+            ])),
+            json!(["True", "False", null, "True", "False"])
+                .as_array()
+                .unwrap()
+                .clone(),
+        ),
+        (
+            Arc::new(Float32Array::from(vec![
+                Some(0.1),
+                Some(-0.0),
+                Some(f32::NAN),
+                None,
+                Some(0.25),
+            ])),
+            json!(["0.10000000149011612", "-0.0", null, null, "0.25"])
+                .as_array()
+                .unwrap()
+                .clone(),
+        ),
+    ];
+    for (array, expected) in variants {
+        let mut sample = shop();
+        sample.tables[0].columns[1].1 = SampledColumn::DeclaredStrings(array);
+        let payload = built(&sample);
+        assert_eq!(
+            payload["schema"]["related_tables"]["users"]["columns"]["age"]["dtype"],
+            "string"
+        );
+        let cells = |half: &str| {
+            payload[half]["related_tables"]["users"]["rows"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|row| row[2].clone())
+                .collect::<Vec<_>>()
+        };
+        let actual = cells("context")
+            .into_iter()
+            .chain(cells("predict"))
+            .collect::<Vec<_>>();
+        assert_eq!(actual, expected);
+    }
+}
+
+#[test]
+fn a_constructed_string_does_not_hide_nonfinite_relational_cells() {
+    for value in [f64::INFINITY, f64::NEG_INFINITY] {
+        let mut sample = shop();
+        sample.tables[0].columns[1].1 =
+            SampledColumn::DeclaredStrings(Arc::new(Float64Array::from(vec![value; 5])));
+        let error = build(&sample).unwrap_err();
+        assert_eq!(error.sentence, sdm_contract::Sentence::NotFinite);
+    }
+}
+
+#[test]
+fn constructed_string_entity_keys_do_not_take_missing_integer_reference_promotion() {
+    let mut sample = shop();
+    sample.tables[0].batch = vec![0, 1, 1, 3, 4];
+    sample.tables[0].columns[0].1 =
+        SampledColumn::DeclaredStrings(Arc::new(UInt64Array::from(vec![0, 1, u64::MAX, 3, 4])));
+    let payload = built(&sample);
+    assert_eq!(
+        payload["schema"]["instance_table"]["columns"]["__kumo_entity_ref_0"]["dtype"],
+        "string"
+    );
+    let predict = &payload["predict"]["instance_table"];
+    let position = predict["columns"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .position(|value| value == "__kumo_entity_ref_0")
+        .unwrap();
+    assert_eq!(predict["rows"][0][position], "3");
+    assert_eq!(
+        payload["context"]["instance_table"]["rows"][2][position],
+        Value::Null
     );
 }

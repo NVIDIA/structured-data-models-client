@@ -5,11 +5,27 @@
 //! Closed direct-request preparation stages and useful call-local values.
 //! Native equality facts describe ordered headers; the core owns validation.
 
+pub mod relational;
+
+pub use relational::{
+    NativeOutputAbsence, NativeOutputEmpty, NativeOutputMeaning, NativeOutputPresence,
+    NativeOutputRole, NativeOutputVocabulary, NativeTargetEquality, RelationalCallFields,
+    RelationalConstantTarget, RelationalContextFacts, RelationalEncodedCall, RelationalPreparation,
+    RelationalPrepared, RelationalStatistic, RelationalTargetNaming, RelationalTargetPopulation,
+    RelationalTargetRole, RelationalTargetUse, RelationalTaskFacts, RelationalTaskMeaning,
+    RelationalTaskUse, RelationalTaskVocabulary,
+};
+
 use crate::data::AttachmentId;
 use crate::ops::{Dtype, Given, HeldSchema, SourceDescription, Stype};
 use crate::{ColumnType, Scalar};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+
+pub mod relational_response;
+pub use relational_response::*;
+pub mod relational_result;
+pub use relational_result::*;
 
 pub const DIRECT_PREPARED_VERSION: u32 = 1;
 pub const CALL_PREPARATION_VERSION: u32 = 2;
@@ -145,11 +161,40 @@ pub struct PreparedDirectTask {
 /// Native capability observations retained independently of the later task read.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+pub struct NativeCallCapabilities {
+    pub temporal: bool,
+    pub link_prediction: bool,
+    pub forecasting: bool,
+}
+
+/// Shared model vocabulary for actual native lookup and comparison kernels.
+/// Positions identify default-output entries without a native object handle.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CallVocabulary {
+    pub default_kinds: Vec<String>,
+    pub temporal_tasks: Vec<String>,
+    pub link_prediction: String,
+    pub forecasting: String,
+    pub tasks: Vec<String>,
+    pub outputs: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct NativeDefaultOutput {
+    pub position: Option<usize>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct CallShape {
     pub kind: String,
     pub anchored: bool,
     pub relationships: bool,
     pub tables: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native: Option<NativeCallCapabilities>,
 }
 
 /// Each call state has useful resolved facts, never a native action/handle.
@@ -180,6 +225,19 @@ pub enum CallPreparation {
         named: bool,
         shape: CallShape,
         kind: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        admitted: Option<bool>,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        native_outputs: bool,
+    },
+    TaskAdmitted {
+        version: u32,
+        model: String,
+        outputs: Vec<String>,
+        named: bool,
+        shape: CallShape,
+        kind: String,
+        admitted: bool,
     },
     Bound {
         version: u32,
@@ -188,6 +246,10 @@ pub enum CallPreparation {
         named: bool,
         shape: CallShape,
         kind: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        admitted: Option<bool>,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        native_outputs: bool,
         context_rows: usize,
     },
 }
@@ -255,8 +317,71 @@ pub struct TabularEnvelope {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "stage", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Preparation {
+    CallRelational {
+        input: RelationalEncodedCall,
+    },
+    Relational {
+        input: RelationalPreparation,
+    },
     EncodeBody {
         input: DirectBody,
+    },
+    RelationalReferenceColumn {
+        facts: RelationalReferenceColumns,
+    },
+    CheckRelationalRows {
+        attribution: RelationalAttribution,
+        rows: Vec<DecodedRelationalRow>,
+    },
+    CheckRelationalForecast {
+        bound: BoundRelationalRow,
+        forecasting: bool,
+    },
+    RelationalWithoutInstance {
+        checked: CheckedRelationalRow,
+    },
+    AttributeRelationalInstance {
+        checked: CheckedRelationalRow,
+        instance: RelationalInstanceText,
+    },
+    CheckRelationalCoverage {
+        data: RelationalResponseData,
+        attribution: RelationalAttribution,
+        rows: AttachmentId,
+    },
+    RelationalTargetMeaning {
+        kind: Vec<u32>,
+        classification: bool,
+    },
+    CompleteRelationalResponse {
+        part: RelationalResponsePart,
+    },
+    FinishRelationalResponse {
+        input: RelationalResultInput,
+    },
+    PrepareRelationalRankPopulation {
+        source: RelationalRankingSource,
+    },
+    RankRelationalScore {
+        item: RelationalRankItem,
+    },
+    ValidateRelationalRanking {
+        outputs: Option<Vec<String>>,
+        #[serde(default)]
+        native: Option<NativeRankingOutputFacts>,
+        #[serde(default)]
+        selected: Option<ValidatedRelationalRanking>,
+        total_parts: usize,
+        cold: Option<Vec<u32>>,
+        #[serde(default)]
+        model: Option<String>,
+    },
+    RankingOutputVocabulary {
+        named: bool,
+        nonempty: Option<bool>,
+    },
+    DescribeRelationalPart {
+        scope: RelationalPartScope,
     },
     CheckResponseRows {
         scope: ResponseScope,
@@ -342,12 +467,21 @@ pub enum Preparation {
     Model {
         model: String,
     },
+    ModelCatalogue,
+    ModelLookup {
+        position: Option<usize>,
+    },
+    CallVocabulary {
+        call: CallPreparation,
+    },
     Outputs {
         call: CallPreparation,
         #[serde(default)]
         outputs: Option<Vec<String>>,
         #[serde(default)]
         kind: Option<String>,
+        #[serde(default)]
+        native_default: Option<NativeDefaultOutput>,
     },
     Capabilities {
         call: CallPreparation,
@@ -355,10 +489,20 @@ pub enum Preparation {
         anchored: bool,
         relationships: bool,
         tables: usize,
+        #[serde(default)]
+        native: Option<NativeCallCapabilities>,
     },
     Task {
         call: CallPreparation,
         kind: String,
+        #[serde(default)]
+        admitted: Option<bool>,
+        #[serde(default)]
+        defer_outputs: bool,
+    },
+    OutputAdmission {
+        call: CallPreparation,
+        unsupported: Vec<usize>,
     },
     Capacity {
         call: CallPreparation,
@@ -423,6 +567,7 @@ pub struct EncodedDirectBody {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(untagged)]
 pub enum PreparedValue {
+    Relational(RelationalPrepared),
     Arguments(ConstructorArguments),
     Headers(ConstructorHeaders),
     Schema(ConstructorSchema),
@@ -438,6 +583,19 @@ pub enum PreparedValue {
     Rows(CheckedDirectRows),
     Member(SelectedDirectMember),
     Attributed(AttributedDirectRow),
+    RelationalResponse(RelationalResponseData),
+    RelationalReference(RelationalReferenceColumn),
+    RelationalRows(CheckedRelationalRows),
+    RelationalForecast(CheckedRelationalRow),
+    RelationalAttributed(AttributedRelationalRow),
+    RelationalAttribution(RelationalAttribution),
+    RelationalTarget(RelationalTargetMeaning),
+    RelationalPart(RelationalResponsePart),
+    RelationalResult(RelationalResultData),
+    RelationalRankPopulation(RelationalRankPopulation),
+    RelationalRankConfidence(RelationalRankConfidence),
+    RelationalRanking(ValidatedRelationalRanking),
+    RelationalPartDescription(RelationalPartDescription),
 }
 
 /// Ordered flat primitive inference values; exact integer digits do not

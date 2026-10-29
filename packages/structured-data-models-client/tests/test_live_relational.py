@@ -4,9 +4,10 @@
 
 """End-to-end against a running ``kumo-relational`` NIM.
 
-Excluded by default. Point ``SDM_RELATIONAL_URL`` at the endpoint and run with
-``-m live_nim``. Needs the ``[relational]`` extra, because the gathering step
-runs in the engine.
+Excluded by default. Set ``SDM_RELATIONAL_URL`` for a NIM or
+``SDM_RELATIONAL_SERVING_ENDPOINT`` for Databricks and run with ``-m live_nim``.
+Databricks uses the ambient SDK authentication configuration.
+The original comparison route needs the ``[relational]`` extra.
 
     SDM_RELATIONAL_URL=http://localhost:8001 pytest -m live_nim
 
@@ -34,9 +35,11 @@ from sdm_client.errors import StructuredDataError
 pytestmark = pytest.mark.live_nim
 
 RELATIONAL_URL = os.environ.get('SDM_RELATIONAL_URL')
+RELATIONAL_ENDPOINT = os.environ.get('SDM_RELATIONAL_SERVING_ENDPOINT')
 
 requires_relational = pytest.mark.skipif(
-    not RELATIONAL_URL, reason='set SDM_RELATIONAL_URL to a kumo-relational NIM'
+    not (RELATIONAL_URL or RELATIONAL_ENDPOINT),
+    reason='set SDM_RELATIONAL_URL or SDM_RELATIONAL_SERVING_ENDPOINT',
 )
 
 pytest.importorskip(
@@ -87,7 +90,15 @@ COUNT_QUERY = 'PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id'
 
 @pytest.fixture
 def client():
-    with SDMClient(url=RELATIONAL_URL, timeout=600.0) as opened:
+    if RELATIONAL_URL and RELATIONAL_ENDPOINT:
+        pytest.fail('set only one relational endpoint configuration')
+    if RELATIONAL_ENDPOINT:
+        configured = SDMClient.for_databricks_serving(
+            RELATIONAL_ENDPOINT, timeout=600.0
+        )
+    else:
+        configured = SDMClient(url=RELATIONAL_URL, timeout=600.0)
+    with configured as opened:
         yield opened
 
 

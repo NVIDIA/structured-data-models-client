@@ -1,0 +1,204 @@
+{
+  "reference": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+  "python": "/home/awadaskar/.local/share/sdm-orchestration/phase-3/final-reference-43e55f4f-ref-pandas3/bin/python",
+  "client": "/home/awadaskar/code/sdmc-reference/packages/structured-data-models-client/src/sdm_client/__init__.py",
+  "engine": "/home/awadaskar/.local/share/sdm-orchestration/phase-3/final-reference-43e55f4f-ref-pandas3/lib/python3.12/site-packages/sdm_relational_engine/__init__.py",
+  "versions": {
+    "pandas": "3.0.6",
+    "numpy": "2.5.3",
+    "pyarrow": "25.0.1",
+    "unicode": "15.0.0"
+  },
+  "source_sha256": {
+    "packages/structured-data-models-client/src/sdm_client/schema.py": "bfa6f660e313ad725d9d8a57da87d75275cc670b98281ca45bc6dc9086c70d63",
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py": "949cc50c1cc59d47e56505a9746848de7c07156308219de089481f7fc1fddc98",
+    "packages/structured-data-models-relational-engine/src/sdm_relational_engine/rfm/base/sampler.py": "096a7e020d906a01344608a21c0ae8b78d3432cf8f492dec60128487f262c072",
+    "packages/structured-data-models-relational-engine/src/sdm_relational_engine/rfm/rfm.py": "affd368eba23713043b5666ccbdea97c4faa697008c6ebc416415fdebe6c1f75",
+    "packages/structured-data-models-relational-engine/src/sdm_relational_engine/rfm/base/table.py": "e71d454f16a31be2f5b8d2f2fd994a10177cf3f3460d27a3e7b58b172d9a3fd3",
+    "relationallib.cpython-312-x86_64-linux-gnu.so": "6f67fd89292364bc273828605d69e6e2f066f646c2a1d092274e643d211c4c41"
+  },
+  "probe_sha256": "8ad44dee4e8dd2caa9c6601978281d4f0e1474c8baa993cca2a8d158d38ef011",
+  "bootstrap_sha256": "b5992fff92bb277dac21f7a1e92a1f86c70ee431a3a60ca95a8cc193ae3cae89",
+  "records": {
+    "numpy-int64-python-True-False": {
+      "error": {
+        "stage": "materialize",
+        "type": "StructuredDataError",
+        "code": "INVALID_REQUEST",
+        "message": "[INVALID_REQUEST] Column 'note' received an incompatible semantic type (got dtype='int' and stype='text')"
+      },
+      "warnings": [],
+      "sent": [],
+      "trace": [],
+      "source_dtype": "dtype('int64')"
+    },
+    "numpy-int64-pyarrow-True-False": {
+      "error": {
+        "stage": "materialize",
+        "type": "StructuredDataError",
+        "code": "INVALID_REQUEST",
+        "message": "[INVALID_REQUEST] Column 'note' received an incompatible semantic type (got dtype='int' and stype='text')"
+      },
+      "warnings": [],
+      "sent": [],
+      "trace": [],
+      "source_dtype": "dtype('int64')"
+    },
+    "numpy-float32-python-True-False": {
+      "error": {
+        "stage": "materialize",
+        "type": "StructuredDataError",
+        "code": "INVALID_REQUEST",
+        "message": "[INVALID_REQUEST] Column 'note' received an incompatible semantic type (got dtype='float' and stype='text')"
+      },
+      "warnings": [],
+      "sent": [],
+      "trace": [],
+      "source_dtype": "dtype('float32')"
+    },
+    "numpy-float32-pyarrow-True-False": {
+      "error": {
+        "stage": "materialize",
+        "type": "StructuredDataError",
+        "code": "INVALID_REQUEST",
+        "message": "[INVALID_REQUEST] Column 'note' received an incompatible semantic type (got dtype='float' and stype='text')"
+      },
+      "warnings": [],
+      "sent": [],
+      "trace": [],
+      "source_dtype": "dtype('float32')"
+    },
+    "numpy-float64-python-True-False": {
+      "error": {
+        "stage": "materialize",
+        "type": "StructuredDataError",
+        "code": "INVALID_REQUEST",
+        "message": "[INVALID_REQUEST] Column 'note' received an incompatible semantic type (got dtype='float' and stype='text')"
+      },
+      "warnings": [],
+      "sent": [],
+      "trace": [],
+      "source_dtype": "dtype('float64')"
+    },
+    "numpy-float64-pyarrow-True-False": {
+      "error": {
+        "stage": "materialize",
+        "type": "StructuredDataError",
+        "code": "INVALID_REQUEST",
+        "message": "[INVALID_REQUEST] Column 'note' received an incompatible semantic type (got dtype='float' and stype='text')"
+      },
+      "warnings": [],
+      "sent": [],
+      "trace": [],
+      "source_dtype": "dtype('float64')"
+    },
+    "numpy-bool-python-True-False": {
+      "error": {
+        "stage": "materialize",
+        "type": "StructuredDataError",
+        "code": "INVALID_REQUEST",
+        "message": "[INVALID_REQUEST] Column 'note' received an incompatible semantic type (got dtype='bool' and stype='text')"
+      },
+      "warnings": [],
+      "sent": [],
+      "trace": [],
+      "source_dtype": "dtype('bool')"
+    },
+    "numpy-bool-pyarrow-True-False": {
+      "error": {
+        "stage": "materialize",
+        "type": "StructuredDataError",
+        "code": "INVALID_REQUEST",
+        "message": "[INVALID_REQUEST] Column 'note' received an incompatible semantic type (got dtype='bool' and stype='text')"
+      },
+      "warnings": [],
+      "sent": [],
+      "trace": [],
+      "source_dtype": "dtype('bool')"
+    },
+    "arrow-int64-python-True-False": {
+      "error": {
+        "stage": "materialize",
+        "type": "StructuredDataError",
+        "code": "INVALID_REQUEST",
+        "message": "[INVALID_REQUEST] Column 'note' received an incompatible semantic type (got dtype='int' and stype='text')"
+      },
+      "warnings": [],
+      "sent": [],
+      "trace": [],
+      "source_dtype": "int64[pyarrow]"
+    },
+    "arrow-int64-pyarrow-True-False": {
+      "error": {
+        "stage": "materialize",
+        "type": "StructuredDataError",
+        "code": "INVALID_REQUEST",
+        "message": "[INVALID_REQUEST] Column 'note' received an incompatible semantic type (got dtype='int' and stype='text')"
+      },
+      "warnings": [],
+      "sent": [],
+      "trace": [],
+      "source_dtype": "int64[pyarrow]"
+    },
+    "arrow-float64-python-True-False": {
+      "error": {
+        "stage": "materialize",
+        "type": "StructuredDataError",
+        "code": "INVALID_REQUEST",
+        "message": "[INVALID_REQUEST] Column 'note' received an incompatible semantic type (got dtype='float' and stype='text')"
+      },
+      "warnings": [],
+      "sent": [],
+      "trace": [],
+      "source_dtype": "double[pyarrow]"
+    },
+    "arrow-float64-pyarrow-True-False": {
+      "error": {
+        "stage": "materialize",
+        "type": "StructuredDataError",
+        "code": "INVALID_REQUEST",
+        "message": "[INVALID_REQUEST] Column 'note' received an incompatible semantic type (got dtype='float' and stype='text')"
+      },
+      "warnings": [],
+      "sent": [],
+      "trace": [],
+      "source_dtype": "double[pyarrow]"
+    },
+    "numpy-int64-python-False-False": {
+      "error": {
+        "stage": "schema",
+        "type": "StructuredDataError",
+        "code": "INVALID_REQUEST",
+        "message": "[INVALID_REQUEST] column 'note' holds 'int64', which cannot mean 'text'"
+      },
+      "warnings": [],
+      "sent": [],
+      "trace": [],
+      "source_dtype": "dtype('int64')"
+    },
+    "arrow-int64-python-True-True": {
+      "error": {
+        "stage": "materialize",
+        "type": "StructuredDataError",
+        "code": "INVALID_REQUEST",
+        "message": "[INVALID_REQUEST] Column 'note' received an incompatible semantic type (got dtype='int' and stype='text')"
+      },
+      "warnings": [],
+      "sent": [],
+      "trace": [],
+      "source_dtype": "int64[pyarrow]"
+    },
+    "arrow-float64-python-True-True": {
+      "error": {
+        "stage": "materialize",
+        "type": "StructuredDataError",
+        "code": "INVALID_REQUEST",
+        "message": "[INVALID_REQUEST] Column 'note' received an incompatible semantic type (got dtype='float' and stype='text')"
+      },
+      "warnings": [],
+      "sent": [],
+      "trace": [],
+      "source_dtype": "double[pyarrow]"
+    }
+  }
+}

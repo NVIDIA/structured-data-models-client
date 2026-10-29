@@ -63,6 +63,12 @@ def _prepared_run(
         finished = run(
             {'op': 'prepare_request', 'input': 1},
             {1: codec.attachment(value), **(attached or {})},
+            # This shared operation also carries relational preflight, whose
+            # notices retain the registered code prefixes. Direct request
+            # construction keeps its existing native frame presentation.
+            warning_presentation='coded'
+            if value['stage'] == 'relational'
+            else 'frame_schema',
         )
     except StructuredDataError as error:
         # The core selected this closed native exception or development
@@ -689,7 +695,7 @@ def predict(
         )
     else:
         call = _call(
-            {'stage': 'outputs', 'call': call, 'outputs': list(tuple(outputs))}
+            {'stage': 'outputs', 'call': call, 'outputs': list(outputs)}
         )
     capability_kind = request.task.kind
     anchored = bool(request.task.options.get('anchor_time_column'))

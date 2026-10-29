@@ -55,7 +55,6 @@ from typing import TYPE_CHECKING, Any
 
 from sdm_client._rust import codec, errors, providers, results
 from sdm_client._rust.results import CoreQuery, CoreRequest, QueryFacts
-from sdm_client._rust.run import run
 from sdm_client._rust.spec import held_schema
 from sdm_client.errors import StructuredDataError
 
@@ -339,11 +338,19 @@ def gather(
     from sdm_client import decompose
 
     schema = materializer.schema
-    anchor = options.get('anchor_time')
     if schema.source is None:
-        choice, provider = {'provider': 'frames', 'manifest': 7}, None
-    else:
-        choice, provider = providers.for_source(schema.source)
+        from sdm_client._rust import frame_facade
+
+        return frame_facade.gather(
+            materializer,
+            query,
+            indices,
+            num_context_samples,
+            options,
+            candidates,
+        )
+    anchor = options.get('anchor_time')
+    choice, provider = providers.for_source(schema.source)
     operation = {
         'op': 'materialize',
         'provider': choice,
@@ -384,12 +391,6 @@ def gather(
             },
         ),
     }
-    if schema.source is None:
-        from sdm_client._rust import frame_materialize
-
-        attachments.update(
-            frame_materialize.inputs(schema, materializer._core_sampler_state)
-        )
     # The ceilings on what one materialize holds, which the caller may set
     # as it sets the most steps of a forecast (T2.8c).
     from sdm_client.materializers import relational
@@ -412,13 +413,15 @@ def gather(
             fields['key']
         ],
     ):
-        finished = run(
+        from sdm_client._rust import native_sql
+
+        finished, gathered = native_sql.gather(
             operation,
             attachments,
-            provider=provider,
-            state=materializer._core_sampler_state,
+            provider,
+            materializer._core_sampler_state,
+            options,
         )
-    gathered = results.expect(finished.result, results.Gathered)
     state = gathered.state
     if gathered.query is None:
         raise StructuredDataError(

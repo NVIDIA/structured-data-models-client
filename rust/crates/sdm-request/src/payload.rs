@@ -38,6 +38,7 @@
 //! is [`Built::answering`], which the core gives as its notice.
 
 use std::collections::BTreeSet;
+use std::sync::Arc;
 
 use arrow_array::cast::AsArray;
 use arrow_array::types::{
@@ -48,6 +49,7 @@ use arrow_array::types::{
 use arrow_array::{Array, ArrayRef};
 use arrow_schema::{DataType, TimeUnit};
 use sdm_contract::ops::Stype;
+use sdm_contract::scalar::unicode::UnicodeText;
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 use sdm_engine::labels::Labels;
 use sdm_wire::json::Value;
@@ -91,13 +93,19 @@ pub const PAYLOAD_BYTES: usize = 30 * 1024 * 1024;
 #[derive(Debug, Clone)]
 pub enum SampledColumn {
     Arrow(ArrayRef),
-    Words(Vec<Vec<String>>),
+    /// Completed native String meaning over unchanged primitive storage.
+    DeclaredStrings(ArrayRef),
+    /// Native text keeps its explicit encoding through the existing cell encoder.
+    Strings(ArrayRef, sdm_contract::data::strings::StringEncoding),
+    Words(Vec<Vec<UnicodeText>>),
 }
 
 impl SampledColumn {
     fn len(&self) -> usize {
         match self {
-            SampledColumn::Arrow(array) => array.len(),
+            SampledColumn::Arrow(array)
+            | SampledColumn::DeclaredStrings(array)
+            | SampledColumn::Strings(array, _) => array.len(),
             SampledColumn::Words(words) => words.len(),
         }
     }
@@ -241,6 +249,9 @@ pub struct Sampled {
 #[derive(Debug, Clone)]
 pub struct Built {
     pub bytes: Vec<u8>,
+    /// The exact logical data encoded into bytes, retained before any JSON
+    /// escaping or native presentation. No JSON-body read reconstructs it.
+    pub logical: Arc<Value>,
     pub answering: usize,
 }
 
@@ -388,7 +399,7 @@ pub(crate) fn int_cell(value: i128, column: &str) -> Result<Value, CoreError> {
         .with_field("dtype", Detail::text("int64")));
     }
     if value.abs() > JSON_SAFE {
-        return Ok(Value::Text(value.to_string()));
+        return Ok(Value::Text(value.to_string().into()));
     }
     Ok(Value::int(value as i64))
 }
@@ -494,7 +505,9 @@ fn cell(array: &ArrayRef, row: usize, column: &str, dtype: Dtype) -> Result<Valu
                 }
                 TimeUnit::Nanosecond => array.as_primitive::<TimestampNanosecondType>().value(row),
             };
-            Ok(Value::Text(iso_microseconds(to_ns(value, *unit, column)?)))
+            Ok(Value::Text(
+                iso_microseconds(to_ns(value, *unit, column)?).into(),
+            ))
         }
         // A time of day, which the reference's engine reads as no time.
         DataType::Time32(_) | DataType::Time64(_) => Ok(Value::Null),
@@ -502,7 +515,7 @@ fn cell(array: &ArrayRef, row: usize, column: &str, dtype: Dtype) -> Result<Valu
             let value = array.as_primitive::<Decimal128Type>().value(row);
             match dtype {
                 // A whole decimal's own digits (`_decimal_text`).
-                Dtype::String => Ok(Value::Text(decimal_text(value, *scale))),
+                Dtype::String => Ok(Value::Text(decimal_text(value, *scale).into())),
                 Dtype::Int64 => int_cell(value, column),
                 Dtype::Float64 => decimal_float(value, *scale, column),
                 _ => Err(internal("a decimal's dtype is not one a decimal takes")),
@@ -522,10 +535,38 @@ fn float_key(cell: &Value) -> Result<Value, CoreError> {
             .map_err(|_| internal("an integer key is not an integer"))?
             as f64,
         Value::Text(digits) => digits
+            .utf8()
+            .ok_or_else(|| internal("an integer key contains non-numeric native text"))?
             .parse::<i128>()
             .map_err(|_| internal("an integer key's digits do not read"))?
             as f64,
         _ => return Err(internal("an integer key is not an integer")),
+    };
+    Value::float(value).ok_or_else(|| internal("an integer key is not finite"))
+}
+
+/// A missing example promotes an integer instance-reference column before
+/// request cell encoding. Read the actual physical integer directly, so a
+/// UInt64 key reaches the later range rule on its real related-table column.
+fn integer_reference_float(array: &ArrayRef, row: usize) -> Result<Value, CoreError> {
+    if array.is_null(row) {
+        return Ok(Value::Null);
+    }
+    macro_rules! small {
+        ($t:ty) => {
+            f64::from(array.as_primitive::<$t>().value(row))
+        };
+    }
+    let value = match array.data_type() {
+        DataType::Int8 => small!(Int8Type),
+        DataType::Int16 => small!(Int16Type),
+        DataType::Int32 => small!(Int32Type),
+        DataType::Int64 => array.as_primitive::<Int64Type>().value(row) as f64,
+        DataType::UInt8 => small!(UInt8Type),
+        DataType::UInt16 => small!(UInt16Type),
+        DataType::UInt32 => small!(UInt32Type),
+        DataType::UInt64 => array.as_primitive::<UInt64Type>().value(row) as f64,
+        _ => return Err(internal("a promoted integer reference is not an integer")),
     };
     Value::float(value).ok_or_else(|| internal("an integer key is not finite"))
 }
@@ -618,6 +659,38 @@ fn arrow_column(
     })
 }
 
+fn string_cell(
+    values: &sdm_engine::strings::StringColumn<'_>,
+    row: usize,
+) -> Result<Value, CoreError> {
+    values
+        .get(row)
+        .map_err(|_| internal("native sampled text is malformed"))
+        .map(|value| match value {
+            None => Value::Null,
+            Some(value) => Value::Text(
+                UnicodeText::from_utf8_surrogatepass(value.as_bytes().to_vec())
+                    .expect("validated native text"),
+            ),
+        })
+}
+
+/// Preserve the reached relational finite-value guard before native String
+/// formatting. The shared primitive reader retains unsigned digits and Float32
+/// widening without making a new Arrow text representation.
+fn declared_string_cell(
+    array: &ArrayRef,
+    row: usize,
+    column: &str,
+    float_text: fn(f64) -> String,
+) -> Result<Value, CoreError> {
+    let value = crate::tabular::raw(array, row)?;
+    if let Scalar::Float64(number) = value {
+        float_cell(number, column)?;
+    }
+    crate::tabular::cell(value, sdm_contract::ops::Dtype::String, column, float_text)
+}
+
 /// A column of `rows`: as sampled, or, for words, a `stringlist` of them,
 /// as the reference types a column holding lists (`_list_dtype_name`;
 /// a column of no rows holds no list, and is `string`).
@@ -626,9 +699,36 @@ fn sampled_column(
     column: &SampledColumn,
     rows: &[usize],
     key: bool,
+    float_text: fn(f64) -> String,
 ) -> Result<FrameColumn, CoreError> {
     match column {
         SampledColumn::Arrow(array) => arrow_column(name, array, rows, key),
+        SampledColumn::DeclaredStrings(array) => Ok(FrameColumn {
+            name: name.to_owned(),
+            dtype: Dtype::String,
+            cells: rows
+                .iter()
+                .map(|&row| {
+                    declared_string_cell(array, row, name, float_text)
+                        .map_err(|error| error.with_field("row", count(row)))
+                })
+                .collect::<Result<_, _>>()?,
+        }),
+        SampledColumn::Strings(array, encoding) => {
+            let values = sdm_engine::strings::StringColumn::new(array.as_ref(), *encoding)
+                .map_err(|_| {
+                    internal("native sampled text does not match its explicit encoding")
+                })?;
+            let cells = rows
+                .iter()
+                .map(|&row| string_cell(&values, row))
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(FrameColumn {
+                name: name.to_owned(),
+                dtype: Dtype::String,
+                cells,
+            })
+        }
         SampledColumn::Words(words) => Ok(FrameColumn {
             name: name.to_owned(),
             dtype: if rows.is_empty() {
@@ -638,7 +738,7 @@ fn sampled_column(
             },
             cells: rows
                 .iter()
-                .map(|&row| Value::texts(words[row].iter().map(String::as_str)))
+                .map(|&row| Value::Array(words[row].iter().cloned().map(Value::Text).collect()))
                 .collect(),
         }),
     }
@@ -684,8 +784,8 @@ fn target(
     kind: Kind,
     labels: &Labels,
     float_text: fn(f64) -> String,
-) -> Result<(Dtype, Vec<Value>, Vec<String>), CoreError> {
-    let classes = |texts: Vec<String>| {
+) -> Result<(Dtype, Vec<Value>, Vec<UnicodeText>), CoreError> {
+    let classes = |texts: Vec<UnicodeText>| {
         let mut seen = BTreeSet::new();
         texts
             .into_iter()
@@ -701,19 +801,20 @@ fn target(
                     list.iter()
                         .map(|value| {
                             use sdm_engine::labels::LinkValue as L;
-                            let text = match value {
-                                L::Int(v) => v.to_string(),
+                            let text: UnicodeText = match value {
+                                L::Int(v) => v.to_string().into(),
+                                L::UInt(v) => v.to_string().into(),
                                 L::Float(v) => {
                                     if !v.is_finite() {
                                         return Err(not_finite(TARGET, f64::from(*v)));
                                     }
-                                    float_text(f64::from(*v))
+                                    float_text(f64::from(*v)).into()
                                 }
-                                L::Bool(v) => if *v { "True" } else { "False" }.to_owned(),
+                                L::Bool(v) => if *v { "True" } else { "False" }.into(),
                                 L::Text(v) => v.clone(),
-                                L::Decimal(v, scale) => decimal_text(*v, *scale),
+                                L::Decimal(v, scale) => decimal_text(*v, *scale).into(),
                             };
-                            Ok(Value::text(&text))
+                            Ok(Value::Text(text))
                         })
                         .collect::<Result<Vec<_>, _>>()
                         .map(Value::Array)
@@ -727,23 +828,23 @@ fn target(
         (Kind::Binary, Labels::Bool(values)) => (
             Dtype::Bool,
             values.iter().map(|v| Value::Bool(*v)).collect(),
-            vec!["false".to_owned(), "true".to_owned()],
+            vec!["false".into(), "true".into()],
         ),
         (Kind::Binary, _) => return Err(internal("a binary task's labels are not booleans")),
         (Kind::Multiclass, Labels::Bool(values)) => {
-            let texts: Vec<String> = values
+            let texts: Vec<UnicodeText> = values
                 .iter()
-                .map(|v| if *v { "True" } else { "False" }.to_owned())
+                .map(|v| if *v { "True" } else { "False" }.into())
                 .collect();
             (
                 Dtype::String,
-                texts.iter().map(|t| Value::text(t)).collect(),
+                texts.iter().cloned().map(Value::Text).collect(),
                 classes(texts),
             )
         }
         (Kind::Multiclass, Labels::Text(values)) => (
             Dtype::String,
-            values.iter().map(|t| Value::text(t)).collect(),
+            values.iter().cloned().map(Value::Text).collect(),
             classes(values.clone()),
         ),
         (Kind::Multiclass, Labels::Int(values)) => (
@@ -752,7 +853,12 @@ fn target(
                 .iter()
                 .map(|v| int_cell(i128::from(*v), TARGET))
                 .collect::<Result<_, _>>()?,
-            classes(values.iter().map(i64::to_string).collect()),
+            classes(
+                values
+                    .iter()
+                    .map(|value| value.to_string().into())
+                    .collect(),
+            ),
         ),
         (Kind::Multiclass, Labels::Float(values)) => {
             let mut seen = BTreeSet::new();
@@ -766,7 +872,7 @@ fn target(
                     .iter()
                     // Adding zero makes a negative zero positive.
                     .filter(|v| seen.insert((**v + 0.0).to_bits()))
-                    .map(|v| float_text(f64::from(*v)))
+                    .map(|v| float_text(f64::from(*v)).into())
                     .collect(),
             )
         }
@@ -900,14 +1006,26 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
             .primary_key
             .as_deref()
             .ok_or_else(|| internal("an entity table has no key"))?;
-        let key_array = entity
+        let key_column = entity
             .columns
             .iter()
-            .find_map(|(n, column)| match column {
-                SampledColumn::Arrow(array) if n == key => Some(array),
-                _ => None,
-            })
+            .find_map(|(name, column)| (name == key).then_some(column))
             .ok_or_else(|| internal("an entity key was not sampled"))?;
+        let (key_array, native_encoding, declared_strings) = match key_column {
+            SampledColumn::Arrow(array) => (array, None, false),
+            SampledColumn::DeclaredStrings(array) => (array, None, true),
+            SampledColumn::Strings(array, encoding) => (array, Some(*encoding), false),
+            SampledColumn::Words(_) => {
+                return Err(internal("an entity key cannot be normalized feature words"));
+            }
+        };
+        let native_strings = native_encoding
+            .map(|encoding| {
+                sdm_engine::strings::StringColumn::new(key_array.as_ref(), encoding).map_err(|_| {
+                    internal("native sampled key text does not match its explicit encoding")
+                })
+            })
+            .transpose()?;
         let mut first = vec![None; examples];
         for (row, &at) in entity.batch.iter().enumerate() {
             if at < examples && first[at].is_none() {
@@ -916,8 +1034,13 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
         }
         let reference = unique_name(&occupied, &format!("{ENTITY_REFERENCE}_{role}"));
         occupied.push(reference.clone());
-        let source_dtype = key_dtype(key_array)?;
+        let source_dtype = if native_strings.is_some() || declared_strings {
+            Dtype::String
+        } else {
+            key_dtype(key_array)?
+        };
         let promote = source_dtype == Dtype::Int64 && first.iter().any(Option::is_none);
+        let promote_integer = promote && key_array.data_type().is_integer();
         let dtype = if promote || source_dtype == Dtype::Float32 {
             Dtype::Float64
         } else {
@@ -928,7 +1051,21 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
             .enumerate()
             .map(|(at, row)| match row {
                 Some(row) => {
-                    let value = cell(key_array, *row, &reference, source_dtype).map_err(|e| {
+                    if promote_integer {
+                        return integer_reference_float(key_array, *row).map_err(|e| {
+                            e.with_field("table", Detail::text(INSTANCE_TABLE))
+                                .with_field("row", count(at))
+                        });
+                    }
+                    let value = if declared_strings {
+                        declared_string_cell(key_array, *row, &reference, sampled.float_text)
+                    } else {
+                        match &native_strings {
+                            Some(strings) => string_cell(strings, *row),
+                            None => cell(key_array, *row, &reference, source_dtype),
+                        }
+                    }
+                    .map_err(|e| {
                         e.with_field("table", Detail::text(INSTANCE_TABLE))
                             .with_field("row", count(at))
                     })?;
@@ -965,7 +1102,7 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
                         if *a == sdm_engine::sample::MISSING_ANCHOR {
                             Value::Null
                         } else {
-                            Value::Text(iso_microseconds(*a))
+                            Value::Text(iso_microseconds(*a).into())
                         }
                     })
                     .collect(),
@@ -1001,7 +1138,7 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
             }
             let key = table.primary_key.as_deref() == Some(name.as_str());
             frame.columns.push(
-                sampled_column(name, column, &rows, key)
+                sampled_column(name, column, &rows, key, sampled.float_text)
                     .map_err(|e| e.with_field("table", Detail::text(&table.name)))?,
             );
         }
@@ -1226,7 +1363,7 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
         num_prediction_examples: sampled.num_test as u64,
     };
     let model = "kumo-relational".to_owned();
-    let bytes = if kind == Kind::TemporalLink {
+    let logical = if kind == Kind::TemporalLink {
         StatePayload {
             model,
             task: sdm_wire::payload::TemporalLinkTask {
@@ -1243,10 +1380,10 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
             context: half(true),
             predict: half(false),
             output,
-            inference: inference!(sampled.options.base()),
+            inference: inference!(crate::options::base(&sampled.options)),
             metadata,
         }
-        .to_bytes()
+        .logical()
     } else if kind.is_classification() {
         StatePayload {
             model,
@@ -1260,10 +1397,10 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
             context: half(true),
             predict: half(false),
             output,
-            inference: inference!(sampled.options.classification()),
+            inference: inference!(crate::options::classification(&sampled.options)),
             metadata,
         }
-        .to_bytes()
+        .logical()
     } else {
         StatePayload {
             model,
@@ -1275,11 +1412,14 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
             context: half(true),
             predict: half(false),
             output,
-            inference: inference!(sampled.options.regression()),
+            inference: inference!(crate::options::regression(&sampled.options)),
             metadata,
         }
-        .to_bytes()
+        .logical()
     };
+    let logical =
+        Arc::new(logical.map_err(|_| internal("the typed request values do not serialize"))?);
+    let bytes = logical.to_bytes();
     // The limit counts the bytes the request sends, as written (PD-2).
     // The refusal names what to change, as the reference's client words
     // its engine's (`_said_in_this_client_s_terms`, `main`'s 1fc5a686): a
@@ -1317,6 +1457,7 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
     }
     Ok(Built {
         bytes,
+        logical,
         answering: answered.len(),
     })
 }

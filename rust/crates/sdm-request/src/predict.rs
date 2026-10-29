@@ -45,16 +45,24 @@
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
+pub mod relational_response;
+
 use arrow_array::builder::{Float64Builder, ListBuilder, MapBuilder, MapFieldNames, StringBuilder};
 use arrow_array::{
     Array, ArrayRef, BooleanArray, Float64Array, Int64Array, RecordBatch, StringArray,
 };
 use arrow_schema::{DataType, Field, Schema};
+use sdm_contract::prepare::{
+    CallVocabulary, NativeCallCapabilities, NativeOutputAbsence, NativeOutputEmpty,
+    NativeOutputMeaning, NativeOutputPresence, NativeOutputRole, NativeOutputVocabulary,
+};
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 use sdm_wire::json::{Value, is_integer_token};
 use sdm_wire::response::{
     PredictionResponse, Refused, integer_text, integer_text_limited, numeric_text,
 };
+
+pub mod validation;
 
 /// The model this build sends a relational request to.
 pub const RELATIONAL: &str = "kumo-relational";
@@ -67,6 +75,17 @@ pub const REGRESSION_FIELDS: [&str; 1] = ["prediction"];
 
 /// The outputs a classification asks for when the caller names none.
 pub const CLASSIFICATION_FIELDS: [&str; 2] = ["prediction", "probabilities"];
+
+const DEFAULT_KINDS: [&str; 6] = [
+    "classification",
+    "binary_classification",
+    "multiclass_classification",
+    "regression",
+    "forecasting",
+    "temporal_link_prediction",
+];
+const FORECASTING: &str = "forecasting";
+const LINK_PREDICTION: &str = "temporal_link_prediction";
 
 /// The task kinds whose call this build writes.
 const CALLED: [&str; 4] = [
@@ -91,6 +110,9 @@ pub const INFERENCE_OPTIONS: [&str; 6] = [
     "hop_shuffle",
     "class_shuffle",
 ];
+
+/// The inference key whose unsupported use receives the statistic remedy.
+pub const INFERENCE_STATISTIC_KEY: &str = "output_type";
 
 /// The most classes `kumo-relational` classifies (`classes_max`).
 pub const CLASSES_MAX: usize = 10;
@@ -293,7 +315,7 @@ fn kind_of(payload: &Value) -> Result<&str, CoreError> {
         return Err(bad_payload("not_an_object"));
     };
     match payload.get("task").and_then(|task| task.get("kind")) {
-        Some(Value::Text(kind)) => Ok(kind),
+        Some(Value::Text(kind)) => kind.utf8().ok_or_else(|| bad_payload("task")),
         _ => Err(bad_payload("task")),
     }
 }
@@ -345,6 +367,11 @@ pub fn predict_rows(payload: &Value) -> Option<usize> {
 /// after it unnumberable, `INTERNAL_ERROR`, as the client refuses it.
 pub fn call_starts(payloads: &[Value]) -> Result<Vec<usize>, CoreError> {
     let counted: Vec<Option<usize>> = payloads.iter().map(predict_rows).collect();
+    call_starts_from_counts(&counted)
+}
+
+/// The same numbering policy over reached native row-count observations.
+pub fn call_starts_from_counts(counted: &[Option<usize>]) -> Result<Vec<usize>, CoreError> {
     if counted
         .iter()
         .take(counted.len().saturating_sub(1))
@@ -516,6 +543,91 @@ pub fn resolve_model(model: &str) -> Result<&'static str, CoreError> {
     Ok(model_spec(model)?.id)
 }
 
+/// The actual native lookup vocabulary, drawn from the shared model policy.
+pub fn call_vocabulary(model: &str) -> Result<CallVocabulary, CoreError> {
+    let spec = model_spec(model)?;
+    Ok(CallVocabulary {
+        default_kinds: if spec.id == TABULAR {
+            vec!["classification".to_owned(), "regression".to_owned()]
+        } else {
+            DEFAULT_KINDS
+                .iter()
+                .map(|kind| (*kind).to_owned())
+                .collect()
+        },
+        temporal_tasks: vec![FORECASTING.to_owned(), LINK_PREDICTION.to_owned()],
+        link_prediction: LINK_PREDICTION.to_owned(),
+        forecasting: FORECASTING.to_owned(),
+        tasks: spec.tasks.iter().map(|kind| (*kind).to_owned()).collect(),
+        outputs: spec.outputs.iter().map(|name| (*name).to_owned()).collect(),
+    })
+}
+
+/// Closed model ids, in the native public catalogue's declaration order.
+pub fn model_catalogue() -> [&'static str; 2] {
+    [TABULAR, RELATIONAL]
+}
+
+/// The outcome of one actual native supported-output membership population.
+pub fn validate_native_outputs(
+    model: &str,
+    outputs: &[String],
+    unsupported_positions: &[usize],
+) -> Result<(), CoreError> {
+    let spec = model_spec(model)?;
+    if unsupported_positions
+        .windows(2)
+        .any(|pair| pair[0] >= pair[1])
+        || unsupported_positions
+            .iter()
+            .any(|position| *position >= outputs.len())
+    {
+        return Err(CoreError::protocol(
+            Sentence::InvalidMessage,
+            "native output positions are invalid",
+        ));
+    }
+    if !unsupported_positions.is_empty() {
+        let mut unknown: Vec<&str> = unsupported_positions
+            .iter()
+            .map(|position| outputs[*position].as_str())
+            .collect();
+        unknown.sort_unstable();
+        let mut error = unsupported(
+            Sentence::ModelLacksOutputs,
+            spec.id,
+            "the model does not produce an output asked for",
+        )
+        .with_field("unsupported_outputs", texts(unknown))
+        .with_field("supported_outputs", texts(sorted(spec.outputs)));
+        error.public_details = Some(Box::new(error.fields.clone()));
+        return Err(error.with_field("native_model_outputs", Detail::Scalar(Scalar::Bool(true))));
+    }
+    Ok(())
+}
+
+/// Resolve one actual native dictionary lookup without re-comparing its key.
+pub fn resolve_native_defaults(
+    model: &str,
+    position: Option<usize>,
+) -> Result<Vec<String>, CoreError> {
+    let words = call_vocabulary(model)?;
+    let kind = match position {
+        Some(position) => words
+            .default_kinds
+            .get(position)
+            .map(String::as_str)
+            .ok_or_else(|| {
+                CoreError::protocol(
+                    Sentence::InvalidMessage,
+                    "a native default-output position is invalid",
+                )
+            })?,
+        None => "",
+    };
+    resolve_outputs(model, kind, None)
+}
+
 /// Ordered explicit outputs or model-specific defaults, with empty checked now.
 pub fn resolve_outputs(
     model: &str,
@@ -550,13 +662,30 @@ pub fn validate_shape(
     linked: bool,
     tables: usize,
 ) -> Result<(), CoreError> {
+    validate_native_shape(model, kind, anchored, linked, tables, None)
+}
+
+/// Shared shape policy over the reached native comparison results, when present.
+pub fn validate_native_shape(
+    model: &str,
+    kind: &str,
+    anchored: bool,
+    linked: bool,
+    tables: usize,
+    native: Option<&NativeCallCapabilities>,
+) -> Result<(), CoreError> {
     let spec = model_spec(model)?;
-    let temporal = anchored || matches!(kind, "forecasting" | "temporal_link_prediction");
+    let temporal = native.map_or_else(
+        || anchored || matches!(kind, FORECASTING | LINK_PREDICTION),
+        |facts| facts.temporal,
+    );
     let needed = |shape: &str| match shape {
         "relationships" => linked,
         "multiple_tables" => tables > 1,
-        "link_prediction" => kind == "temporal_link_prediction",
-        "forecasting" => kind == "forecasting",
+        "link_prediction" => {
+            native.map_or_else(|| kind == LINK_PREDICTION, |facts| facts.link_prediction)
+        }
+        "forecasting" => native.map_or_else(|| kind == FORECASTING, |facts| facts.forecasting),
         "temporal" => temporal,
         "static" => !temporal,
         _ => false,
@@ -579,15 +708,30 @@ pub fn validate_shape(
 
 /// Shared task then supported-output policy, without reading native row counts.
 pub fn validate_task_outputs(model: &str, kind: &str, outputs: &[String]) -> Result<(), CoreError> {
+    validate_native_task_outputs(model, kind, outputs, None)
+}
+
+/// Task admission from actual native membership, followed by shared output policy.
+pub fn validate_native_task_outputs(
+    model: &str,
+    kind: &str,
+    outputs: &[String],
+    admitted: Option<bool>,
+) -> Result<(), CoreError> {
     let spec = model_spec(model)?;
-    if !spec.tasks.contains(&kind) {
-        return Err(unsupported(
+    if !admitted.unwrap_or_else(|| spec.tasks.contains(&kind)) {
+        let mut error = unsupported(
             Sentence::ModelLacksTask,
             spec.id,
             "the model does not serve the task's kind",
         )
         .with_field("task", Detail::text(kind))
-        .with_field("supported", texts(sorted(spec.tasks))));
+        .with_field("supported", texts(sorted(spec.tasks)));
+        if admitted.is_some() {
+            error.public_details = Some(Box::new(error.fields.clone()));
+            error = error.with_field("native_model_task", Detail::Scalar(Scalar::Bool(true)));
+        }
+        return Err(error);
     }
     let mut unknown: Vec<&str> = outputs
         .iter()
@@ -664,7 +808,7 @@ fn member(value: &Value) -> String {
             Ok(n) => format!("n{:016x}", (n + 0.0).to_bits()),
             Err(_) => format!("t{token}"),
         },
-        Value::Text(text) => format!("s{text}"),
+        Value::Text(text) => format!("s{:?}", text.as_bytes()),
         Value::Bool(b) => format!("b{b}"),
         Value::Null => "z".to_owned(),
         other => format!("j{}", String::from_utf8_lossy(&other.to_bytes())),
@@ -709,10 +853,7 @@ pub fn preflight(
         if let Some((_, rows)) = instance_table(payload, "context")
             && rows.is_empty()
         {
-            return Err(
-                unsupported(Sentence::NoContextRows, model, "no context rows are left")
-                    .with_field("context_rows", count(0)),
-            );
+            validation::context_empty(true, model)?;
         }
     }
     for payload in payloads {
@@ -727,15 +868,7 @@ pub fn preflight(
             .and_then(Value::as_text);
         if let Some(values) = target_values(payload, column) {
             let labels: BTreeSet<String> = values.iter().map(|v| member(v)).collect();
-            if labels.len() > CLASSES_MAX {
-                return Err(unsupported(
-                    Sentence::TooManyClasses,
-                    model,
-                    "the target has more classes than the model takes",
-                )
-                .with_field("classes", count(labels.len()))
-                .with_field("limit", count(CLASSES_MAX)));
-            }
+            validation::class_count(labels.len(), model)?;
         }
     }
     for payload in payloads {
@@ -756,56 +889,23 @@ pub fn preflight(
             .filter(|v| !matches!(v, Value::Null))
             .map(|v| member(v))
             .collect();
-        if answered.len() != 1 {
-            continue;
+        if let Some(constant) = validation::variation(
+            kind,
+            column.unwrap_or_default(),
+            answered.len(),
+            query,
+            model,
+        )? {
+            notices.push(constant);
+            break;
         }
-        let column = column.unwrap_or_default();
-        let constant = constant_context(column, query);
-        if classifies(kind) {
-            // Named as the notice names the target, for the host's words
-            // (the adapter's `_how_to_name_the_target`).
-            let sentence = match constant.sentence {
-                Sentence::ContextConstantColumn => Sentence::OneClassColumn,
-                Sentence::ContextConstantPredicted => Sentence::OneClassPredicted,
-                Sentence::ContextConstantQuestion => Sentence::OneClassQuestion,
-                _ => Sentence::OneClassAnswer,
-            };
-            let mut error = unsupported(sentence, model, "every context row has the same answer")
-                .with_field("field", Detail::text("context"))
-                .with_field("reason", Detail::text("one_class"));
-            for (name, value) in constant.fields {
-                error = error.with_field(name, value);
-            }
-            return Err(error.with_field("classes_in_context", count(1)));
-        }
-        notices.push(constant);
-        break;
     }
     if !outputs.iter().any(|o| o == "explanation") {
         return Ok(notices);
     }
     let scored: usize = payloads.iter().map(|p| rows_of(p, "predict")).sum();
-    if scored != EXPLANATION_PREDICT_ROWS {
-        // The output and what to change, for the host's words (T2.13).
-        return Err(unsupported(
-            Sentence::ExplanationOneEntity,
-            model,
-            "an explanation covers one entity",
-        )
-        .with_field("field", Detail::text("outputs"))
-        .with_field("remedy", Detail::text("one_entity"))
-        .with_field("scored", count(scored)));
-    }
-    if asks_for_the_larger_context(payloads) {
-        return Err(unsupported(
-            Sentence::ExplanationFastMode,
-            model,
-            "an explanation is given only in the fast run mode",
-        )
-        .with_field("field", Detail::text("outputs"))
-        .with_field("remedy", Detail::text("smaller_context"))
-        .with_field("context_rows_fast", count(CONTEXT_ROWS_FAST)));
-    }
+    validation::explanation_size(scored, model)?;
+    validation::explanation_mode(asks_for_the_larger_context(payloads), model)?;
     Ok(notices)
 }
 
@@ -813,18 +913,17 @@ pub fn preflight(
 /// other than `fast` on any payload that names one, else more context rows
 /// than the fast mode takes (`_asks_for_the_larger_context`).
 fn asks_for_the_larger_context(payloads: &[Value]) -> bool {
-    let modes: Vec<String> = payloads
+    let modes: Vec<&Value> = payloads
         .iter()
-        .filter_map(
-            |p| match p.get("inference").and_then(|i| i.get("run_mode")) {
-                None | Some(Value::Null) => None,
-                Some(Value::Text(mode)) => Some(mode.clone()),
-                Some(other) => Some(String::from_utf8_lossy(&other.to_bytes()).into_owned()),
-            },
-        )
+        .filter_map(|payload| {
+            payload
+                .get("inference")
+                .and_then(|inference| inference.get("run_mode"))
+        })
+        .filter(|value| !matches!(value, Value::Null))
         .collect();
     if !modes.is_empty() {
-        return modes.iter().any(|m| m != "fast");
+        return modes.iter().any(|mode| mode.as_text() != Some("fast"));
     }
     payloads
         .iter()
@@ -979,29 +1078,11 @@ pub fn body(
                     .collect();
                 refused.sort();
                 if !refused.is_empty() {
-                    // The option field and what to change, for the host's
-                    // words (T2.13): drop the options, and choose a
-                    // regression's statistic where `output_type` is one.
-                    let mut forwarded = INFERENCE_OPTIONS;
-                    forwarded.sort_unstable();
-                    let remedy = if refused.iter().any(|n| *n == "output_type") {
-                        "drop_or_statistic"
-                    } else {
-                        "drop"
-                    };
-                    return Err(CoreError::new(
-                        if remedy == "drop" {
-                            Sentence::OptionsUnread
-                        } else {
-                            Sentence::OptionsUnreadStatistic
-                        },
-                        "the model does not read an inference option the call set",
-                    )
-                    .with_field("field", Detail::text("inference_config"))
-                    .with_field("remedy", Detail::text(remedy))
-                    .with_field("model", Detail::text(model))
-                    .with_field("unsupported", texts(refused.iter().map(|n| n.as_str())))
-                    .with_field("forwarded", texts(forwarded)));
+                    return Err(validation::inference_refusal(
+                        model,
+                        texts(refused.iter().map(|name| name.as_str())),
+                        refused.iter().any(|name| *name == INFERENCE_STATISTIC_KEY),
+                    ));
                 }
                 let sent: Vec<(String, Value)> = config
                     .iter()
@@ -1043,6 +1124,12 @@ fn is_chosen(value: &Value) -> bool {
 /// T1.28a's fix round 1), before the model is called.
 pub fn call_bytes(call: &Value) -> Result<Vec<u8>, CoreError> {
     let bytes = call.to_bytes();
+    check_call_bytes(&bytes)?;
+    Ok(bytes)
+}
+
+/// Admission over the bytes actually encoded by the host's native encoder.
+pub fn check_call_bytes(bytes: &[u8]) -> Result<(), CoreError> {
     if bytes.len() > crate::payload::PAYLOAD_BYTES {
         return Err(CoreError::new(
             Sentence::CallPastEndpoint,
@@ -1055,7 +1142,7 @@ pub fn call_bytes(call: &Value) -> Result<Vec<u8>, CoreError> {
             Detail::Scalar(Scalar::UInt64(crate::payload::PAYLOAD_BYTES as u64)),
         ));
     }
-    Ok(bytes)
+    Ok(())
 }
 
 /// The entity a row is about, as the result gives it: as the reference's
@@ -1206,10 +1293,15 @@ fn declared_answers(payload: &Value, kind: &str) -> AnswerType {
     if !classifies(kind) {
         return AnswerType::Float;
     }
-    match target_dtype(payload) {
-        Some(d) if d.starts_with("bool") => AnswerType::Bool,
-        Some(d) if d.starts_with("int") => AnswerType::Int,
-        Some(d) if d.starts_with("float") => AnswerType::FloatClass,
+    declared_class_answers(target_dtype(payload).map(str::as_bytes))
+}
+
+/// Shared class-family selection over neutral declaration text.
+fn declared_class_answers(dtype: Option<&[u8]>) -> AnswerType {
+    match dtype {
+        Some(d) if d.starts_with(b"bool") => AnswerType::Bool,
+        Some(d) if d.starts_with(b"int") => AnswerType::Int,
+        Some(d) if d.starts_with(b"float") => AnswerType::FloatClass,
         _ => AnswerType::Text,
     }
 }
@@ -1224,7 +1316,7 @@ fn as_bool(value: &Value) -> Option<bool> {
     match value {
         Value::Bool(b) => Some(*b),
         Value::Text(text) => {
-            let text = text.trim().to_lowercase();
+            let text = text.utf8()?.trim().to_lowercase();
             if TRUE.contains(&text.as_str()) {
                 Some(true)
             } else if FALSE.contains(&text.as_str()) {
@@ -1249,7 +1341,7 @@ fn direct_bool_class(value: &Value) -> Option<bool> {
     let Value::Text(text) = value else {
         return as_bool(value);
     };
-    let text = text.trim_matches(sdm_engine::words::space);
+    let text = text.utf8()?.trim_matches(sdm_engine::words::space);
     if TRUE.iter().any(|token| text.eq_ignore_ascii_case(token)) {
         Some(true)
     } else if FALSE.iter().any(|token| text.eq_ignore_ascii_case(token)) {
@@ -1263,7 +1355,7 @@ fn direct_bool_class(value: &Value) -> Option<bool> {
 /// of an integer (trimmed), an integer, or a float that is whole.
 fn as_int(value: &Value) -> Option<i64> {
     match value {
-        Value::Text(text) => text.trim().parse::<i64>().ok(),
+        Value::Text(text) => text.utf8()?.trim().parse::<i64>().ok(),
         Value::Number(token) if is_integer_token(token) => token.parse::<i64>().ok(),
         Value::Number(token) => {
             let float: f64 = token.parse().ok()?;
@@ -1279,7 +1371,7 @@ fn as_int(value: &Value) -> Option<i64> {
 /// text first observes its reached native process limit before zero stripping.
 fn direct_integer_class(value: &Value, decimal_limit: u32) -> Option<String> {
     if let Value::Text(text) = value {
-        return integer_text_limited(text, decimal_limit);
+        return integer_text_limited(text.utf8()?, decimal_limit);
     }
     match entity(value, Some("int64")) {
         Entity::Integer(value) => Some(value.to_string()),
@@ -1293,7 +1385,7 @@ fn direct_integer_class(value: &Value, decimal_limit: u32) -> Option<String> {
 /// an integer past a double's range not one.
 fn as_float(value: &Value) -> Option<f64> {
     match value {
-        Value::Text(text) => text.trim().parse::<f64>().ok(),
+        Value::Text(text) => text.utf8()?.trim().parse::<f64>().ok(),
         Value::Number(token) => token
             .parse::<f64>()
             .ok()
@@ -1306,7 +1398,7 @@ fn as_float(value: &Value) -> Option<f64> {
 /// the established conversion; gathered text retains its approved Rust parser.
 fn direct_float_class(value: &Value) -> Option<f64> {
     match value {
-        Value::Text(text) => numeric_text(text),
+        Value::Text(text) => text.utf8().and_then(numeric_text),
         _ => as_float(value),
     }
 }
@@ -1377,7 +1469,9 @@ fn answer_of(
             None => as_int(value).map_or_else(|| written(value), Answer::Int),
         }),
         AnswerType::Text => Ok(match value {
-            Value::Text(text) => Answer::Text(text.clone()),
+            Value::Text(text) => text
+                .utf8()
+                .map_or_else(|| written(value), |text| Answer::Text(text.to_owned())),
             other => written(other),
         }),
     }
@@ -1424,7 +1518,7 @@ fn spelled_as(
     let respelled: Vec<(String, f64)> = probabilities
         .iter()
         .map(|(class, p)| {
-            let as_written = Value::Text(class.clone());
+            let as_written = Value::Text(class.clone().into());
             let key = match answers {
                 AnswerType::Bool => {
                     let read = match policy {
@@ -1568,6 +1662,36 @@ fn layout_as(
             true,
         ),
     };
+
+    layout_placed(
+        response,
+        placed,
+        text_ids,
+        answers,
+        attribution,
+        policy,
+        float_text,
+    )
+}
+
+/// Shared response-field construction after the owning adapter attributes
+/// each row. Relational native lineage and direct tabular attribution retain
+/// their separate guards before reaching this representation-only helper.
+fn layout_placed(
+    response: &PredictionResponse,
+    placed: Vec<(i64, Entity, Option<i64>)>,
+    text_ids: bool,
+    answers: AnswerType,
+    attribution: Attribution,
+    policy: AnswerPolicy,
+    float_text: fn(f64) -> String,
+) -> Result<Part, CoreError> {
+    if placed.len() != response.predictions.len() {
+        return Err(CoreError::protocol(
+            Sentence::InvalidMessage,
+            "placed answers have another response length",
+        ));
+    }
 
     let mut laid = Vec::with_capacity(placed.len());
     for (item, (row_index, id, forecast_step)) in response.predictions.iter().zip(placed) {
@@ -1871,6 +1995,73 @@ pub fn left_out(part: &Part) -> Vec<String> {
     absent(part, &LOOKED_FOR.map(String::from))
 }
 
+/// Native result-column vocabulary, with membership and presence owned by the host.
+pub fn native_output_vocabulary() -> NativeOutputVocabulary {
+    NativeOutputVocabulary {
+        explanation: "explanation".into(),
+        item_fields: [
+            "prediction",
+            "probabilities",
+            "quantiles",
+            "scores",
+            "rankings",
+            "embeddings",
+        ]
+        .map(str::to_owned)
+        .to_vec(),
+        empty_values: vec![
+            NativeOutputEmpty::Null,
+            NativeOutputEmpty::Mapping,
+            NativeOutputEmpty::List,
+            NativeOutputEmpty::Tuple,
+        ],
+    }
+}
+
+pub fn native_output_meaning(
+    explanation: bool,
+    item: Option<bool>,
+) -> Result<NativeOutputMeaning, CoreError> {
+    let role = match (explanation, item) {
+        (true, None) => NativeOutputRole::Explanation,
+        (false, None) => NativeOutputRole::Candidate,
+        (false, Some(true)) => NativeOutputRole::Item,
+        (false, Some(false)) => NativeOutputRole::Other,
+        (true, Some(_)) => {
+            return Err(CoreError::protocol(
+                Sentence::InvalidMessage,
+                "an explanation output has unexpected item membership",
+            ));
+        }
+    };
+    Ok(NativeOutputMeaning {
+        explanation,
+        item,
+        role,
+    })
+}
+
+pub fn native_output_absence(
+    columns: Vec<NativeOutputPresence>,
+) -> Result<NativeOutputAbsence, CoreError> {
+    let mut absent = vec![];
+    for (position, column) in columns.iter().enumerate() {
+        if native_output_meaning(column.meaning.explanation, column.meaning.item)? != column.meaning
+            || column.meaning.role == NativeOutputRole::Candidate
+            || (column.meaning.role == NativeOutputRole::Other) != column.nonempty.is_none()
+        {
+            return Err(CoreError::protocol(
+                Sentence::InvalidMessage,
+                "native output presence does not match its name meaning",
+            ));
+        }
+        if column.nonempty == Some(false) {
+            absent.push(position);
+        }
+    }
+    Ok(NativeOutputAbsence { columns, absent })
+}
+
 /// The notice of the outputs [`absent`] found, naming the model asked.
 pub fn absent_notice(model: &str, absent: &[String]) -> Notice {
     Notice {
@@ -1890,12 +2081,30 @@ pub fn absent_notice(model: &str, absent: &[String]) -> Notice {
 /// and the steps with none, in step order; `None` where every step or none
 /// was explained, or none was asked for.
 pub fn steps_unexplained(model: &str, named: &[String], steps: &[(u32, &Part)]) -> Option<Notice> {
-    if !named.iter().any(|n| n == "explanation") {
+    if !named.iter().any(|name| name == "explanation") {
+        return None;
+    }
+    steps_unexplained_observed(
+        model,
+        true,
+        &steps
+            .iter()
+            .map(|(step, part)| (*step, part.explanation.is_some()))
+            .collect::<Vec<_>>(),
+    )
+}
+
+pub fn steps_unexplained_observed(
+    model: &str,
+    requested: bool,
+    steps: &[(u32, bool)],
+) -> Option<Notice> {
+    if !requested {
         return None;
     }
     let missing: Vec<u32> = steps
         .iter()
-        .filter(|(_, part)| part.explanation.is_none())
+        .filter(|(_, explained)| !*explained)
         .map(|(step, _)| *step)
         .collect();
     if missing.is_empty() || missing.len() == steps.len() {
@@ -2325,7 +2534,8 @@ fn as_written_column(rows: &[&Row]) -> Option<(DataType, ArrayRef)> {
             DataType::Utf8,
             Arc::new(StringArray::from_iter(rows.iter().map(
                 |r| match &r.prediction {
-                    Answer::Text(t) | Answer::Written(Value::Text(t)) => Some(t.clone()),
+                    Answer::Text(t) => Some(t.clone()),
+                    Answer::Written(Value::Text(t)) => t.utf8().map(str::to_owned),
                     _ => None,
                 },
             ))),
@@ -2437,7 +2647,10 @@ pub(crate) fn entity(value: &Value, dtype: Option<&str>) -> Entity {
         }
         (_, Value::Bool(_)) => None,
         (Some(d), _) if d.starts_with("int") => match value {
-            Value::Text(text) => integer_text(text).map(|digits| integer(&digits)),
+            Value::Text(text) => text
+                .utf8()
+                .and_then(integer_text)
+                .map(|digits| integer(&digits)),
             Value::Number(token) if is_integer_token(token) => Some(integer(token)),
             Value::Number(token) => token
                 .parse::<f64>()
@@ -2447,7 +2660,7 @@ pub(crate) fn entity(value: &Value, dtype: Option<&str>) -> Entity {
             _ => None,
         },
         (Some(d), _) if d.starts_with("float") => match value {
-            Value::Text(text) => numeric_text(text).map(Entity::Float),
+            Value::Text(text) => text.utf8().and_then(numeric_text).map(Entity::Float),
             Value::Number(token) => token
                 .parse::<f64>()
                 .ok()
@@ -2459,7 +2672,10 @@ pub(crate) fn entity(value: &Value, dtype: Option<&str>) -> Entity {
     };
     read.unwrap_or_else(|| match value {
         Value::Null => Entity::None,
-        Value::Text(text) => Entity::Text(text.clone()),
+        Value::Text(text) => text.utf8().map_or_else(
+            || Entity::Written(value.clone()),
+            |text| Entity::Text(text.to_owned()),
+        ),
         Value::Number(token) if is_integer_token(token) => integer(token),
         other => Entity::Written(other.clone()),
     })
@@ -2480,7 +2696,7 @@ fn integer(digits: &str) -> Entity {
 /// object, which no id an answer names matches.
 fn instance_text(value: &Value, float_text: fn(f64) -> String) -> Option<String> {
     Some(match value {
-        Value::Text(text) => text.clone(),
+        Value::Text(text) => text.utf8()?.to_owned(),
         Value::Null => "None".to_owned(),
         Value::Bool(true) => "True".to_owned(),
         Value::Bool(false) => "False".to_owned(),
@@ -2554,7 +2770,7 @@ mod tests {
     #[test]
     fn an_entity_is_read_back_as_as_declared_reads_it() {
         let number = |t: &str| Value::Number(t.to_owned());
-        let text = |t: &str| Value::Text(t.to_owned());
+        let text = |t: &str| Value::Text(t.into());
         let int = Some("int64");
         assert_eq!(entity(&number("7"), int), Entity::Integer(7));
         assert_eq!(entity(&text(" +0_07 "), int), Entity::Integer(7));
@@ -2584,7 +2800,7 @@ mod tests {
     #[test]
     fn a_float_target_s_class_reads_back_as_a_double() {
         let number = |t: &str| Value::Number(t.to_owned());
-        let text = |t: &str| Value::Text(t.to_owned());
+        let text = |t: &str| Value::Text(t.into());
         assert_eq!(as_float(&text(" 3.0 ")), Some(3.0));
         assert_eq!(
             as_float(&text("0.10000000149011612")),
@@ -2632,7 +2848,7 @@ mod tests {
                 ("0", false),
             ] {
                 let padded = format!("{separator}{label}{separator}");
-                let value = Value::Text(padded.clone());
+                let value = Value::Text(padded.clone().into());
                 assert_eq!(
                     answer_of(
                         Some(&value),

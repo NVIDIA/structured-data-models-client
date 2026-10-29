@@ -20,7 +20,11 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub mod response;
 
+#[cfg(test)]
+mod refusal_tests;
+
 fn text(value: impl Into<String>) -> Value {
+    let value: String = value.into();
     Value::Text(value.into())
 }
 fn object<const N: usize>(pairs: [(&str, Value); N]) -> Value {
@@ -64,7 +68,7 @@ fn widened(a: Dtype, b: Dtype) -> Dtype {
     }
 }
 
-fn raw(array: &ArrayRef, row: usize) -> Result<Scalar, CoreError> {
+pub(crate) fn raw(array: &ArrayRef, row: usize) -> Result<Scalar, CoreError> {
     if array.is_null(row) {
         return Ok(Scalar::Null);
     }
@@ -96,7 +100,7 @@ fn raw(array: &ArrayRef, row: usize) -> Result<Scalar, CoreError> {
     })
 }
 
-fn cell(
+pub(crate) fn cell(
     value: Scalar,
     dtype: Dtype,
     column: &str,
@@ -282,7 +286,7 @@ fn primitive_inference(inference: DirectInference) -> Result<Value, CoreError> {
             PrimitiveOption::Value(Scalar::UInt64(v)) => integer(v.to_string())?,
             PrimitiveOption::Value(Scalar::Null) => Value::Null,
             PrimitiveOption::Value(Scalar::Bool(v)) => Value::Bool(v),
-            PrimitiveOption::Value(Scalar::Utf8(v)) => Value::Text(v),
+            PrimitiveOption::Value(Scalar::Utf8(v)) => Value::Text(v.into()),
             PrimitiveOption::Value(Scalar::Float64(v)) => Value::float(v).ok_or_else(|| {
                 CoreError::protocol(
                     Sentence::InvalidMessage,
@@ -611,17 +615,19 @@ pub fn check_body(
                 let valid = matches!(cell, Value::Null)
                     || match (dtype, cell) {
                         (Dtype::Bool, Value::Bool(_)) | (Dtype::String, Value::Text(_)) => true,
-                        (
-                            Dtype::Int32 | Dtype::Int64,
-                            Value::Number(token) | Value::Text(token),
-                        ) => {
-                            sdm_wire::json::is_integer_token(token)
-                                && token.parse::<i64>().is_ok_and(|value| {
-                                    // Coherence uses the same canonical codec as EncodeBody:
-                                    // a wide int64 is lossless text, not a string column.
-                                    crate::payload::int_cell(i128::from(value), name)
-                                        .is_ok_and(|encoded| encoded == *cell)
-                                })
+                        (Dtype::Int32 | Dtype::Int64, Value::Number(_) | Value::Text(_)) => {
+                            let token = match cell {
+                                Value::Number(token) => Some(token.as_str()),
+                                Value::Text(token) => token.utf8(),
+                                _ => None,
+                            };
+                            token.is_some_and(|token| {
+                                sdm_wire::json::is_integer_token(token)
+                                    && token.parse::<i64>().is_ok_and(|value| {
+                                        crate::payload::int_cell(i128::from(value), name)
+                                            .is_ok_and(|encoded| encoded == *cell)
+                                    })
+                            })
                         }
                         (Dtype::Float32 | Dtype::Float64, Value::Number(token)) => {
                             token.parse::<f64>().is_ok_and(f64::is_finite)
@@ -652,7 +658,9 @@ fn entity_text(value: &Entity, float_text: fn(f64) -> String) -> String {
                 "False".into()
             }
         }
-        Entity::Written(Value::Text(s)) => s.clone(),
+        Entity::Written(Value::Text(s)) => s.utf8().map(str::to_owned).unwrap_or_else(|| {
+            String::from_utf8_lossy(&Value::Text(s.clone()).to_bytes()).into_owned()
+        }),
         Entity::Written(v) => String::from_utf8_lossy(&v.to_bytes()).into_owned(),
     }
 }

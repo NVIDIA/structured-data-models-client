@@ -72,6 +72,7 @@ fn column(
     unique: bool,
 ) -> DescribedColumn {
     DescribedColumn {
+        untyped: false,
         name: name.into(),
         received,
         dtype,
@@ -1349,6 +1350,30 @@ fn times_to_the_end(
     run: &mut Run,
     ts: &dyn Fn(usize) -> ArrayRef,
 ) -> (Result<Vec<u8>, CoreError>, Vec<sdm_contract::CoreWarning>) {
+    times_from_complete_columns(
+        run,
+        &|name, n| {
+            if name == "ts" {
+                ts(n)
+            } else {
+                shop_column(name, n, None)
+            }
+        },
+        &|name| {
+            if name == "ts" {
+                ts(1005)
+            } else {
+                shop_column(name, 1005, None)
+            }
+        },
+    )
+}
+
+fn times_from_complete_columns(
+    run: &mut Run,
+    selected: &dyn Fn(&str, usize) -> ArrayRef,
+    complete: &dyn Fn(&str) -> ArrayRef,
+) -> (Result<Vec<u8>, CoreError>, Vec<sdm_contract::CoreWarning>) {
     let mut warnings = Vec::new();
     loop {
         let step = match run.next() {
@@ -1381,8 +1406,7 @@ fn times_to_the_end(
                             "order_id" => Arc::new(Int64Array::from(vec![0_i64, 1])),
                             "user_id" => Arc::clone(&key),
                             "price" => Arc::new(arrow_array::Float64Array::from(vec![1.5; n])),
-                            "ts" => ts(n),
-                            _ => shop_column(c, n, None),
+                            _ => selected(c, n),
                         };
                         (c.as_str(), column)
                     })
@@ -1394,6 +1418,21 @@ fn times_to_the_end(
                 data(answer)
             };
             let answer = match &asked.request {
+                DataRequest::Scan {
+                    columns,
+                    filters,
+                    limit,
+                    ..
+                } => {
+                    assert!(filters.is_empty(), "column reading precedes filtering");
+                    assert_eq!(*limit, None, "whole-column reading has no sample cap");
+                    data(
+                        columns
+                            .iter()
+                            .map(|name| (name.as_str(), complete(name)))
+                            .collect(),
+                    )
+                }
                 DataRequest::Describe { .. } => indexes(&[]),
                 DataRequest::TimeBounds { .. } => catalog(&asked.request).unwrap(),
                 DataRequest::SampleEntities { columns, .. } => {
@@ -1511,17 +1550,12 @@ fn a_date_a_zoned_timestamp_and_text_are_read_to_their_instants() {
 fn text_times_are_read_as_the_provider_declares_and_refused_by_name_otherwise() {
     let text = || shop_with_times(ColumnType::Utf8, Dtype::String);
     let days = |n: usize| Arc::new(StringArray::from(vec!["2024-01-05"; n])) as ArrayRef;
-    // No reading declared, the client's rules (not ported), a value outside
+    // No reading declared, a value outside
     // the core's list of formats (T1.25b), day and month values the fetch
     // puts in no order, and offsets mixed: each by its rule's name, before
     // any text is read as a time.
     for (provider, ts, wanted) in [
         (host_reading(None), Box::new(days) as Column, "text_times"),
-        (
-            host_reading(Some(TextTimes::ClientRules)),
-            Box::new(days),
-            "text_time_rules",
-        ),
         (
             host_reading(Some(TextTimes::ValueByValue)),
             Box::new(|n| Arc::new(StringArray::from(vec!["March 5 2024"; n])) as ArrayRef),
@@ -1564,6 +1598,212 @@ fn text_times_are_read_as_the_provider_declares_and_refused_by_name_otherwise() 
         let err = result.unwrap_err();
         assert_eq!(err.code, ErrorCode::UnsupportedRequest, "{wanted}");
         assert_eq!(rule(&err), wanted);
+    }
+}
+
+#[test]
+fn client_rules_use_complete_columns_for_bounds_and_selected_timestamp_features() {
+    fn at(description: &SourceDescription, anchor: i64) -> Run {
+        let (mut operation, attached) = materialize_start(
+            host_reading(Some(TextTimes::ClientRules)),
+            description,
+            QUERY,
+            Some(Seed::from(7_u128)),
+        );
+        let Operation::Materialize(operation_value) = &mut operation else {
+            panic!("materialize operation")
+        };
+        operation_value.anchor_time = Some(Scalar::Timestamp {
+            unit: TimestampUnit::Ns,
+            zone: None,
+            value: anchor,
+        });
+        materialize_on(Arc::new(sdm_data::Data::new()), operation, attached).unwrap()
+    }
+
+    let first = 1_706_745_600_000_000_i64; // 2024-02-01, day-first 01/02.
+    let last = 1_710_460_800_000_000_i64; // 2024-03-15, the late deciding row.
+    for feature in [false, true] {
+        let mut text = if feature {
+            shop()
+        } else {
+            shop_with_times(ColumnType::Utf8, Dtype::String)
+        };
+        let mut typed = shop();
+        if feature {
+            text.tables[0].columns.push(column(
+                "seen_at",
+                ColumnType::Utf8,
+                Dtype::String,
+                Stype::Timestamp,
+                false,
+            ));
+            typed.tables[0].columns.push(column(
+                "seen_at",
+                ColumnType::Timestamp {
+                    unit: TimestampUnit::Us,
+                    zone: None,
+                },
+                Dtype::Date,
+                Stype::Timestamp,
+                false,
+            ));
+        }
+        let target = if feature { "seen_at" } else { "ts" };
+        // 2024 has a 29-day February: Mar2's 30-day lookback is Feb1.
+        // The ordinary feature has separate designated-time bounds.
+        let valid = ANCHOR + 86_400_000_000_000;
+        let anchors = if feature {
+            vec![valid]
+        } else {
+            vec![ANCHOR, valid]
+        };
+        for anchor in anchors {
+            let mut text_run = at(&text, anchor);
+            let mut typed_run = at(&typed, anchor);
+            let base = |name: &str, n| -> ArrayRef {
+                if name == "ts" {
+                    Arc::new(TimestampMicrosecondArray::from(vec![
+                        1_704_412_800_000_000;
+                        n
+                    ]))
+                } else {
+                    shop_column(name, n, None)
+                }
+            };
+            let bounds = || {
+                Arc::new(TimestampMicrosecondArray::from(vec![
+                    1_672_531_200_000_000,
+                    1_720_310_400_000_000,
+                ])) as ArrayRef
+            };
+            let (text_result, text_warnings) = times_from_complete_columns(
+                &mut text_run,
+                &|name, n| {
+                    if name == target {
+                        Arc::new(StringArray::from(vec!["01/02/2024"; n]))
+                    } else {
+                        base(name, n)
+                    }
+                },
+                &|name| {
+                    if name == target {
+                        let mut values = vec!["01/02/2024"; 1005];
+                        values[1004] = "15/03/2024";
+                        Arc::new(StringArray::from(values))
+                    } else {
+                        bounds()
+                    }
+                },
+            );
+            let (typed_result, typed_warnings) = times_from_complete_columns(
+                &mut typed_run,
+                &|name, n| {
+                    if name == target {
+                        Arc::new(TimestampMicrosecondArray::from(vec![first; n]))
+                    } else {
+                        base(name, n)
+                    }
+                },
+                &|name| {
+                    if name == target {
+                        Arc::new(TimestampMicrosecondArray::from(vec![first, last]))
+                    } else {
+                        bounds()
+                    }
+                },
+            );
+            if anchor == ANCHOR {
+                let text_error = text_result.unwrap_err();
+                let typed_error = typed_result.unwrap_err();
+                assert_eq!(
+                    text_error.sentence,
+                    sdm_contract::Sentence::ContextBeforeDataRefused
+                );
+                assert_eq!(text_error, typed_error);
+                assert_eq!(text_warnings, typed_warnings);
+                assert_eq!(
+                    text_error.fields["earliest"],
+                    sdm_contract::Detail::Scalar(Scalar::Timestamp {
+                        unit: TimestampUnit::Ns,
+                        zone: None,
+                        value: first * 1_000,
+                    })
+                );
+                continue;
+            }
+            let text_payload: serde_json::Value =
+                serde_json::from_slice(&text_result.unwrap()).unwrap();
+            let typed_payload: serde_json::Value =
+                serde_json::from_slice(&typed_result.unwrap()).unwrap();
+            assert_eq!(text_payload, typed_payload, "feature={feature}");
+            assert_eq!(text_warnings, typed_warnings, "feature={feature}");
+            assert!(sends(
+                &serde_json::to_vec(&text_payload).unwrap(),
+                "2024-02-01T00:00:00.000000Z"
+            ));
+        }
+    }
+}
+
+#[test]
+fn client_rules_late_conflict_is_not_hidden_by_selected_rows_or_bounds_summaries() {
+    for feature in [false, true] {
+        let mut description = if feature {
+            shop()
+        } else {
+            shop_with_times(ColumnType::Utf8, Dtype::String)
+        };
+        if feature {
+            description.tables[0].columns.push(column(
+                "seen_at",
+                ColumnType::Utf8,
+                Dtype::String,
+                Stype::Timestamp,
+                false,
+            ));
+        }
+        let target = if feature { "seen_at" } else { "ts" };
+        let mut run = materialize(
+            host_reading(Some(TextTimes::ClientRules)),
+            &description,
+            QUERY,
+            Some(Seed::from(7_u128)),
+        )
+        .unwrap();
+        let (answer, _) = times_from_complete_columns(
+            &mut run,
+            &|name, n| {
+                if name == target {
+                    Arc::new(StringArray::from(vec!["01/02/2024"; n]))
+                } else if name == "ts" {
+                    Arc::new(TimestampMicrosecondArray::from(vec![
+                        1_704_412_800_000_000;
+                        n
+                    ]))
+                } else {
+                    shop_column(name, n, None)
+                }
+            },
+            &|name| {
+                if name == target {
+                    let mut values = vec!["01/02/2024"; 1005];
+                    values[1003] = "15/03/2024";
+                    values[1004] = "03/15/2024";
+                    Arc::new(StringArray::from(values))
+                } else {
+                    Arc::new(TimestampMicrosecondArray::from(vec![
+                        1_672_531_200_000_000,
+                        1_720_310_400_000_000,
+                    ]))
+                }
+            },
+        );
+        let error = answer.expect_err("the complete source contradicts its day order");
+        assert_eq!(
+            error.fields.get("rule"),
+            Some(&Detail::text("text_time_order"))
+        );
     }
 }
 

@@ -7,56 +7,18 @@
 # core are gone, and the bridge is deleted in Phase 5 with the old route.
 # Frozen meanwhile (E50).
 
-r"""``predict`` on the core: the model call and its answer (T1.11d).
+r"""Shared native transport and result presentation for core predictions.
 
-``SDMClient.predict`` of a request materialized on the core over a DuckDB
-source comes here on the core route, after the client's own checks of its
-arguments' types (the request a ``Request``, the outputs a sequence of
-names). Everything else the old route runs before and after the call is
-the core's from T1.28b (the design's "Host-held semantics" rows it moved):
-the model and output checks and the default outputs (``_prepare``), the
-answer to a request with no rows, the adapter's checks of the context
-(``_preflight``), the parts merged into one result and the notice of an
-output the answer left out, each notice a code and fields this client
-words (:mod:`.errors`).
+Gathered prediction uses :mod:`.relational_predict` to retain the live public
+request containers between fixed core operations.
+Model rules, attribution, numbering, aggregation and output policy belong to
+Rust; native traversal, conversion, I/O and result objects belong to Python.
+The direct tabular path shares the transport and presentation helpers here.
 
-The core's ``predict`` takes the request state ``materialize`` answered,
-which the request held since (its version, and its payload and query as
-the request holds them now), the model's id, the outputs the caller named
-(or that it named none), and the id this call carries, drawn as the
-adapter draws one; it makes the call the adapter makes, which this host
-sends through the client's own transport, reads the answer as the client's
-bindings read it, and lays it out: one row per answer, ordered by
-``row_index``, under the entity it is about, with its prediction (a class
-as the target's own type), its probabilities, from T2.13 its explanation
-and metadata, beside the result's explanation, and from T2.9 a
-regression's quantiles. The endpoint's answer
-reaches the core as its JSON, every non-finite number Python's reader made
-of it written as a token the core reads as the same number (an infinity as
-the overflowing ``1e400``, a NaN as ``NaN``), so both hosts read it alike.
-
-What the endpoint itself wrote in a refusal (HTTP 4xx or 5xx) is shown as
-on the old route (decision E47, owner decision 2026-10-10, an exception to
-H17 for the endpoint's own text only): the refusal is raised as the
-client's transport raises it and its adapter explains it, a
-:class:`~sdm_client.errors.NimRequestError` with the endpoint's status,
-``code``, message (its ``detail`` or ``title``) and details
-(``endpoint_code``, ``diagnosis`` and its other fields, as the transport
-reads them), the same class, message and details as the old route's. That
-text is the endpoint's, so a request value it echoes back is shown, which
-the owner accepted; to it the client adds only its own explanations, as on
-the old route: the adapter's naming of the tables and columns of our schema
-a refusal is about, and the Databricks transport's naming of the serving
-endpoint (both the user's own configuration), never a value, a credential
-or a URL. The transport's exception, and with it the endpoint's URL and any
-credential the URL holds, is not chained, nor any other context. As on the
-old route, an endpoint that echoes a credential of ours in its own text has
-it shown: a scrub of such echoes was tried and removed (E47). A failed transport
-(the endpoint could not be reached, or its answer could not be read) is
-told to the core, which ends the run with ``TRANSPORT_ERROR``; any other
-error of the transport keeps its code and gets a fixed sentence.
-
-Nothing here imports the relational engine.
+Endpoint refusals preserve their endpoint-written text and adapter explanation
+under decision E47.
+Transport failures are reported to the core without leaking transport context.
+No optional relational engine is imported by this module.
 """
 
 from __future__ import annotations
@@ -65,10 +27,9 @@ import json
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
-from sdm_client._rust import codec, errors, results
-from sdm_client._rust.run import Refused, TransportFailed, run
+from sdm_client._rust import codec, results
+from sdm_client._rust.run import Refused, TransportFailed
 from sdm_client.core.transport import EndpointFailed
-from sdm_client.decompose import RANKING
 from sdm_client.errors import NimRequestError, StructuredDataError
 
 if TYPE_CHECKING:
@@ -114,19 +75,6 @@ def _explanation(text: str | None, by_step: bool) -> Any:
             for step, explained in steps.items()
         }
     }
-
-
-def _payload(payload: dict[str, Any]) -> bytes:
-    r"""A payload as the core reads it; one holding a value JSON has no form
-    for is refused as the client's transport refuses it, with no context."""
-    try:
-        return json.dumps(payload, allow_nan=False).encode()
-    except (TypeError, ValueError):
-        pass
-    raise StructuredDataError(
-        'this request carries a value that cannot be sent as JSON',
-        code='INVALID_REQUEST',
-    )
 
 
 def _copied(value: Any) -> Any:
@@ -306,255 +254,16 @@ def positions(request: Request) -> tuple[int, ...]:
     return tuple(range(len(rewritten.parts))) if rewritten is not None else ()
 
 
-def _from_state(
-    request: Request, state: results.CoreRequest
-) -> tuple[dict[str, Any], dict[int, Any]]:
-    r"""The request state the core wrote for ``request``, as ``predict``
-    names it, and its attachments: the payloads and questions the request
-    holds, each later call's or part's with the id drawn for it."""
-    from sdm_client.adapters.relational import _request_id
-
-    steps = request.parts if request.parts is not None else (request,)
-    [(payload, query), *later] = [
-        ((step.payloads or ())[0], step.query) for step in steps
-    ]
-    named: dict[str, Any] = {'version': state.version, 'payload': 1, 'query': 2}
-    attachments = {1: _payload(payload), 2: codec.attachment(query)}
-    if state.batches is not None:
-        # Each later call's payload, the rows the core gathered it to score,
-        # and its own id, drawn as the adapter draws one for every call, in
-        # call order (T2.8c).
-        named['batches'] = []
-        for at, (more, rows) in enumerate(
-            zip((request.payloads or ())[1:], state.batches, strict=True),
-            start=3,
-        ):
-            attachments[at] = _payload(more)
-            named['batches'].append(
-                {'payload': at, 'rows': rows, 'request_id': _request_id()}
-            )
-    ranking = state.ranking
-    if request.parts is not None and ranking is not None:
-        named['ranking'] = {
-            'candidate': ranking.positions[0],
-            'value': ranking.values[0],
-            'parts': [],
-        }
-        if ranking.top_k is not None:
-            named['ranking']['top_k'] = ranking.top_k
-        for number, ((more, asked), position, value) in enumerate(
-            zip(later, ranking.positions[1:], ranking.values[1:], strict=True),
-            start=2,
-        ):
-            at = 2 * number - 1
-            attachments[at] = _payload(more)
-            attachments[at + 1] = codec.attachment(asked)
-            # Each question's call its own id, drawn as the adapter draws
-            # one for every call, in order.
-            named['ranking']['parts'].append(
-                {
-                    'candidate': position,
-                    'value': value,
-                    'payload': at,
-                    'query': at + 1,
-                    'request_id': _request_id(),
-                }
-            )
-    elif request.parts is not None:
-        named['forecast'] = []
-        for number, (more, asked) in enumerate(later, start=2):
-            at = 2 * number - 1
-            attachments[at] = _payload(more)
-            attachments[at + 1] = codec.attachment(asked)
-            # Each step's call its own id, drawn as the adapter draws one
-            # for every call, in step order (T1.36 fix 24).
-            named['forecast'].append(
-                {
-                    'step': number,
-                    'payload': at,
-                    'query': at + 1,
-                    'request_id': _request_id(),
-                }
-            )
-    return named, attachments
-
-
-def _held(request: Request) -> tuple[dict[str, Any], dict[int, Any]]:
-    r"""``request``, which holds no state the core wrote, as ``predict``
-    names a request held (T3.26), and its attachments: what the old client
-    sends of it, its payloads in order and each question's text, and, for
-    a ranking, the candidate each question asks after as the caller gave
-    it (:func:`materialize._candidates`), each later call's or part's with
-    the id drawn for it. A part of a forecast or a ranking is one call,
-    which every client gathers it as (``refuse_a_part_that_would_take_
-    several_calls``)."""
-    from sdm_client._rust.materialize import _candidates
-    from sdm_client.adapters.relational import _request_id
-
-    rewritten = request._decomposition
-    if request.parts is None or rewritten is None:
-        first, *calls = request.payloads or ()
-        named: dict[str, Any] = {'payload': 1, 'query': 2}
-        attachments = {1: _payload(first), 2: codec.attachment(request.query)}
-        if calls:
-            # Each later call's payload and its own id, drawn as the
-            # adapter draws one for every call, in call order.
-            named['batches'] = []
-            for at, call in enumerate(calls, start=3):
-                attachments[at] = _payload(call)
-                named['batches'].append(
-                    {'payload': at, 'request_id': _request_id()}
-                )
-        return named, attachments
-    [(payload, query), *later] = [
-        ((part.payloads or ())[0], part.query) for part in request.parts
-    ]
-    named = {'payload': 1, 'query': 2}
-    attachments = {1: _payload(payload), 2: codec.attachment(query)}
-    parts = []
-    for number, (more, asked) in enumerate(later, start=2):
-        at = 2 * number - 1
-        attachments[at] = _payload(more)
-        attachments[at + 1] = codec.attachment(asked)
-        # Each part's call its own id, drawn as the adapter draws one for
-        # every call, in order.
-        parts.append(
-            {'payload': at, 'query': at + 1, 'request_id': _request_id()}
-        )
-    if rewritten.kind == RANKING:
-        at = 2 * len(request.parts) + 1
-        attachments[at] = codec.attachment(
-            _candidates([about for _, about in rewritten.parts])
-        )
-        named['ranking'] = {'candidates': at, 'parts': parts}
-        if rewritten.top is not None:
-            named['ranking']['top_k'] = rewritten.top
-    else:
-        named['forecast'] = parts
-    return named, attachments
-
-
 def predict(
     client: SDMClient,
     request: Request,
     model: Any,
     outputs: Sequence[str] | None,
 ) -> PredictionResult:
-    r"""The answer to ``request``, predicted on the core.
+    """Predict from live native request contents through typed core products."""
+    from sdm_client._rust.relational_predict import predict as gathered
 
-    A request the core materialized is predicted from the state the core
-    wrote (``Request._core``); any other, one an older client gathered or
-    this one gathered on its old route, holding no such state (T3.26,
-    owner decision 2026-10-23), from what it holds, as the old client
-    predicts it: the host hands the core the request's payloads, questions
-    and a ranking's candidates (:func:`_held`), and the core rebuilds the
-    rest.
-
-    Raises:
-        StructuredDataError: the core's refusal, as :mod:`.errors` maps it
-            (the model and output checks, the context's, and what it does
-            not predict yet, ``UNSUPPORTED_REQUEST`` naming the rule); a
-            model given as neither a model handle nor an id; and the
-            endpoint's refusal, as the client's transport reports it.
-    """
-
-    from sdm_client.adapters.relational import _request_id
-    from sdm_client.models import spec_for
-
-    # A forecast or a ranking gathered in parts is held as one request per
-    # part (T1.36 fix 21, T2.8), which the core predicts in one run, part by
-    # part; a request of more rows than one call scores, as each call's
-    # payload (T2.8c), which the core predicts in one run, call by call.
-    state = _state(request)
-    rewritten = request._decomposition
-    ranking = (
-        request.parts is not None
-        and rewritten is not None
-        and rewritten.kind == RANKING
-    )
-    # A ranking's candidates, by the position the core names each by, as
-    # the caller gave them: the values only this host holds.
-    given: dict[int, Any] = (
-        dict(
-            zip(
-                positions(request),
-                (about for _, about in rewritten.parts),
-                strict=True,
-            )
-        )
-        if ranking and rewritten is not None
-        else {}
-    )
-    # A model handle is the host's object; its id, or the id given, is the
-    # core's to check.
-    model_id = model if isinstance(model, str) else spec_for(model).model_id
-
-    def model_call(body: bytes) -> bytes:
-        return _send(client, model_id, body)
-
-    operation: dict[str, Any] = {
-        'op': 'predict',
-        'model': model_id,
-        'request_id': _request_id(),
-        # The outputs the caller named, or that it named none (the core then
-        # asks the task's own, T1.28b).
-        'outputs': [] if outputs is None else list(outputs),
-        # The inference options the caller set (a mapping, on this
-        # route), which the core refuses where the model does not read
-        # them (T1.28a).
-        'inference_asked': sorted(
-            request.requested_inference.get('inference_config', {})
-        ),
-    }
-    if outputs is None:
-        operation['default_outputs'] = True
-    # A serving endpoint the core speaks to: its envelope written and its
-    # answers read there (T3.13).
-    endpoint = getattr(client._transport, 'model_endpoint', None)
-    if endpoint is not None:
-        operation['model_endpoint'] = endpoint
-    if state is None:
-        operation['held'], attachments = _held(request)
-    else:
-        operation['state'], attachments = _from_state(request, state)
-
-    # The candidates the core names by position, as the caller gave them:
-    # the values only this host holds, which its sentences name.
-    try:
-        with errors.holding(
-            candidates=lambda fields: [
-                given[at] for at in fields['candidates']
-            ],
-            candidate=lambda fields: given[fields['candidate']],
-            part_candidate=lambda fields: given[fields['ranking_candidate']],
-        ):
-            finished = run(operation, attachments, model=model_call)
-    except Exception as error:
-        # Whatever the call raised, the answers before it are put on it.
-        _carry_the_answers(error, request.parts is not None)
-        raise
-    answered = results.expect(finished.result, results.Predicted)
-    metadata = codec.restored_json(finished.take(answered.metadata))
-    if ranking:
-        # The core's rows are ordered by row_index; a ranking's items keep
-        # the order the answers named them in.
-        ranked = sorted(
-            _rows(finished.take(answered.result)),
-            key=lambda row: row['answer_index'],
-        )
-        return _ranked(answered, ranked, metadata, given)
-    table = _table(finished.take(answered.result))
-    # The result's explanation, on the result's schema (T2.13).
-    explained = (table.schema.metadata or {}).get(b'explanation')
-    return _result(
-        table.to_pylist(),
-        model=answered.model,
-        request_id=answered.request_id,
-        metadata=metadata,
-        outputs=answered.outputs,
-        by_step=request.parts is not None,
-        explanation=None if explained is None else explained.decode(),
-    )
+    return gathered(client, request, model, outputs)
 
 
 def _result(
@@ -632,6 +341,8 @@ def _ranked(
     rows: list[dict[str, Any]],
     metadata: dict[str, Any],
     given: dict[int, Any],
+    *,
+    native_outputs: tuple[Any, ...] | None = None,
 ) -> PredictionResult:
     r"""A ranking's result as the client gives it (``_ranked``): each row's
     candidates, best first, as the caller gave them (``given``, by the
@@ -643,15 +354,22 @@ def _ranked(
 
     from sdm_client.result import PredictionResult
 
-    wanted = answered.outputs
+    wanted = answered.outputs if native_outputs is None else native_outputs
+    fields: Sequence[Any]
     items = []
     for row in rows:
         chosen = [given[at] for at in row['candidates']]
+        if native_outputs is not None:
+            from sdm_client._rust.relational_native import ranking_fields
+
+            fields = ranking_fields(native_outputs)
+        else:
+            fields = wanted
         items.append(
             PredictionItem(
                 row_index=row['row_index'],
                 id=_id(row),
-                prediction=chosen if 'prediction' in wanted else None,
+                prediction=chosen if 'prediction' in fields else None,
                 rankings=(
                     tuple(
                         {'candidate': candidate, 'score': score}
@@ -659,7 +377,7 @@ def _ranked(
                             chosen, row['scores'], strict=True
                         )
                     )
-                    if 'rankings' in wanted
+                    if 'rankings' in fields
                     else None
                 ),
             )

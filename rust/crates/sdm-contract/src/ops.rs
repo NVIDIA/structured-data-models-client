@@ -42,6 +42,8 @@ pub enum Operation {
     Materialize(Materialize),
     Predict(Predict),
     PrepareRequest(crate::prepare::PrepareRequest),
+    PrepareFrames(crate::frames::materialize::PrepareFrames),
+    PrepareMaterialize(crate::materialize::PrepareMaterialize),
     /// Operations only tests reach, built only with the `test-ops` feature,
     /// which a shipped build leaves off; not part of the contract's schema.
     #[cfg(feature = "test-ops")]
@@ -57,6 +59,22 @@ pub enum AttachmentKind {
     Bytes,
     /// Arrow data.
     Arrow,
+    /// A core-created immutable frame graph and its continuing native stream.
+    FrameGraph,
+    FrameQuestion,
+    FramePopulation,
+    FrameLabelGroups,
+    FrameLabelBatch,
+    LabelInputs,
+    TargetColumn,
+    LookupRows,
+    MaterializeSource,
+    MaterializePopulation,
+    MaterializeGroups,
+    MaterializeBatch,
+    FrameTask,
+    FrameReferences,
+    FramePayload,
 }
 
 impl Operation {
@@ -69,6 +87,8 @@ impl Operation {
             Operation::Materialize(_) => "materialize",
             Operation::Predict(_) => "predict",
             Operation::PrepareRequest(_) => "prepare_request",
+            Operation::PrepareFrames(_) => "prepare_frames",
+            Operation::PrepareMaterialize(_) => "prepare_materialize",
             #[cfg(feature = "test-ops")]
             Operation::Test(_) => "test",
         }
@@ -79,6 +99,8 @@ impl Operation {
     pub fn attachments(&self) -> Vec<(AttachmentId, AttachmentKind)> {
         use AttachmentKind::{Arrow, Bytes};
         match self {
+            Operation::PrepareFrames(request) => vec![(request.input, Bytes)],
+            Operation::PrepareMaterialize(request) => vec![(request.input, Bytes)],
             Operation::ValidateQuery(v) => vec![(v.query, Bytes), (v.schema, Bytes)],
             Operation::DescribeSource(d) => {
                 let mut named = vec![(d.source, Bytes)];
@@ -158,6 +180,8 @@ pub enum OperationResult {
     Materialize(Materialized),
     Predict(Predicted),
     PrepareRequest(crate::prepare::PreparedRequest),
+    PrepareFrames(crate::frames::materialize::PreparedFrames),
+    PrepareMaterialize(crate::materialize::PreparedMaterialize),
     DecodedDirectResponse(crate::prepare::DecodedDirectResponse),
     #[cfg(feature = "test-ops")]
     #[schemars(skip)]
@@ -454,6 +478,10 @@ pub struct DescribedSource {
     /// present in SQL/Schema results or persistent schema metadata.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub frame_rows: Option<AttachmentId>,
+    /// Table-stage rows only: JSON NativeDecimalColumn declarations needed
+    /// when rebinding owned scale-zero mantissas under fresh attachment ids.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub frame_decimals: Option<AttachmentId>,
     /// What a semantic model's conversion notes of the schema it gave
     /// (contract v28, T3.27): each measure as the predictive query it is,
     /// each time column taken in place of the view's own, each parameter
@@ -533,6 +561,9 @@ pub struct DescribedTable {
 #[serde(deny_unknown_fields)]
 pub struct DescribedColumn {
     pub name: String,
+    /// Native inference carried no type, independently of its placeholder.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub untyped: bool,
     /// The type the provider handed over, after admission.
     #[serde(
         serialize_with = "crate::types::checked_column_type",
@@ -1554,6 +1585,67 @@ pub struct Attachments {
     pub frame_checkpoint_manifest: crate::frames::FrameCheckpointManifest,
     #[schemars(rename = "FrameCheckpointManifest.metadata")]
     pub frame_checkpoint_metadata: crate::frames::FrameCheckpointMetadata,
+    #[schemars(rename = "PrepareMaterialize.input")]
+    pub prepare_materialize_input: crate::materialize::MaterializePreparation,
+    #[schemars(rename = "PreparedMaterialize.value")]
+    pub prepare_materialize_value: crate::materialize::PreparedMaterializeValue,
+    #[schemars(rename = "MaterializePreparation/request.values")]
+    pub materialize_native_inference: CallValues,
+    #[schemars(rename = "PrepareFrames.input")]
+    pub prepare_frames_input: crate::frames::materialize::FramePreparation,
+    #[schemars(rename = "PreparedFrames.value")]
+    pub prepared_frames_value: crate::frames::materialize::PreparedFrameValue,
+    #[schemars(rename = "FramePreparation/source_meaning.schema")]
+    pub frame_source_meaning_schema: HeldSchema,
+    #[schemars(rename = "FramePreparation/caller_meaning.schema")]
+    pub frame_caller_meaning_schema: HeldSchema,
+    #[schemars(rename = "FramePreparation/relationship_overlap.observations")]
+    pub frame_relationship_overlap_observations:
+        Vec<crate::frames::materialize::FrameRelationshipEvidence>,
+    #[schemars(rename = "FramePreparation/question.schema")]
+    pub frame_question_schema: HeldSchema,
+    #[schemars(rename = "FramePreparation/question.query")]
+    pub frame_question_query: String,
+    #[schemars(rename = "FramePreparation/graph.schema")]
+    pub frame_graph_schema: HeldSchema,
+    #[schemars(rename = "FramePreparation/graph.frames")]
+    pub frame_graph_frames: crate::frames::MaterializeFrames,
+    #[schemars(rename = "FramePreparation/graph.values")]
+    pub frame_graph_values: CallValues,
+    #[schemars(rename = "FramePreparation/population.query")]
+    pub frame_population_query: String,
+    #[schemars(rename = "FramePreparation/population.values")]
+    pub frame_population_values: CallValues,
+    #[schemars(rename = "FramePreparation/task.values")]
+    pub frame_task_values: CallValues,
+    #[schemars(rename = "FramePreparation/plan.values")]
+    pub frame_plan_values: CallValues,
+    #[schemars(rename = "FramePreparation/payload.values")]
+    pub frame_payload_values: CallValues,
+    #[schemars(rename = "FrameQuestionInputs.candidates")]
+    pub frame_question_candidates: Vec<GivenCandidate>,
+    #[schemars(rename = "FrameQuestionInputs.values")]
+    pub frame_question_values: CallValues,
+    #[schemars(rename = "PreparedFrameQuestions.call_values")]
+    pub frame_checked_call_values: CallValues,
+    #[schemars(rename = "FrameRequestPlan.sampling_values")]
+    pub frame_sampling_values: CallValues,
+    #[schemars(rename = "NativePayload.wire")]
+    pub native_payload_wire: StatePayload,
+    #[schemars(rename = "RelationalResponseData.rows")]
+    pub relational_decoded_rows: Vec<crate::prepare::DecodedRelationalRow>,
+    #[schemars(rename = "RelationalResponsePart.rows")]
+    pub relational_attributed_rows: Vec<crate::prepare::AttributedRelationalRow>,
+    #[schemars(rename = "RelationalResponsePart.target_rows")]
+    pub relational_target_rows: Vec<crate::prepare::RelationalTargetRow>,
+    #[schemars(rename = "CheckRelationalCoverage.rows")]
+    pub relational_coverage_rows: Vec<crate::prepare::AttributedRelationalRow>,
+    #[schemars(rename = "RelationalAggregation/ranking.groups")]
+    pub relational_ranking_groups: crate::prepare::RelationalRankGroups,
+    // Predicted is also a standalone value in RelationalResultData, besides
+    // OperationResult's flattened predict variant, so both fields are locked.
+    #[schemars(rename = "RelationalResultData.predicted.metadata")]
+    pub relational_predicted_metadata: EndpointMetadata,
     #[schemars(rename = "ValidateQuery.query")]
     pub validate_query_query: String,
     #[schemars(rename = "ValidateQuery.schema")]
@@ -1562,6 +1654,8 @@ pub struct Attachments {
     pub describe_source_source: SourceSpec,
     #[schemars(rename = "DescribedSource.description")]
     pub described_source_description: SourceDescription,
+    #[schemars(rename = "DescribedSource.frame_decimals")]
+    pub described_source_frame_decimals: Vec<crate::frames::NativeDecimalColumn>,
     #[schemars(rename = "EditSchema.schema")]
     pub edit_schema_schema: HeldSchema,
     #[schemars(rename = "EditSchema.edit")]

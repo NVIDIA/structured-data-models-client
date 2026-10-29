@@ -22,6 +22,18 @@
 //! `words.json`, recorded in the reference's environment, holds the
 //! lowering of every code point and the words of 772 values (T1.26b).
 
+mod casing;
+mod native;
+mod split;
+
+pub use casing::{CasingProfile, UnicodeDataVersion, simple_identity_input};
+pub use native::{lower_native, normalize_native};
+
+/// Native str whitespace, shared by tokenization and diagnostic trimming.
+pub fn native_space(point: u32) -> bool {
+    char::from_u32(point).is_some_and(casing::space)
+}
+
 /// The most words a value keeps (`max_words`).
 pub const MAX_WORDS: usize = 50;
 /// The most characters a value is cut to before it is split
@@ -60,41 +72,26 @@ pub fn normalize(value: Option<&str>) -> Vec<String> {
         .chars()
         .take(MAX_CHARS)
         .flat_map(lower_case)
-        .map(|c| if punctuation(c) { ' ' } else { c })
         .collect();
-    // `<br\s*/?>`, each match a space, scanned left to right without
-    // overlap as `re.sub` scans.
-    let mut text = String::with_capacity(lower.len());
-    let mut at = 0;
-    while at < lower.len() {
-        if let Some(end) = line_break(&lower, at) {
-            text.push(' ');
-            at = end;
-        } else {
-            text.push(lower[at]);
-            at += 1;
-        }
-    }
-    text.split(space)
-        .filter(|word| !word.is_empty())
-        .take(MAX_WORDS)
-        .map(str::to_owned)
-        .collect()
+    split_words(lower, space)
 }
 
-/// The end of a `<br\s*/?>` starting at `at`, if one does.
-fn line_break(text: &[char], at: usize) -> Option<usize> {
-    if text.get(at..at + 3)? != ['<', 'b', 'r'] {
-        return None;
-    }
-    let mut end = at + 3;
-    while text.get(end).copied().is_some_and(space) {
-        end += 1;
-    }
-    if text.get(end) == Some(&'/') {
-        end += 1;
-    }
-    (text.get(end) == Some(&'>')).then_some(end + 1)
+/// Normalize a native frame value with its observed casing data profile.
+///
+/// The native cast selects its kernel at materialization time, after option
+/// warnings and successful sampling. The caller supplies that input fact;
+/// every character transformation and word-selection rule runs here.
+/// The provider-facing [`normalize`] retains its existing casing behavior.
+pub fn normalize_with_profile(value: Option<&str>, profile: CasingProfile) -> Vec<String> {
+    let text: Vec<_> = value.unwrap_or("").chars().take(MAX_CHARS).collect();
+    split_words(casing::lower(&text, profile), casing::space)
+}
+
+fn split_words(lower: Vec<char>, space: fn(char) -> bool) -> Vec<String> {
+    split::ranges(&lower, Some, space)
+        .into_iter()
+        .map(|range| lower[range].iter().collect())
+        .collect()
 }
 
 #[cfg(test)]

@@ -413,6 +413,12 @@ pub fn template(sentence: Sentence) -> Template {
             r#"{table}.{columns!d} identifies a row {repeats:,} time(s) it has already been used, e.g. {example!p}. Those rows are indistinguishable to the model. Name a different primary key if this column is a foreign key rather than an identifier."#,
         ),
         S::FrameNameEmpty => said(r#"The name {name!r} must be a non-empty string."#),
+        S::FrameCellBytes => said(
+            r#"{described} holds raw bytes ({native_type}), and the contract has no cell that carries them. It is already one value per row, so what it needs is a reading rather than a flattening: decode the column to text, or leave it out of the schema"#,
+        ),
+        S::FrameCellContainer => said(
+            r#"{described} holds {shape} ({native_type}), and a nested column is not something this client can send. Multi-label targets are not supported by these models; for a feature, give one value per row"#,
+        ),
         S::FrameNameCharacters => {
             said(r#"The name {name!r} contains one or more invalid characters: {characters!r}."#)
         }
@@ -512,6 +518,9 @@ pub fn template(sentence: Sentence) -> Template {
         S::ColumnsLeftOut => grouped(r#"{column} ({dtype})"#, Group::ColumnsLeftOut),
         S::TimeValuesUnread => said(
             r#"Could not parse {unread:,} of {rows:,} value(s) of time column '{column}' (for example {examples!T}); they were dropped as {advice:missing_time()}"#,
+        ),
+        S::NativeTimeValuesUnread => said(
+            r#"Could not parse {unread:,} of {rows:,} value(s) of time column '{column}' (for example {host.native_time_examples}); they were dropped as {advice:missing_time()}"#,
         ),
         S::DatesReadDayFirst => owned(
             r#"text in {table}.{column} was read as dates in {format} format, which puts the day first"#,
@@ -679,6 +688,9 @@ pub fn template(sentence: Sentence) -> Template {
         S::DirectRelated => said(
             r#"related_tables {host.direct_related} makes this a relational request, and no model can be sent one built from frames: the relational model is sent tables gathered around each entity, and the tabular model reads a single table. Gather it with PredictiveQuery(...).materialize(indices=[...], model='kumo-relational'), whose schema holds the related tables and the relationships that reach them."#,
         ),
+        S::RelationalOutputShapes => said(
+            r#"these parts were asked for different outputs ({shapes!r}), so they are not slices of one request"#,
+        ),
         S::DirectUnknownModel => said(
             r#"Unknown model {model!r}; this client can send: {known_models!r}. The Universal TFM contract declares these as a closed set, so a new model id has to be added to the contract and the bindings regenerated before it can be sent."#,
         ),
@@ -702,6 +714,23 @@ pub fn template(sentence: Sentence) -> Template {
         ),
         S::DirectNullableCast => said(r#"{host.direct_nullable_cast}"#),
         S::DirectNativeFailure => said(r#"native {stage} conversion failed"#),
+        S::FrameDecimalFraction => said(
+            r#"column {where} is declared {dtype!r} and holds {example}, which is not a whole number. Sending it would round the value without saying so; declare the column float64, or round it yourself if that is what you meant"#,
+        ),
+        S::FrameNativeFailure => said(r#"native frame {stage} conversion failed"#),
+        S::FrameNativeInternal => said(
+            r#"the relational engine failed while building this request: {native_type}: {host.frame_native_message}"#,
+        ),
+        S::FrameNativeSignature => said(
+            r#"the relational engine was called incorrectly by this client: {native_type}: {host.frame_native_message}"#,
+        ),
+        S::FrameNativeCaller => said(r#"{host.frame_native_message}{detail}"#),
+        S::FrameNativeBatchSmaller => said(
+            r#"{host.frame_native_message} What comes down is one of three. For an ordinary question it is the call: {advice:smaller_calls()} below the {holds} this one holds asks for the same entities in more and smaller calls. Where the context is itself over the limit, no call is small enough, and it is num_context_samples, num_neighbors or the columns the graph carries. For a ranking or a forecast, which is one call per candidate or step and is never batched, it is the entities.{detail}"#,
+        ),
+        S::FrameNativeBatchSingle => said(
+            r#"{host.frame_native_message} A call already scores one row, so there is no smaller one to ask for: what comes down is num_context_samples, num_neighbors or the columns the graph carries.{detail}"#,
+        ),
         S::DirectPredictDtype => said(r#"'DataFrame' object has no attribute 'dtype'"#),
         S::DirectAnswersShown => said(
             r#"{shown} of the {rows} rows being scored are also in context, carrying the {target!r} being asked for, so the model is being shown the answers to rows it is being asked about. Drop them from context, or gather the request with materialize(), which leaves the rows it scores out of the context it sends."#,
@@ -752,6 +781,12 @@ pub fn template(sentence: Sentence) -> Template {
         S::DirectResponseContract => {
             said(r#"{model} returned a response that does not match the contract: {diagnostic}"#)
         }
+        S::RelationalNotGathered => said(
+            r#"a relational request has to be gathered first, and this one was not. Build it with PredictiveQuery(...).materialize(indices=[...], model='kumo-relational'). A schema of one table is gathered for the tabular model unless the relational one is named, rather than with Request(context=..., predict=...), which is the single-table form"#,
+        ),
+        S::RelationalRowsUncounted => said(
+            r#"a request sent in several calls has a call whose rows could not be counted, so the rows of the calls after it cannot be numbered"#,
+        ),
         S::TabularRowBounds => {
             said(r#"the response names row_index {index}, and this batch asked about {rows} rows"#)
         }
@@ -760,6 +795,26 @@ pub fn template(sentence: Sentence) -> Template {
         S::TabularIdMismatch => said(
             r#"the response pairs row_index {index} with id {id!r}, and this batch asked about {expected!r} there"#,
         ),
+        S::RelationalRowMissing => said(
+            r#"the response is missing a row_index, so its answer cannot be attributed to an entity"#,
+        ),
+        S::RelationalRowBounds => {
+            said(r#"the response names row_index {index}, and this batch asked about {rows} rows"#)
+        }
+        S::RelationalForecastStepMissing => said(
+            r#"a forecast answer for row {index} names no step, so its place in the horizon is unknown"#,
+        ),
+        S::RelationalForecastStepUnexpected => {
+            said(r#"a {kind} answer carries a forecast step, which only a forecast has"#)
+        }
+        S::RelationalRowRepeated => said(r#"the response answers {where} more than once"#),
+        S::RelationalIdMissing => said(
+            r#"the answer for row {index} carries no id, and this batch asked under {expected}, so the two cannot be matched"#,
+        ),
+        S::RelationalIdMismatch => said(
+            r#"the response pairs row_index {index} with id {id!r}, and this batch asked about {expected} there"#,
+        ),
+        S::RelationalRowsUnanswered => said(r#"the response left row(s) {missing!r} unanswered"#),
         S::NotYetPredict => said(
             r#"predicting this request needs the {rule!r} rule, which is not one this client's core supports yet"#,
         ),
@@ -843,6 +898,9 @@ pub fn template(sentence: Sentence) -> Template {
         S::NotFinite => said(
             r#"encountered a non-finite value ({value}); NIM requests must contain finite numbers or nulls"#,
         ),
+        S::PastInt64Bare => said(
+            r#"a value is outside the range {dtype} represents (-9223372036854775808 to 9223372036854775807); send the column as strings"#,
+        ),
         S::PastInt64 => said(
             r#"Column '{table}.{column}' row {row}: a value is outside the range {dtype} represents (-9223372036854775808 to 9223372036854775807); send the column as strings"#,
         ),
@@ -878,7 +936,7 @@ pub fn template(sentence: Sentence) -> Template {
             said(r#"top_k is {given!S}, and this model ranks between 1 and {limit} candidates"#)
         }
         S::RowsPerCall => said(
-            r#"rows_per_call is not a whole number of at least one, and a call scores a whole number of rows, at least one"#,
+            r#"rows_per_call is {given!G}, and a call scores a whole number of rows, at least one"#,
         ),
         S::MaxPqIterationsNotAWholeNumber => owned(
             r#"max_pq_iterations must be a whole number, got {given!N}"#,
@@ -1174,6 +1232,12 @@ pub fn template(sentence: Sentence) -> Template {
         ),
         S::ColumnsUnreadSeveral => said(
             r#"{columns!c} are typed text, which this model does not read, so the request is answered without them and they contribute nothing to the prediction. Type a column categorical if its values are labels rather than prose, or leave it out to say so."#,
+        ),
+        S::RelationshipsDisjointOne => said(
+            r#"{relationships} joins none of the rows given: no value of the foreign key appears in the key it points at, so the tables are related in the schema and in no row of the data, and the question is answered as though it were not declared. Check that the foreign key is the column naming the parent row; one spelled differently from the key it points at has to be said outright, as relationships=[Relationship({source_table!r}, <that column>, {target_table!r}, {target_column!r})]."#,
+        ),
+        S::RelationshipsDisjointSeveral => said(
+            r#"{relationships} join none of the rows given: no value of the foreign key appears in the key it points at, so the tables are related in the schema and in no row of the data, and the question is answered as though they were not declared. Check that the foreign key is the column naming the parent row; one spelled differently from the key it points at has to be said outright, as relationships=[Relationship({source_table!r}, <that column>, {target_table!r}, {target_column!r})]."#,
         ),
         S::FilterChoseExamples => said(
             r#"the entity filter {condition!r} selects the labelled examples the model learns from, and does not narrow the {entities} rows named for scoring. Those are scored as given, whether or not they satisfy it. Pass only indices that satisfy the condition if that is what you meant."#,

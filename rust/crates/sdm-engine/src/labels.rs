@@ -39,6 +39,7 @@
 //! What the executor does by a path this does not port is refused by name
 //! ([`crate::not_yet`], register P1B-3).
 
+use sdm_contract::scalar::unicode::UnicodeText;
 use sdm_contract::{CoreError, Sentence};
 
 use crate::not_yet;
@@ -302,6 +303,39 @@ pub fn aggregate_kept(
             taken[batch[row]].push(row);
         }
     }
+    aggregate_rows(aggregation, examples, values, &taken)
+}
+
+/// The same numeric kernel over complete already-selected source rows.
+/// Window and filter policy has been consumed by the bound native column;
+/// this entry point introduces no sentinel timestamps or second time window.
+pub fn aggregate_selected(
+    aggregation: Aggregation,
+    examples: usize,
+    batch: &[usize],
+    values: &Values,
+) -> Result<Aggregated, CoreError> {
+    if values.len() != batch.len() || batch.iter().any(|&row| row >= examples) {
+        return Err(CoreError::protocol(
+            Sentence::InvalidMessage,
+            "selected aggregation rows do not align with their candidate identities",
+        ));
+    }
+    let mut taken = vec![Vec::new(); examples];
+    for (row, &candidate) in batch.iter().enumerate() {
+        if values.present(row) {
+            taken[candidate].push(row);
+        }
+    }
+    aggregate_rows(aggregation, examples, values, &taken)
+}
+
+fn aggregate_rows(
+    aggregation: Aggregation,
+    examples: usize,
+    values: &Values,
+    taken: &[Vec<usize>],
+) -> Result<Aggregated, CoreError> {
     let present: Vec<bool> = match aggregation {
         Aggregation::Sum | Aggregation::Count => vec![true; examples],
         _ => taken.iter().map(|rows| !rows.is_empty()).collect(),
@@ -443,7 +477,7 @@ pub enum Constant {
     Int(i128),
     Float(f64),
     Bool(bool),
-    Text(String),
+    Text(UnicodeText),
     /// A date literal's time, nanoseconds since the epoch, with no zone.
     Time(i64),
 }
@@ -454,11 +488,30 @@ pub enum Labels {
     Float(Vec<f32>),
     Int(Vec<i64>),
     Bool(Vec<bool>),
-    Text(Vec<String>),
+    Text(Vec<UnicodeText>),
     Lists(Vec<Vec<LinkValue>>),
 }
 
 impl Labels {
+    /// Append aligned native label batches without changing their logical
+    /// family or the distinction between native Unicode points.
+    pub fn extend(&mut self, other: &Self) -> Result<(), CoreError> {
+        match (self, other) {
+            (Self::Float(into), Self::Float(from)) => into.extend_from_slice(from),
+            (Self::Int(into), Self::Int(from)) => into.extend_from_slice(from),
+            (Self::Bool(into), Self::Bool(from)) => into.extend_from_slice(from),
+            (Self::Text(into), Self::Text(from)) => into.extend_from_slice(from),
+            (Self::Lists(into), Self::Lists(from)) => into.extend_from_slice(from),
+            _ => {
+                return Err(CoreError::protocol(
+                    Sentence::InvalidMessage,
+                    "native label batches do not share their actual source family",
+                ));
+            }
+        }
+        Ok(())
+    }
+
     pub fn len(&self) -> usize {
         match self {
             Labels::Float(v) => v.len(),
@@ -510,9 +563,10 @@ impl Labels {
 #[derive(Debug, Clone, PartialEq)]
 pub enum LinkValue {
     Int(i64),
+    UInt(u64),
     Float(f32),
     Bool(bool),
-    Text(String),
+    Text(UnicodeText),
     Decimal(i128, i8),
 }
 
@@ -520,6 +574,7 @@ impl LinkValue {
     fn key(&self) -> Vec<u8> {
         match self {
             Self::Int(v) => v.to_le_bytes().to_vec(),
+            Self::UInt(v) => v.to_le_bytes().to_vec(),
             // pandas equality treats the two signed zeros as one value.
             Self::Float(v) => (v + 0.0).to_bits().to_le_bytes().to_vec(),
             Self::Bool(v) => vec![u8::from(*v)],
@@ -540,14 +595,43 @@ pub fn distinct(
     bounds: Bounds<'_>,
     kept: Option<&[bool]>,
 ) -> Result<Labelled, CoreError> {
-    let present = column.present();
-    if present.len() != batch.len()
-        || times.len() != batch.len()
+    let rows = batch.len();
+    if times.len() != rows
         || bounds.ends.len() != examples
         || bounds.starts.is_some_and(|s| s.len() != examples)
-        || kept.is_some_and(|k| k.len() != batch.len())
-        || batch.iter().any(|b| *b >= examples)
+        || kept.is_some_and(|k| k.len() != rows)
     {
+        return Err(CoreError::new(
+            Sentence::Internal,
+            "a link label's rows and windows do not align",
+        ));
+    }
+    distinct_rows(examples, batch, column, |row, at| {
+        kept.is_none_or(|k| k[row])
+            && times[row].is_some_and(|time| {
+                time <= bounds.ends[at] && bounds.starts.is_none_or(|s| time > s[at])
+            })
+    })
+}
+
+/// Stable pair grouping over actual rows already selected by the target's
+/// completed native column/filter/window products. No time values are invented.
+pub fn distinct_selected(
+    examples: usize,
+    batch: &[usize],
+    column: &Column,
+) -> Result<Labelled, CoreError> {
+    distinct_rows(examples, batch, column, |_, _| true)
+}
+
+fn distinct_rows(
+    examples: usize,
+    batch: &[usize],
+    column: &Column,
+    included: impl Fn(usize, usize) -> bool,
+) -> Result<Labelled, CoreError> {
+    let present = column.present();
+    if present.len() != batch.len() || batch.iter().any(|&at| at >= examples) {
         return Err(CoreError::new(
             Sentence::Internal,
             "a link label's rows and windows do not align",
@@ -556,24 +640,19 @@ pub fn distinct(
     let mut seen = vec![std::collections::BTreeSet::new(); examples];
     let mut lists = vec![Vec::new(); examples];
     for (row, &at) in batch.iter().enumerate() {
-        if !present[row] || kept.is_some_and(|k| !k[row]) {
-            continue;
-        }
-        let Some(time) = times[row] else {
-            continue;
-        };
-        if time > bounds.ends[at] || bounds.starts.is_some_and(|s| time <= s[at]) {
+        if !present[row] || !included(row, at) {
             continue;
         }
         let value = match column {
             Column::Int(v) => LinkValue::Int(v[row].unwrap_or_default()),
+            Column::UInt(v) => LinkValue::UInt(v[row].unwrap_or_default()),
             Column::Float(v) => LinkValue::Float(v[row].unwrap_or_default()),
             Column::Bool(v) => LinkValue::Bool(v[row].unwrap_or_default()),
             Column::Text(v) => LinkValue::Text(v[row].clone().unwrap_or_default()),
             Column::Decimal { values, scale, .. } => {
                 LinkValue::Decimal(values[row].unwrap_or_default(), *scale)
             }
-            Column::Time(_) | Column::UInt(_) => return Err(not_yet("target_type")),
+            Column::Time(_) => return Err(not_yet("target_type")),
         };
         if seen[at].insert(value.key()) {
             lists[at].push(value);
@@ -748,7 +827,7 @@ pub enum Column {
     Float(Vec<Option<f32>>),
     Int(Vec<Option<i64>>),
     Bool(Vec<Option<bool>>),
-    Text(Vec<Option<String>>),
+    Text(Vec<Option<UnicodeText>>),
     /// A decimal column's unscaled values, its declared precision and its
     /// scale: compared exactly in a condition, or a target
     /// ([`decimal_target`]).
@@ -816,7 +895,12 @@ fn decimal_target(values: &[Option<i128>], scale: i8, classes: bool) -> (Vec<boo
         *seen.entry((float + 0.0).to_bits()).or_insert(value) != value
     });
     let labels = if merged {
-        Labels::Text(present.iter().map(|&v| decimal_text(v, scale)).collect())
+        Labels::Text(
+            present
+                .iter()
+                .map(|&v| decimal_text(v, scale).into())
+                .collect(),
+        )
     } else {
         Labels::Float(floats)
     };
@@ -917,45 +1001,55 @@ pub fn truth(target: &Target) -> Result<Truth, CoreError> {
             constant,
         } => leaf(target, &Test::Compare(*op, constant.as_ref()), false),
         Target::Member { target, values } => leaf(target, &Test::In(values), false),
-        Target::Not(inner) => {
-            let Truth { values, mask } = truth(inner)?;
-            Ok(Truth {
-                values: values.into_iter().map(|v| !v).collect(),
-                mask,
-            })
-        }
+        Target::Not(inner) => Ok(negate_truth(&truth(inner)?)),
         Target::Both { op, left, right } => {
             let left = truth(left)?;
             let right = truth(right)?;
-            if left.values.len() != right.values.len() {
-                return Err(CoreError::new(
-                    Sentence::Internal,
-                    "a logical target's sides do not cover the same rows",
-                ));
-            }
-            Ok(Truth {
-                values: left
-                    .values
-                    .iter()
-                    .zip(&right.values)
-                    .map(|(&l, &r)| match op {
-                        BoolOp::And => l && r,
-                        BoolOp::Or => l || r,
-                    })
-                    .collect(),
-                mask: left
-                    .mask
-                    .iter()
-                    .zip(&right.mask)
-                    .map(|(&l, &r)| l && r)
-                    .collect(),
-            })
+            combine_truth(*op, &left, &right)
         }
         Target::Column(_) | Target::Aggregated(_) | Target::Listed(_) => Err(CoreError::new(
             Sentence::Internal,
             "a column or an aggregation stands where a condition is read",
         )),
     }
+}
+
+/// The same Boolean kernel over actual already completed condition data.
+/// Presence remains independent from a value such as the result of = NULL.
+pub fn negate_truth(truth: &Truth) -> Truth {
+    Truth {
+        values: truth.values.iter().map(|value| !value).collect(),
+        mask: truth.mask.clone(),
+    }
+}
+
+pub fn combine_truth(op: BoolOp, left: &Truth, right: &Truth) -> Result<Truth, CoreError> {
+    if left.values.len() != right.values.len()
+        || left.mask.len() != left.values.len()
+        || right.mask.len() != right.values.len()
+    {
+        return Err(CoreError::new(
+            Sentence::Internal,
+            "a logical target's sides do not cover the same rows",
+        ));
+    }
+    Ok(Truth {
+        values: left
+            .values
+            .iter()
+            .zip(&right.values)
+            .map(|(&left, &right)| match op {
+                BoolOp::And => left && right,
+                BoolOp::Or => left || right,
+            })
+            .collect(),
+        mask: left
+            .mask
+            .iter()
+            .zip(&right.mask)
+            .map(|(&left, &right)| left && right)
+            .collect(),
+    })
 }
 
 /// One condition's truth over its operand, a column or an aggregation.
@@ -1058,7 +1152,7 @@ fn column_compare(column: &Column, op: RelOp, constant: &Constant) -> Result<Vec
             .collect(),
         (Column::Text(v), Constant::Text(t)) => v
             .iter()
-            .map(|x| x.as_deref().is_some_and(|x| apply(x, op, t.as_str())))
+            .map(|x| x.as_ref().is_some_and(|x| apply(x, op, t)))
             .collect(),
         (Column::Time(v), Constant::Time(t)) => v
             .iter()
@@ -1536,8 +1630,8 @@ mod tests {
         assert_eq!(
             label_classes(&Target::Column(close)).unwrap().labels,
             Labels::Text(vec![
-                "0.000000100000000000".to_owned(),
-                "0.000000100000000001".to_owned(),
+                "0.000000100000000000".into(),
+                "0.000000100000000001".into(),
             ])
         );
     }
@@ -1569,9 +1663,9 @@ mod tests {
         assert_eq!(
             label_classes(&Target::Column(amounts)).unwrap().labels,
             Labels::Text(vec![
-                "1234567.01".to_owned(),
-                "1234567.02".to_owned(),
-                "-1234567.03".to_owned(),
+                "1234567.01".into(),
+                "1234567.02".into(),
+                "-1234567.03".into(),
             ])
         );
         // Rounded once: a hair above a float32 midpoint rounds up.
@@ -1773,7 +1867,7 @@ mod tests {
         Box::new(Target::Column(Column::Text(
             ["US", "DE", "IN", "", "DE", "IN"]
                 .iter()
-                .map(|t| (!t.is_empty()).then(|| (*t).to_owned()))
+                .map(|t| (!t.is_empty()).then(|| (*t).into()))
                 .collect(),
         )))
     }
@@ -1801,7 +1895,7 @@ mod tests {
     }
 
     fn text(t: &str) -> Constant {
-        Constant::Text(t.to_owned())
+        Constant::Text(t.into())
     }
 
     #[test]
@@ -1978,5 +2072,157 @@ mod tests {
         .unwrap();
         assert_eq!(out.mask, [true, false, true]);
         assert_eq!(out.labels, Labels::Bool(vec![false, true]));
+    }
+}
+
+#[cfg(test)]
+mod native_text_tests {
+    use super::*;
+    #[test]
+    fn native_label_equality_and_link_distinctness_keep_original_unicode_points() {
+        let pair = UnicodeText::from_points([0xd83d, 0xde3a]).unwrap();
+        let scalar = UnicodeText::from("😺");
+        let column = Column::Text(vec![
+            Some(pair.clone()),
+            Some(scalar.clone()),
+            Some(pair.clone()),
+            None,
+        ]);
+        let compared = label(&Target::Condition {
+            target: Box::new(Target::Column(column.clone())),
+            op: RelOp::Eq,
+            constant: Some(Constant::Text(pair.clone())),
+        })
+        .unwrap();
+        assert_eq!(compared.labels, Labels::Bool(vec![true, false, true]));
+        let listed = distinct(
+            1,
+            &[0, 0, 0, 0],
+            &column,
+            &[Some(1); 4],
+            Bounds {
+                starts: None,
+                ends: &[2],
+            },
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            listed.labels,
+            Labels::Lists(vec![vec![LinkValue::Text(pair), LinkValue::Text(scalar)]])
+        );
+    }
+}
+
+#[cfg(test)]
+mod unsigned_link_tests {
+    use super::*;
+
+    #[test]
+    fn unsigned_distinct_retains_all_boundaries_and_first_occurrence_per_batch() {
+        let boundaries = [
+            0,
+            (1_u64 << 53) - 1,
+            1_u64 << 53,
+            (1_u64 << 53) + 1,
+            i64::MAX as u64,
+            (i64::MAX as u64) + 1,
+            u64::MAX,
+        ];
+        let mut values = boundaries.iter().copied().map(Some).collect::<Vec<_>>();
+        values.extend([
+            Some(boundaries[2]),
+            None,
+            Some(7),
+            Some(8),
+            Some(9),
+            Some(10),
+        ]);
+        let batch = [0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0];
+        let times = [
+            Some(1),
+            Some(1),
+            Some(1),
+            Some(1),
+            Some(1),
+            Some(1),
+            Some(1),
+            Some(1),
+            Some(1),
+            Some(1),
+            None,
+            Some(0),
+            Some(3),
+        ];
+        let kept = [
+            true, true, true, true, true, true, true, true, true, false, true, true, true,
+        ];
+        let result = distinct(
+            2,
+            &batch,
+            &Column::UInt(values),
+            &times,
+            Bounds {
+                starts: Some(&[0, 0]),
+                ends: &[2, 2],
+            },
+            Some(&kept),
+        )
+        .unwrap();
+        assert_eq!(result.mask, [true, true]);
+        assert_eq!(
+            result.labels,
+            Labels::Lists(vec![
+                vec![
+                    LinkValue::UInt(boundaries[0]),
+                    LinkValue::UInt(boundaries[2]),
+                    LinkValue::UInt(boundaries[4]),
+                    LinkValue::UInt(boundaries[6])
+                ],
+                vec![
+                    LinkValue::UInt(boundaries[1]),
+                    LinkValue::UInt(boundaries[3]),
+                    LinkValue::UInt(boundaries[5])
+                ],
+            ])
+        );
+    }
+
+    #[test]
+    fn unsigned_null_empty_groups_and_scalar_time_guards_keep_their_previous_policy() {
+        for (values, batch, times) in [
+            (vec![], vec![], vec![]),
+            (vec![None], vec![0], vec![Some(1)]),
+        ] {
+            let result = distinct(
+                1,
+                &batch,
+                &Column::UInt(values),
+                &times,
+                Bounds {
+                    starts: None,
+                    ends: &[2],
+                },
+                None,
+            )
+            .unwrap();
+            assert_eq!(result.mask, [false]);
+            assert_eq!(result.labels, Labels::Lists(vec![]));
+        }
+        assert!(label(&Target::Column(Column::UInt(vec![Some(1)]))).is_err());
+        assert!(
+            distinct(
+                1,
+                &[0],
+                &Column::Time(vec![Some(1)]),
+                &[Some(1)],
+                Bounds {
+                    starts: None,
+                    ends: &[2]
+                },
+                None
+            )
+            .is_err()
+        );
     }
 }

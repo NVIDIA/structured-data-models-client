@@ -50,14 +50,36 @@ whatever the session's zone.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from contextlib import nullcontext
-from typing import Any
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import contextmanager, nullcontext
+from typing import Any, NamedTuple, Protocol
 
 from sdm_connectors import providers
 from sdm_connectors.providers import PlanNotRun
 
 from sdm_client._rust.providers.postgres_arrow import BATCH_ROWS, rows_arrow
+
+
+class _ColumnDescription(Protocol):
+    @property
+    def name(self) -> str: ...
+    @property
+    def type_code(self) -> int: ...
+    @property
+    def precision(self) -> int | None: ...
+    @property
+    def scale(self) -> int | None: ...
+
+
+class ScalarRows(NamedTuple):
+    """Actual unboxed rows and complete native descriptions, without name reads.
+
+    These retain fetched data only, never a cursor, callback or task state.
+    The ordinary Arrow reader keeps its existing concrete type registry.
+    """
+
+    rows: Sequence[Sequence[object]]
+    description: Sequence[_ColumnDescription]
 
 
 class PostgresProvider:
@@ -72,6 +94,19 @@ class PostgresProvider:
     def __call__(
         self, step: dict[str, Any], keys: Mapping[int, Any] | None = None
     ) -> Any:
+        with self.source_rows(step, keys) as source:
+            return rows_arrow(
+                source.description,
+                source.rows,
+                self._connection,
+                self._batch_rows,
+            )
+
+    @contextmanager
+    def source_rows(
+        self, step: dict[str, Any], keys: Mapping[int, Any] | None = None
+    ) -> Iterator[ScalarRows]:
+        """Keep exact rows and driver declarations in their actual read scope."""
         plan = step.get('plan')
         if not isinstance(plan, Mapping) or plan.get('result_conversions') != [
             {'conversion': 'zoned_text_utc'}
@@ -98,7 +133,10 @@ class PostgresProvider:
                     cursor.execute(statement['text'])
                 else:
                     cursor.execute(_psycopg_text(statement['text']), (text,))
-            return _result(cursor, connection, self._batch_rows)
+            description = cursor.description
+            if description is None:
+                raise PlanNotRun('a plan whose last statement returns no rows')
+            yield ScalarRows(cursor.fetchall(), description)
 
 
 def _own_transaction(connection: Any) -> Any:
@@ -154,15 +192,3 @@ def _psycopg_text(text: str) -> str:
     if found != 1:
         raise PlanNotRun('a statement whose parameter is not told apart')
     return ''.join(out)
-
-
-def _result(cursor: Any, connection: Any, batch_rows: int) -> Any:
-    r"""The last statement's rows as a pyarrow table, in batches of at most
-    ``batch_rows``, each column typed by its Postgres type
-    (:func:`postgres_arrow.rows_arrow`)."""
-    description = cursor.description
-    if description is None:
-        raise PlanNotRun('a plan whose last statement returns no rows')
-    # One read of every row, as the reference reads a result
-    # (``fetchall``), built into batches of at most ``batch_rows``.
-    return rows_arrow(description, cursor.fetchall(), connection, batch_rows)

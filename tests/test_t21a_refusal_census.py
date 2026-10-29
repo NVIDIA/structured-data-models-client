@@ -18,9 +18,11 @@ to; a database the core can't run yet is reported as unmeasured, never as
 zero hits. Its first run is on DuckDB.
 
 The oracle for "every named rule" and "every rule-less call" is computed
-here, independently of the tool, from the same tree: each
+here from the same tree with independent matching: each
 ``not_yet("<rule>")`` name, and each call of the three constructors, in
-``rust/crates/*/src`` outside a file's ``#[cfg(test)]`` part.
+``rust/crates/*/src`` outside conditional test items.
+The production-item reader is shared and independently pinned below by a
+literal source fixture with exact expected rules and original line numbers.
 
 Seeded (T2.0d's row): a refusal site with no probe fails, shown for a new
 named rule and a new rule-less call, each in a copy of the tree whose
@@ -35,12 +37,17 @@ definition. Unmarked tests are controls that pass today.
 
 from __future__ import annotations
 
+import importlib.util
+import io
 import json
+import math
 import re
 import shutil
 import subprocess
 import sys
+import tarfile
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 import pytest
@@ -71,6 +78,7 @@ RULELESS = {
     'rust/crates/sdm-contract/src/types.rs': 'unsupported_type',
     'rust/crates/sdm-host/src/admission.rs': 'unsupported',
     'rust/crates/sdm-request/src/predict.rs': 'unsupported',
+    'rust/crates/sdm-request/src/predict/validation.rs': 'unsupported',
 }
 # ---------------------------------------------------------------------------------
 
@@ -78,12 +86,30 @@ NOT_YET = re.compile(r'\bnot_yet\(\s*"([a-z0-9_]+)"')
 
 
 def _production(text: str) -> str:
-    r"""A Rust source's text before its ``#[cfg(test)]`` part."""
-    return text.split('#[cfg(test)]', 1)[0]
+    """Shared lexical scope; the rule/call matching below is independent."""
+    return _scope()._production(text)
+
+
+def _scope() -> ModuleType:
+    name = '_census_test_scope'
+    if name not in sys.modules:
+        spec = importlib.util.spec_from_file_location(name, TOOL)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        spec.loader.exec_module(module)
+    return sys.modules[name]
 
 
 def _sources(root: Path) -> list[Path]:
-    return sorted(root.glob('rust/crates/*/src/**/*.rs'))
+    excluded = set()
+    for source in (root / 'rust/crates').glob('*/src'):
+        excluded.update(_scope()._rust_lexical().test_module_files(source))
+    return sorted(
+        path
+        for path in root.glob('rust/crates/*/src/**/*.rs')
+        if path not in excluded
+    )
 
 
 def named_rules(root: Path) -> set[str]:
@@ -194,6 +220,60 @@ def test_every_site_has_a_probe() -> None:
     assert done.returncode == 0, done.stdout + done.stderr
 
 
+def test_probe_document_is_standard_json_with_the_nonfinite_option_preserved():
+    def refuse_extension(token):
+        pytest.fail(
+            f'the census source contains nonstandard JSON token {token}'
+        )
+
+    document = json.loads(
+        (ROOT / 'contract/refusal-census.json').read_text(),
+        parse_constant=refuse_extension,
+    )
+    options = [
+        probe['input']['materialize'].get('inference_config', {})
+        for probe in document['probes']
+    ]
+    values = [
+        option['num_estimators']
+        for option in options
+        if 'num_estimators' in option
+    ]
+    assert len(values) == 1
+    assert math.isinf(values[0]) and values[0] > 0
+
+
+def test_production_after_test_items_is_discovered_without_test_only_rules(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / 'rust/crates/sdm-core/src'
+    source.mkdir(parents=True)
+    text = (
+        'fn before() { not_yet("before"); }\n'
+        '#[cfg(test)]\nmod external_tests;\n'
+        '#[cfg(test)]\nmod inline_tests {\n'
+        '  fn hidden() { let text = r#"{ }"#; not_yet("hidden"); }\n'
+        '}\n'
+        'fn after() { not_yet("after"); }\n'
+        '#[cfg(test)]\npub(crate) fn test_helper() {\n'
+        '  /* } nested /* { */ comment */ not_yet("test_helper");\n'
+        '}\n'
+        '#[cfg(test)]\nstruct TestOnly { value: usize }\n'
+        'fn last() { not_yet("last"); }\n'
+    )
+    (source / 'lib.rs').write_text(text)
+    (source / 'external_tests.rs').write_text(
+        'fn only_a_test() { not_yet("external_test"); }\n'
+    )
+    found = {site['rule']: site for site in _sites(tmp_path)}
+    assert set(found) == {'before', 'after', 'last'}
+    for rule in found:
+        line = text[: text.index(f'not_yet("{rule}")')].count('\n') + 1
+        assert found[rule]['where'] == (
+            f'rust/crates/sdm-core/src/lib.rs:{line}'
+        )
+
+
 @pytest.mark.tooling
 @pytest.mark.parametrize(
     ('relative', 'code', 'named'),
@@ -210,8 +290,15 @@ def test_every_site_has_a_probe() -> None:
             '    crate::unsupported_type(c, t)\n}\n',
             'rust/crates/sdm-contract/src/t21a_seeded.rs:2',
         ),
+        (
+            'rust/crates/sdm-request/src/predict/validation.rs',
+            'pub fn seeded() -> CoreError {\n'
+            '    unsupported(Sentence::NoContextRows, "model", "seeded")\n}\n',
+            'rust/crates/sdm-request/src/predict/validation.rs'
+            '::seeded::predict::unsupported#1',
+        ),
     ],
-    ids=['a named rule', 'a rule-less call'],
+    ids=['a named rule', 'a rule-less call', 'a moved private policy'],
 )
 def test_a_site_with_no_probe_fails_by_name(
     relative: str, code: str, named: str, tmp_path: Path
@@ -227,14 +314,64 @@ def test_a_site_with_no_probe_fails_by_name(
     assert named in seeded.stdout + seeded.stderr
 
 
-def test_the_first_duckdb_run_probed_every_site_on_both_routes() -> None:
+def test_the_first_duckdb_run_probed_every_site_on_both_routes(
+    tmp_path: Path,
+) -> None:
     r"""Exit: the first run is on DuckDB; every site the code has now was
     probed there on both routes, each hit is keyed by rule or by site and
     code with its count of real sources, and SQLite and Postgres are
     reported unmeasured, never as zero hits."""
     evidence = json.loads(EVIDENCE.read_text())
     assert evidence['database'] == 'duckdb'
-    sites = {site['id'] for site in _sites(ROOT)}
+    # A historical receipt describes its recorded clean producer, not later
+    # relocated or newly implemented sites. Current coverage is held above.
+    assert evidence['commit']['clean'] is True
+    producer = evidence['commit']['sha']
+    archived = subprocess.run(
+        [
+            'git',
+            '-C',
+            str(ROOT),
+            'archive',
+            '--format=tar',
+            producer,
+            'rust/crates',
+            'packages/structured-data-models-client/src',
+            'contract/tools/refusal_census.py',
+        ],
+        capture_output=True,
+        check=True,
+    ).stdout
+    with tarfile.open(fileobj=io.BytesIO(archived)) as archive:
+        for entry in archive.getmembers():
+            destination = tmp_path / entry.name
+            assert destination.resolve().is_relative_to(tmp_path.resolve())
+            if entry.isdir():
+                destination.mkdir(parents=True, exist_ok=True)
+            elif entry.isfile():
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                source = archive.extractfile(entry)
+                assert source is not None
+                destination.write_bytes(source.read())
+            else:
+                raise AssertionError(
+                    'a source receipt must not contain special files'
+                )
+    done = subprocess.run(
+        [
+            sys.executable,
+            '-I',
+            str(tmp_path / 'contract/tools/refusal_census.py'),
+            'sites',
+            '--root',
+            str(tmp_path),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    sites = {site['id'] for site in json.loads(done.stdout)}
+    assert len(sites) == evidence['sites']
     probed = {}
     for probe in evidence['probes']:
         assert set(probe['outcomes']) >= {'python-core', 'reference'}, probe

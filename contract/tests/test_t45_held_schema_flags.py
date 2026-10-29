@@ -248,6 +248,23 @@ def test_flags_are_table_local_and_source_and_relationship_fields_stay_exact():
     assert COMPARE.held_schema(described)['links'] == [link]
 
 
+def test_actual_sdk_build_and_plain_serialization_match_the_independent_complete_schema():
+    import duckdb
+    from sdm_client import Schema
+    from sdm_client._rust import schema as bridge
+    from sdm_client._rust import spec
+    from sdm_connectors import DuckDBSource
+
+    described = description()
+    before = copy.deepcopy(described)
+    with duckdb.connect() as connection:
+        schema = bridge.build(Schema, DuckDBSource(connection), described)
+        written = spec.held_schema(schema)
+    assert written == expected()
+    assert COMPARE.held_schema(described) == written
+    assert described == before
+
+
 def materialization_observation(schema):
     core = actual_materialization()
     core['described'] = description()

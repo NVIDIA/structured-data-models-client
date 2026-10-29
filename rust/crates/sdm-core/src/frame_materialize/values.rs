@@ -1,0 +1,681 @@
+// SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+// All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+
+//! Ownership and Arrow rebinding for the fixed frame value consumers.
+//! Pending final composition: this module is unlinked on the preserved base.
+
+use std::collections::{BTreeMap, BTreeSet};
+
+use arrow_array::cast::AsArray;
+use arrow_array::types::UInt64Type;
+use arrow_array::{Array, UInt64Array};
+use sdm_contract::data::strings::StringData;
+use sdm_contract::data::{AttachmentId, BATCH_COLUMN};
+use sdm_contract::frames::materialize::{
+    FRAME_MATERIALIZATION_VERSION, FrameNativeColumnRef, FrameNativeTable,
+    FramePhysicalDeclaration, FrameRowProjection, FrameTextColumn, PreparedFrameGraph,
+    SampledFrameContext, SampledFrameLink, SampledFrameTable,
+};
+use sdm_engine::strings::StringColumn;
+
+use super::identity::Identity;
+use super::retained::{GraphLease, RetainedFrameGraph};
+use super::*;
+
+pub(crate) fn take_arrow(
+    attachments: &mut Attachments,
+    id: AttachmentId,
+) -> Result<ArrowData, CoreError> {
+    match attachments.remove(&id) {
+        Some(Attachment::Arrow(data)) => Ok(data),
+        _ => Err(invalid("a frame value lacks its named Arrow attachment")),
+    }
+}
+
+pub(crate) fn take_array(
+    attachments: &mut Attachments,
+    id: AttachmentId,
+) -> Result<ArrayRef, CoreError> {
+    let batch = crate::materialize::one_batch(&take_arrow(attachments, id)?)?;
+    if batch.num_columns() != 1 {
+        return Err(invalid("a frame value column attachment is not one column"));
+    }
+    Ok(Arc::clone(batch.column(0)))
+}
+
+pub(crate) fn take_strings(
+    attachments: &mut Attachments,
+    data: &StringData,
+) -> Result<ArrayRef, CoreError> {
+    let array = take_array(attachments, data.values)?;
+    let column = StringColumn::new(array.as_ref(), data.encoding)
+        .map_err(|_| invalid("native strings do not match their explicit physical encoding"))?;
+    for row in 0..column.len() {
+        column
+            .get(row)
+            .map_err(|_| invalid("native strings contain invalid surrogatepass bytes"))?;
+    }
+    Ok(array)
+}
+
+pub(crate) fn attach_json<T: serde::Serialize>(
+    asker: &Asker,
+    value: &T,
+) -> Result<AttachmentId, CoreError> {
+    asker.attach(Attachment::Bytes(
+        serde_json::to_vec(value).map_err(|_| internal("a frame value does not serialize"))?,
+    ))
+}
+
+pub(crate) fn attach_batch(asker: &Asker, batch: RecordBatch) -> Result<AttachmentId, CoreError> {
+    asker.attach(Attachment::Arrow(ArrowData::new(
+        batch.schema(),
+        vec![batch],
+    )))
+}
+
+pub(crate) fn attach_array(
+    asker: &Asker,
+    name: &str,
+    array: ArrayRef,
+) -> Result<AttachmentId, CoreError> {
+    let batch = RecordBatch::try_from_iter([(name, array)])
+        .map_err(|_| internal("a frame value column does not make Arrow rows"))?;
+    attach_batch(asker, batch)
+}
+
+pub(crate) fn positions(array: &ArrayRef) -> Result<Vec<usize>, CoreError> {
+    let values = array
+        .as_primitive_opt::<UInt64Type>()
+        .filter(|values| values.null_count() == 0)
+        .ok_or_else(|| invalid("frame source positions must be non-null UInt64 values"))?;
+    values
+        .values()
+        .iter()
+        .map(|&value| {
+            usize::try_from(value)
+                .map_err(|_| invalid("a frame source position exceeds this host's address space"))
+        })
+        .collect()
+}
+
+fn positional(values: &[usize]) -> Result<ArrayRef, CoreError> {
+    Ok(Arc::new(UInt64Array::from(
+        values
+            .iter()
+            .map(|&value| {
+                u64::try_from(value).map_err(|_| internal("a frame source position exceeds UInt64"))
+            })
+            .collect::<Result<Vec<_>, _>>()?,
+    )))
+}
+
+/// A useful graph has the actual domain graph and the actual detached owner.
+/// The native facts are source meanings, independent of all attachment ids.
+pub(crate) struct BoundGraph {
+    pub prepared: Arc<PreparedGraph>,
+    pub frames: Context,
+    pub native: Arc<Vec<FrameNativeTable>>,
+    pub source: String,
+    owner: RetainedFrameGraph,
+    lease: Option<GraphLease>,
+}
+
+fn native_identity(source: &str, native: &[FrameNativeTable]) -> Result<String, CoreError> {
+    let mut identity = Identity::new("graph");
+    identity.value(source)?;
+    identity.value(native)?;
+    Ok(identity.finish())
+}
+
+#[cfg(test)]
+mod native_fact_tests;
+
+pub(crate) fn unsupported_large_string(table: &str, column: &str) -> CoreError {
+    let mut error = CoreError::new(
+        Sentence::FrameNativeInternal,
+        "native table construction does not admit a fixed LargeUtf8 declaration",
+    )
+    .with_field(
+        "native_declaration_reason",
+        Detail::text("fixed_large_utf8"),
+    )
+    .with_field("table", Detail::text(table))
+    .with_field("column", Detail::text(column))
+    .with_field(
+        "native_declaration",
+        Detail::text(
+            serde_json::to_string(&FramePhysicalDeclaration::LargeUtf8)
+                .expect("a fixed physical declaration serializes"),
+        ),
+    );
+    error.public_details = Some(Default::default());
+    error
+}
+
+/// One canonical original declaration, shared by early table admission and
+/// later graph validation. This describes existing admitted native families;
+/// it does not admit a new source conversion or discard original Decimal scale.
+pub(crate) fn check_declaration(declaration: &FramePhysicalDeclaration) -> Result<(), CoreError> {
+    use sdm_contract::ColumnType;
+    use sdm_contract::frames::NativeDecimal;
+    match declaration {
+        FramePhysicalDeclaration::Physical { physical } => {
+            if !matches!(
+                physical,
+                ColumnType::Bool
+                    | ColumnType::Int8
+                    | ColumnType::Int16
+                    | ColumnType::Int32
+                    | ColumnType::Int64
+                    | ColumnType::Uint8
+                    | ColumnType::Uint16
+                    | ColumnType::Uint32
+                    | ColumnType::Uint64
+                    | ColumnType::Float32
+                    | ColumnType::Float64
+                    | ColumnType::Utf8
+                    | ColumnType::Timestamp { .. }
+            ) {
+                return Err(invalid(
+                    "native physical declaration has a noncanonical type",
+                ));
+            }
+            physical
+                .check()
+                .map_err(|_| invalid("native physical declaration has invalid parameters"))?;
+        }
+        FramePhysicalDeclaration::LargeUtf8 => {}
+        FramePhysicalDeclaration::Decimal { native } => {
+            let (precision, limit) = match native {
+                NativeDecimal::Decimal32 { precision, .. } => (*precision, 9),
+                NativeDecimal::Decimal64 { precision, .. } => (*precision, 18),
+                NativeDecimal::Decimal128 { precision, .. } => (*precision, 38),
+                NativeDecimal::Decimal256 { precision, .. } => (*precision, 76),
+            };
+            if precision == 0 || precision > limit {
+                return Err(invalid("native Decimal declaration has invalid precision"));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn declared_export(declaration: &FramePhysicalDeclaration) -> DataType {
+    use sdm_contract::frames::NativeDecimal;
+    match declaration {
+        FramePhysicalDeclaration::Physical { physical } => physical.to_arrow(),
+        FramePhysicalDeclaration::LargeUtf8 => DataType::LargeUtf8,
+        FramePhysicalDeclaration::Decimal { native } => match native {
+            NativeDecimal::Decimal32 { precision, .. }
+            | NativeDecimal::Decimal64 { precision, .. }
+            | NativeDecimal::Decimal128 { precision, .. } => DataType::Decimal128(*precision, 0),
+            NativeDecimal::Decimal256 { precision, .. } => DataType::Decimal256(*precision, 0),
+        },
+    }
+}
+
+fn validate_native(
+    frames: &FrameRun,
+    description: &SourceDescription,
+    native: &[FrameNativeTable],
+) -> Result<(), CoreError> {
+    if native.len() != description.tables.len() {
+        return Err(invalid(
+            "frame native origins do not cover the immutable source",
+        ));
+    }
+    let mut sources = BTreeSet::new();
+    for table in native {
+        if !sources.insert(&table.source) {
+            return Err(invalid("frame native origins repeat a source"));
+        }
+        if !description
+            .tables
+            .iter()
+            .any(|described| described.source == table.source)
+        {
+            return Err(invalid("frame native origins name an undescribed source"));
+        }
+        let (_, data) = frames
+            .tables
+            .iter()
+            .find(|(source, _)| source == &table.source)
+            .ok_or_else(|| invalid("frame native origins name an absent source"))?;
+        if table.columns.len() != data.schema.fields().len() {
+            return Err(invalid(
+                "frame native origins do not cover their source columns",
+            ));
+        }
+        for (column, field) in table.columns.iter().zip(data.schema.fields()) {
+            if column.name != *field.name() {
+                return Err(invalid("frame native origins change original column order"));
+            }
+            if let Some(constructed) = column.constructed {
+                if !sdm_schema::frames::native_column::canonical(constructed) {
+                    return Err(invalid(
+                        "native constructed type is outside the canonical constructor domain",
+                    ));
+                }
+                if let Some(fixed) = description
+                    .tables
+                    .iter()
+                    .find(|described| described.source == table.source)
+                    .and_then(|described| {
+                        described
+                            .columns
+                            .iter()
+                            .find(|fixed| fixed.name == column.name)
+                    })
+                    && !sdm_schema::frames::native_column::equivalent(fixed.dtype, constructed)
+                {
+                    return Err(invalid(
+                        "native fixed constructed type contradicts its source meaning",
+                    ));
+                }
+            }
+            if column.declared.is_some() && column.logical_text.is_some() {
+                return Err(invalid(
+                    "native source has contradictory physical and logical declarations",
+                ));
+            }
+            if column.logical_text.is_some() && column.strings.is_none() {
+                return Err(invalid(
+                    "logical text source lacks its exported string encoding",
+                ));
+            }
+            if let Some(declared) = &column.declared {
+                check_declaration(declared)?;
+                // Shared frame admission narrows large offsets to Utf8. The
+                // original fixed declaration must survive that transformation;
+                // logical text exporting the same buffers remains distinct.
+                let matches_export = if matches!(declared, FramePhysicalDeclaration::LargeUtf8) {
+                    matches!(field.data_type(), DataType::Utf8 | DataType::LargeUtf8)
+                } else {
+                    field.data_type() == &declared_export(declared)
+                };
+                if !matches_export {
+                    return Err(invalid(
+                        "native physical declaration differs from its exported storage",
+                    ));
+                }
+                let text = matches!(
+                    declared,
+                    FramePhysicalDeclaration::LargeUtf8
+                        | FramePhysicalDeclaration::Physical {
+                            physical: sdm_contract::ColumnType::Utf8
+                        }
+                );
+                if column.strings != text.then_some(StringEncoding::Utf8) {
+                    return Err(invalid(
+                        "native physical declaration differs from its exported encoding",
+                    ));
+                }
+            }
+            if column.declared == Some(FramePhysicalDeclaration::LargeUtf8) {
+                let name = description
+                    .tables
+                    .iter()
+                    .find(|described| described.source == table.source)
+                    .map(|described| described.name.as_str())
+                    .ok_or_else(|| invalid("native table lacks its logical name"))?;
+                return Err(unsupported_large_string(name, &column.name));
+            }
+            if let Some(encoding) = column.strings {
+                for batch in &data.batches {
+                    let values = batch
+                        .column_by_name(&column.name)
+                        .ok_or_else(|| invalid("native text column is absent"))?;
+                    let strings = StringColumn::new(values.as_ref(), encoding).map_err(|_| {
+                        invalid("native text origin does not match its Arrow encoding")
+                    })?;
+                    for row in 0..strings.len() {
+                        strings.get(row).map_err(|_| {
+                            invalid("native source text contains invalid surrogatepass bytes")
+                        })?;
+                    }
+                }
+            } else if matches!(field.data_type(), DataType::Utf8 | DataType::LargeUtf8) {
+                return Err(invalid("native string source lacks its explicit encoding"));
+            }
+        }
+    }
+    Ok(())
+}
+
+impl BoundGraph {
+    pub(crate) fn retained(&self) -> RetainedFrameGraph {
+        self.owner.clone()
+    }
+    pub fn prepare(
+        asker: &Asker,
+        frames: Context,
+        description: SourceDescription,
+        native: Vec<FrameNativeTable>,
+    ) -> Result<Self, CoreError> {
+        let prepared = {
+            let mut frame = lock(&frames);
+            validate_native(&frame, &description, &native)?;
+            frame.validate_native_text_types(&description, &native)?;
+            frame.prepare_native_graph(asker, description, &native)?
+        };
+        let source = native_identity(&prepared.source, &native)?;
+        Self::from_owner(RetainedFrameGraph::new(prepared, frames, native, source))
+    }
+
+    fn from_owner(owner: RetainedFrameGraph) -> Result<Self, CoreError> {
+        let lease = owner.lease()?;
+        Ok(Self {
+            prepared: owner.prepared(),
+            frames: owner.frames(),
+            native: owner.native(),
+            source: owner.source().to_owned(),
+            owner,
+            lease: Some(lease),
+        })
+    }
+
+    /// Label evaluation borrows immutable graph/index ownership but may
+    /// await shared data kernels. Never retain a graph gate across a host
+    /// suspension. Each local FrameRun method still holds its own mutex;
+    /// continuing neighbor draws occur only in the pure context call.
+    pub fn release_access(&mut self) {
+        self.lease = None;
+    }
+
+    pub fn take_retained(
+        attachments: &mut Attachments,
+        id: AttachmentId,
+    ) -> Result<Self, CoreError> {
+        let Some(Attachment::FrameGraph(owner)) = attachments.remove(&id) else {
+            return Err(invalid(
+                "prepared graph does not name a core-created retained graph owner",
+            ));
+        };
+        Self::from_owner(owner)
+    }
+
+    /// Borrow the declared core-created owner in O(schema), without reading
+    /// raw source rows, detaching foreign Arrow or reconstructing indexes.
+    pub fn bind(
+        asker: &Asker,
+        value: PreparedFrameGraph,
+        attachments: &mut Attachments,
+    ) -> Result<Self, CoreError> {
+        if value.version != FRAME_MATERIALIZATION_VERSION {
+            return Err(
+                invalid("unknown prepared frame graph version").dropping(HeldState::SamplerState)
+            );
+        }
+        let bound = Self::take_retained(attachments, value.owner)?;
+        if bound.source != value.source
+            || bound.native.as_ref() != &value.native_tables
+            || bound.dropped_summary() != value.dropped_summary
+        {
+            return Err(
+                invalid("prepared frame graph no longer matches its native source facts")
+                    .dropping(HeldState::SamplerState),
+            );
+        }
+        lock(&bound.frames).carry(asker, None);
+        // Shared composition supplies this typed ownership handoff. It must
+        // replace any raw checkpoint and retain the same live neighbor state.
+        asker.keep_retained_frame(bound.owner.clone());
+        Ok(bound)
+    }
+
+    pub fn publish(&self, asker: &Asker) -> Result<PreparedFrameGraph, CoreError> {
+        let mut frames = lock(&self.frames);
+        frames.keep(asker);
+        asker.keep_retained_frame(self.owner.clone());
+        Ok(PreparedFrameGraph {
+            version: FRAME_MATERIALIZATION_VERSION,
+            source: self.source.clone(),
+            owner: asker.attach(Attachment::FrameGraph(self.owner.clone()))?,
+            native_tables: self.native.as_ref().clone(),
+            dropped_summary: frames.snapshot.as_ref().and_then(Snapshot::dropped_summary),
+        })
+    }
+
+    pub fn native_column(
+        &self,
+        column: &sdm_contract::ops::ColumnRef,
+    ) -> Result<&sdm_contract::frames::materialize::FrameNativeColumn, CoreError> {
+        let binding = self.native_binding(column)?;
+        self.native
+            .iter()
+            .find(|native| native.source == binding.source)
+            .and_then(|native| {
+                native
+                    .columns
+                    .iter()
+                    .find(|native| native.name == binding.column)
+            })
+            .ok_or_else(|| invalid("native column lacks its original source dtype"))
+    }
+
+    pub fn native_binding(
+        &self,
+        column: &sdm_contract::ops::ColumnRef,
+    ) -> Result<FrameNativeColumnRef, CoreError> {
+        self.owner.native_binding(column)
+    }
+
+    pub fn selected_rows(
+        &self,
+        table: &str,
+        rows: &[usize],
+        columns: &[String],
+    ) -> Result<RecordBatch, CoreError> {
+        lock(&self.frames)
+            .snapshot
+            .as_ref()
+            .ok_or_else(|| internal("bound graph lacks its immutable snapshot"))?
+            .selected_rows(table, rows, columns)
+    }
+
+    pub fn dropped_summary(&self) -> Option<String> {
+        lock(&self.frames)
+            .snapshot
+            .as_ref()
+            .and_then(Snapshot::dropped_summary)
+    }
+
+    pub fn selected_link_pairs(
+        &self,
+        edge: &sdm_engine::graph::Edge,
+        source_rows: &[usize],
+        source_batch: &[usize],
+        target_rows: &[usize],
+        target_batch: &[usize],
+    ) -> Result<Vec<(usize, usize)>, CoreError> {
+        lock(&self.frames)
+            .snapshot
+            .as_ref()
+            .ok_or_else(|| internal("bound graph lacks its immutable snapshot"))?
+            .selected_link_pairs(edge, source_rows, source_batch, target_rows, target_batch)
+    }
+}
+
+/// The local native sampler compacts repeated source nodes only above its
+/// strict redundancy threshold. Equal cell values never establish identity.
+/// Ineligible anchor-dependent features retain expanded occurrence order.
+#[allow(
+    clippy::cast_precision_loss,
+    reason = "the native redundancy comparison uses float64 lengths"
+)]
+pub(crate) fn text_row_projection(source: &[usize], eligible: bool) -> Option<FrameRowProjection> {
+    if !eligible {
+        return None;
+    }
+    let mut first = BTreeMap::new();
+    for (at, &row) in source.iter().enumerate() {
+        first.entry(row).or_insert((at, 0));
+    }
+    if source.len() as f64 <= 1.05 * first.len() as f64 {
+        return None;
+    }
+    let mut positions = Vec::with_capacity(first.len());
+    for (ordinal, (position, compact)) in first.values_mut().enumerate() {
+        positions.push(*position as u64);
+        *compact = ordinal as u64;
+    }
+    Some(FrameRowProjection {
+        positions,
+        inverse: source.iter().map(|row| first[row].1).collect(),
+    })
+}
+
+impl SampledContext {
+    /// Export only actual raw sampled columns, ownership, source rows and links.
+    /// The payload stage independently rebinds them to their immutable source.
+    pub(crate) fn publish(
+        self,
+        asker: &Asker,
+        graph: &BoundGraph,
+        plan: sdm_contract::frames::materialize::FrameRequestPlan,
+        range: sdm_contract::frames::materialize::FrameBatchRange,
+        anchors: ArrayRef,
+    ) -> Result<SampledFrameContext, CoreError> {
+        self.check_source(&graph.prepared.source)?;
+        let mut identity = Identity::new("sampled-context");
+        identity.value(&(&plan.identity, range))?;
+        let anchor_rows = RecordBatch::try_from_iter([("anchor", anchors)])
+            .map_err(|_| internal("frame context anchors do not align"))?;
+        identity.arrow(&ArrowData::new(
+            anchor_rows.schema(),
+            vec![anchor_rows.clone()],
+        ))?;
+        let mut value = SampledFrameContext {
+            text_identity_input: sdm_engine::words::simple_identity_input().to_owned(),
+            version: FRAME_MATERIALIZATION_VERSION,
+            plan,
+            range,
+            identity: String::new(),
+            tables: Vec::new(),
+            links: Vec::new(),
+            anchors: attach_batch(asker, anchor_rows)?,
+            text: Vec::new(),
+        };
+        for table in self.sampled.tables {
+            let source = graph
+                .prepared
+                .graph
+                .table(&table.name)
+                .ok_or_else(|| internal("sampled frame table lost its graph source binding"))?
+                .source
+                .clone();
+            let source_rows = self
+                .native_rows
+                .get(&table.name)
+                .ok_or_else(|| internal("sampled table lacks original row positions"))?;
+            let mut columns = table
+                .columns
+                .into_iter()
+                .map(|(name, column)| match column {
+                    SampledColumn::Arrow(array) => Ok((name, array)),
+                    _ => Err(internal(
+                        "raw frame context already contains normalized words",
+                    )),
+                })
+                .collect::<Result<Vec<_>, CoreError>>()?;
+            columns.push((BATCH_COLUMN.to_owned(), positional(&table.batch)?));
+            let rows = RecordBatch::try_from_iter(columns)
+                .map_err(|_| internal("sampled frame columns do not align"))?;
+            // The admitted native graph has no end-time role. Its Text
+            // features are independent of the occurrence's anchor.
+            let text_rows = text_row_projection(
+                source_rows,
+                table.stypes.iter().any(|(_, stype)| *stype == Stype::Text),
+            );
+            identity.value(&(
+                &table.name,
+                &source,
+                &table.primary_key,
+                &table.stypes,
+                &text_rows,
+            ))?;
+            identity.arrow(&ArrowData::new(rows.schema(), vec![rows.clone()]))?;
+            let source_data =
+                RecordBatch::try_from_iter([("source_row", positional(source_rows)?)])
+                    .map_err(|_| internal("sampled source positions do not align"))?;
+            identity.arrow(&ArrowData::new(
+                source_data.schema(),
+                vec![source_data.clone()],
+            ))?;
+            let rows = attach_batch(asker, rows)?;
+            let source_rows = attach_batch(asker, source_data)?;
+            for (column, stype) in &table.stypes {
+                if *stype == Stype::Text {
+                    let logical = sdm_contract::ops::ColumnRef {
+                        table: table.name.clone(),
+                        column: column.clone(),
+                    };
+                    value.text.push(FrameTextColumn {
+                        native: graph.native_binding(&logical)?,
+                        column: logical,
+                    });
+                }
+            }
+            value.tables.push(SampledFrameTable {
+                name: table.name,
+                source,
+                primary_key: table.primary_key,
+                rows,
+                source_rows,
+                text_rows,
+                stypes: table.stypes,
+            });
+        }
+        for link in self.sampled.links {
+            let pairs = RecordBatch::try_from_iter([
+                (
+                    "source",
+                    positional(
+                        &link
+                            .pairs
+                            .iter()
+                            .map(|&(source, _)| source)
+                            .collect::<Vec<_>>(),
+                    )?,
+                ),
+                (
+                    "target",
+                    positional(
+                        &link
+                            .pairs
+                            .iter()
+                            .map(|&(_, target)| target)
+                            .collect::<Vec<_>>(),
+                    )?,
+                ),
+            ])
+            .map_err(|_| internal("sampled link pairs do not align"))?;
+            let source = sdm_contract::ops::ColumnRef {
+                table: link.src,
+                column: link.fkey,
+            };
+            let target_column = graph
+                .prepared
+                .graph
+                .table(&link.dst)
+                .and_then(|table| table.primary_key.clone())
+                .ok_or_else(|| internal("sampled relationship target has no primary key"))?;
+            let target = sdm_contract::ops::ColumnRef {
+                table: link.dst,
+                column: target_column,
+            };
+            identity.value(&(&source, &target))?;
+            identity.arrow(&ArrowData::new(pairs.schema(), vec![pairs.clone()]))?;
+            value.links.push(SampledFrameLink {
+                source,
+                target,
+                pairs: attach_batch(asker, pairs)?,
+            });
+        }
+        identity.value(&(&value.text, &value.text_identity_input))?;
+        value.identity = identity.finish();
+        Ok(value)
+    }
+}

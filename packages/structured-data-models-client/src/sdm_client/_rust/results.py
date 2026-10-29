@@ -36,6 +36,7 @@ __all__ = [
     'CoreRequest',
     'Described',
     'InferredFrames',
+    'MaterializePrepared',
     'Diagnostic',
     'Edited',
     'Gathered',
@@ -43,6 +44,7 @@ __all__ = [
     'Part',
     'Predicted',
     'Prepared',
+    'FramePrepared',
     'QueryFacts',
     'Ranking',
     'SourceFacts',
@@ -267,6 +269,7 @@ class Described:
     description: int
     notes: tuple[ViewNote, ...] = ()
     frame_rows: int | None = None
+    frame_decimals: int | None = None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -308,6 +311,9 @@ def _described(read: dict[str, Any]) -> Described:
     return Described(
         description=_int(read['description'], 'description'),
         frame_rows=_maybe(read.get('frame_rows'), _int, 'frame_rows'),
+        frame_decimals=_maybe(
+            read.get('frame_decimals'), _int, 'frame_decimals'
+        ),
         # Left out where there is none, which the reading gives as None.
         notes=tuple(
             _note(note) for note in _list(read.get('notes') or [], 'notes')
@@ -401,6 +407,21 @@ class Gathered:
 
     state: GatheredState
     query: QueryFacts | None
+
+    @classmethod
+    def from_contract(cls, value: Any) -> Gathered:
+        """Read a complete Materialized value without an operation envelope."""
+        read = _fields(
+            value, 'the materialized request', ('state',), ('query',)
+        )
+        return cls(
+            state=_state(read['state']),
+            query=(
+                None
+                if read['query'] is None
+                else QueryFacts.from_contract(read['query'])
+            ),
+        )
 
 
 def _state(value: Any) -> GatheredState:
@@ -523,6 +544,20 @@ class Prepared:
 
 
 @dataclasses.dataclass(frozen=True)
+class FramePrepared:
+    """The complete useful value of one fixed frame domain operation."""
+
+    value: int
+
+
+@dataclasses.dataclass(frozen=True)
+class MaterializePrepared:
+    """The actual value attachment of a source materialization operation."""
+
+    value: int
+
+
+@dataclasses.dataclass(frozen=True)
 class DecodedDirectResponse:
     """Owned decoded response buffers for native builtin conversion."""
 
@@ -541,24 +576,31 @@ _RESULTS: dict[str, tuple[tuple[str, ...], tuple[str, ...], Any]] = {
         (),
         lambda read: InferredFrames(_int(read['value'], 'value')),
     ),
-    'describe_source': (('description',), ('notes', 'frame_rows'), _described),
+    'describe_source': (
+        ('description',),
+        ('notes', 'frame_rows', 'frame_decimals'),
+        _described,
+    ),
     'edit_schema': (('schema',), ('declared',), _edited),
     'materialize': (
         ('state',),
         ('query',),
-        lambda read: Gathered(
-            state=_state(read['state']),
-            query=(
-                None
-                if read['query'] is None
-                else QueryFacts.from_contract(read['query'])
-            ),
-        ),
+        Gathered.from_contract,
     ),
     'prepare_request': (
         ('value',),
         (),
         lambda read: Prepared(_int(read['value'], 'value')),
+    ),
+    'prepare_frames': (
+        ('value',),
+        (),
+        lambda read: FramePrepared(_int(read['value'], 'value')),
+    ),
+    'prepare_materialize': (
+        ('value',),
+        (),
+        lambda read: MaterializePrepared(_int(read['value'], 'value')),
     ),
     'predict': (
         ('result', 'model', 'request_id', 'metadata', 'outputs'),
@@ -578,6 +620,8 @@ def decode(
     | Gathered
     | Predicted
     | Prepared
+    | FramePrepared
+    | MaterializePrepared
     | DecodedDirectResponse
 ):
     r"""The result a ``done`` step carries, decoded once.
@@ -606,6 +650,8 @@ def decode(
         | Gathered
         | Predicted
         | Prepared
+        | FramePrepared
+        | MaterializePrepared
         | DecodedDirectResponse
     ) = build(read)
     return built
@@ -620,6 +666,8 @@ _T = TypeVar(
     Gathered,
     Predicted,
     Prepared,
+    FramePrepared,
+    MaterializePrepared,
     DecodedDirectResponse,
 )
 

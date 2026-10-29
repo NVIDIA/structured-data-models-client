@@ -29,6 +29,7 @@ fn supports(stype: Stype, dtype: Dtype) -> bool {
 
 fn plain(name: &str, dtype: Dtype, received: ColumnType, stype: Stype) -> DescribedColumn {
     DescribedColumn {
+        untyped: false,
         name: name.into(),
         received,
         dtype,

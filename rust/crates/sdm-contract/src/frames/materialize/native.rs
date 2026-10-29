@@ -1,0 +1,127 @@
+// SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+// All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+
+//! Actual reached builtin conversions of useful frame data.
+//! These are data outcomes, not host actions, casing choices or Run steps.
+
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+
+use crate::data::AttachmentId;
+use crate::data::strings::StringData;
+use crate::ops::ColumnRef;
+
+use super::{FrameNativeFailure, NativeTextFacts};
+
+/// Prediction data after the closed type chosen by the labeled task.
+/// Existing numeric casts remain core-owned; only the new native string
+/// family carries an actual reached builtin constructor outcome.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum FramePredictionValues {
+    CoreKeys {
+        values: AttachmentId,
+    },
+    NativeString {
+        constructed: NativeFrameConstruction,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "outcome", rename_all = "snake_case", deny_unknown_fields)]
+pub enum NativeFrameConstruction {
+    Value {
+        values: StringData,
+    },
+    Failed {
+        failure: FrameNativeFailure,
+        diagnostic: NativeConstructionDiagnostic,
+    },
+}
+
+/// Actual complete-task or per-batch reference values at their distinct
+/// reached astype(str) positions. Numeric keys retain the core-owned cast;
+/// a native failure has no invented Arrow success value or diagnostic cast.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum FrameReferenceValues {
+    /// No native key conversion is reached for the established core family.
+    /// An explicit raw alternative remains independently validated.
+    CoreKeys {
+        values: Option<AttachmentId>,
+    },
+    NativeString {
+        converted: NativeFrameStrings,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "outcome", rename_all = "snake_case", deny_unknown_fields)]
+pub enum NativeFrameStrings {
+    Value {
+        values: StringData,
+    },
+    Failed {
+        failure: FrameNativeFailure,
+    },
+    /// Both actual native index casts failed. These display observations
+    /// occur only after the second failure, before core error presentation.
+    CastFailed {
+        failure: FrameNativeFailure,
+        expected_dtype: String,
+        input_repr: String,
+    },
+}
+
+/// The first native element that failed the reached diagnostic constructor.
+/// Its repr is native presentation data, not a core inference from content.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct UncastableFrameInput {
+    pub ordinal: u64,
+    pub native_repr: String,
+}
+
+/// The real stop-at-first diagnostic of a failed whole constructor.
+/// Native code does not eagerly convert the unvisited suffix. Core decides
+/// eligibility, attribution and the final public error from these facts.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "outcome", rename_all = "snake_case", deny_unknown_fields)]
+pub enum NativeConstructionDiagnostic {
+    NotReached,
+    Completed {
+        first: Option<UncastableFrameInput>,
+        dtype_display: String,
+    },
+    Failed {
+        failure: FrameNativeFailure,
+    },
+}
+
+/// Actual selected raw strings, before character caps, casing or splitting.
+/// Values stay in owned Arrow data, and facts describe this column's actual
+/// successful conversion rather than an early global dtype observation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ConvertedFrameText {
+    pub column: ColumnRef,
+    pub values: StringData,
+    pub facts: NativeTextFacts,
+}
+
+/// Reached per-context conversion in core-selected feature order. A failed
+/// conversion retains its successful prefix for exact order/coherence checks.
+/// Failure ancestry reuses the existing fixed native-conversion vocabulary.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "outcome", rename_all = "snake_case", deny_unknown_fields)]
+pub enum NativeFrameText {
+    Converted {
+        columns: Vec<ConvertedFrameText>,
+    },
+    Failed {
+        completed: Vec<ConvertedFrameText>,
+        column: ColumnRef,
+        failure: FrameNativeFailure,
+    },
+}

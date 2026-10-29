@@ -74,6 +74,28 @@ class SnowflakeProvider:
         finally:
             cursor.close()
 
+    @contextmanager
+    def source_rows(
+        self, step: dict[str, Any], keys: Mapping[int, Any] | None = None
+    ) -> Iterator[object]:
+        """Expose native Arrow inside its original cursor and style scopes.
+
+        Native source reads never replace a failed Arrow read with scalar
+        text. The ordinary call keeps its separate catalog fallback above.
+        """
+        read: dict[int, str] = {}
+        statements = [
+            (statement['text'], _values(statement, keys, read))
+            for statement in providers.statements(step, 'snowflake')
+        ]
+        with _qmark(self._connection), self._connection.cursor() as cursor:
+            for text, values in statements:
+                if values:
+                    cursor.execute(text, tuple(values))
+                else:
+                    cursor.execute(text)
+            yield cursor.fetch_arrow_all(force_return_table=True)
+
 
 def _values(
     statement: dict[str, Any],

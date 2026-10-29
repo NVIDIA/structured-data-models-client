@@ -4,6 +4,8 @@
 
 //! Call-local frame bindings, never persistent table identity or policies.
 
+pub mod materialize;
+
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -48,12 +50,15 @@ pub struct FrameOverrideOrder {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum FrameStage {
+    ColumnMeanings,
     Nominate,
     Adopt,
+    TimeFacts,
     Time,
     Edit,
     StatedKey,
     Assemble,
+    AssembleNative,
     Sample,
     Table,
     Schema,
@@ -65,6 +70,56 @@ pub enum FrameStage {
 pub struct FrameInput {
     pub source: Relation,
     pub rows: AttachmentId,
+    /// Original native Decimal types of this attachment's typed mantissas.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub decimals: Vec<NativeDecimalColumn>,
+    /// Native object/category cells and their reached column meanings.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub objects: Vec<NativeObjectColumn>,
+}
+
+/// Original logical type beside admitted scale-zero Decimal mantissa storage.
+/// Native scale is the complete signed-i32 fact, including scale greater
+/// than precision; it is not narrowed to Arrow Rust's physical i8 scale.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+pub enum NativeDecimal {
+    Decimal32 { precision: u8, scale: i32 },
+    Decimal64 { precision: u8, scale: i32 },
+    Decimal128 { precision: u8, scale: i32 },
+    Decimal256 { precision: u8, scale: i32 },
+}
+
+/// One native scalar column, bound by both physical ordinal and source name.
+/// An unconverted scalar is a category/presence observation, never a handle.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct NativeObjectColumn {
+    pub column: usize,
+    pub name: String,
+    pub category: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub meaning: Option<NativeObjectMeaning>,
+}
+
+/// The result of the core-selected native object inference traversal.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct NativeObjectMeaning {
+    pub dtype: crate::ops::Dtype,
+    pub untyped: bool,
+    /// Actual native nunique at the reached string-meaning boundary.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub distinct: Option<u64>,
+}
+
+/// One logical native Decimal type bound to the same FrameInput field.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct NativeDecimalColumn {
+    pub column: usize,
+    pub name: String,
+    pub decimal: NativeDecimal,
 }
 
 /// The first frame materializer's ordered, call-local Arrow bindings.
@@ -74,6 +129,8 @@ pub struct FrameInput {
 pub struct MaterializeFrames {
     /// Empty only when a frame checkpoint supplies the frozen snapshot.
     pub tables: Vec<FrameInput>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub row_identities: Vec<materialize::FrameRowIdentity>,
     /// Fresh OS entropy supplied by the host, consumed only by an unseeded
     /// entity/example sample. Neighbor continuation never reads this fact.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -99,6 +156,12 @@ pub struct FrameCheckpoint {
 pub struct FrameCheckpointManifest {
     pub metadata: AttachmentId,
     pub tables: Vec<FrameInput>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub row_identities: Vec<materialize::FrameRowIdentity>,
+    /// The same live core-created graph owner, without exporting source rows.
+    /// Raw legacy checkpoints have no retained alternative.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retained: Option<AttachmentId>,
 }
 
 /// The exact continuing state of the legacy MT19937 primitive.
@@ -119,6 +182,8 @@ pub struct FrameCheckpointMetadata {
     pub source: String,
     pub description: crate::ops::SourceDescription,
     pub neighbors: Mt19937State,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub strings: Option<BTreeMap<String, BTreeMap<String, crate::data::strings::StringEncoding>>>,
 }
 
 /// A frame source is consumed internally by describe, never by DataLayer.
@@ -168,6 +233,13 @@ pub enum PassedOver {
         missing: usize,
         rows: usize,
     },
+    /// A native frame's completed first-value read, kept independently of
+    /// physical Arrow storage and its narrower Decimal scalar descriptor.
+    FrameConstant {
+        first: Option<FrameScalar>,
+        missing: usize,
+        rows: usize,
+    },
     /// `missing` of its `rows` rows, more than half, hold no value.
     Sparse {
         missing: usize,
@@ -183,7 +255,7 @@ impl PassedOver {
     /// gives it.
     pub fn reason(&self) -> &'static str {
         match self {
-            PassedOver::Constant { .. } => "constant",
+            PassedOver::Constant { .. } | PassedOver::FrameConstant { .. } => "constant",
             PassedOver::Sparse { .. } => "sparse",
             PassedOver::LoadStamp => "load_stamp",
             PassedOver::EditStamp => "edit_stamp",
@@ -245,6 +317,18 @@ impl TimeChoice {
 pub struct FrameNomination {
     pub table: DescribedTable,
     pub nominated_key: Vec<String>,
+    /// Actual inferred-key isna.any result, before its possible warning.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub missing: bool,
+}
+
+/// Actual key-quality observations for one selected native population.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct NativeKeyQuality {
+    pub missing: u64,
+    pub duplicates: u64,
+    pub example_row: Option<u64>,
 }
 
 /// Key metadata/count fixed before a possible repeat warning is presented.
@@ -252,6 +336,63 @@ pub struct FrameNomination {
 #[serde(deny_unknown_fields)]
 pub struct FrameAdoption {
     pub table: DescribedTable,
+}
+
+/// A completed native scalar conversion, not an instruction to the host.
+/// Decimal tuples retain actual native boxing, including a full exponent,
+/// separately from both constructor mantissas and later model wire values.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum FrameScalar {
+    /// The native source has not reached a conversion of this scalar.
+    /// It is neither an object handle nor a claim that the value is absent.
+    Native,
+    Text {
+        value: crate::scalar::unicode::UnicodeText,
+    },
+    Value {
+        value: Scalar,
+    },
+    Decimal {
+        negative: bool,
+        digits: String,
+        exponent: FrameDecimalExponent,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum FrameDecimalExponent {
+    Finite { value: i64 },
+    Infinity,
+    Nan,
+    SignalingNan,
+}
+
+/// Core-selected native first-value reads in original candidate order.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FrameTimePlan {
+    pub adoption: FrameAdoption,
+    pub columns: Vec<String>,
+}
+
+/// Values/counts read by actual native dropna/iloc/equality operations.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FrameTimeFirst {
+    pub name: String,
+    pub rows: usize,
+    pub held: usize,
+    pub same: bool,
+    pub first: Option<FrameScalar>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FrameTimeFacts {
+    pub plan: FrameTimePlan,
+    pub firsts: Vec<FrameTimeFirst>,
 }
 
 /// Completed table inference, including the later time observations.
@@ -271,6 +412,16 @@ pub struct FrameSchema {
     pub samples: Vec<FrameSampleColumn>,
     pub key_notices: Vec<CoreWarning>,
     pub notices: Vec<CoreWarning>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub advice: Option<FrameKeyAdvicePlan>,
+}
+
+/// Final declared schema populations before native keyless advice reads.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FrameKeyAdvicePlan {
+    pub description: SourceDescription,
+    pub infer_links: bool,
 }
 
 /// The fixed original meaning of one column whose cardinality decided it.
@@ -300,8 +451,11 @@ pub struct FrameSample {
     deny_unknown_fields
 )]
 pub enum FrameInference {
+    ColumnMeanings(Box<DescribedTable>),
     Nomination(Box<FrameNomination>),
     Adoption(Box<FrameAdoption>),
+    TimePlan(Box<FrameTimePlan>),
+    TimeFacts(Box<FrameTimeFacts>),
     Inferred(Vec<FrameInferred>),
     Schema(Box<FrameSchema>),
     SampleColumn(Box<FrameSampleColumn>),

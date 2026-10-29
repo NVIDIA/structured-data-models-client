@@ -393,3 +393,88 @@ fn the_case_s_rows_per_call_and_failed_call_reach_this_host() {
         assert_eq!(loaded[0].case.input.fail_call, None, "{id}");
     }
 }
+
+#[test]
+fn failure_observations_publish_actual_calls_and_carried_arrow() {
+    use sdm_testkit::observation::{self, Identity};
+    let bases = bases::load(&root().join("contract/bases.yaml")).unwrap();
+    for (id, calls, has_partial) in [
+        ("multicall.fail-call-0", 1, false),
+        ("multicall.fail-call-2", 3, true),
+        ("multicall.forecast.fail-call-1", 2, true),
+    ] {
+        let loaded = case::load(&[root().join(format!("contract/cases/s1/{id}.json"))]).unwrap();
+        let observed = host::run(&loaded[0].case, &bases).unwrap();
+        assert!(matches!(&observed.answer, Answer::Error { .. }), "{id}");
+        assert_eq!(observed.model_calls.len(), calls, "{id}");
+        assert_eq!(observed.answered.is_some(), has_partial, "{id}");
+        let identity = Identity::new(&root()).unwrap();
+        let line = observation::write(&identity, &loaded[0], &observed, None);
+        assert_eq!(
+            line["core"]["model_calls"],
+            json!(observed.model_calls),
+            "{id}"
+        );
+        assert_eq!(line["core"]["answered"], json!(observed.answered), "{id}");
+        let [prediction] = observed.legacy_predictions.as_slice() else {
+            panic!("{id}: expected one actual prediction Run");
+        };
+        assert_eq!(prediction["completion"], "error", "{id}");
+        assert_eq!(prediction["result"], Value::Null, "{id}");
+        assert_eq!(prediction["error"], line["core"]["error"], "{id}");
+        assert_eq!(prediction["answered"], line["core"]["answered"], "{id}");
+        assert_eq!(
+            prediction["run"].as_u64().unwrap() as usize,
+            observed
+                .operations
+                .iter()
+                .position(|op| op == "predict")
+                .unwrap(),
+            "{id}"
+        );
+        assert_eq!(
+            line["core"]["legacy_predictions"],
+            json!(observed.legacy_predictions),
+            "{id}"
+        );
+        if let Some(answered) = &observed.answered {
+            assert!(answered["model"].is_string(), "{id}");
+            assert!(answered["request_id"].is_string(), "{id}");
+            assert!(answered["metadata"].is_object(), "{id}");
+            assert!(answered["outputs"].is_array(), "{id}");
+        }
+        for (at, call) in observed.model_calls.iter().enumerate() {
+            assert!(call["body"]["metadata"]["request_id"].is_string());
+            assert_eq!(call["body_sha256"].as_str().unwrap().len(), 64);
+            assert_eq!(call["model_endpoint"], Value::Null);
+            assert_eq!(
+                call["reply"],
+                json!({
+                    "outcome": "response", "status": if at + 1 == calls { 500 } else { 200 },
+                }),
+                "{id} call {at}"
+            );
+        }
+    }
+}
+
+#[test]
+fn successful_prediction_keeps_its_complete_run_local_result() {
+    use sdm_testkit::observation::{self, Identity};
+    let bases = bases::load(&root().join("contract/bases.yaml")).unwrap();
+    let loaded =
+        case::load(&[root().join("contract/cases/s1/multicall.rows-per-call-3.json")]).unwrap();
+    let observed = host::run(&loaded[0].case, &bases).unwrap();
+    let identity = Identity::new(&root()).unwrap();
+    let line = observation::write(&identity, &loaded[0], &observed, None);
+    let [prediction] = observed.legacy_predictions.as_slice() else {
+        panic!("expected one actual prediction Run");
+    };
+    assert_eq!(prediction["completion"], "done");
+    assert_eq!(prediction["error"], Value::Null);
+    assert_eq!(prediction["answered"], Value::Null);
+    let mut result = prediction["result"].clone();
+    assert!(result["outputs"].is_array());
+    result.as_object_mut().unwrap().remove("outputs");
+    assert_eq!(result, line["core"]["predicted"]);
+}

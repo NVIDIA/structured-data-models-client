@@ -54,7 +54,7 @@ const CELL_BYTES: usize = 4;
 /// `offset` taken `times` times, as pandas multiplies a `DateOffset`: a
 /// count of its unit `times` as large; past what the count holds, refused
 /// as a time out of range naming `lag_timesteps`, as pandas overflows.
-fn times(offset: Offset, times: u64) -> Result<Offset, CoreError> {
+pub(crate) fn times(offset: Offset, times: u64) -> Result<Offset, CoreError> {
     i64::try_from(times)
         .ok()
         .and_then(|times| offset.count.checked_mul(times))

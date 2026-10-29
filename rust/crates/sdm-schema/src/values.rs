@@ -52,6 +52,11 @@ pub(crate) enum Value {
     /// as the float64 the reference's cast gives it.
     Float(u64),
     Text(String),
+    /// Exact native Decimal comparison key within a fixed-type frame field.
+    /// Provider/SQL preview Decimal inference retains its existing branch.
+    Decimal(crate::frames::decimal::Unscaled),
+    /// Neutral typed native object/category source observations.
+    Object(crate::frames::object_decimal::Key),
 }
 
 /// The values of column `index` of `batches`, in row order.
@@ -356,7 +361,7 @@ pub(crate) fn instants(batches: &[RecordBatch], index: usize) -> Vec<Option<i128
 /// decimal, text, a date, a timestamp or a time of day; `None` when null or
 /// of another type.
 pub(crate) fn scalar(array: &dyn Array, row: usize) -> Option<Scalar> {
-    use arrow_array::types::{Date32Type as D, Decimal128Type as Dec};
+    use arrow_array::types::{Date32Type as D, Decimal128Type as Dec, Decimal256Type as WideDec};
     if row >= array.len() || array.is_null(row) {
         return None;
     }
@@ -376,6 +381,11 @@ pub(crate) fn scalar(array: &dyn Array, row: usize) -> Option<Scalar> {
             precision: *precision,
             scale: *scale,
             value: array.as_primitive::<Dec>().value(row),
+        },
+        DataType::Decimal256(precision, scale) => Scalar::Decimal256 {
+            precision: *precision,
+            scale: *scale,
+            value: array.as_primitive::<WideDec>().value(row),
         },
         DataType::Utf8 => Scalar::Utf8(array.as_string::<i32>().value(row).to_owned()),
         DataType::Date32 => Scalar::Date32(array.as_primitive::<D>().value(row)),
@@ -416,6 +426,81 @@ mod tests {
     use arrow_schema::{DataType, Field, Schema};
 
     use super::*;
+
+    #[test]
+    fn constructor_canonical_equality_and_raw_bit_counts_are_distinct_at_both_widths() {
+        use arrow_array::cast::AsArray;
+        use arrow_array::{Array, Float32Array};
+        for narrow in [false, true] {
+            let (sign, quiet, signaling, one) = if narrow {
+                (1_u64 << 31, 0x7fc0_0000, 0x7f80_0001, 0x3f80_0000)
+            } else {
+                (
+                    1_u64 << 63,
+                    0x7ff8_0000_0000_0000,
+                    0x7ff0_0000_0000_0001,
+                    0x3ff0_0000_0000_0000,
+                )
+            };
+            let bits = [
+                0,
+                sign,
+                quiet,
+                quiet | sign,
+                quiet | 1,
+                signaling,
+                quiet | 1,
+                one,
+            ];
+            let values: ArrayRef = if narrow {
+                Arc::new(Float32Array::from(
+                    bits.iter()
+                        .map(|bits| Some(f32::from_bits(*bits as u32)))
+                        .chain([None])
+                        .collect::<Vec<_>>(),
+                ))
+            } else {
+                Arc::new(Float64Array::from(
+                    bits.iter()
+                        .map(|bits| Some(f64::from_bits(*bits)))
+                        .chain([None])
+                        .collect::<Vec<_>>(),
+                ))
+            };
+            let batches = [0..0, 0..3, 3..6, 6..9].map(|range| {
+                RecordBatch::try_from_iter([("value", values.slice(range.start, range.len()))])
+                    .unwrap()
+            });
+            let raw = column(&batches, 0, Floats::NanValue).unwrap();
+            let canonical = column(&batches, 0, Floats::Frame).unwrap();
+            let missing = column(&batches, 0, Floats::NanMissing).unwrap();
+            assert_eq!(distinct(&raw), 7);
+            assert_eq!(distinct(&canonical), 3);
+            assert_eq!(distinct(&missing), 2);
+            assert_eq!(raw.iter().flatten().count(), 8);
+            assert_eq!(canonical.iter().flatten().count(), 8);
+            assert_eq!(missing.iter().flatten().count(), 3);
+            assert_eq!(raw[8], None);
+            assert_eq!(canonical[8], None);
+            for (at, expected) in bits.into_iter().enumerate() {
+                assert_eq!(raw[at], Some(Value::Float(expected)));
+            }
+            // Canonical comparison changes only its keys, never the actual
+            // Float32 signaling bits or any validity/source value buffer.
+            if narrow {
+                assert_eq!(
+                    values.as_primitive::<Float32Type>().value(5).to_bits(),
+                    signaling as u32
+                );
+            } else {
+                assert_eq!(
+                    values.as_primitive::<Float64Type>().value(5).to_bits(),
+                    signaling
+                );
+            }
+            assert!(values.is_null(8));
+        }
+    }
 
     /// A NaN and the two zeros as each reference frame counts them: in
     /// Arrow-backed pandas (DuckDB's and SQLite's) each float is a value of

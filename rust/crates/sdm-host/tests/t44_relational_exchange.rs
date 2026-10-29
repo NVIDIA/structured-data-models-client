@@ -1,0 +1,1014 @@
+// SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+// All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+
+//! Actual HostRun model exchange and fixed response products for decomposed
+//! frame forecasts/rankings. Request bodies are the existing frozen public
+//! materialization fixtures; model answers are explicitly scripted here.
+//! This covers response ownership, attribution and final composition, not
+//! native Python callbacks, graph construction or live model accuracy.
+
+use arrow_array::cast::AsArray;
+use arrow_array::types::{Float64Type, Int64Type};
+use sdm_contract::data::AttachmentId;
+use sdm_contract::facts::PlatformFacts;
+use sdm_contract::ops::{Operation, OperationResult};
+use sdm_contract::prepare::*;
+use sdm_contract::run::{Endpoint, ModelOutcome, ModelReply, StartRun};
+use sdm_contract::{CONTRACT_VERSION, ControlMessage, HostFacts, Scalar, Step, TimestampUnit};
+use sdm_host::{ArrowData, Attachment, Attachments, HostRun};
+use serde::de::DeserializeOwned;
+use serde_json::{Value, json};
+
+fn bytes<T: serde::Serialize>(value: &T) -> Attachment {
+    Attachment::Bytes(serde_json::to_vec(value).unwrap())
+}
+
+fn start(input: Preparation, mut attached: Attachments) -> HostRun {
+    assert!(attached.insert(AttachmentId(1), bytes(&input)).is_none());
+    let message = sdm_host::encode(&ControlMessage::Start(Box::new(StartRun {
+        contract: CONTRACT_VERSION,
+        facts: HostFacts {
+            now: Scalar::Timestamp {
+                value: 0,
+                unit: TimestampUnit::Ns,
+                zone: Some("UTC".into()),
+            },
+            local_zone: None,
+            zone_roots: vec![],
+            platform: PlatformFacts {
+                os: "linux".into(),
+                strftime_pads_year: false,
+            },
+            date_literal_range: None,
+        },
+        operation: Operation::PrepareRequest(PrepareRequest {
+            input: AttachmentId(1),
+        }),
+    })))
+    .unwrap();
+    HostRun::start(&sdm_host::default_root(), &message, attached)
+        .unwrap_or_else(|out| panic!("start: {:?}", sdm_host::read(&out)))
+}
+
+fn take_bytes(run: &HostRun, id: AttachmentId) -> Vec<u8> {
+    match run.take_attachment(id).unwrap().unwrap() {
+        Attachment::Bytes(value) => value,
+        _ => panic!("expected bytes at {id:?}"),
+    }
+}
+
+fn done<T: DeserializeOwned>(run: &HostRun) -> T {
+    let out = run
+        .next()
+        .unwrap_or_else(|out| panic!("next: {:?}", sdm_host::read(&out)));
+    let ControlMessage::Step(Step::Done {
+        result: OperationResult::PrepareRequest(result),
+    }) = sdm_host::read(&out).unwrap()
+    else {
+        panic!("unexpected preparation step: {:?}", sdm_host::read(&out));
+    };
+    assert!(run.take_warnings().unwrap().is_none());
+    serde_json::from_slice(&take_bytes(run, result.value)).unwrap()
+}
+
+fn prepare<T: DeserializeOwned>(input: Preparation, attached: Attachments) -> T {
+    done(&start(input, attached))
+}
+
+fn bound(kind: &str) -> CallPreparation {
+    let model = prepare(
+        Preparation::Model {
+            model: "kumo-relational".into(),
+        },
+        Attachments::new(),
+    );
+    let outputs = prepare(
+        Preparation::Outputs {
+            call: model,
+            outputs: None,
+            kind: Some(kind.into()),
+            native_default: None,
+        },
+        Attachments::new(),
+    );
+    let shape = prepare(
+        Preparation::Capabilities {
+            call: outputs,
+            kind: kind.into(),
+            anchored: true,
+            relationships: true,
+            tables: 3,
+            native: None,
+        },
+        Attachments::new(),
+    );
+    let task = prepare(
+        Preparation::Task {
+            call: shape,
+            kind: kind.into(),
+            admitted: None,
+            defer_outputs: false,
+        },
+        Attachments::new(),
+    );
+    prepare(
+        Preparation::Capacity {
+            call: task,
+            rows: 3,
+        },
+        Attachments::new(),
+    )
+}
+
+fn payloads(family: &str) -> Vec<Value> {
+    let reference: Value = serde_json::from_str(include_str!(
+        "../../../../packages/structured-data-models-client/tests/t44_decomposition_reference.json"
+    ))
+    .unwrap();
+    serde_json::from_value(reference["families"][family]["seed7"].clone()).unwrap()
+}
+
+#[derive(Clone)]
+struct OwnedPart {
+    part: RelationalResponsePart,
+    buffers: [Vec<u8>; 4],
+}
+
+impl OwnedPart {
+    fn take(run: &HostRun, part: RelationalResponsePart) -> Self {
+        let buffers = [
+            take_bytes(run, part.data.response),
+            take_bytes(run, part.data.rows),
+            take_bytes(run, part.rows),
+            take_bytes(run, part.target_rows),
+        ];
+        Self { part, buffers }
+    }
+
+    fn attach(&self, attached: &mut Attachments) -> RelationalResponsePart {
+        let first = u32::try_from(attached.len()).unwrap() + 2;
+        let mut part = self.part.clone();
+        for (offset, buffer) in self.buffers.iter().enumerate() {
+            let id = AttachmentId(first + u32::try_from(offset).unwrap());
+            assert!(
+                attached
+                    .insert(id, Attachment::Bytes(buffer.clone()))
+                    .is_none()
+            );
+        }
+        part.data.response = AttachmentId(first);
+        part.data.rows = AttachmentId(first + 1);
+        part.rows = AttachmentId(first + 2);
+        part.target_rows = AttachmentId(first + 3);
+        part
+    }
+}
+
+fn exchange(payload: &Value, child: usize, classification: bool) -> (CallPreparation, OwnedPart) {
+    exchange_prediction(payload, child, classification, None)
+}
+
+fn exchange_prediction(
+    payload: &Value,
+    child: usize,
+    classification: bool,
+    nested_prediction: Option<&Value>,
+) -> (CallPreparation, OwnedPart) {
+    exchange_native_prediction(payload, child, classification, nested_prediction, None)
+}
+
+fn exchange_native_prediction(
+    payload: &Value,
+    child: usize,
+    classification: bool,
+    nested_prediction: Option<&Value>,
+    native_prediction: Option<&sdm_contract::scalar::native_value::NativeValue>,
+) -> (CallPreparation, OwnedPart) {
+    exchange_native_rows(
+        payload,
+        child,
+        classification,
+        nested_prediction,
+        native_prediction,
+        NativeRows::default(),
+    )
+}
+
+#[derive(Default)]
+struct NativeRows<'a> {
+    raw: Option<&'a [Value; 2]>,
+    converted: Option<&'a [sdm_contract::scalar::native_value::NativeValue; 2]>,
+    equal_probabilities: bool,
+}
+
+fn exchange_native_rows(
+    payload: &Value,
+    child: usize,
+    classification: bool,
+    nested_prediction: Option<&Value>,
+    native_prediction: Option<&sdm_contract::scalar::native_value::NativeValue>,
+    native_rows: NativeRows<'_>,
+) -> (CallPreparation, OwnedPart) {
+    let kind = payload["task"]["kind"].as_str().unwrap();
+    let bound = bound(kind);
+    let request_id = format!("host-call-{child}");
+    let body = serde_json::to_vec(payload).unwrap();
+    let run = start(
+        Preparation::CallRelational {
+            input: RelationalEncodedCall {
+                call: bound.clone(),
+                body: AttachmentId(2),
+                request_id: request_id.clone(),
+                model_endpoint: None,
+            },
+        },
+        Attachments::from([(AttachmentId(2), Attachment::Bytes(body.clone()))]),
+    );
+    let out = run.next().unwrap();
+    let ControlMessage::Step(Step::CallModel(call)) = sdm_host::read(&out).unwrap() else {
+        panic!("encoded relational request did not suspend for its model call");
+    };
+    assert_eq!(call.endpoint, Endpoint::Predict);
+    assert_eq!(call.content_type, "application/json");
+    assert_eq!(take_bytes(&run, call.body), body);
+
+    let source = payload["predict"]["instance_table"]["rows"]
+        .as_array()
+        .unwrap();
+    assert_eq!(source.len(), 2);
+    // Deliberately answer in reverse source order. Final Arrow sorting and
+    // answer_index must retain the separate original response lineage.
+    let predictions = [1usize, 0]
+        .into_iter()
+        .map(|row| {
+            let mut answer = json!({
+                "row_index":row,
+                "id":source[row][0].as_i64().unwrap().to_string(),
+                "prediction":if classification { json!(true) } else { json!([[0.0,1.0],[10.0,11.0]][child][row]) }
+            });
+            if let Some(prediction) = nested_prediction {
+                answer["prediction"] = prediction.clone();
+            }
+            if let Some(values) = native_rows.raw {
+                answer["prediction"] = values[row].clone();
+            }
+            if classification {
+                let positive = if native_rows.equal_probabilities { 0.5 } else { [[0.8, 0.2], [0.6, 0.9]][child][row] };
+                answer["probabilities"] = json!({"False":1.0-positive,"True":positive});
+            }
+            answer
+        })
+        .collect::<Vec<_>>();
+    let response = json!({
+        "id":format!("scripted-answer-{child}"),
+        "model":"kumo-relational", "metadata":{}, "predictions":predictions
+    });
+    let reply = sdm_host::encode(&ControlMessage::ModelReply(ModelReply {
+        id: call.id,
+        outcome: ModelOutcome::Response {
+            status: 200,
+            content_type: "application/json".into(),
+            body: AttachmentId(99),
+        },
+    }))
+    .unwrap();
+    run.reply(
+        &reply,
+        Attachments::from([(AttachmentId(99), bytes(&response))]),
+    )
+    .unwrap();
+    let mut data: RelationalResponseData = done(&run);
+    assert_eq!(data.scope.call_request_id, request_id);
+    assert_eq!(data.scope.request_id, format!("scripted-answer-{child}"));
+    assert_eq!(data.scope.response_rows, 2);
+    let response_bytes = take_bytes(&run, data.response);
+    let decoded_bytes = take_bytes(&run, data.rows);
+    // The later native facts retain their own buffers after this model run
+    // is dropped, just as a different language host must do.
+    drop(run);
+    let decoded: Vec<DecodedRelationalRow> = serde_json::from_slice(&decoded_bytes).unwrap();
+    assert_eq!(decoded[0].row_index, "1");
+    assert_eq!(decoded[1].row_index, "0");
+    let reference: RelationalReferenceColumn = prepare(
+        Preparation::RelationalReferenceColumn {
+            facts: RelationalReferenceColumns {
+                prefix_matches: vec![false, true],
+                exhausted: false,
+            },
+        },
+        Attachments::new(),
+    );
+    assert_eq!(reference.ordinal, Some(1));
+    let attribution = RelationalAttribution {
+        scope: data.scope.clone(),
+        source_rows: Some(source.len()),
+        instances: true,
+    };
+    let mut attributed = Vec::new();
+    for row in &decoded {
+        let rows: CheckedRelationalRows = prepare(
+            Preparation::CheckRelationalRows {
+                attribution: attribution.clone(),
+                rows: vec![row.clone()],
+            },
+            Attachments::new(),
+        );
+        assert!(rows.rows.is_empty());
+        let checked: CheckedRelationalRow = prepare(
+            Preparation::CheckRelationalForecast {
+                bound: rows.forecast.unwrap(),
+                // Forecast decomposition's model calls are regression
+                // children, not a direct forecasting wire task.
+                forecasting: false,
+            },
+            Attachments::new(),
+        );
+        let index = checked.bound.source_row.unwrap();
+        let displayed = source[index][0].as_i64().unwrap().to_string();
+        let accepted: AttributedRelationalRow = prepare(
+            Preparation::AttributeRelationalInstance {
+                checked,
+                instance: RelationalInstanceText {
+                    ordinal: row.ordinal,
+                    points: displayed.chars().map(u32::from).collect(),
+                    different: row.id.as_deref() != Some(displayed.as_str()),
+                },
+            },
+            Attachments::new(),
+        );
+        assert_eq!(accepted.source_row, Some(index));
+        attributed.push(accepted);
+    }
+    data.response = AttachmentId(2);
+    data.rows = AttachmentId(3);
+    let mut attached = Attachments::from([
+        (AttachmentId(2), Attachment::Bytes(response_bytes)),
+        (AttachmentId(3), Attachment::Bytes(decoded_bytes)),
+        (AttachmentId(4), bytes(&attributed)),
+    ]);
+    let covered: RelationalAttribution = prepare(
+        Preparation::CheckRelationalCoverage {
+            data: data.clone(),
+            attribution: attribution.clone(),
+            rows: AttachmentId(4),
+        },
+        attached.clone(),
+    );
+    assert_eq!(covered, attribution);
+    let meaning: RelationalTargetMeaning = prepare(
+        Preparation::RelationalTargetMeaning {
+            kind: kind.chars().map(u32::from).collect(),
+            classification,
+        },
+        Attachments::new(),
+    );
+    assert_eq!(meaning.classification, classification);
+    let dtype = payload["task"]["target"]["dtype"].as_str().unwrap();
+    let converted = decoded
+        .iter()
+        .map(|row| RelationalTargetRow {
+            ordinal: row.ordinal,
+            prediction: native_rows.converted.map_or_else(
+                || native_prediction.unwrap_or(&row.prediction).clone(),
+                |values| values[row.row_index.parse::<usize>().unwrap()].clone(),
+            ),
+            probabilities: row.probabilities.as_ref().map(|values| {
+                values
+                    .iter()
+                    .enumerate()
+                    .map(|(ordinal, (name, probability))| {
+                        use sdm_contract::scalar::native_value::NativeValue;
+                        let value = match (classification, dtype, name.as_str()) {
+                            (true, "bool", "False") => NativeValue::Boolean { value: false },
+                            (true, "bool", "True") => NativeValue::Boolean { value: true },
+                            _ => NativeValue::Unicode {
+                                points: name.chars().map(u32::from).collect(),
+                            },
+                        };
+                        RelationalTargetProbability {
+                            ordinal,
+                            value,
+                            name: name.clone(),
+                            probability: probability.clone(),
+                        }
+                    })
+                    .collect()
+            }),
+        })
+        .collect::<Vec<_>>();
+    attached.insert(AttachmentId(5), bytes(&converted));
+    let part = RelationalResponsePart {
+        data,
+        attribution,
+        rows: AttachmentId(4),
+        target: RelationalTargetFacts {
+            kind: kind.chars().map(u32::from).collect(),
+            classification,
+            dtype_truth: classification.then_some(true),
+            numeric_prefix: classification.then(|| {
+                ["int", "float", "bool"].iter().any(|prefix| {
+                    payload["task"]["target"]["dtype"]
+                        .as_str()
+                        .unwrap()
+                        .starts_with(prefix)
+                })
+            }),
+            dtype: classification.then(|| dtype.into()),
+        },
+        target_rows: AttachmentId(5),
+    };
+    let completion = start(Preparation::CompleteRelationalResponse { part }, attached);
+    let part = done(&completion);
+    (bound, OwnedPart::take(&completion, part))
+}
+
+#[test]
+fn complete_and_later_merge_apply_gathered_grammar_to_original_class_values() {
+    use sdm_contract::scalar::native_value::NativeValue;
+    let fixture: Value = serde_json::from_str(include_str!(
+        "../../../../packages/structured-data-models-client/tests/t44_mutable_prediction_reference.json"
+    )).unwrap();
+    let mut payload = fixture["cases"]["r2/control"]["wire"][0].clone();
+    payload["task"]["target"]["dtype"] = json!("int64");
+    let native = NativeValue::Integer {
+        digits: "10".into(),
+    };
+    for raw in ["1_0", "10"] {
+        let (bound, mut owned) =
+            exchange_native_prediction(&payload, 0, true, Some(&json!(raw)), Some(&native));
+        let mut attached = Attachments::new();
+        let part = owned.attach(&mut attached);
+        let (result, rows) = finish(
+            bound.clone(),
+            RelationalAggregation::Calls {
+                parts: vec![part],
+                counted: vec![Some(2)],
+                known_empty: false,
+            },
+            attached,
+        );
+        assert_eq!(result.lineage.len(), 2);
+        assert_eq!(result.lineage[0].source_row, Some(1));
+        assert_eq!(result.lineage[1].source_row, Some(0));
+        let values = rows.batches[0].column_by_name("prediction").unwrap();
+        if raw == "1_0" {
+            let values = values.as_string::<i32>();
+            assert_eq!(values.value(0), "1_0");
+            assert_eq!(values.value(1), "1_0");
+        } else {
+            let values = values.as_primitive::<Int64Type>();
+            assert_eq!(values.value(0), 10);
+            assert_eq!(values.value(1), 10);
+        }
+        // This buffer already passed CompleteRelationalResponse. A later
+        // merge must revalidate its ordered entry/probability bindings.
+        let mut converted: Vec<RelationalTargetRow> =
+            serde_json::from_slice(&owned.buffers[3]).unwrap();
+        converted[0].probabilities.as_mut().unwrap().reverse();
+        owned.buffers[3] = serde_json::to_vec(&converted).unwrap();
+        let mut attached = Attachments::new();
+        let part = owned.attach(&mut attached);
+        let run = start(
+            Preparation::FinishRelationalResponse {
+                input: RelationalResultInput {
+                    bound,
+                    aggregation: RelationalAggregation::Calls {
+                        parts: vec![part],
+                        counted: vec![Some(2)],
+                        known_empty: false,
+                    },
+                    report_absent: true,
+                },
+            },
+            attached,
+        );
+        let out = run.next().unwrap_err();
+        let ControlMessage::Error { error } = sdm_host::read(&out).unwrap() else {
+            panic!("changed target bindings must refuse")
+        };
+        assert_eq!(error.sentence, sdm_contract::Sentence::InvalidMessage);
+    }
+}
+
+#[test]
+fn complete_and_retained_mixed_class_results_keep_the_primary_typed_columns() {
+    use arrow_array::Array;
+    use arrow_schema::DataType;
+    use sdm_contract::scalar::native_value::NativeValue;
+    let fixture: Value = serde_json::from_str(include_str!("../../../../packages/structured-data-models-client/tests/t44_mutable_prediction_reference.json")).unwrap();
+    let text = |value: &str| NativeValue::Unicode {
+        points: value.chars().map(u32::from).collect(),
+    };
+    let integer = |value: &str| NativeValue::Integer {
+        digits: value.into(),
+    };
+    let float = |value: f64| NativeValue::Float {
+        bits: value.to_be_bytes(),
+    };
+    for (dtype, raw, converted, physical, expected) in [
+        (
+            "bool",
+            [json!("maybe"), json!(true)],
+            [text("maybe"), NativeValue::Boolean { value: true }],
+            DataType::Boolean,
+            vec![None, Some("true")],
+        ),
+        (
+            "int64",
+            [json!("1_0"), json!("10")],
+            [integer("10"), integer("10")],
+            DataType::Int64,
+            vec![None, Some("10")],
+        ),
+        (
+            "float64",
+            [json!("1_0.5"), json!("2.5")],
+            [float(10.5), float(2.5)],
+            DataType::Float64,
+            vec![None, Some("2.5")],
+        ),
+        (
+            "string",
+            [json!(1), json!("two")],
+            [integer("1"), text("two")],
+            DataType::Utf8,
+            vec![None, Some("two")],
+        ),
+        (
+            "bool",
+            [json!(2), json!(1.0)],
+            [integer("2"), float(1.0)],
+            DataType::Float64,
+            vec![Some("2"), Some("1")],
+        ),
+    ] {
+        let mut payload = fixture["cases"]["r2/control"]["wire"][0].clone();
+        payload["task"]["target"]["dtype"] = json!(dtype);
+        let (bound, owned) = exchange_native_rows(
+            &payload,
+            0,
+            true,
+            None,
+            None,
+            NativeRows {
+                raw: Some(&raw),
+                converted: Some(&converted),
+                equal_probabilities: true,
+            },
+        );
+        let mut attached = Attachments::new();
+        let part = owned.attach(&mut attached);
+        let (result, rows) = finish(
+            bound.clone(),
+            RelationalAggregation::Calls {
+                parts: vec![part],
+                counted: vec![Some(2)],
+                known_empty: false,
+            },
+            attached,
+        );
+        assert_eq!(
+            result
+                .lineage
+                .iter()
+                .map(|row| row.source_row)
+                .collect::<Vec<_>>(),
+            [Some(1), Some(0)]
+        );
+        let table = &rows.batches[0];
+        assert_eq!(
+            table
+                .schema()
+                .fields()
+                .iter()
+                .map(|field| field.name().as_str())
+                .collect::<Vec<_>>(),
+            [
+                "row_index",
+                "id",
+                "prediction",
+                "prediction_as_answered",
+                "probabilities",
+                "answer_index"
+            ]
+        );
+        let values = table.column_by_name("prediction").unwrap();
+        assert_eq!(values.data_type(), &physical);
+        let actual = (0..2)
+            .map(|at| {
+                if values.is_null(at) {
+                    return None;
+                }
+                Some(match physical {
+                    DataType::Boolean => values.as_boolean().value(at).to_string(),
+                    DataType::Int64 => values.as_primitive::<Int64Type>().value(at).to_string(),
+                    DataType::Float64 => values.as_primitive::<Float64Type>().value(at).to_string(),
+                    DataType::Utf8 => values.as_string::<i32>().value(at).into(),
+                    _ => panic!("primary type"),
+                })
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            actual,
+            expected
+                .into_iter()
+                .map(|value| value.map(str::to_owned))
+                .collect::<Vec<_>>(),
+            "{dtype}"
+        );
+        let fallback = table
+            .column_by_name("prediction_as_answered")
+            .unwrap()
+            .as_string::<i32>();
+        for at in 0..2 {
+            let actual: Value = serde_json::from_str(fallback.value(at)).unwrap();
+            let expected = if values.is_null(at) {
+                raw[at].clone()
+            } else {
+                match &converted[at] {
+                    NativeValue::Boolean { value } => json!(value),
+                    NativeValue::Integer { digits } => serde_json::from_str(digits).unwrap(),
+                    NativeValue::Float { bits } => json!(f64::from_be_bytes(*bits)),
+                    NativeValue::Unicode { points } => json!(
+                        points
+                            .iter()
+                            .map(|&point| char::from_u32(point).unwrap())
+                            .collect::<String>()
+                    ),
+                    _ => panic!("fixture scalar"),
+                }
+            };
+            assert_eq!(actual, expected, "{dtype} fallback {at}");
+        }
+        // Complete already accepted these equal-probability entries. Later
+        // retained merge must reject a swap, duplicate and omission too.
+        for mode in 0..3 {
+            let mut changed = owned.clone();
+            let mut converted: Vec<RelationalTargetRow> =
+                serde_json::from_slice(&changed.buffers[3]).unwrap();
+            let entries = converted[0].probabilities.as_mut().unwrap();
+            match mode {
+                0 => entries.reverse(),
+                1 => entries[1] = entries[0].clone(),
+                _ => {
+                    entries.pop();
+                }
+            }
+            changed.buffers[3] = serde_json::to_vec(&converted).unwrap();
+            let mut attached = Attachments::new();
+            let part = changed.attach(&mut attached);
+            let run = start(
+                Preparation::FinishRelationalResponse {
+                    input: RelationalResultInput {
+                        bound: bound.clone(),
+                        aggregation: RelationalAggregation::Calls {
+                            parts: vec![part],
+                            counted: vec![Some(2)],
+                            known_empty: false,
+                        },
+                        report_absent: true,
+                    },
+                },
+                attached,
+            );
+            let error = run.next().unwrap_err();
+            let ControlMessage::Error { error } = sdm_host::read(&error).unwrap() else {
+                panic!("retained malformed entries")
+            };
+            assert_eq!(error.sentence, sdm_contract::Sentence::InvalidMessage);
+        }
+    }
+}
+
+#[test]
+fn retained_custom_class_products_keep_declared_fallback_and_native_float_bits() {
+    use arrow_array::Array;
+    use sdm_contract::scalar::native_value::NativeValue;
+    let fixture: Value = serde_json::from_str(include_str!("../../../../packages/structured-data-models-client/tests/t44_mutable_prediction_reference.json")).unwrap();
+    let mut payload = fixture["cases"]["r2/control"]["wire"][0].clone();
+    payload["task"]["target"]["dtype"] = json!("int64");
+    for malformed in [false, true] {
+        let raw = [
+            json!("-0.0"),
+            json!(if malformed { "1_0.5" } else { "1.5" }),
+        ];
+        let converted = [
+            NativeValue::Float {
+                bits: (-0.0_f64).to_be_bytes(),
+            },
+            NativeValue::Float {
+                bits: (if malformed { 10.5_f64 } else { 1.5_f64 }).to_be_bytes(),
+            },
+        ];
+        let (bound, owned) = exchange_native_rows(
+            &payload,
+            0,
+            true,
+            None,
+            None,
+            NativeRows {
+                raw: Some(&raw),
+                converted: Some(&converted),
+                equal_probabilities: false,
+            },
+        );
+        let mut attached = Attachments::new();
+        let part = owned.attach(&mut attached);
+        let (_, rows) = finish(
+            bound,
+            RelationalAggregation::Calls {
+                parts: vec![part],
+                counted: vec![Some(2)],
+                known_empty: false,
+            },
+            attached,
+        );
+        let table = &rows.batches[0];
+        let primary = table.column_by_name("prediction").unwrap();
+        if malformed {
+            assert_eq!(primary.null_count(), 2);
+            assert_eq!(primary.data_type(), &arrow_schema::DataType::Int64);
+            let fallback = table
+                .column_by_name("prediction_as_answered")
+                .unwrap()
+                .as_string::<i32>();
+            assert_eq!(fallback.value(0), "-0.0");
+            assert_eq!(fallback.value(1), r#""1_0.5""#);
+        } else {
+            let primary = primary.as_primitive::<Float64Type>();
+            assert_eq!(primary.null_count(), 0);
+            assert_eq!(primary.value(0).to_bits(), (-0.0_f64).to_bits());
+            assert_eq!(primary.value(1), 1.5);
+            assert!(table.column_by_name("prediction_as_answered").is_none());
+        }
+    }
+}
+
+#[test]
+fn deep_builtin_predictions_keep_wire_depth_across_all_response_products() {
+    let fixture: Value = serde_json::from_str(include_str!(
+        "../../../../packages/structured-data-models-client/tests/t44_mutable_prediction_reference.json"
+    ))
+    .unwrap();
+    let payload = &fixture["cases"]["r2/control"]["wire"][0];
+    assert_eq!(payload["task"]["target"]["dtype"], "string");
+    for levels in [0, 90, 125] {
+        let mut prediction = json!("retained-leaf");
+        for _ in 0..levels {
+            prediction = json!([prediction]);
+        }
+        let (bound, part) = exchange_prediction(payload, 0, true, Some(&prediction));
+        let mut attached = Attachments::new();
+        let part = part.attach(&mut attached);
+        let (result, rows) = finish(
+            bound,
+            RelationalAggregation::Calls {
+                parts: vec![part],
+                counted: vec![Some(2)],
+                known_empty: false,
+            },
+            attached,
+        );
+        assert_eq!(rows.batches[0].num_rows(), 2);
+        assert_eq!(result.lineage.len(), 2);
+        assert_eq!(result.answer_details.get("calls_answered"), Some(&1));
+        assert_eq!(result.answer_details.get("rows_answered"), Some(&2));
+        assert_eq!(result.lineage[0].source_row, Some(1));
+        assert_eq!(result.lineage[1].source_row, Some(0));
+    }
+}
+
+fn children(calls: &[(CallPreparation, OwnedPart)]) -> (Vec<RelationalCallResult>, Attachments) {
+    let mut attached = Attachments::new();
+    let children = calls
+        .iter()
+        .map(|(bound, part)| RelationalCallResult {
+            bound: bound.clone(),
+            parts: vec![part.attach(&mut attached)],
+            counted: vec![Some(2)],
+            known_empty: false,
+        })
+        .collect();
+    (children, attached)
+}
+
+fn finish(
+    bound: CallPreparation,
+    aggregation: RelationalAggregation,
+    attached: Attachments,
+) -> (RelationalResultData, ArrowData) {
+    let run = start(
+        Preparation::FinishRelationalResponse {
+            input: RelationalResultInput {
+                bound,
+                aggregation,
+                report_absent: true,
+            },
+        },
+        attached,
+    );
+    let result: RelationalResultData = done(&run);
+    assert_eq!(result.predicted.model, "kumo-relational");
+    assert_eq!(result.predicted.request_id, "scripted-answer-0");
+    assert_eq!(
+        take_bytes(&run, result.predicted.metadata).as_slice(),
+        b"{}"
+    );
+    let Attachment::Arrow(rows) = run
+        .take_attachment(result.predicted.result)
+        .unwrap()
+        .unwrap()
+    else {
+        panic!("finished relational result was not Arrow");
+    };
+    (result, rows)
+}
+
+#[test]
+fn forecast_children_exchange_decode_attribute_and_finish_with_step_lineage() {
+    let calls = payloads("forecast")
+        .iter()
+        .enumerate()
+        .map(|(child, payload)| exchange(payload, child, false))
+        .collect::<Vec<_>>();
+    let (children, attached) = children(&calls);
+    let (result, rows) = finish(
+        calls[0].0.clone(),
+        RelationalAggregation::Steps {
+            children,
+            steps: vec![1, 2],
+        },
+        attached,
+    );
+    assert_eq!(result.answer_details.get("parts_answered"), Some(&2));
+    assert_eq!(result.lineage.len(), 4);
+    let batch = &rows.batches[0];
+    let positions = batch
+        .column_by_name("row_index")
+        .unwrap()
+        .as_primitive::<Int64Type>();
+    let ids = batch
+        .column_by_name("id")
+        .unwrap()
+        .as_primitive::<Int64Type>();
+    let steps = batch
+        .column_by_name("forecast_step")
+        .unwrap()
+        .as_primitive::<Int64Type>();
+    let answers = batch
+        .column_by_name("answer_index")
+        .unwrap()
+        .as_primitive::<Int64Type>();
+    let values = batch
+        .column_by_name("prediction")
+        .unwrap()
+        .as_primitive::<Float64Type>();
+    assert_eq!(batch.num_rows(), 4);
+    for (row, (source, step, value, answer)) in [
+        (0, 1, 0.0, 1),
+        (0, 2, 10.0, 3),
+        (1, 1, 1.0, 0),
+        (1, 2, 11.0, 2),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        assert_eq!(positions.value(row), source);
+        assert_eq!(ids.value(row), source);
+        assert_eq!(steps.value(row), step);
+        assert_eq!(values.value(row), value);
+        assert_eq!(answers.value(row), answer);
+        let lineage = &result.lineage[usize::try_from(answer).unwrap()];
+        assert_eq!(lineage.source_row, Some(usize::try_from(source).unwrap()));
+        assert_eq!(lineage.answer_ordinal, usize::try_from(1 - source).unwrap());
+        assert_eq!(lineage.call_request_id, format!("host-call-{}", step - 1));
+    }
+}
+
+#[test]
+fn ranking_children_exchange_then_core_confidence_ordering_retains_group_owners() {
+    let calls = payloads("ranking")
+        .iter()
+        .enumerate()
+        .map(|(child, payload)| exchange(payload, child, true))
+        .collect::<Vec<_>>();
+    let (children, attached) = children(&calls);
+    let population: RelationalRankPopulation = prepare(
+        Preparation::PrepareRelationalRankPopulation {
+            source: RelationalRankingSource {
+                children: children.clone(),
+                positions: vec![0, 1],
+            },
+        },
+        attached.clone(),
+    );
+    assert_eq!(population.items.len(), 4);
+    for (item, expected) in population.items.iter().zip([0.2, 0.8, 0.9, 0.6]) {
+        let confidence: RelationalRankConfidence = prepare(
+            Preparation::RankRelationalScore { item: item.clone() },
+            Attachments::new(),
+        );
+        assert_eq!(confidence.score, Scalar::Float64(expected));
+    }
+    assert_eq!(
+        population
+            .items
+            .iter()
+            .map(|item| item.row_index)
+            .collect::<Vec<_>>(),
+        [1, 0, 1, 0]
+    );
+    // These are the ordinary integer source-key dictionary observations.
+    // The host reports membership only; confidence and top-k stay in Rust.
+    let groups = RelationalRankGroups {
+        membership: (0..4)
+            .map(|ordinal| RelationalRankMembership {
+                ordinal,
+                score_first: ordinal % 2,
+                asked_first: ordinal % 2,
+            })
+            .collect(),
+        groups: vec![
+            RelationalRankGroup {
+                members: vec![0, 2],
+                representative: 0,
+            },
+            RelationalRankGroup {
+                members: vec![1, 3],
+                representative: 1,
+            },
+        ],
+    };
+    let mut attached = attached;
+    assert!(attached.insert(AttachmentId(10), bytes(&groups)).is_none());
+    let (result, rows) = finish(
+        calls[0].0.clone(),
+        RelationalAggregation::Ranking {
+            children,
+            positions: vec![0, 1],
+            candidates: vec!["0".into(), "1".into()],
+            top_k: Some(1),
+            outputs: vec!["rankings".into()],
+            selected: None,
+            unscored_candidates: vec![],
+            groups: AttachmentId(10),
+        },
+        attached,
+    );
+    assert_eq!(result.answer_details.get("parts_answered"), Some(&2));
+    assert_eq!(result.predicted.outputs, ["rankings"]);
+    let batch = &rows.batches[0];
+    assert_eq!(batch.num_rows(), 2);
+    for (row, (source, candidate, score, answer)) in
+        [(0, "0", 0.8, 1), (1, "1", 0.9, 0)].into_iter().enumerate()
+    {
+        assert_eq!(
+            batch
+                .column_by_name("row_index")
+                .unwrap()
+                .as_primitive::<Int64Type>()
+                .value(row),
+            source
+        );
+        assert_eq!(
+            batch
+                .column_by_name("id")
+                .unwrap()
+                .as_primitive::<Int64Type>()
+                .value(row),
+            source
+        );
+        assert_eq!(
+            batch
+                .column_by_name("answer_index")
+                .unwrap()
+                .as_primitive::<Int64Type>()
+                .value(row),
+            answer
+        );
+        let ranked = batch
+            .column_by_name("rankings")
+            .unwrap()
+            .as_list::<i32>()
+            .value(row);
+        let scores = batch
+            .column_by_name("scores")
+            .unwrap()
+            .as_list::<i32>()
+            .value(row);
+        let candidates = batch
+            .column_by_name("candidates")
+            .unwrap()
+            .as_list::<i32>()
+            .value(row);
+        assert_eq!(ranked.len(), 1);
+        assert_eq!(ranked.as_string::<i32>().value(0), candidate);
+        assert_eq!(scores.as_primitive::<Float64Type>().value(0), score);
+        assert_eq!(candidates.as_primitive::<Int64Type>().value(0), source);
+        let lineage = &result.lineage[usize::try_from(answer).unwrap()];
+        assert_eq!(lineage.call_request_id, "host-call-0");
+        assert_eq!(lineage.source_row, Some(usize::try_from(source).unwrap()));
+        assert_eq!(lineage.answer_ordinal, usize::try_from(1 - source).unwrap());
+    }
+}

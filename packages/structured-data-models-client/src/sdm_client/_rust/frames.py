@@ -9,17 +9,25 @@
 from __future__ import annotations
 
 import json
+import re
 import warnings
 from collections.abc import Mapping, Sequence
 from contextlib import AbstractContextManager
+from dataclasses import dataclass
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import pandas as pd
 
 from sdm_client._routing import RouteError
-from sdm_client._rust import codec, errors, results
+from sdm_client._rust import codec, errors, frame_counts, frame_objects, results
 from sdm_client._rust import schema as schemas
+from sdm_client._rust.frame_decimals import (
+    native_decimal_column,
+    native_decimal_type,
+)
+from sdm_client._rust.frame_time import first_values
 from sdm_client._rust.run import Finished, run
 from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.errors import StructuredDataError
@@ -39,20 +47,62 @@ _FINAL_NOTICE_CODES = frozenset(
     }
 )
 
+# Scan native string storage in C, without calling scalar conversion or
+# iterator overrides. The first surrogate selects lossless typed storage;
+# ordinary strings keep their existing Arrow export and physical buffers.
+_SURROGATE_POINT = re.compile(r'[\ud800-\udfff]')
+
+
+@dataclass(frozen=True)
+class _NativeObjectType:
+    dtype: Any
+    series: pd.Series
+    descriptor: dict[str, Any]
+
+
+def _native_dtype(dtype: Any) -> Any:
+    return dtype.dtype if isinstance(dtype, _NativeObjectType) else dtype
+
 
 def _frame_example(
-    fields: dict[str, Any], native_types: Mapping[str, Mapping[str, Any]]
+    fields: dict[str, Any],
+    native_types: Mapping[str, Mapping[str, Any]],
+    native_examples: Mapping[tuple[str, tuple[str, ...]], frame_counts.Quality]
+    | None = None,
 ) -> str:
     # Primitive scalar spelling is native presentation, including NumPy's
     # own version-dependent repr. The core supplies selected typed values.
     columns = fields['columns']
+    if fields.get('native_quality'):
+        if native_examples is None:
+            raise codec.CodecError(
+                'native key presentation lost its source population'
+            )
+        observed = native_examples[(fields['table'], tuple(columns))]
+        if observed.example_row != fields.get('example_row'):
+            raise codec.CodecError(
+                'native key presentation selected a different source row'
+            )
+        return repr(observed.example)
     types = native_types[fields['table']]
     # Let the actual native library traverse a selected composite scalar.
     # A mixed numeric pandas row can widen its components; typed Arrow
     # scalar repr alone would not reproduce that presentation.
     pieces = []
-    for name, value in zip(columns, fields['example'], strict=True):
-        dtype = types[name]
+    scales = fields.get('example_decimal_scales', [None] * len(columns))
+    for name, value, scale in zip(
+        columns, fields['example'], scales, strict=True
+    ):
+        held_type = types[name]
+        if isinstance(held_type, _NativeObjectType) and 'example_row' in fields:
+            value = held_type.series.iloc[fields['example_row']]
+        if scale is not None:
+            # The core selected the mantissa and original logical scale.
+            # Reconstruct its actual native representation from digits,
+            # without Decimal arithmetic or context rounding.
+            parts = value.as_tuple()
+            value = Decimal((parts.sign, parts.digits, -scale))
+        dtype = _native_dtype(held_type)
         if type(dtype) in (pd.Float32Dtype, pd.Float64Dtype):
             # The core selected a present scalar. Construct its native
             # representation without turning a valid NaN into pd.NA.
@@ -85,12 +135,40 @@ def _frame_key_candidate(fields: dict[str, Any]) -> str:
 
 
 def _frame_timestamp(
-    fields: dict[str, Any], native_types: Mapping[str, Mapping[str, Any]]
+    fields: dict[str, Any],
+    native_types: Mapping[str, Mapping[str, Any]],
+    native_firsts: Mapping[str, Mapping[str, Any]],
 ) -> str:
     # Only presentation of the core-selected scalar, in its original native
     # timezone implementation and unit. No original frame values are read.
+    if fields['column'] in native_firsts.get(fields['table'], {}):
+        return str(native_firsts[fields['table']][fields['column']])
+    if 'frame_native_text' in fields:
+        return ''.join(chr(point) for point in fields['frame_native_text'])
     value = fields['value']
-    dtype = native_types[fields['table']][fields['column']]
+    if 'frame_decimal_kind' in fields:
+        kind = fields['frame_decimal_kind']
+        if kind == 'finite':
+            exponent = fields['frame_decimal_exponent']
+        else:
+            special = {
+                'infinity': 'Infinity',
+                'nan': 'NaN',
+                'signaling_nan': 'sNaN',
+            }[kind]
+        negative = int(fields['frame_decimal_negative'])
+        digits = tuple(int(digit) for digit in value)
+        if kind == 'finite':
+            return str(Decimal((negative, digits, exponent)))
+        # The standard stub omits runtime-supported special tuple exponents.
+        # These already-decoded core facts have exact native spellings too.
+        payload = (
+            ''
+            if kind == 'infinity'
+            else ''.join(str(digit) for digit in digits)
+        )
+        return str(Decimal(f'{"-" if negative else ""}{special}{payload}'))
+    dtype = _native_dtype(native_types[fields['table']][fields['column']])
     if not hasattr(value, 'unit'):
         return str(pd.Series([value], dtype=dtype).iloc[0])
     if type(dtype) is pd.DatetimeTZDtype:
@@ -106,12 +184,19 @@ def _frame_timestamp(
 
 def _presentation(
     native_types: Mapping[str, Mapping[str, Any]],
+    native_firsts: Mapping[str, Mapping[str, Any]] | None = None,
+    native_examples: Mapping[tuple[str, tuple[str, ...]], frame_counts.Quality]
+    | None = None,
 ) -> AbstractContextManager[None]:
     return errors.holding(
-        frame_example=lambda fields: _frame_example(fields, native_types),
+        frame_example=lambda fields: _frame_example(
+            fields, native_types, native_examples
+        ),
         frame_key=_frame_key,
         frame_key_candidate=_frame_key_candidate,
-        frame_timestamp=lambda fields: _frame_timestamp(fields, native_types),
+        frame_timestamp=lambda fields: _frame_timestamp(
+            fields, native_types, native_firsts or {}
+        ),
     )
 
 
@@ -128,6 +213,7 @@ def _final_notices(
     schema: Schema,
     notices: list[dict[str, Any]],
     native_types: Mapping[str, Mapping[str, Any]],
+    advice: dict[str, Any] | None = None,
 ) -> None:
     # Owner-approved host-only diagnostic exception (2026-10-26): this
     # existing pandas hint never changes the core's result or its inputs.
@@ -142,6 +228,9 @@ def _final_notices(
             column := _warn_dates_stored_as_text(cast('Table', table))
         ) is not None:
             dates[name] = column
+    if advice is not None:
+        _key_advice(schema, advice, dates, native_types)
+        return
     pending = []
     with _presentation(native_types):
         for notice in notices:
@@ -174,6 +263,109 @@ def _final_notices(
         _show_held(pending)
 
 
+def _key_advice(
+    schema: Schema,
+    plan: dict[str, Any],
+    dates: dict[str, str],
+    native_types: Mapping[str, Mapping[str, Any]],
+) -> None:
+    """Consume actual native populations selected by final schema advice."""
+    from sdm_client import _native
+
+    state = _native.FrameKeyAdvice(codec.attachment(plan), dates)
+    examples: dict[tuple[str, tuple[str, ...]], frame_counts.Quality] = {}
+
+    def source(name: str) -> pd.DataFrame:
+        return cast('Table', schema.tables[name]).data
+
+    def observe(
+        name: str, frame: pd.DataFrame, columns: list[str]
+    ) -> frame_counts.Quality:
+        observed = frame_counts.quality(frame, columns)
+        examples[(name, tuple(columns))] = observed
+        return observed
+
+    try:
+        with _presentation(native_types, native_examples=examples):
+            try:
+                for name in state.declined_tables():
+                    frame = source(name)
+                    state.begin_declined(
+                        name, frame is None or bool(frame.empty)
+                    )
+                    while (column := state.declined_column()) is not None:
+                        if state.declined_distinct(
+                            int(frame[column].nunique(dropna=True)), len(frame)
+                        ) and state.declined_quality(
+                            observe(name, frame, [column]).facts()
+                        ):
+                            _show_held(
+                                json.loads(state.declined_notice(len(frame)))
+                            )
+                for name in state.keyless_tables():
+                    frame = source(name)
+                    columns = state.keyless_columns(
+                        name, frame is None or bool(frame.empty)
+                    )
+                    for column in columns:
+                        if state.keyless_missing(
+                            bool(frame[column].isna().any())
+                        ):
+                            state.keyless_quality(
+                                name,
+                                column,
+                                observe(name, frame, [column]).facts(),
+                            )
+                    _show_held(json.loads(state.keyless_notice(name)))
+                _show_held(json.loads(state.ambiguous_notices()))
+            except _native.CoreError as error:
+                errors.raise_from_core(
+                    error.control,
+                    error.attachments,
+                    internal_context=error,
+                    presentation='frame_constructor',
+                )
+    finally:
+        examples.clear()
+
+
+def _sample_notices(schema: Schema, columns: list[dict[str, Any]]) -> None:
+    """Read each selected native cardinality after preceding advice effects."""
+    from sdm_client import _native
+
+    previous = None
+    empty = True
+    frame: Any = None
+    for column in columns:
+        name = column['table']
+        if name != previous:
+            previous = name
+            frame = cast('Table', schema.tables[name]).data
+            empty = frame is None or len(frame) == 0
+        if empty:
+            continue
+        field = column['column']['name']
+        exists = field in frame
+        distinct = int(frame[field].nunique(dropna=True)) if exists else 0
+        present = int(frame[field].count()) if exists else 0
+        sample = {
+            'column': column,
+            'exists': exists,
+            'distinct': distinct,
+            'present': present,
+        }
+        try:
+            notices = _native.frame_sample_facts(codec.attachment(sample))
+        except _native.CoreError as error:
+            errors.raise_from_core(
+                error.control,
+                error.attachments,
+                internal_context=error,
+                presentation='frame_constructor',
+            )
+        _show_held(json.loads(notices))
+
+
 def _primitive_array(series: pd.Series) -> Any:
     """Convert values only, independently of constructor/header policy."""
     import pyarrow as pa
@@ -183,11 +375,15 @@ def _primitive_array(series: pd.Series) -> Any:
 
 def _numeric_physical(dtype: Any) -> str | None:
     """The physical width of the closed built-in numeric storage family."""
-    if isinstance(dtype, np.dtype) and dtype.isnative:
-        if (dtype.kind in 'biu' and dtype.itemsize <= 8) or (
-            dtype.kind == 'f' and dtype.itemsize in (4, 8)
-        ):
-            return 'bool' if dtype.kind == 'b' else dtype.name
+    if (
+        isinstance(dtype, np.dtype)
+        and dtype.isnative
+        and (
+            (dtype.kind in 'biu' and dtype.itemsize <= 8)
+            or (dtype.kind == 'f' and dtype.itemsize in (4, 8))
+        )
+    ):
+        return 'bool' if dtype.kind == 'b' else dtype.name
     if type(dtype) in (
         pd.Int8Dtype,
         pd.Int16Dtype,
@@ -207,49 +403,76 @@ def _numeric_physical(dtype: Any) -> str | None:
     return None
 
 
+def _check_header(name: str, frame: pd.DataFrame) -> None:
+    """Observe the existing native header checks without reading values."""
+    if type(frame.columns) not in (pd.Index, pd.RangeIndex) or any(
+        type(column) not in (str, int, float, bool, type(None))
+        for column in frame.columns
+    ):
+        raise RouteError(
+            'the partial frame constructor requires ordinary built-in column names'
+        )
+    if frame.columns.has_duplicates:
+        duplicates = sorted(
+            {str(c) for c in frame.columns[frame.columns.duplicated()]}
+        )
+        raise StructuredDataError(
+            f'table {name!r} has duplicate column name(s) {duplicates}',
+            code='INVALID_REQUEST',
+        )
+    if any(isinstance(c, str) and type(c) is not str for c in frame.columns):
+        raise RouteError(
+            'the partial frame constructor requires ordinary built-in column names'
+        )
+    non_strings = [c for c in frame.columns if not isinstance(c, str)]
+    if non_strings:
+        raise StructuredDataError(
+            f'table {name!r} column names must be strings; got {non_strings}',
+            code='INVALID_REQUEST',
+        )
+
+
 def _convert(
-    name: str, frame: pd.DataFrame, *, check_header: bool = True
+    name: str,
+    frame: pd.DataFrame,
+    *,
+    check_header: bool = True,
+    infer_objects: bool = True,
+    constructor_objects: bool = True,
 ) -> tuple[Any, dict[str, Any]]:
-    # Validate one table before proceeding to the next. No preliminary
-    # all-table scan or native-object conversion is permitted here.
+    # Validate one table before proceeding to the next.
     if check_header:
-        if type(frame.columns) not in (pd.Index, pd.RangeIndex) or any(
-            type(column) not in (str, int, float, bool, type(None))
-            for column in frame.columns
-        ):
-            raise RouteError(
-                'the partial frame constructor requires ordinary built-in column names'
-            )
-        if frame.columns.has_duplicates:
-            duplicates = sorted(
-                {str(c) for c in frame.columns[frame.columns.duplicated()]}
-            )
-            raise StructuredDataError(
-                f'table {name!r} has duplicate column name(s) {duplicates}',
-                code='INVALID_REQUEST',
-            )
-        if any(
-            isinstance(c, str) and type(c) is not str for c in frame.columns
-        ):
-            raise RouteError(
-                'the partial frame constructor requires ordinary built-in column names'
-            )
-        non_strings = [c for c in frame.columns if not isinstance(c, str)]
-        if non_strings:
-            raise StructuredDataError(
-                f'table {name!r} column names must be strings; got {non_strings}',
-                code='INVALID_REQUEST',
-            )
+        _check_header(name, frame)
     import pyarrow as pa
 
     arrays = []
     native_types = {}
     for ordinal, column in enumerate(frame.columns):
-        # A prior warning can introduce a duplicate label after metadata was
-        # fixed. Convert each physical column without replaying name lookup
-        # or duplicate-name policy before the core's remaining native guards.
-        series = frame.iloc[:, ordinal]
+        # Initial inference resolves each original name only when reached.
+        # Later metadata-fixed observations retain their physical positions.
+        series = (
+            frame[column]
+            if constructor_objects and infer_objects
+            else frame.iloc[:, ordinal]
+        )
         dtype = series.dtype
+        decimal = native_decimal_column(series)
+        object_values = None
+        if constructor_objects and (
+            (isinstance(dtype, np.dtype) and dtype.kind == 'O')
+            or type(dtype) is pd.CategoricalDtype
+        ):
+            observed = frame_objects.meaning(series) if infer_objects else None
+            if not infer_objects or observed is not None:
+                descriptor: dict[str, Any] = {
+                    'category': type(dtype) is pd.CategoricalDtype
+                }
+                if observed is not None:
+                    descriptor['meaning'] = observed
+                object_values = frame_objects.storage(series)
+                native_types[column] = _NativeObjectType(
+                    dtype, series, descriptor
+                )
         numeric = _numeric_physical(dtype) is not None
         temporal = (
             isinstance(dtype, np.dtype)
@@ -264,6 +487,39 @@ def _convert(
             'python',
             'pyarrow',
         )
+        if (
+            constructor_objects
+            and text
+            and dtype.storage == 'python'
+            and any(
+                _SURROGATE_POINT.search(value) is not None
+                for value in series.array
+                if isinstance(value, str)
+            )
+        ):
+            # Arrow UTF8 cannot hold these already-valid native string
+            # points. Reuse the explicit FrameScalar::Text tuple without
+            # changing their declared meaning or native dtype owner.
+            # Native nunique can differ from exact Unicode equality. Keep
+            # its original initial-meaning read separate from exported points;
+            # later fresh observations must not repeat that native read.
+            declared_string_meaning: dict[str, str | bool | int] = {
+                'dtype': 'string',
+                'untyped': False,
+            }
+            if infer_objects:
+                declared_string_meaning['distinct'] = int(
+                    series.nunique(dropna=True)
+                )
+            object_values = frame_objects.storage(series)
+            native_types[column] = _NativeObjectType(
+                dtype,
+                series,
+                {
+                    'category': False,
+                    'meaning': declared_string_meaning,
+                },
+            )
         arrow = False
         if (
             type(dtype) is pd.ArrowDtype
@@ -275,20 +531,30 @@ def _convert(
                     pa.types.is_integer(physical)
                     and physical.bit_width in (8, 16, 32, 64)
                 )
+                or (
+                    pa.types.is_floating(physical)
+                    and physical.bit_width in (32, 64)
+                )
                 or pa.types.is_boolean(physical)
                 or pa.types.is_string(physical)
                 or pa.types.is_large_string(physical)
             )
-            # Arrow float nunique distinguishes zero/NaN bit patterns while
-            # pandas duplicate-key equality can merge them. The current
-            # frame contract does not represent both native facts, so that
-            # whole family remains outside this development route.
-            # Arrow timestamps also remain unfinished: native scalar
+            # Native candidate cardinality and selected-key duplicate quality
+            # are observed separately at their reached constructor stages.
+            # Export preserves float width, NaN bits and Arrow validity.
+            # Arrow timestamps remain unfinished: native scalar
             # boxing can overflow or turn a present ns MIN into NaT, which
             # affects time choice at its consumed row and constructor stage.
-        if not (numeric or temporal or text or arrow):
+        if not (
+            numeric
+            or temporal
+            or text
+            or arrow
+            or decimal is not None
+            or object_values is not None
+        ):
             raise RouteError(
-                f'the partial frame constructor supports only NumPy or pandas masked numeric and Boolean columns, native datetimes, built-in pandas strings, or built-in Arrow integer, Boolean or string columns: {name}.{column}'
+                f'the partial frame constructor supports only NumPy or pandas masked numeric and Boolean columns, native datetimes, built-in pandas strings, or built-in Arrow integer, Float32/Float64, Boolean, string or Decimal columns: {name}.{column}'
             )
         # Convert values only. DataFrame export may add a non-Range index
         # column, which the public schema constructor never describes.
@@ -298,11 +564,16 @@ def _convert(
         # chunks and widths. Do not reconstruct it from Python values or
         # apply pandas missing-value inference.
         arrays.append(
-            series.array.__arrow_array__()
+            object_values
+            if object_values is not None
+            else decimal[0]
+            if decimal is not None
+            else series.array.__arrow_array__()
             if arrow
             else _primitive_array(series)
         )
-        native_types[column] = dtype
+        if object_values is None:
+            native_types[column] = dtype
     return pa.Table.from_arrays(arrays, names=list(frame.columns)), native_types
 
 
@@ -332,9 +603,26 @@ def _describe(
     attached: dict[int, Any] = {1: codec.attachment(spec)}
     try:
         for ordinal, (name, rows) in enumerate(frames.items(), 3):
-            manifest['tables'].append(
-                {'source': codec.relation(name), 'rows': ordinal}
-            )
+            entry: dict[str, Any] = {
+                'source': codec.relation(name),
+                'rows': ordinal,
+            }
+            decimals = [
+                {'column': at, 'name': column, 'decimal': descriptor}
+                for at, (column, dtype) in enumerate(native_types[name].items())
+                if not isinstance(dtype, _NativeObjectType)
+                and (descriptor := native_decimal_type(dtype)) is not None
+            ]
+            if decimals:
+                entry['decimals'] = decimals
+            objects = [
+                {'column': at, 'name': column, **dtype.descriptor}
+                for at, (column, dtype) in enumerate(native_types[name].items())
+                if isinstance(dtype, _NativeObjectType)
+            ]
+            if objects:
+                entry['objects'] = objects
+            manifest['tables'].append(entry)
             attached[ordinal] = rows
         if inference is not None:
             inference_id = max(2, max(attached)) + 1
@@ -354,6 +642,7 @@ def _describe(
                 if held_notices is not None
                 else frozenset(),
                 kept=held_notices,
+                error_presentation='frame_constructor',
             )
     finally:
         rows = None
@@ -367,43 +656,146 @@ def _observe(
     # New unrelated columns are not traversed and earlier header guards are
     # not replayed after a native warning handler changes the frame.
     current = [column for column in names if column in frame.columns]
-    return _convert(name, frame[current], check_header=False)
+    return _convert(
+        name, frame[current], check_header=False, infer_objects=False
+    )
+
+
+def _adopt(
+    name: str,
+    frame: pd.DataFrame,
+    product: dict[str, Any],
+    native_types: Mapping[str, Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Advance fixed key products using their actual native populations."""
+    from sdm_client import _native
+
+    state = _native.FrameKeyAdoption(codec.attachment(product))
+    examples: dict[tuple[str, tuple[str, ...]], frame_counts.Quality] = {}
+
+    def observe(columns: list[str]) -> frame_counts.Quality:
+        observed = frame_counts.quality(frame, columns)
+        examples[(name, tuple(columns))] = observed
+        return observed
+
+    try:
+        with _presentation(native_types, native_examples=examples):
+            try:
+                validation = state.validation_columns()
+                if validation is not None:
+                    empty = bool(frame.empty)
+                    state.validation_empty(empty)
+                    if not empty:
+                        state.validation_quality(observe(validation).facts())
+                        missing = [
+                            column
+                            for column in state.missing_columns()
+                            if column in frame.columns
+                            and bool(frame[column].isna().any())
+                        ]
+                        rows = (
+                            len(frame)
+                            if state.validation_needs_rows()
+                            else None
+                        )
+                        state.validate(missing, rows)
+                columns = state.adoption_columns()
+                state.adopt(
+                    None
+                    if columns is None or frame.empty
+                    else observe(columns).facts()
+                )
+                for column in state.discriminators():
+                    assert columns is not None
+                    state.discriminator(
+                        column, observe([*columns, column]).facts()
+                    )
+                for column in state.usable_columns():
+                    usable_missing = (
+                        bool(frame[column].isna().any())
+                        if column in frame.columns
+                        else None
+                    )
+                    state.usable(column, usable_missing)
+                adopted, notices = state.finish(
+                    len(frame) if state.needs_rows() else None
+                )
+            except _native.CoreError as error:
+                errors.raise_from_core(
+                    error.control,
+                    error.attachments,
+                    internal_context=error,
+                    presentation='frame_constructor',
+                )
+            _show_held(json.loads(notices))
+            return json.loads(adopted)
+    finally:
+        examples.clear()
 
 
 def _infer_table(
     name: str, frame: pd.DataFrame
-) -> tuple[dict[str, Any], dict[str, Any]]:
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     spec = {
         'tables': [{'name': name, 'source': codec.relation(name)}],
         'primary_keys': {},
         'time_columns': {},
     }
-    converted, types = _convert(name, frame)
-    finished = _describe('nominate', {name: converted}, spec, {name: types})
-    result = results.expect(finished.result, results.InferredFrames)
-    nominated = json.loads(finished.take(result.value))
-    names = [
-        column['name'] for column in nominated['value']['table']['columns']
-    ]
-    converted, types = _observe(name, frame, names)
+    _check_header(name, frame)
+    frame_objects.validate_cells(frame, name)
+    converted, types = _convert(name, frame, check_header=False)
     finished = _describe(
-        'adopt', {name: converted}, spec, {name: types}, inference=nominated
+        'column_meanings', {name: converted}, spec, {name: types}
     )
     result = results.expect(finished.result, results.InferredFrames)
-    adopted = json.loads(finished.take(result.value))
-    converted, types = _observe(name, frame, names)
+    from sdm_client import _native
+
+    frame_objects.validate_cells(frame, name)
+    candidates = _native.FrameKeyCandidates(
+        finished.take(result.value), len(frame)
+    )
+    while (candidate := candidates.column()) is not None:
+        candidates.observe(
+            int(frame[candidate].nunique(dropna=True)), len(frame)
+        )
+    nominee = candidates.selected()
+    missing = None
+    if nominee is not None:
+        has_missing = bool(frame[nominee].isna().any())
+        missing = (
+            has_missing,
+            int(frame[nominee].isna().sum()) if has_missing else 0,
+        )
+    nomination, notices = candidates.finish(missing)
+    nominated = json.loads(nomination)
+    _show_held(json.loads(notices))
+    adopted = _adopt(name, frame, nominated, {name: types})
+    finished = _describe('time_facts', {}, spec, {}, inference=adopted)
+    result = results.expect(finished.result, results.InferredFrames)
+    plan = json.loads(finished.take(result.value))['value']
+    facts, native_firsts = first_values(frame, plan)
+    converted, types = _observe(name, frame, plan['columns'])
     # A missing candidate is selected by the core. Native lookup is used
     # only by its reached diagnostic presenter, preserving KeyError cause.
     with errors.holding(
         direct_schema_missing=lambda fields: frame[fields['name']]
     ):
         finished = _describe(
-            'time', {name: converted}, spec, {name: types}, inference=adopted
+            'time',
+            {name: converted},
+            spec,
+            {name: types},
+            inference={'kind': 'time_facts', 'value': facts},
         )
     result = results.expect(finished.result, results.InferredFrames)
-    return cast(
-        'dict[str, Any]', json.loads(finished.take(result.value))['value'][0]
-    ), types
+    return (
+        cast(
+            'dict[str, Any]',
+            json.loads(finished.take(result.value))['value'][0],
+        ),
+        types,
+        native_firsts,
+    )
 
 
 def _ordinary_builtin(value: Any, seen: set[int]) -> bool:
@@ -462,10 +854,10 @@ def from_data(
     snapshots: dict[str, Any] = {}
     inferred: dict[str, dict[str, Any]] = {}
     time_types: dict[str, dict[str, Any]] = {}
+    time_firsts: dict[str, dict[str, Any]] = {}
     originals: dict[str, pd.DataFrame] = {}
     native_types: dict[str, dict[str, Any]] = {}
     finished: Finished | None = None
-    converted: Any = None
     held_notices: list[dict[str, Any]] = []
     try:
         for name, frame in tables.items():
@@ -487,7 +879,9 @@ def from_data(
                 raise RouteError(
                     'the partial frame constructor requires ordinary built-in DataFrames'
                 )
-            inferred[name], time_types[name] = _infer_table(name, frame)
+            inferred[name], time_types[name], time_firsts[name] = _infer_table(
+                name, frame
+            )
             originals[name] = frame
         # Native argument conversion is deliberately after all Table stages,
         # matching the constructor's override boundary.
@@ -557,23 +951,13 @@ def from_data(
                 item['table']['name']: item
                 for item in json.loads(edited.take(result.value))['value']
             }
-            columns = [
-                column['name'] for column in inferred[name]['table']['columns']
-            ]
-            converted, types = _observe(name, originals[name], columns)
-            stated = _describe(
-                'stated_key',
-                {name: converted},
-                {
-                    'tables': [{'name': name, 'source': codec.relation(name)}],
-                    'primary_keys': {},
-                    'time_columns': {},
-                },
-                {name: types},
-                inference={'kind': 'inferred', 'value': [inferred[name]]},
+            adopted = _adopt(
+                name,
+                originals[name],
+                {'kind': 'inferred', 'value': [inferred[name]]},
+                {name: time_types[name]},
             )
-            result = results.expect(stated.result, results.InferredFrames)
-            inferred[name] = json.loads(stated.take(result.value))['value'][0]
+            inferred[name] = adopted['value'][0]
         spec = {
             'tables': [
                 {'name': name, 'source': codec.relation(name)}
@@ -636,7 +1020,7 @@ def from_data(
             snapshots[name], native_types[name] = _observe(name, frame, names)
         try:
             finished = _describe(
-                'assemble',
+                'assemble_native',
                 snapshots,
                 spec,
                 native_types,
@@ -660,40 +1044,23 @@ def from_data(
         schema = schemas.build(
             cls, None, assembled['description'], frames=originals
         )
-        _final_notices(schema, assembled['key_notices'], native_types)
+        _final_notices(
+            schema, assembled['key_notices'], native_types, assembled['advice']
+        )
         # These are the core-selected original automatic meanings. Presence
         # and cardinality are captured separately for each native iteration,
         # after the previous advice and after the date-as-text presentation.
-        for column in assembled['samples']:
-            name = column['table']
-            converted, types = _observe(
-                name, originals[name], [column['column']['name']]
-            )
-            sampled = _describe(
-                'sample',
-                {name: converted},
-                {
-                    'tables': [{'name': name, 'source': codec.relation(name)}],
-                    'primary_keys': {},
-                    'time_columns': {},
-                },
-                {name: types},
-                inference={'kind': 'sample_column', 'value': column},
-            )
-            sampled_result = results.expect(
-                sampled.result, results.InferredFrames
-            )
-            sampled.take(sampled_result.value)
-        with _presentation(time_types):
+        _sample_notices(schema, assembled['samples'])
+        with _presentation(time_types, time_firsts):
             _show_held(assembled['notices'])
         return schema
     finally:
         # Tracebacks can retain these frames. Clear only call-owned snapshots;
         # the public tables retain their original DataFrames by reference.
         finished = None
-        converted = None
         snapshots.clear()
         inferred.clear()
         time_types.clear()
+        time_firsts.clear()
         native_types.clear()
         held_notices.clear()

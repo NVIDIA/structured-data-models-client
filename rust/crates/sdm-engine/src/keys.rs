@@ -27,7 +27,9 @@ use arrow_array::types::{
 };
 use arrow_array::{Array, ArrayRef};
 use arrow_schema::DataType;
+use sdm_contract::data::strings::StringEncoding;
 use sdm_contract::data::{WrittenNumber, written_number};
+use sdm_contract::scalar::unicode::UnicodeText;
 use sdm_contract::types::ColumnType;
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 
@@ -39,7 +41,7 @@ use crate::not_yet;
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Key {
     Int(i128),
-    Text(String),
+    Text(UnicodeText),
     /// A value with a fraction: `value` ten-to-the-`scale`ths, `scale` from
     /// 1 to 38, `value` no multiple of ten.
     Decimal {
@@ -77,8 +79,9 @@ impl Key {
     }
 }
 
-/// Whether a key of `data_type` is sampled: the integers, text and, from
-/// T1.32a, the floats and a `decimal128` of no negative scale.
+/// Whether a key of `data_type` is read: the integers, either text offset
+/// width and, from T1.32a, the floats and a `decimal128` of no negative scale.
+/// The separate provider cast rule determines which target types it builds.
 pub fn supported(data_type: &DataType) -> bool {
     matches!(
         data_type,
@@ -91,6 +94,7 @@ pub fn supported(data_type: &DataType) -> bool {
             | DataType::UInt32
             | DataType::UInt64
             | DataType::Utf8
+            | DataType::LargeUtf8
             | DataType::Float32
             | DataType::Float64
     ) || matches!(data_type, DataType::Decimal128(_, scale) if *scale >= 0)
@@ -106,6 +110,14 @@ pub fn read(array: &ArrayRef) -> Result<Vec<Option<Key>>, CoreError> {
                 .collect()
         }};
     }
+    macro_rules! text {
+        ($offset:ty) => {{
+            let values = array.as_string::<$offset>();
+            (0..values.len())
+                .map(|i| (!values.is_null(i)).then(|| Key::Text(values.value(i).into())))
+                .collect()
+        }};
+    }
     Ok(match array.data_type() {
         DataType::Int8 => ints!(Int8Type),
         DataType::Int16 => ints!(Int16Type),
@@ -115,12 +127,8 @@ pub fn read(array: &ArrayRef) -> Result<Vec<Option<Key>>, CoreError> {
         DataType::UInt16 => ints!(UInt16Type),
         DataType::UInt32 => ints!(UInt32Type),
         DataType::UInt64 => ints!(UInt64Type),
-        DataType::Utf8 => {
-            let values = array.as_string::<i32>();
-            (0..values.len())
-                .map(|i| (!values.is_null(i)).then(|| Key::Text(values.value(i).to_owned())))
-                .collect()
-        }
+        DataType::Utf8 => text!(i32),
+        DataType::LargeUtf8 => text!(i64),
         DataType::Decimal128(_, scale) if *scale >= 0 => {
             let values = array.as_primitive::<Decimal128Type>();
             (0..values.len())
@@ -171,7 +179,7 @@ impl Key {
     /// that writes no number (a `NaN`, an `Infinity`) is its own text.
     pub fn number_text(text: &str) -> Key {
         let Ok(written) = written(text) else {
-            return Key::Text(text.to_owned());
+            return Key::Text(text.into());
         };
         if written.digits.is_empty() {
             return Key::Int(0);
@@ -190,11 +198,41 @@ impl Key {
                 };
             }
         }
-        Key::Text(sdm_contract::data::exact_number_text(text))
+        Key::Text(sdm_contract::data::exact_number_text(text).into())
     }
 }
 
 // --- The entities' cast to the key's type (T1.32a) ---------------------------
+
+/// Read strings only under their explicit logical encoding. Binary is
+/// never interpreted by the general key reader. Both offset widths share
+/// the same validated borrowed view and the same owned text-key meaning.
+pub fn read_strings(
+    array: &ArrayRef,
+    encoding: StringEncoding,
+) -> Result<Vec<Option<Key>>, CoreError> {
+    let invalid = || {
+        CoreError::protocol(
+            Sentence::InvalidMessage,
+            "text key encoding does not match its Arrow values",
+        )
+    };
+    let strings =
+        crate::strings::StringColumn::new(array.as_ref(), encoding).map_err(|_| invalid())?;
+    (0..strings.len())
+        .map(|row| {
+            strings
+                .get(row)
+                .map_err(|_| invalid())?
+                .map(|text| {
+                    UnicodeText::from_utf8_surrogatepass(text.as_bytes().to_vec())
+                        .map(Key::Text)
+                        .map_err(|_| invalid())
+                })
+                .transpose()
+        })
+        .collect()
+}
 
 /// Why an entity does not cast to the key's type: the `reason` field of the
 /// refusal, one of the rule table's outcomes.
@@ -814,10 +852,78 @@ pub fn cast(entities: &ArrayRef, key: &DataType) -> Result<ArrayRef, CoreError> 
 mod tests {
     use super::*;
     use arrow_array::{
-        BooleanArray, Decimal128Array, Float32Array, Float64Array, Int64Array, NullArray,
-        StringArray, TimestampMicrosecondArray, UInt64Array,
+        BooleanArray, Decimal128Array, Float32Array, Float64Array, Int64Array, LargeStringArray,
+        NullArray, StringArray, TimestampMicrosecondArray, UInt64Array,
     };
     use sdm_contract::ErrorCode;
+
+    #[test]
+    fn identifying_text_is_exact_at_both_offset_widths_and_nonzero_slices() {
+        // Lexical, Unicode, empty, NUL and missing values are distinct native
+        // graph-key facts. No numeric parsing, casing or normalization applies.
+        let values = [
+            Some("outside slice"),
+            Some("007"),
+            Some("7"),
+            Some("7.0"),
+            Some(""),
+            Some("ΟΣ"),
+            Some("İ"),
+            Some("é"),
+            Some("e\u{301}"),
+            Some("\0"),
+            Some("<NA>"),
+            Some("nan"),
+            None,
+            Some("007"),
+            Some("outside slice"),
+        ];
+        let expected = values[1..values.len() - 1]
+            .iter()
+            .map(|value| value.map(|text| Key::Text(text.into())))
+            .collect::<Vec<_>>();
+        let narrow: ArrayRef = Arc::new(StringArray::from(values.to_vec()));
+        let large: ArrayRef = Arc::new(LargeStringArray::from(values.to_vec()));
+        for original in [narrow, large] {
+            assert!(supported(original.data_type()));
+            let sliced = original.slice(1, values.len() - 2);
+            assert_eq!(read(&sliced).unwrap(), expected);
+            // Independently read pages preserve the same ordered keys and
+            // nulls as a single logical slice, without rewriting offsets.
+            let first = sliced.slice(0, 5);
+            let rest = sliced.slice(5, sliced.len() - 5);
+            let mut paged = read(&first).unwrap();
+            paged.extend(read(&rest).unwrap());
+            assert_eq!(paged, expected);
+            assert_eq!(sliced.data_type(), original.data_type());
+            assert_eq!(original.len(), values.len());
+        }
+    }
+
+    #[test]
+    fn empty_and_all_missing_text_keys_preserve_their_native_shape() {
+        for values in [Vec::<Option<&str>>::new(), vec![None, None]] {
+            for array in [
+                Arc::new(StringArray::from(values.clone())) as ArrayRef,
+                Arc::new(LargeStringArray::from(values.clone())) as ArrayRef,
+            ] {
+                assert_eq!(read(&array).unwrap(), vec![None; values.len()]);
+            }
+        }
+    }
+
+    #[test]
+    fn reading_large_offsets_does_not_replace_the_provider_cast_rule() {
+        let entities: ArrayRef = Arc::new(LargeStringArray::from(vec!["7", "007"]));
+        let casted = cast(&entities, &DataType::Int64).unwrap();
+        assert_eq!(read(&casted).unwrap(), vec![Some(Key::Int(7)); 2]);
+        let refused = cast(&entities, &DataType::LargeUtf8).unwrap_err();
+        assert_eq!(refused.code, ErrorCode::UnsupportedRequest);
+        assert_eq!(
+            read(&entities).unwrap(),
+            vec![Some(Key::Text("7".into())), Some(Key::Text("007".into())),]
+        );
+    }
 
     fn cast_to(entities: ArrayRef, key: &DataType) -> Result<ArrayRef, (String, u64)> {
         cast(&entities, key).map_err(|e| {

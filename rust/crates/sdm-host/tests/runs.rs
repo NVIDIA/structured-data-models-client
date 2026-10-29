@@ -136,7 +136,7 @@ impl IntoCore for CoreError {
 
 impl IntoCore for sdm_host::Failure {
     fn into_core(self) -> CoreError {
-        self.error
+        *self.error
     }
 }
 
@@ -224,6 +224,11 @@ fn a_run_starts_only_from_a_start_message_the_core_takes() {
         (err.kind, err.code),
         (ErrorKind::Protocol, ErrorCode::InvalidMessage)
     );
+}
+
+#[test]
+fn contained_failures_keep_only_an_error_owner_and_panic_flag_inline() {
+    assert!(std::mem::size_of::<sdm_host::Failure>() <= 2 * std::mem::size_of::<usize>());
 }
 
 #[test]
