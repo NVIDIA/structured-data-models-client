@@ -12,7 +12,10 @@ import pytest
 from sdm_connectors.providers import PlanNotRun
 from snowflake.connector.errors import NotSupportedError
 
-from sdm_client._rust.native_source_rows import SourceRowsBatch, read_source_rows
+from sdm_client._rust.native_source_rows import (
+    SourceRowsBatch,
+    read_source_rows,
+)
 from sdm_client._rust.providers.snowflake import SnowflakeProvider
 
 
@@ -32,7 +35,9 @@ def _step(*statements):
 
 
 class Connection:
-    def __init__(self, *, arrow_error=None, execute_error=None, close_error=None):
+    def __init__(
+        self, *, arrow_error=None, execute_error=None, close_error=None
+    ):
         self._paramstyle = 'pyformat'
         self.events = []
         self.table = pa.table({'value': [2**53 + 1, None]})
@@ -68,18 +73,24 @@ class Cursor:
 
     def __exit__(self, error_type, error, traceback):
         if error is not None:
-            self.connection.events.append(('unwind', error, self.connection._paramstyle))
+            self.connection.events.append(
+                ('unwind', error, self.connection._paramstyle)
+            )
         self.close()
 
     def execute(self, text, parameters=None):
         connection = self.connection
-        connection.events.append(('execute', text, parameters, connection._paramstyle))
+        connection.events.append(
+            ('execute', text, parameters, connection._paramstyle)
+        )
         if connection.execute_error is not None:
             raise connection.execute_error
 
     def fetch_arrow_all(self, *, force_return_table):
         connection = self.connection
-        connection.events.append(('arrow', force_return_table, connection._paramstyle))
+        connection.events.append(
+            ('arrow', force_return_table, connection._paramstyle)
+        )
         if connection.arrow_error is not None:
             raise connection.arrow_error
         return connection.table
@@ -97,7 +108,9 @@ class Cursor:
 
 
 @pytest.mark.parametrize('connection_type', [Connection, PublicStyleConnection])
-def test_native_cursor_and_style_scope_encloses_one_execute_and_exact_arrow_read(connection_type):
+def test_native_cursor_and_style_scope_encloses_one_execute_and_exact_arrow_read(
+    connection_type,
+):
     connection = connection_type()
     provider = SnowflakeProvider(connection)
     with provider.source_rows(_step(('SELECT value', [])), {}) as table:
@@ -108,9 +121,12 @@ def test_native_cursor_and_style_scope_encloses_one_execute_and_exact_arrow_read
     assert connection.closed
     assert connection._paramstyle == 'pyformat'
     assert connection.events == [
-        ('cursor', 'qmark'), ('enter', 'qmark'),
+        ('cursor', 'qmark'),
+        ('enter', 'qmark'),
         ('execute', 'SELECT value', None, 'qmark'),
-        ('arrow', True, 'qmark'), 'consumer', ('close', 'qmark'),
+        ('arrow', True, 'qmark'),
+        'consumer',
+        ('close', 'qmark'),
     ]
 
 
@@ -118,7 +134,10 @@ def test_native_port_binds_the_actual_core_text_and_scalar_parameters_in_order()
     connection = Connection()
     step = _step(
         ('SELECT ?', [{'param': 'text', 'attachment': 8}]),
-        ('SELECT ?', [{'param': 'value', 'value': {'t': 'utf8', 'v': 'given'}}]),
+        (
+            'SELECT ?',
+            [{'param': 'value', 'value': {'t': 'utf8', 'v': 'given'}}],
+        ),
     )
     keys = {8: pa.table({'keys': ['[[3]]']})}
     with SnowflakeProvider(connection).source_rows(step, keys) as table:
@@ -127,20 +146,27 @@ def test_native_port_binds_the_actual_core_text_and_scalar_parameters_in_order()
         ('execute', 'SELECT ?', ('[[3]]',), 'qmark'),
         ('execute', 'SELECT ?', ('given',), 'qmark'),
     ]
-    assert [event for event in connection.events if event[0] == 'arrow'] == [('arrow', True, 'qmark')]
+    assert [event for event in connection.events if event[0] == 'arrow'] == [
+        ('arrow', True, 'qmark')
+    ]
 
 
 def test_native_arrow_not_supported_error_is_preserved_without_scalar_fallback():
     original = NotSupportedError('raw Arrow unavailable')
     connection = Connection(arrow_error=original)
     with pytest.raises(NotSupportedError) as caught:
-        with SnowflakeProvider(connection).source_rows(_step(('SELECT value', [])), {}):
+        with SnowflakeProvider(connection).source_rows(
+            _step(('SELECT value', [])), {}
+        ):
             pytest.fail('a failed native Arrow read yielded data')
     assert caught.value is original
     assert connection.closed
     assert connection._paramstyle == 'pyformat'
     assert not any(event[0] == 'rows' for event in connection.events)
-    assert connection.events[-2:] == [('unwind', original, 'qmark'), ('close', 'qmark')]
+    assert connection.events[-2:] == [
+        ('unwind', original, 'qmark'),
+        ('close', 'qmark'),
+    ]
 
 
 def test_ordinary_call_retains_arrow_to_scalar_text_fallback_and_its_old_style_scope():
@@ -152,7 +178,9 @@ def test_ordinary_call_retains_arrow_to_scalar_text_fallback_and_its_old_style_s
     assert connection.events == [
         ('cursor', 'pyformat'),
         ('execute', 'SHOW value', None, 'qmark'),
-        ('arrow', True, 'pyformat'), ('rows', 'pyformat'), ('close', 'pyformat'),
+        ('arrow', True, 'pyformat'),
+        ('rows', 'pyformat'),
+        ('close', 'pyformat'),
     ]
     assert connection._paramstyle == 'pyformat'
 
@@ -176,14 +204,18 @@ def test_real_native_arrow_conversion_runs_after_cursor_close_and_style_restorat
 
 
 @pytest.mark.parametrize('position', ['execute', 'body', 'close'])
-def test_native_scope_restores_style_on_exact_failure_and_closes_cursor(position):
+def test_native_scope_restores_style_on_exact_failure_and_closes_cursor(
+    position,
+):
     original = RuntimeError('selected failure')
     connection = Connection(
         execute_error=original if position == 'execute' else None,
         close_error=original if position == 'close' else None,
     )
     with pytest.raises(RuntimeError) as caught:
-        with SnowflakeProvider(connection).source_rows(_step(('SELECT value', [])), {}):
+        with SnowflakeProvider(connection).source_rows(
+            _step(('SELECT value', [])), {}
+        ):
             if position == 'body':
                 raise original
     assert caught.value is original
@@ -207,7 +239,9 @@ def test_process_control_propagates_through_native_scope_cleanup(error_type):
     original = error_type()
     connection = Connection(arrow_error=original)
     with pytest.raises(error_type) as caught:
-        with SnowflakeProvider(connection).source_rows(_step(('SELECT value', [])), {}):
+        with SnowflakeProvider(connection).source_rows(
+            _step(('SELECT value', [])), {}
+        ):
             pytest.fail('process control must propagate')
     assert caught.value is original
     assert connection.closed
