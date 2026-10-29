@@ -111,12 +111,21 @@ def as_run(cell: str) -> dict[str, dict[str, Any]]:
 def observed(
     r: Path, tmp: Path, cell: str = 'ref-pandas3', edit: Edit | None = None
 ) -> Path:
-    r"""python-old's observations: the reference's, relabelled, but for
-    the seven, which are python-old's own lines as run in ``cell``,
-    ``CASE``'s changed by ``edit``."""
+    r"""Seven actual receipts over an explicitly authored complete scaffold.
+
+    Filler records retain the reference-based test data, with a coherent
+    requested runtime profile. They were not executed in that runtime and
+    are never runtime acceptance evidence. The seven actual records are
+    overlaid unchanged, with only CASE deliberately changed by ``edit``.
+    """
 
     def real(lines: dict[str, dict[str, Any]]) -> None:
-        for case, line in as_run(cell).items():
+        recorded = as_run(cell)
+        profile = next(iter(recorded.values()))['identity']
+        for line in lines.values():
+            for field in ('cell', 'versions', 'platform'):
+                line['identity'][field] = copy.deepcopy(profile[field])
+        for case, line in recorded.items():
             lines[case] = copy.deepcopy(line)
         if edit is not None:
             edit(lines[CASE])
