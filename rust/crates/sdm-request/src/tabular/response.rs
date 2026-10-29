@@ -470,24 +470,26 @@ pub fn attribute(
         float_text,
     )
 }
-pub fn layout(
-    payload: &Value,
-    response: &PredictionResponse,
+/// Complete actual row attribution before any native target-task display.
+/// This returns the useful complete attributed rows, not a permission token.
+pub fn complete_rows(
     scope: &ResponseScope,
     attributed: Vec<AttributedDirectRow>,
-    decimal_limit: u32,
     float_text: fn(f64) -> String,
-) -> Result<Part, CoreError> {
-    let (actual, rows) = decode(payload, response, float_text)?;
-    if actual != *scope || attributed.len() != rows.len() {
+) -> Result<Vec<AttributedDirectRow>, CoreError> {
+    self::scope(scope)?;
+    if attributed.len() != scope.response_rows {
         return Err(protocol(
-            "attributed rows disagree with decoded response scope",
+            "complete attribution has another decoded response extent",
         ));
     }
     let mut seen = IndexSet::new();
-    for (row, accepted) in rows.iter().zip(&attributed) {
-        if *row != accepted.row {
-            return Err(protocol("attribution source differs from decoded response"));
+    for (ordinal, accepted) in attributed.iter().enumerate() {
+        let row = &accepted.row;
+        if row.ordinal != ordinal {
+            return Err(protocol(
+                "complete attributed rows are missing or out of order",
+            ));
         }
         let replay = if let Some(json) = &accepted.json {
             let checked = CheckedDirectRow {
@@ -539,7 +541,34 @@ pub fn layout(
             ),
         ));
     }
-    let mut part = predict::layout_tabular(payload, response, decimal_limit, float_text)?;
+    Ok(attributed)
+}
+
+pub fn layout(
+    payload: &Value,
+    response: &PredictionResponse,
+    scope: &ResponseScope,
+    attributed: Vec<AttributedDirectRow>,
+    decimal_limit: u32,
+    float_text: fn(f64) -> String,
+    native_task: Option<&sdm_contract::scalar::unicode::UnicodeText>,
+) -> Result<Part, CoreError> {
+    let (actual, rows) = decode(payload, response, float_text)?;
+    if actual != *scope || attributed.len() != rows.len() {
+        return Err(protocol(
+            "attributed rows disagree with decoded response scope",
+        ));
+    }
+    if rows
+        .iter()
+        .zip(&attributed)
+        .any(|(row, accepted)| *row != accepted.row)
+    {
+        return Err(protocol("attribution source differs from decoded response"));
+    }
+    let attributed = complete_rows(scope, attributed, float_text)?;
+    let mut part =
+        predict::layout_tabular_task(payload, response, decimal_limit, float_text, native_task)?;
     for (row, accepted) in part.rows.iter_mut().zip(attributed) {
         row.id = entity(&accepted.id)?;
     }

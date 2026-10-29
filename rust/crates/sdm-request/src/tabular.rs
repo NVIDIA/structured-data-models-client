@@ -12,7 +12,8 @@ use arrow_schema::DataType;
 use sdm_contract::ops::{DescribedTable, Dtype, HeldSchema, HeldTable, SourceDescription, Stype};
 use sdm_contract::prepare::{
     DirectInference, EncodedDirectBody, EncodedTableShape, FloatStorage, PrimitiveOption,
-    TabularColumn, TabularColumns,
+    TABULAR_ENVELOPE_VERSION, TabularColumn, TabularColumns, TabularEnvelope,
+    TabularEnvelopeWidths, TaskValue,
 };
 use sdm_contract::{CoreError, CoreWarning, Detail, Scalar, Sentence};
 use sdm_wire::json::Value;
@@ -305,6 +306,246 @@ fn primitive_inference(inference: DirectInference) -> Result<Value, CoreError> {
     Ok(Value::Object(fields))
 }
 
+/// Resolve the complete earlier width calculation before any task comparison.
+pub fn envelope_widths(
+    description: &SourceDescription,
+    native_schema: &HeldSchema,
+    entity: &str,
+    context_names: &[String],
+    scoring: &[RecordBatch],
+    arriving: &[(String, Dtype)],
+    storage: &[Option<FloatStorage>],
+) -> Result<Vec<(String, Dtype)>, CoreError> {
+    let table = description
+        .tables
+        .iter()
+        .find(|t| t.name == entity)
+        .ok_or_else(|| {
+            invalid(Sentence::DirectSchemaMissing).with_field("name", Detail::text(entity))
+        })?;
+    let native = native_schema.tables.iter().find(|t| t.name == entity);
+    let dtypes = widths(table, native, scoring, arriving, storage)?;
+    let missing: Vec<String> = context_names
+        .iter()
+        .filter(|n| !dtypes.contains_key(*n))
+        .cloned()
+        .collect();
+    if !missing.is_empty() {
+        return Err(invalid(Sentence::DirectSchemaColumns).with_field("columns", texts(missing)));
+    }
+    Ok(dtypes.into_iter().collect())
+}
+
+#[derive(Debug)]
+struct EnvelopeSource {
+    widths: TabularEnvelopeWidths,
+    supports: fn(Stype, Dtype) -> bool,
+    dtypes: BTreeMap<String, Dtype>,
+}
+
+/// Owned completed column meanings over one actual captured width plan.
+#[derive(Debug)]
+pub struct EnvelopeColumns {
+    source: std::sync::Arc<EnvelopeSource>,
+    columns: Vec<TabularColumn>,
+    text: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct EnvelopeDeclaration {
+    source: std::sync::Arc<EnvelopeSource>,
+    ordinal: usize,
+    name: String,
+    dtype: Dtype,
+    declared: Stype,
+}
+
+#[derive(Debug, Clone)]
+pub struct EnvelopeMeaning {
+    declaration: EnvelopeDeclaration,
+    proposed: Stype,
+    supported: bool,
+}
+
+fn envelope_invalid(message: &'static str) -> CoreError {
+    CoreError::protocol(Sentence::InvalidMessage, message)
+}
+
+impl EnvelopeColumns {
+    pub fn new(
+        widths: TabularEnvelopeWidths,
+        supports: fn(Stype, Dtype) -> bool,
+    ) -> Result<Self, CoreError> {
+        let names: BTreeSet<_> = widths.names.iter().collect();
+        let dtypes: BTreeSet<_> = widths.dtypes.iter().map(|(name, _)| name).collect();
+        if widths.version != TABULAR_ENVELOPE_VERSION
+            || names.len() != widths.names.len()
+            || dtypes.len() != widths.dtypes.len()
+            || !names.is_subset(&dtypes)
+            || !names.contains(&widths.target)
+        {
+            return Err(envelope_invalid(
+                "tabular width plan does not bind complete ordered unique columns",
+            ));
+        }
+        Ok(Self {
+            source: std::sync::Arc::new(EnvelopeSource {
+                dtypes: widths.dtypes.iter().cloned().collect(),
+                widths,
+                supports,
+            }),
+            columns: Vec::new(),
+            text: Vec::new(),
+        })
+    }
+
+    pub fn declaration(
+        &self,
+        name: String,
+        declared: Stype,
+    ) -> Result<EnvelopeDeclaration, CoreError> {
+        let ordinal = self.columns.len();
+        if self.source.widths.names.get(ordinal) != Some(&name) {
+            return Err(envelope_invalid(
+                "native column declaration is outside its ordered envelope prefix",
+            ));
+        }
+        let dtype =
+            self.source.dtypes.get(&name).copied().ok_or_else(|| {
+                envelope_invalid("native column declaration has no resolved width")
+            })?;
+        Ok(EnvelopeDeclaration {
+            source: self.source.clone(),
+            ordinal,
+            name,
+            dtype,
+            declared,
+        })
+    }
+
+    pub fn complete(
+        &mut self,
+        meaning: &EnvelopeMeaning,
+        stated: Option<bool>,
+    ) -> Result<(), CoreError> {
+        let declaration = &meaning.declaration;
+        if !std::sync::Arc::ptr_eq(&self.source, &declaration.source)
+            || declaration.ordinal != self.columns.len()
+        {
+            return Err(envelope_invalid(
+                "column meaning does not extend this exact envelope owner",
+            ));
+        }
+        let stype = match (meaning.supported, stated) {
+            (true, None) | (false, Some(true)) => meaning.proposed,
+            (false, Some(false)) => {
+                if declaration.dtype == Dtype::Time {
+                    Stype::Timestamp
+                } else if matches!(
+                    declaration.dtype,
+                    Dtype::Int32 | Dtype::Int64 | Dtype::Float32 | Dtype::Float64
+                ) {
+                    Stype::Numerical
+                } else {
+                    Stype::Categorical
+                }
+            }
+            _ => {
+                return Err(envelope_invalid(
+                    "column declaration flag is missing or was not reached",
+                ));
+            }
+        };
+        if declaration.text() {
+            self.text.push(declaration.name.clone());
+        }
+        self.columns.push(TabularColumn {
+            name: declaration.name.clone(),
+            dtype: declaration.dtype,
+            stype,
+        });
+        Ok(())
+    }
+
+    pub fn finish(&self) -> Result<(TabularEnvelope, Vec<CoreWarning>), CoreError> {
+        if self.columns.len() != self.source.widths.names.len() {
+            return Err(envelope_invalid(
+                "tabular envelope lacks completed native column meanings",
+            ));
+        }
+        let notices = if self.text.is_empty() {
+            Vec::new()
+        } else {
+            vec![
+                CoreWarning::new(
+                    Sentence::DirectTextCategorical,
+                    "tabular text is categorical",
+                )
+                .with_field("columns", texts(self.text.clone())),
+            ]
+        };
+        Ok((
+            TabularEnvelope {
+                version: TABULAR_ENVELOPE_VERSION,
+                bound: self.source.widths.bound.clone(),
+                columns: TabularColumns {
+                    dtypes: self.source.widths.dtypes.clone(),
+                    columns: self.columns.clone(),
+                    target: self.source.widths.target.clone(),
+                },
+            },
+            notices,
+        ))
+    }
+}
+
+impl EnvelopeDeclaration {
+    pub fn text(&self) -> bool {
+        self.declared == Stype::Text
+    }
+    pub fn target(&self) -> bool {
+        self.name == self.source.widths.target
+    }
+    pub fn meaning(&self, classification: Option<bool>) -> Result<EnvelopeMeaning, CoreError> {
+        let proposed = if self.text() {
+            if classification.is_some() {
+                return Err(envelope_invalid(
+                    "text shortcut observed an unreached task comparison",
+                ));
+            }
+            Stype::Categorical
+        } else if self.target() {
+            if classification
+                .ok_or_else(|| envelope_invalid("native target lacks its reached task meaning"))?
+            {
+                Stype::Categorical
+            } else if self.declared == Stype::Categorical {
+                Stype::Numerical
+            } else {
+                self.declared
+            }
+        } else {
+            if classification.is_some() {
+                return Err(envelope_invalid(
+                    "feature column observed an unreached task comparison",
+                ));
+            }
+            self.declared
+        };
+        Ok(EnvelopeMeaning {
+            declaration: self.clone(),
+            proposed,
+            supported: (self.source.supports)(proposed, self.dtype),
+        })
+    }
+}
+
+impl EnvelopeMeaning {
+    pub fn supported(&self) -> bool {
+        self.supported
+    }
+}
+
 /// Resolve adapter schema columns before its warning and fallible body work.
 #[allow(clippy::too_many_arguments)]
 pub fn envelope(
@@ -437,7 +678,7 @@ pub fn body(
     context: &[RecordBatch],
     scoring: &[RecordBatch],
     primary_key: &[String],
-    kind: &str,
+    kind: &TaskValue,
     outputs: &[String],
     float_text: fn(f64) -> String,
 ) -> Result<Value, CoreError> {
@@ -494,7 +735,7 @@ pub fn body(
         (
             "task",
             object([
-                ("kind", text(kind)),
+                ("kind", Value::Text(kind.text()?)),
                 (
                     "target",
                     object([
@@ -553,7 +794,7 @@ pub fn check_body(
         .get(body.columns.target.as_str())
         .ok_or_else(protocol)?;
     let task = object([
-        ("kind", text(&body.kind)),
+        ("kind", Value::Text(body.kind.text()?)),
         (
             "target",
             object([

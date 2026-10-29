@@ -560,6 +560,7 @@ pub fn call_vocabulary(model: &str) -> Result<CallVocabulary, CoreError> {
         forecasting: FORECASTING.to_owned(),
         tasks: spec.tasks.iter().map(|kind| (*kind).to_owned()).collect(),
         outputs: spec.outputs.iter().map(|name| (*name).to_owned()).collect(),
+        shape_order: SHAPES.map(str::to_owned).to_vec(),
     })
 }
 
@@ -1290,7 +1291,11 @@ fn answer_type(payload: &Value) -> Result<AnswerType, CoreError> {
 }
 
 fn declared_answers(payload: &Value, kind: &str) -> AnswerType {
-    if !classifies(kind) {
+    declared_answer_meaning(payload, classifies(kind))
+}
+
+fn declared_answer_meaning(payload: &Value, classification: bool) -> AnswerType {
+    if !classification {
         return AnswerType::Float;
     }
     declared_class_answers(target_dtype(payload).map(str::as_bytes))
@@ -1587,17 +1592,25 @@ pub fn layout(
 
 /// Direct tabular answers follow the later wire task, without rerunning
 /// gathered admission after a source warning changed that task.
-pub(crate) fn layout_tabular(
+pub(crate) fn layout_tabular_task(
     payload: &Value,
     response: &PredictionResponse,
     decimal_limit: u32,
     float_text: fn(f64) -> String,
+    native_task: Option<&sdm_contract::scalar::unicode::UnicodeText>,
 ) -> Result<Part, CoreError> {
+    let answers = if let Some(task) = native_task {
+        let points: Vec<_> = task.points().collect();
+        let word: Vec<_> = "classification".chars().map(u32::from).collect();
+        declared_answer_meaning(payload, points.windows(word.len()).any(|part| part == word))
+    } else {
+        declared_answers(payload, kind_of(payload)?)
+    };
     layout_as(
         payload,
         response,
         float_text,
-        declared_answers(payload, kind_of(payload)?),
+        answers,
         Attribution::AsWritten,
         AnswerPolicy::Direct { decimal_limit },
     )

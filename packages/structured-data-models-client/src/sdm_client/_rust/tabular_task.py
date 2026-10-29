@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import numbers
+import sys
 import warnings
 from collections.abc import Callable, Iterator
 from decimal import Decimal
@@ -112,6 +113,7 @@ def task_kind(
     from sdm_client import _native
 
     stypes, tasks, categorical = _native.tabular_task_vocabulary()
+    tasks = [sys.intern(value) for value in tasks]
 
     def target_display(observed: dict[str, Any]) -> tuple[str, str]:
         return repr(query.target_column), repr(query.target_stype.value)

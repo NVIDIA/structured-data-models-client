@@ -84,7 +84,6 @@ Candidate values are captured before context-cap validation and advice, preservi
 Public source-read controls cover actual target operand identity, present and no-match holdouts, empty scoring and scoring-accessor edits to source keys.
 The next controls also retain full old/core contexts, request bodies and results when an empty-scoring getter changes the source index or a target getter changes the held-out index before sampling.
 
-
 ## Shared task meaning
 
 The opt-in materialization path captures the actual final context target Series before target-stype or stated-task observations.
@@ -105,6 +104,35 @@ The generator-expression versus returned-truth StopIteration boundaries remain d
 Two-whole classification emits the finite shared first-party notice before schema snapshot, Request construction and query recording.
 Public original/Core materialize-to-predict controls retain full contexts, tasks, schema, encoded bodies, results and native error graphs, with actual native protocol/effect order controls.
 Typed Rust Host consumers execute the same task products and pin vocabulary/refusal metadata, cardinality shortcuts, exact exhaustion, short circuit and malformed facts.
-No new crate, serialized operation, native object registry, callback RunStep, generic interpreter or second task-policy table is introduced.
+No new crate, native object registry, callback RunStep, generic interpreter or second task-policy table is introduced.
+The bounded contract36 preparation additions describe completed domain data rather than a serialized native workflow.
 The contract36 source change and finite catalog additions require genuine canonical generation under the normal source-authoring controls; no old schema is claimed to describe that new source.
 The preexisting broader entity/index families, custom sorter handling, default activation, sessions and complete T4.6 acceptance remain open.
+
+
+## Task objects through construction, calls and responses
+
+The seven-task model-neutral constructor vocabulary is separate from the two-task PQL materialization rule.
+For non-literal native task objects, the constructor observes the actual ordered tuple membership after the frame-form guards and retains the accepted original object in Request.task.kind.
+A constant target reaches the original first classification membership, lazy regression inequality and second classification membership before the selected notice and later Task metadata reads.
+Per-call default-output lookup, capability equality/truth observations and fresh model membership use shared Core vocabulary with the original native objects.
+Equality truth owners remain with the native Capabilities value until their original ordered shape consumption and preflight lifetime boundary.
+A reached callback can replace the task with non-string data; absence of string storage is represented separately from its actual comparison facts so the normal model/task refusal still runs first.
+If such non-string data is nevertheless admitted and later needs unsupported wire storage, the existing selected unfinished direct boundary remains explicit rather than inventing a spelling.
+
+The adapter completes wire widths before native per-column task meanings.
+Each ordered column declaration is bound to one retained width-plan owner and exact ordinal.
+A Text target does not read task classification, while a non-Text target observes the actual Task.is_classification property at the original position.
+The second native column lookup and any reached declaration flag are observed afterward, so a task callback can change a later column's metadata before that later read.
+Only the complete ordered column product emits text advice and supplies later body encoding.
+Missing, foreign, repeated, out-of-order and unsolicited native facts retain strict protocol refusals.
+
+The response retains the original task owner captured for the payload instead of rereading Request after transport.
+The shared row-attribution validator first returns the complete actual attributed rows, including the existing missing-row and native-ID refusals.
+Only then does Python observe str on that captured owner once, including on regression, and pass its lossless Unicode points to the shared restoration policy.
+Invalid responses and the empty-scoring shortcut do not observe task display.
+Public original/Core controls retain full requests, encoded calls, results and native effects, including noncanonical accepted task spelling, later-column mutation, non-string task mutation, comparison truth failure, changed response display and failure on the second actual response conversion.
+Rust Host controls consume the same typed column, constant-task, completed-row and response-text products.
+
+All of this source remains unexecuted pending the exact source-authoring review pair, genuine canonical contract36/schema and bridge generation, fresh completed-source reviews and required validation.
+No generated schema or prior runtime is claimed to represent these new inputs.

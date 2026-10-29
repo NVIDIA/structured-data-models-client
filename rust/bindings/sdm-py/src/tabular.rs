@@ -288,3 +288,112 @@ impl TabularTaskNumbers {
         Ok(pyo3::types::PyBytes::new(py, &bytes).unbind())
     }
 }
+
+#[pyfunction]
+pub(crate) fn request_task_vocabulary(
+    py: Python<'_>,
+) -> PyResult<(Vec<String>, Vec<String>, String)> {
+    let words = crate::core_call(py, sdm_host::constructor_task_vocabulary)?;
+    Ok((words.tasks, words.classification, words.regression))
+}
+
+#[pyclass(module = "sdm_client._native")]
+pub(crate) struct TabularEnvelopeColumns {
+    state: sdm_host::TabularEnvelopeColumns,
+}
+
+#[pymethods]
+impl TabularEnvelopeColumns {
+    #[new]
+    fn new(py: Python<'_>, widths: &[u8]) -> PyResult<Self> {
+        Ok(Self {
+            state: checked(
+                py,
+                crate::core_call(py, || sdm_host::tabular_envelope::columns(widths))?,
+            )?,
+        })
+    }
+    fn declaration(
+        &self,
+        py: Python<'_>,
+        name: String,
+        stype: &str,
+    ) -> PyResult<TabularEnvelopeDeclaration> {
+        Ok(TabularEnvelopeDeclaration {
+            state: checked(
+                py,
+                crate::core_call(py, || {
+                    sdm_host::tabular_envelope::declaration(&self.state, name, stype)
+                })?,
+            )?,
+        })
+    }
+    #[pyo3(signature = (meaning, stated=None))]
+    fn complete(
+        &mut self,
+        py: Python<'_>,
+        meaning: PyRef<'_, TabularEnvelopeMeaning>,
+        stated: Option<bool>,
+    ) -> PyResult<()> {
+        checked(
+            py,
+            crate::core_call(py, || self.state.complete(&meaning.state, stated))?,
+        )
+    }
+    fn finish<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<(
+        Bound<'py, pyo3::types::PyBytes>,
+        Bound<'py, pyo3::types::PyBytes>,
+    )> {
+        let (value, notices) = checked(
+            py,
+            crate::core_call(py, || sdm_host::tabular_envelope::finish(&self.state))?,
+        )?;
+        Ok((
+            pyo3::types::PyBytes::new(py, &value),
+            pyo3::types::PyBytes::new(py, &notices),
+        ))
+    }
+}
+
+#[pyclass(module = "sdm_client._native")]
+pub(crate) struct TabularEnvelopeDeclaration {
+    state: sdm_host::TabularEnvelopeDeclaration,
+}
+
+#[pymethods]
+impl TabularEnvelopeDeclaration {
+    fn text(&self, py: Python<'_>) -> PyResult<bool> {
+        crate::core_call(py, || self.state.text())
+    }
+    fn target(&self, py: Python<'_>) -> PyResult<bool> {
+        crate::core_call(py, || self.state.target())
+    }
+    #[pyo3(signature = (classification=None))]
+    fn meaning(
+        &self,
+        py: Python<'_>,
+        classification: Option<bool>,
+    ) -> PyResult<TabularEnvelopeMeaning> {
+        Ok(TabularEnvelopeMeaning {
+            state: checked(
+                py,
+                crate::core_call(py, || self.state.meaning(classification))?,
+            )?,
+        })
+    }
+}
+
+#[pyclass(module = "sdm_client._native")]
+pub(crate) struct TabularEnvelopeMeaning {
+    state: sdm_host::TabularEnvelopeMeaning,
+}
+
+#[pymethods]
+impl TabularEnvelopeMeaning {
+    fn supported(&self, py: Python<'_>) -> PyResult<bool> {
+        crate::core_call(py, || self.state.supported())
+    }
+}

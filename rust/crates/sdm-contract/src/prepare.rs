@@ -18,6 +18,7 @@ pub use relational::{
 
 use crate::data::AttachmentId;
 use crate::ops::{Dtype, Given, HeldSchema, SourceDescription, Stype};
+use crate::scalar::unicode::UnicodeText;
 use crate::{ColumnType, Scalar};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -27,10 +28,10 @@ pub use relational_response::*;
 pub mod relational_result;
 pub use relational_result::*;
 
-pub const DIRECT_PREPARED_VERSION: u32 = 1;
-pub const CALL_PREPARATION_VERSION: u32 = 2;
+pub const DIRECT_PREPARED_VERSION: u32 = 2;
+pub const CALL_PREPARATION_VERSION: u32 = 3;
 pub const DIRECT_OVERLAP_VERSION: u32 = 1;
-pub const TABULAR_ENVELOPE_VERSION: u32 = 2;
+pub const TABULAR_ENVELOPE_VERSION: u32 = 3;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -92,17 +93,77 @@ pub struct NativeLookup {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub unhashable: Option<String>,
 }
+/// Literal task data for raw hosts, or the actual native string storage whose
+/// hash/equality semantics remain with its call-local host owner.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(untagged, deny_unknown_fields)]
+pub enum TaskValue {
+    Literal(String),
+    Native { value: UnicodeText },
+    NonText { non_text: () },
+}
+
+impl TaskValue {
+    /// Native comparisons are supplied separately; this view is only a
+    /// placeholder for their private diagnostic field on exceptional text.
+    pub fn policy_text(&self) -> &str {
+        match self {
+            Self::Literal(value) => value,
+            Self::Native { value } => value.utf8().unwrap_or(""),
+            Self::NonText { .. } => "",
+        }
+    }
+    pub fn text(&self) -> Result<UnicodeText, crate::CoreError> {
+        match self {
+            Self::Literal(value) => Ok(value.clone().into()),
+            Self::Native { value } => Ok(value.clone()),
+            Self::NonText { .. } => Err(crate::CoreError::new(
+                crate::Sentence::DirectUnfinished,
+                "native task storage is unfinished",
+            )
+            .with_field(
+                "family",
+                crate::Detail::text("native task values without string storage"),
+            )),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct NativeConstructorTask {
+    pub value: TaskValue,
+    pub member: bool,
+}
+
+/// Actually reached comparisons, in the original constant-target order.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct NativeConstructorConstant {
+    pub classification_first: bool,
+    pub regression_not_equal: Option<bool>,
+    pub classification_second: Option<bool>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ConstructorTaskVocabulary {
+    pub tasks: Vec<String>,
+    pub classification: Vec<String>,
+    pub regression: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ConstructorArguments {
     pub version: u32,
-    pub task: String,
+    pub task: TaskValue,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ConstructorHeaders {
     pub version: u32,
-    pub task: String,
+    pub task: TaskValue,
     pub context: FrameHeader,
     pub predict: FrameHeader,
     pub target: usize,
@@ -111,8 +172,12 @@ pub struct ConstructorHeaders {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct PreparedDirectRequest {
+    #[serde(default)]
+    pub constant_target: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_constant: Option<NativeConstructorConstant>,
     pub version: u32,
-    pub task: String,
+    pub task: TaskValue,
     pub target: String,
     pub description: SourceDescription,
     pub schema: HeldSchema,
@@ -123,7 +188,7 @@ pub struct PreparedDirectRequest {
 #[serde(deny_unknown_fields)]
 pub struct ConstructorContext {
     pub version: u32,
-    pub task: String,
+    pub task: TaskValue,
     pub target: String,
     pub entity_table: String,
 }
@@ -133,7 +198,7 @@ pub struct ConstructorContext {
 #[serde(deny_unknown_fields)]
 pub struct ConstructorSchema {
     pub version: u32,
-    pub task: String,
+    pub task: TaskValue,
     pub target: String,
     pub entity_table: String,
     pub description: SourceDescription,
@@ -152,7 +217,7 @@ pub struct ConstructorTaskTable {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct PreparedDirectTask {
-    pub kind: String,
+    pub kind: TaskValue,
     pub target: String,
     pub table: String,
     pub dtype: String,
@@ -178,6 +243,7 @@ pub struct CallVocabulary {
     pub forecasting: String,
     pub tasks: Vec<String>,
     pub outputs: Vec<String>,
+    pub shape_order: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -189,7 +255,7 @@ pub struct NativeDefaultOutput {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct CallShape {
-    pub kind: String,
+    pub kind: TaskValue,
     pub anchored: bool,
     pub relationships: bool,
     pub tables: usize,
@@ -224,7 +290,7 @@ pub enum CallPreparation {
         outputs: Vec<String>,
         named: bool,
         shape: CallShape,
-        kind: String,
+        kind: TaskValue,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         admitted: Option<bool>,
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -236,7 +302,7 @@ pub enum CallPreparation {
         outputs: Vec<String>,
         named: bool,
         shape: CallShape,
-        kind: String,
+        kind: TaskValue,
         admitted: bool,
     },
     Bound {
@@ -245,7 +311,7 @@ pub enum CallPreparation {
         outputs: Vec<String>,
         named: bool,
         shape: CallShape,
-        kind: String,
+        kind: TaskValue,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         admitted: Option<bool>,
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -266,7 +332,7 @@ pub struct DirectPrelude {
     pub schema: HeldSchema,
     pub entity_table: String,
     pub target: String,
-    pub task: String,
+    pub task: TaskValue,
 }
 /// Core-checked prelude and overlap counts, before adapter reference capture.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -289,7 +355,21 @@ pub struct DirectEnvelope {
     pub schema: HeldSchema,
     pub entity_table: String,
     pub target: String,
-    pub task: String,
+    pub task: TaskValue,
+}
+
+/// Captured width inputs before any per-column task-kind observation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct DirectWidths {
+    pub overlap: DirectOverlap,
+    pub context: AttachmentId,
+    pub predict: AttachmentId,
+    pub context_header: FrameHeader,
+    pub predict_header: FrameHeader,
+    pub schema: HeldSchema,
+    pub entity_table: String,
+    pub target: String,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -312,6 +392,18 @@ pub struct TabularEnvelope {
     pub version: u32,
     pub bound: CallPreparation,
     pub columns: TabularColumns,
+}
+
+/// All wire widths and the captured column order, before per-column native
+/// task/metadata observations and before any text advice.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TabularEnvelopeWidths {
+    pub version: u32,
+    pub bound: CallPreparation,
+    pub dtypes: Vec<(String, Dtype)>,
+    pub names: Vec<String>,
+    pub target: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -399,10 +491,16 @@ pub enum Preparation {
         selected: SelectedDirectMember,
         string: Option<StringObservation>,
     },
+    CompleteResponseRows {
+        scope: ResponseScope,
+        rows: Vec<AttributedDirectRow>,
+    },
     LayoutResponse {
         data: DirectResponseData,
         attributed: AttachmentId,
         decimal_limit: u32,
+        #[serde(default)]
+        native_task: Option<UnicodeText>,
     },
     Overlap {
         input: DirectPrelude,
@@ -410,12 +508,22 @@ pub enum Preparation {
     Envelope {
         input: DirectEnvelope,
     },
+    EnvelopeWidths {
+        input: DirectWidths,
+    },
+    ConstructorVocabulary {
+        context: FrameForm,
+        predict: FrameForm,
+        related: Vec<FrameForm>,
+    },
     Arguments {
         context: FrameForm,
         predict: FrameForm,
         // Keys are unused by validation and remain native until diagnostic display.
         related: Vec<FrameForm>,
         task: Given<String>,
+        #[serde(default)]
+        native_task: Option<NativeConstructorTask>,
     },
     Headers {
         arguments: ConstructorArguments,
@@ -458,6 +566,10 @@ pub enum Preparation {
         target_context: NativeLookup,
         context_predict: Vec<NativeLookup>,
     },
+    ConstructorConstant {
+        prepared: PreparedDirectRequest,
+        facts: NativeConstructorConstant,
+    },
     ConstructorTask {
         prepared: PreparedDirectRequest,
         entity_table: String,
@@ -485,7 +597,7 @@ pub enum Preparation {
     },
     Capabilities {
         call: CallPreparation,
-        kind: String,
+        kind: TaskValue,
         anchored: bool,
         relationships: bool,
         tables: usize,
@@ -494,7 +606,7 @@ pub enum Preparation {
     },
     Task {
         call: CallPreparation,
-        kind: String,
+        kind: TaskValue,
         #[serde(default)]
         admitted: Option<bool>,
         #[serde(default)]
@@ -537,11 +649,11 @@ pub struct DirectBody {
     pub predict: AttachmentId,
     pub context_header: FrameHeader,
     pub predict_header: FrameHeader,
-    pub task: String,
+    pub task: TaskValue,
     pub primary_key: Vec<String>,
 }
 
-pub const ENCODED_DIRECT_BODY_VERSION: u32 = 1;
+pub const ENCODED_DIRECT_BODY_VERSION: u32 = 2;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct EncodedTableShape {
@@ -556,7 +668,7 @@ pub struct EncodedDirectBody {
     pub version: u32,
     pub bound: CallPreparation,
     pub columns: TabularColumns,
-    pub kind: String,
+    pub kind: TaskValue,
     pub primary_key: Vec<String>,
     pub context_shape: EncodedTableShape,
     pub predict_shape: EncodedTableShape,
@@ -569,6 +681,7 @@ pub struct EncodedDirectBody {
 pub enum PreparedValue {
     Relational(RelationalPrepared),
     Arguments(ConstructorArguments),
+    ConstructorVocabulary(ConstructorTaskVocabulary),
     Headers(ConstructorHeaders),
     Schema(ConstructorSchema),
     Context(ConstructorContext),
@@ -578,9 +691,11 @@ pub enum PreparedValue {
     Call(CallPreparation),
     Overlap(DirectOverlap),
     Envelope(TabularEnvelope),
+    EnvelopeWidths(TabularEnvelopeWidths),
     Body(EncodedDirectBody),
     Response(DirectResponseData),
     Rows(CheckedDirectRows),
+    CompletedRows(Vec<AttributedDirectRow>),
     Member(SelectedDirectMember),
     Attributed(AttributedDirectRow),
     RelationalResponse(RelationalResponseData),

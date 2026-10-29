@@ -58,6 +58,7 @@ pub(crate) fn layout(
     data: DirectResponseData,
     attributed: AttachmentId,
     decimal_limit: u32,
+    native_task: Option<sdm_contract::scalar::unicode::UnicodeText>,
     mut attached: Attachments,
 ) -> Result<OperationResult, CoreError> {
     let payload = json::read(&bytes(&mut attached, data.payload)?)
@@ -88,6 +89,7 @@ pub(crate) fn layout(
         accepted,
         decimal_limit,
         crate::pql::float_text,
+        native_task.as_ref(),
     )?;
     if data.named {
         let absent = policy::absent(&part, &data.outputs);

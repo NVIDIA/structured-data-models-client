@@ -534,6 +534,16 @@ def direct_constructor_on_core() -> bool:
     )
 
 
+def direct_task_on_core() -> bool:
+    # Do not inspect unrelated route settings on an ordinary legacy Task read.
+    named = {
+        part.strip() for part in os.environ.get(ENVIRONMENT, '').split(',')
+    } - {''}
+    return bool(named.intersection(DIRECT_CONSUMERS)) and bool(
+        forced().intersection(DIRECT_CONSUMERS)
+    )
+
+
 def frame_constructor_on_core() -> bool:
     # Preserve existing constructor behavior for settings that concern other
     # routes, including when another entrypoint will diagnose a bad setting.

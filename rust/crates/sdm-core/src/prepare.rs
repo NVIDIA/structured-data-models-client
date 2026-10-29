@@ -34,6 +34,99 @@ fn error(sentence: Sentence) -> CoreError {
 pub(crate) fn invalid(message: &str) -> CoreError {
     CoreError::protocol(Sentence::InvalidMessage, message)
 }
+/// Constructor vocabulary is distinct from PQL's two admitted materialization tasks.
+pub fn constructor_task_vocabulary() -> ConstructorTaskVocabulary {
+    ConstructorTaskVocabulary {
+        tasks: TASKS.map(str::to_owned).to_vec(),
+        classification: TASKS[..3].iter().map(|value| (*value).to_owned()).collect(),
+        regression: TASKS[3].into(),
+    }
+}
+
+fn constructor_forms(
+    context: FrameForm,
+    predict: FrameForm,
+    related: Vec<FrameForm>,
+) -> Result<(), CoreError> {
+    frame(context, "context")?;
+    frame(predict, "predict")?;
+    for (ordinal, form) in related.iter().enumerate() {
+        frame(form.clone(), "related_tables").map_err(|error| {
+            error.with_field(
+                "related_ordinal",
+                Detail::Scalar(Scalar::UInt64(ordinal as u64)),
+            )
+        })?;
+    }
+    if !related.is_empty() {
+        return Err(error(Sentence::DirectRelated));
+    }
+    Ok(())
+}
+
+/// Reuse the existing constant-target warning policy with actually reached
+/// native task comparisons. No native task spelling becomes a canonical alias.
+pub fn constructor_constant_notice(
+    task: &TaskValue,
+    facts: Option<&NativeConstructorConstant>,
+    target: &str,
+) -> Result<Option<CoreWarning>, CoreError> {
+    let sentence = match task {
+        TaskValue::Literal(kind) => {
+            if facts.is_some() {
+                return Err(invalid(
+                    "literal constructor task has unsolicited native comparisons",
+                ));
+            }
+            if TASKS[..3].contains(&kind.as_str()) {
+                Some(Sentence::DirectConstantClass)
+            } else if kind == TASKS[3] {
+                Some(Sentence::DirectConstantRegression)
+            } else {
+                None
+            }
+        }
+        TaskValue::Native { .. } | TaskValue::NonText { .. } => {
+            let facts = facts
+                .ok_or_else(|| invalid("constant native task lacks reached comparison facts"))?;
+            let relevant = if facts.classification_first {
+                if facts.regression_not_equal.is_some() {
+                    return Err(invalid(
+                        "classification shortcut observed an unreached regression comparison",
+                    ));
+                }
+                true
+            } else {
+                !facts.regression_not_equal.ok_or_else(|| {
+                    invalid("native constant task lacks its regression comparison")
+                })?
+            };
+            if relevant {
+                Some(
+                    if facts.classification_second.ok_or_else(|| {
+                        invalid("native constant task lacks its second classification membership")
+                    })? {
+                        Sentence::DirectConstantClass
+                    } else {
+                        Sentence::DirectConstantRegression
+                    },
+                )
+            } else {
+                if facts.classification_second.is_some() {
+                    return Err(invalid(
+                        "irrelevant native task observed a second classification membership",
+                    ));
+                }
+                None
+            }
+        }
+    };
+    Ok(sentence.map(|sentence| {
+        CoreWarning::new(sentence, "every context row has the same target")
+            .with_field("target", Detail::text(target))
+    }))
+}
+
 fn text_list(values: impl IntoIterator<Item = String>) -> Detail {
     Detail::List(values.into_iter().map(Scalar::Utf8).collect())
 }
@@ -344,8 +437,9 @@ pub(crate) async fn run(
         Preparation::AttributeResponseRow { selected, string } => serde_json::to_value(
             sdm_request::tabular::response::attribute(selected, string, crate::pql::float_text)?,
         ),
-        Preparation::LayoutResponse { data, attributed, decimal_limit } => {
-            return crate::prepare_response::layout(&asker, data, attributed, decimal_limit, attached);
+        Preparation::CompleteResponseRows { scope, rows } => serde_json::to_value(sdm_request::tabular::response::complete_rows(&scope, rows, crate::pql::float_text)?),
+        Preparation::LayoutResponse { data, attributed, decimal_limit, native_task } => {
+            return crate::prepare_response::layout(&asker, data, attributed, decimal_limit, native_task, attached);
         }
         Preparation::Overlap { input } => {
             serde_json::to_value(overlap(&asker, input, &mut attached).await?)
@@ -353,32 +447,29 @@ pub(crate) async fn run(
         Preparation::Envelope { input } => {
             serde_json::to_value(envelope(&asker, input, &mut attached).await?)
         }
-        Preparation::Arguments {
-            context,
-            predict,
-            related,
-            task,
-        } => {
-            frame(context, "context")?;
-            frame(predict, "predict")?;
-            for (ordinal, form) in related.iter().enumerate() {
-                frame(form.clone(), "related_tables").map_err(|error| {
-                    error.with_field(
-                        "related_ordinal",
-                        Detail::Scalar(Scalar::UInt64(ordinal as u64)),
-                    )
-                })?;
-            }
-            if !related.is_empty() {
-                return Err(error(Sentence::DirectRelated));
-            }
-            let Some(task) = task.value().filter(|task| TASKS.contains(&task.as_str())) else {
-                return Err(error(Sentence::DirectTask));
+        Preparation::EnvelopeWidths { input } => {
+            serde_json::to_value(envelope_widths(input, &mut attached)?)
+        }
+        Preparation::ConstructorVocabulary { context, predict, related } => {
+            constructor_forms(context, predict, related)?;
+            serde_json::to_value(constructor_task_vocabulary())
+        }
+        Preparation::Arguments { context, predict, related, task, native_task } => {
+            constructor_forms(context, predict, related)?;
+            let task = if let Some(native) = native_task {
+                if !matches!(task, sdm_contract::ops::Given::Unreadable) {
+                    return Err(invalid("native constructor task conflicts with a literal task"));
+                }
+                if !native.member { return Err(error(Sentence::DirectTask)); }
+                if matches!(&native.value, TaskValue::Literal(_)) { return Err(invalid("native constructor value needs its actual storage observation")); }
+                native.value
+            } else {
+                let Some(task) = task.value().filter(|task| TASKS.contains(&task.as_str())) else {
+                    return Err(error(Sentence::DirectTask));
+                };
+                TaskValue::Literal(task.clone())
             };
-            serde_json::to_value(ConstructorArguments {
-                version: DIRECT_PREPARED_VERSION,
-                task: task.clone(),
-            })
+            serde_json::to_value(ConstructorArguments { version: DIRECT_PREPARED_VERSION, task })
         }
         Preparation::Headers {
             arguments,
@@ -601,17 +692,10 @@ pub(crate) async fn run(
             } else {
                 sdm_schema::frames::present_distinct(&context.batches, target_context.positions[0])? == 1
             };
-            if constant
-                && (task.contains("classification") || task == "regression")
-            {
-                asker.warn(
-                    CoreWarning::new(
-                        if task == "regression" { Sentence::DirectConstantRegression } else { Sentence::DirectConstantClass },
-                        "every context row has the same target",
-                    ).with_field("target", Detail::text(&target)),
-                );
-            }
+            if constant && matches!(&task, TaskValue::Literal(_)) && let Some(notice) = constructor_constant_notice(&task, None, &target)? { asker.warn(notice); }
             serde_json::to_value(PreparedDirectRequest {
+                constant_target: constant,
+                native_constant: None,
                 version: DIRECT_PREPARED_VERSION,
                 task,
                 target,
@@ -619,8 +703,23 @@ pub(crate) async fn run(
                 schema,
             })
         }
+        Preparation::ConstructorConstant { mut prepared, facts } => {
+            version(prepared.version, DIRECT_PREPARED_VERSION)?;
+            if !prepared.constant_target || matches!(&prepared.task, TaskValue::Literal(_)) || prepared.native_constant.is_some() {
+                return Err(invalid("native constant task completion lacks an uncompleted actual constant target"));
+            }
+            if let Some(notice) = constructor_constant_notice(&prepared.task, Some(&facts), &prepared.target)? { asker.warn(notice); }
+            prepared.native_constant = Some(facts);
+            serde_json::to_value(prepared)
+        }
         Preparation::ConstructorTask { prepared, entity_table, tables, table } => {
             version(prepared.version, DIRECT_PREPARED_VERSION)?;
+            match (&prepared.task, prepared.constant_target, &prepared.native_constant) {
+                (TaskValue::Native { .. } | TaskValue::NonText { .. }, true, Some(facts)) => { constructor_constant_notice(&prepared.task, Some(facts), &prepared.target)?; },
+                (TaskValue::Native { .. } | TaskValue::NonText { .. }, true, None) => return Err(invalid("native constant task metadata precedes its actual task comparisons")),
+                (_, false, Some(_)) | (TaskValue::Literal(_), _, Some(_)) => return Err(invalid("task metadata carries unsolicited native constant comparisons")),
+                _ => {},
+            }
             let present = tables.iter().any(|name| matches!(name,HeaderName::Text { value } if value==&entity_table));
             if present != table.is_some() {
                 return Err(invalid("native task table lookup disagrees with its names"));
@@ -729,7 +828,8 @@ pub(crate) async fn run(
                 return Err(invalid("capabilities require an outputs-resolved call"));
             };
             version(v, CALL_PREPARATION_VERSION)?;
-            policy::validate_native_shape(&model, &kind, anchored, relationships, tables, native.as_ref())?;
+            if !matches!(&kind, TaskValue::Literal(_)) && native.is_none() { return Err(invalid("observed native task shape requires its actual comparison facts")); }
+            policy::validate_native_shape(&model, kind.policy_text(), anchored, relationships, tables, native.as_ref())?;
             serde_json::to_value(CallPreparation::ShapeAccepted {
                 version: v,
                 model,
@@ -756,7 +856,8 @@ pub(crate) async fn run(
                 return Err(invalid("task validation requires a shape-accepted call"));
             };
             version(v, CALL_PREPARATION_VERSION)?;
-            policy::validate_native_task_outputs(&model, &kind, if defer_outputs { &[] } else { &outputs }, admitted)?;
+            if !matches!(&kind, TaskValue::Literal(_)) && admitted.is_none() { return Err(invalid("observed native task requires actual model membership")); }
+            policy::validate_native_task_outputs(&model, kind.policy_text(), if defer_outputs { &[] } else { &outputs }, admitted)?;
             if defer_outputs {
                 let admitted = admitted.ok_or_else(|| invalid("deferred output admission requires actual native task membership"))?;
                 serde_json::to_value(CallPreparation::TaskAdmitted { version: v, model, outputs, named, shape, kind, admitted })
@@ -778,7 +879,7 @@ pub(crate) async fn run(
                 return Err(invalid("native output admission requires a task-admitted call"));
             };
             version(v, CALL_PREPARATION_VERSION)?;
-            policy::validate_native_task_outputs(&model, &kind, &[], Some(admitted))?;
+            policy::validate_native_task_outputs(&model, kind.policy_text(), &[], Some(admitted))?;
             policy::validate_native_outputs(&model, &outputs, &unsupported)?;
             serde_json::to_value(CallPreparation::TaskAccepted { version:v, model, outputs, named, shape, kind, admitted:Some(admitted), native_outputs:true })
         }
@@ -830,7 +931,8 @@ struct Bound<'a> {
     model: &'a str,
     outputs: &'a [String],
     named: bool,
-    kind: &'a str,
+    kind: &'a TaskValue,
+    native_task: bool,
     shape: &'a CallShape,
     context_rows: usize,
 }
@@ -851,9 +953,15 @@ fn checked_bound(call: &CallPreparation) -> Result<Bound<'_>, CoreError> {
     };
     version(*v, CALL_PREPARATION_VERSION)?;
     policy::resolve_model(model)?;
+    if !matches!(&shape.kind, TaskValue::Literal(_)) && shape.native.is_none() {
+        return Err(invalid("native bound shape lacks reached comparisons"));
+    }
+    if !matches!(kind, TaskValue::Literal(_)) && admitted.is_none() {
+        return Err(invalid("native bound task lacks reached membership"));
+    }
     policy::validate_native_shape(
         model,
-        &shape.kind,
+        shape.kind.policy_text(),
         shape.anchored,
         shape.relationships,
         shape.tables,
@@ -861,7 +969,7 @@ fn checked_bound(call: &CallPreparation) -> Result<Bound<'_>, CoreError> {
     )?;
     policy::validate_native_task_outputs(
         model,
-        kind,
+        kind.policy_text(),
         if *native_outputs { &[] } else { outputs },
         *admitted,
     )?;
@@ -871,6 +979,7 @@ fn checked_bound(call: &CallPreparation) -> Result<Bound<'_>, CoreError> {
         outputs,
         named: *named,
         kind,
+        native_task: admitted.is_some(),
         shape,
         context_rows: *context_rows,
     })
@@ -898,7 +1007,7 @@ async fn overlap(
     let bound = checked_bound(&input.bound)?;
     // These are the observations consumed before any one-shot advice can
     // mutate native values or replace the references the adapter later takes.
-    if input.task != bound.kind
+    if (!bound.native_task && &input.task != bound.kind)
         || input.context_header.rows != bound.context_rows
         || input.schema.tables.len() != bound.shape.tables
         || (!input.schema.links.is_empty()) != bound.shape.relationships
@@ -961,6 +1070,50 @@ fn check_consistent(read: &sdm_schema::held::Read) -> Result<(), CoreError> {
     Ok(())
 }
 
+fn envelope_widths(
+    input: DirectWidths,
+    attached: &mut Attachments,
+) -> Result<TabularEnvelopeWidths, CoreError> {
+    version(input.overlap.version, DIRECT_OVERLAP_VERSION)?;
+    let bound = checked_bound(&input.overlap.bound)?;
+    if bound.model != policy::TABULAR || input.overlap.shown > input.overlap.predict_rows {
+        return Err(invalid(
+            "native tabular width plan has invalid call/overlap facts",
+        ));
+    }
+    let context = take_rows(attached, input.context)?;
+    let scoring = take_rows(attached, input.predict)?;
+    coherent(&input.context_header, &context)?;
+    coherent(&input.predict_header, &scoring)?;
+    let scoring = renamed(&input.predict_header, &scoring)?;
+    let read = read_schema(input.schema.clone())?;
+    check_consistent(&read)?;
+    let names = names(&input.context_header)?;
+    let dtypes = sdm_request::tabular::envelope_widths(
+        &read.description,
+        &input.schema,
+        &input.entity_table,
+        &names,
+        &scoring.batches,
+        &arriving(&scoring)?,
+        &float_storage(&input.predict_header),
+    )?;
+    Ok(TabularEnvelopeWidths {
+        version: TABULAR_ENVELOPE_VERSION,
+        bound: input.overlap.bound,
+        dtypes,
+        names,
+        target: input.target,
+    })
+}
+
+pub fn tabular_envelope_columns(
+    widths: TabularEnvelopeWidths,
+) -> Result<sdm_request::tabular::EnvelopeColumns, CoreError> {
+    checked_bound(&widths.bound)?;
+    sdm_request::tabular::EnvelopeColumns::new(widths, crate::edit::supports)
+}
+
 async fn envelope(
     asker: &Asker,
     input: DirectEnvelope,
@@ -968,6 +1121,11 @@ async fn envelope(
 ) -> Result<TabularEnvelope, CoreError> {
     version(input.overlap.version, DIRECT_OVERLAP_VERSION)?;
     let bound = checked_bound(&input.overlap.bound)?;
+    if !matches!(&input.task, TaskValue::Literal(_)) {
+        return Err(invalid(
+            "native envelope task meaning requires its actual per-column completion",
+        ));
+    }
     if input.overlap.shown > input.overlap.predict_rows {
         return Err(invalid("overlap count exceeds its captured scoring rows"));
     }
@@ -994,7 +1152,7 @@ async fn envelope(
         &arriving(&scoring)?,
         &float_storage(&input.predict_header),
         &input.target,
-        &input.task,
+        input.task.policy_text(),
         crate::edit::supports,
     )?;
     if !notices.is_empty() {
@@ -1116,7 +1274,7 @@ pub(crate) async fn predict(
                 "task".into(),
                 sdm_wire::json::Value::Object(vec![(
                     "kind".into(),
-                    sdm_wire::json::Value::text(&kind),
+                    sdm_wire::json::Value::Text(kind.text()?),
                 )]),
             )]);
             return crate::predict::finish_direct(

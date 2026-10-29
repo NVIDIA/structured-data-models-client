@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import pandas as pd
 
+from sdm_client import _native
 from sdm_client._routing import RouteError
 from sdm_client._rust import codec, errors, frames, results, spec
 from sdm_client._rust.run import Finished, run
@@ -66,6 +67,9 @@ def _prepared_run(
             # This shared operation also carries relational preflight, whose
             # notices retain the registered code prefixes. Direct request
             # construction keeps its existing native frame presentation.
+            error_presentation='tabular_task'
+            if value['stage'] == 'task'
+            else 'coded',
             warning_presentation='coded'
             if value['stage'] == 'relational'
             else 'frame_schema',
@@ -239,7 +243,7 @@ def _attribute_native(checked: dict[str, Any]) -> dict[str, Any]:
     )
 
 
-def _response(finished: Finished) -> Finished:
+def _response(finished: Finished, task_owner: Any) -> Finished:
     """Use immutable owned buffers once and bounded slices after native effects."""
     answer = results.expect(finished.result, results.DecodedDirectResponse)
     data = json.loads(finished.take(answer.value))
@@ -268,6 +272,16 @@ def _response(finished: Finished) -> Finished:
         # Native JSON is observed only for the reached checked row. Bounded
         # later slices never replay a growing response or scoring-key set.
         end = min(len(rows), at + 256)
+    accepted = _call(
+        {
+            'stage': 'complete_response_rows',
+            'scope': data['scope'],
+            'rows': accepted,
+        }
+    )
+    # The original payload captured this owner before encoding/transport.
+    # Complete row admission precedes its one reached native str conversion.
+    task_text = str(task_owner)
     attached = {
         n: buffers[name]
         for n, name in enumerate(('payload', 'response', 'rows'), 2)
@@ -277,6 +291,9 @@ def _response(finished: Finished) -> Finished:
     return _prepared_run(
         {
             'stage': 'layout_response',
+            'native_task': [
+                ord(character) for character in str.__iter__(task_text)
+            ],
             'data': data,
             'attributed': 5,
             'decimal_limit': getter() if getter else 0,
@@ -475,16 +492,36 @@ def construct(
                 ),
             )
         )
+        forms = {
+            'context': _form(context),
+            'predict': _form(predict),
+            'related': [_form(frame) for frame in related.values()],
+        }
+        task_words = None
+        native_task = None
+        # The constructor's tuple membership applies to the actual object,
+        # including non-string values; only plain literals use the raw host path.
+        if type(task) is not str or not _text(task):
+            task_words = _call({'stage': 'constructor_vocabulary', **forms})
+            task_words = {
+                key: [sys.intern(value) for value in values]
+                if isinstance(values, list)
+                else sys.intern(values)
+                for key, values in task_words.items()
+            }
+            member = task in tuple(task_words['tasks'])
+            native_task = {
+                'value': _task_value(task),
+                'member': member,
+            }
         arguments = _call(
             {
                 'stage': 'arguments',
-                'context': _form(context),
-                'predict': _form(predict),
-                'related': [_form(frame) for frame in related.values()],
-                # Given remains unchanged: no eager repr of invalid arguments.
+                **forms,
                 'task': codec.given(task)
                 if type(task) is str and _text(task)
                 else codec.UNREADABLE,
+                'native_task': native_task,
             }
         )
         context_header, predict_header = _header(context), _header(predict)
@@ -589,6 +626,28 @@ def construct(
                 3: _buffers(predict, predict_header),
             },
         )
+        if native_task is not None and answer['constant_target']:
+            assert task_words is not None
+            classified = task in frozenset(task_words['classification'])
+            regression_not_equal = (
+                None if classified else bool(task != task_words['regression'])
+            )
+            second = (
+                task in frozenset(task_words['classification'])
+                if classified or not regression_not_equal
+                else None
+            )
+            answer = _call(
+                {
+                    'stage': 'constructor_constant',
+                    'prepared': answer,
+                    'facts': {
+                        'classification_first': classified,
+                        'regression_not_equal': regression_not_equal,
+                        'classification_second': second,
+                    },
+                }
+            )
         # Task construction reaches only the selected native metadata now.
         # No Schema/Table __getitem__ validation or unrelated column meaning
         # is consumed by this conversion.
@@ -620,7 +679,7 @@ def construct(
         )
     request.schema = schema
     request.task = Task(
-        kind=task_data['kind'],
+        kind=task,
         target=Target(
             column_name=task_data['target'],
             dtype=task_data['dtype'],
@@ -665,12 +724,24 @@ def _json(value: Any) -> Any:
     return {'entries': entries}
 
 
+def _task_value(value: Any) -> dict[str, Any]:
+    # A storage read bypasses str-subclass formatting/iteration overrides.
+    # Semantic comparisons continue to use the original object at their stage.
+    if not any(
+        base is str for base in type.__getattribute__(type(value), '__mro__')
+    ):
+        return {'non_text': None}
+    return {'value': [ord(character) for character in str.__iter__(value)]}
+
+
 def predict(
     client: SDMClient,
     request: Request,
     model: Any,
     outputs: Sequence[str] | None,
 ) -> PredictionResult:
+    from predictive_query import Capabilities
+
     from sdm_client._rust import predict as prediction
     from sdm_client.adapters.tabular import _request_id
     from sdm_client.client import _require_output_names
@@ -685,13 +756,23 @@ def predict(
         # The existing native model-form diagnostic, before a core lookup.
         model_id = spec_for(model).model_id
     call = _call({'stage': 'model', 'model': model_id})
+    words = _call({'stage': 'call_vocabulary', 'call': call})
     if outputs is not None and type(outputs) not in (list, tuple):
         raise RouteError(
             'the partial direct request requires built-in output sequences'
         )
     if outputs is None:
+        defaults = {
+            sys.intern(kind): position
+            for position, kind in enumerate(words['default_kinds'])
+        }
+        position = defaults.get(request.task.kind)
         call = _call(
-            {'stage': 'outputs', 'call': call, 'kind': request.task.kind}
+            {
+                'stage': 'outputs',
+                'call': call,
+                'native_default': {'position': position},
+            }
         )
     else:
         call = _call(
@@ -699,19 +780,68 @@ def predict(
         )
     capability_kind = request.task.kind
     anchored = bool(request.task.options.get('anchor_time_column'))
+    temporal = anchored or capability_kind in frozenset(
+        sys.intern(word) for word in words['temporal_tasks']
+    )
     linked = bool(request.schema.relationships)
     table_count = len(request.schema)
+    link_prediction = capability_kind == sys.intern(words['link_prediction'])
+    forecasting = capability_kind == sys.intern(words['forecasting'])
+    required = Capabilities.nothing('this request').also(
+        relationships=linked,
+        multiple_tables=table_count > 1,
+        link_prediction=link_prediction,
+        forecasting=forecasting,
+        temporal=temporal,
+        static=not temporal,
+    )
+    shape_kind = _task_value(capability_kind)
+    capability_kind = link_prediction = forecasting = None
+    # Actual equality operands are truth-tested only at the original ordered
+    # shape-consumption boundary. Rust supplies the fixed capability order.
+    observed_shapes = {
+        name: bool(getattr(required, name)) for name in words['shape_order']
+    }
+    native_capabilities = {
+        'temporal': observed_shapes['temporal'],
+        'link_prediction': observed_shapes['link_prediction'],
+        'forecasting': observed_shapes['forecasting'],
+    }
     call = _call(
         {
             'stage': 'capabilities',
             'call': call,
-            'kind': capability_kind,
+            'kind': shape_kind,
             'anchored': anchored,
             'relationships': linked,
             'tables': table_count,
+            'native': native_capabilities,
         }
     )
-    call = _call({'stage': 'task', 'call': call, 'kind': request.task.kind})
+    kind = request.task.kind
+    admitted = kind in frozenset(sys.intern(word) for word in words['tasks'])
+
+    def refused_task(fields: dict[str, Any]) -> tuple[str, Any]:
+        internal = sys.exception()
+        try:
+            return repr(request.task.kind), request.task.kind
+        except BaseException as native:
+            if isinstance(internal, _native.CoreError):
+                errors.raise_native(native, internal_context=internal)
+            raise
+
+    with errors.holding(relational_model_task=refused_task):
+        call = _call(
+            {
+                'stage': 'task',
+                'call': call,
+                'kind': _task_value(kind),
+                'admitted': admitted,
+            }
+        )
+    # The reference's required-capabilities owner leaves with preflight,
+    # after model/task admission and before capacity and adapter data reads.
+    del required
     call = _call(
         {
             'stage': 'capacity',
@@ -752,7 +882,7 @@ def predict(
                     'schema': spec.held_schema(schema),
                     'entity_table': entity_table,
                     'target': target,
-                    'task': request.task.kind,
+                    'task': _task_value(request.task.kind),
                 },
             },
             {
@@ -788,9 +918,9 @@ def predict(
                 scored.iloc[:, fields['ordinal']].dropna().astype('int64')
             )
         ):
-            envelope = _call(
+            widths = _call(
                 {
-                    'stage': 'envelope',
+                    'stage': 'envelope_widths',
                     'input': {
                         'overlap': overlap,
                         'context': 2,
@@ -800,7 +930,6 @@ def predict(
                         'schema': spec.held_schema(schema),
                         'entity_table': request.entity_table,
                         'target': request.task.target.column_name,
-                        'task': request.task.kind,
                     },
                 },
                 {
@@ -808,6 +937,27 @@ def predict(
                     3: _buffers(scored, predict_header),
                 },
             )
+        assert (
+            table is not None
+        )  # The width plan proved the captured entity exists.
+        columns = _native.TabularEnvelopeColumns(codec.attachment(widths))
+        for name in context.columns:
+            declared = table[name].stype
+            declaration = columns.declaration(name, declared)
+            classification = (
+                bool(request.task.is_classification)
+                if not declaration.text() and declaration.target()
+                else None
+            )
+            meaning = declaration.meaning(classification)
+            column = table[name]
+            stated = (
+                None if meaning.supported() else bool(column.stype_declared)
+            )
+            columns.complete(meaning, stated)
+        envelope_bytes, notices = columns.finish()
+        envelope = json.loads(envelope_bytes)
+        frames._show_held(json.loads(notices))
         # The same captured frames are read after text advice. In-place edits
         # are visible, while replacement Request references are not recaptured.
         assert table is not None  # Envelope proved the captured entity exists.
@@ -820,7 +970,7 @@ def predict(
             'predict': 3,
             'context_header': context_header,
             'predict_header': predict_header,
-            'task': task,
+            'task': _task_value(task),
             'primary_key': primary_key,
         }
         attached = {
@@ -884,7 +1034,7 @@ def predict(
                 int(decimal.Decimal(fields['index']))
             )
         ):
-            finished = _response(finished)
+            finished = _response(finished, task)
     answered = results.expect(finished.result, results.Predicted)
     table = prediction._table(finished.take(answered.result))
     result = prediction._result(

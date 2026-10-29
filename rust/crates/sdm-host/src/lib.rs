@@ -44,6 +44,12 @@ pub use sdm_core::{
     TabularTaskMeaning, TabularTaskNumber, TabularTaskNumbers, TabularTaskVocabulary,
     tabular_labelled_rows, tabular_task_vocabulary,
 };
+pub use sdm_core::{
+    TabularEnvelopeColumns, TabularEnvelopeDeclaration, TabularEnvelopeMeaning,
+    constructor_constant_notice, constructor_task_vocabulary,
+};
+pub mod tabular_envelope;
+
 pub use zones::{ZoneError, ZoneResolver, ZoneRoot, ZoneSource, session_zone_offset};
 
 /// A Postgres `json` or `jsonb` value, given as the server's text, as the

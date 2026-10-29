@@ -32,6 +32,7 @@ from __future__ import annotations
 import json
 import math
 import re
+import sys
 import warnings
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -100,6 +101,15 @@ class Task:
 
     @property
     def is_classification(self) -> bool:
+        from sdm_client import _routing
+
+        if _routing.direct_task_on_core():
+            from sdm_client import _native
+
+            _, classification, _ = _native.request_task_vocabulary()
+            return self.kind in frozenset(
+                sys.intern(word) for word in classification
+            )
         return self.kind in _CLASSIFICATION_KINDS
 
 

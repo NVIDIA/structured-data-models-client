@@ -683,7 +683,7 @@ const JSON: [(&str, &str); 72] = [
 ];
 
 /// The other fields naming an attachment, and why the lock needs no entry.
-const OTHER: [(&str, &str); 67] = [
+const OTHER: [(&str, &str); 69] = [
     (
         "NativeTargetValues.times",
         "Arrow complete current values of the actual captured source-time owner",
@@ -718,6 +718,14 @@ const OTHER: [(&str, &str); 67] = [
     ),
     (
         "DirectPrelude.predict",
+        "Arrow, with positional header facts",
+    ),
+    (
+        "DirectWidths.context",
+        "Arrow, with positional header facts",
+    ),
+    (
+        "DirectWidths.predict",
         "Arrow, with positional header facts",
     ),
     (

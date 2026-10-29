@@ -55,6 +55,9 @@ pub use materialize::source_values::{
 /// (Python's `repr`): for a host that hands the data layer a value to
 /// write as the reference does (T3.12 fix 1).
 pub use pql::float_text;
+pub use prepare::{
+    constructor_constant_notice, constructor_task_vocabulary, tabular_envelope_columns,
+};
 pub use run::{
     ArrowData, Ask, Asker, Attachment, AttachmentIds, Attachments, FetchResult, ModelResult, Reply,
     Run, RunState,
@@ -67,6 +70,10 @@ pub use sdm_engine::time::{UnknownZone, Zones};
 /// (`capabilities()`), re-exported so a host reaches the request crate's
 /// table through the core (decision E30).
 pub use sdm_request::predict::{Capabilities, capabilities};
+pub use sdm_request::tabular::{
+    EnvelopeColumns as TabularEnvelopeColumns, EnvelopeDeclaration as TabularEnvelopeDeclaration,
+    EnvelopeMeaning as TabularEnvelopeMeaning,
+};
 pub use sdm_schema::frames::key_adoption::Adoption as FrameKeyAdoption;
 pub use sdm_schema::frames::key_advice::{Advice as FrameKeyAdvice, sample as native_frame_sample};
 pub use sdm_schema::frames::key_candidates::Candidates as FrameKeyCandidates;
@@ -77,6 +84,7 @@ pub use sdm_schema::frames::object_infer::{
 };
 /// Owned logical payload data, before JSON escaping or native presentation.
 pub use sdm_wire::json::Value as LogicalValue;
+
 pub use tabular::{
     TabularContext, TabularIndexSelection, TabularPopulation, TabularScoringKeys,
     TabularTaskMeaning, TabularTaskNumber, TabularTaskNumbers, TabularTaskVocabulary,
