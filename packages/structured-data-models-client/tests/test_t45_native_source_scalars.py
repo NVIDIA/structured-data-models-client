@@ -109,3 +109,79 @@ def test_actual_decimal_cast_failure_is_retained_for_the_core_fallback_decision(
     assert raised.value is failure
     assert events == [pd.ArrowDtype(pa.int64())]
     assert original.iloc[0] == Decimal('1')
+
+
+@pytest.mark.parametrize('unit', ['s', 'ms', 'us', 'ns'])
+@pytest.mark.parametrize('zone', [None, 'America/New_York'])
+def test_core_selected_timestamp_constructs_actual_naive_nanosecond_series(
+    unit, zone
+):
+    values = pd.Series(
+        pa.array([0, None, 123], type=pa.timestamp(unit, tz=zone)),
+        dtype=pd.ArrowDtype(pa.timestamp(unit, tz=zone)),
+        index=[9, 3, 7],
+        name='observed_time',
+    )
+    expected = pd.Series(
+        values.to_numpy(), index=values.index, name=values.name
+    )
+    expected = pd.to_datetime(expected, unit='ns', errors='coerce')
+    if isinstance(expected.dtype, pd.DatetimeTZDtype):
+        expected = expected.dt.tz_convert('UTC').dt.tz_localize(None)
+    expected = expected.astype('datetime64[ns]')
+    actual = scalar_column(
+        values,
+        {
+            'meaning': 'nullable',
+            'physical': {'type': 'timestamp', 'unit': 'ns', 'zone': None},
+        },
+    )
+    pd.testing.assert_series_equal(actual, expected)
+    assert actual.dtype == 'datetime64[ns]'
+    assert values.dtype == pd.ArrowDtype(pa.timestamp(unit, tz=zone))
+
+
+def test_timestamp_boxing_failure_retains_actual_native_owner():
+    failure = ValueError('actual source timestamp boxing failed')
+
+    class Observed(pd.Series):
+        def to_numpy(self, *args, **kwargs):
+            raise failure
+
+    values = Observed([0], dtype=pd.ArrowDtype(pa.timestamp('us')))
+    with pytest.raises(ValueError) as raised:
+        scalar_column(
+            values,
+            {
+                'meaning': 'nullable',
+                'physical': {'type': 'timestamp', 'unit': 'ns', 'zone': None},
+            },
+        )
+    assert raised.value is failure
+
+
+def test_core_selected_boxed_datetime_values_keep_index_nulls_and_utc():
+    from datetime import datetime, timezone
+
+    values = pd.Series(
+        [datetime(2023, 1, 2, tzinfo=timezone.utc), None],
+        dtype=object,
+        index=[8, 2],
+        name='actual',
+    )
+    actual = scalar_column(
+        values,
+        {
+            'meaning': 'nullable',
+            'physical': {'type': 'timestamp', 'unit': 'ns', 'zone': None},
+        },
+    )
+    pd.testing.assert_series_equal(
+        actual,
+        pd.Series(
+            [pd.Timestamp('2023-01-02'), pd.NaT],
+            dtype='datetime64[ns]',
+            index=[8, 2],
+            name='actual',
+        ),
+    )

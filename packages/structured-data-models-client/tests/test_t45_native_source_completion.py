@@ -721,3 +721,62 @@ def test_exact_decimal_reply_and_actual_native_frame_are_independent(
         ['column', 'fallback'] if fallback else ['column']
     )
     assert adapter.native_error is None
+
+
+def test_typed_timestamp_is_assigned_in_physical_order_before_time_capture(
+    monkeypatch,
+):
+    raw = pa.table(
+        {
+            'before': pa.array([Decimal('1')], type=pa.decimal128(10, 0)),
+            'ts': pa.array([123], type=pa.timestamp('us', tz='UTC')),
+            'after': pa.array([Decimal('2')], type=pa.decimal128(10, 0)),
+        }
+    )
+    events = []
+    provider = Provider({7: raw}, events)
+    service = Service(
+        recipes={
+            'before': {
+                'meaning': 'exact_decimal',
+                'physical': {'type': 'float64'},
+            },
+            'ts': {
+                'meaning': 'nullable',
+                'physical': {'type': 'timestamp', 'unit': 'ns', 'zone': None},
+            },
+            'after': {
+                'meaning': 'exact_decimal',
+                'physical': {'type': 'float64'},
+            },
+        }
+    )
+    actual = completion.scalar_column
+    converted = []
+
+    def observed(values, meaning):
+        assert provider.active == set()
+        converted.append(values.name)
+        return actual(values, meaning)
+
+    monkeypatch.setattr(completion, 'scalar_column', observed)
+    adapter = completion.SourceCompletion(
+        provider, _source(raw.column_names), service
+    )
+    steps = _steps(lookup=False)
+    result = adapter(steps, {})
+    assert isinstance(result, dict)
+    assert converted == ['before', 'ts', 'after']
+    assert adapter.tables[7].frame['ts'].dtype == 'datetime64[ns]'
+    assert result[7]['ts'].type == pa.timestamp('ns')
+    assert result[7]['ts'].to_pylist() == [pd.Timestamp(123000)]
+    calls = [call for call in service.calls if call[0] == 'column']
+    assert calls[1][2] == {
+        'storage': 'typed_columns',
+        'declaration': {
+            'declaration': 'physical',
+            'physical': {'type': 'timestamp', 'unit': 'us', 'zone': 'UTC'},
+        },
+    }
+    assert result[7]['before'].type == raw['before'].type
+    assert result[7]['after'].type == raw['after'].type

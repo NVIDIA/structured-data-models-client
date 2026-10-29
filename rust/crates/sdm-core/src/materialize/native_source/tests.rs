@@ -179,3 +179,56 @@ fn native_decimal_descriptor_cannot_alias_an_invalid_or_redundant_declaration() 
         );
     }
 }
+
+#[test]
+fn typed_timestamp_requires_both_reached_semantics_and_actual_storage() {
+    let timestamp = Facts::TypedColumns {
+        declaration: Some(FramePhysicalDeclaration::Physical {
+            physical: ColumnType::Timestamp {
+                unit: sdm_contract::types::TimestampUnit::Us,
+                zone: Some("UTC".into()),
+            },
+        }),
+    };
+    let expected = Some(Meaning::Nullable {
+        physical: ColumnType::Timestamp {
+            unit: sdm_contract::types::TimestampUnit::Ns,
+            zone: None,
+        },
+    });
+    for dtype in [
+        None,
+        Some(Dtype::Time),
+        Some(Dtype::Date),
+        Some(Dtype::String),
+    ] {
+        assert_eq!(
+            timestamp_meaning(dtype, Stype::Timestamp, &timestamp),
+            expected
+        );
+    }
+    assert_eq!(
+        timestamp_meaning(Some(Dtype::Time), Stype::Categorical, &timestamp),
+        expected
+    );
+    for dtype in [None, Some(Dtype::Date), Some(Dtype::String)] {
+        assert_eq!(
+            timestamp_meaning(dtype, Stype::Categorical, &timestamp),
+            None
+        );
+    }
+    for input in [
+        Facts::CellRows {},
+        Facts::TypedColumns { declaration: None },
+        Facts::TypedColumns {
+            declaration: Some(FramePhysicalDeclaration::Physical {
+                physical: ColumnType::Utf8,
+            }),
+        },
+    ] {
+        assert_eq!(
+            timestamp_meaning(Some(Dtype::Time), Stype::Timestamp, &input),
+            None
+        );
+    }
+}

@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+import warnings
+
 import pandas as pd
 import pytest
 import test_t45_native_sql_labels as public
@@ -71,7 +73,11 @@ def _time_observed(monkeypatch, effect, core):
             frame, times = captured[-1]
             earlier = times.iloc[0] - pd.Timedelta(days=1000)
             events.append((len(self), len(times)))
-            if effect == 'in-place':
+            if effect == 'in-place-warning-error':
+                with warnings.catch_warnings():
+                    warnings.simplefilter('error')
+                    times.iloc[:] = earlier
+            elif effect == 'in-place':
                 times.iloc[:] = earlier
             else:
                 frame['ts'] = earlier
@@ -84,7 +90,9 @@ def _time_observed(monkeypatch, effect, core):
     return result, events
 
 
-@pytest.mark.parametrize('effect', ['in-place', 'replacement'])
+@pytest.mark.parametrize(
+    'effect', ['in-place', 'replacement', 'in-place-warning-error']
+)
 def test_actual_captured_time_owner_remains_authoritative_until_window_selection(
     monkeypatch, effect
 ):
