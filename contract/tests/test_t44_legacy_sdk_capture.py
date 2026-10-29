@@ -152,3 +152,71 @@ def test_a_present_sdk_module_with_an_incomplete_api_is_not_optional(
     with pytest.raises(AttributeError):
         RUNNER._Boundary()
     assert run.native is previous
+
+
+@pytest.mark.parametrize('name', ['native', '_carried', '_steps', 'Finished'])
+def test_checkpoint_common_api_is_still_required(monkeypatch, name):
+    from sdm_client._rust import run
+
+    _checkpoint_modules(monkeypatch)
+    monkeypatch.delattr(run, name)
+    with pytest.raises(AttributeError):
+        RUNNER._Boundary()
+
+
+def test_present_sdk_hook_groups_keep_every_hook_and_exact_cleanup(monkeypatch):
+    from types import SimpleNamespace
+
+    from sdm_client._rust import errors, run
+
+    def supplied(*args, **kwargs):
+        raise AssertionError('this authored cohort test must not run a product')
+
+    frame_native = SimpleNamespace(_assessment=supplied)
+    native_sql = SimpleNamespace(
+        gather=supplied, _Preparation=SimpleNamespace(read_failure=supplied)
+    )
+    relational_predict = SimpleNamespace(
+        predict=supplied, _present=supplied, _carry=supplied
+    )
+    modules = dict(
+        zip(
+            sorted(FUTURE_MODULES),
+            [frame_native, native_sql, relational_predict],
+        )
+    )
+    original_import = RUNNER.importlib.import_module
+
+    def module(name, *args, **kwargs):
+        return (
+            modules[name]
+            if name in modules
+            else original_import(name, *args, **kwargs)
+        )
+
+    monkeypatch.setattr(RUNNER.importlib, 'import_module', module)
+    owners = [
+        (run, 'native'),
+        (run, '_carried'),
+        (run, '_steps'),
+        (errors, 'error_from_core'),
+        (frame_native, '_assessment'),
+        (native_sql, 'gather'),
+        (native_sql._Preparation, 'read_failure'),
+        (relational_predict, 'predict'),
+        (relational_predict, '_present'),
+        (relational_predict, '_carry'),
+    ]
+    before = [getattr(owner, name) for owner, name in owners]
+    boundary = RUNNER._Boundary()
+    try:
+        assert all(
+            getattr(owner, name) is not previous
+            for (owner, name), previous in zip(owners, before)
+        )
+    finally:
+        boundary.close()
+    assert all(
+        getattr(owner, name) is previous
+        for (owner, name), previous in zip(owners, before)
+    )

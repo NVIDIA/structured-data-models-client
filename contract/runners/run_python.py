@@ -1225,13 +1225,14 @@ class _Capture:
 
     @staticmethod
     def _materialization_ids(kind: str, data: dict[str, Any]) -> list[int]:
-        # The live collector uses the SDK's actual typed owner declaration.
+        # This finite tooling declaration is shared with the strict reader,
+        # including when the checkpoint SDK predates native SQL products.
         # Malformed output still belongs to the SDK's normal refusal path;
         # observation must not replace that failure or probe an opaque owner.
-        from sdm_client._rust.native_sql_products import owner_ids
-
         try:
-            return owner_ids(kind, data)
+            return _sibling('prediction_observation').materialization_owner_ids(
+                kind, data
+            )
         except Exception:  # noqa: BLE001 - observation never changes admission
             return []
 
@@ -2585,30 +2586,50 @@ class _Native:
         return getattr(self._native, name)
 
 
+def _optional_sdk_module(name: str) -> Any:
+    """Only an absent exact future SDK module is an unobserved hook group."""
+    try:
+        return importlib.import_module(name)
+    except ModuleNotFoundError as error:
+        if error.name != name:
+            raise
+        return None
+
+
 class _Boundary:
     """One explicit lifetime for actual native, entry and presentation reads."""
 
     def __init__(self) -> None:
-        from sdm_client._rust import (
-            errors,
-            frame_native,
-            native_sql,
-            relational_predict,
-            run,
+        from sdm_client._rust import errors, run
+
+        frame_native = _optional_sdk_module('sdm_client._rust.frame_native')
+        native_sql = _optional_sdk_module('sdm_client._rust.native_sql')
+        relational_predict = _optional_sdk_module(
+            'sdm_client._rust.relational_predict'
         )
 
         self.capture = _Capture(native_cancellations_observed=True)
         self._closed = False
         self._native_before = run.native
-        self._predict_before = relational_predict.predict
+        self._predict_before = (
+            None if relational_predict is None else relational_predict.predict
+        )
         self._presentation_before = errors.error_from_core
         self._carried_before = run._carried
-        self._present_before = relational_predict._present
-        self._result_carry_before = relational_predict._carry
-        self._gather_before = native_sql.gather
+        self._present_before = (
+            None if relational_predict is None else relational_predict._present
+        )
+        self._result_carry_before = (
+            None if relational_predict is None else relational_predict._carry
+        )
+        self._gather_before = None if native_sql is None else native_sql.gather
         self._steps_before = run._steps
-        self._read_failure_before = native_sql._Preparation.read_failure
-        self._assessment_before = frame_native._assessment
+        self._read_failure_before = (
+            None if native_sql is None else native_sql._Preparation.read_failure
+        )
+        self._assessment_before = (
+            None if frame_native is None else frame_native._assessment
+        )
         imported = self._native_before
         predict_before = self._predict_before
         presentation_before = self._presentation_before
@@ -2837,16 +2858,69 @@ class _Boundary:
         self._steps_hook = steps
         self._read_failure_hook = read_failure
         self._assessment_hook = assessment
-        run.native = native
-        relational_predict.predict = predict
-        errors.error_from_core = presentation
-        run._carried = carried
-        relational_predict._present = present
-        relational_predict._carry = result_carry
-        native_sql.gather = gather
-        run._steps = steps
-        native_sql._Preparation.read_failure = read_failure
-        frame_native._assessment = assessment
+        # Validate every existing module's API before changing any hook.
+        # A missing future module is honest unavailability, while an internal
+        # import failure or incomplete present module remains a hard failure.
+        hooks = [
+            (run, 'native', self._native_before, native),
+            (
+                errors,
+                'error_from_core',
+                self._presentation_before,
+                presentation,
+            ),
+            (run, '_carried', self._carried_before, carried),
+            (run, '_steps', self._steps_before, steps),
+        ]
+        if relational_predict is not None:
+            hooks.extend(
+                [
+                    (
+                        relational_predict,
+                        'predict',
+                        self._predict_before,
+                        predict,
+                    ),
+                    (
+                        relational_predict,
+                        '_present',
+                        self._present_before,
+                        present,
+                    ),
+                    (
+                        relational_predict,
+                        '_carry',
+                        self._result_carry_before,
+                        result_carry,
+                    ),
+                ]
+            )
+        if native_sql is not None:
+            hooks.extend(
+                [
+                    (native_sql, 'gather', self._gather_before, gather),
+                    (
+                        native_sql._Preparation,
+                        'read_failure',
+                        self._read_failure_before,
+                        read_failure,
+                    ),
+                ]
+            )
+        if frame_native is not None:
+            hooks.append(
+                (
+                    frame_native,
+                    '_assessment',
+                    self._assessment_before,
+                    assessment,
+                )
+            )
+        self._hook_bindings = hooks
+        for target, name, before, hook in hooks:
+            assert getattr(target, name) is before
+        for target, name, before, hook in hooks:
+            setattr(target, name, hook)
 
     def reset(self) -> _Capture:
         if (
@@ -2861,44 +2935,19 @@ class _Boundary:
         return self.capture
 
     def close(self) -> None:
-        from sdm_client._rust import (
-            errors,
-            frame_native,
-            native_sql,
-            relational_predict,
-            run,
-        )
-
         if self._closed:
             return
         if self.capture._entries or self.capture._materialization_stack:
             raise RunnerFailure('cannot close an active prediction entry')
-        if (
-            run.native is not self._native_hook
-            or relational_predict.predict is not self._predict_hook
-            or errors.error_from_core is not self._presentation_hook
-            or run._carried is not self._carried_hook
-            or relational_predict._present is not self._present_hook
-            or relational_predict._carry is not self._result_carry_hook
-            or native_sql.gather is not self._gather_hook
-            or run._steps is not self._steps_hook
-            or native_sql._Preparation.read_failure
-            is not self._read_failure_hook
-            or frame_native._assessment is not self._assessment_hook
+        if any(
+            getattr(target, name) is not hook
+            for target, name, _, hook in self._hook_bindings
         ):
             raise RunnerFailure(
                 'capture hooks must close in LIFO installation order'
             )
-        run.native = self._native_before
-        relational_predict.predict = self._predict_before
-        errors.error_from_core = self._presentation_before
-        run._carried = self._carried_before
-        relational_predict._present = self._present_before
-        relational_predict._carry = self._result_carry_before
-        native_sql.gather = self._gather_before
-        run._steps = self._steps_before
-        native_sql._Preparation.read_failure = self._read_failure_before
-        frame_native._assessment = self._assessment_before
+        for target, name, before, _ in reversed(self._hook_bindings):
+            setattr(target, name, before)
         self._closed = True
 
 
