@@ -1046,13 +1046,15 @@ def test_unrelated_object_source_has_no_new_native_time_content_reads(
     monkeypatch,
 ):
     observed = []
-    infer = pd.api.types.infer_dtype
+    content = completion.observed_content
 
-    def inferred(values, *args, **kwargs):
+    def inferred(values):
         observed.append(values)
-        return infer(values, *args, **kwargs)
+        return content(values)
 
-    monkeypatch.setattr(pd.api.types, 'infer_dtype', inferred)
+    # Observe only this source-construction fact port; Arrow's independent
+    # final export may perform its own legitimate dtype inference.
+    monkeypatch.setattr(completion, 'observed_content', inferred)
     provider = Provider(
         {7: _scalars([['ordinary'], ['unread']], ['value'])}, []
     )
