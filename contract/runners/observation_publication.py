@@ -176,36 +176,30 @@ def _project_json_text(held: Any, text: str) -> tuple[str, bool]:
 
 
 def _project(held: Any, value: Any) -> Any:
-    pending = [value]
-    while pending:
-        current = pending.pop()
+    def mapped(current: Any) -> Any:
         if isinstance(current, dict):
             keys = [held.text(key) for key in current]
             if len(set(keys)) != len(keys):
                 raise PublicationError(
                     'warehouse names collide with object members'
                 )
-            pending.extend(current.values())
-        elif isinstance(current, list):
-            pending.extend(current)
-    shown = held.value(value)
-    # request_json is a decoded publication field, not the original wire.
-    # Escaped member values must not hide a private name from Placeheld.
-    pending = [shown]
-    while pending:
-        current = pending.pop()
-        if isinstance(current, dict):
-            nested_owner = _serving_record(current)
-            nested = (
-                None if nested_owner is None else nested_owner['request_json']
-            )
-            if isinstance(nested, str):
-                mapped, changed = _project_json_text(held, nested)
-                if changed:
-                    nested_owner['request_json'] = mapped
-            pending.extend(current.values())
-        elif isinstance(current, list):
-            pending.extend(current)
+            serving = _serving_record(current)
+            if serving is not None and type(serving['request_json']) is str:
+                # Parse the original logical JSON before ordinary string
+                # replacement can change tokens or conceal a key collision.
+                text, _ = _project_json_text(held, serving['request_json'])
+                return {keys[0]: [{held.text('request_json'): text}]}
+            return {
+                key: mapped(item)
+                for key, item in zip(keys, current.values(), strict=True)
+            }
+        if isinstance(current, list):
+            return [mapped(item) for item in current]
+        if isinstance(current, tuple):
+            return tuple(mapped(item) for item in current)
+        return held.text(current) if isinstance(current, str) else current
+
+    shown = mapped(value)
     pending = [shown]
     while pending:
         current = pending.pop()
@@ -214,7 +208,7 @@ def _project(held: Any, value: Any) -> Any:
         if isinstance(current, dict):
             pending.extend(current)
             pending.extend(current.values())
-        elif isinstance(current, list):
+        elif isinstance(current, (list, tuple)):
             pending.extend(current)
     return shown
 
