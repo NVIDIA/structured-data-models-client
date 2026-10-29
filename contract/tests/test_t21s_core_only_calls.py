@@ -158,14 +158,14 @@ def test_a_named_core_only_column_is_left_out_of_every_call(
     bodies = _core_bodies()
     # Not vacuous: with no entry the kept columns fail, by the call's path.
     found = _failures(tmp_path, bodies, named=False)
-    assert found and 'core.model_calls/0/' in found[0], found
+    assert found and 'core.predicted.calls/0/' in found[0], found
     assert _failures(tmp_path, bodies, named=True) == []
     # As in a single call's body, which the rule already reads.
     assert _failures(tmp_path, bodies[:1], named=True) == []
     # Beside them, a column the entry does not name is the one reported.
     _kept(bodies[1], 'items', 'other')
     [found] = _failures(tmp_path, bodies, named=True)
-    assert 'core.model_calls/1/' in found, found
+    assert 'core.predicted.calls/1/' in found, found
 
 
 def test_an_unnamed_column_in_a_call_still_fails(tmp_path: Path) -> None:
@@ -174,4 +174,4 @@ def test_an_unnamed_column_in_a_call_still_fails(tmp_path: Path) -> None:
     bodies = [_call(0), _call(1)]
     _kept(bodies[1], 'items', 'other')
     [found] = _failures(tmp_path, bodies, named=True)
-    assert 'core.model_calls/1/' in found, found
+    assert 'core.predicted.calls/1/' in found, found

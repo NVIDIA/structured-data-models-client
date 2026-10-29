@@ -568,7 +568,7 @@ def test_no_sentinel_reaches_anything_written(
         from sdm_api.generated.tfm_api import ResponseContractError
 
         assert error.code == 'INVALID_RESPONSE'
-        assert getattr(error, '_sentence') == 'direct_response_contract'
+        assert error._sentence == 'direct_response_contract'
         cause = error.__cause__
         assert type(cause) is ResponseContractError
         assert str(cause) == (

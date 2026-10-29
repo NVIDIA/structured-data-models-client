@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import copy
 import gc
 import importlib
 import json
@@ -491,17 +492,22 @@ def test_unchanged_public_late_failure_retains_internal_results_without_carry(
     capture = boundary.reset()
     try:
         if forecast:
-            module.test_native_decomposed_output_owners_and_paid_boundaries(
-                monkeypatch,
-                core=True,
-                case='forecast-explanation-contains-fails',
+            case = 'forecast-explanation-contains-fails'
+            observed = module._observe_native_decomposed_output_owners_and_paid_boundaries(
+                monkeypatch, True, case
             )
+            shown = copy.deepcopy(observed)
+            shown['warnings'] = module.product_notices(shown)
+            shown.pop('option_effects')
+            assert shown == module.DECOMPOSED_OUTPUT_REFERENCE[case]
         else:
-            module.test_native_two_paid_call_output_shape_hash_boundary(
-                monkeypatch,
-                core=True,
-                case='shape-hash-raises',
+            case = 'shape-hash-raises'
+            observed = (
+                module._observe_native_two_paid_call_output_shape_hash_boundary(
+                    monkeypatch, True, case
+                )
             )
+            assert observed == module.MODEL_OUTPUT_SHAPE_REFERENCE[case]
     finally:
         boundary.close()
     [entry] = entries(capture)

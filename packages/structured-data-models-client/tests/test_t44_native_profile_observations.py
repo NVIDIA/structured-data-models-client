@@ -166,9 +166,11 @@ def test_option_effect_attribution_keeps_complete_raw_records():
             original(message, category, filename, lineno, file=file, line=line)
 
         warnings.showwarning = recording
-        warnings.warn('SDK advice', UserWarning)
+        warnings.warn('SDK advice', UserWarning, stacklevel=1)
         with effects.at('option-read'):
-            warnings.warn('native option read', DeprecationWarning)
+            warnings.warn(
+                'native option read', DeprecationWarning, stacklevel=1
+            )
         events.append('converted')
     observed = {
         'events': events,
@@ -204,19 +206,19 @@ def test_option_context_attributes_occurrences_without_hiding_body_or_exit():
     class NativeContext:
         def __enter__(self):
             reached.append('enter')
-            warnings.warn(owner)
+            warnings.warn(owner, stacklevel=1)
             return self
 
         def __exit__(self, *exception):
             reached.append(exception)
-            warnings.warn(owner)
+            warnings.warn(owner, stacklevel=1)
             return False
 
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter('always')
         with pytest.raises(RuntimeError) as raised:
             with effects.context(NativeContext(), caught):
-                warnings.warn(owner)
+                warnings.warn(owner, stacklevel=1)
                 reached.append('body')
                 raise retained
     assert raised.value is retained

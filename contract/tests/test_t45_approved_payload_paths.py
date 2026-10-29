@@ -182,7 +182,6 @@ def fixture(bodies, producer):
         'request_id': predicted['request_id'],
         'metadata': copy.deepcopy(final['metadata']),
         'result': copy.deepcopy(final['result']),
-        'outputs': copy.deepcopy(predicted['outputs']),
     }
     if len(bodies) == 2:
         product['calls'] = [
@@ -215,11 +214,17 @@ def fixture(bodies, producer):
             'model_replies': True,
             'native_error_control': True,
         }
+        core['answered'] = None
         core['legacy_predictions'] = [
             {
                 'run': 2,
                 'completion': 'done',
-                'result': copy.deepcopy(product),
+                # The actual per-Run completion owns this supplement;
+                # the common global summary above has no outputs field.
+                'result': {
+                    **copy.deepcopy(product),
+                    'outputs': copy.deepcopy(predicted['outputs']),
+                },
                 'error': None,
                 'answered': None,
             }

@@ -139,7 +139,9 @@ def test_frame_payload_cause_cannot_be_borrowed_by_another_refusal():
         },
         'message': 'another refusal',
     }
-    with pytest.raises(CodecError, match='invalid native payload validation sentence'):
+    with pytest.raises(
+        CodecError, match='invalid native payload validation sentence'
+    ):
         errors.error_from_core(
             json.dumps({'message': 'error', 'error': sent}).encode(), {}
         )

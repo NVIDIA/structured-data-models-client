@@ -255,6 +255,7 @@ def test_retained_native_failure_releases_extra_read_views_but_not_caller_produc
     monkeypatch,
 ):
     import weakref
+
     from sdm_client._rust import native_sql_sources
 
     source_rows = []

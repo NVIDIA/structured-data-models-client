@@ -261,7 +261,7 @@
       "gone": "T3.17: the choice of template by field, rule and fields is the core's choice of sentence"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::error_from_core": {
-      "refactor": "T4.4: retain native presentation recipes, including qualified/bare frame-payload PastInt64 ValueError causes, original nested handler context and active caller context; private site metadata is omitted from public details, decoded-envelope naming is type-only, and unmarked SQL/direct readers are unchanged."
+      "refactor": "T4.4: retain native presentation recipes, including qualified/bare frame-payload PastInt64 ValueError causes, original nested handler context and active caller context; private site metadata is omitted from public details, decoded-envelope naming is type-only, and unmarked SQL/direct readers are unchanged. T4.4: the reached native frame payload NotFinite refusal retains its ValueError cause through the existing Core-selected presentation recipe; the unmarked warehouse/direct boundary remains unchanged."
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::raise_from_core": {
       "refactor": "T4.4: forward the explicit native constructor presentation choice for an already selected error; actual native failure rethrows and the default coded/provider privacy boundary are unchanged."

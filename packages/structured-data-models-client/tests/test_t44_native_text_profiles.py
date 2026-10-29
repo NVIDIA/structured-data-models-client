@@ -409,9 +409,16 @@ def test_native_warning_and_sampling_stages_keep_arguments_and_cached_rows(
         actual = original
         expected = expected_record(reference('boundaries')[case], False)
     assert actual == expected_record(original, core)
-    assert {
-        key: actual[key] for key in ('requests', 'sent', 'final_arguments')
-    } == {key: expected[key] for key in ('requests', 'sent', 'final_arguments')}
+    if 'error' in expected:
+        # The frozen producer records no success-only request product when
+        # materialization raises, and the live observer must reach none.
+        assert 'requests' not in expected
+        assert actual['requests'] == []
+    else:
+        assert actual['requests'] == expected['requests']
+    assert {key: actual[key] for key in ('sent', 'final_arguments')} == {
+        key: expected[key] for key in ('sent', 'final_arguments')
+    }
     assert product_notices(actual) == expected['warnings']
 
 

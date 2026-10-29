@@ -42,7 +42,7 @@ def complete_source_times(
         (role, read) for role, tables in sources.items() for read in tables
     }
     seen = set()
-    ready = []
+    ready: list[tuple[pd.DataFrame, int, str, pa.ChunkedArray]] = []
     observations = table = data = stream = values = frame = None
     try:
         observations = inputs.owners[inputs.data['owner']].temporal_sources()
