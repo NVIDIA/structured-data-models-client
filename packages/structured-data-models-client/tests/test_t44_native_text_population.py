@@ -15,6 +15,11 @@ from unittest.mock import patch
 import pandas as pd
 import pytest
 from test_t42_arrow_decimal_frames import _decimal_error_graph
+from test_t44_native_profile_observations import (
+    OptionEffects,
+    product_notices,
+    semantic_events,
+)
 from test_t44_text_frames import core as select_core
 from test_t44_text_frames import p3e2_warning_codes, shop, text
 
@@ -107,6 +112,12 @@ def observe(monkeypatch, *, core, case, later_failure=False):
     conversions = []
     events = []
     sampled = False
+    option_effects = OptionEffects()
+
+    def read_inference():
+        with option_effects.at('option-read'):
+            return pd.options.future.infer_string
+
     retained = ValueError('native later Text conversion failed')
     original_astype = pd.Series.astype
     result = {}
@@ -121,7 +132,7 @@ def observe(monkeypatch, *, core, case, later_failure=False):
                 'input': points(series),
                 'index': series.index.tolist(),
                 'dtype': dtype_observation(series),
-                'infer_string': pd.options.future.infer_string,
+                'infer_string': read_inference(),
                 'storage': pd.options.mode.string_storage,
             }
             conversions.append(item)
@@ -177,13 +188,17 @@ def observe(monkeypatch, *, core, case, later_failure=False):
             message, category, filename, lineno, file=None, line=None
         ):
             nonlocal sampled
+            option_effects.warning(
+                message, category, filename, len(events), occurrence=len(caught)
+            )
             events.append('warning')
             expected = '[HOPS_IGNORED] ' + HOPS if core else HOPS
             if str(message) == expected:
                 assert sampled is False
-                assert pd.options.future.infer_string is False
+                assert read_inference() is False
                 assert pd.options.mode.string_storage == 'python'
-                pd.options.future.infer_string = True
+                with option_effects.at('option-write'):
+                    pd.options.future.infer_string = True
                 pd.options.mode.string_storage = 'pyarrow'
                 sampled = True
                 events.append('hops-option-switch')
@@ -216,6 +231,11 @@ def observe(monkeypatch, *, core, case, later_failure=False):
                     nothing_to_score=request.nothing_to_score,
                 )
                 events.append('materialize-complete')
+        with patch.object(warnings, 'showwarning', switch_at_hops):
+            result['options_after'] = {
+                'infer_string': read_inference(),
+                'storage': pd.options.mode.string_storage,
+            }
         result['warnings'] = [
             {
                 'type': type(item.message).__name__,
@@ -224,10 +244,7 @@ def observe(monkeypatch, *, core, case, later_failure=False):
             }
             for item in caught
         ]
-        result['options_after'] = {
-            'infer_string': pd.options.future.infer_string,
-            'storage': pd.options.mode.string_storage,
-        }
+        result['option_effects'] = option_effects.snapshot(caught)
         if core:
             held = query._relational_materializer._core_sampler_state['held']
             result['neighbors'] = json.loads(
@@ -316,18 +333,21 @@ def test_native_text_uses_source_population_before_conversion(
 ):
     original = observe(monkeypatch, core=False, case=case)
     actual = observe(monkeypatch, core=True, case=case)
+    neighbors = actual.pop('neighbors')
+    assert neighbors['position'] > 0
+    assert actual == expected_core(original)
     assert_population(original, case)
     assert_public_source_rows(original, case)
     constructor_notices = (
         [] if case == 'equal-text' else [constructor_notice('note')]
     )
-    assert [notice['message'] for notice in original['warnings']] == [
+    assert [notice['message'] for notice in product_notices(original)] == [
         *constructor_notices,
         HOPS,
         TEXT_UNREAD,
         CONTEXT_ANSWERS,
     ]
-    assert original['events'] == [
+    assert semantic_events(original) == [
         'schema-ready',
         'query-ready',
         *[
@@ -343,9 +363,6 @@ def test_native_text_uses_source_population_before_conversion(
         'warning',
         'materialize-complete',
     ]
-    neighbors = actual.pop('neighbors')
-    assert neighbors['position'] > 0
-    assert actual == expected_core(original)
     assert_population(actual, case)
     assert_public_source_rows(actual, case)
 
@@ -357,10 +374,12 @@ def test_later_native_text_failure_retains_compact_operands_and_draws(
         monkeypatch, core=False, case='front', later_failure=True
     )
     actual = observe(monkeypatch, core=True, case='front', later_failure=True)
+    neighbors = actual.pop('neighbors')
+    assert actual == expected_core(original)
     assert_population(original, 'front')
     assert original['outcome'] == 'error'
     assert original['retained_cause'] is True
-    assert [notice['message'] for notice in original['warnings']] == [
+    assert [notice['message'] for notice in product_notices(original)] == [
         constructor_notice('note'),
         constructor_notice('note_later'),
         HOPS,
@@ -383,15 +402,13 @@ def test_later_native_text_failure_retains_compact_operands_and_draws(
         'context': 'same-as-cause',
         'suppress': False,
     }
-    assert original['events'][-5:] == [
+    assert semantic_events(original)[-5:] == [
         ('note', 'caller-mutation'),
         ('note', 'astype-exit'),
         ('note_later', 'astype-enter'),
         ('note_later', 'astype-error'),
         'materialize-error',
     ]
-    neighbors = actual.pop('neighbors')
-    assert actual == expected_core(original)
     assert_population(actual, 'front')
     control = observe(monkeypatch, core=True, case='front')
     assert neighbors == control['neighbors']

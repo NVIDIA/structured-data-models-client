@@ -19,6 +19,11 @@ import pandas as pd
 import pytest
 import requests
 from test_t42_arrow_decimal_frames import _decimal_error_graph
+from test_t44_native_profile_observations import (
+    OptionEffects,
+    product_notices,
+    semantic_events,
+)
 from test_t44_native_text_population import (
     CONTEXT_ANSWERS,
     HOPS,
@@ -311,6 +316,12 @@ def _observe_text_conversion(monkeypatch, *, core_route, case):
         )
         events, conversions, switched = [], [], []
         sampled = False
+        option_effects = OptionEffects()
+
+        def read_inference():
+            with option_effects.at('option-read'):
+                return pd.options.future.infer_string
+
         original_astype = pd.Series.astype
 
         def question():
@@ -333,7 +344,7 @@ def _observe_text_conversion(monkeypatch, *, core_route, case):
                     'sampled': sampled,
                     'dtype': str(series.dtype),
                     'storage': getattr(series.dtype, 'storage', None),
-                    'infer_string': pd.options.future.infer_string,
+                    'infer_string': read_inference(),
                     'option_storage': pd.options.mode.string_storage,
                 }
                 conversions.append(item)
@@ -372,13 +383,21 @@ def _observe_text_conversion(monkeypatch, *, core_route, case):
                 message, category, filename, lineno, file=None, line=None
             ):
                 nonlocal sampled
+                option_effects.warning(
+                    message,
+                    category,
+                    filename,
+                    len(events),
+                    occurrence=len(caught),
+                )
                 events.append('warning')
                 if str(message) == (
                     '[HOPS_IGNORED] ' + HOPS if core_route else HOPS
                 ):
-                    assert pd.options.future.infer_string is False
+                    assert read_inference() is False
                     assert pd.options.mode.string_storage == 'python'
-                    pd.options.future.infer_string = True
+                    with option_effects.at('option-write'):
+                        pd.options.future.infer_string = True
                     pd.options.mode.string_storage = 'pyarrow'
                     sampled = True
                     switched.append(True)
@@ -409,6 +428,11 @@ def _observe_text_conversion(monkeypatch, *, core_route, case):
                         'nothing_to_score': request.nothing_to_score,
                     }
                     events.append('materialize-complete')
+            with patch.object(warnings, 'showwarning', switch_at_hops):
+                options_after = {
+                    'infer_string': read_inference(),
+                    'storage': pd.options.mode.string_storage,
+                }
             observed.update(
                 warnings=[
                     {
@@ -423,10 +447,8 @@ def _observe_text_conversion(monkeypatch, *, core_route, case):
                 events=events,
                 conversions=conversions,
                 switched=switched,
-                options_after={
-                    'infer_string': pd.options.future.infer_string,
-                    'storage': pd.options.mode.string_storage,
-                },
+                options_after=options_after,
+                option_effects=option_effects.snapshot(caught),
             )
             if core_route:
                 checkpoint = query._relational_materializer._core_sampler_state[
@@ -548,20 +570,20 @@ def test_native_text_conversion_precedes_character_cap_after_sampling(
             'message': error['text'],
         } == recorded['error']
         assert final['outcome'] == 'error'
-        assert original['events'] == prefix + [
+        assert semantic_events(original) == prefix + [
             'astype-str-error',
             'materialize-error',
         ]
         assert [
             {'type': item['type'], 'message': item['message']}
-            for item in original['warnings']
+            for item in product_notices(original)
         ] == recorded['warnings']
     else:
         assert original['outcome'] == final['outcome'] == 'success'
         assert final['result'] == final['input']
         assert original['context_rows'] == 1 and original['predict_rows'] == 2
         assert original['nothing_to_score'] is False
-        assert original['warnings'] == [
+        assert product_notices(original) == [
             {
                 'type': 'UserWarning',
                 'category': 'builtins.UserWarning',
@@ -578,7 +600,7 @@ def test_native_text_conversion_precedes_character_cap_after_sampling(
                 'message': CONTEXT_ANSWERS,
             },
         ]
-        assert original['events'] == prefix + [
+        assert semantic_events(original) == prefix + [
             'astype-str-exit',
             'warning',
             'warning',

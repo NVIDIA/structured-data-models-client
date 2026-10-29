@@ -126,6 +126,8 @@ def product_notices(observed):
         assert record['message'] == notice['message']
         if 'category' in notice:
             assert record['category'] == notice['category']
+        elif 'type' in notice:
+            assert record['category'].rsplit('.', 1)[-1] == notice['type']
     return [
         notice
         for at, notice in enumerate(observed['warnings'])

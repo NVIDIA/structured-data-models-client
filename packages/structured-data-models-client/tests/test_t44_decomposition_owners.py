@@ -51,10 +51,15 @@ def family(request):
     return request.param
 
 
-def question(family):
+def question(family, *, option_effects=None, notices=None):
     np.random.seed(123)
-    with pd.option_context(
+    manager = pd.option_context(
         'future.infer_string', False, 'mode.string_storage', 'python'
+    )
+    with (
+        option_effects.context(manager, notices)
+        if option_effects is not None
+        else manager
     ):
         users = pd.DataFrame({'user_id': range(12), 'segment': list('abc') * 4})
         orders = pd.DataFrame(

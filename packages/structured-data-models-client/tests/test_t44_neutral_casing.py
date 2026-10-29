@@ -7,95 +7,91 @@
 from __future__ import annotations
 
 import unicodedata
-import warnings
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pandas as pd
 import pytest
+from test_t44_native_profile_observations import product_notices
 from test_t44_native_text_profiles import (
+    _observe_effective_target_profile_keeps_full_public_bodies,
     expected_record,
     reference,
-    send,
-    warning_values,
 )
-from test_t44_text_frames import (
-    Scripted,
-    question,
-    shop,
-)
-from test_t44_text_frames import (
-    core as core,
-)
+from test_t44_text_frames import core as select_core
 
 from sdm_client._rust.frame_native import NativeColumn, NativeFrameFailure
 
 
+@pytest.mark.parametrize('core', [False, True], ids=['original', 'core'])
 @pytest.mark.parametrize('storage', ['python', 'pyarrow'])
 def test_observed_casing_facts_keep_the_frozen_public_text_journey(
-    core, storage
+    monkeypatch, core, storage
 ):
     case = f'python-target-{storage}'
-    observed = reference('profile')[case]
-    expected = expected_record(observed, core)
-    options = observed['requested_options']
-    frames = shop('python')
-    frames['users'].loc[0, 'note'] = 'ΟΣ ΟΣΑ AΣ́ AΣ1 AΣ-A'
-    frames['users'].loc[6, 'note'] = 'ΟΣ İ AΣ́ ΟΣΑ'
-    frames['users'].loc[7, 'note'] = 'é' * 298 + 'İΣx'
-    scripted = Scripted('age')
-    ids = [body['metadata']['request_id'] for body in expected['sent']]
     observations = []
-    original = NativeColumn.text_facts
+    native = NativeColumn.text_facts
 
     def record(column, identity_input):
-        fact = original(column, identity_input)
-        observations.append(fact)
+        fact = native(column, identity_input)
+        dtype = column.values.dtype
+        observations.append(
+            {
+                'fact': fact,
+                'is_string': type(dtype) is pd.StringDtype,
+                'storage': getattr(dtype, 'storage', None),
+                'dtype': str(dtype),
+                'values': [
+                    None
+                    if value is None or value is pd.NA
+                    else list(map(ord, value))
+                    for value in column.values
+                ],
+            }
+        )
         return fact
 
-    with (
-        warnings.catch_warnings(record=True) as caught,
-        pd.option_context(
-            'mode.string_storage',
-            options['storage'],
-            'future.infer_string',
-            options['infer_string'],
-        ),
-        patch('sdm_client.adapters.relational._request_id', side_effect=ids),
-        patch.object(NativeColumn, 'text_facts', record),
-    ):
-        warnings.simplefilter('always')
-        asked = question(frames, prose=True)
-        for wanted in expected['requests']:
-            request = asked.materialize(
-                indices=[7, 8],
-                num_context_samples=3,
-                num_neighbors=[3],
-                num_hops=1,
-                random_seed=7,
+    with monkeypatch.context() as route:
+        select_core.__wrapped__(SimpleNamespace(param=False), route)
+        original, _, _ = (
+            _observe_effective_target_profile_keeps_full_public_bodies(
+                False, case
             )
-            send(request, scripted, wanted, core)
-    assert scripted.calls == expected['sent']
-    assert warning_values(caught) == expected['warnings']
+        )
+    if core:
+        with (
+            monkeypatch.context() as route,
+            patch.object(NativeColumn, 'text_facts', record),
+        ):
+            select_core.__wrapped__(SimpleNamespace(param=True), route)
+            actual, _, _ = (
+                _observe_effective_target_profile_keeps_full_public_bodies(
+                    True, case
+                )
+            )
+    else:
+        actual = original
+    assert actual == expected_record(original, core)
+    expected = expected_record(reference('profile')[case], core)
+    assert actual['requests'] == expected['requests']
+    assert actual['sent'] == expected['sent']
+    assert product_notices(actual) == expected['warnings']
     if not core:
         assert observations == []
         return
     assert observations
-    if int(pd.__version__.split('.')[0]) == 2 or storage == 'python':
-        assert all(
-            fact
-            == {
+    supported = {'iσⰯᲉ꟎', 'iσⱟᲉ꟎', 'iσⱟᲊ꟎', 'iσⱟᲊ꟏'}
+    for observed in observations:
+        fact = observed['fact']
+        if observed['is_string'] and observed['storage'] != 'python':
+            assert set(fact) == {'mapping', 'identity'}
+            assert fact['mapping'] == 'simple'
+            assert fact['identity'] in supported
+        else:
+            assert fact == {
                 'mapping': 'full_root',
                 'unicode_version': unicodedata.unidata_version,
             }
-            for fact in observations
-        )
-    else:
-        supported = {'iσⰯᲉ꟎', 'iσⱟᲉ꟎', 'iσⱟᲊ꟎', 'iσⱟᲊ꟏'}
-        assert all(
-            set(fact) == {'mapping', 'identity'} for fact in observations
-        )
-        assert all(fact['mapping'] == 'simple' for fact in observations)
-        assert all(fact['identity'] in supported for fact in observations)
 
 
 def test_failure_capture_records_message_casing_without_displaying_native_error():

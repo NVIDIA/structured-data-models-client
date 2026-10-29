@@ -27,6 +27,7 @@ import pytest
 import requests
 from t38_forced_routes_record import bare
 from t45_frame_routes import FRAME_PREDICT_ROUTES
+from test_t44_native_profile_observations import OptionEffects, product_notices
 
 from sdm_client import KumoRelational, PredictiveQuery, Schema, SDMClient
 from sdm_client.adapters.relational import RelationalAdapter
@@ -453,15 +454,21 @@ def test_gathered_details_comparison_is_limited_to_its_core_case(core, case):
     assert _fault_as_recorded(observed, core=core) is observed
 
 
-@pytest.mark.parametrize('core', [False, True], ids=['original', 'core'])
-@pytest.mark.parametrize('case', list(FAULT_REFERENCE))
-def test_native_part_fault_and_instance_comparison_parity(
+def _observe_native_part_fault_and_instance_comparison_parity(
     monkeypatch, core, case
 ):
     from test_t44_decomposition_owners import question
 
     monkeypatch.setenv('SDM_CORE_ROUTES', FRAME_PREDICT_ROUTES if core else '')
-    expected = FAULT_REFERENCE[case]
+    if core:
+
+        def legacy(*args, **kwargs):
+            raise AssertionError(
+                'the core prediction route called legacy SDMClient._prepare'
+            )
+
+        monkeypatch.setattr(SDMClient, '_prepare', legacy)
+    option_effects = OptionEffects()
     events = []
     observed = {'case': case}
 
@@ -514,7 +521,11 @@ def test_native_part_fault_and_instance_comparison_parity(
         try:
             if case.startswith(('forecast-', 'ranking-')):
                 ranking = case.startswith('ranking-')
-                asked = question('ranking' if ranking else 'forecast')
+                asked = question(
+                    'ranking' if ranking else 'forecast',
+                    option_effects=option_effects,
+                    notices=notices,
+                )
                 how = {
                     'indices': [1, 2],
                     'num_context_samples': 3,
@@ -550,7 +561,25 @@ def test_native_part_fault_and_instance_comparison_parity(
             for item in notices
         ]
     observed['events'] = events
-    assert _fault_as_recorded(observed, core=core) == expected
+    observed['option_effects'] = option_effects.snapshot(notices)
+    return _fault_as_recorded(observed, core=core)
+
+
+@pytest.mark.parametrize('case', list(FAULT_REFERENCE))
+def test_native_part_fault_and_instance_comparison_parity(monkeypatch, case):
+    with monkeypatch.context() as old_route:
+        original = _observe_native_part_fault_and_instance_comparison_parity(
+            old_route, False, case
+        )
+    with monkeypatch.context() as new_route:
+        actual = _observe_native_part_fault_and_instance_comparison_parity(
+            new_route, True, case
+        )
+    assert actual == original
+    shown = copy.deepcopy(original)
+    shown['warnings'] = product_notices(shown)
+    shown.pop('option_effects')
+    assert shown == FAULT_REFERENCE[case]
 
 
 @pytest.mark.parametrize('core', [False, True], ids=['original', 'core'])
@@ -1013,12 +1042,18 @@ MODEL_OUTPUT_SHAPE_REFERENCE = json.loads(
 ]
 
 
-@pytest.mark.parametrize('core', [False, True], ids=['original', 'core'])
-@pytest.mark.parametrize('case', list(MODEL_OUTPUT_SHAPE_REFERENCE))
-def test_native_two_paid_call_output_shape_hash_boundary(
+def _observe_native_two_paid_call_output_shape_hash_boundary(
     monkeypatch, core, case
 ):
     monkeypatch.setenv('SDM_CORE_ROUTES', FRAME_PREDICT_ROUTES if core else '')
+    if core:
+
+        def legacy(*args, **kwargs):
+            raise AssertionError(
+                'the core prediction route called legacy SDMClient._prepare'
+            )
+
+        monkeypatch.setattr(SDMClient, '_prepare', legacy)
     expected = copy.deepcopy(MODEL_OUTPUT_SHAPE_REFERENCE[case])
     events = []
     sent = []
@@ -1101,7 +1136,38 @@ def test_native_two_paid_call_output_shape_hash_boundary(
             for item in caught
         ]
     record.update(events=events, sent=sent, paid_calls=len(sent))
-    assert record == expected
+    return record
+
+
+@pytest.mark.parametrize('case', list(MODEL_OUTPUT_SHAPE_REFERENCE))
+def test_native_two_paid_call_output_shape_hash_boundary(monkeypatch, case):
+    with monkeypatch.context() as old_route:
+        original = _observe_native_two_paid_call_output_shape_hash_boundary(
+            old_route, False, case
+        )
+    with monkeypatch.context() as new_route:
+        actual = _observe_native_two_paid_call_output_shape_hash_boundary(
+            new_route, True, case
+        )
+    assert actual == original
+    expected = copy.deepcopy(MODEL_OUTPUT_SHAPE_REFERENCE[case])
+    if case == 'shape-control':
+        historical_events = expected.pop('events')
+        assert historical_events
+        shown = copy.deepcopy(original)
+        events = shown.pop('events')
+        assert [
+            event for event in events if event.startswith('http-post.')
+        ] == ['http-post.1', 'http-post.2']
+        hashes = [event for event in events if event.startswith('output.hash.')]
+        assert hashes == [
+            'output.hash.' + str(at + 1) for at in range(len(hashes))
+        ]
+        assert len(hashes) >= 2
+        assert events.index('http-post.2') < events.index('output.hash.2')
+        assert shown == expected
+    else:
+        assert original == expected
 
 
 DECOMPOSED_OUTPUT_REFERENCE = json.loads(
@@ -1113,9 +1179,7 @@ DECOMPOSED_OUTPUT_REFERENCE = json.loads(
 ]
 
 
-@pytest.mark.parametrize('core', [False, True], ids=['original', 'core'])
-@pytest.mark.parametrize('case', list(DECOMPOSED_OUTPUT_REFERENCE))
-def test_native_decomposed_output_owners_and_paid_boundaries(
+def _observe_native_decomposed_output_owners_and_paid_boundaries(
     monkeypatch, core, case
 ):
     from test_t44_decomposition_owners import question as question_for
@@ -1123,6 +1187,15 @@ def test_native_decomposed_output_owners_and_paid_boundaries(
     from sdm_client.result import PredictionResult
 
     monkeypatch.setenv('SDM_CORE_ROUTES', FRAME_PREDICT_ROUTES if core else '')
+    if core:
+
+        def legacy(*args, **kwargs):
+            raise AssertionError(
+                'the core prediction route called legacy SDMClient._prepare'
+            )
+
+        monkeypatch.setattr(SDMClient, '_prepare', legacy)
+    option_effects = OptionEffects()
     expected = copy.deepcopy(DECOMPOSED_OUTPUT_REFERENCE[case])
     if expected['sent']:
         if case.startswith('ranking-'):
@@ -1231,7 +1304,11 @@ def test_native_decomposed_output_owners_and_paid_boundaries(
         warnings.simplefilter('always')
         try:
             ranking = case.startswith('ranking-')
-            question = question_for('ranking' if ranking else 'forecast')
+            question = question_for(
+                'ranking' if ranking else 'forecast',
+                option_effects=option_effects,
+                notices=caught,
+            )
             how = {
                 'indices': [1, 2],
                 'num_context_samples': 3,
@@ -1309,4 +1386,22 @@ def test_native_decomposed_output_owners_and_paid_boundaries(
     if core:
         for warning in record['warnings']:
             warning['message'] = bare(warning['message'])
-    assert record == expected
+    record['option_effects'] = option_effects.snapshot(caught)
+    return record
+
+
+@pytest.mark.parametrize('case', list(DECOMPOSED_OUTPUT_REFERENCE))
+def test_native_decomposed_output_owners_and_paid_boundaries(monkeypatch, case):
+    with monkeypatch.context() as old_route:
+        original = _observe_native_decomposed_output_owners_and_paid_boundaries(
+            old_route, False, case
+        )
+    with monkeypatch.context() as new_route:
+        actual = _observe_native_decomposed_output_owners_and_paid_boundaries(
+            new_route, True, case
+        )
+    assert actual == original
+    shown = copy.deepcopy(original)
+    shown['warnings'] = product_notices(shown)
+    shown.pop('option_effects')
+    assert shown == DECOMPOSED_OUTPUT_REFERENCE[case]
