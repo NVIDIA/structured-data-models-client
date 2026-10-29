@@ -347,13 +347,29 @@ def test_process_control_during_cancellation_is_not_masked(
     assert native.__context__ is original_context
 
 
-def test_refusal_releases_the_owned_run_after_publishing_its_memo(monkeypatch):
+@pytest.mark.parametrize('source_batch', [False, True])
+def test_refusal_releases_the_owned_run_after_publishing_its_memo(
+    monkeypatch, source_batch
+):
     events = []
     handles = []
     error = _native_error()
 
+    class Handle(_Handle):
+        def next(self):
+            control, attached = super().next()
+            if source_batch:
+                value = json.loads(control)
+                for ordinal, request in enumerate(value.get('requests', [])):
+                    request.update(
+                        purpose='source_rows',
+                        partition={'first': 1, 'ordinal': ordinal, 'parts': 2},
+                    )
+                control = json.dumps(value).encode()
+            return control, attached
+
     def start(control, attached):
-        handle = _Handle(events, memo=True)
+        handle = Handle(events, memo=True)
         handles.append(weakref.ref(handle))
         return handle
 
@@ -375,6 +391,11 @@ def test_refusal_releases_the_owned_run_after_publishing_its_memo(monkeypatch):
             {'op': 'materialize', 'provider': {'provider': 'frames'}},
             {},
             provider=provider,
+            source_provider=(
+                lambda requests, keys: run_module.FetchRefused(error)
+            )
+            if source_batch
+            else None,
             state=state,
         )
     assert caught.value is error
