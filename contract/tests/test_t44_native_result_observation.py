@@ -213,3 +213,73 @@ def test_native_semantic_companion_is_complete_and_bound_to_actual_rows(fault):
     core['predicted']['presentation'] = copy.deepcopy(shown)
     with pytest.raises(reader().ObservationError):
         reader().view(core, operations)
+
+
+@pytest.mark.parametrize(
+    'values',
+    [
+        (1.5, -0.0),
+        (float('nan'), float('inf')),
+        (True, False),
+        (1, 'one'),
+        (10**25, -(10**25)),
+    ],
+)
+def test_observed_native_ids_agree_with_complete_rust_written_ids(values):
+    """The old float-key public journey also has a Rust utf8 carrier.
+
+    Rust id_columns retains noninteger/mixed identities in id_as_written;
+    that actual owner and a native presented owner need one semantic view.
+    """
+    import json
+
+    from sdm_api.generated.tfm_api import PredictionItem
+    from sdm_client.result import PredictionResult
+
+    core, operations = actual_observation()
+    actual = reader().view(core, operations)['events'][0]['result']
+    native = copy.deepcopy(actual)
+    native['presentation'] = RUNNER.native_result_snapshot(
+        PredictionResult(
+            model='kumo-relational',
+            request_id='actual',
+            outputs=['prediction'],
+            items=[
+                PredictionItem(row_index=i, id=v) for i, v in enumerate(values)
+            ],
+        )
+    )
+    rust = copy.deepcopy(actual)
+    table = rust['result']
+    names = [column['name'] for column in table['columns']]
+    table['columns'][names.index('id')]['type'] = 'utf8'
+    table['columns'].append({'name': 'id_as_written', 'type': 'utf8'})
+    for row, value in zip(table['rows'], values, strict=True):
+        written = json.dumps(value, ensure_ascii=False, separators=(',', ':'))
+        row[names.index('id')] = {
+            'utf8': value if type(value) is str else written
+        }
+        row.append({'utf8': written})
+    before = copy.deepcopy((native, rust))
+    assert reader().semantic_result(native) == reader().semantic_result(rust)
+    assert (native, rust) == before
+    rust['result']['rows'][0][names.index('id')] = {'utf8': 'another identity'}
+    with pytest.raises(reader().ObservationError, match='written identity'):
+        reader().semantic_result(rust)
+
+
+@pytest.mark.parametrize('written', ['not JSON', '"another identity"'])
+def test_written_identity_owner_cannot_disagree_with_its_actual_carrier(
+    written,
+):
+    core, operations = actual_observation()
+    actual = reader().view(core, operations)['events'][0]['result']
+    table = actual['result']
+    names = [column['name'] for column in table['columns']]
+    table['columns'][names.index('id')]['type'] = 'utf8'
+    table['columns'].append({'name': 'id_as_written', 'type': 'utf8'})
+    for row in table['rows']:
+        row[names.index('id')] = {'utf8': '1.5'}
+        row.append({'utf8': written})
+    with pytest.raises(reader().ObservationError, match='written identity'):
+        reader().semantic_result(actual)
