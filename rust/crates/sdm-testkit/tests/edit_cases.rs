@@ -47,6 +47,100 @@ fn digest(value: &Value) -> String {
     case::sha256(serde_json::to_string(&canonical(value)).unwrap().as_bytes())
 }
 
+/// The original pin did not observe held declaration bits. Check all actual
+/// bits before comparing the independent older fields, including true after
+/// the first accepted meaning edit. Never mutate or rebake the frozen pin.
+fn historical_starts(name: &str, starts: &[Value], edits: bool) -> Result<Value, String> {
+    let accepted = match name {
+        "edit.accepted-meaning-key-links" | "edit.time-column-text" => true,
+        "edit.key-missing-column"
+        | "edit.key-time-column"
+        | "edit.leave-out-the-key"
+        | "edit.link-not-the-key"
+        | "edit.meaning-not-carried"
+        | "edit.meaning-unknown"
+        | "edit.time-column-not-a-time" => false,
+        _ => return Err("unknown historical edit case".into()),
+    };
+    let expected_count = if edits && name == "edit.accepted-meaning-key-links" {
+        4
+    } else if !edits && accepted {
+        2
+    } else {
+        1
+    };
+    if starts.len() != expected_count {
+        return Err("edit start count differs".into());
+    }
+    let mut projected = starts.to_vec();
+    for (at, start) in projected.iter_mut().enumerate() {
+        if !edits && at == 0 {
+            if start["op"] != "describe_source" || start.get("schema").is_some() {
+                return Err("edit source start differs".into());
+            }
+            continue;
+        }
+        if start["op"] != if edits { "edit_schema" } else { "materialize" } {
+            return Err("edit operation differs".into());
+        }
+        let time = if name == "edit.time-column-text" {
+            "day"
+        } else {
+            "ts"
+        };
+        let age_declared = name == "edit.accepted-meaning-key-links" && (!edits || at > 0);
+        let mut expected = BTreeMap::new();
+        for column in ["order_id", "user_id", "price", time] {
+            expected.insert(
+                ("orders".to_owned(), column.to_owned()),
+                (false, column == time),
+            );
+        }
+        for column in ["user_id", "age", "country"] {
+            expected.insert(
+                ("users".to_owned(), column.to_owned()),
+                (false, column == "age" && age_declared),
+            );
+        }
+        let tables = start["schema"]["tables"]
+            .as_array_mut()
+            .ok_or("held-column flags tables")?;
+        for table in tables {
+            let table_name = table["name"]
+                .as_str()
+                .ok_or("held-column flags table name")?
+                .to_owned();
+            let columns = table["columns"]
+                .as_array_mut()
+                .ok_or("held-column flags columns")?;
+            for column in columns {
+                let key = (
+                    table_name.clone(),
+                    column["name"]
+                        .as_str()
+                        .ok_or("held-column flags column name")?
+                        .to_owned(),
+                );
+                let wanted = expected.remove(&key).ok_or("held-column flags inventory")?;
+                if (
+                    column["untyped"].as_bool(),
+                    column["stype_declared"].as_bool(),
+                ) != (Some(wanted.0), Some(wanted.1))
+                {
+                    return Err("held-column flags differ".into());
+                }
+                let members = column.as_object_mut().ok_or("held-column flags object")?;
+                members.remove("untyped");
+                members.remove("stype_declared");
+            }
+        }
+        if !expected.is_empty() {
+            return Err("held-column flags incomplete".into());
+        }
+    }
+    Ok(Value::from(projected))
+}
+
 /// Each edit case, run on this host: what the pin holds of it, by case.
 fn observed() -> BTreeMap<String, Value> {
     let bases = bases::load(&contract().join("bases.yaml")).unwrap();
@@ -70,8 +164,8 @@ fn observed() -> BTreeMap<String, Value> {
         seen.insert(
             loaded.case.id.clone(),
             json!({
-                "inputs": digest(&Value::from(ran.inputs.clone())),
-                "edits": digest(&Value::from(ran.edits.clone())),
+                "inputs": digest(&historical_starts(&loaded.case.id, &ran.inputs, false).unwrap()),
+                "edits": digest(&historical_starts(&loaded.case.id, &ran.edits, true).unwrap()),
                 "error": error,
                 "materialized": ran.materialized.as_ref().map_or(Value::Null, |m| digest(m).into()),
             }),
@@ -211,15 +305,23 @@ fn native_declaration_flags_are_checked_before_the_historical_digest() {
         let mut edits = ran.edits.clone();
         let time = &mut edits[0]["schema"]["tables"][0]["columns"][3];
         match changed {
-            "missing" => { time.as_object_mut().unwrap().remove("stype_declared"); }
+            "missing" => {
+                time.as_object_mut().unwrap().remove("stype_declared");
+            }
             "false" => time["stype_declared"] = json!(false),
             "type" => time["stype_declared"] = json!(1),
             "unexpected" => edits[0]["schema"]["tables"][0]["columns"][0]["untyped"] = json!(true),
-            "later" => edits[1]["schema"]["tables"][1]["columns"][1]["stype_declared"] = json!(false),
+            "later" => {
+                edits[1]["schema"]["tables"][1]["columns"][1]["stype_declared"] = json!(false)
+            }
             _ => unreachable!(),
         }
         let before = edits.clone();
         assert!(historical_starts(name, &edits, true).is_err(), "{changed}");
         assert_eq!(edits, before);
     }
+    let mut changed_operand = ran.edits.clone();
+    changed_operand[0]["edit"]["stype"]["value"] = json!("numerical");
+    let historical = historical_starts(name, &changed_operand, true).unwrap();
+    assert_ne!(digest(&historical), pin()["cases"][name]["edits"]);
 }
