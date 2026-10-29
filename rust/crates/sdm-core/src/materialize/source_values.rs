@@ -325,6 +325,7 @@ impl RetainedMaterializePopulation {
         let source = self.column_binding(table, "*")?.source;
         self.0
             .source
+            .0
             .meaning
             .tables
             .iter()
