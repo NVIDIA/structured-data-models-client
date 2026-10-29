@@ -230,7 +230,19 @@ fn base_regression_s_schema_completes_on_the_pure_rust_host() {
     // E35, approved by the owner on 2026-10-10, the one exclusion of
     // contract/compare-policy.yaml), since each host draws its own;
     // everything else exactly.
+    // Current hosts observe resolved outputs; the historical pin did not.
+    // Check that supplement independently before comparing every common field.
+    assert_eq!(predicted["outputs"], serde_json::json!(["prediction"]));
+    assert_eq!(
+        predicted["body"]["output"]["fields"],
+        serde_json::json!(["prediction"])
+    );
+    assert!(pinned["predicted"].get("outputs").is_none());
     let mut masked = predicted.clone();
+    assert_eq!(
+        masked.as_object_mut().unwrap().remove("outputs"),
+        Some(serde_json::json!(["prediction"]))
+    );
     let id = &mut masked["body"]["metadata"]["request_id"];
     assert!(id.is_string(), "{id}");
     *id = serde_json::json!({"excluded value of type": "string"});

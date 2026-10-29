@@ -944,10 +944,10 @@ fn relationships_given_are_the_schema_s_and_checked() {
     assert!(made.warnings.is_empty(), "{:?}", made.warnings);
 }
 
-/// The warnings the assembly gives are the ones `assemble::WARNINGS` lists,
-/// each code with its variants, and every listed pair is given by some
-/// schema here: what a host words is the list the binding exports
-/// (decision E59(d)), checked by what the assembly does, not by its text.
+/// Every assembly-owned sentence is observed from a real schema here.
+/// Native time conversion has its own Core producer and producer test;
+/// its sentence shares the existing code, not assembly ownership.
+/// Their disjoint inventories exactly cover these warning codes (E59(d)).
 #[test]
 fn every_warning_given_is_listed_and_every_listed_one_is_given() {
     use sdm_schema::infer::{LeftOut, UnreadTimes};
@@ -1196,7 +1196,20 @@ fn every_warning_given_is_listed_and_every_listed_one_is_given() {
         .filter(|s| matches!(s.code(), Code::Warning(code) if codes.contains(&code)))
         .map(|s| s.as_str())
         .collect();
-    assert_eq!(seen, listed);
+    // Produced by materialize::native_source::time_notice and covered by
+    // native_time_conversion_notice_is_completed_data_with_existing_warning_policy
+    // in sdm-core, with full native facts and held-warning fields.
+    let native = BTreeSet::from([Sentence::NativeTimeValuesUnread.as_str()]);
+    assert!(native.is_subset(&listed));
+    assert!(seen.is_disjoint(&native));
+    assert_eq!(
+        seen,
+        listed.difference(&native).copied().collect::<BTreeSet<_>>()
+    );
+    assert_eq!(
+        seen.union(&native).copied().collect::<BTreeSet<_>>(),
+        listed
+    );
 }
 
 /// Once every table is read, the tied key candidates of each table are
