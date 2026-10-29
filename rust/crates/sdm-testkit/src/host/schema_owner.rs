@@ -65,8 +65,8 @@ impl SchemaOwner {
                     let previous = columns
                         .get(column.name.as_str())
                         .ok_or_else(|| anyhow!("the edited schema has no prior column owner"))?;
-                    // SDK edits._store keeps these host flags rather than the
-                    // reset flags in contract34's actual Core answer.
+                    // SDK edits._store retains these existing host flags;
+                    // only the returned declared reference is newly marked.
                     column.untyped = previous.untyped;
                     column.stype_declared = previous.stype_declared;
                     if declared.is_some_and(|reference| {

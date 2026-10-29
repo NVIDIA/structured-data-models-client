@@ -166,7 +166,7 @@ pub fn held(described: &SourceDescription) -> HeldSchema {
                     .columns
                     .iter()
                     .map(|column| HeldColumn {
-                        untyped: false,
+                        untyped: column.untyped,
                         stype_declared: false,
                         name: column.name.clone(),
                         dtype: column.dtype.wire_name().to_owned(),
