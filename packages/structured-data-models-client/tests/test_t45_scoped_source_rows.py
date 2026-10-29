@@ -16,8 +16,7 @@ import pyarrow as pa
 import pytest
 
 from sdm_client._rust.providers.duckdb import DuckDBProvider
-from sdm_client._rust.providers.postgres import PostgresProvider
-from sdm_client._rust.providers.source_rows import ArrowRows, ScalarRows
+from sdm_client._rust.providers.postgres import PostgresProvider, ScalarRows
 
 
 def plan(dialect):
@@ -66,9 +65,9 @@ def test_actual_arrow_native_construction_runs_before_cursor_exit(failure):
     error = ValueError('native source conversion failed')
     try:
         with provider.source_rows(plan('duckdb')) as source:
-            assert type(source) is ArrowRows and source.table is table
+            assert source is table
             events.append('native-source')
-            frame = source.table.to_pandas(types_mapper=pd.ArrowDtype)
+            frame = source.to_pandas(types_mapper=pd.ArrowDtype)
             assert frame['id'].iloc[0] == 2**53 + 1
             if failure:
                 raise error
