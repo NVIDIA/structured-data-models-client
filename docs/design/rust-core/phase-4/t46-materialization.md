@@ -64,7 +64,8 @@ Core binds the context selector to the existing model limit; Python retains only
 An already captured candidate frame survives cap advice, and the selector supplies positions within that frame rather than rereading the caller's potentially edited source afterward.
 An uncapped population returns no replacement take, preserving the existing candidate frame and avoiding another copy.
 It consumes no native index labels and runs no sampling or sorting.
-Missing required label facts, inconsistent extents and duplicate labels are refused rather than replaced with source-row ordering.
+Missing required label facts and inconsistent extents retain the invalid-message protocol refusal rather than falling back to source-row ordering.
+Complete duplicate labels describe an unfinished native sorting family, so Core selects the existing H17 materialization refusal and Python presents that selected development boundary through RouteError.
 The Rust host exercises the same public typed selection product exported through the composition root and host layer.
 No new serialized message or opaque continuation is introduced by these owned primitive values.
 

@@ -180,12 +180,18 @@ def materialize(
             candidates if positions is None else candidates.iloc[positions]
         )
     except _native.CoreError as error:
-        errors.raise_from_core(
-            error.control,
-            error.attachments,
-            internal_context=error,
-            presentation='frame_constructor',
-        )
+        try:
+            errors.raise_from_core(
+                error.control,
+                error.attachments,
+                internal_context=error,
+                presentation='frame_constructor',
+            )
+        except StructuredDataError as selected_error:
+            # Only the core-selected development boundary maps to routing.
+            if selected_error._sentence == 'not_yet_materialize':
+                raise RouteError(selected_error.message) from None
+            raise
     # Task derivation is the next T4.6 extraction; constructor/prediction reuse
     # their existing core routes when selected, rather than a second wire path.
     return _asking(
