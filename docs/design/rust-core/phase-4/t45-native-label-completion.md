@@ -214,3 +214,13 @@ Every actually observed materialization entry and complete nested product is com
 A coherent actual Task and owner/lifecycle chain may end in an unattributed host failure with no selected Core/native association; retain the complete public failure independently and never invent a Core kind/code or infer authority from incidental exception context.
 Source-first pure, real Host and complete public consumers cover the repaired key presence, actual UInt64 helper producer, zoned/naive conditions, earlier/nested product changes and actual captured-versus-uncaptured native formatter failure.
 Regenerate only applicable canonical outputs through their writers and require two fresh full exact whole-code approvals before any successor SDK execution.
+
+### Reached compiler integration repair
+
+The exact R42 guarded execution passed formatting and stopped at workspace compilation before any wheel or public execution.
+Preserve that failed compiler receipt and its complete all-target diagnostics.
+Import the existing UInt64 Arrow type at its actual frame owner and test readers, and make empty position expectations explicitly usize without changing any values or assertions.
+Apply the existing poison recovery helper to the concrete mutex value type so actual read-identity and lookup-owner locks retain their intended meaning.
+Remove the reported unused import and unnecessary mutability, and retain the entity-key validation at its existing position even though its returned key is no longer consumed there.
+These are integration and quality repairs with no new product, policy, stage, attachment or schema shape.
+The existing failing compiler consumers are the reproduction; preserve their complete behavioral assertions and obtain a fresh exact whole-code pair before successor execution.
