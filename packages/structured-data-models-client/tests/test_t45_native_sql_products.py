@@ -28,47 +28,85 @@ RANGE = {'start': 0, 'stop': 2}
 def _data(kind):
     if kind == 'source':
         return {
-            'source': 'actual source', 'identity': 'source identity', 'owner': 4,
+            'source': 'actual source',
+            'identity': 'source identity',
+            'owner': 4,
             'target': COLUMN,
-            'tables': [{'source': RELATION, 'read': RELATION, 'columns': ['value']}],
+            'tables': [
+                {'source': RELATION, 'read': RELATION, 'columns': ['value']}
+            ],
         }
     if kind == 'population':
         return {
-            'source': 'actual source', 'identity': 'population identity',
-            'owner': 4, 'rows': 2, 'batch_rows': 10, 'target': COLUMN,
+            'source': 'actual source',
+            'identity': 'population identity',
+            'owner': 4,
+            'rows': 2,
+            'batch_rows': 10,
+            'target': COLUMN,
         }
     if kind == 'label_inputs':
         return {
-            'population': 'population identity', 'range': RANGE, 'owner': 4,
-            'source_read': 4, 'target': COLUMN, 'form': 'filtered',
+            'population': 'population identity',
+            'range': RANGE,
+            'owner': 4,
+            'source_read': 4,
+            'target': COLUMN,
+            'form': 'filtered',
             'condition_columns': [COLUMN, COLUMN],
         }
     if kind == 'target_column':
         return {
-            'input': _data('label_inputs'), 'owner': 5,
-            'derivation': 'conditioned', 'rows': 2,
+            'input': _data('label_inputs'),
+            'owner': 5,
+            'derivation': 'conditioned',
+            'rows': 2,
             'condition_values': [
-                {'column': COLUMN, 'converted': {'rows': 6, 'presence': 7, 'encoding': None}},
-                {'column': COLUMN, 'converted': {'rows': 6, 'presence': None, 'encoding': None}},
+                {
+                    'column': COLUMN,
+                    'converted': {'rows': 6, 'presence': 7, 'encoding': None},
+                },
+                {
+                    'column': COLUMN,
+                    'converted': {
+                        'rows': 6,
+                        'presence': None,
+                        'encoding': None,
+                    },
+                },
             ],
         }
     if kind == 'label_groups':
         return {
-            'population': 'population identity', 'range': RANGE, 'owner': 4,
-            'native_target': COLUMN, 'target_encoding': None,
+            'population': 'population identity',
+            'range': RANGE,
+            'owner': 4,
+            'native_target': COLUMN,
+            'target_encoding': None,
         }
     if kind == 'label_batch':
-        return {'population': 'population identity', 'range': RANGE, 'owner': 4, 'complete': True}
+        return {
+            'population': 'population identity',
+            'range': RANGE,
+            'owner': 4,
+            'complete': True,
+        }
     if kind == 'column_meaning':
         return {
-            'source': 'source identity', 'column': COLUMN,
+            'source': 'source identity',
+            'column': COLUMN,
             'input': {'storage': 'cell_rows'},
             'scalar': {'meaning': 'nullable', 'physical': {'type': 'int64'}},
         }
     if kind == 'lookup':
         return {
-            'owner': 4, 'read': 4, 'source': RELATION, 'key': 'event_id',
-            'range': RANGE, 'context_rows': 1, 'scored_rows': 1,
+            'owner': 4,
+            'read': 4,
+            'source': RELATION,
+            'key': 'event_id',
+            'range': RANGE,
+            'context_rows': 1,
+            'scored_rows': 1,
         }
     if kind == 'lookup_rows':
         return {'positions': 4}
@@ -86,7 +124,9 @@ class Handle:
 
 
 def _finished(kind, data=None, owners=None):
-    raw = json.dumps({'value': kind, 'data': _data(kind) if data is None else data}).encode()
+    raw = json.dumps(
+        {'value': kind, 'data': _data(kind) if data is None else data}
+    ).encode()
     handle = Handle({17: raw, **(owners or {})})
     return Finished({'op': 'prepare_materialize', 'value': 17}, handle), handle
 
@@ -94,13 +134,23 @@ def _finished(kind, data=None, owners=None):
 @pytest.mark.parametrize(
     ('kind', 'ids'),
     [
-        ('source', [4]), ('population', [4]), ('label_inputs', [4]),
-        ('target_column', [4, 5, 6, 7]), ('label_groups', [4]),
-        ('label_batch', [4]), ('column_meaning', []), ('lookup_rows', [4]),
+        ('source', [4]),
+        ('population', [4]),
+        ('label_inputs', [4]),
+        ('target_column', [4, 5, 6, 7]),
+        ('label_groups', [4]),
+        ('label_batch', [4]),
+        ('column_meaning', []),
+        ('lookup_rows', [4]),
     ],
 )
-def test_read_and_adopt_take_exact_explicit_owners_once_in_contract_order(kind, ids):
-    for reader in (products.read, lambda finished: products.adopt(finished, kind)):
+def test_read_and_adopt_take_exact_explicit_owners_once_in_contract_order(
+    kind, ids
+):
+    for reader in (
+        products.read,
+        lambda finished: products.adopt(finished, kind),
+    ):
         owners = {number: object() for number in ids}
         finished, handle = _finished(kind, owners=owners)
         product = reader(finished)
@@ -113,7 +163,17 @@ def test_read_and_adopt_take_exact_explicit_owners_once_in_contract_order(kind, 
         assert handle.attachments == {}
 
 
-@pytest.mark.parametrize('kind', ['source', 'population', 'label_inputs', 'label_groups', 'label_batch', 'lookup'])
+@pytest.mark.parametrize(
+    'kind',
+    [
+        'source',
+        'population',
+        'label_inputs',
+        'label_groups',
+        'label_batch',
+        'lookup',
+    ],
+)
 def test_bind_rewrites_only_owner_and_preserves_run_local_read_numbers(kind):
     data = _data(kind)
     before = copy.deepcopy(data)
@@ -145,7 +205,12 @@ def test_target_bind_keeps_aliases_and_rebinds_each_named_nested_slot_only():
         {'rows': 4, 'presence': 5, 'encoding': None},
         {'rows': 4, 'presence': None, 'encoding': None},
     ]
-    assert bindings.attachments == {2: owners[4], 3: owners[5], 4: owners[6], 5: owners[7]}
+    assert bindings.attachments == {
+        2: owners[4],
+        3: owners[5],
+        4: owners[6],
+        5: owners[7],
+    }
     assert data == before
     assert product.owners == owners
 
@@ -153,20 +218,29 @@ def test_target_bind_keeps_aliases_and_rebinds_each_named_nested_slot_only():
 def test_meaning_has_no_owner_and_positions_are_an_explicit_arrow_owner_slot():
     bindings = Bindings()
     meaning = _data('column_meaning')
-    assert products.bind(Product('column_meaning', meaning, {}), bindings) == meaning
+    assert (
+        products.bind(Product('column_meaning', meaning, {}), bindings)
+        == meaning
+    )
     assert bindings.attachments == {}
     actual = object()
-    assert products.bind(Product('lookup_rows', {'positions': 4}, {4: actual}), bindings) == {'positions': 2}
+    assert products.bind(
+        Product('lookup_rows', {'positions': 4}, {4: actual}), bindings
+    ) == {'positions': 2}
     assert bindings.attachments == {2: actual}
 
 
 @pytest.mark.parametrize('kind', ['ordinary', 'forecast', 'batches', 'ranking'])
-def test_final_request_reads_nested_materialized_once_without_consuming_state_attachments(kind):
+def test_final_request_reads_nested_materialized_once_without_consuming_state_attachments(
+    kind,
+):
     nested = _materialized(kind)
     before = copy.deepcopy(nested)
     for reader in (products.read, products.request):
         payload = object()
-        finished, handle = _finished('request', nested, {11: payload, 12: b'query'})
+        finished, handle = _finished(
+            'request', nested, {11: payload, 12: b'query'}
+        )
         actual = reader(finished)
         assert actual == results.Gathered.from_contract(before)
         assert handle.takes == [17]
@@ -186,7 +260,10 @@ def test_task_dispatch_handles_source_and_request_as_actual_single_pass_alternat
     assert request_handle.takes == [17]
 
 
-@pytest.mark.parametrize('reader', [lambda finished: products.adopt(finished, 'population'), products.request])
+@pytest.mark.parametrize(
+    'reader',
+    [lambda finished: products.adopt(finished, 'population'), products.request],
+)
 def test_wrong_expected_tag_is_refused_before_owner_takes(reader):
     owner = object()
     finished, handle = _finished('source', owners={4: owner})
@@ -205,18 +282,46 @@ def test_wrong_operation_is_refused_before_any_attachment_read():
     assert handle.takes == []
 
 
-@pytest.mark.parametrize('raw', [b'broken JSON', b'[]', b'{"value":"source"}', b'{"value":"source","data":null}', b'{"value":"source","data":{},"extra":1}', b'{"value":"unknown","data":{"owner":4}}', b'{"value":"lookup","data":{"owner":4}}'])
+@pytest.mark.parametrize(
+    'raw',
+    [
+        b'broken JSON',
+        b'[]',
+        b'{"value":"source"}',
+        b'{"value":"source","data":null}',
+        b'{"value":"source","data":{},"extra":1}',
+        b'{"value":"unknown","data":{"owner":4}}',
+        b'{"value":"lookup","data":{"owner":4}}',
+    ],
+)
 def test_malformed_or_unknown_envelopes_never_take_named_owners(raw):
     owner = object()
     handle = Handle({17: raw, 4: owner})
     with pytest.raises(CodecError):
-        products.read(Finished({'op': 'prepare_materialize', 'value': 17}, handle))
+        products.read(
+            Finished({'op': 'prepare_materialize', 'value': 17}, handle)
+        )
     assert handle.takes == [17]
     assert handle.attachments == {4: owner}
 
 
-@pytest.mark.parametrize('malformed', ['missing', 'extra', 'bool_owner', 'negative', 'oversized', 'bad_input', 'bad_condition', 'bad_presence', 'json_owner'])
-def test_complete_product_structure_is_validated_before_taking_any_owner(malformed):
+@pytest.mark.parametrize(
+    'malformed',
+    [
+        'missing',
+        'extra',
+        'bool_owner',
+        'negative',
+        'oversized',
+        'bad_input',
+        'bad_condition',
+        'bad_presence',
+        'json_owner',
+    ],
+)
+def test_complete_product_structure_is_validated_before_taking_any_owner(
+    malformed,
+):
     data = copy.deepcopy(_data('target_column'))
     if malformed == 'missing':
         del data['rows']
@@ -244,7 +349,9 @@ def test_complete_product_structure_is_validated_before_taking_any_owner(malform
     assert handle.attachments == owners
 
 
-@pytest.mark.parametrize('change', ['unknown', 'missing_owner', 'extra_owner', 'bad_shape'])
+@pytest.mark.parametrize(
+    'change', ['unknown', 'missing_owner', 'extra_owner', 'bad_shape']
+)
 def test_invalid_bind_does_not_partially_publish_attachments(change):
     kind, data, owners = 'source', copy.deepcopy(_data('source')), {4: object()}
     if change == 'unknown':
