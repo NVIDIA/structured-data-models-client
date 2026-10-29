@@ -35,7 +35,7 @@ use std::sync::Arc;
 use duckdb::arrow::array::{ArrayRef, RecordBatch};
 use duckdb::arrow::compute::concat_batches;
 use duckdb::arrow::datatypes::{Field, Schema};
-use sdm_contract::data::{AttachmentId, Dialect, FetchPlan, KeySet, ProviderChoice, SqlParam};
+use sdm_contract::data::{AttachmentId, Dialect, FetchPlan, ProviderChoice};
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::ops::{
     DescribeSource, Dtype, EditSchema, ForecastStep, GivenCandidate, HeldSchema, Materialize,
@@ -978,26 +978,19 @@ fn drive(
                     if let Some(purpose) = step.purpose {
                         fetched["purpose"] = json!(purpose);
                     }
-                    observed.fetches.push(fetched);
                     // The key sets the step names: a SQL plan's parameters,
                     // or, for a host provider, the request's own.
-                    let sets: Vec<&KeySet> = match &step.plan {
-                        FetchPlan::Sql { statements, .. } => statements
-                            .iter()
-                            .flat_map(|s| &s.params)
-                            .filter_map(|param| match param {
-                                SqlParam::KeySet { keys, .. } => Some(keys),
-                                SqlParam::Text { .. } => None,
-                                SqlParam::Value { .. } => None,
-                            })
+                    let sets: Vec<AttachmentId> = match &step.plan {
+                        FetchPlan::Sql { .. } => step.plan.key_sets(),
+                        FetchPlan::Host { .. } => Memory::key_sets(&step.request)
+                            .into_iter()
+                            .map(|set| set.attachment)
                             .collect(),
-                        FetchPlan::Host { .. } => Memory::key_sets(&step.request),
                     };
                     let mut keys = BTreeMap::new();
                     for set in sets {
-                        if let Entry::Vacant(entry) = keys.entry(set.attachment) {
-                            let Ok(Some(Attachment::Arrow(data))) =
-                                handle.take_attachment(set.attachment)
+                        if let Entry::Vacant(entry) = keys.entry(set) {
+                            let Ok(Some(Attachment::Arrow(data))) = handle.take_attachment(set)
                             else {
                                 bail!("{}: a key set is not attached", case.id);
                             };
@@ -1007,6 +1000,12 @@ fn drive(
                             });
                         }
                     }
+                    fetched["bindings"] = crate::fetch_bindings::observe(
+                        step,
+                        observed.operations.len().saturating_sub(1),
+                        &keys,
+                    )?;
+                    observed.fetches.push(fetched);
                     let answered = match source {
                         Source::Duck(connection) => {
                             duck::answer_logged(connection, step, &keys, log)
@@ -1015,7 +1014,11 @@ fn drive(
                         Source::Replay {
                             answers: replay, ..
                         } => {
-                            let replayed = replay.answer(step)?;
+                            let replayed = replay.answer_bound(
+                                step,
+                                observed.operations.len().saturating_sub(1),
+                                &keys,
+                            )?;
                             log_replayed(log, &replayed);
                             replayed.answer
                         }

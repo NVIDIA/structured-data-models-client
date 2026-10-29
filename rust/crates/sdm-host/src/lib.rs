@@ -13,6 +13,8 @@
 pub mod admission;
 pub mod codec;
 mod extensions;
+#[cfg(feature = "test-ops")]
+mod fetch_bindings;
 pub mod frame_constructors;
 mod frames;
 mod gathered_entities;
@@ -22,11 +24,13 @@ pub mod zones;
 
 pub use admission::{OFFSET_CAPACITY, admit, admit_from, admit_with_capacity, admitted_type};
 pub use codec::{CONTROL_CAP, Outgoing, decode, encode, read, write, write_error};
+#[cfg(feature = "test-ops")]
+pub use fetch_bindings::{fetch_binding_schemas, fetch_plan_witness};
 pub use frames::detach as detach_frame;
 pub use gathered_entities::gathered_entity_bytes;
-pub use sdm_core::gathered_entity_text;
 pub use local_zone::{LOCALTIME, ZoneFiles, local_zone};
 pub use runs::{Failure, HostRun, Unreadable, Unreadables, contain, is_posix_zone};
+pub use sdm_core::gathered_entity_text;
 /// The types a binding hands across, so a binding depends on `sdm-host`
 /// and on `sdm-contract` for types, never on `sdm-core` (decision E21);
 /// `CompositionRoot` too, so a host composes its own data layer

@@ -290,7 +290,7 @@
             "type": "object",
             "additionalProperties": false,
             "required": ["request", "plan"],
-            "properties": {"request": {"type": "object"}, "plan": {"type": "object"}, "purpose": {"enum": ["locate", "describe_result", "source_rows"]}}
+            "properties": {"request": {"type": "object"}, "plan": {"type": "object"}, "purpose": {"enum": ["locate", "describe_result", "source_rows"]}, "bindings": {"$ref": "#/$defs/fetchBindingObservation"}}
           }
         },
         "accepted": {"type": ["boolean", "null"]},
@@ -442,6 +442,55 @@
     }
   },
   "$defs": {
+    "fetchBindingObservation": {
+      "description": "Actual issuing Run and fetch, bound KeySet or Text Arrow owners, and an optional independently rendered SQL-plan witness. No removed original seed buffer is reconstructed.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["available", "run", "fetch", "owners", "witness"],
+      "properties": {
+        "available": {"type": "boolean"},
+        "run": {"type": "integer", "minimum": 0},
+        "fetch": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+        "owners": {"type": "array", "items": {"$ref": "#/$defs/fetchBoundOwner"}},
+        "witness": {"anyOf": [{"$ref": "#/$defs/fetchPlanWitness"}, {"type": "null"}]}
+      },
+      "allOf": [{"if": {"properties": {"available": {"const": false}}}, "then": {"properties": {"owners": {"maxItems": 0}, "witness": {"type": "null"}}}}]
+    },
+    "fetchBoundOwner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["attachment", "fields", "metadata", "rows", "values"],
+      "properties": {
+        "attachment": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "fields": {"type": "array", "items": {"$ref": "#/$defs/fetchBoundField"}},
+        "metadata": {"type": "object", "additionalProperties": {"type": "string"}},
+        "rows": {"type": "integer", "minimum": 0},
+        "values": {"$ref": "#/$defs/values"}
+      }
+    },
+    "fetchBoundField": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type", "nullable"],
+      "properties": {
+        "name": {"type": "string"},
+        "type": {"type": "object"},
+        "nullable": {"type": "boolean"},
+        "metadata": {"type": "object", "additionalProperties": {"type": "string"}}
+      }
+    },
+    "fetchPlanWitness": {
+      "description": "Test-only native renderer output for an actual complete SQLite or DuckDB KeySet plan. Bound Text, chunk and projected plans have no invented unbound witness.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["issued_request", "issued_plan", "canonical_request", "canonical_plan"],
+      "properties": {
+        "issued_request": {"type": "object"},
+        "issued_plan": {"type": "object"},
+        "canonical_request": {"type": "object"},
+        "canonical_plan": {"type": "object"}
+      }
+    },
     "legacyPredictionResult": {
       "description": "The actual native completion, with each attachment product present only when the host actually took it.",
       "type": [

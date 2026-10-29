@@ -1261,18 +1261,46 @@ jobs:
       # environment holding that build alone, which the kit's runner
       # (contract/runners/provider_kit.py) runs under (SDM_KIT_PYTHON)
       # when the shipped build it starts on has no test-only operations;
-      # every other step runs the shipped build.
+      # Production tests and gates keep the shipped build. Separate bound-owner
+      # observations below use this exact-source build's test-only renderer.
       - &contract-kit-wheel
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: native-wheel-test-ops
           path: native-test-ops
       - &contract-kit-python
-        name: The test-ops build, for the provider kit
+        name: The test-ops build, for the provider kit and bound-owner observations
         run: |
           python -m venv --system-site-packages "$RUNNER_TEMP/kit"
           "$RUNNER_TEMP/kit/bin/pip" install --quiet --no-deps --ignore-installed "$(ls native-test-ops/*.whl)"
           "$RUNNER_TEMP/kit/bin/python" -I -c 'import sdm_client._native as n; assert n.TEST_OPS'
+          python - <<'EOF'
+          import json, os, pathlib, subprocess, sys
+          observer = pathlib.Path(os.environ['RUNNER_TEMP']) / 'kit/bin/python'
+          code = '''import hashlib, json, pathlib
+          import numpy, pandas, pyarrow, sdm_client
+          from sdm_client import _native
+          root = pathlib.Path(sdm_client.__file__).parent
+          print(json.dumps({'test_ops':_native.TEST_OPS,'contract':_native.CONTRACT_VERSION,
+              'cell':[numpy.__version__,pandas.__version__,pyarrow.__version__],
+              'python':{str(p.relative_to(root)):hashlib.sha256(p.read_bytes()).hexdigest()
+                        for p in root.rglob('*') if p.suffix in ('.py','.pyi')},
+              'native':hashlib.sha256(pathlib.Path(_native.__file__).read_bytes()).hexdigest(),
+              'witness':hasattr(_native,'fetch_binding_witness')}))'''
+          def identity(python):
+              return json.loads(subprocess.check_output([str(python), '-I', '-c', code], text=True))
+          shipped, observed = identity(sys.executable), identity(observer)
+          assert not shipped['test_ops'] and observed['test_ops'] and observed['witness']
+          assert (shipped['contract'],shipped['cell'],shipped['python']) == (observed['contract'],observed['cell'],observed['python'])
+          head = subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+          for directory, actual in (('native',shipped),('native-test-ops',observed)):
+              [sidecar] = pathlib.Path(directory).glob('*.whl.json')
+              manifest = json.loads(sidecar.read_text())
+              assert manifest['commit'] == head and manifest['native_sha256'] == actual['native']
+          print(json.dumps({'source':head,'contract':observed['contract'],'cell':observed['cell'],
+                            'shipped_native':shipped['native'],'observer_native':observed['native'],
+                            'client_python_equal':True,'observer_test_ops':True}))
+          EOF
           echo "SDM_KIT_PYTHON=$RUNNER_TEMP/kit/bin/python" >> "$GITHUB_ENV"
       # In parallel, each test file on one worker so its module fixtures are
       # built once; the results match a serial run's, test by test. The
@@ -1337,7 +1365,7 @@ jobs:
         name: python-core's observations for the cross-host comparison
         run: |
           mkdir -p cross-host
-          python -I contract/runners/run_python.py --mode python-core \
+          "$SDM_KIT_PYTHON" -I contract/runners/run_python.py --mode python-core \
             --out cross-host/python-core.jsonl contract/cases
       - if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -1617,11 +1645,28 @@ jobs:
       - &contract-kit
         name: The provider kit on this database's Python provider
         run: python -m pytest contract/tests/test_t25_provider_kit.py -q -k "$DATABASE"
+      # The production observation above remains the reference gate. These
+      # additional observations carry actual bound-owner evidence for replay
+      # and cross-host comparison, using the verified exact-source interpreter.
+      - &contract-bound-observations
+        name: Actual bound seed owners for cross-host comparison and replay
+        run: |
+          mkdir -p bound-observations
+          record=()
+          if [ "$DATABASE" = postgres ]; then record=(--record-fetches bound-observations/fetches.jsonl); fi
+          "$SDM_KIT_PYTHON" -I contract/runners/run_python.py --mode python-core --database "$DATABASE" \
+            ${record[@]+"${record[@]}"} --out bound-observations/python-core.jsonl contract/cases
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: observations-python-core-production-sqlite
+          path: database-observations/python-core.jsonl
+          if-no-files-found: error
       - if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: observations-python-core-sqlite
-          path: database-observations/python-core.jsonl
+          path: bound-observations/python-core.jsonl
           if-no-files-found: error
 
   contract-python-ref-pandas3-postgres:
@@ -1671,13 +1716,22 @@ jobs:
       - *contract-kit-python
       - *contract-kit
       - *contract-database
+      - *contract-bound-observations
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: observations-python-core-production-postgres
+          path: |
+            database-observations/python-core.jsonl
+            database-observations/fetches.jsonl
+          if-no-files-found: error
       - if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: observations-python-core-postgres
           path: |
-            database-observations/python-core.jsonl
-            database-observations/fetches.jsonl
+            bound-observations/python-core.jsonl
+            bound-observations/fetches.jsonl
           if-no-files-found: error
 
   contract-python-dbr17-pandas2-sqlite:

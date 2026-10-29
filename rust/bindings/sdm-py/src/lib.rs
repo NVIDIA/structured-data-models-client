@@ -43,6 +43,8 @@ use sdm_host::{
     read,
 };
 
+#[cfg(feature = "test-ops")]
+mod fetch_bindings;
 mod frame_advice;
 mod frame_keys;
 mod frame_objects;
@@ -974,6 +976,11 @@ impl Run {
 
 #[pymodule]
 fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    #[cfg(feature = "test-ops")]
+    module.add_function(wrap_pyfunction!(
+        fetch_bindings::fetch_binding_witness,
+        module
+    )?)?;
     let py = module.py();
     module.add("CONTRACT_VERSION", CONTRACT_VERSION)?;
     module.add("TEST_OPS", cfg!(feature = "test-ops"))?;

@@ -790,10 +790,23 @@ def _materializations(
                         for key in ('request', 'plan', 'purpose')
                         if key in fetched
                     }
+                    global_fetch = core['fetches'][position]
                     require(
-                        core['fetches'][position] == actual,
+                        {
+                            key: value
+                            for key, value in global_fetch.items()
+                            if key != 'bindings'
+                        }
+                        == actual,
                         'materialization fetch differs from its actual global trace',
                     )
+                    binding = global_fetch.get('bindings')
+                    if binding is not None:
+                        require(
+                            binding['run'] == run
+                            and binding['fetch'] == fetched['id'],
+                            'materialization bindings name another issuing Run or fetch',
+                        )
                     if fetched.get('purpose') in (
                         'source_rows',
                         'describe_result',
@@ -803,6 +816,8 @@ def _materializations(
                             for key, value in actual.items()
                             if key != 'purpose'
                         }
+                        if binding is not None:
+                            fetches[position]['bindings'] = binding
                 cursor += len(issued)
             require(
                 cursor == len(record['fetches']),

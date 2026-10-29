@@ -14,7 +14,7 @@ publish.workspace = true
 
 [dependencies]
 sdm-contract = { path = "../sdm-contract" }
-sdm-host = { path = "../sdm-host" }
+sdm-host = { path = "../sdm-host", features = ["test-ops"] }
 anyhow.workspace = true
 # The non-SQL test provider (T2.7) answers from in-memory Arrow tables:
 # selecting, ordering and grouping their rows.

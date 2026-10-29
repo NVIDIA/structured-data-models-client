@@ -468,6 +468,16 @@ def _core_field(field: str, value: Any) -> Any:
     ]
 
 
+def _core_fields_agree(field: str, left: Any, right: Any) -> bool:
+    if field != 'fetches':
+        return _core_field(field, left) == _core_field(field, right)
+    reader = _runner()._sibling('fetch_bindings')
+    try:
+        return reader.agree(left, right)
+    except (reader.BindingError, KeyError, TypeError, ValueError):
+        return False
+
+
 class Report:
     r"""Differences by rule: a gate's is a failure, a diagnostic rule's a
     note; a difference with no rule (the files, a runner failure) always
@@ -1401,7 +1411,7 @@ def _core_agree(
     _prediction_events_agree(report, where, python_view, rust_view)
     _materialization_events_agree(report, where, python_view, rust_view)
     for field in ('inputs', 'fetches', 'described', 'materialized'):
-        if _core_field(field, mine[field]) != _core_field(field, theirs[field]):
+        if not _core_fields_agree(field, mine[field], theirs[field]):
             _differ(
                 report,
                 where,
@@ -1530,7 +1540,7 @@ def _core_agree_shared(
         if op in shared:
             held[field] = (mine[field], theirs[field])
     for field, (a, b) in held.items():
-        if _core_field(field, a) != _core_field(field, b):
+        if not _core_fields_agree(field, a, b):
             _differ(
                 report,
                 where,

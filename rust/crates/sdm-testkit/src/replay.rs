@@ -33,9 +33,11 @@
 //! record of what ran is python-core's, each result its own read of the
 //! answer replayed.
 //!
-//! The key sets a plan binds are not compared: they are the core's own,
-//! made from the answers replayed before them, and the plan names each by
-//! its schema, which is compared.
+//! Older recordings compare request and plan attachments exactly.
+//! New recordings additionally retain actual bound KeySet or Text owners,
+//! including their complete schema and ordered values, so a local attachment
+//! name may differ only after those actual contents agree.
+//! The removed original seed Arrow is never reconstructed from the request.
 //!
 //! The file is JSON Lines, one line per case, `{"format": "sdm-replay/1",
 //! "case": <key>, "fetches": [{"request", "plan", "statements", "data" |
@@ -46,7 +48,7 @@
 //! paired with the raw fetches. Materialize descriptions and predict
 //! states are never recorded as inputs: this host builds its own (E50).
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
 use std::io::Cursor;
 use std::path::Path;
@@ -85,6 +87,10 @@ struct Fetch {
     plan: Value,
     statements: Vec<String>,
     #[serde(default)]
+    bindings: Option<Value>,
+    #[serde(default, rename = "purpose")]
+    _purpose: Option<Value>,
+    #[serde(default)]
     data: Option<String>,
     #[serde(default)]
     error: Option<ProviderError>,
@@ -96,6 +102,7 @@ struct Recorded {
     request: Value,
     plan: Value,
     statements: Vec<String>,
+    bindings: Option<Value>,
     answer: Answer,
 }
 
@@ -150,6 +157,7 @@ impl Recording {
                     request: fetch.request,
                     plan: fetch.plan,
                     statements: fetch.statements,
+                    bindings: fetch.bindings,
                     answer,
                 });
             }
@@ -180,6 +188,8 @@ impl Recording {
             fetches: &recorded.fetches,
             next: Cell::new(0),
             past_the_end: false,
+            actual_bindings: RefCell::new(crate::fetch_bindings::State::default()),
+            recorded_bindings: RefCell::new(crate::fetch_bindings::State::default()),
         })
     }
 
@@ -225,6 +235,8 @@ pub struct Replay<'a> {
     fetches: &'a [Recorded],
     next: Cell<usize>,
     past_the_end: bool,
+    actual_bindings: RefCell<crate::fetch_bindings::State>,
+    recorded_bindings: RefCell<crate::fetch_bindings::State>,
 }
 
 impl Replay<'_> {
@@ -244,11 +256,27 @@ impl Replay<'_> {
     /// error recorded; a fetch other than the one recorded is this host's
     /// failure.
     pub fn answer(&self, step: &FetchStep) -> Result<Replayed<'_>> {
+        self.answer_checked(step, None)
+    }
+
+    /// New recordings prove the actual bound owners before local-ID
+    /// correspondence. Older recordings still require exact request/plan IDs.
+    pub fn answer_bound(
+        &self,
+        step: &FetchStep,
+        run: usize,
+        keys: &BTreeMap<sdm_contract::data::AttachmentId, Fetched>,
+    ) -> Result<Replayed<'_>> {
+        self.answer_checked(step, Some(crate::fetch_bindings::observe(step, run, keys)?))
+    }
+
+    fn answer_checked(&self, step: &FetchStep, actual: Option<Value>) -> Result<Replayed<'_>> {
         let position = self.next.get();
         let Some(Recorded {
             request,
             plan,
             statements,
+            bindings,
             answer,
         }) = self.fetches.get(position)
         else {
@@ -278,9 +306,19 @@ impl Replay<'_> {
             }
             .into());
         };
-        if serde_json::to_value(&step.request)? != *request
-            || serde_json::to_value(&step.plan)? != *plan
-        {
+        let agrees = match (actual, bindings) {
+            (Some(actual), Some(recorded)) => crate::fetch_bindings::same(
+                &serde_json::json!({"request":step.request,"plan":step.plan,"bindings":actual}),
+                &serde_json::json!({"request":request,"plan":plan,"bindings":recorded}),
+                &mut self.actual_bindings.borrow_mut(),
+                &mut self.recorded_bindings.borrow_mut(),
+            )?,
+            _ => {
+                serde_json::to_value(&step.request)? == *request
+                    && serde_json::to_value(&step.plan)? == *plan
+            }
+        };
+        if !agrees {
             bail!(
                 "{}: the core's fetch {position} is not the one recorded (its request or plan differs): record the case again",
                 self.case
