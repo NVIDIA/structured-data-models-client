@@ -16,6 +16,7 @@ not run still fails, and DuckDB's lines are held to the whole block.
 
 from __future__ import annotations
 
+import copy
 import importlib.util
 import json
 import sys
@@ -42,13 +43,61 @@ def _compare() -> ModuleType:
 
 
 def _observation(operations: list[str]) -> dict[str, Any]:
+    """Finite route evidence, without claiming a completed prediction.
+
+    The catalog fetch uses SQLite's actual Tables request/plan spelling.
+    The route-only materialization has no observed completion product.
+    """
+    case = json.loads(CASE.read_text(encoding='utf-8'))
+    described = {'tables': [], 'links': []}
+    starts = []
+    for op in operations:
+        # The historical Rust host did not journal edit inputs.
+        if op == 'edit_schema':
+            continue
+        start = {'op': op, **copy.deepcopy(case['core'][op])}
+        start['provider']['dialect'] = 'sqlite'
+        if op == 'materialize':
+            start.update(schema=described, query=case['input']['pql'])
+        starts.append(start)
     return {
         'identity': {
             'native_loaded': True,
             'native': {'sha256': '0' * 64},
-            'operations': operations,
+            'operations': list(operations),
         },
-        'core': {},
+        'core': {
+            'inputs': starts,
+            'fetches': [
+                {
+                    'request': {
+                        'request': 'describe',
+                        'tables': [],
+                        'part': 'tables',
+                    },
+                    'plan': {
+                        'plan': 'sql',
+                        'statements': [
+                            {
+                                'dialect': 'sqlite',
+                                'text': "SELECT name FROM sqlite_master WHERE type='table'",
+                                'params': [],
+                            }
+                        ],
+                        'expect': {'expect': 'discover'},
+                    },
+                }
+            ]
+            if 'describe_source' in operations
+            else [],
+            'accepted': None,
+            'described': described if 'describe_source' in operations else None,
+            'materialized': None,
+            'predicted': None,
+            'error': None,
+            'model_calls': [],
+            'legacy_predictions': [],
+        },
     }
 
 
@@ -129,15 +178,12 @@ def test_rust_host_s_refused_edit_is_one_error_by_its_operations() -> None:
         'id': 'decimal.target-regression-collide@sqlite',
         'core': {'describe_source': {}},
     }
-    observation = {
-        'identity': {'operations': ['describe_source', 'edit_schema']},
-        'core': {
-            'described': {'tables': []},
-            'error': {'kind': 'invalid_request', 'code': 'INVALID_REQUEST'},
-            'fetches': [{}],
-        },
-        'outcome': {'result': 'refusal', 'code': 'INVALID_REQUEST'},
+    observation = _observation(['describe_source', 'edit_schema'])
+    observation['core']['error'] = {
+        'kind': 'invalid_request',
+        'code': 'INVALID_REQUEST',
     }
+    observation['outcome'] = {'result': 'refusal', 'code': 'INVALID_REQUEST'}
     report = c.Report()
     c._core_consistent(report, case, 'rust-host', observation, 'sqlite')
     assert report.failures == []
