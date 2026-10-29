@@ -1,0 +1,244 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+"""Single-pass useful SQL products and their explicit attachment handovers.
+
+The closed product structure names every owned attachment.
+Source/query meanings remain core data; this module evaluates no policy.
+Request state attachment owners remain with their original Finished reader.
+"""
+
+from __future__ import annotations
+
+import json
+from typing import Any
+
+from sdm_client._rust import results
+from sdm_client._rust.codec import CodecError
+from sdm_client._rust.native_products import Bindings, Product
+from sdm_client._rust.run import Finished
+
+_FIELDS = {
+    'source': ('source', 'identity', 'owner', 'target', 'tables'),
+    'population': (
+        'source',
+        'identity',
+        'owner',
+        'rows',
+        'batch_rows',
+        'target',
+    ),
+    'label_inputs': (
+        'population',
+        'range',
+        'owner',
+        'target',
+        'form',
+        'condition_columns',
+    ),
+    'target_column': (
+        'input',
+        'owner',
+        'derivation',
+        'rows',
+        'condition_values',
+    ),
+    'label_groups': (
+        'population',
+        'range',
+        'owner',
+        'native_target',
+        'target_encoding',
+    ),
+    'label_batch': ('population', 'range', 'owner', 'complete'),
+    'column_meaning': ('source', 'column', 'input', 'scalar'),
+    'lookup': (
+        'owner',
+        'read',
+        'source',
+        'key',
+        'range',
+        'context_rows',
+        'scored_rows',
+    ),
+    'lookup_rows': ('positions',),
+}
+_OUTPUTS = frozenset(_FIELDS) - {'lookup'}
+_OWNED = frozenset(
+    {
+        'source',
+        'population',
+        'label_inputs',
+        'label_groups',
+        'label_batch',
+        'lookup',
+    }
+)
+
+
+def _object(
+    value: Any, required: tuple[str, ...], optional: tuple[str, ...] = ()
+) -> dict[str, Any]:
+    if not isinstance(value, dict) or not set(required) <= set(value) <= set(
+        required + optional
+    ):
+        raise CodecError('a native SQL product does not hold its closed fields')
+    return value
+
+
+def _attachment(value: Any) -> int:
+    if type(value) is not int or not 0 <= value < 2**32:
+        raise CodecError('a native SQL product names no attachment id')
+    return value
+
+
+def _ids(kind: str, data: dict[str, Any]) -> list[int]:
+    fields = _FIELDS.get(kind)
+    if fields is None:
+        raise CodecError('unknown retained native SQL value')
+    value = _object(
+        data, fields, ('source_read',) if kind == 'label_inputs' else ()
+    )
+    if kind in ('source', 'population'):
+        _object(value['target'], ('source', 'column'))
+    if kind == 'source':
+        if not isinstance(value['tables'], list):
+            raise CodecError('native SQL source tables are not an ordered list')
+        for table in value['tables']:
+            _object(table, ('source', 'read', 'columns'))
+    if kind in ('label_inputs', 'label_groups', 'label_batch', 'lookup'):
+        _object(value['range'], ('start', 'stop'))
+    if kind == 'label_groups' and value['native_target'] is not None:
+        _object(value['native_target'], ('source', 'column'))
+    if kind == 'column_meaning':
+        _object(value['column'], ('source', 'column'))
+        if not isinstance(value['input'], dict) or not isinstance(
+            value['scalar'], dict
+        ):
+            raise CodecError(
+                'native SQL column meaning has no closed input data'
+            )
+    if kind == 'label_inputs':
+        _object(value['target'], ('source', 'column'))
+        columns = value['condition_columns']
+        if not isinstance(columns, list):
+            raise CodecError(
+                'native SQL condition columns are not an ordered list'
+            )
+        for column in columns:
+            _object(column, ('source', 'column'))
+    if kind in _OWNED:
+        return [_attachment(value['owner'])]
+    if kind == 'column_meaning':
+        return []
+    if kind == 'lookup_rows':
+        return [_attachment(value['positions'])]
+    # All fields and attachment slots are validated before any owner is taken.
+    ids = _ids('label_inputs', value['input']) + [_attachment(value['owner'])]
+    conditions = value['condition_values']
+    if not isinstance(conditions, list):
+        raise CodecError(
+            'native SQL completed conditions are not an ordered list'
+        )
+    for condition in conditions:
+        condition = _object(condition, ('column', 'converted'))
+        _object(condition['column'], ('source', 'column'))
+        converted = _object(
+            condition['converted'], ('rows', 'presence', 'encoding')
+        )
+        ids.append(_attachment(converted['rows']))
+        if converted['presence'] is not None:
+            ids.append(_attachment(converted['presence']))
+    return ids
+
+
+def _read(
+    finished: Finished, expected: str | None
+) -> Product | results.Gathered:
+    answer = results.expect(finished.result, results.MaterializePrepared)
+    _attachment(answer.value)
+    raw = finished.take(answer.value)
+    if not isinstance(raw, bytes):
+        raise CodecError('a native SQL product has no JSON bytes')
+    try:
+        value = json.loads(raw)
+    except ValueError as error:
+        raise CodecError('a native SQL product has invalid JSON') from error
+    value = _object(value, ('value', 'data'))
+    kind = value['value']
+    if not isinstance(kind, str) or kind not in _OUTPUTS | {'request'}:
+        raise CodecError('unknown native SQL output value')
+    if expected is not None and kind != expected:
+        raise CodecError('native SQL operation returned another value')
+    data = value['data']
+    if kind == 'request':
+        return results.Gathered.from_contract(data)
+    ids = list(dict.fromkeys(_ids(kind, data)))
+    if answer.value in ids:
+        raise CodecError('a native SQL owner aliases its JSON value attachment')
+    return Product(kind, data, {key: finished.take(key) for key in ids})
+
+
+def read(finished: Finished) -> Product | results.Gathered:
+    """Read the actual Source/Request alternative once, including Task results."""
+    return _read(finished, None)
+
+
+def adopt(finished: Finished, expected: str) -> Product:
+    """Adopt one known useful result, rejecting another tag before owner takes."""
+    if expected not in _OUTPUTS:
+        raise CodecError('unknown native SQL product to adopt')
+    value = _read(finished, expected)
+    if not isinstance(value, Product):
+        raise CodecError(
+            'native SQL operation returned a request instead of data'
+        )
+    return value
+
+
+def request(finished: Finished) -> results.Gathered:
+    """Read the actual nested Materialized without taking payload/query owners."""
+    value = _read(finished, 'request')
+    if not isinstance(value, results.Gathered):
+        raise CodecError(
+            'native SQL operation returned data instead of a request'
+        )
+    return value
+
+
+def bind(product: Product, bindings: Bindings) -> dict[str, Any]:
+    """Rebind only typed slots, with one local binding per original key."""
+    ids = list(dict.fromkeys(_ids(product.kind, product.data)))
+    for key in product.owners:
+        _attachment(key)
+    if set(ids) != set(product.owners):
+        raise CodecError(
+            'native SQL product owners differ from its named slots'
+        )
+    bound = {key: bindings.add(product.owners[key]) for key in ids}
+    data = product.data
+    if product.kind in _OWNED:
+        return {**data, 'owner': bound[data['owner']]}
+    if product.kind == 'column_meaning':
+        return dict(data)
+    if product.kind == 'lookup_rows':
+        return {**data, 'positions': bound[data['positions']]}
+    return {
+        **data,
+        'input': {**data['input'], 'owner': bound[data['input']['owner']]},
+        'owner': bound[data['owner']],
+        'condition_values': [
+            {
+                **condition,
+                'converted': {
+                    **condition['converted'],
+                    'rows': bound[condition['converted']['rows']],
+                    'presence': None
+                    if condition['converted']['presence'] is None
+                    else bound[condition['converted']['presence']],
+                },
+            }
+            for condition in data['condition_values']
+        ],
+    }
