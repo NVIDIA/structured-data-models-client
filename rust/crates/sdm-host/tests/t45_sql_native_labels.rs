@@ -652,7 +652,15 @@ fn native(
         rows: id,
         presence: Some(presence_id),
         encoding: None,
+        times: None,
     }
+}
+
+fn native_times(stages: &mut Stages, values: ArrayRef) -> AttachmentId {
+    let id = AttachmentId(stages.held.keys().map(|id| id.0).max().unwrap() + 1);
+    let rows = RecordBatch::try_from_iter([("time", values)]).unwrap();
+    stages.held.insert(id, Attachment::Arrow(data(rows)));
+    id
 }
 
 #[test]
@@ -693,24 +701,87 @@ fn sql_native_target_and_changed_group_completion_reach_the_actual_request() {
     let source_rows = owner.rows().unwrap().batches[0].clone();
     assert!(source_rows.num_rows() > 1);
     let positions = (0..source_rows.num_rows() as u64).collect::<Vec<_>>();
-    let short = native(
+    let mut short = native(
         &mut stages,
         positions[1..].to_vec(),
         vec![3; positions.len() - 1],
         vec![true; positions.len()],
     );
+    short.times = Some(native_times(
+        &mut stages,
+        Arc::clone(source_rows.column_by_name("time").unwrap()),
+    ));
     assert_eq!(
         stages
             .stage(json!({"stage":"target_column","inputs":inputs,"converted":short}))
             .unwrap_err()["error"]["code"],
         "INVALID_MESSAGE"
     );
-    let converted = native(
+    let fetched_before_time = stages.issued.len();
+    for times in [
+        None,
+        Some(
+            source_rows
+                .column_by_name("time")
+                .unwrap()
+                .slice(1, positions.len() - 1),
+        ),
+        Some(ints(vec![1; positions.len()])),
+    ] {
+        let mut bad = native(
+            &mut stages,
+            positions.clone(),
+            vec![3; positions.len()],
+            vec![true; positions.len()],
+        );
+        bad.times = times.map(|values| native_times(&mut stages, values));
+        assert_eq!(
+            stages
+                .stage(json!({"stage":"target_column","inputs":inputs,"converted":bad}))
+                .unwrap_err()["error"]["code"],
+            "INVALID_MESSAGE"
+        );
+    }
+    assert_eq!(stages.issued.len(), fetched_before_time);
+    let mut missing_times = native(
         &mut stages,
         positions.clone(),
         vec![3; positions.len()],
         vec![true; positions.len()],
     );
+    missing_times.times = Some(native_times(
+        &mut stages,
+        arrow_array::new_null_array(
+            source_rows.column_by_name("time").unwrap().data_type(),
+            positions.len(),
+        ),
+    ));
+    let PreparedMaterializeValue::TargetColumn(changed_time) = stages
+        .stage(json!({"stage":"target_column","inputs":inputs,"converted":missing_times}))
+        .unwrap()
+    else {
+        panic!("changed captured times")
+    };
+    let Attachment::TargetColumn(changed_time) = &stages.held[&changed_time.owner] else {
+        panic!("changed time owner")
+    };
+    assert!(
+        changed_time.selection().unwrap().batches[0]
+            .column(0)
+            .as_boolean()
+            .iter()
+            .all(|value| value == Some(false))
+    );
+    let mut converted = native(
+        &mut stages,
+        positions.clone(),
+        vec![3; positions.len()],
+        vec![true; positions.len()],
+    );
+    converted.times = Some(native_times(
+        &mut stages,
+        Arc::clone(source_rows.column_by_name("time").unwrap()),
+    ));
     let PreparedMaterializeValue::TargetColumn(column) = stages
         .stage(json!({"stage":"target_column","inputs":inputs,"converted":converted}))
         .unwrap()

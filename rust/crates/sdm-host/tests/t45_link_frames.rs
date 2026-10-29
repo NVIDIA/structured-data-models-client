@@ -499,7 +499,18 @@ fn native_target_values(
         rows: AttachmentId(next),
         presence,
         encoding: None,
+        times: None,
     }
+}
+
+fn native_times(stages: &mut FrameStages, values: ArrayRef) -> AttachmentId {
+    let id = AttachmentId(stages.held.keys().map(|id| id.0).max().unwrap() + 1);
+    let rows = RecordBatch::try_from_iter([("time", values)]).unwrap();
+    stages.held.insert(
+        id,
+        Attachment::Arrow(ArrowData::new(rows.schema(), vec![rows])),
+    );
+    id
 }
 
 #[test]
@@ -543,23 +554,35 @@ fn completed_native_target_rows_and_occurrences_reach_the_real_link_payload() {
                     present.pop();
                 }
             }
-            let converted = native_target_values(
+            let mut converted = native_target_values(
                 &mut stages,
                 &selected,
                 vec![3; selected.len()],
                 Some(present),
             );
+            if !filtered {
+                converted.times = Some(native_times(
+                    &mut stages,
+                    Arc::clone(source.column_by_name("time").unwrap()),
+                ));
+            }
             let error = stages
                 .stage(json!({"stage":"target_column","inputs":inputs,"converted":converted}))
                 .expect_err("incomplete native column accepted");
             assert_eq!(error["error"]["code"], "INVALID_MESSAGE");
         }
-        let converted = native_target_values(
+        let mut converted = native_target_values(
             &mut stages,
             &positions,
             vec![3; positions.len()],
             Some(vec![true; positions.len()]),
         );
+        if !filtered {
+            converted.times = Some(native_times(
+                &mut stages,
+                Arc::clone(source.column_by_name("time").unwrap()),
+            ));
+        }
         let PreparedFrameValue::TargetColumn(mut column) = stages
             .stage(json!({"stage":"target_column","inputs":inputs,"converted":converted}))
             .unwrap()
@@ -602,8 +625,12 @@ fn completed_native_target_rows_and_occurrences_reach_the_real_link_payload() {
                 .iter()
                 .collect::<Vec<_>>();
             assert!(selection.iter().all(|selected| *selected));
-            let converted =
+            let mut converted =
                 native_target_values(&mut stages, &positions, vec![3; positions.len()], None);
+            converted.times = Some(native_times(
+                &mut stages,
+                Arc::clone(source.column_by_name("time").unwrap()),
+            ));
             let PreparedFrameValue::TargetColumn(next) = stages
                 .stage(json!({"stage":"filtered_target","column":column,"converted":converted}))
                 .unwrap()
