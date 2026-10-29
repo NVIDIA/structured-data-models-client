@@ -98,3 +98,51 @@ fn nested_not_and_null_keep_the_existing_truth_and_presence_masks() {
     assert_eq!(expected.values, [false, true]);
     assert_eq!(expected.mask, [false, true]);
 }
+
+#[test]
+fn aggregated_condition_uses_completed_values_at_candidate_extent_not_source_extent() {
+    let target = Shape::Aggregated(Windowed {
+        aggregation: labels::Aggregation::Sum,
+        table: "orders".into(),
+        column: Some("amount".into()),
+        filter: None,
+        start: sdm_engine::time::offset::Offset::of(0, sdm_contract::pql::TimeUnit::Days),
+        end: sdm_engine::time::offset::Offset::of(30, sdm_contract::pql::TimeUnit::Days),
+    });
+    let condition = Shape::Condition {
+        target: Box::new(target),
+        test: Test::Compare(labels::RelOp::Gt, Some(labels::Constant::Int(0))),
+    };
+    let completed = ConditionInputs::default()
+        .complete_target(
+            &condition,
+            labels::Target::Aggregated(labels::Aggregated {
+                values: vec![-2.0, 5.0],
+                present: vec![true, true],
+            }),
+        )
+        .unwrap();
+    assert_eq!(completed.truth().unwrap().values, [false, true]);
+    assert_eq!(completed.completed(), 1);
+    assert!(operand_columns(&condition).is_err());
+}
+
+#[test]
+fn completed_aggregated_left_is_evaluated_before_a_later_operand_can_complete() {
+    let filter = Shape::Both {
+        op: labels::BoolOp::And,
+        left: Box::new(Shape::Condition {
+            target: Box::new(Shape::Column("left".into())),
+            test: Test::Compare(labels::RelOp::Gt, Some(labels::Constant::Int(i128::MAX))),
+        }),
+        right: Box::new(positive("right")),
+    };
+    assert!(
+        ConditionInputs::default()
+            .complete_target(
+                &filter,
+                labels::Target::Column(labels::Column::Int(vec![Some(1)])),
+            )
+            .is_err()
+    );
+}
