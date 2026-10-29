@@ -162,13 +162,24 @@ def _steps(handle, provider, model=None):
 
 
 @pytest.mark.parametrize('warning_failure', [False, True])
+@pytest.mark.parametrize('cancel_failure', [False, True])
 def test_native_failure_cancels_before_reply_or_another_request(
     monkeypatch,
     warning_failure,
+    cancel_failure,
 ):
     events = []
     error = _native_error()
     handle = _Handle(events)
+    original_context = error.__context__
+
+    if cancel_failure:
+
+        def cancel():
+            events.append('cancel')
+            raise _CoreError('cancellation failed')
+
+        monkeypatch.setattr(handle, 'cancel', cancel)
 
     def fail_warning(*args, **kwargs):
         raise error
@@ -196,6 +207,7 @@ def test_native_failure_cancels_before_reply_or_another_request(
     with pytest.raises(_UnreadError) as caught:
         _steps(handle, NativeProvider(), model)
     assert caught.value is error
+    assert error.__context__ is original_context
     assert events == [('fetch', 1), 'cancel']
     assert handle.replies == []
     # No answered/carry metadata is attached to the native exception.
