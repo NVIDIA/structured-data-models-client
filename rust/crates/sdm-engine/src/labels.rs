@@ -562,14 +562,43 @@ pub fn distinct(
     bounds: Bounds<'_>,
     kept: Option<&[bool]>,
 ) -> Result<Labelled, CoreError> {
-    let present = column.present();
-    if present.len() != batch.len()
-        || times.len() != batch.len()
+    let rows = batch.len();
+    if times.len() != rows
         || bounds.ends.len() != examples
         || bounds.starts.is_some_and(|s| s.len() != examples)
-        || kept.is_some_and(|k| k.len() != batch.len())
-        || batch.iter().any(|b| *b >= examples)
+        || kept.is_some_and(|k| k.len() != rows)
     {
+        return Err(CoreError::new(
+            Sentence::Internal,
+            "a link label's rows and windows do not align",
+        ));
+    }
+    distinct_rows(examples, batch, column, |row, at| {
+        kept.is_none_or(|k| k[row])
+            && times[row].is_some_and(|time| {
+                time <= bounds.ends[at] && bounds.starts.is_none_or(|s| time > s[at])
+            })
+    })
+}
+
+/// Stable pair grouping over actual rows already selected by the target's
+/// completed native column/filter/window products. No time values are invented.
+pub fn distinct_selected(
+    examples: usize,
+    batch: &[usize],
+    column: &Column,
+) -> Result<Labelled, CoreError> {
+    distinct_rows(examples, batch, column, |_, _| true)
+}
+
+fn distinct_rows(
+    examples: usize,
+    batch: &[usize],
+    column: &Column,
+    included: impl Fn(usize, usize) -> bool,
+) -> Result<Labelled, CoreError> {
+    let present = column.present();
+    if present.len() != batch.len() || batch.iter().any(|&at| at >= examples) {
         return Err(CoreError::new(
             Sentence::Internal,
             "a link label's rows and windows do not align",
@@ -578,13 +607,7 @@ pub fn distinct(
     let mut seen = vec![std::collections::BTreeSet::new(); examples];
     let mut lists = vec![Vec::new(); examples];
     for (row, &at) in batch.iter().enumerate() {
-        if !present[row] || kept.is_some_and(|k| !k[row]) {
-            continue;
-        }
-        let Some(time) = times[row] else {
-            continue;
-        };
-        if time > bounds.ends[at] || bounds.starts.is_some_and(|s| time <= s[at]) {
+        if !present[row] || !included(row, at) {
             continue;
         }
         let value = match column {

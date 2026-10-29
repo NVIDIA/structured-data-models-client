@@ -45,7 +45,7 @@ fn selected_grouping_preserves_float32_zero_equality_and_nonfinite_missingness()
         panic!("expected actual lists")
     };
     assert_eq!(groups[0].len(), 2);
-    let LinkValue::Float(first) = groups[0][0] else {
+    let LinkValue::Float(first) = &groups[0][0] else {
         panic!("expected float32")
     };
     assert_eq!(first.to_bits(), (-0.0_f32).to_bits());
