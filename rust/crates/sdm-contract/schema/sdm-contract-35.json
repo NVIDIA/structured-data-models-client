@@ -10772,6 +10772,24 @@
             "meaning",
             "physical"
           ]
+        },
+        {
+          "description": "Execute the native cast while preserving the exact typed mathematical input.",
+          "type": "object",
+          "properties": {
+            "physical": {
+              "$ref": "#/$defs/ColumnType"
+            },
+            "meaning": {
+              "type": "string",
+              "const": "exact_decimal"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "meaning",
+            "physical"
+          ]
         }
       ]
     },
