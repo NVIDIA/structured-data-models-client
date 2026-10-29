@@ -40,7 +40,8 @@ pub use sdm_core::{
     native_constructed_dtype, wire_names,
 };
 pub use sdm_core::{
-    TabularContext, TabularIndexSelection, tabular_labelled_rows, tabular_matched_rows,
+    TabularContext, TabularIndexSelection, TabularPopulation, TabularScoringKeys,
+    tabular_labelled_rows,
 };
 pub use zones::{ZoneError, ZoneResolver, ZoneRoot, ZoneSource, session_zone_offset};
 
