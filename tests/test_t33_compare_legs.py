@@ -71,11 +71,55 @@ class Leg:
             reference=None,
             native={'sha256': '0' * 64},
             native_loaded=True,
-            operations=[],
+            operations=['predict'],
         )
-        core['core'] = dict.fromkeys(
-            ('accepted', 'described', 'materialized', 'predicted', 'error')
-        ) | {'inputs': [], 'fetches': []}
+        # Like the independent successful T32 Pair, retain the reference's
+        # actual body/hash while leaving unread internal products unobserved.
+        [received] = core['public']['payloads']
+        payload = copy.deepcopy(received['parsed'])
+        for field in ('model', 'output', 'inference'):
+            payload.pop(field, None)
+        payload['metadata'].pop('request_id')
+        core['core'] = {
+            'inputs': [
+                {
+                    'op': 'predict',
+                    'model': received['parsed']['model'],
+                    'state': {
+                        'version': 1,
+                        'query': case['input']['pql'],
+                        'payload': payload,
+                    },
+                }
+            ],
+            'fetches': [],
+            'accepted': None,
+            'described': None,
+            'materialized': None,
+            'predicted': None,
+            'error': None,
+            'model_calls': [
+                {
+                    'run': 0,
+                    'body': copy.deepcopy(received['parsed']),
+                    'body_sha256': received['sha256'],
+                    'reply': None,
+                    'model_endpoint': None,
+                }
+            ],
+            'legacy_predictions': [
+                {
+                    'run': 0,
+                    'completion': 'unobserved',
+                    'result': None,
+                    'error': None,
+                }
+            ],
+            'capture_capabilities': {
+                'model_replies': False,
+                'native_error_control': False,
+            },
+        }
         self.core = core
         self.observed = tmp / 'python-core.jsonl'
 
