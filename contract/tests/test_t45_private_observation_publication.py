@@ -292,8 +292,8 @@ def test_original_model_bytes_and_received_retries_are_conserved_first(
     original = reader().view(raw['core'], raw['identity']['operations'])
     reader().check_receipts(original['attempts'], raw['public']['payloads'])
     assert prepared.raw_view == original
-    assert prepared.view == RUNNER.Placeheld(NAMES, NAMES.values()).value(
-        original
+    assert logical_serving_json(prepared.view) == logical_serving_json(
+        RUNNER.Placeheld(NAMES, NAMES.values()).value(original)
     )
     assert len(prepared.raw_view['attempts']) == 1
     assert len(prepared.raw['public']['payloads']) == retries
@@ -892,6 +892,36 @@ def ordered_numbers(text):
         parse_float=lambda token: ('float', token),
         object_pairs_hook=lambda pairs: ('members', pairs),
     )
+
+
+def logical_serving_json(value):
+    """Ignore JSON whitespace/escaping only in the known Serving text slot.
+
+    This independent fixture comparison retains exact numeric tokens and
+    ordered duplicate members, without invoking the publication projector.
+    Raw observations, hashes and receipts never pass through this helper.
+    """
+    if type(value) is dict:
+        rows = value.get('dataframe_records')
+        if (
+            set(value) == {'dataframe_records'}
+            and type(rows) is list
+            and len(rows) == 1
+            and type(rows[0]) is dict
+            and set(rows[0]) == {'request_json'}
+            and type(rows[0]['request_json']) is str
+        ):
+            return {
+                'dataframe_records': [
+                    {'request_json': ordered_numbers(rows[0]['request_json'])}
+                ]
+            }
+        return {key: logical_serving_json(item) for key, item in value.items()}
+    if type(value) is list:
+        return [logical_serving_json(item) for item in value]
+    if type(value) is tuple:
+        return tuple(logical_serving_json(item) for item in value)
+    return value
 
 
 def test_logical_serving_json_ignores_only_nested_json_spelling():
