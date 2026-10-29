@@ -50,7 +50,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from _actual_core import checked_operations
+from _actual_core import checked_operations, checked_view
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / 'contract/runners/run_python.py'
@@ -72,19 +72,83 @@ def digest(value: Any) -> str:
 
 
 def agreed(observation: dict[str, Any]) -> dict[str, Any]:
-    r"""What the pin holds of one python-core observation."""
+    r"""Compare actual common materialization meaning to the historical pin.
+
+    Complete current declaration flags are asserted separately before
+    hashing the older fields, which the immutable pin actually observed.
+    """
     core = observation['core']
+    logical = checked_view(observation)
+    name = observation['case']
     error = core['error']
     return {
-        'inputs': digest(core['inputs']),
-        'edits': digest(core.get('edits', [])),
+        'inputs': digest(
+            historical_starts(name, logical['inputs'], edits=False)
+        ),
+        'edits': digest(historical_starts(name, core['edits'], edits=True)),
         'error': None if error is None else error['code'],
         'materialized': (
             None
-            if core['materialized'] is None
-            else digest(core['materialized'])
+            if logical['materialized'] is None
+            else digest(logical['materialized'])
         ),
     }
+
+
+def historical_starts(
+    name: str, starts: list[Any], *, edits: bool
+) -> list[Any]:
+    """Check complete current flags, then compare the older independent data.
+
+    The frozen pin's original nine raw journeys omit these members.
+    Current public journeys retain true for the source's time meaning and
+    for age after its accepted meaning edit.
+    Every other input, edit, order and value remains in the hashed data.
+    """
+    assert name in {path.stem for path in CASES}
+    accepted = name in (
+        'edit.accepted-meaning-key-links',
+        'edit.time-column-text',
+    )
+    expected_count = (
+        4 if edits and name == 'edit.accepted-meaning-key-links' else 1
+    )
+    if not edits:
+        expected_count = 2 if accepted else 1
+    assert len(starts) == expected_count
+    projected = copy.deepcopy(starts)
+    for at, start in enumerate(projected):
+        if not edits and at == 0:
+            assert start['op'] == 'describe_source' and 'schema' not in start
+            continue
+        assert start['op'] == ('edit_schema' if edits else 'materialize')
+        time = 'day' if name == 'edit.time-column-text' else 'ts'
+        age_declared = name == 'edit.accepted-meaning-key-links' and (
+            not edits or at > 0
+        )
+        expected = {
+            ('orders', column): (False, column == time)
+            for column in ('order_id', 'user_id', 'price', time)
+        } | {
+            ('users', column): (False, column == 'age' and age_declared)
+            for column in ('user_id', 'age', 'country')
+        }
+        seen = set()
+        for table in start['schema']['tables']:
+            for column in table['columns']:
+                key = table['name'], column['name']
+                assert key in expected and key not in seen, (
+                    'held-column flags inventory'
+                )
+                seen.add(key)
+                flags = column.get('untyped'), column.get('stype_declared')
+                assert (
+                    all(type(value) is bool for value in flags)
+                    and flags == expected[key]
+                ), 'held-column flags differ'
+                del column['untyped'], column['stype_declared']
+        assert seen == set(expected), 'held-column flags incomplete'
+    return projected
 
 
 def problems(pin: Any, seen: dict[str, dict[str, Any]]) -> list[str]:
@@ -223,10 +287,12 @@ def test_the_pin_check_fails_closed() -> None:
 
 @pytest.mark.parametrize('changed', ['missing', 'false', 'unexpected', 'type'])
 def test_native_flags_are_checked_before_the_historical_pin(
-    observed: dict[str, Any], changed: str,
+    observed: dict[str, Any],
+    changed: str,
 ) -> None:
     name = 'edit.accepted-meaning-key-links'
     original = observed[name]
+    original_before = copy.deepcopy(original)
     assert agreed(original) == json.loads(PINNED.read_text())['cases'][name]
     altered = copy.deepcopy(original)
     columns = altered['core']['edits'][0]['schema']['tables'][0]['columns']
@@ -242,7 +308,7 @@ def test_native_flags_are_checked_before_the_historical_pin(
     with pytest.raises(AssertionError, match='held-column flags'):
         agreed(altered)
     assert altered == before
-    assert original == observed[name]
+    assert original == original_before
 
 
 def test_the_historical_projection_keeps_later_native_edit_flags(
@@ -257,3 +323,17 @@ def test_the_historical_projection_keeps_later_native_edit_flags(
     age['stype_declared'] = False
     with pytest.raises(AssertionError, match='held-column flags'):
         agreed(altered)
+
+
+def test_the_historical_projection_keeps_actual_edit_operands(
+    observed: dict[str, Any],
+) -> None:
+    name = 'edit.accepted-meaning-key-links'
+    altered = copy.deepcopy(observed[name])
+    altered['core']['edits'][0]['edit']['stype']['value'] = 'numerical'
+    seen = {name: agreed(altered)}
+    pin = {
+        'format': FORMAT,
+        'cases': {name: json.loads(PINNED.read_text())['cases'][name]},
+    }
+    assert problems(pin, seen) == [f"{name}: edits is not the pin's"]
