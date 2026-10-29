@@ -136,7 +136,9 @@ def test_completed_lookup_precedes_native_nullable_conversion_and_keeps_full_wid
     answer = adapter(steps, _keys(steps, owner))
     assert isinstance(answer, dict)
     assert answer[7].column_names == [
-        'value', '__kumo_matches__', '__kumo_batch__'
+        'value',
+        '__kumo_matches__',
+        '__kumo_batch__',
     ]
     assert answer[7]['value'].to_pylist() == [2**53 + 1, None]
     assert answer[7]['__kumo_batch__'].to_pylist() == [0, 1]
@@ -399,9 +401,7 @@ def test_timestamp_transport_keeps_raw_ordinals_then_removes_only_helpers():
     assert answer[7]['value'].type == pa.timestamp('us')
     assert answer[7]['value'].cast(pa.int64()).to_pylist() == [2**53 + 1, None]
     assert adapter.tables[7].frame.columns.tolist() == ['value']
-    assert answer[7].column_names == [
-        '__kumo_batch__', 'value', '__kumo_row__'
-    ]
+    assert answer[7].column_names == ['__kumo_batch__', 'value', '__kumo_row__']
     assert answer[7]['__kumo_row__'].to_pylist() == [9, 4]
 
 
@@ -568,26 +568,41 @@ def test_reached_arrow_transport_cast_error_retains_exact_native_owner(
 
 
 def test_replies_preserve_all_actual_helpers_in_original_slots_after_business_conversion():
-    raw = pa.table({
-        '__KUMO_BATCH__': [1, 0],
-        'value': [3, 4],
-        '__KUMO_MATCHES__': [1, 1],
-        '__KUMO_ROW__': [8, 5],
-        '__KUMO_ID__': [12, 9],
-    })
-    adapter = completion.SourceCompletion(Provider({7: raw}, []), _source(), Service())
+    raw = pa.table(
+        {
+            '__KUMO_BATCH__': [1, 0],
+            'value': [3, 4],
+            '__KUMO_MATCHES__': [1, 1],
+            '__KUMO_ROW__': [8, 5],
+            '__KUMO_ID__': [12, 9],
+        }
+    )
+    adapter = completion.SourceCompletion(
+        Provider({7: raw}, []), _source(), Service()
+    )
     steps = _steps()
     reply = adapter(steps, _keys(steps, object()))
     assert isinstance(reply, dict)
-    assert reply[7].column_names == ['__kumo_batch__', 'value', '__kumo_matches__', '__kumo_row__', '__kumo_id__']
+    assert reply[7].column_names == [
+        '__kumo_batch__',
+        'value',
+        '__kumo_matches__',
+        '__kumo_row__',
+        '__kumo_id__',
+    ]
     assert reply[7].to_pydict() == {
-        '__kumo_batch__': [1, 0], 'value': [3, 4],
-        '__kumo_matches__': [1, 1], '__kumo_row__': [8, 5], '__kumo_id__': [12, 9],
+        '__kumo_batch__': [1, 0],
+        'value': [3, 4],
+        '__kumo_matches__': [1, 1],
+        '__kumo_row__': [8, 5],
+        '__kumo_id__': [12, 9],
     }
     assert adapter.tables[7].frame.columns.tolist() == ['value']
 
 
-def test_public_request_reuses_actual_early_lookup_and_late_shared_helper_reader(monkeypatch):
+def test_public_request_reuses_actual_early_lookup_and_late_shared_helper_reader(
+    monkeypatch,
+):
     """Controlled native group completion reaches both real Rust lookup sites.
 
     Passing through Rust's already computed group values avoids coupling this
@@ -612,7 +627,9 @@ def test_public_request_reuses_actual_early_lookup_and_late_shared_helper_reader
 
     def prepared(self, value, *args, **kwargs):
         stages.append(value['stage'])
-        return prepare(self, value, *args, **kwargs)
+        result = prepare(self, value, *args, **kwargs)
+        stages.append(value['stage'] + ':done')
+        return result
 
     def counted(self, value, helpers, owner):
         actual = lookup(self, value, helpers, owner)
@@ -641,7 +658,9 @@ def test_public_request_reuses_actual_early_lookup_and_late_shared_helper_reader
         assert actual.payloads
         assert actual.predict_rows == 2
     assert 'lookup_rows' in stages
-    assert stages[-1] == 'request'
+    assert stages[-1] == 'request:done'
     assert early
-    assert any('__kumo_matches__' in helpers.column_names for helpers, _ in early)
+    assert any(
+        '__kumo_matches__' in helpers.column_names for helpers, _ in early
+    )
     assert all(answer.column_names == ['position'] for _, answer in early)
