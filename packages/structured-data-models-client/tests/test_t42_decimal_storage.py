@@ -98,7 +98,9 @@ def test_lossless_native_decimal_mantissa_view(bits, scale):
     # The C stream carries representable typed mantissas, with the original
     # full native descriptor retained separately and no per-cell tree.
     table = pa.table({'value': storage})
-    reader = pa.RecordBatchReader.from_stream(table)
+    reader = pa.RecordBatchReader._import_from_c_capsule(
+        table.__arrow_c_stream__()
+    )
     restored = reader.read_all()['value']
     del original, series, chunks, storage, table, reader, source, view
     gc.collect()
