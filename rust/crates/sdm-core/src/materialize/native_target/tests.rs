@@ -5,6 +5,30 @@
 use super::*;
 
 #[test]
+fn native_timestamp_conditions_reuse_utc_normalization_and_reject_other_families() {
+    let before: ArrayRef = Arc::new(TimestampNanosecondArray::from(vec![Some(0), None, Some(1)]));
+    for zone in ["UTC", "America/New_York"] {
+        let actual: ArrayRef = Arc::new(
+            arrow_array::TimestampMillisecondArray::from(vec![Some(0), None, Some(3_600_000)])
+                .with_timezone(zone),
+        );
+        validate_condition_values(&before, None, &actual, None).unwrap();
+        let labels::Column::Time(values) =
+            native_condition_column(&actual, &[0, 1, 2], None).unwrap()
+        else {
+            panic!("temporal condition")
+        };
+        assert_eq!(values, [Some(0), None, Some(3_600_000_000_000)]);
+    }
+    let wrong: ArrayRef = Arc::new(arrow_array::StringArray::from(vec![
+        Some("2023-01-01"),
+        None,
+        Some("2023-01-02"),
+    ]));
+    assert!(validate_condition_values(&before, None, &wrong, None).is_err());
+}
+
+#[test]
 fn native_column_positions_bind_the_complete_actual_missingness_observation() {
     let present = [true, false, true];
     assert_eq!(column_positions(3, &present, true).unwrap(), [0, 2]);

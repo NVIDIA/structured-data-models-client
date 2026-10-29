@@ -120,9 +120,15 @@ def test_complete_nested_batch_data_remains_observed_even_when_main_payload_is_e
     left = actual_materialization()
     record = left['materialization_preparations'][0]
     terminal = copy.deepcopy(record['value_reads'][0]['parsed'])
-    terminal['data']['state']['batches'] = [
-        {'payload': 13, 'rows': 1, 'request_id': 'request-1'}
-    ]
+    if changed == 'query':
+        terminal['data']['state']['forecast'] = [
+            {'step': 2, 'payload': 13, 'query': 14}
+        ]
+        record['output_reads'].append(_bytes(14, b'"forecast query"'))
+    else:
+        terminal['data']['state']['batches'] = [
+            {'payload': 13, 'rows': 1, 'request_id': 'request-1'}
+        ]
     record['value_reads'] = [_bytes(10, json.dumps(terminal).encode())]
     record['output_reads'].append(_bytes(13, b'{"context":{},"predict":{}}'))
     right = copy.deepcopy(left)
@@ -131,8 +137,8 @@ def test_complete_nested_batch_data_remains_observed_even_when_main_payload_is_e
             13, b'{"context":{"changed":1},"predict":{}}'
         )
     elif changed == 'query':
-        right['materialization_preparations'][0]['output_reads'][1] = _bytes(
-            12, b'"different complete query"'
+        right['materialization_preparations'][0]['output_reads'][2] = _bytes(
+            14, b'"different forecast query"'
         )
     else:
         terminal['data']['state']['batches'][0]['rows'] = 2

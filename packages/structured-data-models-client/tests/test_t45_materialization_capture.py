@@ -12,7 +12,11 @@ from functools import cache
 from pathlib import Path
 
 import pytest
+import pandas as pd
 import test_t45_native_sql_labels as public
+
+from sdm_client import PredictiveQuery, Schema
+from sdm_connectors import DuckDBSource
 
 
 @cache
@@ -92,3 +96,65 @@ def test_public_source_and_native_label_products_have_actual_entry_and_late_read
         )
     finally:
         boundary.close()
+
+
+def _display_failure(monkeypatch, captured):
+    events = []
+    display = RuntimeError('actual native display failed')
+
+    class Unprintable(ValueError):
+        def __str__(self):
+            events.append('display')
+            raise display
+
+    native = Unprintable()
+    actual = pd.Series.astype
+
+    def converted(self, dtype, *args, **kwargs):
+        if type(dtype) is str and dtype == 'int64':
+            events.append('native-int-cast')
+            raise native
+        return actual(self, dtype, *args, **kwargs)
+
+    with monkeypatch.context() as selected, public.connection([]) as db:
+        public.route(selected, True)
+        schema = Schema.from_source(DuckDBSource(db))
+        boundary = runner()._Boundary() if captured else None
+        try:
+            selected.setattr(pd.Series, 'astype', converted)
+            with pytest.raises(RuntimeError) as raised:
+                PredictiveQuery(public.QUERY, schema).materialize(
+                    anchor_time=pd.Timestamp('2023-03-01'), indices=[0, 1]
+                )
+            assert raised.value is display
+            assert (
+                BaseException.__getattribute__(display, '__context__') is native
+            )
+            assert BaseException.__getattribute__(display, '__cause__') is None
+            if boundary is not None:
+                core = boundary.capture.core()
+                view = (
+                    runner()
+                    ._sibling('prediction_observation')
+                    .view(core, boundary.capture.operations)
+                )
+                [entry] = view['materializations']
+                assert entry['native'] and entry['completion'] == 'raised'
+                assert entry['failure'] is None
+                assert view['error'] is None and core['error'] is None
+                assert core['materialization_guards']
+                assert boundary.capture._materialization_owners == {}
+        finally:
+            if boundary is not None:
+                boundary.close()
+    return events
+
+
+def test_actual_native_formatter_failure_is_retained_with_capture_and_without_it(
+    monkeypatch,
+):
+    assert _display_failure(monkeypatch, False) == [
+        'native-int-cast',
+        'display',
+    ]
+    assert _display_failure(monkeypatch, True) == ['native-int-cast', 'display']

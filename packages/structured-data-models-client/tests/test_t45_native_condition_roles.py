@@ -99,3 +99,35 @@ def test_actual_captured_time_owner_remains_authoritative_until_window_selection
     assert old[1]
     assert current[1] == old[1]
     assert current[0] == public._approved_old(old[0], 'ordinary')
+
+
+@pytest.mark.parametrize('role', ['entity', 'target', 'what_if'])
+@pytest.mark.parametrize('kind', ['TIMESTAMP', 'TIMESTAMPTZ'])
+def test_native_timestamp_condition_family_matches_its_complete_original_journey(
+    monkeypatch, role, kind
+):
+    table, column = (
+        ('buys', 'recorded_at') if role == 'target' else ('users', 'created_at')
+    )
+    setup = [
+        f"ALTER TABLE {table} ADD COLUMN {column} {kind} DEFAULT TIMESTAMP '2023-01-01'"
+    ]
+    target = (
+        'buys.item_id WHERE buys.recorded_at != NULL'
+        if role == 'target'
+        else 'buys.item_id'
+    )
+    query = (
+        f'PREDICT LIST_DISTINCT({target}, 0, 30, days) FOR EACH users.user_id'
+    )
+    if role == 'entity':
+        query += ' WHERE users.created_at != NULL'
+    elif role == 'what_if':
+        query += ' ASSUMING users.created_at != NULL'
+    monkeypatch.setattr(public, '_input', lambda case: (setup, query))
+    original = public._observe(monkeypatch, 'ordinary', False)
+    current = public._observe(monkeypatch, 'ordinary', True)
+    assert (
+        original['outcome'] == 'success' or original['stage'] == 'materialize'
+    )
+    assert current == public._approved_old(original, 'ordinary')
