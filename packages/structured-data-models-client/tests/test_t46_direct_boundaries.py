@@ -27,6 +27,21 @@ class ObservationFailure(Exception):
     pass
 
 
+def _assert_callback_advice(events, original, count, native_phase):
+    assert comparable(events) == comparable(original)
+    assert [event['ordinal'] for event in events] == list(
+        range(1, len(events) + 1)
+    )
+    assert all(event['phase'] in ('advice', native_phase) for event in events)
+    assert all(
+        event['filename'] and event['module'] and event['type']
+        for event in events
+    )
+    assert (
+        len([event for event in events if event['phase'] == 'advice']) == count
+    )
+
+
 @pytest.mark.parametrize('changed', ['message', 'type', 'phase', 'order'])
 def test_callback_warning_attribution_keeps_the_complete_native_journal(
     changed,
@@ -134,6 +149,7 @@ def key_boundary(
     initial_repeat=False,
     time=False,
     error_warning=False,
+    warning_phases=False,
 ):
     key = pd.Series([None, *range(1, n)], dtype='Int64')
     if initial_repeat:
@@ -153,6 +169,7 @@ def key_boundary(
             'us'
         )
     record = {'case': f'{api}/{label}', 'events': []}
+    phase = 'advice'
     with warnings.catch_warnings():
         warnings.simplefilter('always')
         if error_warning:
@@ -161,6 +178,7 @@ def key_boundary(
             warnings.simplefilter('error', SDMWarning)
 
         def show(message, category, filename, lineno, file=None, line=None):
+            nonlocal phase
             record['events'].append(
                 observe(
                     lambda: {
@@ -177,6 +195,13 @@ def key_boundary(
                     }
                 )
             )
+            if warning_phases:
+                record['events'][-1].update(
+                    ordinal=len(record['events']),
+                    phase=phase,
+                    module=category.__module__,
+                    filename=filename,
+                )
             event = len(record['events'])
             if change == 'create' and event == 1:
                 context.loc[2, 'user_id'] = 1
@@ -206,7 +231,11 @@ def key_boundary(
             if change == 'chained' and event == 1:
                 context.loc[2, 'user_id'] = 1
             if change == 'chained' and event == 2:
-                predict.drop(columns=['feature'], inplace=True)
+                phase = 'drop'
+                try:
+                    predict.drop(columns=['feature'], inplace=True)
+                finally:
+                    phase = 'advice'
             if change == 'after-repeat' and event == 1:
                 context.loc[2, 'user_id'] = 1
             if change == 'after-repeat' and event == 2:
@@ -1113,7 +1142,13 @@ def test_adoption_warning_effects_precede_later_constructor_guards(
     for core in (False, True):
         monkeypatch.setenv('SDM_CORE_ROUTES', CORE if core else '')
         observed.append(
-            key_boundary('chain', 'request', 'chained', error_warning=as_error)
+            key_boundary(
+                'chain',
+                'request',
+                'chained',
+                error_warning=as_error,
+                warning_phases=True,
+            )
         )
     assert comparable(observed[1]) == comparable(observed[0])
     assert not observed[1]['ok']
@@ -1121,7 +1156,9 @@ def test_adoption_warning_effects_precede_later_constructor_guards(
         assert observed[1]['error']['type'] == 'SDMWarning'
         assert not observed[1]['events']
     else:
-        assert len(observed[1]['events']) == 2
+        _assert_callback_advice(
+            observed[1]['events'], observed[0]['events'], 2, 'drop'
+        )
         assert (
             "missing column(s) ['feature']" in observed[1]['error']['message']
         )
@@ -1269,6 +1306,7 @@ def test_public_predict_run_loop_keeps_selected_causes(
 
 def later_schema_boundary(mode):
     events = []
+    phase = 'advice'
     if mode.startswith('override'):
         left = pd.DataFrame({'code': range(100), 'feature': range(100, 200)})
         left.loc[2, 'code'] = 1
@@ -1291,9 +1329,17 @@ def later_schema_boundary(mode):
         options = {'relationships': []}
 
     def show(message, category, filename, lineno, file=None, line=None):
+        nonlocal phase
         events.append(
             observe(
-                lambda: {'type': category.__name__, 'message': str(message)}
+                lambda: {
+                    'type': category.__name__,
+                    'message': str(message),
+                    'module': category.__module__,
+                    'filename': filename,
+                    'ordinal': len(events) + 1,
+                    'phase': phase,
+                }
             )
         )
         if len(events) == 1:
@@ -1302,7 +1348,11 @@ def later_schema_boundary(mode):
             if mode == 'category-advice-mutates-later':
                 frame['label_b'] = pd.Series(['constant'] * 40, dtype='string')
             if mode == 'date-advice-before-category':
-                frame.drop(columns=['label_b'], inplace=True)
+                phase = 'drop'
+                try:
+                    frame.drop(columns=['label_b'], inplace=True)
+                finally:
+                    phase = 'advice'
 
     with warnings.catch_warnings():
         warnings.simplefilter('always')
@@ -1349,8 +1399,11 @@ def test_schema_reads_after_later_override_and_final_advice(monkeypatch, mode):
         outcomes.append(later_schema_boundary(mode))
     assert comparable(outcomes[1]) == comparable(outcomes[0])
     assert outcomes[1]['ok'] is (mode != 'override-mutates-later')
-    assert len(outcomes[1]['events']) == (
-        2 if mode == 'date-advice-before-category' else 1
+    _assert_callback_advice(
+        outcomes[1]['events'],
+        outcomes[0]['events'],
+        2 if mode == 'date-advice-before-category' else 1,
+        'drop',
     )
 
 

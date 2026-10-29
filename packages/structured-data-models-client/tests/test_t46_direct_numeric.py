@@ -31,6 +31,21 @@ CORE = ','.join(
 )
 
 
+def _assert_constructor_advice(events, original, count):
+    assert events == original
+    assert [event['ordinal'] for event in events] == list(
+        range(1, len(events) + 1)
+    )
+    assert all(event['phase'] in ('advice', 'drop') for event in events)
+    assert all(
+        event['filename'] and event['module'] and event['type']
+        for event in events
+    )
+    assert (
+        len([event for event in events if event['phase'] == 'advice']) == count
+    )
+
+
 def test_constructor_advice_count_does_not_drop_nested_native_warning_facts():
     events = [
         {
@@ -1858,6 +1873,7 @@ def test_direct_constructor_schema_advice_precedes_fresh_frame_guards(
             }
         )
         events = []
+        phase = 'advice'
         with warnings.catch_warnings():
             warnings.simplefilter('always')
             if change == 'warning-error':
@@ -1875,13 +1891,31 @@ def test_direct_constructor_schema_advice_precedes_fresh_frame_guards(
                 events=events,
                 predict=predict,
             ):
-                events.append((str(message), category))
+                nonlocal phase
+                events.append(
+                    {
+                        'message': str(message),
+                        'type': category.__name__,
+                        'module': category.__module__,
+                        'filename': filename,
+                        'ordinal': len(events) + 1,
+                        'phase': phase,
+                    }
+                )
                 if len(events) != 1:
                     return
                 if change == 'drop-predict':
-                    predict.drop(columns=['feature'], inplace=True)
+                    phase = 'drop'
+                    try:
+                        predict.drop(columns=['feature'], inplace=True)
+                    finally:
+                        phase = 'advice'
                 elif change == 'drop-context':
-                    context.drop(columns=['feature'], inplace=True)
+                    phase = 'drop'
+                    try:
+                        context.drop(columns=['feature'], inplace=True)
+                    finally:
+                        phase = 'advice'
                 elif change == 'add-context':
                     context['new_feature'] = range(100)
                 elif change == 'add-predict':
@@ -1895,9 +1929,17 @@ def test_direct_constructor_schema_advice_precedes_fresh_frame_guards(
                 elif change == 'null-target':
                     context['target'] = pd.Series([None] * 100, dtype='Int64')
                 elif change == 'drop-target':
-                    context.drop(columns=['target'], inplace=True)
+                    phase = 'drop'
+                    try:
+                        context.drop(columns=['target'], inplace=True)
+                    finally:
+                        phase = 'advice'
                 elif change == 'empty-context':
-                    context.drop(index=context.index, inplace=True)
+                    phase = 'drop'
+                    try:
+                        context.drop(index=context.index, inplace=True)
+                    finally:
+                        phase = 'advice'
                 elif change in ('duplicate-present', 'duplicate-null'):
                     context.insert(
                         len(context.columns),
@@ -1925,6 +1967,12 @@ def test_direct_constructor_schema_advice_precedes_fresh_frame_guards(
             (result, events, list(context.columns), list(predict.columns))
         )
     assert observed[1] == observed[0]
+    if change != 'warning-error':
+        _assert_constructor_advice(
+            observed[1][1],
+            observed[0][1],
+            2 if change == 'constant-target' else 1,
+        )
     if change in ('drop-predict', 'add-context', 'scored-values'):
         assert observed[0][0][2] == 'INVALID_REQUEST'
     elif change == 'drop-target':
@@ -1937,7 +1985,6 @@ def test_direct_constructor_schema_advice_precedes_fresh_frame_guards(
         assert not observed[0][1]
     else:
         assert observed[0][0][0] == 'ok'
-        assert len(observed[0][1]) == (2 if change == 'constant-target' else 1)
 
 
 @pytest.mark.parametrize(
