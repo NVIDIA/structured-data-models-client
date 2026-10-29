@@ -278,14 +278,23 @@ fn native_time_conversion_notice_is_completed_data_with_existing_warning_policy(
         .unwrap();
     assert_eq!(notice.code, "TIME_VALUES_UNREAD");
     assert_eq!(notice.sentence, Sentence::NativeTimeValuesUnread);
+    assert!(notice.holds_to_table());
     assert_eq!(
-        notice.fields["examples_points"],
-        Detail::List(
-            "[datetime.datetime(3000, 1, 1, 0, 0)]"
-                .chars()
-                .map(|point| Scalar::UInt32(u32::from(point)))
-                .collect()
-        )
+        notice.fields,
+        std::collections::BTreeMap::from([
+            ("column".to_owned(), Detail::text("ts")),
+            ("rows".to_owned(), Detail::Scalar(Scalar::UInt64(4))),
+            ("unread".to_owned(), Detail::Scalar(Scalar::UInt64(2))),
+            (
+                "examples_points".to_owned(),
+                Detail::List(
+                    "[datetime.datetime(3000, 1, 1, 0, 0)]"
+                        .chars()
+                        .map(|point| Scalar::UInt32(u32::from(point)))
+                        .collect()
+                )
+            ),
+        ])
     );
     assert!(time_notice(Some(Dtype::String), Stype::Categorical, "ts", &input).is_err());
     for (rows, unread, examples) in [(0, 1, "[x]"), (1, 2, "[x]"), (2, 0, "[x]"), (2, 1, "")] {
