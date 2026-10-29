@@ -40,6 +40,7 @@ pub mod driver;
 pub mod duck;
 pub mod edits;
 pub mod endpoint;
+pub mod fetch_bindings;
 pub mod host;
 pub mod kit;
 pub mod layer;

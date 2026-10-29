@@ -958,6 +958,8 @@ class _CapturedRun:
         self.error_owner: BaseException | None = None
         self.carried: dict[str, Any] | None = None
         self.asked: dict[int, dict[str, Any]] = {}
+        self.bound_seed_owners: dict[int, Any] = {}
+        self.bound_seed_values: dict[int, dict[str, Any]] = {}
         self.materialization_entry: int | None = None
         self.materialization_guard: dict[str, Any] | None = None
         self.materialization_output_owners: set[int] = set()
@@ -1862,18 +1864,30 @@ class _Capture:
                             owner.materialization_fetch_owners[
                                 lookup['owner']
                             ] = lookup['read']
-            self.fetches.extend(
-                {
-                    'request': asked['request'],
-                    'plan': asked['plan'],
+            for asked in step['requests']:
+                observed_fetch = {
+                    'request': copy.deepcopy(asked['request']),
+                    'plan': copy.deepcopy(asked['plan']),
                     **(
                         {'purpose': asked['purpose']}
                         if 'purpose' in asked
                         else {}
                     ),
                 }
-                for asked in step['requests']
-            )
+                module = sys.modules.get('sdm_client._native')
+                if (
+                    module is not None
+                    and vars(module).get('fetch_binding_witness') is not None
+                ):
+                    observed_fetch['bindings'] = {
+                        'available': False,
+                        'run': owner.ordinal,
+                        'fetch': asked['id'],
+                        'owners': [],
+                        'witness': None,
+                    }
+                self.fetches.append(observed_fetch)
+                owner.asked[asked['id']] = observed_fetch
             # The statements answering this step are marked with its
             # purpose, where every fetch of it says one (T3.4).
             if self.driver_log is not None:
@@ -1881,11 +1895,6 @@ class _Capture:
                 self.driver_log.purpose = (
                     purposes.pop() if len(purposes) == 1 else None
                 )
-            for asked in step['requests']:
-                owner.asked[asked['id']] = {
-                    'request': asked['request'],
-                    'plan': asked['plan'],
-                }
         elif self.driver_log is not None:
             self.driver_log.purpose = None
         if step.get('step') == 'call_model':
@@ -1941,13 +1950,15 @@ class _Capture:
                 ) from error
             owner.call = None
             return
-        if not self.recording:
-            return
         if reply.get('message') != 'fetch_reply':
             return
-        asked = self._run(run).asked.pop(reply['id'], None)
+        owner = self._run(run)
+        asked = owner.asked.pop(reply['id'], None)
         if asked is None:
             raise RunnerFailure('a fetch replied to that was never asked')
+        self._record_bound_seeds(owner, asked)
+        if not self.recording:
+            return
         outcome = reply['outcome']
         if outcome['outcome'] == 'error':
             self.answered.append({**asked, 'error': outcome['error']})
@@ -2037,10 +2048,69 @@ class _Capture:
             }
             self.predicted = owner.predicted
 
+    @staticmethod
+    def _bound_seed_ids(plan: dict[str, Any]) -> list[int]:
+        ids = []
+        for statement in plan.get('statements', []):
+            for param in statement['params']:
+                if param['param'] == 'key_set':
+                    ids.append(param['keys']['attachment'])
+                elif param['param'] == 'text':
+                    ids.append(param['attachment'])
+        return list(dict.fromkeys(ids))
+
+    def _record_bound_seeds(
+        self, owner: _CapturedRun, asked: dict[str, Any]
+    ) -> None:
+        if 'bindings' not in asked:
+            return
+        from sdm_client import _native
+
+        witness = getattr(_native, 'fetch_binding_witness', None)
+        if witness is None or asked['plan'].get('plan') != 'sql':
+            return
+        ids = self._bound_seed_ids(asked['plan'])
+        actual = {at: owner.bound_seed_owners.get(at) for at in ids}
+        if any(
+            type(value) is not _native.ArrowStream for value in actual.values()
+        ):
+            # A host failure may escape before it takes every parameter.
+            # Unobserved data never becomes an invented owner or a new error.
+            return
+        proof = json.loads(
+            witness(
+                json.dumps(asked['request']).encode(),
+                json.dumps(asked['plan']).encode(),
+                actual,
+            )
+        )
+        import pyarrow as pa
+
+        owners = []
+        for schema in proof['owners']:
+            at = schema['attachment']
+            if at not in owner.bound_seed_values:
+                # Core's immutable ArrowStream exports shared buffers again;
+                # the provider's own export is neither consumed nor replaced.
+                table = pa.RecordBatchReader._import_from_c_capsule(
+                    actual[at].__arrow_c_stream__()
+                ).read_all()
+                owner.bound_seed_values[at] = {
+                    'rows': table.num_rows,
+                    'values': arrow_values(table),
+                }
+            owners.append({**schema, **owner.bound_seed_values[at]})
+        asked['bindings'].update(
+            available=True, owners=owners, witness=proof['witness']
+        )
+
     def taken(
         self, attachment: int, value: Any, *, run: _CapturedRun | None = None
     ) -> None:
         owner = self._run(run)
+        for asked in owner.asked.values():
+            if attachment in self._bound_seed_ids(asked['plan']):
+                owner.bound_seed_owners[attachment] = value
         self._materialization_take(owner, attachment, value)
         record = owner.materialization_record or owner.materialization_guard
         if (

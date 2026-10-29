@@ -86,6 +86,11 @@ class ArrowStream:
     ) -> object: ...
     def __arrow_c_schema__(self) -> object: ...
 
+# Present only in a TEST_OPS build, for actual contract-observation producers.
+def fetch_binding_witness(
+    request: bytes, plan: bytes, owners: dict[int, ArrowStream]
+) -> bytes: ...
+
 #: The builtin values presented from the core's logical JSON data.
 _LogicalValue = (
     bool
