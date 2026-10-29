@@ -66,7 +66,6 @@ RELATIONAL_LIMITS = {
     'context_rows_max': 10_000,
     'predict_rows_max': 10_000,
     'predict_rows_temporal_link_prediction': 200,
-    'explanation_predict_rows': 1,
     'hops_max': 6,
     'tables_max': 15,
     'classes_max': 10,
@@ -89,7 +88,6 @@ SUMMARISED_TASK_KINDS = frozenset({'regression', 'forecasting'})
 # large context to be told the limit at the far end.
 TABULAR_LIMITS = {
     'context_rows_max': 10_000,
-    'explanation_predict_rows': 1,
 }
 
 KUMO_TABULAR = ModelSpec(

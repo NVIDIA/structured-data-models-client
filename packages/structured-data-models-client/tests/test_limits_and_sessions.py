@@ -57,7 +57,6 @@ def test_the_declared_limits_are_pinned_to_what_was_read_off_the_endpoint():
     assert RELATIONAL_LIMITS['context_rows_max'] == 10_000
     assert RELATIONAL_LIMITS['predict_rows_max'] == 10_000
     assert RELATIONAL_LIMITS['predict_rows_temporal_link_prediction'] == 200
-    assert RELATIONAL_LIMITS['explanation_predict_rows'] == 1
     assert RELATIONAL_LIMITS['hops_max'] == 6
     assert RELATIONAL_LIMITS['tables_max'] == 15
 
@@ -69,18 +68,6 @@ def test_num_hops_must_be_a_whole_number(bad):
         materializer._check_shape({'num_hops': bad}, RELATIONAL_LIMITS)
     assert 'num_hops must be a whole number' in str(error.value)
     assert error.value.code == 'INVALID_REQUEST'
-
-
-def test_an_explanation_covering_more_than_one_entity_is_refused():
-    """The model explains one entity at a time; more gets an opaque 500."""
-    request = _Gathered(payload(predict_rows=4, context_rows=100))
-    with pytest.raises(UnsupportedRequestError) as error:
-        list(
-            RelationalAdapter().prediction_plan(
-                request, ('prediction', 'explanation')
-            )
-        )
-    assert 'one at a time' in str(error.value)
 
 
 def test_explains_large_context():
@@ -245,13 +232,6 @@ def test_the_preflight_runs_through_a_real_materialized_request():
     plans = list(RelationalAdapter().prediction_plan(request, ('prediction',)))
     assert len(plans) == 1
     assert plans[0]['model'] == 'kumo-relational'
-
-    with pytest.raises(UnsupportedRequestError):
-        list(
-            RelationalAdapter().prediction_plan(
-                request, ('prediction', 'explanation')
-            )
-        )
 
 
 def gathered_in_calls(*, calls: int, context_rows: int):

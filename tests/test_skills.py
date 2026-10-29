@@ -2291,7 +2291,6 @@ LIMIT_ROWS = {
     'rows scored for a link prediction': (
         'predict_rows_temporal_link_prediction'
     ),
-    'rows scored with an explanation': 'explanation_predict_rows',
     'tables in the gathered graph': 'tables_max',
     'hops gathered': 'hops_max',
     'classes': 'classes_max',

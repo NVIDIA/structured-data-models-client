@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import pytest
 
-from sdm_client import UnsupportedRequestError
 from sdm_client.adapters.tabular import TabularAdapter
 from sdm_client.base import check_request_against_model
 from sdm_client.models import KUMO_TABULAR
@@ -52,52 +51,34 @@ def test_one_row_sent(tabular_request):
     assert envelope['output']['fields'] == list(EXPLAIN)
 
 
-def test_rows_refused(tabular_request):
-    """An explanation over two rows is refused before sending, naming the count.
+def test_rows_sent(tabular_request):
+    """An explanation over two rows is sent with explanation in its fields.
 
     Assumptions:
-    - The endpoint explains one row at a time.
-    """
-    with pytest.raises(UnsupportedRequestError) as error:
-        list(TabularAdapter().prediction_plan(tabular_request(rows=2), EXPLAIN))
-    assert 'one at a time' in str(error.value)
-    assert error.value.details['scored'] == 2
-
-
-def test_rows_without_explanation(tabular_request):
-    """Several rows are sent when no explanation is asked for.
-
-    Assumptions:
-    - The one-row limit applies only to explanations.
+    - The endpoint explains every scored row.
     """
     (envelope,) = TabularAdapter().prediction_plan(
-        tabular_request(rows=2), ('prediction',)
+        tabular_request(rows=2), EXPLAIN
     )
-    assert envelope['output']['fields'] == ['prediction']
+    assert envelope['output']['fields'] == list(EXPLAIN)
 
 
-def test_pin_not_judged(tabular_request):
-    """Pinning a session context is not refused by the row limit.
-
-    Assumptions:
-    - Pinning sends no predict rows, so the limit has nothing to count.
-    """
+def test_pin_sends_no_rows(tabular_request):
+    """Pinning a session context for explanations sends no predict rows."""
     pinned = TabularAdapter().session_plan(tabular_request(rows=2), EXPLAIN)
     assert 'predict' not in pinned
 
 
-def test_session_rows_refused(tabular_request):
-    """Session scoring refuses an explanation over two rows.
+def test_session_rows_sent(tabular_request):
+    """Session scoring sends an explanation over two rows.
 
     Assumptions:
-    - Scoring sends the predict rows, so the limit applies.
+    - The endpoint explains every scored row.
     """
-    with pytest.raises(UnsupportedRequestError):
-        list(
-            TabularAdapter().session_prediction_plan(
-                tabular_request(rows=2), EXPLAIN
-            )
-        )
+    (envelope,) = TabularAdapter().session_prediction_plan(
+        tabular_request(rows=2), EXPLAIN
+    )
+    assert envelope['output']['fields'] == list(EXPLAIN)
 
 
 def test_result_carries_explanation():
