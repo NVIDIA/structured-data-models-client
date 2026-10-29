@@ -31,6 +31,36 @@ CORE = ','.join(
 )
 
 
+def test_constructor_advice_count_does_not_drop_nested_native_warning_facts():
+    events = [
+        {
+            'ordinal': 1,
+            'phase': 'advice',
+            'type': 'SDMWarning',
+            'module': 'sdm_client',
+            'message': 'advice',
+            'filename': __file__,
+        },
+        {
+            'ordinal': 2,
+            'phase': 'drop',
+            'type': 'FutureWarning',
+            'module': 'builtins',
+            'message': 'native drop',
+            'filename': __file__,
+        },
+    ]
+    _assert_constructor_advice(events, copy.deepcopy(events), 1)
+    other = copy.deepcopy(events)
+    other[1]['message'] = 'changed native warning'
+    with pytest.raises(AssertionError):
+        _assert_constructor_advice(other, events, 1)
+    other = copy.deepcopy(events)
+    other[1]['phase'] = 'unattributed'
+    with pytest.raises(AssertionError):
+        _assert_constructor_advice(other, copy.deepcopy(other), 1)
+
+
 class Scripted:
     url = 'scripted://direct-numeric'
     serves_sessions = True

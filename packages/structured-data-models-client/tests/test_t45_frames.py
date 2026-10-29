@@ -37,6 +37,21 @@ REFERENCE = json.loads(
 )
 
 
+def test_only_newly_reached_category_ordinary_has_one_finite_authored_id():
+    empty = {'sent': []}
+    identifiers = iter(_request_identifiers('category', 'ordinary', empty))
+    assert next(identifiers) == 't45-category-ordinary-profile'
+    with pytest.raises(StopIteration):
+        next(identifiers)
+    assert _request_identifiers('category', 'window', empty) == []
+    assert _request_identifiers('object', 'ordinary', empty) == []
+    recorded = {'sent': [{'metadata': {'request_id': 'actual-frozen-id'}}]}
+    assert _request_identifiers('category', 'ordinary', recorded) == [
+        'actual-frozen-id'
+    ]
+    assert empty == {'sent': []}
+
+
 def keys(kind, values):
     if kind == 'object':
         return pd.Series(

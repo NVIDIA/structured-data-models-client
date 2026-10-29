@@ -27,6 +27,42 @@ class ObservationFailure(Exception):
     pass
 
 
+@pytest.mark.parametrize('changed', ['message', 'type', 'phase', 'order'])
+def test_callback_warning_attribution_keeps_the_complete_native_journal(
+    changed,
+):
+    events = [
+        {
+            'ordinal': 1,
+            'phase': 'advice',
+            'type': 'SDMWarning',
+            'module': 'sdm_client',
+            'message': 'advice',
+            'filename': __file__,
+        },
+        {
+            'ordinal': 2,
+            'phase': 'drop',
+            'type': 'FutureWarning',
+            'module': 'builtins',
+            'message': 'native drop',
+            'filename': __file__,
+        },
+    ]
+    _assert_callback_advice(events, copy.deepcopy(events), 1, 'drop')
+    other = copy.deepcopy(events)
+    if changed == 'order':
+        other.reverse()
+    else:
+        other[1][changed] = 'different'
+    with pytest.raises(AssertionError):
+        _assert_callback_advice(other, events, 1, 'drop')
+    extra = copy.deepcopy(events)
+    extra.append({**extra[-1], 'ordinal': 3, 'phase': 'unattributed'})
+    with pytest.raises(AssertionError):
+        _assert_callback_advice(extra, copy.deepcopy(extra), 1, 'drop')
+
+
 def observe(function):
     try:
         return function()
