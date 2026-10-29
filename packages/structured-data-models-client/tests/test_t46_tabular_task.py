@@ -1539,3 +1539,166 @@ def test_late_native_dtype_shortcuts_and_failures_follow_actual_protocol(
         assert current[2] == ['dtype truth']
     else:
         assert current[2][-1] == ('dtype prefix', ('int', 'float', 'bool'))
+
+
+@pytest.mark.parametrize(
+    'effect',
+    ['int', 'stateful', 'collision', 'prediction-error', 'probability-error'],
+)
+def test_positive_native_dtype_restores_each_prediction_and_key_in_order(
+    monkeypatch, effect
+):
+    from sdm_client import Request
+
+    def observe(core):
+        events, holder = [], {}
+        held = ArithmeticError('actual native dtype conversion')
+        counters = {'bool': 0, 'int': 0, 'float': 0}
+
+        class Dtype:
+            def __bool__(self):
+                events.append('dtype truth')
+                return True
+
+            def startswith(self, prefix):
+                events.append(('prefix', prefix))
+                if isinstance(prefix, tuple):
+                    return True
+                counters[prefix] += 1
+                if (
+                    effect == 'prediction-error'
+                    and prefix == 'bool'
+                    and counters[prefix] == 3
+                ):
+                    raise held
+                if (
+                    effect == 'probability-error'
+                    and prefix == 'bool'
+                    and counters[prefix] == 2
+                ):
+                    raise held
+                if effect == 'stateful':
+                    return prefix == (
+                        'float' if counters['bool'] == 2 else 'int'
+                    )
+                return prefix == 'int'
+
+        class Answer(Scripted):
+            def predict(self, payload):
+                answer = super().predict(payload)
+                holder['payload'] = payload
+                payload['task']['target']['dtype'] = Dtype()
+                for ordinal, item in enumerate(answer['predictions']):
+                    item['prediction'] = str(3 + ordinal)
+                    item['probabilities'] = (
+                        {'03': 0.4, '3': 0.6}
+                        if effect == 'collision'
+                        else {'03': 1.0}
+                    )
+                return answer
+
+        scripted = Answer()
+        with monkeypatch.context() as patch:
+            patch.setenv(
+                _routing.ENVIRONMENT,
+                ','.join(_routing.DIRECT_CONSUMERS) if core else '',
+            )
+            request = Request(
+                pd.DataFrame({'answer': [0, 1, 0], 'feature': [2, 3, 4]}),
+                pd.DataFrame({'feature': [5, 6]}),
+                target='answer',
+                task='classification',
+            )
+            with warnings.catch_warnings(record=True):
+                warnings.simplefilter('always')
+                with SDMClient('http://localhost:1', max_retries=0) as client:
+                    client._transport.close()
+                    client._transport = scripted
+                    try:
+                        result = client.predict(request, model='kumo-tabular')
+                        outcome = ('ok', result.to_pandas().to_dict('split'))
+                    except Exception as error:
+                        outcome = ('error', _error_graph(error), error is held)
+            for body in scripted.calls:
+                body['metadata']['request_id'] = '<drawn>'
+            return outcome, scripted.calls, events
+
+    old, current = observe(False), observe(True)
+    assert current == old
+    assert current[2][:2] == [
+        'dtype truth',
+        ('prefix', ('int', 'float', 'bool')),
+    ]
+    if effect.endswith('error'):
+        assert current[0][-1] is True
+    else:
+        frame = current[0][1]
+        assert frame['data'][0][frame['columns'].index('prediction')] == 3
+        if effect == 'collision':
+            assert 'probability_03' in frame['columns']
+            assert 'probability_3' in frame['columns']
+        elif effect == 'stateful':
+            assert 'probability_3.0' in frame['columns']
+
+
+def test_transport_replacement_releases_original_payload_kind_before_normalization(
+    monkeypatch,
+):
+    from dataclasses import replace
+    from sdm_client import Request
+
+    def observe(core):
+        events, holder = [], {}
+        with monkeypatch.context() as patch:
+            patch.setenv(
+                _routing.ENVIRONMENT,
+                ','.join(_routing.DIRECT_CONSUMERS) if core else '',
+            )
+            request = Request(
+                pd.DataFrame({'answer': [0, 1, 0], 'feature': [2, 3, 4]}),
+                pd.DataFrame({'feature': [5]}),
+                target='answer',
+                task='classification',
+            )
+
+            class Choice(str):
+                def __deepcopy__(self, memo):
+                    return 'classification'
+
+                def __del__(self):
+                    events.append('released original kind')
+                    holder['payload']['task']['target']['dtype'] = 'string'
+
+            request.task = replace(request.task, kind=Choice('classification'))
+
+            class Answer(Scripted):
+                def predict(self, payload):
+                    answer = super().predict(payload)
+                    holder['payload'] = payload
+                    request.task = replace(request.task, kind='classification')
+                    payload['task']['kind'] = 'classification'
+                    events.append('after replacement')
+                    for item in answer['predictions']:
+                        item['prediction'] = '3'
+                    return answer
+
+            scripted = Answer()
+            with warnings.catch_warnings(record=True):
+                warnings.simplefilter('always')
+                with SDMClient('http://localhost:1', max_retries=0) as client:
+                    client._transport.close()
+                    client._transport = scripted
+                    result = client.predict(request, model='kumo-tabular')
+            for body in scripted.calls:
+                body['metadata']['request_id'] = '<drawn>'
+            return (
+                result.to_pandas().to_dict('split'),
+                scripted.calls,
+                list(events),
+            )
+
+    old, current = observe(False), observe(True)
+    assert current == old
+    assert current[2] == ['released original kind', 'after replacement']
+    frame = current[0]
+    assert frame['data'][0][frame['columns'].index('prediction')] == '3'

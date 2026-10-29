@@ -209,7 +209,7 @@ fn finish_response_declaration(
         AttachmentId(data["payload"].as_u64().unwrap() as u32),
     ))
     .unwrap();
-    let native_target = if let Some(task) = &native_task {
+    let mut native_target = if let Some(task) = &native_task {
         let classification = prepare(
             json!({"stage":"response_task_meaning","task":task}),
             Attachments::new(),
@@ -222,6 +222,11 @@ fn finish_response_declaration(
     } else {
         target_override
     };
+    if let Some(target) = native_target.as_mut() {
+        if target["storage"] == "converted" && target["value"]["scope"].is_null() {
+            target["value"]["scope"] = data["scope"].clone();
+        }
+    }
     let mut buffers = Attachments::new();
     for (n, name) in ["payload", "response", "rows"].iter().enumerate() {
         let old = AttachmentId(data[*name].as_u64().unwrap() as u32);
@@ -294,6 +299,30 @@ fn finish_response_declaration(
         .unwrap();
     }
     buffers.insert(AttachmentId(5), bytes(json!(accepted)));
+    if native_target
+        .as_ref()
+        .is_some_and(|value| value["storage"] == "converted")
+    {
+        let copied = buffers
+            .iter()
+            .map(|(id, value)| {
+                let Attachment::Bytes(bytes) = value else {
+                    panic!("owned response buffers are bytes")
+                };
+                (*id, Attachment::Bytes(bytes.clone()))
+            })
+            .collect();
+        let source = prepare(
+            json!({"stage":"response_target_rows","data":data,"attributed":5}),
+            copied,
+        )?;
+        assert_eq!(source["scope"], data["scope"]);
+        assert_eq!(
+            source["rows"][0]["prediction"],
+            json!({"kind":"unicode","points":[51]})
+        );
+    }
+
     buffers.insert(
         AttachmentId(1),
         bytes(json!({"stage":"layout_response","data":data,"attributed":5,"decimal_limit":decimal_limit,"native_task":native_task,"native_target":native_target})),
@@ -2868,5 +2897,64 @@ fn host_layout_refuses_missing_and_unsolicited_late_declarations() {
             panic!("malformed late declaration must fail actual Host layout")
         };
         assert_eq!(error.sentence, sdm_contract::Sentence::InvalidMessage);
+    }
+}
+
+#[test]
+fn native_converted_rows_preserve_results_order_and_probability_population() {
+    use arrow_array::cast::AsArray;
+    use arrow_array::types::Int64Type;
+    let task = json!({"representation":"builtin","value":"classification".chars().map(u32::from).collect::<Vec<_>>()});
+    let rows = json!([
+        {"ordinal":0,"prediction":{"kind":"integer","digits":"3"},"probabilities":[]},
+        {"ordinal":1,"prediction":{"kind":"integer","digits":"3"},"probabilities":[]}
+    ]);
+    let target = json!({"storage":"converted","value":{"rows":rows}});
+    let result = classified_result_with_task_declaration(
+        Arc::new(arrow_array::Int64Array::from(vec![0, 1, 0])) as ArrayRef,
+        json!("3"),
+        serde_json::Map::new(),
+        4300,
+        Some(task.clone()),
+        Some(target.clone()),
+    );
+    assert_eq!(
+        result.batches[0]
+            .column_by_name("prediction")
+            .unwrap()
+            .as_primitive::<Int64Type>()
+            .value(0),
+        3
+    );
+    for axis in ["ordinal", "missing", "probability", "scope"] {
+        let mut changed = target.clone();
+        match axis {
+            "ordinal" => changed["value"]["rows"][1]["ordinal"] = json!(0),
+            "missing" => {
+                changed["value"]["rows"].as_array_mut().unwrap().pop();
+            }
+            "probability" => {
+                changed["value"]["rows"][0]["probabilities"] = json!([{"ordinal":0,"value":{"kind":"integer","digits":"3"},"name":"3","probability":{"type":"float64","value":0.5}}])
+            }
+            _ => {
+                changed["value"]["scope"] = json!({"version":1,"model":"kumo-tabular","request_id":"another","call_request_id":"sdm-fixed","response_rows":2,"scoring_rows":2})
+            }
+        }
+        let run = classified_response_declaration_run(
+            Arc::new(arrow_array::Int64Array::from(vec![0, 1, 0])) as ArrayRef,
+            json!("3"),
+            serde_json::Map::new(),
+            4300,
+            Some(task.clone()),
+            Some(changed),
+        );
+        let ControlMessage::Error { error } = next(&run) else {
+            panic!("malformed native conversion must fail Host layout: {axis}")
+        };
+        assert_eq!(
+            error.sentence,
+            sdm_contract::Sentence::InvalidMessage,
+            "{axis}"
+        );
     }
 }
