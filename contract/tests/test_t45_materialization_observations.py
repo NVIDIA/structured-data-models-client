@@ -451,6 +451,78 @@ def test_materialization_lifecycle_facts_must_match_the_actual_product(change):
         reader().view(core, ['prepare_materialize'])
 
 
+def prediction_materialization_failure():
+    core = actual_materialization()
+    error = {'kind': 'data_source', 'code': 'PROVIDER_ERROR'}
+    record = core['materialization_preparations'][0]
+    record.update(
+        run=1,
+        completion='error',
+        result=None,
+        value_reads=[],
+        output_reads=[],
+        error=error,
+        events=[{'event': 'core_error'}],
+    )
+    core['materialization_entries'][0].update(
+        prediction_parent=0,
+        runs=[1],
+        completion='raised',
+        terminal=None,
+        failure={'run': 1, 'relation': 'selected'},
+    )
+    core.update(
+        error=error,
+        predictions=[
+            {
+                'ordinal': 0,
+                'parent': None,
+                'argument': {'form': 'unobserved'},
+                'completion': 'raised',
+                'runs': [0, 1],
+                'calls': [],
+                'results': [],
+                'final': None,
+                'carried': None,
+                'failure': {'run': 1, 'relation': 'selected'},
+            }
+        ],
+        inputs=[
+            {
+                'op': 'prepare_request',
+                'run': 0,
+                'entry': 0,
+                'input': {'stage': 'model', 'model': 'kumo-relational'},
+                'result': {
+                    'phase': 'model_resolved',
+                    'version': 1,
+                    'model': 'kumo-relational',
+                },
+                'error': None,
+            }
+        ],
+    )
+    return core
+
+
+def test_prediction_retains_its_actual_materialization_error_without_a_fake_preparation():
+    core = prediction_materialization_failure()
+    original = copy.deepcopy(core)
+    observed = reader().view(core, ['prepare_request', 'prepare_materialize'])
+    assert observed['operations'] == ['predict', 'materialize']
+    assert observed['predictions'][0]['failure'] == {
+        'run': 1,
+        'relation': 'selected',
+    }
+    assert observed['error'] == core['error']
+    assert observed['events'][0]['error'] == core['error']
+    assert observed['calls'] == []
+    assert core == original
+    core['materialization_entries'][0]['prediction_parent'] = None
+    with pytest.raises(reader().ObservationError):
+        reader().view(core, ['prepare_request', 'prepare_materialize'])
+
+
 def test_separate_entries_with_reused_ids_keep_distinct_resource_producers():
     capture = RUNNER._Capture(native_cancellations_observed=True)
     _owned_chain(capture)
