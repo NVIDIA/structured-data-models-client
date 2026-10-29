@@ -167,6 +167,42 @@ def test_only_an_actual_core_error_gets_a_core_error_record():
     _validate(capture.core())
 
 
+def test_private_source_failure_operand_is_not_an_exported_error_summary():
+    capture = RUNNER._Capture()
+    raw = json.dumps(
+        {
+            'stage': 'source_failure',
+            'source': {'owner': 9},
+            'read': {
+                'kind': 'neighbors',
+                'source': ['catalog', 'schema', 'buys'],
+                'columns': ['buy_id', 'item_id'],
+            },
+            'error': {
+                'kind': 'data_source',
+                'retryable': False,
+                'sqlstate': '08006',
+                'driver_message': 'private driver diagnostic',
+            },
+        },
+        indent=2,
+    ).encode()
+    owner = _start(capture, raw)
+    capture.failed(_CoreError(), run=owner)
+    core = capture.core()
+    [record] = core['materialization_preparations']
+    assert record['input'] == _bytes(1, raw)
+    assert (
+        record['error']
+        == core['error']
+        == {
+            'kind': 'data_source',
+            'code': 'PROVIDER_ERROR',
+        }
+    )
+    _validate(core)
+
+
 class _UnreadFailure(Exception):
     def __str__(self):
         raise AssertionError('capture formatted an arbitrary failure')
