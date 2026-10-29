@@ -93,6 +93,36 @@ def materialize(db, query=QUERY, **options):
     )
 
 
+def _same_profile_materialize(
+    monkeypatch, setup, query=QUERY, *, case='ordinary', failure_element=None
+):
+    import test_t45_native_sql_labels as public
+
+    monkeypatch.setattr(public, '_input', lambda selected: (setup, query))
+    requests = []
+    original = public._observe(
+        monkeypatch, case, False, request_owners=requests
+    )
+    current = public._observe(monkeypatch, case, True, request_owners=requests)
+    assert current == public._approved_old(original, case)
+    if original['outcome'] == 'error':
+        assert failure_element in ('string', 'int64')
+        assert requests == []
+        assert original['stage'] == 'materialize'
+        error = original['error']
+        assert error['type'] == 'sdm_client.errors.StructuredDataError'
+        assert error['code'] == 'INTERNAL_ERROR'
+        assert error['cause']['type'] == 'pyarrow.lib.ArrowNotImplementedError'
+        target = 'utf8' if failure_element == 'string' else 'int64'
+        cast = 'cast_string' if failure_element == 'string' else 'cast_int64'
+        assert error['cause']['text'] == (
+            f'Unsupported cast from list<item: {failure_element}> to {target} using function {cast}'
+        )
+        return None
+    assert len(requests) == 2
+    return requests
+
+
 def predict(request, script):
     with SDMClient('http://localhost:1', max_retries=0) as client:
         client._transport.close()
@@ -230,27 +260,32 @@ def test_link_calls_keep_the_200_row_cap_and_repeated_public_entities(
 def test_rhs_keys_keep_the_reference_text_large_integer_and_float_identity(
     monkeypatch, expression
 ):
+    setup = [
+        f'ALTER TABLE {table} ALTER COLUMN item_id TYPE '
+        + (
+            'VARCHAR'
+            if expression.startswith("'key-")
+            else 'DECIMAL(38,2)'
+            if 'DECIMAL' in expression
+            else 'DOUBLE'
+            if 'DOUBLE' in expression
+            else 'BIGINT'
+        )
+        + f' USING {expression}'
+        for table in ('items', 'buys')
+    ]
+    requests = _same_profile_materialize(
+        monkeypatch,
+        setup,
+        failure_element='string' if expression.startswith("'key-") else None,
+    )
+    if requests is None:
+        return
     outputs = []
-    for core in (False, True):
+    for core, request in zip((False, True), requests, strict=True):
         route(monkeypatch, core)
-        extra = [
-            f'ALTER TABLE {table} ALTER COLUMN item_id TYPE '
-            + (
-                'VARCHAR'
-                if expression.startswith("'key-")
-                else 'DECIMAL(38,2)'
-                if 'DECIMAL' in expression
-                else 'DOUBLE'
-                if 'DOUBLE' in expression
-                else 'BIGINT'
-            )
-            + f' USING {expression}'
-            for table in ('items', 'buys')
-        ]
-        with connection(extra) as db:
-            request = materialize(db)
-            assert predict(request, Scripted())['id'].tolist() == [0, 1]
-            outputs.append(request.payloads)
+        assert predict(request, Scripted())['id'].tolist() == [0, 1]
+        outputs.append(request.payloads)
     assert outputs[1] == outputs[0]
 
 
@@ -337,12 +372,16 @@ def test_distinct_labels_keep_executor_order_null_filter_and_window_boundaries(
             "INSERT INTO buys VALUES (999003, 0, NULL, TIMESTAMP '2023-02-03')"
         )
     query = 'PREDICT LIST_DISTINCT(buys.item_id WHERE buys.buy_id >= 999000, 0, 30, days) FOR EACH users.user_id'
-    outputs = []
-    for core in (False, True):
-        route(monkeypatch, core)
-        with connection(setup) as db:
-            request = materialize(db, query)
-            outputs.append(request.payloads)
+    requests = _same_profile_materialize(
+        monkeypatch,
+        setup,
+        query,
+        case='distinct-null' if include_null else 'distinct',
+        failure_element='int64',
+    )
+    if requests is None:
+        return
+    outputs = [request.payloads for request in requests]
     if not include_null:
         assert outputs[1] == outputs[0]
     else:

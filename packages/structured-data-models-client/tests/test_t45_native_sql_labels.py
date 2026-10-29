@@ -64,7 +64,7 @@ def _source_rows(db):
     }
 
 
-def _observe(monkeypatch, case, core):
+def _observe(monkeypatch, case, core, *, request_owners=None):
     setup, text = _input(case)
     stage = 'schema'
     warning_stages = []
@@ -122,6 +122,8 @@ def _observe(monkeypatch, case, core):
                             'target_moves_with_time': request.target_moves_with_time,
                         },
                     )
+                    if request_owners is not None:
+                        request_owners.append(request)
                 except Exception as error:
                     observed.update(
                         outcome='error',
