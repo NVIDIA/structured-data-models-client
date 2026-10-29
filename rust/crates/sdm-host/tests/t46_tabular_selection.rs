@@ -92,9 +92,21 @@ fn actual_candidate_labels_order_the_sample_before_mapping_original_rows() {
         Some(vec![5, 1, 0])
     );
     assert_eq!(context.select(Some(&labels)).unwrap(), [31, 5, 2]);
-    assert!(context.positions(None).is_err());
-    assert!(context.positions(Some(&labels[..5])).is_err());
-    assert!(context.positions(Some(&[70, -9, 200, 3, 1, 70])).is_err());
+    for error in [
+        context.positions(None).unwrap_err(),
+        context.positions(Some(&labels[..5])).unwrap_err(),
+    ] {
+        assert_eq!(error.code, sdm_contract::ErrorCode::InvalidMessage);
+        assert_eq!(error.sentence, sdm_contract::Sentence::InvalidMessage);
+    }
+    let duplicate = context
+        .positions(Some(&[70, -9, 200, 3, 1, 70]))
+        .unwrap_err();
+    assert_eq!(duplicate.code, sdm_contract::ErrorCode::UnsupportedRequest);
+    assert_eq!(
+        duplicate.sentence,
+        sdm_contract::Sentence::NotYetMaterialize
+    );
 }
 
 #[test]
@@ -103,5 +115,7 @@ fn uncapped_context_needs_no_native_index_and_rejects_unsolicited_labels() {
     assert!(!context.reduced());
     assert!(context.positions(None).unwrap().is_none());
     assert_eq!(context.select(None).unwrap(), [1, 4, 8]);
-    assert!(context.positions(Some(&[3, 2, 1])).is_err());
+    let unsolicited = context.positions(Some(&[3, 2, 1])).unwrap_err();
+    assert_eq!(unsolicited.code, sdm_contract::ErrorCode::InvalidMessage);
+    assert_eq!(unsolicited.sentence, sdm_contract::Sentence::InvalidMessage);
 }

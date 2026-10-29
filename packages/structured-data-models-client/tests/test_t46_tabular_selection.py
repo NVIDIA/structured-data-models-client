@@ -12,6 +12,7 @@ import pytest
 from test_t46_direct_numeric import Scripted
 
 from sdm_client import PredictiveQuery, SDMClient, _routing
+from sdm_client._routing import RouteError
 from sdm_client.errors import StructuredDataError
 
 
@@ -359,3 +360,45 @@ def test_unsampled_context_does_not_observe_candidate_index_labels(monkeypatch):
     pd.testing.assert_frame_equal(
         old.context.instance_table, current.context.instance_table
     )
+
+
+@pytest.mark.parametrize('core', [False, True])
+def test_reduced_duplicate_candidate_index_is_an_unfinished_family(
+    monkeypatch, core
+):
+    monkeypatch.setenv(
+        _routing.ENVIRONMENT,
+        ','.join(_routing.MATERIALIZE['frames']) if core else '',
+    )
+    source = _table(12_019)
+    scoring = pd.DataFrame({'entity_id': [11], 'feature': [0.5]})
+    query = PredictiveQuery(
+        'PREDICT things.answer FOR EACH things.entity_id', {'things': source}
+    )
+    original_get = pd.DataFrame.__getitem__
+    changed = []
+
+    def observed_get(frame, key):
+        if (
+            not changed
+            and isinstance(key, str)
+            and key == 'answer'
+            and frame is not source
+        ):
+            frame.index = pd.Index(np.arange(len(frame), dtype='int64') // 2)
+            changed.append(len(frame))
+        return original_get(frame, key)
+
+    monkeypatch.setattr(pd.DataFrame, '__getitem__', observed_get)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        if core:
+            with pytest.raises(RouteError) as refused:
+                query.materialize(predict=scoring, task='regression')
+            assert type(refused.value) is RouteError
+        else:
+            request = query.materialize(predict=scoring, task='regression')
+            assert request.context_rows == 10_000
+            assert not request.context.instance_table.index.is_unique
+            assert request.context.instance_table.index.is_monotonic_increasing
+    assert changed == [len(source) - 1]
