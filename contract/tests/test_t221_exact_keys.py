@@ -587,6 +587,102 @@ def public_differs(
     )
 
 
+@pytest.mark.parametrize(
+    'producer', ['current-predict', 'current-materialize', 'legacy']
+)
+def test_route_helper_reads_proved_current_and_legacy_operations(
+    producer: str,
+) -> None:
+    from test_t44_prediction_observation import (
+        actual_observation,
+        legacy_observation,
+    )
+    from test_t45_materialization_observations import actual_materialization
+
+    if producer == 'current-materialize':
+        core, operations = actual_materialization(), ['prepare_materialize']
+        expected = ['materialize']
+    else:
+        core, operations = (
+            actual_observation()
+            if producer == 'current-predict'
+            else legacy_observation()
+        )
+        expected = ['describe_source', 'materialize', 'predict']
+    line = {
+        'identity': {'native_loaded': True, 'operations': operations},
+        'core': core,
+    }
+    original = copy.deepcopy(line)
+    assert _core_operations(line) == expected
+    assert line == original
+    if producer == 'current-predict':
+        assert operations[-3:] == ['prepare_request'] * 3
+        assert 'predict' not in operations
+    elif producer == 'current-materialize':
+        assert 'materialize' not in operations
+
+
+@pytest.mark.parametrize(
+    'changed',
+    [
+        'missing-task-read',
+        'foreign-task-owner',
+        'missing-call',
+        'foreign-call-owner',
+    ],
+)
+def test_route_helper_cannot_earn_roles_from_incomplete_or_foreign_evidence(
+    changed: str,
+) -> None:
+    from test_t44_prediction_observation import actual_observation
+    from test_t45_materialization_observations import actual_materialization
+
+    if changed in ('missing-task-read', 'foreign-task-owner'):
+        core, operations = actual_materialization(), ['prepare_materialize']
+        if changed == 'missing-task-read':
+            core['materialization_preparations'][0]['input_reads'].pop(0)
+        else:
+            core['materialization_preparations'][0]['entry'] = 1
+    else:
+        core, operations = actual_observation()
+        if changed == 'missing-call':
+            core['predictions'][0]['calls'].clear()
+        else:
+            core['inputs'][3]['entry'] = 1
+    line = {
+        'identity': {'native_loaded': True, 'operations': operations},
+        'core': core,
+    }
+    original = copy.deepcopy(line)
+    with pytest.raises(ValueError):
+        _core_operations(line)
+    assert line == original
+
+
+@pytest.mark.parametrize(
+    'changed', ['native-not-loaded', 'no-core', 'no-operations']
+)
+def test_route_helper_keeps_native_and_required_identity_guards(
+    changed: str,
+) -> None:
+    from test_t44_prediction_observation import legacy_observation
+
+    core, operations = legacy_observation()
+    line = {
+        'identity': {'native_loaded': True, 'operations': operations},
+        'core': core,
+    }
+    if changed == 'native-not-loaded':
+        line['identity']['native_loaded'] = False
+    elif changed == 'no-core':
+        line['core'] = None
+    else:
+        del line['identity']['operations']
+    with pytest.raises((AssertionError, KeyError)):
+        _core_operations(line)
+
+
 @pytest.mark.parametrize('case_key', CASE_KEYS)
 def test_python_core_answers_each_case_as_the_reference_does(
     case_key: str,
