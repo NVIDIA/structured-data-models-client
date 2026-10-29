@@ -586,7 +586,7 @@ fn completed_native_target_rows_and_occurrences_reach_the_real_link_payload() {
         let Attachment::FramePayload(owner) = &stages.held[&part.payload] else {
             panic!("payload owner")
         };
-        let payload: Value = serde_json::from_slice(&owner.wire().unwrap()).unwrap();
+        let payload: Value = serde_json::from_slice(owner.wire()).unwrap();
         let context = &payload["context"]["instance_table"];
         let target = context["columns"]
             .as_array()
