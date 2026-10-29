@@ -257,6 +257,72 @@ impl RetainedLabelInputs {
         }
     }
 
+    /// Complete Reader-normalized temporal columns of every already-fetched
+    /// provider source, before any candidate or condition view selects rows.
+    /// The descriptor and Arrow rows share this exact immutable input owner.
+    pub fn temporal_sources(&self) -> Result<Vec<(Vec<u8>, ArrowData)>, CoreError> {
+        let LabelRoot::Source { population, .. } = &self.data.root else {
+            return Err(invalid_target(
+                "complete provider sources require their SQL input owner",
+            ));
+        };
+        let mut out = Vec::new();
+        let mut append = |role: &str,
+                          table: &str,
+                          read: Option<sdm_contract::run::ReplyId>,
+                          rows: &RecordBatch| {
+            let read =
+                read.ok_or_else(|| invalid_target("complete temporal source has no issued read"))?;
+            let temporal = population.temporal_columns(table)?;
+            let mut fields = vec![arrow_schema::Field::new(
+                "source_row",
+                DataType::UInt64,
+                false,
+            )];
+            let positions: ArrayRef = Arc::new(arrow_array::UInt64Array::from_iter_values(
+                (0..rows.num_rows()).map(|row| row as u64),
+            ));
+            let mut arrays = vec![positions];
+            let mut columns = Vec::new();
+            let schema = rows.schema();
+            for (field, values) in schema.fields().iter().zip(rows.columns()) {
+                if temporal.contains(field.name())
+                    && matches!(values.data_type(), DataType::Timestamp(_, None))
+                {
+                    fields.push(field.as_ref().clone());
+                    arrays.push(Arc::clone(values));
+                    columns.push(field.name().clone());
+                }
+            }
+            let binding = population.column_binding(table, "*")?;
+            let descriptor = serde_json::to_vec(&serde_json::json!({
+                "source_role": role,
+                "source_read": read.0,
+                "source": binding.source,
+                "columns": columns,
+                "rows": rows.num_rows(),
+            }))
+            .map_err(|_| invalid_target("complete temporal source descriptor is not JSON"))?;
+            let batch =
+                RecordBatch::try_new(Arc::new(arrow_schema::Schema::new(fields)), arrays)
+                    .map_err(|_| invalid_target("complete temporal source rows do not align"))?;
+            out.push((descriptor, ArrowData::new(batch.schema(), vec![batch])));
+            Ok::<_, CoreError>(())
+        };
+        let entity = self.data.root.condition_context()?.entity.table;
+        let sampled = &self.data.inputs.population;
+        append("entity", &entity, sampled.source_read, &sampled.sampled)?;
+        for (table, source) in &self.data.inputs.fetched {
+            if source.source_positions.is_some() {
+                return Err(invalid_target(
+                    "provider source view contains a native row selection",
+                ));
+            }
+            append("windowed", table, source.source_read, &source.rows)?;
+        }
+        Ok(out)
+    }
+
     pub fn rows(&self) -> Result<ArrowData, CoreError> {
         let (rows, source_rows) = self.source_rows()?;
         let count = rows.num_rows();

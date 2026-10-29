@@ -362,3 +362,13 @@ Provide the unit fixtures' required issued-request key maps without changing pro
 Make formatter controls explicitly return a missing timestamp from the actual native conversion callback so they reach the intended coercion/display boundary on both dependency profiles, preserving native formatter/handler failure and exact notice oracles.
 Retain the unmodified library's actual range-refusal receipts and every frozen expectation; do not infer a universal coercion outcome from one pandas profile.
 Collect the remaining unchanged R50 diagnostics before freezing the grouped successor and obtain fresh whole reviews before any successor execution.
+
+The existing SQLite LIST journey exposed a representation gap between the complete Reader-normalized source and the retained native source frame.
+The actual fetched `ts` was UTF-8 with timestamp meaning; the existing Reader completed its timestamp values, while the native frame still returned text at the captured-time boundary.
+`LabelInputs.temporal_sources()` exposes complete already-fetched temporal data from the same immutable owner, without another read, parser, resource class or preparation stage.
+Each entry binds the entity or windowed role, actual first read ID, logical source, physical temporal column order, full row extent and complete source positions.
+The entity entry retains the sampled batch before deduplication and candidate selection; the other entries retain the full fetched sources, including later condition inputs.
+The native source adapter validates every binding before assigning fixed timestamp representations from these completed typed values and before capturing the time Series.
+It preserves an already typed native owner rather than replacing its backing, so later in-place edits and frame-column replacement keep their separate existing meanings.
+The raw fetched inputs remain independently recorded, and the strict timestamp, condition, window and lineage checks remain unchanged.
+These source-first controls and implementation require fresh whole reviews and exact execution before receiving acceptance credit.

@@ -130,6 +130,7 @@ class LabelInputs:
     """Reached source rows of an actual target evaluation."""
 
     def rows(self) -> ArrowStream: ...
+    def temporal_sources(self) -> tuple[tuple[bytes, ArrowStream], ...]: ...
 
 @final
 class TargetColumn:

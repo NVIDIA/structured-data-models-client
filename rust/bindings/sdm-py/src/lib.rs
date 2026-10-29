@@ -251,6 +251,21 @@ struct LabelInputs {
 
 #[pymethods]
 impl LabelInputs {
+    fn temporal_sources(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let sources = self
+            .owner
+            .temporal_sources()
+            .map_err(|error| PyValueError::new_err(error.message))?;
+        let mut out = Vec::with_capacity(sources.len());
+        for (descriptor, rows) in sources {
+            out.push((
+                PyBytes::new(py, &descriptor).unbind(),
+                to_python(py, Attachment::Arrow(rows), true)?,
+            ));
+        }
+        Ok(PyTuple::new(py, out)?.into_any().unbind())
+    }
+
     fn rows(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let rows = self
             .owner

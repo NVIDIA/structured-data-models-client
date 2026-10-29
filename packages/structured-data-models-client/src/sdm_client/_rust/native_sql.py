@@ -32,6 +32,7 @@ from sdm_client._rust.native_source_completion import (
 )
 from sdm_client._rust.native_source_rows import SourceReadFailure
 from sdm_client._rust.native_sql_products import adopt, bind, read, request
+from sdm_client._rust.native_sql_sources import complete_source_times
 from sdm_client._rust.native_target import export_groups
 from sdm_client._rust.run import Finished, _driver, run
 
@@ -409,6 +410,9 @@ def gather(
                     'native label input has no producing source Run'
                 )
             source_completions.append(completion)
+            complete_source_times(
+                inputs, entity_sources, completion, preparation
+            )
             sources = _Sources(entity_sources, completion, preparation)
             eligible = complete_eligibility(inputs, sources, preparation)
             products.append(eligible)

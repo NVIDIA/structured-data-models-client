@@ -320,6 +320,19 @@ impl RetainedMaterializePopulation {
             column: column.into(),
         })
     }
+
+    pub(super) fn temporal_columns(&self, table: &str) -> Result<&[String], CoreError> {
+        let source = self.column_binding(table, "*")?.source;
+        self.0
+            .source
+            .meaning
+            .tables
+            .iter()
+            .find(|table| table.source == source)
+            .map(|table| table.temporal_columns.as_slice())
+            .ok_or_else(|| invalid("complete temporal source lost its captured declaration"))
+    }
+
     fn bind(
         value: PreparedMaterializePopulation,
         attachments: &mut Attachments,
