@@ -1298,6 +1298,7 @@ class _Capture:
                 'completion': 'active',
                 'result': None,
                 'value_reads': [],
+                'fetches': [],
                 'error': None,
                 'events': [],
             }
@@ -1468,6 +1469,15 @@ class _Capture:
     ) -> None:
         owner = self._run(run)
         if step.get('step') == 'fetch':
+            if owner.materialization_record is not None:
+                record = owner.materialization_record
+                record['fetches'].extend(copy.deepcopy(step['requests']))
+                record['events'].append(
+                    {
+                        'event': 'fetch',
+                        'requests': [asked['id'] for asked in step['requests']],
+                    }
+                )
             self.fetches.extend(
                 {
                     'request': asked['request'],

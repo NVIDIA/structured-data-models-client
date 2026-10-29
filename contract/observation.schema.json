@@ -82,7 +82,7 @@
                       }
                     }
                   },
-                  "purpose": {"description": "The purpose of the core's fetch the statement answers, where the core gave one (FetchStep.purpose): locate, plan B's read of a table as it stands (T3.4).", "enum": ["locate"]}
+                  "purpose": {"description": "The actual core fetch purpose: source location, result representation metadata or completed native source rows.", "enum": ["locate", "describe_result", "source_rows"]}
                 }
               }
             },
@@ -278,7 +278,7 @@
             "type": "object",
             "additionalProperties": false,
             "required": ["request", "plan"],
-            "properties": {"request": {"type": "object"}, "plan": {"type": "object"}, "purpose": {"enum": ["locate"]}}
+            "properties": {"request": {"type": "object"}, "plan": {"type": "object"}, "purpose": {"enum": ["locate", "describe_result", "source_rows"]}}
           }
         },
         "accepted": {"type": ["boolean", "null"]},
@@ -532,6 +532,15 @@
         {
           "type": "object",
           "additionalProperties": false,
+          "required": ["event", "requests"],
+          "properties": {
+            "event": {"const": "fetch"},
+            "requests": {"type": "array", "items": {"type": "integer", "minimum": 1}}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
           "required": ["event"],
           "properties": {
             "event": {"enum": ["done", "core_error", "cancelled", "cancel_failed"]}
@@ -551,7 +560,7 @@
     "materializationPreparationObservation": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["run", "operation", "input", "completion", "result", "value_reads", "error", "events"],
+      "required": ["run", "operation", "input", "completion", "result", "value_reads", "fetches", "error", "events"],
       "properties": {
         "run": {"type": "integer", "minimum": 0},
         "operation": {
@@ -574,6 +583,32 @@
         "value_reads": {
           "type": "array",
           "items": {"$ref": "#/$defs/materializationBytesObservation"}
+        },
+        "fetches": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "request", "plan"],
+            "properties": {
+              "id": {"type": "integer", "minimum": 1},
+              "request": {"type": "object"},
+              "plan": {"type": "object"},
+              "continuation": {"type": "string"},
+              "purpose": {"enum": ["locate", "describe_result", "source_rows"]},
+              "lookup": {"type": "object"},
+              "partition": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["first", "ordinal", "parts"],
+                "properties": {
+                  "first": {"type": "integer", "minimum": 1},
+                  "ordinal": {"type": "integer", "minimum": 0},
+                  "parts": {"type": "integer", "minimum": 1}
+                }
+              }
+            }
+          }
         },
         "error": {
           "anyOf": [
