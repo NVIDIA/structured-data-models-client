@@ -667,6 +667,62 @@ def test_t32_the_gate_runs_the_java_legs() -> None:
 
 
 @pending
+def test_sparse_text_fixture_keeps_actual_body_hash_and_unobserved_products() -> (
+    None
+):
+    live = _module(
+        't32_tools_live_fixture', ROOT / 'tests/test_t32_live_only.py'
+    )
+    line = live._reference_line()
+    original = copy.deepcopy(line)
+    core = _sparse_text_observation(line, _case('base.binary')['input']['pql'])
+    compare = _module('t32_tools_compare', RUST_CORE / 'compare.py')
+    view = compare._prediction_view(core)
+    [received] = line['public']['payloads']
+    assert view['operations'] == ['predict']
+    assert view['calls'] == [received['parsed']]
+    [attempt] = view['attempts']
+    assert attempt['run'] == 0 and attempt['body_sha256'] == received['sha256']
+    assert attempt['reply'] is None and attempt['model_endpoint'] is None
+    assert view['events'][0]['result'] is None
+    assert core['core']['predicted'] is None and 'answered' not in core['core']
+    compare._prediction_reader().check_receipts(
+        view['attempts'], line['public']['payloads']
+    )
+    assert line == original
+
+
+@pytest.mark.parametrize('changed', ['missing', 'owner', 'body', 'hash'])
+def test_sparse_text_fixture_rejects_missing_or_changed_call_evidence(
+    changed: str,
+) -> None:
+    live = _module(
+        't32_tools_live_fixture', ROOT / 'tests/test_t32_live_only.py'
+    )
+    line = live._reference_line()
+    core = _sparse_text_observation(line, _case('base.binary')['input']['pql'])
+    compare = _module('t32_tools_compare', RUST_CORE / 'compare.py')
+    clean = compare.Report()
+    compare._core_payload(
+        clean, {'id': line['case']}, 'python-core', core, None
+    )
+    assert clean.failures == [], clean.texts
+    [call] = core['core']['model_calls']
+    if changed == 'missing':
+        core['core']['model_calls'].clear()
+    elif changed == 'owner':
+        call['run'] = 1
+    elif changed == 'body':
+        call['body']['metadata']['source_query'] += ' '
+    else:
+        call['body_sha256'] = '0' * 64
+    report = compare.Report()
+    compare._core_payload(
+        report, {'id': line['case']}, 'python-core', core, None
+    )
+    assert [rule for rule, _ in report.failures] == ['payload'], report.texts
+
+
 def test_t32_result_rows_are_compared_as_text_where_the_digest_is_excused(
     tmp_path: Path,
 ) -> None:

@@ -440,6 +440,82 @@ def test_the_expected_tests_are_the_files_own() -> None:
                 assert len(with_parameters) == count and not bare, (name, test)
 
 
+def test_constructor_and_binding_owner_inventory_is_independent_and_complete() -> (
+    None
+):
+    binding = set(smoke.EXPECTED['test_binding.py'])
+    assert (
+        'test_base_frame_schema_and_request_do_not_load_optional_sources'
+        in binding
+    )
+    aliases = {
+        'test_attachment_annotations_include_every_native_owner[_AttachmentIn-_ArrowStreamExportable]',
+        'test_attachment_annotations_include_every_native_owner[_AttachmentOut-ArrowStream]',
+    }
+    owners = {
+        f'test_native_owners_cannot_be_forged_or_subclassed[{name}]'
+        for name in (
+            'FrameGraph',
+            'FrameQuestion',
+            'FramePopulation',
+            'FrameLabelGroups',
+            'FrameLabelBatch',
+            'LabelInputs',
+            'TargetColumn',
+            'FrameTask',
+            'FrameReferences',
+            'FramePayload',
+            'LookupRows',
+            'MaterializeSource',
+            'MaterializePopulation',
+            'MaterializeGroups',
+            'MaterializeBatch',
+        )
+    }
+    assert {
+        name
+        for name in binding
+        if name.startswith('test_attachment_annotations_')
+    } == aliases
+    assert {
+        name for name in binding if name.startswith('test_native_owners_')
+    } == owners
+    assert len(binding) == len(smoke.EXPECTED['test_binding.py']) == 30
+    assert set(smoke.EXPECTED['test_frame_native_constructor.py']) == {
+        'test_native_constructor_binds_name_source_type_and_completed_meaning',
+        'test_fixed_native_declaration_cannot_be_replaced_by_exported_storage',
+    }
+    assert set(smoke.EXPECTED['test_t42_arrow_float_owners.py']) == {
+        f'test_constructor_float_buffers_detach_before_producer_mutation_and_rebind[{chunked}-{offset}-{width}]'
+        for chunked in (False, True)
+        for offset in (0, 1, 3, 7)
+        for width in (32, 64)
+    }
+
+
+@pytest.mark.parametrize(
+    'missing',
+    [
+        'test_base_frame_schema_and_request_do_not_load_optional_sources',
+        'test_attachment_annotations_include_every_native_owner[_AttachmentOut-ArrowStream]',
+        'test_native_owners_cannot_be_forged_or_subclassed[MaterializeBatch]',
+    ],
+)
+def test_collection_refuses_a_missing_new_binding_consumer_at_the_same_count(
+    tmp_path: pathlib.Path, missing: str
+) -> None:
+    home = tmp_path / 'env'
+    assert len(ITEMS) == 30
+    smoke.collection_verdict(_collection(tmp_path, _record(home)), COUNTS, home)
+    items = [item for item in ITEMS if item.rsplit('::', 1)[1] != missing]
+    assert len(items) == 29
+    items.append(items[0])
+    with pytest.raises(smoke.SmokeFailed, match='not run:'):
+        smoke.collection_verdict(
+            _collection(tmp_path, _record(home, items=items)), COUNTS, home
+        )
+
+
 def test_production_smoke_includes_the_frame_ownership_tests() -> None:
     # These tests use shipped operations: the ownership boundary must hold
     # on the production wheel as well as the test-ops wheel.

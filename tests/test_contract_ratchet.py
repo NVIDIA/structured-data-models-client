@@ -584,6 +584,25 @@ def test_duckdb_fixture_declares_its_scope_without_changing_production_default(
         ), aggregate
 
 
+@pytest.mark.parametrize('database', ['duckdb', None])
+def test_fixture_scope_is_an_explicit_argument_and_preserves_every_problem(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, database: str | None
+) -> None:
+    called = []
+    problems = ['scope: retained', 'baselines: retained']
+
+    def checking(*args: Any, **kwargs: Any) -> Any:
+        called.append((args, kwargs))
+        return ratchet.Report(problems=problems)
+
+    monkeypatch.setattr(ratchet, 'check', checking)
+    files = (tmp_path / 'observations.jsonl',)
+    assert check(tmp_path, 'checkpoint', files, database=database) is problems
+    assert called == [
+        ((tmp_path, 'checkpoint', list(files), None), {'database': database})
+    ]
+
+
 def test_one_check_parses_unchanged_reference_bytes_once_for_all_rules(
     repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

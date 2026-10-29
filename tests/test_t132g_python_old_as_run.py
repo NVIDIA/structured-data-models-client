@@ -156,6 +156,41 @@ def test_the_lines_are_python_old_s_as_run() -> None:
     assert floor.count('DeprecationWarning') >= 2
 
 
+@pytest.mark.parametrize('cell', sorted(AS_RUN))
+def test_authored_filler_is_coherent_and_the_seven_receipts_remain_complete(
+    repo: Path, tmp_path: Path, cell: str
+) -> None:
+    raw = AS_RUN[cell].read_bytes()
+    expected = as_run(cell)
+    actual = lines_of(observed(repo, tmp_path, cell))
+    assert len(expected) == 7
+    assert {case: actual[case] for case in SEVEN} == expected
+    filler = {case: line for case, line in actual.items() if case not in SEVEN}
+    assert filler
+    profile = next(iter(expected.values()))['identity']
+    for line in filler.values():
+        assert {
+            field: line['identity'][field]
+            for field in ('cell', 'versions', 'platform')
+        } == {
+            field: profile[field] for field in ('cell', 'versions', 'platform')
+        }
+    assert AS_RUN[cell].read_bytes() == raw
+    report = ratchet.Report()
+    ratchet.check_database_scope(report, {'python-old': actual}, 'duckdb')
+    assert report.problems == []
+    next(iter(filler.values()))['identity']['cell'] = next(
+        name for name in AS_RUN if name != cell
+    )
+    mixed = ratchet.Report()
+    ratchet.check_database_scope(mixed, {'python-old': actual}, 'duckdb')
+    assert mixed.problems == [
+        'scope: python-old: observations mix runtime cells'
+    ]
+    assert {case: actual[case] for case in SEVEN} == expected
+    assert AS_RUN[cell].read_bytes() == raw
+
+
 # --- P1.1 and P1.2: held and proposed as run -------------------------------------
 
 
