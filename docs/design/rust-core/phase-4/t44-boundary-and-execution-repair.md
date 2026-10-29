@@ -711,3 +711,14 @@ Expand that independent inventory to all fifteen existing classes and use it for
 Keep construction and observation helper classes outside the attachment inventory and preserve the existing exact module-name and union assertions.
 The existing real-wheel failures precede this test-only correction; no runtime owner, stub, alias, registration or resource policy changes.
 Collect remaining unexecuted Rust own-suite feedback on unchanged approved R53, then freeze the grouped successor for fresh whole reviews before executing it.
+
+
+### Producer-owned warning and historical output inventories
+
+The remaining own-suite diagnostic on unchanged R53 reaches one schema warning inventory failure and one predicted-record fixture failure, with the other collected target groups passing.
+The schema inventory groups sentences by warning code, while native time conversion deliberately shares TIME_VALUES_UNREAD with catalog assembly and has its own completed-data producer in Core.
+Keep exact inventory equality with an explicit native-produced singleton, prove disjoint assembly/native ownership, and strengthen the actual native producer test with complete held-warning fields.
+The frozen predicted record predates the current observed outputs supplement; full parsed assertion values differ only at that field.
+Require the current outputs and actual body output fields to equal the known prediction field list, explicitly verify the historical field is absent, and compare every common field after only that local availability projection.
+Retain the existing request-ID rule, all schema/state/SQL/fetch/result assertions and every frozen byte.
+These are consumer inventory repairs, with no producer, warning policy, presentation, comparator exclusion or model behavior change.
