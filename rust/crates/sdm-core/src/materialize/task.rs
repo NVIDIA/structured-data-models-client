@@ -33,6 +33,7 @@ use crate::run::{Asker, internal};
 /// Typed rows obtained by the existing entity draw, before labels or any
 /// caller-supplied prediction entity is converted.
 pub(super) struct EntitySample {
+    source_read: Option<sdm_contract::run::ReplyId>,
     sampled: RecordBatch,
     pub(super) entity_key: ArrayRef,
     entity_time: Option<Vec<Option<i64>>>,
@@ -91,6 +92,7 @@ pub(super) async fn entity_sample(
     }
     // Seeds are optional. An unseeded provider documents its limitation
     // without issuing a routine warning for the default seed (P3D-13).
+    let mut source_read = None;
     let sampled = if let Some(frames) = frames {
         let entity_seed = seed.to_u128().unwrap_or(0);
         // The OS fact also seeds RS-1, whose entropy domain is wider.
@@ -108,40 +110,34 @@ pub(super) async fn entity_sample(
             entity_seed,
         )?
     } else {
-        read_times
-            .read(
-                asker,
-                entity,
-                one_batch(
-                    &ask(
-                        asker,
-                        DataRequest::SampleEntities {
-                            table: entity.source.clone(),
-                            key: vec![key.to_owned()],
-                            n: trials as u64,
-                            seed: seed_value,
-                            columns: entity.ordered(&entity_columns),
-                            filters,
-                            // The schema's type of the key, for a provider that
-                            // orders the draw by it (SQLite's, which reads the
-                            // type the key's declaration fixes first).
-                            key_dtype: asker
-                                .samples_by_key_dtype()
-                                .then(|| entity.column(key).map(|c| c.dtype))
-                                .flatten(),
-                            // The table's rows, for a provider sizing its draw by
-                            // them (the reference's sampled percentage).
-                            rows: if asker.capabilities()?.sample_rows {
-                                rows_of(memo, &entity.name)
-                            } else {
-                                None
-                            },
-                        },
-                    )
-                    .await?,
-                )?,
-            )
-            .await?
+        let request = DataRequest::SampleEntities {
+            table: entity.source.clone(),
+            key: vec![key.to_owned()],
+            n: trials as u64,
+            seed: seed_value,
+            columns: entity.ordered(&entity_columns),
+            filters,
+            // The schema's type of the key, for a provider that
+            // orders the draw by it (SQLite's, which reads the
+            // type the key's declaration fixes first).
+            key_dtype: asker
+                .samples_by_key_dtype()
+                .then(|| entity.column(key).map(|c| c.dtype))
+                .flatten(),
+            // The table's rows, for a provider sizing its draw by
+            // them (the reference's sampled percentage).
+            rows: if asker.capabilities()?.sample_rows {
+                rows_of(memo, &entity.name)
+            } else {
+                None
+            },
+        };
+        let name = request.name();
+        let pending = asker.fetch(request)?;
+        let observed = pending.source_read();
+        let raw = crate::describe::data(pending.await, name)?;
+        source_read = observed.and_then(|read| read.first());
+        read_times.read(asker, entity, one_batch(&raw)?).await?
     };
     if sampled.num_rows() == 0 {
         return Err(invalid(
@@ -188,6 +184,7 @@ pub(super) async fn entity_sample(
         None => None,
     };
     Ok(EntitySample {
+        source_read,
         sampled,
         entity_key,
         entity_time,
@@ -350,6 +347,7 @@ pub(super) struct LabelDraw<'a> {
 /// suspended execution state.
 #[derive(Clone)]
 pub(super) struct ExamplePopulation {
+    pub(super) source_read: Option<sdm_contract::run::ReplyId>,
     pub(super) sampled: RecordBatch,
     pub(super) entity_key: ArrayRef,
     pub(super) kept: Arc<[usize]>,
@@ -378,6 +376,7 @@ impl ExamplePopulation {
             .get(range)
             .ok_or_else(|| internal("candidate anchors do not cover their index range"))?;
         Ok(Self {
+            source_read: self.source_read,
             sampled: self.sampled.clone(),
             entity_key: Arc::clone(&self.entity_key),
             kept: Arc::clone(&self.kept),
@@ -419,6 +418,7 @@ pub(super) fn example_population(
         ),
     };
     Ok(ExamplePopulation {
+        source_read: sampled.source_read,
         sampled: sampled.sampled,
         nan_key: Arc::new(nan_rows(&sampled.entity_key)),
         entity_key: sampled.entity_key,
@@ -445,9 +445,12 @@ pub(super) async fn label_population(
 /// This is shared immutable task data, not a suspended label evaluation.
 pub(super) struct LabelInputs {
     pub(super) population: ExamplePopulation,
-    native_rows: Option<RecordBatch>,
-    entity_rows: Vec<usize>,
-    strings: std::collections::BTreeMap<String, sdm_contract::data::strings::StringEncoding>,
+    pub(super) target: super::Shape,
+    pub(super) native_rows: Option<RecordBatch>,
+    pub(super) entity_rows: Vec<usize>,
+    pub(super) entity_positions: Vec<usize>,
+    pub(super) strings:
+        std::collections::BTreeMap<String, sdm_contract::data::strings::StringEncoding>,
     pub(super) fetched: std::collections::BTreeMap<String, super::Fetched>,
     entity_selection: Option<Vec<bool>>,
 }
@@ -476,6 +479,7 @@ impl LabelInputs {
 /// Actual target groups retain the same reached input owner for later masks.
 pub(super) struct EvaluatedLabelGroups {
     pub(super) inputs: Arc<LabelInputs>,
+    pub(super) entity_selection: Option<Vec<bool>>,
     labelled: labels::Labelled,
     scalar_selection: Option<Vec<bool>>,
 }
@@ -561,6 +565,7 @@ pub(super) async fn read_label_inputs(
     draw: LabelDraw<'_>,
     population: ExamplePopulation,
     native_rows: Option<RecordBatch>,
+    observed_conditions: bool,
 ) -> Result<Arc<LabelInputs>, CoreError> {
     let LabelDraw {
         entity,
@@ -585,6 +590,7 @@ pub(super) async fn read_label_inputs(
         kept,
         nan_key,
         examples,
+        source_read: _,
     } = &population;
     // A NaN key a source hands over, which the reference reads as missing
     // where it reads floats into NumPy-backed pandas (Postgres's rows), is
@@ -637,7 +643,7 @@ pub(super) async fn read_label_inputs(
     // mask only after target restoration and what-if evaluation. A group
     // excluded by that condition still reaches the native converter.
     let entity_filtered = asked.task == Task::TemporalLink && entity_filter.is_some();
-    let eligibility = if entity_filtered {
+    let eligibility = if entity_filtered && !observed_conditions {
         let filter = asked
             .choosing
             .first()
@@ -649,7 +655,9 @@ pub(super) async fn read_label_inputs(
     let strings = labelling.strings;
     Ok(Arc::new(LabelInputs {
         population,
+        target: asked.target.clone(),
         native_rows,
+        entity_positions: entity_rows.clone(),
         entity_rows,
         strings,
         fetched,
@@ -664,7 +672,15 @@ pub(super) async fn evaluate_label_groups(
     population: ExamplePopulation,
     native_rows: Option<RecordBatch>,
 ) -> Result<EvaluatedLabelGroups, CoreError> {
-    let inputs = read_label_inputs(asker, memo, draw, population, native_rows).await?;
+    let inputs = read_label_inputs(asker, memo, draw, population, native_rows, false).await?;
+    evaluate_input_groups(asker, draw, inputs)
+}
+
+pub(super) fn evaluate_input_groups(
+    asker: &Asker,
+    draw: LabelDraw<'_>,
+    inputs: Arc<LabelInputs>,
+) -> Result<EvaluatedLabelGroups, CoreError> {
     let labelling = inputs.labelling(asker, draw.read_times, draw.key);
     let target = labelling.build(&draw.asked.target, &inputs.fetched, true)?;
     evaluate_target_groups(asker, draw, inputs, target)
@@ -704,6 +720,7 @@ pub(super) fn evaluate_target_groups(
     };
     null_compared(&asked.target, &labelled.mask)?;
     Ok(EvaluatedLabelGroups {
+        entity_selection: inputs.entity_selection.clone(),
         inputs,
         labelled,
         scalar_selection,
@@ -716,14 +733,34 @@ pub(super) fn complete_label_groups(
     groups: &EvaluatedLabelGroups,
     restored: Option<labels::Labels>,
 ) -> Result<LabelledContext, CoreError> {
+    complete_groups_selection(asker, draw, groups, restored, None)
+}
+
+pub(super) fn complete_observed_label_groups(
+    asker: &Asker,
+    draw: LabelDraw<'_>,
+    groups: &EvaluatedLabelGroups,
+    restored: labels::Labels,
+    what_if: Option<&[bool]>,
+) -> Result<LabelledContext, CoreError> {
+    complete_groups_selection(asker, draw, groups, Some(restored), Some(what_if))
+}
+
+fn complete_groups_selection(
+    asker: &Asker,
+    draw: LabelDraw<'_>,
+    groups: &EvaluatedLabelGroups,
+    restored: Option<labels::Labels>,
+    observed: Option<Option<&[bool]>>,
+) -> Result<LabelledContext, CoreError> {
     let EvaluatedLabelGroups {
         inputs,
         labelled,
         scalar_selection,
+        entity_selection,
     } = groups;
     let population = &inputs.population;
     let fetched = &inputs.fetched;
-    let entity_selection = &inputs.entity_selection;
     let mut labelled = labelled.clone();
     if let Some(restored) = restored {
         labelled = restore_group_labels(labelled, restored)?;
@@ -733,17 +770,26 @@ pub(super) fn complete_label_groups(
     // native restoration. No source or later candidate slice is reread.
     let selection = if draw.asked.task == Task::TemporalLink {
         let mut selection = entity_selection.clone();
-        for shape in draw
-            .asked
-            .choosing
-            .iter()
-            .skip(usize::from(entity_selection.is_some()))
-        {
-            let next = labels::truth(&labelling.build(shape, fetched, false)?)?.values;
-            selection = Some(match selection {
-                None => next,
-                Some(before) => before.iter().zip(&next).map(|(&a, &b)| a && b).collect(),
-            });
+        if let Some(what_if) = observed {
+            if let Some(next) = what_if {
+                selection = Some(match selection {
+                    None => next.to_vec(),
+                    Some(before) => before.iter().zip(next).map(|(&a, &b)| a && b).collect(),
+                });
+            }
+        } else {
+            for shape in draw
+                .asked
+                .choosing
+                .iter()
+                .skip(usize::from(entity_selection.is_some()))
+            {
+                let next = labels::truth(&labelling.build(shape, fetched, false)?)?.values;
+                selection = Some(match selection {
+                    None => next,
+                    Some(before) => before.iter().zip(&next).map(|(&a, &b)| a && b).collect(),
+                });
+            }
         }
         selection
     } else {
@@ -912,9 +958,24 @@ mod tests {
     }
 
     #[test]
+    fn native_nullable_float_missing_keys_keep_the_existing_nan_key_admission() {
+        let keys: ArrayRef = Arc::new(arrow_array::Float64Array::from(vec![
+            Some(f64::NAN),
+            None,
+            Some(3.0),
+        ]));
+        assert_eq!(nan_rows(&keys), BTreeSet::from([0, 1]));
+        let keys: ArrayRef = Arc::new(arrow_array::Float32Array::from(vec![None, Some(1.0)]));
+        assert_eq!(nan_rows(&keys), BTreeSet::from([0]));
+        let integers: ArrayRef = Arc::new(Int64Array::from(vec![None, Some(1)]));
+        assert!(nan_rows(&integers).is_empty());
+    }
+
+    #[test]
     fn candidate_slices_share_complete_source_allocations_and_copy_only_reached_examples() {
         let keys = integers((0..25_000).collect());
         let population = ExamplePopulation {
+            source_read: None,
             sampled: RecordBatch::try_from_iter([("id", Arc::clone(&keys))]).unwrap(),
             entity_key: keys,
             kept: (0..25_000).collect::<Vec<_>>().into(),
