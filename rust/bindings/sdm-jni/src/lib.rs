@@ -307,6 +307,7 @@ fn attachment_object<'local>(
         Attachment::FrameGraph(_)
         | Attachment::FrameQuestion(_)
         | Attachment::FramePopulation(_)
+        | Attachment::FrameLabelGroups(_)
         | Attachment::FrameLabelBatch(_)
         | Attachment::FrameTask(_)
         | Attachment::FrameReferences(_)
