@@ -36,10 +36,9 @@ def test_raw_cell_scalars_keep_exact_wide_values_validity_and_original_owner(
     original = pd.Series(values, dtype=object, index=[8, 2, 4], name='actual')
     before = original.copy(deep=True)
     actual = scalar_column(original, _meaning('nullable', physical))
-    expected = pd.Series(
-        pd.array(values, dtype=dtype), index=original.index, name=original.name
+    pd.testing.assert_extension_array_equal(
+        actual, pd.array(values, dtype=dtype)
     )
-    pd.testing.assert_series_equal(actual, expected)
     pd.testing.assert_series_equal(original, before)
 
 
@@ -56,8 +55,8 @@ def test_native_stringification_retains_null_dict_list_and_actual_user_call_orde
     )
     actual = scalar_column(original, _meaning('nullable', 'utf8'))
     assert events == ['render']
-    assert actual.iloc[:2].isna().all()
-    assert actual.iloc[2:].tolist() == [
+    assert actual[:2].isna().all()
+    assert actual[2:].tolist() == [
         '{"x":[1,null]}',
         '[true,"a"]',
         'changed',
