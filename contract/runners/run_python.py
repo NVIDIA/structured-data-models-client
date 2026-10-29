@@ -6965,19 +6965,54 @@ def environment_refusal(
 
 
 def publish_observations(
-    observations: list[dict[str, Any]], database: str
+    observations: list[dict[str, Any]],
+    database: str,
+    *,
+    private_source: Path | None = None,
 ) -> list[dict[str, Any]]:
-    """A publication copy, after raw starts/fetches have been recorded.
+    """Publish decoded views; actual encoded evidence stays in its private source.
 
-    Java and reference warehouse runners already publish through Placeheld.
-    Python core and Rust keep their private replay data unchanged and use
-    this same mapping only at the final observation-file boundary.
+    Current byte-owning observations require the original file and identify it
+    by its actual digest and line. Historical byte-free publication is unchanged.
+    Neither branch modifies raw capture or replay operands.
     """
     if database not in WAREHOUSES:
         return observations
     _, names, private = live_configuration(database)
     held = Placeheld(names, private)
-    published = held.value(observations)
+    publication = _sibling('observation_publication')
+    modern = any(publication.encoded_operands(value) for value in observations)
+    if modern:
+        if private_source is None:
+            raise RunnerFailure(
+                'encoded observations require a private original file'
+            )
+        source = private_source.read_bytes()
+        lines = source.decode('utf-8').splitlines()
+        originals = [json.loads(line) for line in lines]
+        if not _sibling('prediction_observation')._same_jsonl_snapshot(
+            originals, observations
+        ):
+            raise RunnerFailure(
+                'private original file differs from the supplied observations'
+            )
+        digest = hashlib.sha256(source).hexdigest()
+        published = []
+        for line, observation in enumerate(originals, 1):
+            prepared = publication.prepare_comparison(
+                observation, database, names
+            )
+            if publication.private_leak(prepared, held):
+                raise RunnerFailure(
+                    'a published observation retained private configuration'
+                )
+            published.append(
+                publication.public_derivative(
+                    prepared, source_sha256=digest, line=line
+                )
+            )
+    else:
+        published = held.value(observations)
     if held.leaked(json.dumps(published, sort_keys=True, ensure_ascii=False)):
         raise RunnerFailure(
             'a published observation retained private configuration'
@@ -6999,7 +7034,9 @@ def publish_main(argv: list[str]) -> int:
             for line in args.on.read_text().splitlines()
             if line.strip()
         ]
-        published = publish_observations(raw, args.database)
+        published = publish_observations(
+            raw, args.database, private_source=args.on
+        )
         with args.out.open('x') as stream:
             for observation in published:
                 stream.write(json.dumps(observation, sort_keys=True) + '\n')

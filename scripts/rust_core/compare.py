@@ -342,7 +342,20 @@ def _prediction_reader() -> ModuleType:
     return module
 
 
+@functools.cache
+def _publication() -> ModuleType:
+    return _runner()._sibling('observation_publication')
+
+
+def _raw_observation(observation: Any) -> dict[str, Any]:
+    if isinstance(observation, _publication().ComparisonObservation):
+        return observation.raw
+    return observation
+
+
 def _prediction_view(observation: dict[str, Any]) -> dict[str, Any]:
+    if isinstance(observation, _publication().ComparisonObservation):
+        return observation.view
     core = observation.get('core')
     operations = observation['identity'].get('operations') or []
     if core is None:
@@ -526,7 +539,12 @@ class Report:
 
 
 def _observations(
-    path: Path, runner: ModuleType, report: Report
+    path: Path,
+    runner: ModuleType,
+    report: Report,
+    *,
+    private_name_map: Path | None = None,
+    database: str = 'duckdb',
 ) -> tuple[str | None, dict[str, dict[str, Any]]]:
     r"""One runner's observations by case, each validated."""
     validate = runner.validator('observation')
@@ -535,9 +553,17 @@ def _observations(
     if not path.is_file():
         report.fail(f'{path.name}: runner failure: no observations written')
         return None, by_case
-    for number, line in enumerate(
-        path.read_text(encoding='utf-8').splitlines(), 1
-    ):
+    source_bytes = path.read_bytes()
+    names = None
+    if private_name_map is not None:
+        try:
+            names = _publication().load_name_map(
+                private_name_map, database, path, source_bytes=source_bytes
+            )
+        except _publication().PublicationError:
+            report.fail(f'{path.name}: invalid private source mapping')
+            return None, by_case
+    for number, line in enumerate(source_bytes.decode('utf-8').splitlines(), 1):
         try:
             observation = json.loads(line)
         except (json.JSONDecodeError, RecursionError):
@@ -563,6 +589,16 @@ def _observations(
                 f'observation: {problem}'
             )
             continue
+        if names is not None:
+            try:
+                observation = _publication().prepare_comparison(
+                    observation, database, names
+                )
+            except _publication().PublicationError:
+                report.fail(
+                    f'{path.name}:{number}: invalid private original evidence'
+                )
+                continue
         case = observation['case']
         if case in by_case:
             report.fail(f'{path.name}: {case} observed twice')
@@ -2615,7 +2651,8 @@ def _core_payload(
     if observation.get('core') is None:
         return
     try:
-        viewed = _prediction_view(observation)
+        original = _raw_observation(observation)
+        viewed = _prediction_view(original)
         calls = viewed['calls']
     except _prediction_reader().ObservationError:
         report.fail(
@@ -2639,7 +2676,7 @@ def _core_payload(
         else [_payload(body, report.paths) for body in calls]
     )
     if who == 'python-core':
-        received = (observation.get('public') or {}).get('payloads', [])
+        received = (original.get('public') or {}).get('payloads', [])
         if viewed['attempts'] is not None:
             try:
                 _prediction_reader().check_receipts(
@@ -2659,6 +2696,8 @@ def _core_payload(
                     f'received: {found}',
                     'payload',
                 )
+    if isinstance(observation, _publication().ComparisonObservation):
+        bodies = observation.project(bodies)
     if (
         who in UNOBSERVING
         and reference is not None
@@ -3178,7 +3217,7 @@ def _complete(report: Report, where: str, observation: dict[str, Any]) -> bool:
     if driver is None or driver.get('capture') is None:
         report.fail(f'{where}: no record of the statements run', 'sql.count')
         return False
-    problems = _capture_check().complete(observation)
+    problems = _capture_check().complete(_raw_observation(observation))
     for problem in problems:
         report.fail(f'{where}: the record of what ran: {problem}', 'sql.count')
     return not problems
@@ -3195,6 +3234,8 @@ def _sql(
     large: bool = False,
     database: str = 'duckdb',
     answered: bool = False,
+    *,
+    original: dict[str, Any] | None = None,
 ) -> None:
     r"""Decision H9 against the reference: ``sql.count`` and ``sql.result``,
     with ``sql.text``, ``sql.parameters`` and ``sql.bindings`` reported;
@@ -3220,7 +3261,9 @@ def _sql(
     where = f'{case["id"]}: {who} against python-ref'
     if not _complete(report, f'{case["id"]}: python-ref', reference):
         return
-    if not _complete(report, where, observation):
+    if not _complete(
+        report, where, observation if original is None else original
+    ):
         return
     mine, theirs = _by_stage(observation), _by_stage(reference)
     assert mine is not None and theirs is not None
@@ -3624,6 +3667,7 @@ def compare(
     register_file: Path = REGISTER,
     improvements: Path | None = None,
     database: str = 'duckdb',
+    private_name_map: Path | None = None,
 ) -> Report:
     r"""The comparison of ``files``' observations on ``database``, a
     database or a warehouse leg. A warehouse leg is judged as any database
@@ -3681,7 +3725,13 @@ def compare(
             report.fail(f'{reference_file.name}: not python-ref observations')
     observed: dict[str, dict[str, dict[str, Any]]] = {}
     for path in files:
-        who, by_case = _observations(path, runner, report)
+        who, by_case = _observations(
+            path,
+            runner,
+            report,
+            private_name_map=private_name_map,
+            database=database,
+        )
         if who is None:
             report.fail(f'{path.name}: runner failure: no valid observations')
             continue
@@ -3845,7 +3895,7 @@ def compare(
             seen, against = observation, ref
             named = report.core_only.get(case['id'].partition('@')[0], {})
             if named and who in MORE_EXACT_RUNNERS and ref is not None:
-                seen = without_core_only(observation, named)
+                seen = without_core_only(dict(observation), named)
                 against = without_left_out_warning(ref, named, observation)
             _core_payload(
                 report, case, who, observation, against, earlier or stop
@@ -3889,6 +3939,7 @@ def compare(
                     refused or kept or stop,
                     large,
                     database,
+                    original=observation,
                     answered=refused is not None
                     or kept is not None
                     or statements_opted_in(
@@ -3993,6 +4044,7 @@ def main(argv: list[str] | None = None) -> int:
         "more_exact fields (default: this tree's)",
     )
     parser.add_argument('--database', default='duckdb')
+    parser.add_argument('--private-name-map', type=Path)
     parser.add_argument('observations', type=Path, nargs='*')
     arguments = parser.parse_args(argv)
     if not arguments.observations and arguments.reference is None:
@@ -4009,6 +4061,7 @@ def main(argv: list[str] | None = None) -> int:
         arguments.expect,
         improvements=arguments.register,
         database=arguments.database,
+        private_name_map=arguments.private_name_map,
     )
     for text in report.info:
         print(f'statements per public call: {text}')
