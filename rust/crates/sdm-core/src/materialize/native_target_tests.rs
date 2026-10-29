@@ -21,7 +21,10 @@ fn native_column_positions_bind_the_complete_actual_missingness_observation() {
 
 #[test]
 fn native_filter_and_window_selection_keep_source_order_and_complete_alignment() {
-    assert_eq!(selected_positions(&[0, 2, 7], &[false, true, true]).unwrap(), [2, 7]);
+    assert_eq!(
+        selected_positions(&[0, 2, 7], &[false, true, true]).unwrap(),
+        [2, 7]
+    );
     assert_eq!(selected_positions(&[], &[]).unwrap(), []);
     for selection in [vec![], vec![true], vec![true, false, true, false]] {
         assert_eq!(
@@ -35,14 +38,55 @@ fn native_filter_and_window_selection_keep_source_order_and_complete_alignment()
 fn completion_must_cover_the_exact_selected_rows_not_just_an_ordered_subset() {
     assert!(validate_positions(&[0, 2], &[0, 2], 2).is_ok());
     assert!(validate_positions(&[], &[], 0).is_ok());
-    for actual in [vec![], vec![2], vec![0], vec![2, 0], vec![0, 0], vec![0, 2, 3]] {
+    for actual in [
+        vec![],
+        vec![2],
+        vec![0],
+        vec![2, 0],
+        vec![0, 0],
+        vec![0, 2, 3],
+    ] {
         assert_eq!(
-            validate_positions(&[0, 2], &actual, actual.len()).unwrap_err().code,
+            validate_positions(&[0, 2], &actual, actual.len())
+                .unwrap_err()
+                .code,
             sdm_contract::ErrorCode::InvalidMessage
         );
     }
     assert_eq!(
         validate_positions(&[0, 2], &[0, 2], 1).unwrap_err().code,
         sdm_contract::ErrorCode::InvalidMessage
+    );
+}
+
+#[test]
+fn empty_native_groups_keep_the_actual_completed_scalar_meaning() {
+    for (input, encoding, expected) in [
+        (DataType::Utf8, Some(StringEncoding::Utf8), DataType::Utf8),
+        (
+            DataType::Binary,
+            Some(StringEncoding::Utf8Surrogatepass),
+            DataType::Binary,
+        ),
+        (DataType::Boolean, None, DataType::Boolean),
+        (DataType::Int8, None, DataType::Int64),
+        (DataType::UInt16, None, DataType::Int64),
+        (DataType::UInt64, None, DataType::UInt64),
+        (DataType::Float32, None, DataType::Float32),
+        (
+            DataType::Decimal128(19, 3),
+            None,
+            DataType::Decimal128(38, 3),
+        ),
+    ] {
+        let values = arrow_array::new_empty_array(&input);
+        assert_eq!(group_value_type(&values, encoding).unwrap(), expected);
+    }
+    assert!(
+        group_value_type(
+            &arrow_array::new_empty_array(&DataType::Int64),
+            Some(StringEncoding::Utf8)
+        )
+        .is_err()
     );
 }
