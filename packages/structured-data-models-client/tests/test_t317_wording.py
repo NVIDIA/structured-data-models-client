@@ -624,10 +624,14 @@ def test_current_census_still_covers_every_current_site_once() -> None:
     census = _census()
     sites = census.sites(ROOT)
     probes = census.probes(ROOT)
-    assert len(sites) == len(probes) == 51
+    assert len(sites) == len(probes) == 53
     assert len({site['id'] for site in sites}) == len(sites)
     assert len({probe['site'] for probe in probes}) == len(probes)
     assert {site['id'] for site in sites} == {probe['site'] for probe in probes}
+    assert {
+        'rule:tabular_duplicate_index_ordering',
+        'packages/structured-data-models-client/src/sdm_client/_rust/tabular_materialize.py::materialize#1',
+    } <= {site['id'] for site in sites}
     assert census.check(ROOT) == []
 
 

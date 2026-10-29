@@ -107,6 +107,12 @@ fn actual_candidate_labels_order_the_sample_before_mapping_original_rows() {
         duplicate.sentence,
         sdm_contract::Sentence::NotYetMaterialize
     );
+    assert_eq!(
+        duplicate.fields.get("rule"),
+        Some(&sdm_contract::Detail::text(
+            "tabular_duplicate_index_ordering"
+        ))
+    );
 }
 
 #[test]
