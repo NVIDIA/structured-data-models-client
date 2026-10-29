@@ -68,7 +68,7 @@ fn completed_chain_owns_only_actual_batches_and_does_not_reinterpret_counts_as_i
 fn source_conversion_facts_are_closed_data_and_keep_full_original_decimal_metadata() {
     for (bits, scale) in [(32, -129), (64, 129), (128, 0), (256, i32::MAX)] {
         let value = json!({"stage":"source_column","population":population(),"input":{
-            "storage":"typed_columns","declaration":{"declaration":"decimal","native":{"bits":bits,"precision":7,"scale":scale}}
+            "storage":"typed_columns","declaration":{"declaration":"decimal","native":{"type":format!("decimal{bits}"),"precision":7,"scale":scale}}
         }});
         let input: MaterializePreparation = serde_json::from_value(value.clone()).unwrap();
         let roundtrip = serde_json::to_value(input).unwrap();
