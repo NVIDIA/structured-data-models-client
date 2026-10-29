@@ -692,6 +692,14 @@ impl TargetColumn {
         group_value_type(&self.values, self.encoding)
     }
 
+    pub(super) fn native_group_type(&self) -> Result<DataType, CoreError> {
+        group_value_type(&self.native_values, self.encoding)
+    }
+
+    pub(super) fn native_groups(&self) -> Result<labels::Target, CoreError> {
+        self.groups_from(&self.native_values)
+    }
+
     pub(super) fn group_encoding(&self) -> Option<StringEncoding> {
         self.encoding.or_else(|| {
             matches!(
@@ -964,6 +972,10 @@ impl TargetColumn {
     }
 
     pub(super) fn groups(&self) -> Result<labels::Target, CoreError> {
+        self.groups_from(&self.values)
+    }
+
+    fn groups_from(&self, values: &ArrayRef) -> Result<labels::Target, CoreError> {
         if self.derivation != Derivation::Windowed {
             return Err(invalid_target(
                 "grouping requires the complete actual window-selected target",
@@ -976,15 +988,15 @@ impl TargetColumn {
             .iter()
             .map(|&row| source.batch[row])
             .collect::<Vec<_>>();
-        let every = (0..self.values.len()).collect::<Vec<_>>();
+        let every = (0..values.len()).collect::<Vec<_>>();
         let examples = self.inputs.population.examples.index.len();
         // Window policy has already selected and bound every actual source
         // position. This reuses only the existing stable pair/group kernel.
         if window.aggregation == labels::Aggregation::ListDistinct {
-            let values = list_distinct_column(&self.values, &every, self.encoding)?;
+            let values = list_distinct_column(values, &every, self.encoding)?;
             labels::distinct_selected(examples, &batch, &values).map(labels::Target::Listed)
         } else {
-            let values = label_values(&self.values)?;
+            let values = label_values(values)?;
             labels::aggregate_selected(window.aggregation, examples, &batch, &values)
                 .map(labels::Target::Aggregated)
         }

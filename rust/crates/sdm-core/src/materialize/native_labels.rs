@@ -47,6 +47,29 @@ pub(super) fn restored(
     expected_encoding: Option<sdm_contract::data::strings::StringEncoding>,
     encoding: Option<sdm_contract::data::strings::StringEncoding>,
 ) -> Result<labels::Labels, CoreError> {
+    let scalar = expected
+        .column(2)
+        .as_list_opt::<i32>()
+        .map(|list| list.value_type());
+    restored_with_meaning(
+        before,
+        expected,
+        rows,
+        expected_encoding,
+        encoding,
+        scalar.as_ref(),
+    )
+}
+
+/// Native group identities and mathematical group masks are separate products.
+pub(super) fn restored_with_meaning(
+    before: &task::LabelledContext,
+    expected: &RecordBatch,
+    rows: &RecordBatch,
+    expected_encoding: Option<StringEncoding>,
+    encoding: Option<StringEncoding>,
+    mathematical_scalar: Option<&DataType>,
+) -> Result<labels::Labels, CoreError> {
     if rows.num_columns() != 3
         || rows
             .schema()
@@ -55,13 +78,12 @@ pub(super) fn restored(
             .map(|field| field.name().as_str())
             .collect::<Vec<_>>()
             != ["entity", "anchor", "target"]
-        || rows.num_rows() != before.keys.len()
+        || rows.num_rows() != expected.num_rows()
         || rows.column(2).null_count() != 0
-        || rows.column(0).to_data() != before.keys.to_data()
+        || rows.column(0).to_data() != expected.column(0).to_data()
         || rows.column(1).data_type()
             != &DataType::Timestamp(arrow_schema::TimeUnit::Nanosecond, None)
-        || times_ns(rows.column(1), "anchor")?
-            != before.anchors.iter().copied().map(Some).collect::<Vec<_>>()
+        || times_ns(rows.column(1), "anchor")? != times_ns(expected.column(1), "anchor")?
     {
         return Err(protocol(
             "restored native groups do not retain their complete ordered entity and anchor identities",
@@ -69,10 +91,7 @@ pub(super) fn restored(
     }
     let exact_decimal = expected_encoding.is_none()
         && encoding.is_none()
-        && expected
-            .column(2)
-            .as_list_opt::<i32>()
-            .is_some_and(|list| matches!(list.value_type(), DataType::Decimal128(_, _)));
+        && matches!(mathematical_scalar, Some(DataType::Decimal128(_, _)));
     let numeric_completion = rows.column(2).as_list_opt::<i32>().is_some_and(|list| {
         matches!(
             list.value_type(),

@@ -133,6 +133,8 @@ struct LabelGroupsData {
     native_target: Option<FrameNativeColumnRef>,
     target_encoding: Option<sdm_contract::data::strings::StringEncoding>,
     target_type: Option<DataType>,
+    native_groups: Option<task::LabelledContext>,
+    native_type: Option<DataType>,
 }
 
 #[derive(Clone)]
@@ -158,13 +160,24 @@ impl RetainedFrameLabelGroups {
         if let Some(restored) = &self.data.restored {
             return Ok(data(restored.rows.clone()));
         }
-        let labels = self
-            .data
-            .groups
-            .native_labels()?
-            .ok_or_else(|| protocol("the evaluated target has no native list groups"))?;
-        let rows =
-            super::super::native_labels::group_rows(&labels, self.data.target_type.as_ref())?;
+        let mathematical;
+        let labels = match &self.data.native_groups {
+            Some(labels) => labels,
+            None => {
+                mathematical =
+                    self.data.groups.native_labels()?.ok_or_else(|| {
+                        protocol("the evaluated target has no native list groups")
+                    })?;
+                &mathematical
+            }
+        };
+        let rows = super::super::native_labels::group_rows(
+            labels,
+            self.data
+                .native_type
+                .as_ref()
+                .or(self.data.target_type.as_ref()),
+        )?;
         Ok(data(rows))
     }
 }
@@ -647,6 +660,8 @@ pub(super) async fn label_groups(
             native_target,
             target_encoding,
             target_type: None,
+            native_groups: None,
+            native_type: None,
         }),
     };
     Ok(PreparedFrameLabelGroups {
@@ -789,7 +804,9 @@ pub(super) fn native_groups(
         .eligibility
         .as_ref()
         .and_then(|condition| condition.selection().map(<[bool]>::to_vec));
-    let native_labels = groups.native_labels()?;
+    let native_projection = groups.projected_native_labels(column.data.native_groups()?)?;
+    let native_type = column.data.native_group_type()?;
+    let native_labels = Some(&native_projection);
     let native_target = Some(column.input.data.meaning.target.clone());
     let target_encoding = native_labels
         .as_ref()
@@ -816,6 +833,8 @@ pub(super) fn native_groups(
             native_target,
             target_encoding,
             target_type,
+            native_groups: Some(native_projection),
+            native_type: Some(native_type),
         }),
     };
     Ok(PreparedFrameLabelGroups {
@@ -898,12 +917,13 @@ pub(super) fn restore_groups(
         .groups
         .native_labels()?
         .ok_or_else(|| protocol("native groups have no actual list values"))?;
-    let labels = super::super::native_labels::restored(
+    let labels = super::super::native_labels::restored_with_meaning(
         &before,
         &expected,
         &rows,
         owner.data.target_encoding,
         restored.encoding,
+        owner.data.target_type.as_ref(),
     )?;
     let restored = crate::materialize::native_conditions::RestoredGroups::new(
         input,

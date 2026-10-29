@@ -83,6 +83,8 @@ struct GroupsData {
     restored: Option<super::native_conditions::RestoredGroups>,
     encoding: Option<sdm_contract::data::strings::StringEncoding>,
     scalar: DataType,
+    native_groups: task::LabelledContext,
+    native_scalar: DataType,
     memo: SamplerMemo,
 }
 
@@ -108,10 +110,8 @@ impl RetainedMaterializeGroups {
                 vec![restored.rows.clone()],
             ));
         }
-        let values = self.data.groups.native_labels()?.ok_or_else(|| {
-            invalid("native materialization groups lost their complete list values")
-        })?;
-        let rows = native_labels::group_rows(&values, Some(&self.data.scalar))?;
+        let rows =
+            native_labels::group_rows(&self.data.native_groups, Some(&self.data.native_scalar))?;
         Ok(ArrowData::new(rows.schema(), vec![rows]))
     }
 }
@@ -614,9 +614,8 @@ fn native_groups(
         .eligibility
         .as_ref()
         .and_then(|condition| condition.selection().map(<[bool]>::to_vec));
-    let native = groups
-        .native_labels()?
-        .ok_or_else(|| invalid("SQL list target did not produce its complete native groups"))?;
+    let native = groups.projected_native_labels(column.data.native_groups()?)?;
+    let native_scalar = column.data.native_group_type()?;
     let encoding =
         native_labels::label_encoding(&native.labels).or_else(|| column.data.group_encoding());
     let scalar = column.data.group_type()?;
@@ -639,6 +638,8 @@ fn native_groups(
             restored: None,
             encoding,
             scalar,
+            native_groups: native,
+            native_scalar,
             memo: memo.clone(),
         }),
     };
@@ -721,12 +722,13 @@ fn restore_groups(
         .groups
         .native_labels()?
         .ok_or_else(|| invalid("native groups have no pre-mask list values"))?;
-    let labels = native_labels::restored(
+    let labels = native_labels::restored_with_meaning(
         &before,
         &expected,
         &rows,
         owner.data.encoding,
         restored.encoding,
+        Some(&owner.data.scalar),
     )?;
     let restored = super::native_conditions::RestoredGroups::new(
         &owner.data.native_input,

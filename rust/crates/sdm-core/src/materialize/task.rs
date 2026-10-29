@@ -488,14 +488,38 @@ impl EvaluatedLabelGroups {
         if !matches!(self.labelled.labels, labels::Labels::Lists(_)) {
             return Ok(None);
         }
-        let selected = self
-            .labelled
+        self.context_for(&self.labelled).map(Some)
+    }
+
+    /// The same population binds a separately grouped actual native operand.
+    pub(super) fn projected_native_labels(
+        &self,
+        target: labels::Target,
+    ) -> Result<LabelledContext, CoreError> {
+        let labelled = labels::label(&target)?;
+        if !matches!(labelled.labels, labels::Labels::Lists(_)) {
+            return Err(invalid(
+                "native group projection is not a complete list target",
+            ));
+        }
+        self.context_for(&labelled)
+    }
+
+    fn context_for(&self, labelled: &labels::Labelled) -> Result<LabelledContext, CoreError> {
+        if labelled.mask.len() != self.inputs.population.examples.index.len()
+            || labelled.mask.iter().filter(|&&v| v).count() != labelled.labels.len()
+        {
+            return Err(invalid(
+                "group mask does not cover its actual complete population",
+            ));
+        }
+        let selected = labelled
             .mask
             .iter()
             .enumerate()
             .filter_map(|(row, &kept)| kept.then_some(row))
             .collect::<Vec<_>>();
-        Ok(Some(LabelledContext {
+        Ok(LabelledContext {
             keys: take(
                 &self.inputs.population.entity_key,
                 &selected
@@ -507,8 +531,8 @@ impl EvaluatedLabelGroups {
                 .iter()
                 .map(|&row| self.inputs.population.examples.anchors[row])
                 .collect(),
-            labels: self.labelled.labels.clone(),
-        }))
+            labels: labelled.labels.clone(),
+        })
     }
 }
 
