@@ -386,6 +386,10 @@ def test_actual_forecast_entry_has_only_real_runs_calls_and_final_evidence(
     final = entry['results'][entry['final']]
     assert final['metadata'] == capture.predicted['metadata']
     assert final['result'] == capture.predicted['result']
+    assert final['presentation'] == capture.predicted['presentation']
+    assert [row['row_index'] for row in final['presentation']['rows']] == [
+        item.row_index for item in observed['items']
+    ]
     assert final['data']['predicted']['model'] == capture.predicted['model']
     assert len(final['data']['lineage']) == len(observed['frame'])
     assert {row['call_request_id'] for row in final['data']['lineage']} == set(

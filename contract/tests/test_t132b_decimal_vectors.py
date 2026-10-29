@@ -93,6 +93,8 @@ from typing import Any
 import pytest
 import yaml
 
+from _actual_core import _reader, checked_view
+
 ROOT = Path(__file__).resolve().parents[2]
 VECTORS = ROOT / 'contract/decimal-vectors.json'
 REGISTER = ROOT / 'docs/design/rust-core/register.yaml'
@@ -603,7 +605,8 @@ def _offset(vector_id: str) -> int:
 
 def _identities(observation: dict[str, Any], offset: int) -> list[Decimal]:
     r"""Each result row's entity id, exactly, less ``offset``."""
-    result = observation['core']['predicted']['result']
+    value = checked_view(observation)['events'][-1]['result']
+    result = _reader().semantic_result(value)['result']
     at = [c['name'] for c in result['columns']].index('id')
     return [
         Decimal(next(iter(row[at].values()))) - offset for row in result['rows']
@@ -655,9 +658,12 @@ def test_the_exact_join_check_fails_on_a_merged_key(
             if row[at] is not None:
                 row[at] = str(10**17)
     assert _joined(merged, offset) != _joined(same, 0)
-    result = observation['core']['predicted']['result']
-    at = [c['name'] for c in result['columns']].index('id')
-    result['rows'][1][at] = dict(result['rows'][0][at])
+    event = observation['core']['predictions'][-1]
+    presentation = event['results'][event['final']]['presentation']
+    presentation['rows'][1]['id'] = dict(presentation['rows'][0]['id'])
+    observation['core']['predicted']['presentation'] = copy.deepcopy(
+        presentation
+    )
     assert _identities(observation, offset) != [Decimal(0), Decimal(1)]
 
 

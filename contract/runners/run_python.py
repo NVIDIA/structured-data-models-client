@@ -1524,6 +1524,9 @@ class _Capture:
             and record['metadata'] is not None
             and record['result'] is not None
         ):
+            shown = native_result_snapshot(result)
+            if shown is not None:
+                record['presentation'] = shown
             self._result_presentations.append((result, owner.ordinal))
 
     def carried_result(self, error: BaseException, result: Any) -> None:
@@ -1595,6 +1598,11 @@ class _Capture:
             'request_id': predicted['request_id'],
             'metadata': final['metadata'],
             'result': final['result'],
+            **(
+                {'presentation': final['presentation']}
+                if 'presentation' in final
+                else {}
+            ),
         }
 
     def warned(self, message: bytes) -> None:
@@ -2289,6 +2297,83 @@ def _carried_result(stream: Any, rows: int) -> dict[str, Any]:
         'metadata': json.loads(metadata[b'metadata']),
         'outputs': json.loads(metadata[b'outputs']),
     }
+
+
+def native_result_snapshot(result: Any) -> dict[str, Any] | None:
+    """Read exact SDK storage after presentation, without converting custom owners.
+
+    The Arrow result and its lineage remain recorded independently.
+    Unavailable native values do not become inferred or guessed observations.
+    """
+    result_module = sys.modules.get('sdm_client.result')
+    item_module = sys.modules.get('sdm_api.generated.tfm_api')
+    if result_module is None or item_module is None:
+        return None
+    result_type = vars(result_module).get('PredictionResult')
+    item_type = vars(item_module).get('PredictionItem')
+    if type(result) is not result_type:
+        return None
+
+    def scalar(value: Any) -> Any:
+        if value is None:
+            return None
+        if type(value) is str:
+            return {'utf8': value}
+        if type(value) is int:
+            return {'i64': str(value)}
+        if type(value) is float:
+            return {'f64_bits': struct.pack('>d', value).hex()}
+        if type(value) is bool:
+            return {'bool': value}
+        raise TypeError('unobserved native scalar')
+
+    items = object.__getattribute__(result, '__dict__').get('items')
+    if type(items) is not tuple:
+        return None
+    rows = []
+    try:
+        for item in items:
+            if type(item) is not item_type:
+                return None
+            fields = object.__getattribute__(item, '__dict__')
+            row_index = fields.get('row_index')
+            step = fields.get('forecast_step')
+            if type(row_index) is not int or (
+                step is not None and type(step) is not int
+            ):
+                return None
+            rankings = fields.get('rankings')
+            shown = None
+            if rankings is not None:
+                if type(rankings) is not tuple:
+                    return None
+                shown = []
+                for ranked in rankings:
+                    if type(ranked) is not dict or set(ranked) != {
+                        'candidate',
+                        'score',
+                    }:
+                        return None
+                    score = ranked['score']
+                    if type(score) is not float:
+                        return None
+                    shown.append(
+                        {
+                            'candidate': scalar(ranked['candidate']),
+                            'score': struct.pack('>d', score).hex(),
+                        }
+                    )
+            rows.append(
+                {
+                    'row_index': row_index,
+                    'forecast_step': step,
+                    'id': scalar(fields.get('id')),
+                    'rankings': shown,
+                }
+            )
+    except (ValueError, TypeError):
+        return None
+    return {'rows': rows}
 
 
 def _result_rows(stream: Any) -> dict[str, Any]:

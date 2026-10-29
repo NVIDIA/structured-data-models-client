@@ -318,6 +318,7 @@
             "body": {"type": ["object", "null"]},
             "calls": {"description": "Where predict made more than one call (a forecast's steps, a request asked in several calls), every call's body in the order sent, body the last's (T2.1g); absent for one call.", "type": "array", "minItems": 2, "items": {"type": "object"}},
             "outputs": {"type": "array", "items": {"type": "string"}},
+            "presentation": {"$ref": "#/$defs/nativeResultPresentation"},
             "model": {"type": "string"},
             "request_id": {"type": "string"},
             "metadata": {"type": "object"},
@@ -944,6 +945,34 @@
         }
       }
     },
+    "nativeResultScalar": {
+      "oneOf": [
+        {"type": "null"},
+        {"type": "object", "additionalProperties": false, "required": ["i64"], "properties": {"i64": {"type": "string", "pattern": "^(0|-?[1-9][0-9]*)$"}}},
+        {"type": "object", "additionalProperties": false, "required": ["utf8"], "properties": {"utf8": {"type": "string"}}},
+        {"type": "object", "additionalProperties": false, "required": ["f64_bits"], "properties": {"f64_bits": {"type": "string", "pattern": "^[0-9a-f]{16}$"}}},
+        {"type": "object", "additionalProperties": false, "required": ["bool"], "properties": {"bool": {"type": "boolean"}}}
+      ]
+    },
+    "nativeResultPresentation": {
+      "description": "Actual primitive identity/ranking storage observed after the same owned native _present returns; Arrow carriers and lineage remain separate.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rows"],
+      "properties": {"rows": {"type": "array", "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["row_index", "forecast_step", "id", "rankings"],
+        "properties": {
+          "row_index": {"type": "integer"},
+          "forecast_step": {"type": ["integer", "null"]},
+          "id": {"$ref": "#/$defs/nativeResultScalar"},
+          "rankings": {"type": ["array", "null"], "items": {
+            "type": "object", "additionalProperties": false, "required": ["candidate", "score"],
+            "properties": {"candidate": {"$ref": "#/$defs/nativeResultScalar"}, "score": {"type": "string", "pattern": "^[0-9a-f]{16}$"}}
+          }}
+        }
+      }}}
+    },
     "predictionResultObservation": {
       "type": "object",
       "additionalProperties": false,
@@ -955,6 +984,7 @@
         "result"
       ],
       "properties": {
+        "presentation": {"$ref": "#/$defs/nativeResultPresentation"},
         "run": {
           "type": "integer",
           "minimum": 0

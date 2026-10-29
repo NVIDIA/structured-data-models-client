@@ -1225,7 +1225,7 @@ def _event_product(value: Any, attempts: Any, paths: tuple[Any, ...]) -> Any:
         endpoint = matched[0]['model_endpoint'] if matched else None
         return _event_payload(body, endpoint, paths)
 
-    result = dict(value)
+    result = _prediction_reader().semantic_result(value)
     if 'body' in result:
         result['body'] = payload(result['body'])
     if 'calls' in result:

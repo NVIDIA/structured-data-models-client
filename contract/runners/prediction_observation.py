@@ -12,8 +12,10 @@ This module reads JSON data and never evaluates SDK or user-owned objects.
 from __future__ import annotations
 
 import base64
+import copy
 import hashlib
 import json
+import struct
 from typing import Any
 
 
@@ -1222,6 +1224,176 @@ def _selected(
     return selected
 
 
+def _native_scalar(value: Any) -> Any:
+    require(
+        value is None or (type(value) is dict and len(value) == 1),
+        'native result scalar is malformed',
+    )
+    if value is None:
+        return None
+    kind, content = next(iter(value.items()))
+    valid = (
+        (kind == 'utf8' and type(content) is str)
+        or (kind == 'bool' and type(content) is bool)
+        or (
+            kind == 'i64'
+            and type(content) is str
+            and content.removeprefix('-').isascii()
+            and content.removeprefix('-').isdigit()
+            and (
+                content == '0'
+                or (
+                    not content.startswith('0') and not content.startswith('-0')
+                )
+            )
+        )
+        or (
+            kind == 'f64_bits'
+            and type(content) is str
+            and len(content) == 16
+            and all(c in '0123456789abcdef' for c in content)
+        )
+    )
+    require(valid, 'native result scalar has invalid typed content')
+    return value
+
+
+def _presentation(shown: Any, table: Any) -> None:
+    require(
+        type(shown) is dict
+        and set(shown) == {'rows'}
+        and type(shown['rows']) is list
+        and type(table) is dict,
+        'native result presentation is malformed',
+    )
+    columns = [column['name'] for column in table['columns']]
+    require(
+        'answer_index' in columns
+        and 'row_index' in columns
+        and len(shown['rows']) == len(table['rows']),
+        'native result presentation has incomplete row extent',
+    )
+    for row in table['rows']:
+        ordinal = int(row[columns.index('answer_index')]['i64'])
+        native = shown['rows'][ordinal]
+        require(
+            type(native) is dict
+            and set(native) == {'row_index', 'forecast_step', 'id', 'rankings'},
+            'native result presentation has unknown row fields',
+        )
+        require(
+            type(native['row_index']) is int
+            and str(native['row_index'])
+            == row[columns.index('row_index')]['i64'],
+            'native result presentation changed row index',
+        )
+        step = (
+            row[columns.index('forecast_step')]
+            if 'forecast_step' in columns
+            else None
+        )
+        require(
+            (native['forecast_step'] is None and step is None)
+            or (
+                type(native['forecast_step']) is int
+                and step == {'i64': str(native['forecast_step'])}
+            ),
+            'native result presentation changed forecast step',
+        )
+        _native_scalar(native['id'])
+        ranked = native['rankings']
+        if ranked is not None:
+            require(
+                type(ranked) is list
+                and 'scores' in columns
+                and 'candidates' in columns
+                and 'rankings' in columns,
+                'native ranking has no actual ordinal and score owners',
+            )
+            scores = row[columns.index('scores')]
+            candidates = row[columns.index('candidates')]
+            require(
+                type(scores) is dict
+                and type(candidates) is dict
+                and len(ranked)
+                == len(scores['list'])
+                == len(candidates['list']),
+                'native ranking extent differs from actual candidate selection',
+            )
+            for candidate, score in zip(ranked, scores['list'], strict=True):
+                require(
+                    type(candidate) is dict
+                    and set(candidate) == {'candidate', 'score'},
+                    'native ranking has unknown fields',
+                )
+                _native_scalar(candidate['candidate'])
+                require(
+                    score == {'f64_bits': candidate['score']},
+                    'native ranking changed its actual score',
+                )
+
+
+def semantic_result(value: dict[str, Any]) -> dict[str, Any]:
+    """Project actual presented identities while retaining every other raw field.
+
+    This never modifies the observed Arrow carrier or derives a native identity
+    from request inputs, expected answers or the last generic Run.
+    """
+    result = copy.deepcopy(value)
+    shown = result.pop('presentation', None)
+    if shown is None:
+        return result
+    table = result['result']
+    _presentation(shown, table)
+    names = [column['name'] for column in table['columns']]
+    kinds = set()
+    for row in table['rows']:
+        native = shown['rows'][int(row[names.index('answer_index')]['i64'])]
+        if 'id' in names:
+            row[names.index('id')] = native['id']
+            if native['id'] is not None:
+                kinds.add(next(iter(native['id'])))
+        if native['rankings'] is not None:
+
+            def literal(cell: Any) -> Any:
+                if cell is None:
+                    return None
+                kind, content = next(iter(cell.items()))
+                return (
+                    int(content)
+                    if kind == 'i64'
+                    else struct.unpack('>d', bytes.fromhex(content))[0]
+                    if kind == 'f64_bits'
+                    else content
+                )
+
+            row[names.index('rankings')] = {
+                'list': [
+                    {
+                        'utf8': json.dumps(
+                            literal(candidate['candidate']),
+                            ensure_ascii=False,
+                            separators=(',', ':'),
+                            allow_nan=False,
+                        )
+                    }
+                    for candidate in native['rankings']
+                ]
+            }
+    if 'id' in names and kinds:
+        table['columns'][names.index('id')]['type'] = (
+            {
+                'i64': 'int64',
+                'f64_bits': 'float64',
+                'utf8': 'utf8',
+                'bool': 'bool',
+            }.get(next(iter(kinds)), 'other')
+            if len(kinds) == 1
+            else 'native'
+        )
+    return result
+
+
 def _final(
     final: dict[str, Any],
     records: dict[int, dict[str, Any]],
@@ -1287,6 +1459,18 @@ def _final(
             'final prediction Arrow indices disagree with lineage',
         )
     predicted = final['data']['predicted']
+    if 'presentation' in final:
+        _presentation(final['presentation'], table)
+        names = [column['name'] for column in table['columns']]
+        if 'id' in names:
+            for row in table['rows']:
+                ordinal = int(row[names.index('answer_index')]['i64'])
+                if lineage[ordinal]['source_row'] is None:
+                    require(
+                        final['presentation']['rows'][ordinal]['id']
+                        == row[names.index('id')],
+                        'native presentation changed an identity with no native source owner',
+                    )
     bodies = [call['body'] for call in selected]
     return {
         'body': bodies[-1] if bodies else None,
@@ -1295,6 +1479,11 @@ def _final(
         'request_id': predicted['request_id'],
         'metadata': final['metadata'],
         'result': table,
+        **(
+            {'presentation': final['presentation']}
+            if 'presentation' in final
+            else {}
+        ),
     }
 
 
