@@ -20,7 +20,12 @@ import pytest
 
 from sdm_client._rust import frame_facade
 from sdm_client._rust.errors import raise_native
-from sdm_client._rust.native_label_stage import ColumnExport, complete_target
+from sdm_client._rust.native_label_stage import (
+    ColumnExport,
+    complete_eligibility,
+    complete_target,
+    complete_what_if,
+)
 from sdm_client._rust.native_products import Bindings, Product
 from sdm_client.errors import StructuredDataError
 
@@ -472,3 +477,124 @@ def test_plain_nullable_integer_uses_actual_native_cast_and_second_presence(
     assert native.positions.tolist() == [0, 3]
     assert str(native.values.dtype) == 'int64'
     assert source.operands == 0
+
+
+@pytest.mark.parametrize('role', ['eligibility', 'what_if'])
+@pytest.mark.parametrize('fail_left', [False, True])
+def test_condition_history_completes_each_occurrence_before_next_native_read(
+    role, fail_left
+):
+    events = []
+    failure = StructuredDataError(
+        'actual first comparison', code='INVALID_REQUEST'
+    )
+    view = {
+        'owner': 2,
+        'population': 'actual-source',
+        'range': {'start': 0, 'stop': 4},
+        'target': OPERAND,
+        'form': 'condition',
+        'condition_columns': [],
+    }
+    second = {**view, 'owner': 3}
+    initial = Product(
+        'label_inputs' if role == 'eligibility' else 'label_groups',
+        {
+            'owner': 1,
+            role: {'columns': [view, second], 'values': []},
+            **(
+                {'restored': {'rows': 4, 'encoding': None}}
+                if role == 'what_if'
+                else {}
+            ),
+        },
+        {1: InputOwner(events), 2: InputOwner(events), 3: InputOwner(events)},
+    )
+    refs = []
+    converted = []
+
+    class Sources:
+        source = Source(events)
+
+        def columns(self, current):
+            assert current.data in (view, second)
+            events.append(('source', current.data['owner']))
+            return self.source
+
+    class Port:
+        def target_column(self, inputs, values):
+            converted.append(snapshot(values))
+            owner = SelectionOwner(events, 'condition', [])
+            refs.append(weakref.ref(owner))
+            return Product('target_column', {'owner': 20}, {20: owner})
+
+        def complete(self, previous, column):
+            assert column.owners[20] is refs[-1]()
+            ordinal = len(converted)
+            events.append(('core', role, ordinal))
+            if fail_left:
+                raise failure
+            assert previous.data[role]['values'] == list(range(ordinal - 1))
+            owner = SelectionOwner(events, 'history', [])
+            refs.append(weakref.ref(owner))
+            return Product(
+                initial.kind,
+                {
+                    **initial.data,
+                    role: {
+                        **initial.data[role],
+                        'values': list(range(ordinal)),
+                    },
+                },
+                {1: owner},
+            )
+
+        eligibility_column = complete
+        what_if_column = complete
+
+        def native_failure(self, error):
+            pytest.fail(
+                f'unexpected native failure type {type(error).__name__}'
+            )
+
+    complete = (
+        complete_eligibility if role == 'eligibility' else complete_what_if
+    )
+    if fail_left:
+        with pytest.raises(StructuredDataError) as caught:
+            complete(initial, Sources(), Port())
+        assert caught.value is failure
+    else:
+        final = complete(initial, Sources(), Port())
+        assert final.data[role]['values'] == [0, 1]
+        assert final.owners[1] is refs[-1]()
+    expected = [
+        ('source', 2),
+        'input-rows',
+        ('read', 'flag', 1),
+        ('core', role, 1),
+    ]
+    if not fail_left:
+        expected += [
+            ('source', 3),
+            'input-rows',
+            ('read', 'flag', 2),
+            ('core', role, 2),
+        ]
+    assert events == expected
+    assert converted[0]['rows']['target'] == [4, 2, 1, 3]
+    if not fail_left:
+        assert converted[1]['rows']['target'] == [14, 12, 11, 13]
+    assert all(ref() is None for ref in (refs if fail_left else refs[:-1]))
+    assert initial.owners
+
+
+def test_what_if_cannot_read_any_native_operand_before_restored_groups():
+    class NoSources:
+        def columns(self, _):
+            pytest.fail('native operand reached before restoration')
+
+    from sdm_client._rust.codec import CodecError
+
+    with pytest.raises(CodecError, match='precede restored'):
+        complete_what_if(Product('label_groups', {}, {}), NoSources(), object())
