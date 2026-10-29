@@ -162,6 +162,19 @@ A failed left condition prevents right-side native effects, while a successful f
 Retain complete converted column and subtree-mask data as historical evidence; neither a serialized program cursor nor a generic next-action instruction belongs to this product.
 An overflow notice alone cannot replace a native condition cast that changes values or fails.
 
+The same completed operand boundary applies to entity eligibility before the target and what-if conditions after native group restoration.
+Each condition keeps its own original source-row extent and occurrence order, including aggregated what-if operands whose input row count differs from the candidate count.
+Reuse the existing Rust comparison, aggregation and combined-mask kernels; neither an eligible flag nor a host-computed condition result is an input.
+Retain successful operand values and completed subtree masks as useful condition data, and make each left-side refusal observable before the following native operand read.
+The pure/raw host path keeps its existing mathematical conversion kernel.
+
+A scored entity Lookup validates duplicate source keys before native business-column sanitation.
+Its source-row product binds the actual owned task batch, prediction range, scored keys and issued read; host-supplied scored/unique/refuse flags cannot replace that data.
+Extract the existing duplicate-score kernel once and share it between this native boundary and the raw request completion.
+Preserve context-only repeated keys, declared unique-key count omission, intentionally unread counts on other lookups, full-width caller-key diagnostics and the later missing-key refusal.
+The native consumer first assembles actual raw Arrow tables or in-scope scalar frames, consumes this lookup validation, and only then converts business columns.
+Keep already global core batch offsets unchanged instead of replaying native helper arithmetic.
+
 Release evaluation/source/native result owners after their completion is consumed, on native failure, cancellation and explicit close.
 Retain the original graph/current-owner cache rules and already-completed sampler state on failure.
 Do not advance later reads, masks, draws or decomposition children after the selected native failure.
