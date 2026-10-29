@@ -27,7 +27,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from _actual_core import checked_operations
+from _actual_core import checked_operations, checked_view
+from test_t44_legacy_pin_inputs import (
+    assert_corrected_inputs,
+    assert_pinned_fetch_shapes,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / 'contract/runners/run_python.py'
@@ -88,8 +92,14 @@ def test_base_regression_s_schema_on_the_core_is_the_reference_s(
     pinned = json.loads(
         (ROOT / 'contract/pinned/base.regression.core.json').read_text()
     )
-    for field in ('inputs', 'fetches', 'described'):
-        assert core['core'][field] == pinned[field], field
+    logical = checked_view(core)
+    assert_corrected_inputs(
+        logical['inputs'],
+        pinned['inputs'],
+        materialized=logical['materialized'],
+    )
+    assert_pinned_fetch_shapes(logical['fetches'], pinned['fetches'])
+    assert core['core']['described'] == pinned['described']
     for observed in (core, old):
         assert observed['public']['schema'] == reference['public']['schema']
         assert observed['outcome'] == reference['outcome']

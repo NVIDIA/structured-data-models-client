@@ -188,7 +188,10 @@ def test_native_semantic_projection_keeps_the_raw_ordinal_result():
     assert semantic['result'] != reader().semantic_result(value)['result']
 
 
-@pytest.mark.parametrize('fault', ['short', 'row', 'extra', 'scalar', 'width'])
+@pytest.mark.parametrize(
+    'fault',
+    ['short', 'row', 'extra', 'scalar', 'width', 'aggregation', 'outputs'],
+)
 def test_native_semantic_companion_is_complete_and_bound_to_actual_rows(fault):
     core, operations = actual_observation()
     shown = presentation()
@@ -200,8 +203,12 @@ def test_native_semantic_companion_is_complete_and_bound_to_actual_rows(fault):
         shown['rows'][0]['guessed'] = True
     elif fault == 'scalar':
         shown['rows'][0]['id'] = {'i64': 'not an integer'}
-    else:
+    elif fault == 'width':
         shown['rows'][0]['id'] = {'i64': str(10**25)}
+    elif fault == 'aggregation':
+        shown['ranking'] = True
+    else:
+        shown['outputs'].append('rankings')
     core['predictions'][0]['results'][0]['presentation'] = shown
     core['predicted']['presentation'] = copy.deepcopy(shown)
     with pytest.raises(reader().ObservationError):

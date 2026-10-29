@@ -40,7 +40,6 @@ none of, its differences); these tests gate the claims above in CI.
 
 from __future__ import annotations
 
-import copy
 import importlib.util
 import json
 import struct
@@ -52,7 +51,7 @@ from typing import Any
 
 from test_t44_legacy_pin_inputs import assert_corrected_inputs
 
-from _actual_core import checked_operations
+from _actual_core import _reader, checked_operations, checked_view
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNNERS = ROOT / 'contract/runners'
@@ -161,29 +160,35 @@ def test_base_regression_completes_a_model_request_and_its_result_on_the_core(
     assert core['public']['result'] == reference['public']['result']
     assert _without_plan_b_reads(core) == capture_check.projection(reference)
 
-    # The request the endpoint received is the call the core wrote, and the
-    # state predict started with is the one materialize answered.
-    predicted = core['core']['predicted']
+    # The endpoint received the core's call, with the complete domain data
+    # observed from materialization rather than an invented legacy input.
+    logical = checked_view(core)
+    [event] = logical['events']
+    predicted = _reader().semantic_result(core['core']['predicted'])
     assert predicted['body'] == payload['parsed']
-    [started] = [i for i in core['core']['inputs'] if i['op'] == 'predict']
-    materialized = core['core']['materialized']
-    assert started['state'] == materialized
+    [started] = [i for i in logical['inputs'] if i['op'] == 'predict']
+    materialized = logical['materialized']
+    for section in ('task', 'schema', 'context', 'predict'):
+        assert predicted['body'][section] == materialized['payload'][section]
     assert started['model'] == 'kumo-relational'
 
     # The two core hosts agree, against the pin rust-host is held to.
     pinned = json.loads(PINNED.read_text())
-    assert_corrected_inputs(core['core']['inputs'], pinned['inputs'])
+    assert_corrected_inputs(
+        logical['inputs'], pinned['inputs'], materialized=materialized
+    )
     # The actual per-Run Done journal observes outputs; the unchanged
     # legacy summary and historical writer do not carry that supplement.
-    [completed] = core['core']['legacy_predictions']
-    assert completed['completion'] == 'done'
+    assert event['error'] is None and event['result'] is not None
+    [entry] = logical['predictions']
+    assert entry['native'] and entry['completion'] == 'returned'
     assert (
-        completed['result']['outputs']
+        event['result']['outputs']
         == predicted['body']['output']['fields']
         == ['prediction']
     )
     assert 'outputs' not in predicted and 'outputs' not in pinned['predicted']
-    journal = copy.deepcopy(completed['result'])
+    journal = _reader().semantic_result(event['result'])
     journal.pop('outputs')
     assert journal == predicted
     assert {

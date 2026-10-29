@@ -53,8 +53,11 @@ from typing import Any
 import duckdb
 import pyarrow as pa
 import pytest
-from _actual_core import checked_operations
-from test_t44_legacy_pin_inputs import assert_corrected_inputs
+from _actual_core import checked_operations, checked_view
+from test_t44_legacy_pin_inputs import (
+    assert_corrected_inputs,
+    assert_pinned_fetch_shapes,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNNERS = ROOT / 'contract/runners'
@@ -145,7 +148,8 @@ def test_base_regression_reaches_the_reference_s_payload_on_the_core(
         'predict',
     ]
     assert core['core']['error'] is None
-    materialized = core['core']['materialized']
+    logical = checked_view(core)
+    materialized = logical['materialized']
     assert materialized['version'] == 2
     assert materialized['query'] == json.loads(CASE.read_text())['input']['pql']
     # Not vacuous: one request, of the payload's 112 examples and 2 to
@@ -167,9 +171,12 @@ def test_base_regression_reaches_the_reference_s_payload_on_the_core(
         assert sent[section] == built[section], section
     # The two core hosts agree on everything the core did and answered.
     pinned = json.loads(PINNED.read_text())
-    assert_corrected_inputs(core['core']['inputs'], pinned['inputs'])
-    for field in ('fetches', 'described', 'materialized'):
-        assert core['core'][field] == pinned[field], field
+    assert_corrected_inputs(
+        logical['inputs'], pinned['inputs'], materialized=materialized
+    )
+    assert_pinned_fetch_shapes(logical['fetches'], pinned['fetches'])
+    assert core['core']['described'] == pinned['described']
+    assert materialized == pinned['materialized']
 
 
 # --- the core's SQL against the reference's ---------------------------------

@@ -177,6 +177,9 @@ def test_the_core_rule_compares_the_explanation_across_hosts(
         'by_forecast_step' if 'by_forecast_step' in explained else 'summary'
     ] = 'another host'
     rust['core']['predicted']['result']['explanation'] = json.dumps(explained)
+    entry = rust['core']['predictions'][-1]
+    final = entry['results'][entry['final']]
+    final['result']['explanation'] = json.dumps(explained)
     differing = compare.Report(rules={'core': 'gate'})
     compare._core_agree(differing, case, python, rust)
     assert any('core.predicted' in str(f) for f in differing.failures), (
