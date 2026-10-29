@@ -931,3 +931,97 @@ def test_actual_boxed_time_coercion_notice_precedes_finishing_and_keeps_native_f
             'actual completed native time notice'
         ]
         assert adapter.native_error is None
+
+
+@pytest.mark.parametrize('native_failure', [False, True])
+def test_public_scalar_row_source_uses_actual_core_selected_boxed_time_recipe(
+    monkeypatch, native_failure
+):
+    from contextlib import contextmanager
+    from test_t45_native_sql_labels import _observe
+    from sdm_client._rust import native_sql
+    from sdm_client._rust.providers.duckdb import DuckDBProvider
+
+    source_rows = DuckDBProvider.source_rows
+    column = native_sql._Preparation.column
+    to_datetime = pd.to_datetime
+    selected = []
+    converted = []
+    failure = ValueError('actual boxed source datetime conversion failed')
+
+    @contextmanager
+    def scalar_rows(self, step, keys=None):
+        with source_rows(self, step, keys) as table:
+            if step.get('purpose') != 'source_rows':
+                yield table
+            else:
+                names = table.column_names
+                yield _scalars(
+                    [
+                        [row[name] for name in names]
+                        for row in table.to_pylist()
+                    ],
+                    names,
+                )
+
+    def observed(self, binding, facts):
+        result = column(self, binding, facts)
+        if binding['column'] == 'ts' and facts['storage'] == 'column_values':
+            selected.append(
+                (copy.deepcopy(facts), copy.deepcopy(result['scalar']))
+            )
+        return result
+
+    def actual_conversion(values, *args, **kwargs):
+        if (
+            selected
+            and isinstance(values, pd.Series)
+            and values.name == 'ts'
+            and values.dtype == object
+        ):
+            converted.append((values.name, len(values), kwargs.copy()))
+            if native_failure:
+                raise failure
+        return to_datetime(values, *args, **kwargs)
+
+    monkeypatch.setattr(DuckDBProvider, 'source_rows', scalar_rows)
+    monkeypatch.setattr(native_sql._Preparation, 'column', observed)
+    monkeypatch.setattr(pd, 'to_datetime', actual_conversion)
+    outcome = _observe(monkeypatch, 'ordinary', True)
+    assert selected
+    assert all(
+        facts
+        == {
+            'storage': 'column_values',
+            'inferred': 'temporal',
+            'all_missing': False,
+        }
+        and recipe
+        == {
+            'meaning': 'nullable',
+            'physical': {'type': 'timestamp', 'unit': 'ns', 'zone': None},
+        }
+        for facts, recipe in selected
+    )
+    assert converted
+    assert all(
+        options == {'unit': 'ns', 'errors': 'coerce'}
+        for _, _, options in converted
+    )
+    if native_failure:
+        assert outcome['outcome'] == 'error'
+        assert outcome['stage'] == 'materialize'
+        assert outcome['error']['cause']['type'] == 'builtins.ValueError'
+        assert outcome['error']['cause']['text'] == str(failure)
+    elif outcome['outcome'] == 'error':
+        assert (
+            outcome['error']['cause']['type']
+            == 'pyarrow.lib.ArrowNotImplementedError'
+        )
+        assert (
+            outcome['error']['cause']['text']
+            == 'Unsupported cast from list<item: int64> to int64 using function cast_int64'
+        )
+    else:
+        assert outcome['request']['predict_rows'] == 2
+        assert outcome['request']['context_rows'] > 0
