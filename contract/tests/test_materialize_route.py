@@ -229,7 +229,12 @@ def test_historical_plan_comparison_checks_actual_binding_evidence(tmp_path):
         else:
             fetch['bindings'] = None
         supplied = copy.deepcopy(logical['fetches'])
-        supplied[position]['bindings'] = copy.deepcopy(fetch['bindings'])
+        if fault == 'null':
+            # The older logical reader drops a null supplement. The helper
+            # must still reject it in the actual raw observation.
+            supplied[position].pop('bindings')
+        else:
+            supplied[position]['bindings'] = copy.deepcopy(fetch['bindings'])
         before = copy.deepcopy((changed, supplied))
         with pytest.raises(AssertionError):
             assert_pinned_fetch_shapes(supplied, pinned, observation=changed)
