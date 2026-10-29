@@ -66,6 +66,14 @@ def test_every_code_reaches_its_class_through_a_run() -> None:
                 'message': CANARY,
             }
             expected_code = code
+            if error['sentence'] == 'direct_response_contract':
+                error['fields'] = {
+                    'model': {'t': 'utf8', 'v': 'kumo-tabular'},
+                    'diagnostic': {
+                        't': 'utf8',
+                        'v': 'a prediction field is missing',
+                    },
+                }
             if code == 'ENDPOINT_REFUSED':
                 # A valid endpoint refusal carries its HTTP status and its
                 # separate endpoint code, which is the caller's public code.
