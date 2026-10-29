@@ -633,7 +633,10 @@ fn native_label_completion_binds_complete_pre_mask_groups_and_uses_actual_values
     let rows = owner.rows().unwrap().batches[0].clone();
     assert!(rows.num_rows() > 3);
     let original = rows.column(2).as_any().downcast_ref::<ListArray>().unwrap();
-    let mut builder = ListBuilder::new(Int64Builder::new());
+    let arrow_schema::DataType::List(field) = original.data_type() else {
+        panic!("actual groups must retain their scalar list type")
+    };
+    let mut builder = ListBuilder::new(Int64Builder::new()).with_field(Arc::clone(field));
     for _ in 0..rows.num_rows() {
         builder.values().append_value(3);
         builder.append(true);
@@ -644,6 +647,7 @@ fn native_label_completion_binds_complete_pre_mask_groups_and_uses_actual_values
         ("target", Arc::new(builder.finish()) as ArrayRef),
     ])
     .unwrap();
+    assert_eq!(changed.column(2).data_type(), rows.column(2).data_type());
     assert_ne!(original.to_data(), changed.column(2).to_data());
     stages.held.insert(
         AttachmentId(40_000),
