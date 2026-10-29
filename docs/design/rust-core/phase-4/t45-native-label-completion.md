@@ -91,9 +91,13 @@ The harness observes these real preparation inputs/results and attributes the fi
 
 A provider's scoped `source_rows` I/O primitive executes and reads once while retaining the actual Arrow table or actual scalar rows and original description within the existing cursor/transaction lifetime.
 The ordinary Arrow consumer remains pandas-free and uses its current concrete encoding, including full Postgres type-registry/precision/scale/array metadata and Snowflake's existing scalar text fallback.
-The native consumer constructs its actual source array inside this scope, before eligibility or target aggregation, and retains no cursor after scope exit.
+The native consumer retains the actual fetched data and constructs its source array at the original reader's position relative to cursor and transaction exit, before eligibility or target aggregation.
+The Arrow-backed DuckDB and Snowflake readers close their cursor before pandas construction and sanitation; do not extend that cursor lifetime through native callbacks.
+Scalar construction and sanitation may occupy distinct original positions, which must be traced separately rather than assigned one global timing rule.
+No completed task retains a cursor.
 Names alone are insufficient scalar metadata; preserve the original description objects and their reached name-access timing.
-Scope exit still occurs on native conversion, native warning-handler, ordinary boxing and cancellation failures.
+Scope exit retains each original reader's behavior for ordinary boxing and cancellation failures.
+A native conversion reached after scope exit cannot be reported as an exception that the database context handled.
 An actual native conversion failure is presented through the existing Rust-owned engine error assessment outside the provider-error handler, preserving the original object and cause graph.
 
 Rust selects the bounded scalar source recipe from resolved column declarations and actual fetched physical facts.

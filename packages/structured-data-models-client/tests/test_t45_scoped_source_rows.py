@@ -2,7 +2,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Useful provider data stays inside its actual cursor lifetime for conversion."""
+"""Actual provider data preserves representation and its precise cursor lifetime."""
 
 from __future__ import annotations
 
@@ -15,8 +15,10 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 
+from sdm_client._rust.providers.databricks import DatabricksSqlProvider
 from sdm_client._rust.providers.duckdb import DuckDBProvider
 from sdm_client._rust.providers.postgres import PostgresProvider, ScalarRows
+from sdm_client._rust.providers.sqlite import SqliteProvider
 
 
 def plan(dialect):
@@ -51,39 +53,52 @@ class Cursor:
         self.events.append(('arrow-read', size))
         return self.result
 
+    def fetch_arrow_table(self):
+        self.events.append(('arrow-read', None))
+        return self.result
+
+    def fetchall_arrow(self):
+        return self.fetch_arrow_table()
+
     def fetchall(self):
         self.events.append('rows-read')
         return self.result
 
 
 @pytest.mark.parametrize('failure', [False, True])
-def test_actual_arrow_native_construction_runs_before_cursor_exit(failure):
+@pytest.mark.parametrize(
+    'dialect,provider_type,size',
+    [
+        ('duckdb', DuckDBProvider, 1_000_000),
+        ('sqlite', SqliteProvider, None),
+        ('databricks', DatabricksSqlProvider, None),
+    ],
+)
+def test_actual_arrow_source_is_owned_before_post_cursor_native_construction(
+    failure, dialect, provider_type, size
+):
     events = []
     table = pa.table({'id': pa.array([2**53 + 1, None], type=pa.int64())})
     cursor = Cursor(events, table)
-    provider = DuckDBProvider(SimpleNamespace(cursor=lambda: cursor))
+    provider = provider_type(SimpleNamespace(cursor=lambda: cursor))
     error = ValueError('native source conversion failed')
     try:
-        with provider.source_rows(plan('duckdb')) as source:
+        with provider.source_rows(plan(dialect)) as source:
             assert source is table
-            events.append('native-source')
-            frame = source.to_pandas(types_mapper=pd.ArrowDtype)
-            assert frame['id'].iloc[0] == 2**53 + 1
-            if failure:
-                raise error
+        events.append('native-source')
+        frame = source.to_pandas(types_mapper=pd.ArrowDtype)
+        assert frame['id'].iloc[0] == 2**53 + 1
+        if failure:
+            raise error
     except ValueError as raised:
         assert failure and raised is error
     assert events[:4] == [
         'cursor-enter',
         ('execute', 'SELECT exact_rows'),
-        ('arrow-read', 1_000_000),
-        'native-source',
+        ('arrow-read', size),
+        ('cursor-exit', None, None),
     ]
-    assert events[4] == (
-        'cursor-exit',
-        ValueError if failure else None,
-        error if failure else None,
-    )
+    assert events[4] == 'native-source'
 
 
 def test_ordinary_arrow_port_uses_same_single_read_without_importing_pandas(
