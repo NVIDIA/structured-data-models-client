@@ -842,3 +842,116 @@ def test_task_column_meaning_uses_reached_native_property_and_later_metadata(
             assert current[1][0]['schema']['instance_table']['columns'][
                 'later'
             ] == {'dtype': 'int64', 'stype': 'categorical'}
+
+
+@pytest.mark.parametrize(
+    'effect',
+    ['truth-order', 'truth-failure', 'nonstring-mutation', 'repr-failure'],
+)
+def test_fresh_call_task_observations_preserve_truth_and_selected_refusal(
+    monkeypatch, effect
+):
+    from dataclasses import replace
+
+    from sdm_client import Request
+
+    def observe(core):
+        events = []
+        scripted = Scripted()
+        context = pd.DataFrame({'answer': [0, 1, 0], 'feature': [2, 3, 4]})
+        scoring = pd.DataFrame({'feature': [5]})
+        with monkeypatch.context() as patch:
+            patch.setenv(
+                _routing.ENVIRONMENT,
+                ','.join(_routing.DIRECT_CONSUMERS) if core else '',
+            )
+            request = Request(
+                context, scoring, target='answer', task='classification'
+            )
+            failure = ValueError('actual selected task repr')
+            changed = [False]
+
+            class Truth:
+                def __init__(self, name):
+                    self.name = name
+
+                def __bool__(self):
+                    events.append(('truth', self.name))
+                    if effect == 'truth-failure' and self.name == 'link':
+                        raise ArithmeticError(
+                            'actual native task comparison truth'
+                        )
+                    return False
+
+            class Choice(str):
+                def __hash__(self):
+                    events.append('native hash')
+                    if effect == 'nonstring-mutation' and not changed[0]:
+                        changed[0] = True
+                        request.task = replace(request.task, kind=42)
+                        events.append('task became integer')
+                    return str.__hash__(self)
+
+                def __eq__(self, other):
+                    events.append(('native equal', other))
+                    if other == 'temporal_link_prediction':
+                        return Truth('link')
+                    if other == 'forecasting':
+                        return Truth('forecast')
+                    return str.__eq__(self, other)
+
+                def __repr__(self):
+                    events.append('selected native repr')
+                    raise failure
+
+            request.task = replace(
+                request.task,
+                kind=Choice(
+                    'absent' if effect == 'repr-failure' else 'classification'
+                ),
+            )
+            with warnings.catch_warnings(record=True):
+                warnings.simplefilter('always')
+                try:
+                    with SDMClient(
+                        'http://localhost:1', max_retries=0
+                    ) as client:
+                        client._transport.close()
+                        client._transport = scripted
+                        result = client.predict(request, model='kumo-tabular')
+                        outcome = ('ok', result.to_pandas().to_dict('split'))
+                except Exception as error:
+                    outcome = (
+                        'error',
+                        _error_graph(error),
+                        getattr(error, 'details', None),
+                        error is failure,
+                    )
+            for body in scripted.calls:
+                body['metadata']['request_id'] = '<drawn>'
+            return outcome, scripted.calls, events
+
+    old, current = observe(False), observe(True)
+    assert current == old
+    if effect == 'nonstring-mutation':
+        assert current[1] == []
+        assert current[0][2]['task'] == 42
+        assert current[2].count('task became integer') == 1
+    elif effect == 'repr-failure':
+        assert current[0][3] is True
+        assert current[2][-1] == 'selected native repr'
+        assert current[1] == []
+    elif effect == 'truth-failure':
+        assert current[0][1][0] is ArithmeticError
+        assert ('truth', 'forecast') not in current[2]
+        assert current[1] == []
+    else:
+        link = current[2].index(('native equal', 'temporal_link_prediction'))
+        forecast = current[2].index(('native equal', 'forecasting'))
+        assert (
+            link
+            < forecast
+            < current[2].index(('truth', 'link'))
+            < current[2].index(('truth', 'forecast'))
+        )
+        assert current[0][0] == 'ok'
