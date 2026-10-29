@@ -18,7 +18,9 @@ def _target(scalar, values):
     return pa.array(
         values,
         type=pa.list_(
-            pa.field('actual_item', scalar, nullable=False, metadata={b'k': b'v'})
+            pa.field(
+                'actual_item', scalar, nullable=False, metadata={b'k': b'v'}
+            )
         ),
     )
 
@@ -69,8 +71,7 @@ def test_actual_changed_native_text_is_authoritative_across_physical_encodings(
     assert encoded.type.value_type == scalar
     assert encoded.type.value_field.name == previous.type.value_field.name
     assert (
-        encoded.type.value_field.metadata
-        == previous.type.value_field.metadata
+        encoded.type.value_field.metadata == previous.type.value_field.metadata
     )
     expected = (
         actual

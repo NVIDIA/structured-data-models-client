@@ -12,10 +12,50 @@ from typing import TypeAlias
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
+import pyarrow as pa
 
 NativeGroupResult: TypeAlias = (
     npt.NDArray[np.object_] | pd.api.extensions.ExtensionArray
 )
+
+
+def export_groups(
+    values: NativeGroupResult, target: pa.Array, *, text: bool
+) -> tuple[pa.Array, str | None]:
+    """Export actual completed groups, preserving their logical text data.
+
+    The predecessor supplies the fixed scalar width and list field meaning.
+    Native empty extension results are iterated as rows before Arrow boxing;
+    logical text may legitimately change between UTF-8 and lossless bytes.
+    """
+    rows = list(values)
+    if not text:
+        return pa.array(rows, type=target.type), None
+    child = target.type.value_field
+    strings = pa.list_(
+        pa.field(
+            child.name,
+            pa.string(),
+            nullable=child.nullable,
+            metadata=child.metadata,
+        )
+    )
+    try:
+        return pa.array(rows, type=strings), 'utf8'
+    except UnicodeEncodeError:
+        binary = pa.list_(
+            pa.field(
+                child.name,
+                pa.binary(),
+                nullable=child.nullable,
+                metadata=child.metadata,
+            )
+        )
+        encoded = [
+            [str.encode(value, 'utf-8', 'surrogatepass') for value in row]
+            for row in rows
+        ]
+        return pa.array(encoded, type=binary), 'utf8_surrogatepass'
 
 
 @dataclass(frozen=True)
@@ -30,6 +70,7 @@ class NativeTargetColumn:
     values: pd.Series
     positions: npt.NDArray[np.intp]
     present: npt.NDArray[np.bool_]
+    window_presence: npt.NDArray[np.bool_] | None = None
 
     @classmethod
     def column(
@@ -70,7 +111,7 @@ class NativeTargetColumn:
         positions = positions[present.to_numpy()]
         mask = np.zeros(len(self.present), dtype=bool)
         mask[positions] = True
-        return NativeTargetColumn(values, positions, mask)
+        return NativeTargetColumn(values, positions, mask, present.to_numpy())
 
     def group_result(self, groups: list[object]) -> NativeGroupResult:
         """Restore Rust's actual groups through this derived array's owner."""
