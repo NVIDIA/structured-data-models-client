@@ -5,6 +5,8 @@
 //! Single-table row selection over admitted primitive entity and validity facts.
 //! Native candidate labels are input facts for sampled-subset ordering.
 
+pub mod task;
+
 use std::collections::{HashMap, HashSet};
 
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};

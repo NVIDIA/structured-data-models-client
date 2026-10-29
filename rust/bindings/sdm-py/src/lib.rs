@@ -1037,6 +1037,9 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<tabular::TabularContext>()?;
     module.add_class::<tabular::TabularScoringKeys>()?;
     module.add_class::<tabular::TabularPopulation>()?;
+    module.add_class::<tabular::TabularTaskMeaning>()?;
+    module.add_class::<tabular::TabularTaskNumbers>()?;
+    module.add_function(wrap_pyfunction!(tabular::tabular_task_vocabulary, module)?)?;
     module.add_function(wrap_pyfunction!(tabular::tabular_indices, module)?)?;
     module.add_function(wrap_pyfunction!(tabular::tabular_labelled_rows, module)?)?;
     module.add_function(wrap_pyfunction!(reset_log_cache, module)?)?;

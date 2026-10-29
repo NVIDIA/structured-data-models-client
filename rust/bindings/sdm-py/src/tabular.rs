@@ -126,3 +126,165 @@ impl TabularPopulation {
         Ok(TabularContext { state })
     }
 }
+
+#[pyfunction]
+pub(crate) fn tabular_task_vocabulary(
+    py: Python<'_>,
+) -> PyResult<(Vec<String>, Vec<String>, String)> {
+    let words = crate::core_call(py, sdm_host::tabular_task_vocabulary)?;
+    Ok((words.stypes, words.tasks, words.categorical))
+}
+
+#[pyclass(module = "sdm_client._native")]
+pub(crate) struct TabularTaskMeaning {
+    state: sdm_host::TabularTaskMeaning,
+}
+
+#[pymethods]
+impl TabularTaskMeaning {
+    #[new]
+    fn new(py: Python<'_>, target_supported: bool) -> PyResult<Self> {
+        Ok(Self {
+            state: checked(
+                py,
+                crate::core_call(py, || sdm_host::TabularTaskMeaning::new(target_supported))?,
+            )?,
+        })
+    }
+    #[pyo3(signature = (present, string=None, member=None))]
+    fn stated(
+        &self,
+        py: Python<'_>,
+        present: bool,
+        string: Option<bool>,
+        member: Option<bool>,
+    ) -> PyResult<Self> {
+        Ok(Self {
+            state: checked(
+                py,
+                crate::core_call(py, || self.state.stated(present, string, member))?,
+            )?,
+        })
+    }
+    fn inferred(&self, py: Python<'_>, categorical: bool) -> PyResult<Self> {
+        Ok(Self {
+            state: checked(
+                py,
+                crate::core_call(py, || self.state.inferred(categorical))?,
+            )?,
+        })
+    }
+    fn original(&self, py: Python<'_>) -> PyResult<bool> {
+        crate::core_call(py, || self.state.original())
+    }
+    fn kind(&self, py: Python<'_>) -> PyResult<Option<String>> {
+        crate::core_call(py, || self.state.kind().map(str::to_owned))
+    }
+    fn numbers(&self, py: Python<'_>, cardinality: usize) -> PyResult<TabularTaskNumbers> {
+        Ok(TabularTaskNumbers {
+            state: checked(
+                py,
+                crate::core_call(py, || self.state.numbers(cardinality))?,
+            )?,
+        })
+    }
+}
+
+#[pyclass(module = "sdm_client._native")]
+pub(crate) struct TabularTaskNumbers {
+    state: sdm_host::TabularTaskNumbers,
+}
+
+impl TabularTaskNumbers {
+    fn number(
+        &self,
+        py: Python<'_>,
+        ordinal: usize,
+        value: sdm_host::TabularTaskNumber,
+    ) -> PyResult<Self> {
+        Ok(Self {
+            state: checked(
+                py,
+                crate::core_call(py, || self.state.number(ordinal, value))?,
+            )?,
+        })
+    }
+}
+
+#[pymethods]
+impl TabularTaskNumbers {
+    fn boolean(&self, py: Python<'_>, ordinal: usize) -> PyResult<Self> {
+        self.number(py, ordinal, sdm_host::TabularTaskNumber::Boolean)
+    }
+    fn integral(&self, py: Python<'_>, ordinal: usize) -> PyResult<Self> {
+        self.number(py, ordinal, sdm_host::TabularTaskNumber::Integral)
+    }
+    #[pyo3(signature = (ordinal, finite, equal=None, returned=None))]
+    fn decimal(
+        &self,
+        py: Python<'_>,
+        ordinal: usize,
+        finite: bool,
+        equal: Option<bool>,
+        returned: Option<bool>,
+    ) -> PyResult<Self> {
+        self.number(
+            py,
+            ordinal,
+            sdm_host::TabularTaskNumber::Decimal {
+                finite,
+                equal,
+                returned,
+            },
+        )
+    }
+    fn real(&self, py: Python<'_>, ordinal: usize, value: f64) -> PyResult<Self> {
+        self.number(
+            py,
+            ordinal,
+            sdm_host::TabularTaskNumber::RealValue {
+                bits: value.to_le_bytes(),
+            },
+        )
+    }
+    fn real_failure(
+        &self,
+        py: Python<'_>,
+        ordinal: usize,
+        overflow_error: bool,
+        type_error: bool,
+        value_error: bool,
+    ) -> PyResult<Self> {
+        self.number(
+            py,
+            ordinal,
+            sdm_host::TabularTaskNumber::RealFailure {
+                overflow_error,
+                type_error,
+                value_error,
+            },
+        )
+    }
+    fn other(&self, py: Python<'_>, ordinal: usize) -> PyResult<Self> {
+        self.number(py, ordinal, sdm_host::TabularTaskNumber::Other)
+    }
+    fn exhausted(&self, py: Python<'_>, ordinal: usize) -> PyResult<Self> {
+        Ok(Self {
+            state: checked(py, crate::core_call(py, || self.state.exhausted(ordinal))?)?,
+        })
+    }
+    fn kind(&self, py: Python<'_>) -> PyResult<Option<String>> {
+        crate::core_call(py, || self.state.kind().map(str::to_owned))
+    }
+    fn propagates(&self, py: Python<'_>) -> PyResult<bool> {
+        crate::core_call(py, || self.state.propagates())
+    }
+    fn notices(&self, py: Python<'_>) -> PyResult<Py<pyo3::types::PyBytes>> {
+        let notices = crate::core_call(py, || self.state.notice().into_iter().collect::<Vec<_>>())?;
+        let bytes = checked(
+            py,
+            crate::core_call(py, || sdm_host::frame_constructors::notices_bytes(&notices))?,
+        )?;
+        Ok(pyo3::types::PyBytes::new(py, &bytes).unbind())
+    }
+}

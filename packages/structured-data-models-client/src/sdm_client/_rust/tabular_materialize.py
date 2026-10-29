@@ -104,8 +104,8 @@ def materialize(
     from predictive_query.validator.utils import col_name, table_name
 
     from sdm_client import Request, _native
+    from sdm_client._rust import tabular_task
     from sdm_client.materializers.tabular import (
-        TabularMaterializer,
         _asking,
         _rows,
     )
@@ -192,14 +192,12 @@ def materialize(
             if selected_error._sentence == 'not_yet_materialize':
                 raise RouteError(selected_error.message) from None
             raise
-    # Task derivation is the next T4.6 extraction; constructor/prediction reuse
-    # their existing core routes when selected, rather than a second wire path.
     return _asking(
         Request(
             context=selected,
             predict=predict,
             target=target,
-            task=TabularMaterializer._task_kind(query, selected[target], task),
+            task=tabular_task.task_kind(query, selected[target], task),
             schema=schema.snapshot(),
             entity_table=name,
         ),

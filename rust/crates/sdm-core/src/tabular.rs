@@ -6,6 +6,11 @@
 
 use sdm_contract::CoreError;
 
+pub use sdm_engine::tabular::task::{
+    Number as TabularTaskNumber, TaskMeaning as TabularTaskMeaning,
+    TaskNumbers as TabularTaskNumbers, Vocabulary as TabularTaskVocabulary,
+    vocabulary as tabular_task_vocabulary,
+};
 pub use sdm_engine::tabular::{
     IndexSelection as TabularIndexSelection, labelled_rows as tabular_labelled_rows,
 };

@@ -79,7 +79,8 @@ pub use sdm_schema::frames::object_infer::{
 pub use sdm_wire::json::Value as LogicalValue;
 pub use tabular::{
     TabularContext, TabularIndexSelection, TabularPopulation, TabularScoringKeys,
-    tabular_labelled_rows,
+    TabularTaskMeaning, TabularTaskNumber, TabularTaskNumbers, TabularTaskVocabulary,
+    tabular_labelled_rows, tabular_task_vocabulary,
 };
 
 /// Finite native sample facts complete one useful physical column meaning.

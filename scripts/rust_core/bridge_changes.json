@@ -261,7 +261,7 @@
       "gone": "T3.17: the choice of template by field, rule and fields is the core's choice of sentence"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::error_from_core": {
-      "refactor": "T4.4: retain native presentation recipes, including qualified/bare frame-payload PastInt64 ValueError causes, original nested handler context and active caller context; private site metadata is omitted from public details, decoded-envelope naming is type-only, and unmarked SQL/direct readers are unchanged. T4.4: the reached native frame payload NotFinite refusal retains its ValueError cause through the existing Core-selected presentation recipe; the unmarked warehouse/direct boundary remains unchanged."
+      "refactor": "T4.4: retain native presentation recipes, including qualified/bare frame-payload PastInt64 ValueError causes, original nested handler context and active caller context; private site metadata is omitted from public details, decoded-envelope naming is type-only, and unmarked SQL/direct readers are unchanged. T4.4: the reached native frame payload NotFinite refusal retains its ValueError cause through the existing Core-selected presentation recipe; the unmarked warehouse/direct boundary remains unchanged. T4.6: present Core-selected tabular target-stype and stated-task refusals with scoped actual native repr, the original task object and exact legacy public details/class; native display failures remain outside the formatting-defect catch and other selected readers are unchanged."
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::raise_from_core": {
       "refactor": "T4.4: forward the explicit native constructor presentation choice for an already selected error; actual native failure rethrows and the default coded/provider privacy boundary are unchanged."
@@ -594,7 +594,7 @@
       "refactor": "T4.6: propagate the selected actual exception instance and its native cause/context/suppression graph, removing only the explicitly identified internal CoreError; no admission or refusal classification"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::raise_error": {
-      "refactor": "T4.4: restore ordinary native-constructor raising for the selected causeless INVALID_REQUEST error, removing only its exact introduced core context while retaining the actual caller; default coded privacy and explicit native causes remain unchanged."
+      "refactor": "T4.4: restore ordinary native-constructor raising for the selected causeless INVALID_REQUEST error, removing only its exact introduced core context while retaining the actual caller; default coded privacy and explicit native causes remain unchanged. T4.6: a finite tabular_task presentation preserves the original ordinary-raise suppression/context only for the selected target-stype and stated-task sentences; every other error keeps its existing presentation."
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_payload": {
       "gone": "T4.4: removed early payload snapshot encoding; the actual transport encoder supplies authoritative per-call bytes."

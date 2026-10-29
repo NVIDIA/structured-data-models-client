@@ -703,6 +703,14 @@ def error_from_core(
     if (code, details.get('rule')) in AS_THE_BASE_CLASS:
         cls = StructuredDataError
     sentence = error['sentence']
+    if sentence == 'tabular_target_stype':
+        cls = StructuredDataError
+        if (present := _held().get('tabular_task_target')) is not None:
+            column, stype = present(fields)
+            fields['column'] = _ObservedRepr(column)
+            fields['stype'] = _ObservedRepr(stype)
+    if sentence == 'model_lacks_task' and fields.get('native_tabular_task'):
+        cls = StructuredDataError
     if (
         sentence in {'ranking_output_unknown', 'ranking_outputs_unknown'}
         and fields.get('native_ranking_outputs')
@@ -1035,7 +1043,7 @@ def _detail(value: Any) -> Any:
 
 # Native constructor semantic refusals use the original ordinary raise.
 # Other boundaries keep the coded privacy/presentation behavior.
-ErrorPresentation = Literal['coded', 'frame_constructor']
+ErrorPresentation = Literal['coded', 'frame_constructor', 'tabular_task']
 
 
 def raise_from_core(
@@ -1090,8 +1098,9 @@ def raise_error(
     if (
         presentation == 'frame_constructor'
         and error.code == 'INVALID_REQUEST'
-        and cause is None
-    ):
+        or presentation == 'tabular_task'
+        and error._sentence in {'tabular_target_stype', 'model_lacks_task'}
+    ) and cause is None:
         try:
             raise error
         finally:

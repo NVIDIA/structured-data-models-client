@@ -831,6 +831,12 @@ pub fn template(sentence: Sentence) -> Template {
         S::ModelLacksTask => {
             said(r#"{model} does not serve the task kind {task!r}; it serves {supported!r}"#)
         }
+        S::TabularTargetStype => said(
+            r#"tabular materialization requires a categorical or numerical target; {column!r} has semantic type {stype!r}"#,
+        ),
+        S::TabularBinaryLabel => said(
+            r#"{host.tabular_target} holds two whole numbers, which is how a binary label is usually written, so this is being asked as a classification. If they are quantities rather than labels, pass task="regression" to ask for one; pass task="classification" to say this was meant and silence this."#,
+        ),
         S::ModelLacksOutputs => said(
             r#"{model} does not produce {unsupported_outputs!r}; it produces {supported_outputs!r}"#,
         ),

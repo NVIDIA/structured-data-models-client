@@ -41,7 +41,8 @@ pub use sdm_core::{
 };
 pub use sdm_core::{
     TabularContext, TabularIndexSelection, TabularPopulation, TabularScoringKeys,
-    tabular_labelled_rows,
+    TabularTaskMeaning, TabularTaskNumber, TabularTaskNumbers, TabularTaskVocabulary,
+    tabular_labelled_rows, tabular_task_vocabulary,
 };
 pub use zones::{ZoneError, ZoneResolver, ZoneRoot, ZoneSource, session_zone_offset};
 

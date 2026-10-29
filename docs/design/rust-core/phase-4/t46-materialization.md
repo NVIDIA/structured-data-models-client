@@ -69,7 +69,8 @@ Complete duplicate labels describe an unfinished native sorting family, so Core 
 The Rust host exercises the same public typed selection product exported through the composition root and host layer.
 No new serialized message or opaque continuation is introduced by these owned primitive values.
 
-Task derivation still uses the existing implementation in this slice and remains an explicit T4.6 extraction obligation.
+The next source increment extracts the original task boundary into shared task-meaning and lazy numeric-prefix products.
+Its handwritten source is complete but remains unexecuted, with contract36/catalog schema authoring pending before validation.
 Broader entity equality, duplicate or mixed index labels, other index families, custom native protocols, counts outside native row widths, final default activation and complete T4.6 acceptance remain open.
 The current source and controls have not been executed; the frozen frame/link background run provides no validation credit for this new source.
 
@@ -82,3 +83,28 @@ The retained population checks the mask extent, returns local labelled positions
 Candidate values are captured before context-cap validation and advice, preserving that separate native boundary.
 Public source-read controls cover actual target operand identity, present and no-match holdouts, empty scoring and scoring-accessor edits to source keys.
 The next controls also retain full old/core contexts, request bodies and results when an empty-scoring getter changes the source index or a target getter changes the held-out index before sampling.
+
+
+## Shared task meaning
+
+The opt-in materialization path captures the actual final context target Series before target-stype or stated-task observations.
+Rust owns the two-task vocabulary, supported target meanings, stated membership interpretation, two-whole inference, selected refusals and classification notice.
+Python retains the original stated object and returns it unchanged on acceptance, including str subclasses.
+It performs actual native stype membership, stated isinstance/hash/equality, and selected diagnostic repr only at their reached boundaries.
+The stype refusal precedes stated-task operations, and native display faults are presented outside an internal CoreError handler.
+ModelLacksTask is reused with exactly the old task/supported public details and no extra model detail.
+A finite task presentation preserves the original ordinary raise, including its suppression flag and active caller context, for only these selected task refusals.
+Categorical and explicit shortcuts read no target distinct values.
+Only absent numerical tasks reach the captured target's actual dropna, unique, len and lazy iterator.
+The prefix product consumes reached bool/Integral, Decimal finite/round/equality/truth or completed Real float/failure-ancestry facts and stops after the first nonwhole result.
+An actual reported length of two does not imply two iterator members; native exhaustion is observed rather than fabricated, including zero, one or more than two yielded members.
+The owned prefix retains its consumed extent and complete conjunction meaning in constant space, with malformed phase/order/extent/completion facts refused.
+No integer width limit or Decimal digit encoding is introduced into these native observations.
+Native failures outside OverflowError, TypeError and ValueError on Real conversion propagate as their original owners.
+The generator-expression versus returned-truth StopIteration boundaries remain distinct.
+Two-whole classification emits the finite shared first-party notice before schema snapshot, Request construction and query recording.
+Public original/Core materialize-to-predict controls retain full contexts, tasks, schema, encoded bodies, results and native error graphs, with actual native protocol/effect order controls.
+Typed Rust Host consumers execute the same task products and pin vocabulary/refusal metadata, cardinality shortcuts, exact exhaustion, short circuit and malformed facts.
+No new crate, serialized operation, native object registry, callback RunStep, generic interpreter or second task-policy table is introduced.
+The contract36 source change and finite catalog additions require genuine canonical generation under the normal source-authoring controls; no old schema is claimed to describe that new source.
+The preexisting broader entity/index families, custom sorter handling, default activation, sessions and complete T4.6 acceptance remain open.

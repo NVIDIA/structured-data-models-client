@@ -738,6 +738,7 @@ warning_codes! {
     TwoWaysToATable = "TWO_WAYS_TO_A_TABLE",
     CandidatesUnscored = "CANDIDATES_UNSCORED",
     ContextConstant = "CONTEXT_CONSTANT",
+    TabularBinaryLabel = "TABULAR_BINARY_LABEL",
     OutputsAbsent = "OUTPUTS_ABSENT",
     StepsUnexplained = "STEPS_UNEXPLAINED",
     MissingIndices = "MISSING_INDICES",
@@ -991,6 +992,8 @@ sentences! {
     MetadataNotAMapping = "metadata_not_a_mapping", E::InvalidResponse;
     ModelLacksShape = "model_lacks_shape", E::UnsupportedRequest;
     ModelLacksTask = "model_lacks_task", E::UnsupportedRequest;
+    TabularTargetStype = "tabular_target_stype", E::UnsupportedRequest;
+    TabularBinaryLabel = "tabular_binary_label", W::TabularBinaryLabel;
     ModelLacksOutputs = "model_lacks_outputs", E::UnsupportedRequest;
     ContextPastModel = "context_past_model", E::UnsupportedRequest;
     NoContextRows = "no_context_rows", E::UnsupportedRequest;
