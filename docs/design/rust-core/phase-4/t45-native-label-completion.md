@@ -99,6 +99,16 @@ Postgres constructs its object DataFrame inside the read, then performs nullable
 SQLite and Databricks also perform pandas conversion after their Arrow cursor closes.
 Snowflake's original windowed reader has no scalar fallback; its ordinary provider fallback remains separate and cannot turn that original Arrow failure into a successful native label source.
 No completed task retains a cursor.
+One logical source read retains the exact ordered partition of bound fetch plans in its existing pending Ask.
+When finite native preparation requests this description, each actual FetchStep reports its first reply ID, ordinal and complete part count.
+These fields describe issued I/O data, not an action cursor or callback.
+Independent same-table reads remain distinct partitions, and generic chunk reply, concatenation and failure ordering remain unchanged.
+The native source consumer reads only this complete bound partition, retains the actual raw results, and performs scalar sanitation once after every required chunk succeeds.
+It preserves helper columns and existing core offsets unchanged when splitting the actual converted data back across those replies.
+On a real I/O failure it stops later queries and cancels the incomplete source run without fake data or premature Arrow boxing.
+An error-only source diagnostic binds the existing prepared source and maps the reported failed request and existing provider facts through the shared provider error kernel.
+It authorizes no success rows and claims no stronger issued-request proof than the actual captured request supplies.
+Native sanitation failures remain separate retained native failures.
 Names alone are insufficient scalar metadata; preserve the original description objects and their reached name-access timing.
 Scope exit retains each original reader's behavior for ordinary boxing and cancellation failures.
 A native conversion reached after scope exit cannot be reported as an exception that the database context handled.
