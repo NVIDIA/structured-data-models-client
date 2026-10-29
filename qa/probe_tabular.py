@@ -337,6 +337,56 @@ def run(client):
         except StructuredDataError as exc:
             note(e, str(exc)[:120])
 
+    with probe(
+        AREA,
+        'an explanation over several rows',
+        'one entry per scored row, keyed by row_index, no related tables',
+    ) as e:
+        ctx, sc = split(data.adult(), 200, 4)
+        result = client.predict(
+            Request(
+                context=ctx,
+                predict=sc.drop(columns=['income']),
+                target='income',
+                task='classification',
+            ),
+            model=KumoTabular(),
+            outputs=['prediction', 'probabilities', 'explanation'],
+        )
+        frame = result.to_pandas()
+        explained = result.explanations
+        if set(explained) != set(frame['row_index']):
+            fail(
+                e,
+                f'explained {sorted(explained)}, '
+                f'scored {sorted(frame["row_index"])}',
+            )
+        elif any('related' in entry for entry in explained.values()):
+            fail(e, 'a kumo-tabular entry carries related tables')
+        elif any(
+            len(entry['instance']['gradients']) != len(entry['outputs'])
+            or any(
+                len(per_output) != len(entry['instance']['columns'])
+                for per_output in entry['instance']['gradients']
+            )
+            for entry in explained.values()
+        ):
+            fail(e, 'gradients are not [output][column]')
+        else:
+            flat = explained.to_pandas()
+            if 'explanation' in frame.columns:
+                fail(e, 'the explanation leaked into to_pandas()')
+            elif 'hop' not in flat.columns or set(flat['hop']) != {0}:
+                fail(e, f'to_pandas() hops: {list(flat.get("hop", []))[:8]}')
+            else:
+                first = explained[min(explained)]
+                note(
+                    e,
+                    f'{len(explained)} entries, '
+                    f'{len(first["instance"]["columns"])} columns each, '
+                    f'{len(flat)} lines flat',
+                )
+
     # --- correlation ------------------------------------------------------
     with probe(
         AREA, 'row_index joins one-to-one', 'every scored row is answered once'

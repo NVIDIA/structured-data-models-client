@@ -159,7 +159,6 @@ would break rather than letting the endpoint return a 500.
 | context rows, with `num_context_samples` | `10,000` |
 | rows scored at once | `10,000` |
 | rows scored for a link prediction | `200` |
-| rows scored with an explanation | `1` |
 | tables in the gathered graph | `15` |
 | hops gathered | `6` |
 | classes | `10` |
@@ -186,9 +185,24 @@ query actually reaches.
 ## Asking for more than one answer each
 
 A ranking is a call per candidate and a forecast a call per step; an
-explanation is an output, over one scored row. Each has limits and refusals of
-its own, and they are in
+explanation is an output, over every scored row. Each has limits and refusals
+of its own, and they are in
 [`references/beyond-one-answer.md`](references/beyond-one-answer.md).
+
+An explanation is kept out of `to_pandas()`, on `result.explanations`, a
+mapping from each row's key to its explanation: the entity's `id`, or
+`(id, forecast_step)` on a forecast. One entry covers the entity's own row and
+every related row gathered for it:
+
+```python
+entry = result.explanations['user_5']  # the entity whose id is 'user_5'
+entry['instance']['gradients']         # [output][column], the entity's own row
+orders = entry['related']['orders']    # one block per related table
+orders['keys']                         # each row's primary key; absent if the table has none
+orders['rows']                         # each row's values as sent
+orders['gradients']                    # [output][row][column]
+result.explanations.to_pandas()        # one line per (row, output, column), with its hop
+```
 
 ## Asking the same context more than once
 
@@ -272,6 +286,6 @@ change. The ones worth knowing:
 | more than 100,000 entities at once | every batch is built before any is sent; ask about fewer at a time |
 | more than 100 calls at once | a context is gathered per call; ask about fewer entities, or raise `rows_per_call` if you lowered it |
 | more entities than one call scores, on a ranking or a forecast | each candidate or step is already a call, and batching one would send that many times as many; ask about fewer at a time |
-| an output this question cannot give | `rankings` on a regression, `explanation` on a ranking or on more than one row |
-| `422 UNSUPPORTED_OUTPUT` | the client sent an output the deployment does not serve, such as `explanation` |
+| an output this question cannot give | `rankings` on a regression, `explanation` on a ranking |
+| `422 UNSUPPORTED_OUTPUT` | the client sent an output the deployment does not serve, such as `explanation`, or asked for `explanation` of a deployment not started with one estimator, `SDM_NUM_ESTIMATORS=1` |
 | an aggregation the model does not answer | `COUNT_DISTINCT`, `FIRST`, `LAST`, or any aggregation of a category |
