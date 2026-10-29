@@ -192,7 +192,36 @@ fn finish_response_task(
     decimal_limit: u32,
     native_task: Option<Value>,
 ) -> Result<HostRun, sdm_contract::CoreError> {
+    finish_response_declaration(run, value, native_member, decimal_limit, native_task, None)
+}
+
+fn finish_response_declaration(
+    run: &HostRun,
+    value: AttachmentId,
+    native_member: Option<(&str, bool)>,
+    decimal_limit: u32,
+    native_task: Option<Value>,
+    target_override: Option<Value>,
+) -> Result<HostRun, sdm_contract::CoreError> {
     let mut data: Value = serde_json::from_slice(&response_bytes(run, value)).unwrap();
+    let original_payload: Value = serde_json::from_slice(&response_bytes(
+        run,
+        AttachmentId(data["payload"].as_u64().unwrap() as u32),
+    ))
+    .unwrap();
+    let native_target = if let Some(task) = &native_task {
+        let classification = prepare(
+            json!({"stage":"response_task_meaning","task":task}),
+            Attachments::new(),
+        )?;
+        if classification == json!(true) {
+            Some(target_override.unwrap_or_else(|| json!({"dtype":original_payload["task"]["target"]["dtype"].as_str().map(|text|text.chars().map(u32::from).collect::<Vec<_>>())})))
+        } else {
+            target_override
+        }
+    } else {
+        target_override
+    };
     let mut buffers = Attachments::new();
     for (n, name) in ["payload", "response", "rows"].iter().enumerate() {
         let old = AttachmentId(data[*name].as_u64().unwrap() as u32);
@@ -267,7 +296,7 @@ fn finish_response_task(
     buffers.insert(AttachmentId(5), bytes(json!(accepted)));
     buffers.insert(
         AttachmentId(1),
-        bytes(json!({"stage":"layout_response","data":data,"attributed":5,"decimal_limit":decimal_limit,"native_task":native_task})),
+        bytes(json!({"stage":"layout_response","data":data,"attributed":5,"decimal_limit":decimal_limit,"native_task":native_task,"native_target":native_target})),
     );
     let layout = start(json!({"op":"prepare_request","input":1}), buffers);
     Ok(layout)
@@ -885,7 +914,7 @@ fn direct_prelude_must_agree_with_the_legitimately_checked_bound_call() {
     ] {
         let call = bound(3);
         let mut input = json!({"bound":call,"context":2,"predict":3,"context_header":header(&["feature","target"],3),"predict_header":header(&["feature"],2),"schema":prepared["schema"],"entity_table":"instance","target":"target","task":"regression"});
-        let mut attached = halves();
+        let attached = halves();
         match axis {
             "task-ranking" => input["task"] = json!("ranking"),
             "task-forecasting" => input["task"] = json!("forecasting"),
@@ -900,13 +929,8 @@ fn direct_prelude_must_agree_with_the_legitimately_checked_bound_call() {
             "schema-links" => {
                 input["schema"]["links"] = json!([[{"table":"instance","column":"feature"},{"table":"instance","column":"target"}]])
             }
-            _ => {
-                let count = if axis == "rows-4" { 4 } else { 10_001 };
-                input["context_header"] = header(&["feature", "target"], count);
-                let feature = (0..count).map(|n| n as f64).collect();
-                let target = (0..count).map(|n| (n + 1) as f64).collect();
-                attached.insert(AttachmentId(2), rows(&[("0", feature), ("1", target)]));
-            }
+            "rows-4" => input["context_header"] = header(&["feature", "target"], 4),
+            _ => input["bound"]["context_rows"] = json!(10_001),
         }
         let error = prepare(json!({"stage":"overlap","input":input}), attached).unwrap_err();
         assert_eq!(
@@ -1800,6 +1824,24 @@ fn classified_result_with_task_fact(
     decimal_limit: u32,
     native_task: Option<Value>,
 ) -> ArrowData {
+    classified_result_with_task_declaration(
+        target,
+        label,
+        probabilities,
+        decimal_limit,
+        native_task,
+        None,
+    )
+}
+
+fn classified_result_with_task_declaration(
+    target: ArrayRef,
+    label: Value,
+    probabilities: serde_json::Map<String, Value>,
+    decimal_limit: u32,
+    native_task: Option<Value>,
+    native_target: Option<Value>,
+) -> ArrowData {
     let feature = Arc::new(arrow_array::Int64Array::from(vec![1, 2, 3])) as ArrayRef;
     let context = [RecordBatch::try_from_iter([("0", feature), ("1", target)]).unwrap()];
     let scoring = [RecordBatch::try_from_iter([(
@@ -1843,7 +1885,15 @@ fn classified_result_with_task_fact(
     else {
         panic!("decoded")
     };
-    let laid = finish_response_task(&run, decoded.value, None, decimal_limit, native_task).unwrap();
+    let laid = finish_response_declaration(
+        &run,
+        decoded.value,
+        None,
+        decimal_limit,
+        native_task,
+        native_target,
+    )
+    .unwrap();
     let message = next(&laid);
     let ControlMessage::Step(Step::Done {
         result: OperationResult::Predict(result),
@@ -2691,4 +2741,68 @@ fn empty_native_nontext_task_needs_no_wire_task_storage_or_model_call() {
         panic!("empty result")
     };
     assert!(rows.batches.iter().all(|batch| batch.num_rows() == 0));
+}
+
+#[test]
+fn later_adapter_rows_are_independent_of_admitted_preflight_count() {
+    let schema = prepare(json!({"stage":"schema","headers":headers(),"context":2,"predict":3,"entity_table":"instance"}), halves()).unwrap();
+    let input = json!({"bound":bound(9),"context":2,"predict":3,"context_header":header(&["feature","target"],3),"predict_header":header(&["feature"],2),"schema":schema["schema"],"entity_table":"instance","target":"target","task":"regression"});
+    let overlap = prepare(json!({"stage":"overlap","input":input}), halves()).unwrap();
+    assert_eq!(overlap["bound"]["context_rows"], 9);
+}
+
+#[test]
+fn late_native_target_declaration_is_independent_of_sent_dtype_and_closed() {
+    use arrow_array::cast::AsArray;
+    let task = json!({"representation":"builtin","value":"classification".chars().map(u32::from).collect::<Vec<_>>()});
+    assert_eq!(
+        prepare(
+            json!({"stage":"response_task_meaning","task":task}),
+            Attachments::new()
+        )
+        .unwrap(),
+        true
+    );
+    let result = classified_result_with_task_declaration(
+        Arc::new(arrow_array::Int64Array::from(vec![0, 1, 0])) as ArrayRef,
+        json!("3"),
+        serde_json::Map::new(),
+        4300,
+        Some(task),
+        Some(json!({"dtype":"string".chars().map(u32::from).collect::<Vec<_>>()})),
+    );
+    assert_eq!(
+        result.batches[0]
+            .column_by_name("prediction")
+            .unwrap()
+            .as_string::<i32>()
+            .value(0),
+        "3"
+    );
+    for malformed in [
+        json!({}),
+        json!({"dtype":17}),
+        json!({"dtype":[],"extra":true}),
+    ] {
+        assert!(
+            serde_json::from_value::<sdm_contract::prepare::DirectTargetDeclaration>(malformed)
+                .is_err()
+        );
+    }
+    let false_task = json!({"representation":"native","value":[],"classification":false});
+    assert_eq!(
+        prepare(
+            json!({"stage":"response_task_meaning","task":false_task}),
+            Attachments::new()
+        )
+        .unwrap(),
+        false
+    );
+    // The domain product rejects missing/unsolicited target facts before any result layout.
+    let yes: sdm_contract::prepare::DirectTaskMeaning = serde_json::from_value(task).unwrap();
+    let no: sdm_contract::prepare::DirectTaskMeaning = serde_json::from_value(false_task).unwrap();
+    let target = sdm_contract::prepare::DirectTargetDeclaration { dtype: None };
+    assert!(sdm_request::predict::direct_target_declaration(Some(&yes), None).is_err());
+    assert!(sdm_request::predict::direct_target_declaration(Some(&no), Some(&target)).is_err());
+    assert!(sdm_request::predict::direct_target_declaration(None, Some(&target)).is_err());
 }

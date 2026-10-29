@@ -1246,3 +1246,219 @@ def test_empty_prediction_admits_a_native_nonstring_task_without_wire_storage(
     assert current[0]['data'] == []
     assert current[1] == []
     assert current[3] is True
+
+
+@pytest.mark.parametrize('rows', [10001, 9])
+def test_required_capability_truth_owner_survives_capacity_then_releases(
+    monkeypatch, rows
+):
+    from dataclasses import replace
+    from sdm_client import Request
+
+    def observe(core):
+        events = []
+        context = pd.DataFrame(
+            {'answer': [i % 2 for i in range(rows)], 'feature': range(rows)}
+        )
+        scoring = pd.DataFrame({'feature': [rows + 1]})
+        with monkeypatch.context() as patch:
+            patch.setenv(
+                _routing.ENVIRONMENT,
+                ','.join(_routing.DIRECT_CONSUMERS) if core else '',
+            )
+            request = Request(
+                context, scoring, target='answer', task='classification'
+            )
+
+            class Truth:
+                def __bool__(self):
+                    events.append('truth')
+                    return False
+
+                def __del__(self):
+                    events.append('released capability')
+                    context.drop(context.index[3:], inplace=True)
+
+            class Choice(str):
+                __hash__ = str.__hash__
+
+                def __eq__(self, other):
+                    if other == 'temporal_link_prediction':
+                        return Truth()
+                    return str.__eq__(self, other)
+
+            request.task = replace(request.task, kind=Choice('classification'))
+
+            class Answer(Scripted):
+                def predict(self, payload):
+                    events.append('transport')
+                    return super().predict(payload)
+
+            scripted = Answer()
+            with warnings.catch_warnings(record=True):
+                warnings.simplefilter('always')
+                with SDMClient('http://localhost:1', max_retries=0) as client:
+                    client._transport.close()
+                    client._transport = scripted
+                    try:
+                        result = client.predict(request, model='kumo-tabular')
+                        outcome = ('ok', result.to_pandas().to_dict('split'))
+                    except Exception as error:
+                        # Record while the refusal traceback still owns preflight locals.
+                        outcome = (
+                            'error',
+                            _error_graph(error),
+                            getattr(error, 'details', None),
+                            len(context),
+                            list(events),
+                        )
+            for body in scripted.calls:
+                body['metadata']['request_id'] = '<drawn>'
+            return outcome, scripted.calls, events
+
+    old, current = observe(False), observe(True)
+    assert current == old
+    if rows > 10000:
+        assert current[0][0] == 'error'
+        assert current[0][2]['context_rows'] == 10001
+        assert current[0][3] == 10001
+        assert 'released capability' not in current[0][4]
+        assert current[1] == []
+    else:
+        assert current[0][0] == 'ok'
+        assert current[2].index('released capability') < current[2].index(
+            'transport'
+        )
+        assert len(current[1][0]['context']['instance_table']['rows']) == 3
+
+
+@pytest.mark.parametrize(
+    'effect',
+    [
+        'display',
+        'contains',
+        'display-release',
+        'transport-kind',
+        'nonclassification',
+    ],
+)
+def test_response_restoration_reads_actual_payload_after_display_effects(
+    monkeypatch, effect
+):
+    from sdm_client import Request
+
+    def observe(core):
+        events, holder = [], {}
+        context = pd.DataFrame({'answer': [0, 1, 0], 'feature': [2, 3, 4]})
+        scoring = pd.DataFrame({'feature': [5]})
+
+        def mutate():
+            holder['payload']['task']['target']['dtype'] = 'string'
+            events.append('changed actual dtype')
+
+        class Display(str):
+            def __contains__(self, word):
+                events.append(('contains', word))
+                if effect == 'contains':
+                    mutate()
+                return str.__contains__(self, word)
+
+            def __del__(self):
+                if effect == 'display-release':
+                    mutate()
+
+        class Choice(str):
+            def __str__(self):
+                events.append('display')
+                if effect in ('display', 'transport-kind'):
+                    mutate()
+                if effect in ('contains', 'display-release'):
+                    return Display('classification')
+                return (
+                    'regression'
+                    if effect == 'nonclassification'
+                    else 'classification'
+                )
+
+        class NoTargetRead(dict):
+            def get(self, key, *args):
+                if key == 'target':
+                    raise AssertionError('nonclassification read target dtype')
+                return super().get(key, *args)
+
+        class Answer(Scripted):
+            def predict(self, payload):
+                holder['payload'] = payload
+                events.append('transport')
+                answer = super().predict(payload)
+                if effect == 'transport-kind':
+                    payload['task']['kind'] = Choice('classification')
+                elif effect == 'nonclassification':
+                    payload['task'] = NoTargetRead(payload['task'])
+                for item in answer['predictions']:
+                    item['prediction'] = '3'
+                return answer
+
+        scripted = Answer()
+        with monkeypatch.context() as patch:
+            patch.setenv(
+                _routing.ENVIRONMENT,
+                ','.join(_routing.DIRECT_CONSUMERS) if core else '',
+            )
+            request = Request(
+                context, scoring, target='answer', task=Choice('classification')
+            )
+            with warnings.catch_warnings(record=True):
+                warnings.simplefilter('always')
+                with SDMClient('http://localhost:1', max_retries=0) as client:
+                    client._transport.close()
+                    client._transport = scripted
+                    result = client.predict(request, model='kumo-tabular')
+            for body in scripted.calls:
+                body['metadata']['request_id'] = '<drawn>'
+            return result.to_pandas().to_dict('split'), scripted.calls, events
+
+    old, current = observe(False), observe(True)
+    assert current == old
+    frame = current[0]
+    assert frame['data'][0][frame['columns'].index('prediction')] == '3'
+    assert current[1][0]['task']['target']['dtype'] == 'int64'
+    assert current[2][0] == 'transport'
+    if effect != 'nonclassification':
+        assert current[2][-1] == 'changed actual dtype'
+
+
+def test_direct_byte_transport_receives_exact_core_bytes(monkeypatch):
+    from sdm_client import Request
+
+    received, offered = [], []
+    original = SDMClient._send_body
+
+    def send_body(self, adapter, body, **kwargs):
+        offered.append(body)
+        return original(self, adapter, body, **kwargs)
+
+    class Answer(Scripted):
+        def predict_body(self, body):
+            received.append(body)
+            return json.dumps(super().predict(json.loads(body))).encode()
+
+    monkeypatch.setenv(
+        _routing.ENVIRONMENT, ','.join(_routing.DIRECT_CONSUMERS)
+    )
+    monkeypatch.setattr(SDMClient, '_send_body', send_body)
+    scripted = Answer()
+    request = Request(
+        pd.DataFrame({'answer': [0, 1, 0], 'feature': [2, 3, 4]}),
+        pd.DataFrame({'feature': [5]}),
+        target='answer',
+        task='classification',
+    )
+    with SDMClient('http://localhost:1', max_retries=0) as client:
+        client._transport.close()
+        client._transport = scripted
+        result = client.predict(request, model='kumo-tabular')
+    assert len(result.to_pandas()) == 1
+    assert len(received) == 1
+    assert received == offered
+    assert type(received[0]) is bytes
