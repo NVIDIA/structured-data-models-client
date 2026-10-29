@@ -611,6 +611,15 @@ it on the result. `result.explanations.to_pandas()` flattens them into a table
 of their own when one is wanted, with each related row's `hop` from the entity
 worked out from the relationships and foreign-key values the client sent.
 
+**The relational entity is two tables.** The engine sends the per-prediction
+row, the entity key, anchor time and its own bookkeeping, as the instance
+table, and the entity's own feature row as a related table sampled like any
+other. So a `kumo-relational` entry's `instance` holds the bookkeeping row's
+gradients, and the entity's features are under `related`, by their table's
+name. The flat table shows the entity on an `instance` line and on a line of
+its own table, both hop 0. A `kumo-tabular` entry has one table, the
+`instance`.
+
 A forecast is explained a step at a time, under `(id, forecast_step)`, rather
 than aggregated across steps: each step is its own row in `to_pandas()`, and
 its explanation is keyed the same way.
