@@ -76,8 +76,13 @@ def test_another_origin_is_not_a_pandas_runtime_warning(origin):
 def test_missing_or_inconsistent_origin_cannot_classify_a_warning(
     which, broken
 ):
-    mine = _observation(host(('Pandas4Warning', 'pandas'), NOTICE))
-    theirs = _observation(host(('Pandas4Warning', 'pyarrow'), NOTICE))
+    # The warning lists must differ before an exclusion needs origin proof.
+    # Identical classes require no exclusion, regardless of unused origins.
+    observed = _observation(host(('Pandas4Warning', 'pandas'), NOTICE))
+    unchanged = _observation(host(NOTICE))
+    mine, theirs = (
+        (observed, unchanged) if which == 'mine' else (unchanged, observed)
+    )
     target = (mine if which == 'mine' else theirs)['host']
     if broken == 'missing':
         del target['origins']
