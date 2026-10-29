@@ -12,6 +12,7 @@ provider). It imports nothing of this package."""
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
@@ -84,7 +85,7 @@ _JSON = ('json', 'jsonb')
 
 def rows_arrow(
     description: Any,
-    rows: list[Any],
+    rows: Sequence[Sequence[object]],
     connection: Any,
     batch_rows: int = BATCH_ROWS,
 ) -> Any:
