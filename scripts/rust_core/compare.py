@@ -1702,6 +1702,33 @@ def held_schema(described: Any) -> Any:
         return described
 
 
+def _held_input_matches(actual: Any, described: Any, *, legacy: bool) -> bool:
+    """Keep legacy omitted flags unavailable; actual Tasks carry full flags.
+
+    Every present flag and every other field stays exact.
+    The observation itself is never filled or projected in place.
+    """
+    if actual == described:
+        return True
+    expected = copy.deepcopy(held_schema(described))
+    try:
+        for table, wanted in zip(
+            actual['tables'], expected['tables'], strict=True
+        ):
+            for column, reference in zip(
+                table['columns'], wanted['columns'], strict=True
+            ):
+                for flag in ('untyped', 'stype_declared'):
+                    if flag in column:
+                        if type(column[flag]) is not bool:
+                            return False
+                    elif legacy:
+                        reference.pop(flag, None)
+    except (KeyError, TypeError, ValueError):
+        return False
+    return actual == expected
+
+
 def _case_inputs(
     report: Report,
     case: dict[str, Any],
@@ -1722,7 +1749,8 @@ def _case_inputs(
     if core is None:
         return
     try:
-        inputs = _prediction_view(observation)['inputs']
+        view = _prediction_view(observation)
+        inputs = view['inputs']
     except _prediction_reader().ObservationError:
         report.fail(
             f'{case["id"]}: {who}: invalid actual prediction inputs', 'inputs'
@@ -1756,18 +1784,32 @@ def _case_inputs(
             'query': case['input']['pql'],
             **case['core']['materialize'],
         }
-        started = [each for each in inputs if each.get('op') == 'materialize']
+        started = [
+            (position, each)
+            for position, each in zip(
+                view['input_positions'], inputs, strict=True
+            )
+            if each.get('op') == 'materialize'
+        ]
+        task_positions = {
+            entry['position']
+            for entry in view['materializations']
+            if entry['native']
+        }
         missing = missing or not any(
             all(
                 each.get(key) == value
                 for key, value in wanted_materialize.items()
             )
-            for each in started
+            for _, each in started
         )
         if not case['input'].get('edits') and any(
-            each.get('schema')
-            not in (core['described'], held_schema(core['described']))
-            for each in started
+            not _held_input_matches(
+                each.get('schema'),
+                core['described'],
+                legacy=position not in task_positions,
+            )
+            for position, each in started
         ):
             _differ(
                 report,
