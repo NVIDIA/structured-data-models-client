@@ -149,16 +149,17 @@ both models:
 
 ### One entry
 
-Each entry is a plain nested dict, the same shape for both models:
+Each entry is a plain nested dict:
 
 ```python
 {
   'outputs':  [...],                        # the explained scores, in order
-  'instance': {
+  'instance': {                             # kumo-tabular only
       'columns':   [...],                   # model's preprocessed numerical columns
       'gradients': [[...], ...],            # [output][column]
   },
-  'related': {                              # absent for kumo-tabular
+  'related': {                              # kumo-relational only: every table,
+                                            # the entity's own included
       '<table>': {
           'keys':      [...],               # the table's primary key per row; absent if the table has none
           'rows':      [{...}, ...],        # each row's values as sent to the model
@@ -193,12 +194,8 @@ table without numerical features has an empty `columns`.
 | kumo-relational | the predicted entity's own table, plus every related table in the subgraph the client gathered for that entity (all tables reached within the hop limit, up to 6) |
 
 A `kumo-tabular` entry has no `related` key: its one table is the `instance`.
-
-`kumo-relational` sends the entity as two tables. `instance` is the
-per-prediction row the engine builds: the entity key, the anchor time and the
-engine's own bookkeeping, with few or no numerical columns. The entity's own
-feature row is a related table like any other, under its table's name, such
-as `related['users']`, and that is where its features' gradients are.
+A `kumo-relational` entry has no `instance` key: the entity's own table is one
+of the tables under `related`, at hop 0.
 
 Only the rows being predicted and their related rows get gradients. The
 context rows, the labelled examples the model compares against, get none.
@@ -228,18 +225,14 @@ result.explanations['cust_17']
 #               'gradients': [[0.01, -0.03], [-0.01, 0.03]]}}
 ```
 
-`kumo-relational`, user 5 with one order and two login events. The user's own
-features are under `related['users']`; `instance` holds the engine's
-per-prediction row. `orders` has a primary key (`order_id`), so its rows carry
-`keys`. `events` has none, so its rows are identified by their values alone.
-All are part of the same entry:
+`kumo-relational`, user 5 with one order and two login events. `orders` has a
+primary key (`order_id`), so its rows carry `keys`. `events` has none, so its
+rows are identified by their values alone. Both are part of the same entry:
 
 ```python
 result.explanations['user_5']
 # {'outputs': [{'kind': 'probability', 'class': 'no'},
 #              {'kind': 'probability', 'class': 'yes'}],
-#  'instance': {'columns': ['anchor_time_dayofweek'],          # engine bookkeeping, illustrative
-#               'gradients': [[0.001], [-0.001]]},
 #  'related': {
 #      'users':  {'keys': ['user_5'],
 #                 'rows': [{'user_id': 'user_5', 'tenure_days': 410}],
@@ -262,23 +255,22 @@ result.explanations['user_5']
 across all entities:
 
 ```
-id      table     hop  key         row  output             column                 gradient
-user_5  instance  0    user_5      0    probability_yes    anchor_time_dayofweek  -0.001
-user_5  users     0    user_5      0    probability_yes    tenure_days             0.05
-user_5  orders    1    order_9003  0    probability_yes    amount                  0.02
-user_5  products  2    prod_77     0    probability_yes    price                   0.004
-user_5  events    1    None        1    probability_yes    kind_login             -0.02
+id      table     hop  key         row  output           column       gradient
+user_5  users     0    user_5      0    probability_yes  tenure_days   0.05
+user_5  orders    1    order_9003  0    probability_yes  amount        0.02
+user_5  products  2    prod_77     0    probability_yes  price         0.004
+user_5  events    1    None        1    probability_yes  kind_login   -0.02
 ```
 
-- `table` is `instance` for the entry's `instance` block and the table's name
-  for a related one. On `kumo-relational` the entity shows on both an
-  `instance` line and a line of its own table (`users` here), both hop 0.
-- `hop` is how many links the row is from the entity, 0 for the entity
-  itself. The client works it out from the relationships and foreign-key
-  values it sent. It is `None` for a related row no relationship reaches.
-- `key` is the row's primary key, or `None` for a keyless table. On an
-  `instance` line it is the row's `id`, or `None` when the request has no
-  entity key. `row` is the row's position in that entity's
-  `related[table]['rows']`, and 0 on an `instance` line.
+- `table` is the table's name. On `kumo-relational` the entity's own table
+  (`users` here) is hop 0. On `kumo-tabular` the one table is shown as
+  `instance`, at hop 0.
+- `hop` is how many links the row is from the entity, 0 for the entity's own
+  table. The client works it out from the relationships and foreign-key
+  values it sent. It is `None` for a row no relationship reaches.
+- `key` is the row's primary key, or `None` for a keyless table. On a
+  `kumo-tabular` `instance` line it is the row's `id`, or `None` when the
+  request has no entity key. `row` is the row's position in that entity's
+  `related[table]['rows']`, and 0 on a `kumo-tabular` `instance` line.
 - `output` names the score by the column of `result.to_pandas()` that holds
   it: `probability_yes`, `prediction`, `quantile_0.1`.

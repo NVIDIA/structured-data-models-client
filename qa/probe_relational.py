@@ -456,22 +456,22 @@ def run(client):
                 )
             elif not all(entry.get('related') for entry in explained.values()):
                 fail(e, 'an entry carries no related tables')
+            elif any('instance' in entry for entry in explained.values()):
+                fail(e, 'an entry carries the engine question row as instance')
+            elif not all(
+                'Orders' in entry['related'] for entry in explained.values()
+            ):
+                fail(e, "an entry lacks the entity's own table, Orders")
             elif any(
-                len(entry['instance']['gradients']) != len(entry['outputs'])
+                len(block['gradients']) != len(entry['outputs'])
                 or any(
-                    len(block['gradients']) != len(entry['outputs'])
-                    or any(
-                        len(per_output) != len(block['rows'])
-                        for per_output in block['gradients']
-                    )
-                    for block in entry['related'].values()
+                    len(per_output) != len(block['rows'])
+                    for per_output in block['gradients']
                 )
                 for entry in explained.values()
+                for block in entry['related'].values()
             ):
-                fail(
-                    e,
-                    'gradients are not [output][column] and [output][row][column]',
-                )
+                fail(e, 'gradients are not [output][row][column]')
             else:
                 flat = explained.to_pandas()
                 if 'explanation' in frame.columns:

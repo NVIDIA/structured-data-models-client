@@ -191,20 +191,18 @@ of its own, and they are in
 
 An explanation is kept out of `to_pandas()`, on `result.explanations`, a
 mapping from each row's key to its explanation: the entity's `id`, or
-`(id, forecast_step)` on a forecast. One entry covers the engine's
-per-prediction row, the entity's own feature row and every related row
-gathered for it. The entity's features are under its table's name in
-`related`, not in `instance`:
+`(id, forecast_step)` on a forecast. One entry covers the entity's own row
+and every related row gathered for it, each under its table's name in
+`related`:
 
 ```python
 entry = result.explanations['user_5']  # the entity whose id is 'user_5'
-entry['instance']['gradients']         # [output][column], the per-prediction row: key, anchor time, bookkeeping
-entry['related']['users']              # the entity's own features, one row
+entry['related']['users']              # the entity's own row, hop 0
 orders = entry['related']['orders']    # one block per related table
 orders['keys']                         # each row's primary key; absent if the table has none
 orders['rows']                         # each row's values as sent
 orders['gradients']                    # [output][row][column]
-result.explanations.to_pandas()        # one line per (row, output, column), with its hop; the entity is hop 0 on both its instance and users lines
+result.explanations.to_pandas()        # one line per (row, output, column), with its hop; the entity's users line is hop 0
 ```
 
 ## Asking the same context more than once
