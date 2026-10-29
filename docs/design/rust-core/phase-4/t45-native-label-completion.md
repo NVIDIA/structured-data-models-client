@@ -349,3 +349,16 @@ Use the existing call-local holding presenter around that one notice to supply t
 Require the completed notice points to match the reported native text before presentation.
 Add actual datetime-subclass surrogate and repr-failure source controls plus lossless/malformed raw-host facts before implementation, preserving all existing coercion, handler and ordinary-source observations.
 Regenerate only working canonical artifacts through their existing writers, then obtain a fresh whole review pair before execution.
+
+### Typed DATE construction and reached fixture setup
+
+The exact approved R50 completes compiler, strict Clippy, Rust/Host consumers, wheel identity and capture/replay; its public failures expose missing per-request maps in nine new unit cases and an assumed wide-datetime coercion in two formatter controls.
+A bounded full public reproduction separately establishes ordinary parity and original success versus Core INVALID_MESSAGE for a DATE entity condition and a designated DATE time column.
+Actual Arrow date storage has datetime dtype kind and bypasses the object-only native-content observation, leaving a Date32 native completion against the existing Timestamp mathematical predecessor.
+Observe this actual typed date content at the same semantic temporal-column position and reuse the existing Core-selected native timestamp converter.
+Do not describe dates as observed timestamps, weaken temporal completion checks or change the existing Rust date/window kernels.
+Add DATE conditions, designated DATE time and both Arrow date storage widths before the source correction.
+Provide the unit fixtures' required issued-request key maps without changing production lookup rules.
+Make formatter controls explicitly return a missing timestamp from the actual native conversion callback so they reach the intended coercion/display boundary on both dependency profiles, preserving native formatter/handler failure and exact notice oracles.
+Retain the unmodified library's actual range-refusal receipts and every frozen expectation; do not infer a universal coercion outcome from one pandas profile.
+Collect the remaining unchanged R50 diagnostics before freezing the grouped successor and obtain fresh whole reviews before any successor execution.
