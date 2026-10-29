@@ -1627,12 +1627,17 @@ def held_schema(described: Any) -> Any:
     try:
         tables = []
         for table in described['tables']:
+            timed = {table['time_column_inferred'], table['time_column']} - {
+                None
+            }
             held = {
                 'name': table['name'],
                 'source': table['source'],
                 'columns': [
                     {
                         'name': column['name'],
+                        'untyped': column.get('untyped', False),
+                        'stype_declared': column['name'] in timed,
                         'dtype': _WIRE_NAMES[column['dtype']],
                         'stype': column['stype'],
                         'stype_before_key': column['stype_before_key'],
