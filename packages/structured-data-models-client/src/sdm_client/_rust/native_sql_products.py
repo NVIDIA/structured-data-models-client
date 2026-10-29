@@ -190,7 +190,7 @@ def _ids(kind: str, data: dict[str, Any]) -> list[int]:
     if kind == 'lookup_rows':
         return [_attachment(value['positions'])]
     # All fields and attachment slots are validated before any owner is taken.
-    ids = _ids('label_inputs', value['input']) + [_attachment(value['owner'])]
+    ids = [*_ids('label_inputs', value['input']), _attachment(value['owner'])]
     conditions = value['condition_values']
     if not isinstance(conditions, list):
         raise CodecError(
@@ -214,7 +214,7 @@ def owner_ids(kind: str, data: dict[str, Any]) -> list[int]:
     """Only typed opaque resources, never Arrow, ordinals or ordinary numbers."""
     _ids(kind, data)
     if kind == 'target_column':
-        return owner_ids('label_inputs', data['input']) + [data['owner']]
+        return [*owner_ids('label_inputs', data['input']), data['owner']]
     if kind not in _OWNED:
         return []
     out = [data['owner']]
