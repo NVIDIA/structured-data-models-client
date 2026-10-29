@@ -958,6 +958,11 @@ class _CapturedRun:
         self.error_owner: BaseException | None = None
         self.carried: dict[str, Any] | None = None
         self.asked: dict[int, dict[str, Any]] = {}
+        self.materialization_entry: int | None = None
+        self.materialization_guard: dict[str, Any] | None = None
+        self.materialization_output_owners: set[int] = set()
+        self.materialization_fetch_owners: dict[int, int] = {}
+        self.materialization_state: dict[str, Any] | None = None
 
 
 class _Capture:
@@ -1000,6 +1005,23 @@ class _Capture:
         self.native_error_control_observed = native_error_control_observed
         self.native_cancellations_observed = native_cancellations_observed
         self.materialization_preparations: list[dict[str, Any]] = []
+        self.materialization_entries: list[dict[str, Any]] = []
+        self.materialization_guards: list[dict[str, Any]] = []
+        self._materialization_stack: list[int] = []
+        self._materialization_owners: dict[
+            int, list[tuple[Any, dict[str, Any]]]
+        ] = {}
+        self._materialization_presented: list[
+            tuple[BaseException, int, str]
+        ] = []
+        self._materialization_source_scopes: list[tuple[_CapturedRun, Any]] = []
+        self._materialization_refusals: list[
+            tuple[BaseException, dict[str, Any]]
+        ] = []
+        self._materialization_origin: dict[str, Any] | None = None
+        self._materialization_guard_origins: dict[
+            int, dict[str, Any] | None
+        ] = {}
         self.operations: list[str] = []
         self.inputs: list[dict[str, Any]] = []
         #: What the host passed ``edit_schema`` and ``materialize``'s held
@@ -1037,6 +1059,305 @@ class _Capture:
         if owner is None:
             raise RunnerFailure('a capture event has no actual Run')
         return owner
+
+    def enter_materialization(self) -> int:
+        ordinal = len(self.materialization_entries)
+        self.materialization_entries.append(
+            {
+                'ordinal': ordinal,
+                'parent': self._materialization_stack[-1]
+                if self._materialization_stack
+                else None,
+                'prediction_parent': self._entries[-1]
+                if self._entries
+                else None,
+                'runs': [],
+                'completion': 'active',
+                'terminal': None,
+                'failure': None,
+            }
+        )
+        self._materialization_stack.append(ordinal)
+        self._materialization_owners[ordinal] = []
+        return ordinal
+
+    def _materialization_within(self, run: int, entry: int) -> bool:
+        parent = self._runs[run].materialization_entry
+        while parent is not None:
+            if parent == entry:
+                return True
+            parent = self.materialization_entries[parent]['parent']
+        return False
+
+    def leave_materialization(
+        self,
+        ordinal: int,
+        error: BaseException | None,
+        *,
+        terminal: _CapturedRun | None = None,
+    ) -> None:
+        if (
+            not self._materialization_stack
+            or self._materialization_stack[-1] != ordinal
+        ):
+            raise RunnerFailure(
+                'materialization entries did not finish in nesting order'
+            )
+        entry = self.materialization_entries[ordinal]
+        try:
+            entry['completion'] = 'returned' if error is None else 'raised'
+            self.error = None
+            if (
+                terminal is not None
+                and self._runs.get(terminal.ordinal) is terminal
+                and terminal.materialization_entry == ordinal
+            ):
+                entry['terminal'] = {'run': terminal.ordinal}
+            selected = error
+            seen: set[int] = set()
+            while selected is not None and id(selected) not in seen:
+                seen.add(id(selected))
+                matched = next(
+                    (
+                        (run, relation)
+                        for owner, run, relation in reversed(
+                            self._materialization_presented
+                        )
+                        if owner is selected
+                        and self._materialization_within(run, ordinal)
+                    ),
+                    None,
+                )
+                run = (
+                    matched[0]
+                    if matched is not None
+                    else next(
+                        (
+                            run
+                            for run, owner in self._runs.items()
+                            if owner.error_owner is selected
+                            and self._materialization_within(run, ordinal)
+                        ),
+                        None,
+                    )
+                )
+                if run is not None:
+                    entry['failure'] = {
+                        'run': run,
+                        'relation': matched[1]
+                        if matched is not None
+                        and matched[1] in ('refused', 'native')
+                        else 'selected'
+                        if selected is error
+                        else 'cause',
+                    }
+                    self.error = self._runs[run].error
+                    break
+                selected = BaseException.__cause__.__get__(selected)
+        finally:
+            self._materialization_stack.pop()
+            self._materialization_owners.pop(ordinal, None)
+            self._materialization_guard_origins.pop(ordinal, None)
+            self._materialization_refusals = [
+                (error, origin)
+                for error, origin in self._materialization_refusals
+                if self._runs[origin['run']].materialization_entry != ordinal
+            ]
+            if not self._materialization_stack:
+                self._materialization_presented.clear()
+                self._materialization_refusals.clear()
+                if not self._entries:
+                    for owner in self._runs.values():
+                        if owner.materialization_entry is not None:
+                            owner.error_owner = None
+
+    @staticmethod
+    def _materialization_components(
+        value: dict[str, Any],
+    ) -> list[tuple[str, dict[str, Any]]]:
+        stage = value.get('stage')
+        if stage in (
+            'population',
+            'source_column',
+            'source_fallback',
+            'source_failure',
+        ):
+            return [('source', value['source'])]
+        if stage == 'lookup_rows':
+            return [('lookup', value['lookup'])]
+        if stage == 'label_inputs':
+            return [('population', value['population'])] + (
+                []
+                if value.get('previous') is None
+                else [('label_batch', value['previous'])]
+            )
+        if stage == 'target_column':
+            return [('label_inputs', value['inputs'])]
+        if stage in (
+            'condition_column',
+            'filtered_target',
+            'windowed_target',
+            'native_label_groups',
+        ):
+            return [('target_column', value['column'])]
+        if stage == 'eligibility_column':
+            return [
+                ('label_inputs', value['inputs']),
+                ('target_column', value['column']),
+            ]
+        if stage == 'complete_label_batch':
+            return [
+                ('population', value['population']),
+                ('label_groups', value['groups']),
+            ]
+        if stage == 'restore_label_groups':
+            return [('label_groups', value['groups'])]
+        if stage == 'what_if_column':
+            return [
+                ('label_groups', value['groups']),
+                ('target_column', value['column']),
+            ]
+        if stage == 'request':
+            return [('population', value['population'])] + [
+                ('label_batch', batch) for batch in value['batches']
+            ]
+        return []
+
+    @staticmethod
+    def _materialization_ids(kind: str, data: dict[str, Any]) -> list[int]:
+        # The live collector uses the SDK's actual typed owner declaration.
+        # Malformed output still belongs to the SDK's normal refusal path;
+        # observation must not replace that failure or probe an opaque owner.
+        from sdm_client._rust.native_sql_products import owner_ids
+
+        try:
+            return owner_ids(kind, data)
+        except Exception:  # noqa: BLE001 - observation never changes admission
+            return []
+
+    def _materialization_started(
+        self, owner: _CapturedRun, record: dict[str, Any], attachments: Any
+    ) -> None:
+        entry = owner.materialization_entry
+        if entry is None:
+            return
+        record.update(
+            entry=entry,
+            input_reads=[],
+            owner_binds=[],
+            owner_takes=[],
+            output_reads=[],
+            origin=copy.deepcopy(self._materialization_origin),
+        )
+        value = record['input']['parsed']
+        if not isinstance(value, dict):
+            return
+        if value.get('stage') == 'task':
+            task = value['request']
+            for name in (
+                'schema',
+                'query',
+                'indices',
+                'values',
+                'candidates',
+                'held',
+            ):
+                key = task.get(name)
+                if key is None:
+                    continue
+                if name == 'indices':
+                    record['input_reads'].append(
+                        {
+                            'attachment': key,
+                            'scalars': _scalars(attachments[key]),
+                        }
+                    )
+                else:
+                    record['input_reads'].append(
+                        _materialization_bytes(key, attachments[key])
+                    )
+        elif (
+            value.get('stage') == 'request' and value.get('values') is not None
+        ):
+            key = value['values']
+            record['input_reads'].append(
+                _materialization_bytes(key, attachments[key])
+            )
+        ids = list(
+            dict.fromkeys(
+                key
+                for kind, data in self._materialization_components(value)
+                for key in self._materialization_ids(kind, data)
+            )
+        )
+        live = self._materialization_owners[entry]
+        for key in ids:
+            actual = attachments.get(key)
+            producer = next(
+                (
+                    reference
+                    for observed, reference in reversed(live)
+                    if actual is observed
+                ),
+                None,
+            )
+            if producer is not None:
+                record['owner_binds'].append(
+                    {'attachment': key, 'producer': dict(producer)}
+                )
+
+    def _materialization_take(
+        self, owner: _CapturedRun, attachment: int, value: Any
+    ) -> None:
+        record = owner.materialization_record or owner.materialization_guard
+        if record is None or owner.materialization_entry is None:
+            return
+        if (
+            record['result'] is not None
+            and attachment == record['result'].get('value')
+            and isinstance(value, bytes)
+        ):
+            decoded = json.loads(value)
+            if owner.materialization_record is not None:
+                if decoded.get('value') == 'request':
+                    owner.materialization_state = decoded['data']['state']
+                else:
+                    owner.materialization_output_owners = set(
+                        self._materialization_ids(
+                            decoded.get('value'), decoded.get('data')
+                        )
+                    )
+        state = owner.materialization_state
+        if state is not None and isinstance(value, bytes):
+            ids = [state['payload'], state['query']]
+            ids.extend(batch['payload'] for batch in state.get('batches') or [])
+            for part in (state.get('forecast') or []) + (
+                (state.get('ranking') or {}).get('parts') or []
+            ):
+                ids.extend([part['payload'], part['query']])
+            if attachment in ids:
+                record['output_reads'].append(
+                    _materialization_bytes(attachment, value)
+                )
+        if any(
+            type(value) is primitive
+            for primitive in (bytes, str, int, float, bool, type(None))
+        ):
+            return
+        reference = None
+        if attachment in owner.materialization_output_owners:
+            reference = {'attachment': attachment, 'origin': 'result'}
+        elif attachment in owner.materialization_fetch_owners:
+            reference = {
+                'attachment': attachment,
+                'origin': 'fetch',
+                'fetch_id': owner.materialization_fetch_owners[attachment],
+            }
+        if reference is not None:
+            record['owner_takes'].append(reference)
+            live = self._materialization_owners.get(owner.materialization_entry)
+            if live is not None:
+                live.append((value, {'run': owner.ordinal, **reference}))
 
     def enter_prediction(self, model: Any) -> int:
         ordinal = len(self.predictions)
@@ -1167,6 +1488,14 @@ class _Capture:
     def presented(
         self, result: BaseException, internal: BaseException | None
     ) -> None:
+        if internal is not None and self._materialization_stack:
+            entry = self._materialization_stack[-1]
+            for ordinal in self.materialization_entries[entry]['runs']:
+                if self._runs[ordinal].error_owner is internal:
+                    self._materialization_presented.append(
+                        (result, ordinal, 'selected')
+                    )
+                    break
         if internal is None or not self._entries:
             return
         for ordinal in self.predictions[self._entries[-1]]['runs']:
@@ -1279,6 +1608,11 @@ class _Capture:
         ordinal = len(self.operations)
         entry = self._entries[-1] if self._entries else None
         owner = _CapturedRun(ordinal, operation['op'], entry)
+        if self._materialization_stack:
+            owner.materialization_entry = self._materialization_stack[-1]
+            self.materialization_entries[owner.materialization_entry][
+                'runs'
+            ].append(ordinal)
         self._runs[ordinal] = owner
         self._current_run = owner
         self.operations.append(operation['op'])
@@ -1305,6 +1639,36 @@ class _Capture:
             self.materialization_preparations.append(
                 owner.materialization_record
             )
+            self._materialization_started(
+                owner, owner.materialization_record, attachments
+            )
+        if (
+            operation['op'] == 'prepare_frames'
+            and owner.materialization_entry is not None
+        ):
+            raw = attachments[operation['input']]
+            value = json.loads(raw)
+            if isinstance(value, dict) and value.get('stage') in (
+                'assess_failure',
+                'report_failure',
+            ):
+                owner.materialization_guard = {
+                    'run': ordinal,
+                    'entry': owner.materialization_entry,
+                    'operation': copy.deepcopy(operation),
+                    'input': _materialization_bytes(operation['input'], raw),
+                    'completion': 'active',
+                    'result': None,
+                    'value_reads': [],
+                    'error': None,
+                    'events': [],
+                    'origin': copy.deepcopy(
+                        self._materialization_guard_origins.get(
+                            owner.materialization_entry
+                        )
+                    ),
+                }
+                self.materialization_guards.append(owner.materialization_guard)
         if operation['op'] == 'prepare_request':
             value = json.loads(attachments[operation['input']])
             owner.preparation = value
@@ -1476,8 +1840,28 @@ class _Capture:
                     {
                         'event': 'fetch',
                         'requests': [asked['id'] for asked in step['requests']],
+                        **(
+                            {
+                                'positions': list(
+                                    range(
+                                        len(self.fetches),
+                                        len(self.fetches)
+                                        + len(step['requests']),
+                                    )
+                                )
+                            }
+                            if owner.materialization_entry is not None
+                            else {}
+                        ),
                     }
                 )
+                if owner.materialization_entry is not None:
+                    for asked in step['requests']:
+                        lookup = asked.get('lookup')
+                        if isinstance(lookup, dict):
+                            owner.materialization_fetch_owners[
+                                lookup['owner']
+                            ] = lookup['read']
             self.fetches.extend(
                 {
                     'request': asked['request'],
@@ -1589,13 +1973,22 @@ class _Capture:
         owner = self._run(run)
         owner.completion = 'error'
         owner.error = {'kind': str(error.kind), 'code': str(error.code)}
-        if owner.materialization_record is not None:
-            record = owner.materialization_record
+        if (
+            owner.materialization_record is not None
+            or owner.materialization_guard is not None
+        ):
+            record = owner.materialization_record or owner.materialization_guard
             record['completion'] = 'error'
             record['error'] = dict(owner.error)
             record['events'].append({'event': 'core_error'})
         owner.error_owner = (
-            error if owner.entry is not None and self._entries else None
+            error
+            if (owner.entry is not None and self._entries)
+            or (
+                owner.materialization_entry is not None
+                and self._materialization_stack
+            )
+            else None
         )
         if owner.input_record is not None:
             owner.input_record['error'] = owner.error
@@ -1609,8 +2002,11 @@ class _Capture:
     ) -> None:
         owner = self._run(run)
         owner.completion = 'done'
-        if owner.materialization_record is not None:
-            record = owner.materialization_record
+        if (
+            owner.materialization_record is not None
+            or owner.materialization_guard is not None
+        ):
+            record = owner.materialization_record or owner.materialization_guard
             record['completion'] = 'done'
             record['result'] = dict(result)
             record['events'].append({'event': 'done'})
@@ -1645,7 +2041,8 @@ class _Capture:
         self, attachment: int, value: Any, *, run: _CapturedRun | None = None
     ) -> None:
         owner = self._run(run)
-        record = owner.materialization_record
+        self._materialization_take(owner, attachment, value)
+        record = owner.materialization_record or owner.materialization_guard
         if (
             record is not None
             and record['result'] is not None
@@ -1795,7 +2192,7 @@ class _Capture:
 
     def cancelled(self, succeeded: bool, *, run: _CapturedRun) -> None:
         """Observe only whether the actual cancel returned or raised."""
-        record = run.materialization_record
+        record = run.materialization_record or run.materialization_guard
         if record is not None:
             event = 'cancelled' if succeeded else 'cancel_failed'
             run.completion = event
@@ -1856,13 +2253,16 @@ class _Capture:
         }
         if self.edits:
             core['edits'] = self.edits
-        if self.materialization_preparations:
+        if self.materialization_preparations or self.materialization_entries:
             core['materialization_preparations'] = (
                 self.materialization_preparations
             )
             core['materialization_capture_capabilities'] = {
                 'cancellation': self.native_cancellations_observed
             }
+        if self.materialization_entries:
+            core['materialization_entries'] = self.materialization_entries
+            core['materialization_guards'] = self.materialization_guards
         if self.predictions or any(
             item['op'] == 'prepare_request' for item in self.inputs
         ):
@@ -2189,7 +2589,13 @@ class _Boundary:
     """One explicit lifetime for actual native, entry and presentation reads."""
 
     def __init__(self) -> None:
-        from sdm_client._rust import errors, relational_predict, run
+        from sdm_client._rust import (
+            errors,
+            frame_native,
+            native_sql,
+            relational_predict,
+            run,
+        )
 
         self.capture = _Capture(native_cancellations_observed=True)
         self._closed = False
@@ -2199,12 +2605,20 @@ class _Boundary:
         self._carried_before = run._carried
         self._present_before = relational_predict._present
         self._result_carry_before = relational_predict._carry
+        self._gather_before = native_sql.gather
+        self._steps_before = run._steps
+        self._read_failure_before = native_sql._Preparation.read_failure
+        self._assessment_before = frame_native._assessment
         imported = self._native_before
         predict_before = self._predict_before
         presentation_before = self._presentation_before
         carried_before = self._carried_before
         present_before = self._present_before
         result_carry_before = self._result_carry_before
+        gather_before = self._gather_before
+        steps_before = self._steps_before
+        read_failure_before = self._read_failure_before
+        assessment_before = self._assessment_before
         finished_type = run.Finished
 
         def native() -> Any:
@@ -2222,6 +2636,136 @@ class _Boundary:
             else:
                 capture.leave_prediction(entry, None)
                 return value
+
+        def captured_handle(handle: Any) -> _CapturedRun | None:
+            seen: set[int] = set()
+            while type(handle) is _Handle and id(handle) not in seen:
+                seen.add(id(handle))
+                if object.__getattribute__(handle, '_capture') is self.capture:
+                    return object.__getattribute__(handle, '_owner')
+                handle = object.__getattribute__(handle, '_handle')
+            return None
+
+        def gather(*args: Any, **kwargs: Any) -> Any:
+            capture = self.capture
+            entry = capture.enter_materialization()
+            try:
+                value = gather_before(*args, **kwargs)
+            except BaseException as error:
+                capture.leave_materialization(entry, error)
+                raise
+            else:
+                terminal = None
+                if (
+                    type(value) is tuple
+                    and len(value) == 2
+                    and type(value[0]) is finished_type
+                ):
+                    terminal = captured_handle(
+                        object.__getattribute__(value[0], '_run')
+                    )
+                capture.leave_materialization(entry, None, terminal=terminal)
+                return value
+
+        def steps(*args: Any, **kwargs: Any) -> Any:
+            source = kwargs.get('source_provider')
+            handle = args[1] if len(args) > 1 else kwargs.get('handle')
+            owner = captured_handle(handle)
+            capture = self.capture
+            if (
+                source is None
+                or owner is None
+                or owner.materialization_entry is None
+            ):
+                return steps_before(*args, **kwargs)
+
+            def source_read(requests: Any, keys: Any) -> Any:
+                scope = (owner, requests)
+                capture._materialization_source_scopes.append(scope)
+                try:
+                    value = source(requests, keys)
+                    if isinstance(value, run.FetchRefused):
+                        capture._materialization_refusals.append(
+                            (
+                                value.raised,
+                                {
+                                    'run': owner.ordinal,
+                                    'first': requests[0]['partition']['first'],
+                                    'failed': None,
+                                },
+                            )
+                        )
+                    return value
+                finally:
+                    capture._materialization_source_scopes.pop()
+
+            return steps_before(
+                *args, **{**kwargs, 'source_provider': source_read}
+            )
+
+        def read_failure(preparation: Any, failure: Any) -> Any:
+            capture = self.capture
+            previous = capture._materialization_origin
+            if capture._materialization_source_scopes:
+                owner, requests = capture._materialization_source_scopes[-1]
+                selected = next(
+                    (
+                        request
+                        for request in requests
+                        if request is failure.step
+                    ),
+                    None,
+                )
+                if selected is not None:
+                    capture._materialization_origin = {
+                        'run': owner.ordinal,
+                        'first': requests[0]['partition']['first'],
+                        'failed': selected['id'],
+                    }
+            try:
+                return read_failure_before(preparation, failure)
+            finally:
+                capture._materialization_origin = previous
+
+        def assessment(*args: Any, **kwargs: Any) -> Any:
+            capture = self.capture
+            native_failure = args[0] if args else kwargs.get('native')
+            entry = (
+                capture._materialization_stack[-1]
+                if capture._materialization_stack
+                else None
+            )
+            beginning = len(capture.operations)
+            if entry is not None:
+                origin = next(
+                    (
+                        reference
+                        for error, reference in reversed(
+                            capture._materialization_refusals
+                        )
+                        if error is native_failure.error
+                    ),
+                    None,
+                )
+                capture._materialization_guard_origins[entry] = copy.deepcopy(
+                    origin
+                )
+            value = assessment_before(*args, **kwargs)
+            if entry is not None and value.get('category') == 'pass_through':
+                guarded = [
+                    record
+                    for record in capture.materialization_guards
+                    if record['entry'] == entry
+                    and record['run'] >= beginning
+                    and record['input']['parsed'].get('stage')
+                    == 'assess_failure'
+                    and record['completion'] == 'done'
+                ]
+                if len(guarded) == 1:
+                    capture._materialization_presented.append(
+                        (native_failure.error, guarded[0]['run'], 'native')
+                    )
+            return value
 
         def presentation(*args: Any, **kwargs: Any) -> Any:
             capture = self.capture
@@ -2289,15 +2833,27 @@ class _Boundary:
         self._carried_hook = carried
         self._present_hook = present
         self._result_carry_hook = result_carry
+        self._gather_hook = gather
+        self._steps_hook = steps
+        self._read_failure_hook = read_failure
+        self._assessment_hook = assessment
         run.native = native
         relational_predict.predict = predict
         errors.error_from_core = presentation
         run._carried = carried
         relational_predict._present = present
         relational_predict._carry = result_carry
+        native_sql.gather = gather
+        run._steps = steps
+        native_sql._Preparation.read_failure = read_failure
+        frame_native._assessment = assessment
 
     def reset(self) -> _Capture:
-        if self._closed or self.capture._entries:
+        if (
+            self._closed
+            or self.capture._entries
+            or self.capture._materialization_stack
+        ):
             raise RunnerFailure(
                 'cannot reset an active or closed prediction capture'
             )
@@ -2305,11 +2861,17 @@ class _Boundary:
         return self.capture
 
     def close(self) -> None:
-        from sdm_client._rust import errors, relational_predict, run
+        from sdm_client._rust import (
+            errors,
+            frame_native,
+            native_sql,
+            relational_predict,
+            run,
+        )
 
         if self._closed:
             return
-        if self.capture._entries:
+        if self.capture._entries or self.capture._materialization_stack:
             raise RunnerFailure('cannot close an active prediction entry')
         if (
             run.native is not self._native_hook
@@ -2318,6 +2880,11 @@ class _Boundary:
             or run._carried is not self._carried_hook
             or relational_predict._present is not self._present_hook
             or relational_predict._carry is not self._result_carry_hook
+            or native_sql.gather is not self._gather_hook
+            or run._steps is not self._steps_hook
+            or native_sql._Preparation.read_failure
+            is not self._read_failure_hook
+            or frame_native._assessment is not self._assessment_hook
         ):
             raise RunnerFailure(
                 'capture hooks must close in LIFO installation order'
@@ -2328,6 +2895,10 @@ class _Boundary:
         run._carried = self._carried_before
         relational_predict._present = self._present_before
         relational_predict._carry = self._result_carry_before
+        native_sql.gather = self._gather_before
+        run._steps = self._steps_before
+        native_sql._Preparation.read_failure = self._read_failure_before
+        frame_native._assessment = self._assessment_before
         self._closed = True
 
 
@@ -6237,7 +6808,21 @@ def _replay_core(capture: _Capture) -> dict[str, Any]:
         'predict': ('model',),
     }
     inputs = capture.inputs
-    if any(started['op'] == 'prepare_request' for started in inputs):
+    native_materialization = 'prepare_materialize' in capture.operations
+    if native_materialization and any(
+        record['completion'] in ('active', 'cancelled', 'cancel_failed')
+        for record in capture.materialization_preparations
+    ):
+        raise RunnerFailure(
+            'a cancelled or unanswered native source read cannot be written as a reply replay'
+        )
+    if native_materialization and capture.materialization_guards:
+        raise RunnerFailure(
+            'a native materialization guard has no complete mathematical reply replay'
+        )
+    if native_materialization or any(
+        started['op'] == 'prepare_request' for started in inputs
+    ):
         reader = _sibling('prediction_observation')
         try:
             observed = reader.view(capture.core(), capture.operations)
@@ -6245,13 +6830,20 @@ def _replay_core(capture: _Capture) -> dict[str, Any]:
             raise RunnerFailure(
                 'a replay has invalid actual prediction evidence'
             ) from error
-        entries = observed['predictions']
-        if len(entries) != 1 or entries[0]['parent'] is not None:
+        if native_materialization and not any(
+            entry['native'] for entry in observed['materializations']
+        ):
             raise RunnerFailure(
-                'a replay has multiple or ambiguous prediction entries'
+                'a replay has no proved actual materialization Task'
             )
-        if entries[0]['model'] is None or not entries[0]['native']:
-            raise RunnerFailure('a replay has no resolved prediction model')
+        entries = observed['predictions']
+        if any(started['op'] == 'prepare_request' for started in inputs):
+            if len(entries) != 1 or entries[0]['parent'] is not None:
+                raise RunnerFailure(
+                    'a replay has multiple or ambiguous prediction entries'
+                )
+            if entries[0]['model'] is None or not entries[0]['native']:
+                raise RunnerFailure('a replay has no resolved prediction model')
         inputs = observed['inputs']
     core: dict[str, Any] = {}
     for started in inputs:

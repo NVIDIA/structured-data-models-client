@@ -520,6 +520,11 @@ def complete(observation: dict[str, Any]) -> list[str]:
         return ['the capture was off']
     problems = [f'could not record: {what}' for what in capture['incomplete']]
     core = observation.get('core')
+    materialization = isinstance(core, dict) and (
+        'materialization_entries' in core
+        or 'prepare_materialize'
+        in (observation['identity'].get('operations') or [])
+    )
     if isinstance(core, dict) and (
         'predictions' in core
         or 'model_calls' in core
@@ -527,10 +532,17 @@ def complete(observation: dict[str, Any]) -> list[str]:
             item.get('op') == 'prepare_request'
             for item in core.get('inputs', [])
         )
+        or materialization
     ):
         reader = runner()._sibling('prediction_observation')
         try:
             observed = reader.view(core, observation['identity']['operations'])
+            if materialization and not any(
+                entry['native'] for entry in observed['materializations']
+            ):
+                problems.append(
+                    'actual materialization evidence has no proved Task/terminal association'
+                )
             if observation['identity']['runner'] == 'python-core':
                 received = (observation.get('public') or {}).get('payloads', [])
                 if observed['attempts'] is not None:
@@ -541,7 +553,9 @@ def complete(observation: dict[str, Any]) -> list[str]:
                     )
         except reader.ObservationError:
             problems.append(
-                'actual prediction evidence is incomplete or contradictory'
+                'actual materialization evidence is incomplete or contradictory'
+                if materialization
+                else 'actual prediction evidence is incomplete or contradictory'
             )
     if logged is None:
         # Every line has its log: DuckDB's own, or off DuckDB the driver's

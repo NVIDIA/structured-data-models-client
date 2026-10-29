@@ -350,6 +350,49 @@ def _prediction_view(observation: dict[str, Any]) -> dict[str, Any]:
     return _prediction_reader().view(core, operations)
 
 
+def _checked_core(
+    observation: dict[str, Any],
+    view: dict[str, Any],
+    shared: list[str] | None = None,
+) -> dict[str, Any] | None:
+    """Read actual domain products without publishing them into the raw DTO.
+
+    A shared prefix selects its own completed native materialization entry,
+    rather than a later entry's global summary. Historical unobserved detail
+    remains available through the existing ordinary core fields.
+    """
+    raw = observation['core']
+    if raw is None:
+        return None
+    core = {
+        **raw,
+        'inputs': view['inputs'],
+        'fetches': view.get('fetches', raw.get('fetches')),
+        'materialized': view.get('materialized', raw.get('materialized')),
+        'error': view.get('error', raw.get('error')),
+    }
+    if shared is not None:
+        core['inputs'] = [
+            value
+            for position, value in zip(
+                view['input_positions'], view['inputs'], strict=True
+            )
+            if position < len(shared)
+        ]
+        completed = [
+            entry
+            for entry in view.get('materializations', [])
+            if entry['native']
+            and entry['parent'] is None
+            and entry['position'] < len(shared)
+            and entry['through'] < len(shared)
+        ]
+        if completed:
+            last = max(completed, key=lambda entry: entry['position'])
+            core['materialized'] = last['materialized']
+    return core
+
+
 def _predicted(core: dict[str, Any], paths: tuple[Any, ...]) -> Any:
     r"""``core.predicted``, its call's request id compared by presence and
     type only (decision E35), and payload numbers by exact kind and value."""
@@ -903,7 +946,15 @@ def _core_consistent(
     query and that call ended it (T2.1r, DT-5). Off DuckDB an accepted
     query goes on through the case's ``until``, and a later call's error
     is the outcome (:func:`_later_error`)."""
-    core = observation['core']
+    try:
+        view = _prediction_view(observation)
+        core = _checked_core(observation, view)
+    except _prediction_reader().ObservationError:
+        report.fail(
+            f'{case["id"]}: {who}: core: invalid actual domain evidence',
+            'core',
+        )
+        return
     if core is None:
         return
     if (
@@ -920,14 +971,7 @@ def _core_consistent(
             'state with no fetch recorded',
             'core',
         )
-    try:
-        prediction = _prediction_view(observation)['predictions']
-    except _prediction_reader().ObservationError:
-        report.fail(
-            f'{case["id"]}: {who}: core: invalid actual prediction evidence',
-            'core',
-        )
-        return
+    prediction = view['predictions']
     outer = next(
         (entry for entry in reversed(prediction) if entry['parent'] is None),
         None,
@@ -946,6 +990,32 @@ def _core_consistent(
         if observation['outcome']['result'] != 'refusal':
             report.fail(
                 f'{case["id"]}: {who}: raised prediction entry has a success outcome',
+                'outcome',
+            )
+        return
+    materialization = next(
+        (
+            entry
+            for entry in reversed(view.get('materializations', []))
+            if entry['parent'] is None
+            and entry['prediction_parent'] is None
+            and entry['native']
+        ),
+        None,
+    )
+    if (
+        materialization is not None
+        and materialization['completion'] == 'raised'
+        and (
+            materialization['failure'] is None
+            or materialization['failure']['relation']
+            in ('cause', 'refused', 'native')
+        )
+        and (outer is None or materialization['position'] > outer['position'])
+    ):
+        if observation['outcome']['result'] != 'refusal':
+            report.fail(
+                f'{case["id"]}: {who}: raised materialization entry has a success outcome',
                 'outcome',
             )
         return
@@ -998,7 +1068,7 @@ def _core_consistent(
         # beside the description (decision E67).
         edits = core.get('edits') or []
         edited = bool(edits) and edits[-1].get('op') == 'edit_schema'
-        operations = observation['identity'].get('operations') or []
+        operations = view['operations']
         if 'edits' not in core:
             # rust-host records no edits: its operations say the last call
             # was an edit (T2.1e, a line held to the calls it makes).
@@ -1071,7 +1141,14 @@ def shared_operations(
     if any(
         event['position'] < len(short) <= event['through']
         for view in views
-        for event in view.get('events', [])
+        for event in [
+            *view.get('events', []),
+            *[
+                entry
+                for entry in view.get('materializations', [])
+                if entry['native']
+            ],
+        ]
     ):
         return None
     limit = STAGES.index(stop)
@@ -1253,30 +1330,8 @@ def _core_agree(
         _core_agree_shared(
             report,
             where,
-            {
-                **python['core'],
-                'inputs': [
-                    value
-                    for position, value in zip(
-                        python_view['input_positions'],
-                        python_view['inputs'],
-                        strict=True,
-                    )
-                    if position < len(shared)
-                ],
-            },
-            {
-                **rust['core'],
-                'inputs': [
-                    value
-                    for position, value in zip(
-                        rust_view['input_positions'],
-                        rust_view['inputs'],
-                        strict=True,
-                    )
-                    if position < len(shared)
-                ],
-            },
+            _checked_core(python, python_view, shared),
+            _checked_core(rust, rust_view, shared),
             shared,
         )
         _prediction_events_agree(report, where, python_view, rust_view, shared)
@@ -1291,11 +1346,10 @@ def _core_agree(
             rust['identity']['operations'],
             rule='core',
         )
-    mine, theirs = python['core'], rust['core']
+    mine = _checked_core(python, python_view)
+    theirs = _checked_core(rust, rust_view)
     if mine is None or theirs is None:
         return
-    mine = {**mine, 'inputs': python_view['inputs']}
-    theirs = {**theirs, 'inputs': rust_view['inputs']}
     _prediction_events_agree(report, where, python_view, rust_view)
     for field in ('inputs', 'fetches', 'described', 'materialized'):
         if _core_field(field, mine[field]) != _core_field(field, theirs[field]):

@@ -38,6 +38,871 @@ def _sha256(value: Any) -> bool:
     )
 
 
+def _materialization_bytes(value: Any) -> tuple[bytes, Any]:
+    require(
+        isinstance(value, dict)
+        and set(value) == {'attachment', 'base64', 'sha256', 'parsed'}
+        and _ordinal(value['attachment'])
+        and _sha256(value['sha256']),
+        'materialization bytes observation has no closed identity',
+    )
+    raw = base64.b64decode(value['base64'], validate=True)
+    require(
+        hashlib.sha256(raw).hexdigest() == value['sha256'],
+        'materialization bytes digest differs',
+    )
+    parsed = json.loads(raw)
+    require(
+        _same_jsonl_snapshot(parsed, value['parsed']),
+        'materialization parsed data differs from its actual bytes',
+    )
+    return raw, parsed
+
+
+def materialization_owner_ids(kind: str, data: Any) -> list[int]:
+    """Opaque slots of the finite materialization products, without SDK code."""
+    require(
+        isinstance(data, dict), 'materialization product has no data object'
+    )
+    if kind in ('column_meaning', 'lookup_rows', 'request'):
+        return []
+    require(
+        kind
+        in (
+            'source',
+            'population',
+            'label_inputs',
+            'target_column',
+            'label_groups',
+            'label_batch',
+            'lookup',
+        ),
+        'unknown materialization owner product',
+    )
+    ids = [data['owner']]
+    if kind == 'target_column':
+        ids = materialization_owner_ids('label_inputs', data['input']) + ids
+    history = (
+        data.get('eligibility')
+        if kind == 'label_inputs'
+        else data.get('what_if')
+        if kind == 'label_groups'
+        else None
+    )
+    if history is not None:
+        require(
+            isinstance(history, dict)
+            and set(history) == {'columns', 'values'}
+            and isinstance(history['columns'], list)
+            and isinstance(history['values'], list),
+            'materialization condition history has no closed shape',
+        )
+        for column in history['columns']:
+            ids.extend(materialization_owner_ids('label_inputs', column))
+        for value in history['values']:
+            require(
+                isinstance(value, dict) and set(value) == {'column', 'owner'},
+                'completed condition has no typed owner',
+            )
+            ids.append(value['owner'])
+    require(
+        all(_ordinal(key) and key < 2**32 for key in ids),
+        'materialization owner is not an attachment id',
+    )
+    return list(dict.fromkeys(ids))
+
+
+def _materialization_components(value: dict[str, Any]) -> list[tuple[str, Any]]:
+    stage = value['stage']
+    if stage == 'task':
+        return []
+    if stage in (
+        'population',
+        'source_column',
+        'source_fallback',
+        'source_failure',
+    ):
+        return [('source', value['source'])]
+    if stage == 'lookup_rows':
+        return [('lookup', value['lookup'])]
+    if stage == 'label_inputs':
+        return [('population', value['population'])] + (
+            []
+            if value.get('previous') is None
+            else [('label_batch', value['previous'])]
+        )
+    if stage == 'target_column':
+        return [('label_inputs', value['inputs'])]
+    if stage == 'eligibility_column':
+        return [
+            ('label_inputs', value['inputs']),
+            ('target_column', value['column']),
+        ]
+    if stage in (
+        'condition_column',
+        'filtered_target',
+        'windowed_target',
+        'native_label_groups',
+    ):
+        return [('target_column', value['column'])]
+    if stage == 'restore_label_groups':
+        return [('label_groups', value['groups'])]
+    if stage == 'what_if_column':
+        return [
+            ('label_groups', value['groups']),
+            ('target_column', value['column']),
+        ]
+    if stage == 'complete_label_batch':
+        return [
+            ('population', value['population']),
+            ('label_groups', value['groups']),
+        ]
+    if stage == 'request':
+        return [('population', value['population'])] + [
+            ('label_batch', batch) for batch in value['batches']
+        ]
+    raise ObservationError('unknown actual materialization stage')
+
+
+def _materialization_slots(
+    kind: str, data: Any
+) -> list[tuple[int, str, Any, bool]]:
+    """Actual resource kinds and the metadata each published slot exposes."""
+    materialization_owner_ids(kind, data)
+    if kind in ('column_meaning', 'lookup_rows', 'request'):
+        return []
+    slots = [(data['owner'], kind, data, False)]
+    if kind == 'target_column':
+        slots.extend(_materialization_slots('label_inputs', data['input']))
+    history = (
+        data.get('eligibility')
+        if kind == 'label_inputs'
+        else data.get('what_if')
+        if kind == 'label_groups'
+        else None
+    )
+    if history is not None:
+        for column in history['columns']:
+            slots.extend(_materialization_slots('label_inputs', column))
+        slots.extend(
+            (value['owner'], 'target_column', value['column'], True)
+            for value in history['values']
+        )
+    return slots
+
+
+def _materialization_metadata(kind: str, data: Any) -> Any:
+    """Remove only explicitly rebound IDs; keep every observed meaning field."""
+    out = {key: value for key, value in data.items() if key != 'owner'}
+    if kind == 'target_column':
+        out['input'] = _materialization_metadata('label_inputs', data['input'])
+        out['condition_values'] = [
+            {
+                'column': value['column'],
+                'converted': {'encoding': value['converted']['encoding']},
+            }
+            for value in data['condition_values']
+        ]
+    name = (
+        'eligibility'
+        if kind == 'label_inputs'
+        else 'what_if'
+        if kind == 'label_groups'
+        else None
+    )
+    if name is not None and data.get(name) is not None:
+        history = data[name]
+        out[name] = {
+            'columns': [
+                _materialization_metadata('label_inputs', column)
+                for column in history['columns']
+            ],
+            'values': [
+                {'column': value['column']} for value in history['values']
+            ],
+        }
+    if kind == 'label_groups' and data.get('restored') is not None:
+        out['restored'] = {'encoding': data['restored']['encoding']}
+    return out
+
+
+def _materialization_same_slot(
+    left: tuple[Any, ...], right: tuple[Any, ...]
+) -> bool:
+    _, kind, data, partial = left
+    _, other_kind, other, other_partial = right
+    if kind != other_kind:
+        return False
+    if partial or other_partial:
+        return kind == 'target_column' and _same_jsonl_snapshot(
+            data if partial else data['input']['target'],
+            other if other_partial else other['input']['target'],
+        )
+    return _same_jsonl_snapshot(
+        _materialization_metadata(kind, data),
+        _materialization_metadata(kind, other),
+    )
+
+
+def _materialization_lifecycle(record: dict[str, Any]) -> None:
+    events = record['events']
+    require(isinstance(events, list), 'materialization lifecycle is absent')
+    terminal = {
+        'done': 'done',
+        'error': 'core_error',
+        'cancelled': 'cancelled',
+        'cancel_failed': 'cancel_failed',
+    }.get(record['completion'])
+    terminals = [
+        (at, event['event'])
+        for at, event in enumerate(events)
+        if event['event']
+        in ('done', 'core_error', 'cancelled', 'cancel_failed')
+    ]
+    require(
+        terminals == []
+        if terminal is None
+        else len(terminals) == 1 and terminals[0][1] == terminal,
+        'materialization lifecycle has missing or contradictory completion',
+    )
+    require(
+        (record['result'] is not None) == (terminal == 'done')
+        and (record['error'] is not None) == (terminal == 'core_error'),
+        'materialization lifecycle disagrees with its actual result/error',
+    )
+    reads = [
+        (at, event['attachment'])
+        for at, event in enumerate(events)
+        if event['event'] == 'value_taken'
+    ]
+    require(
+        [key for _, key in reads]
+        == [value['attachment'] for value in record['value_reads']]
+        and all(terminal == 'done' and at > terminals[0][0] for at, _ in reads),
+        'materialization value take precedes or differs from its actual Done',
+    )
+
+
+def _materialization_state(value: Any) -> tuple[dict[str, Any], list[int]]:
+    require(
+        isinstance(value, dict)
+        and set(value) <= {'state', 'query'}
+        and 'state' in value,
+        'nested materialized result has no closed shape',
+    )
+    state = value['state']
+    require(
+        isinstance(state, dict)
+        and {'version', 'payload', 'query'}
+        <= set(state)
+        <= {'version', 'payload', 'query', 'forecast', 'batches', 'ranking'}
+        and _ordinal(state['version']),
+        'nested materialized state has no closed shape',
+    )
+    ids = [state['payload'], state['query']]
+    for batch in state.get('batches') or []:
+        require(
+            isinstance(batch, dict)
+            and {'payload', 'rows'}
+            <= set(batch)
+            <= {'payload', 'rows', 'request_id'}
+            and _ordinal(batch['rows']),
+            'materialized batch is malformed',
+        )
+        ids.append(batch['payload'])
+    for part in state.get('forecast') or []:
+        require(
+            isinstance(part, dict)
+            and {'step', 'payload', 'query'}
+            <= set(part)
+            <= {'step', 'payload', 'query', 'request_id'}
+            and _ordinal(part['step']),
+            'materialized forecast is malformed',
+        )
+        ids.extend([part['payload'], part['query']])
+    ranking = state.get('ranking')
+    if ranking is not None:
+        require(
+            isinstance(ranking, dict)
+            and set(ranking) == {'top_k', 'candidate', 'value', 'parts'},
+            'materialized ranking is malformed',
+        )
+        for part in ranking['parts']:
+            require(
+                isinstance(part, dict)
+                and {'candidate', 'value', 'payload', 'query'}
+                <= set(part)
+                <= {'candidate', 'value', 'payload', 'query', 'request_id'},
+                'materialized ranking part is malformed',
+            )
+            ids.extend([part['payload'], part['query']])
+    require(
+        all(_ordinal(key) and key < 2**32 for key in ids),
+        'materialized state names no attachment',
+    )
+    return state, list(dict.fromkeys(ids))
+
+
+def _materialization_read_origin(
+    record: dict[str, Any], owned: dict[int, Any], run: int
+) -> Any:
+    origin = record.get('origin')
+    if origin is None:
+        return None
+    require(
+        isinstance(origin, dict)
+        and set(origin) == {'run', 'first', 'failed'}
+        and origin['run'] in owned
+        and origin['run'] < run,
+        'materialization diagnostic has no original source Run',
+    )
+    original = owned[origin['run']]
+    require(
+        original['completion'] in ('cancelled', 'cancel_failed'),
+        'materialization diagnostic source Run was not cancelled',
+    )
+    partition = [
+        fetch
+        for fetch in original['fetches']
+        if fetch.get('partition', {}).get('first') == origin['first']
+    ]
+    require(
+        partition
+        and all(fetch.get('purpose') == 'source_rows' for fetch in partition),
+        'materialization diagnostic names no actual source partition',
+    )
+    if origin['failed'] is not None:
+        require(
+            any(fetch['id'] == origin['failed'] for fetch in partition),
+            'materialization diagnostic names no actual failed member',
+        )
+    return origin
+
+
+def _materializations(
+    core: dict[str, Any], operations: list[str]
+) -> dict[str, Any]:
+    records, guards = {}, {}
+    for name, operation, into in (
+        ('materialization_preparations', 'prepare_materialize', records),
+        ('materialization_guards', 'prepare_frames', guards),
+    ):
+        for record in core.get(name, []):
+            run = record['run']
+            require(
+                _ordinal(run)
+                and run < len(operations)
+                and operations[run] == operation
+                and run not in into,
+                'materialization Run is absent or repeated',
+            )
+            require(
+                record['operation']['op'] == operation
+                and record['operation']['input']
+                == record['input']['attachment'],
+                'materialization input has another operation owner',
+            )
+            _raw, parsed = _materialization_bytes(record['input'])
+            require(
+                isinstance(parsed, dict),
+                'materialization input is not a domain object',
+            )
+            require(
+                not (
+                    record['error'] is not None and record['result'] is not None
+                ),
+                'materialization both answered and errored',
+            )
+            into[run] = {**record, '_input': parsed, '_value': None}
+            values = record['value_reads']
+            require(
+                isinstance(values, list) and len(values) <= 1,
+                'materialization product was read repeatedly',
+            )
+            if values:
+                result = record['result']
+                require(
+                    isinstance(result, dict)
+                    and result['op'] == operation
+                    and result['value'] == values[0]['attachment']
+                    and record['completion'] == 'done',
+                    'materialization product lacks its actual Done',
+                )
+                _, product = _materialization_bytes(values[0])
+                require(
+                    isinstance(product, dict)
+                    and set(product) == {'value', 'data'},
+                    'materialization product has no tagged data',
+                )
+                into[run]['_value'] = product
+    require(
+        set(records)
+        == {
+            at
+            for at, op in enumerate(operations)
+            if op == 'prepare_materialize'
+        },
+        'materialization operation has no raw input journal',
+    )
+    entries = core.get('materialization_entries', [])
+    require(
+        isinstance(entries, list), 'materialization entries are not observed'
+    )
+    owners, inputs, projected = {}, {}, []
+    fetches = [dict(fetch) for fetch in core['fetches']]
+    fetch_positions: set[int] = set()
+    all_records = {**records, **guards}
+    for at, entry in enumerate(entries):
+        require(
+            isinstance(entry, dict)
+            and set(entry)
+            == {
+                'ordinal',
+                'parent',
+                'prediction_parent',
+                'runs',
+                'completion',
+                'terminal',
+                'failure',
+            }
+            and _ordinal(entry['ordinal'])
+            and entry['ordinal'] == at
+            and (
+                entry['parent'] is None
+                or _ordinal(entry['parent'])
+                and entry['parent'] < at
+            ),
+            'materialization entry has no closed nesting identity',
+        )
+        require(
+            entry['prediction_parent'] is None
+            or _ordinal(entry['prediction_parent'])
+            and entry['prediction_parent'] < len(core.get('predictions', [])),
+            'materialization has no actual prediction parent',
+        )
+        runs = entry['runs']
+        require(
+            isinstance(runs, list)
+            and all(_ordinal(run) and run < len(operations) for run in runs)
+            and runs == sorted(set(runs)),
+            'materialization entry has incoherent Run order',
+        )
+        owned = {
+            run: record
+            for run, record in all_records.items()
+            if record.get('entry') == at
+        }
+        require(
+            set(owned) <= set(runs),
+            'materialization record is outside its entry',
+        )
+        for run in owned:
+            require(
+                run not in owners, 'materialization Run belongs to two entries'
+            )
+            owners[run] = at
+        tasks = [
+            run
+            for run, record in owned.items()
+            if run in records and record['_input'].get('stage') == 'task'
+        ]
+        if not tasks:
+            require(
+                not owned
+                and entry['terminal'] is None
+                and entry['failure'] is None
+                and entry['completion'] == 'raised',
+                'materialization entry has no actual Task',
+            )
+            projected.append(
+                {**entry, 'native': False, 'position': None, 'through': None}
+            )
+            continue
+        require(
+            len(tasks) == 1 and tasks[0] == min(owned),
+            'materialization entry has multiple or late Tasks',
+        )
+        task = records[tasks[0]]['_input']['request']
+        snapshots = {}
+        for observation in records[tasks[0]]['input_reads']:
+            key = observation['attachment']
+            require(
+                key not in snapshots, 'materialization input was observed twice'
+            )
+            if 'scalars' in observation:
+                require(
+                    set(observation) == {'attachment', 'scalars'}
+                    and isinstance(observation['scalars'], list)
+                    and all(
+                        isinstance(item, dict)
+                        for item in observation['scalars']
+                    ),
+                    'materialization indices are not actual scalar observations',
+                )
+                snapshots[key] = observation['scalars']
+            else:
+                _, snapshots[key] = _materialization_bytes(observation)
+        for name in (
+            'schema',
+            'query',
+            'indices',
+            'values',
+            'candidates',
+            'held',
+        ):
+            if task.get(name) is not None:
+                require(
+                    task[name] in snapshots,
+                    'materialization Task omits its actual referenced input',
+                )
+        inputs[at] = {
+            'op': 'materialize',
+            'provider': task['provider'],
+            'schema': snapshots[task['schema']],
+            'query': snapshots[task['query']],
+            'indices': None
+            if task.get('indices') is None
+            else snapshots[task['indices']],
+            'anchor_time': task['anchor_time'],
+            'seed': task['seed'],
+        }
+        for run, record in owned.items():
+            _materialization_lifecycle(record)
+            origin = _materialization_read_origin(record, owned, run)
+            if run in guards:
+                require(
+                    record['_input'].get('stage')
+                    in ('assess_failure', 'report_failure'),
+                    'unrelated frame preparation claimed as materialization guard',
+                )
+                if record['_input']['stage'] == 'report_failure':
+                    assessment = record['_input']['report']['assessment']
+                    require(
+                        any(
+                            earlier < run
+                            and earlier in guards
+                            and previous['_value'] is not None
+                            and previous['_value']['value']
+                            == 'failure_assessment'
+                            and _same_jsonl_snapshot(
+                                previous['_value']['data'], assessment
+                            )
+                            for earlier, previous in owned.items()
+                        ),
+                        'materialization report has no actual prior assessment',
+                    )
+                continue
+            stage = record['_input']['stage']
+            product = record['_value']
+            if product is not None:
+                allowed = {
+                    'task': ('source', 'request'),
+                    'population': ('population',),
+                    'lookup_rows': ('lookup_rows',),
+                    'source_column': ('column_meaning',),
+                    'source_fallback': ('column_meaning',),
+                    'label_inputs': ('label_inputs',),
+                    'eligibility_column': ('label_inputs',),
+                    'target_column': ('target_column',),
+                    'condition_column': ('target_column',),
+                    'filtered_target': ('target_column',),
+                    'windowed_target': ('target_column',),
+                    'native_label_groups': ('label_groups',),
+                    'restore_label_groups': ('label_groups',),
+                    'what_if_column': ('label_groups',),
+                    'complete_label_batch': ('label_batch',),
+                    'request': ('request',),
+                }
+                require(
+                    product['value'] in allowed.get(stage, ()),
+                    'materialization stage returned another product kind',
+                )
+            if (
+                stage == 'request'
+                and record['_input'].get('values') is not None
+            ):
+                late = record['_input']['values']
+                require(
+                    any(
+                        item['attachment'] == late and 'base64' in item
+                        for item in record['input_reads']
+                    ),
+                    'materialization request omits its actual late values',
+                )
+            for item in record['input_reads']:
+                if 'base64' in item:
+                    _materialization_bytes(item)
+            for take in record['owner_takes']:
+                if take['origin'] == 'result':
+                    require(
+                        product is not None
+                        and take['attachment']
+                        in materialization_owner_ids(
+                            product['value'], product['data']
+                        ),
+                        'materialization take is not a declared opaque output',
+                    )
+                else:
+                    require(
+                        take['origin'] == 'fetch'
+                        and any(
+                            fetch['id'] == take['fetch_id']
+                            and fetch.get('lookup', {}).get('owner')
+                            == take['attachment']
+                            for fetch in record['fetches']
+                        ),
+                        'materialization take has no actual lookup fetch',
+                    )
+            if stage == 'source_failure':
+                require(
+                    origin is not None and origin['failed'] is not None,
+                    'source diagnostic has no exact failed read association',
+                )
+                failed = next(
+                    fetch
+                    for fetch in owned[origin['run']]['fetches']
+                    if fetch['id'] == origin['failed']
+                )['request']
+                read = record['_input']['read']
+                require(
+                    read['kind'] == failed['request']
+                    and read['source'] == failed['table']
+                    and read['columns'] == failed['columns'],
+                    'source diagnostic differs from its actual failed request',
+                )
+            expected = set(
+                key
+                for kind, data in _materialization_components(record['_input'])
+                for key in materialization_owner_ids(kind, data)
+            )
+            binds = record['owner_binds']
+            require(
+                isinstance(binds, list)
+                and len(binds) == len(expected)
+                and {bind['attachment'] for bind in binds} == expected,
+                'materialization has no complete actual owner binds',
+            )
+            for bind in binds:
+                producer = bind['producer']
+                require(
+                    isinstance(producer, dict)
+                    and producer['run'] in owned
+                    and producer['run'] < run,
+                    'materialization resource has a foreign or future producer',
+                )
+                source = owned[producer['run']]
+                take = {
+                    key: value
+                    for key, value in producer.items()
+                    if key != 'run'
+                }
+                require(
+                    take in source['owner_takes'],
+                    'materialization bind has no actual producer take',
+                )
+                if producer['origin'] == 'result':
+                    product = source['_value']
+                    require(
+                        product is not None
+                        and producer['attachment']
+                        in materialization_owner_ids(
+                            product['value'], product['data']
+                        ),
+                        'materialization producer does not declare this owner',
+                    )
+                    producer_slots = _materialization_slots(
+                        product['value'], product['data']
+                    )
+                else:
+                    require(
+                        producer['origin'] == 'fetch',
+                        'unknown materialization resource origin',
+                    )
+                    fetched = next(
+                        (
+                            fetch
+                            for fetch in source['fetches']
+                            if fetch['id'] == producer['fetch_id']
+                        ),
+                        None,
+                    )
+                    require(
+                        fetched is not None
+                        and fetched.get('purpose') == 'source_rows'
+                        and fetched.get('lookup', {}).get('owner')
+                        == producer['attachment']
+                        and fetched['lookup']['read'] == producer['fetch_id'],
+                        'lookup owner has no actual issuing fetch',
+                    )
+                    producer_slots = _materialization_slots(
+                        'lookup', fetched['lookup']
+                    )
+                wanted = [
+                    slot
+                    for kind, data in _materialization_components(
+                        record['_input']
+                    )
+                    for slot in _materialization_slots(kind, data)
+                    if slot[0] == bind['attachment']
+                ]
+                actual = [
+                    slot
+                    for slot in producer_slots
+                    if slot[0] == producer['attachment']
+                ]
+                require(
+                    actual
+                    and wanted
+                    and all(
+                        any(
+                            _materialization_same_slot(slot, produced)
+                            for produced in actual
+                        )
+                        for slot in wanted
+                    ),
+                    'materialization resource kind or meaning differs from its actual producer',
+                )
+            cursor = 0
+            for event in record['events']:
+                if event['event'] != 'fetch':
+                    continue
+                positions = event['positions']
+                issued = record['fetches'][
+                    cursor : cursor + len(event['requests'])
+                ]
+                require(
+                    [fetch['id'] for fetch in issued] == event['requests']
+                    and len(positions) == len(issued),
+                    'materialization fetch event does not retain its actual partition',
+                )
+                for position, fetched in zip(positions, issued, strict=True):
+                    require(
+                        _ordinal(position)
+                        and position < len(fetches)
+                        and position not in fetch_positions,
+                        'materialization fetch has no unique actual global position',
+                    )
+                    fetch_positions.add(position)
+                    actual = {
+                        key: fetched[key]
+                        for key in ('request', 'plan', 'purpose')
+                        if key in fetched
+                    }
+                    require(
+                        core['fetches'][position] == actual,
+                        'materialization fetch differs from its actual global trace',
+                    )
+                    if fetched.get('purpose') in (
+                        'source_rows',
+                        'describe_result',
+                    ):
+                        fetches[position] = {
+                            key: value
+                            for key, value in actual.items()
+                            if key != 'purpose'
+                        }
+                cursor += len(issued)
+            require(
+                cursor == len(record['fetches']),
+                'materialization fetches have no lifecycle events',
+            )
+        terminal, failure = entry['terminal'], entry['failure']
+        materialized, error = None, None
+        if entry['completion'] == 'returned':
+            require(
+                failure is None
+                and isinstance(terminal, dict)
+                and set(terminal) == {'run'}
+                and terminal['run'] in owned,
+                'materialization returned without its actual terminal Run',
+            )
+            record = owned[terminal['run']]
+            product = record['_value']
+            require(
+                record['completion'] == 'done'
+                and product is not None
+                and product['value'] == 'request',
+                'materialization terminal is not an actual nested request',
+            )
+            require(
+                record['_input']['stage'] in ('task', 'request'),
+                'a helper cannot stand in for the materialized request',
+            )
+            state, ids = _materialization_state(product['data'])
+            outputs = record['output_reads']
+            require(
+                len(outputs) == len(ids)
+                and {item['attachment'] for item in outputs} == set(ids),
+                'materialization terminal state has incomplete actual takes',
+            )
+            taken = {
+                item['attachment']: _materialization_bytes(item)
+                for item in outputs
+            }
+            payload = json.loads(
+                taken[state['payload']][0],
+                parse_int=lambda token: {'number': token},
+                parse_float=lambda token: {'number': token},
+            )
+            materialized = {
+                'version': state['version'],
+                'query': taken[state['query']][1],
+                'payload': payload,
+            }
+        else:
+            require(
+                entry['completion'] == 'raised'
+                and terminal is None
+                and isinstance(failure, dict)
+                and set(failure) == {'run', 'relation'}
+                and failure['run'] in owned,
+                'materialization error has no selected actual terminal association',
+            )
+            record = owned[failure['run']]
+            if failure['relation'] == 'native':
+                product = record['_value']
+                require(
+                    failure['run'] in guards
+                    and record['completion'] == 'done'
+                    and product is not None
+                    and product['value'] == 'failure_assessment'
+                    and product['data']['category'] == 'pass_through',
+                    'selected native materialization failure has no actual pass-through assessment',
+                )
+            else:
+                require(
+                    failure['relation'] in ('selected', 'cause', 'refused')
+                    and record['completion'] == 'error'
+                    and record['error'] is not None,
+                    'materialization failure lacks its actual Core error',
+                )
+                error = record['error']
+        projected.append(
+            {
+                **entry,
+                'native': True,
+                'position': None,
+                'through': None,
+                '_task': tasks[0],
+                '_materialized': materialized,
+                '_error': error,
+            }
+        )
+    for run, record in all_records.items():
+        if 'entry' in record:
+            require(
+                owners.get(run) == record['entry'],
+                'materialization record has no entry owner',
+            )
+    return {
+        'records': all_records,
+        'entries': projected,
+        'owners': owners,
+        'inputs': inputs,
+        'fetches': fetches,
+    }
+
+
 def _ordered_json(value: bytes | str) -> Any:
     def nonfinite(_token: str) -> Any:
         raise ObservationError('prediction input has a nonfinite JSON value')
@@ -417,6 +1282,7 @@ def _entry(
     records: dict[int, dict[str, Any]],
     operations: list[str],
     entries: list[dict[str, Any]],
+    materialization_errors: dict[int, tuple[int, dict[str, Any]]],
 ) -> dict[str, Any]:
     require(
         entry['ordinal'] == ordinal,
@@ -552,12 +1418,28 @@ def _entry(
     )
     failure = entry.get('failure')
     if failure is not None:
+        failed = records.get(failure['run'])
+        supplied = materialization_errors.get(failure['run'])
+        failure_owner = (
+            failed['entry']
+            if failed is not None
+            else supplied[0]
+            if supplied is not None
+            else None
+        )
+        failure_error = (
+            failed['error']
+            if failed is not None
+            else supplied[1]
+            if supplied is not None
+            else None
+        )
         require(
             entry['completion'] == 'raised'
-            and failure['run'] in records
-            and _below(records[failure['run']]['entry'], ordinal, entries)
+            and failure_owner is not None
+            and _below(failure_owner, ordinal, entries)
             and failure['relation'] in ('selected', 'cause', 'refused')
-            and records[failure['run']]['error'] is not None,
+            and failure_error is not None,
             'prediction terminal error has no actual native presentation association',
         )
     native = bool(models) or (failure is not None and failure['run'] in owned)
@@ -847,6 +1729,7 @@ def _legacy_events(
 
 
 def _view(core: dict[str, Any], operations: list[str]) -> dict[str, Any]:
+    materialization = _materializations(core, operations)
     capabilities = core.get('capture_capabilities')
     require(
         capabilities is None
@@ -894,8 +1777,25 @@ def _view(core: dict[str, Any], operations: list[str]) -> dict[str, Any]:
         isinstance(entries, list),
         'prediction entries are not observed as a list',
     )
+    materialization_errors = {}
+    for entry in materialization['entries']:
+        failure = entry['failure']
+        if (
+            entry['native']
+            and entry['prediction_parent'] is not None
+            and failure is not None
+            and failure['relation'] != 'native'
+        ):
+            materialization_errors[failure['run']] = (
+                entry['prediction_parent'],
+                entry['_error'],
+            )
+    selected_errors = {run: record['error'] for run, record in records.items()}
+    selected_errors.update(
+        {run: error for run, (_, error) in materialization_errors.items()}
+    )
     projected = [
-        _entry(entry, at, records, operations, entries)
+        _entry(entry, at, records, operations, entries, materialization_errors)
         for at, entry in enumerate(entries)
     ]
     products = {}
@@ -952,9 +1852,24 @@ def _view(core: dict[str, Any], operations: list[str]) -> dict[str, Any]:
     logical_operations = []
     run_positions = {}
     entry_positions = {}
+    materialization_positions = {}
+    materialization_native = {
+        entry['ordinal']: entry
+        for entry in materialization['entries']
+        if entry['native']
+    }
     for run, operation in enumerate(operations):
+        materialize = materialization_native.get(
+            materialization['owners'].get(run)
+        )
         entry = native.get(owners.get(run))
-        if operation == 'prepare_request' and entry is not None:
+        if materialize is not None:
+            ordinal = materialize['ordinal']
+            if ordinal not in materialization_positions:
+                materialization_positions[ordinal] = len(logical_operations)
+                logical_operations.append('materialize')
+            run_positions[run] = materialization_positions[ordinal]
+        elif operation == 'prepare_request' and entry is not None:
             if entry['ordinal'] not in emitted:
                 entry_positions[entry['ordinal']] = len(logical_operations)
                 logical_operations.append('predict')
@@ -1007,6 +1922,27 @@ def _view(core: dict[str, Any], operations: list[str]) -> dict[str, Any]:
         else:
             logical_inputs.append(record)
             input_positions.append(run_positions[run])
+    for ordinal, entry in materialization_native.items():
+        logical_inputs.append(materialization['inputs'][ordinal])
+        input_positions.append(run_positions[entry['_task']])
+    ordered_inputs = sorted(
+        zip(input_positions, logical_inputs, strict=True),
+        key=lambda item: item[0],
+    )
+    input_positions = [position for position, _ in ordered_inputs]
+    logical_inputs = [value for _, value in ordered_inputs]
+    materialized = core.get('materialized')
+    selected_error = core.get('error')
+    last_materialization = next(
+        (
+            entry
+            for entry in reversed(materialization['entries'])
+            if entry['parent'] is None and entry['native']
+        ),
+        None,
+    )
+    if last_materialization is not None:
+        materialized = last_materialization['_materialized']
     last = next(
         (entry for entry in reversed(projected) if entry['parent'] is None),
         None,
@@ -1018,10 +1954,24 @@ def _view(core: dict[str, Any], operations: list[str]) -> dict[str, Any]:
         )
         error = None
         if last['failure'] is not None:
-            error = records[last['failure']['run']]['error']
+            error = selected_errors[last['failure']['run']]
+        if last_materialization is None or max(
+            entries[last['ordinal']]['runs'], default=-1
+        ) >= max(last_materialization['runs'], default=-1):
+            require(
+                core.get('error') == error,
+                'common prediction error lacks an actual selected native owner',
+            )
+            selected_error = error
+    if last_materialization is not None and (
+        last is None
+        or max(last_materialization['runs'], default=-1)
+        > max(entries[last['ordinal']]['runs'], default=-1)
+    ):
+        selected_error = last_materialization['_error']
         require(
-            core.get('error') == error,
-            'common prediction error lacks an actual selected native owner',
+            core.get('error') == selected_error,
+            'common materialization error lacks its actual selected owner',
         )
     legacy_calls = core.get('model_calls')
     require(
@@ -1131,7 +2081,7 @@ def _view(core: dict[str, Any], operations: list[str]) -> dict[str, Any]:
                     if item['body'] is not None
                 ],
                 'result': rendered,
-                'error': records[failure['run']]['error']
+                'error': selected_errors[failure['run']]
                 if failure is not None
                 else None,
                 'partial': {
@@ -1147,6 +2097,24 @@ def _view(core: dict[str, Any], operations: list[str]) -> dict[str, Any]:
         del entry['_rendered']
         del entry['_calls']
         del entry['_results']
+    for entry in materialization['entries']:
+        if entry['native']:
+            entry['position'] = materialization_positions[entry['ordinal']]
+            related = set(entry['runs'])
+            for child in materialization['entries']:
+                parent = child['parent']
+                while parent is not None:
+                    if parent == entry['ordinal']:
+                        related.update(child['runs'])
+                        break
+                    parent = materialization['entries'][parent]['parent']
+            entry['through'] = max(
+                (run_positions[run] for run in related),
+                default=entry['position'],
+            )
+            del entry['_task']
+            entry['materialized'] = entry.pop('_materialized')
+            entry['error'] = entry.pop('_error')
     return {
         'operations': logical_operations,
         'inputs': logical_inputs,
@@ -1157,6 +2125,10 @@ def _view(core: dict[str, Any], operations: list[str]) -> dict[str, Any]:
         'attempts': attempts,
         'events': events,
         'partial': partial,
+        'materializations': materialization['entries'],
+        'materialized': materialized,
+        'error': selected_error,
+        'fetches': materialization['fetches'],
     }
 
 
