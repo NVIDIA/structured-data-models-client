@@ -135,6 +135,9 @@ def test_complete_read_rows_include_entity_and_other_table_before_native_capture
     other.frame['ts'] = pd.Series([pd.Timestamp(99)] * 3)
     assert captured.time_series({'source': OTHER, 'column': 'ts'}) is times
     assert times.iloc[0] == pd.Timestamp(21)
+    assert [
+        (metadata, table.to_pydict()) for metadata, table in original
+    ] == snapshots
 
 
 @pytest.mark.parametrize('count', [0, 2])
