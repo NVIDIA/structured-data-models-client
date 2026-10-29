@@ -91,7 +91,7 @@ class Service:
             if self.positions is not None
             else helpers['__kumo_batch__']
         )
-        return pa.table({'position': pa.array(values, type=pa.int64())})
+        return pa.table({'position': pa.array(values, type=pa.uint64())})
 
     def column(self, binding, facts):
         self.calls.append(('column', binding, facts))

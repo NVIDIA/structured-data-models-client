@@ -12,6 +12,42 @@ fn positive(column: &str) -> Shape {
 }
 
 #[test]
+fn actual_entity_presence_enters_a_real_predicate_before_optional_where() {
+    use crate::materialize::native_conditions::entity_condition;
+    for where_clause in [None, Some(positive("age"))] {
+        let shape = entity_condition("user_id".into(), where_clause.clone());
+        let first = ConditionInputs::default()
+            .complete_target(
+                &shape,
+                labels::Target::Column(labels::Column::Bool(vec![
+                    Some(true),
+                    Some(false),
+                    Some(true),
+                ])),
+            )
+            .unwrap();
+        if where_clause.is_some() {
+            assert!(first.truth().is_none());
+            let complete = first
+                .complete(
+                    &shape,
+                    labels::Column::Int(vec![Some(1), Some(2), Some(-1)]),
+                )
+                .unwrap();
+            assert_eq!(complete.truth().unwrap().values, [true, false, false]);
+        } else {
+            assert_eq!(first.truth().unwrap().values, [true, false, true]);
+        }
+    }
+    assert!(
+        labels::truth(&labels::Target::Column(labels::Column::Bool(vec![Some(
+            true
+        )])))
+        .is_err()
+    );
+}
+
+#[test]
 fn repeated_native_occurrences_remain_ordered_and_actual_values_choose_the_rows() {
     let filter = Shape::Both {
         op: labels::BoolOp::And,

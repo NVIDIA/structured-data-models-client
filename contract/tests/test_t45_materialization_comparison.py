@@ -100,6 +100,51 @@ def test_changed_actual_materialized_payload_cannot_hide_behind_empty_global_sum
     assert failures(observed(core, ['prepare_materialize']), legacy())
 
 
+def test_equal_full_traces_compare_the_first_actual_materialization_product():
+    left = two_entries()
+    right = copy.deepcopy(left)
+    replace_payload(
+        right['materialization_preparations'][0],
+        {'context': {'changed': 1}, 'predict': {}},
+    )
+    assert failures(
+        observed(left, ['prepare_materialize'] * 2),
+        observed(right, ['prepare_materialize'] * 2),
+    )
+
+
+@pytest.mark.parametrize('changed', ['payload', 'query', 'rows'])
+def test_complete_nested_batch_data_remains_observed_even_when_main_payload_is_equal(
+    changed,
+):
+    left = actual_materialization()
+    record = left['materialization_preparations'][0]
+    terminal = copy.deepcopy(record['value_reads'][0]['parsed'])
+    terminal['data']['state']['batches'] = [
+        {'payload': 13, 'rows': 1, 'request_id': 'request-1'}
+    ]
+    record['value_reads'] = [_bytes(10, json.dumps(terminal).encode())]
+    record['output_reads'].append(_bytes(13, b'{"context":{},"predict":{}}'))
+    right = copy.deepcopy(left)
+    if changed == 'payload':
+        right['materialization_preparations'][0]['output_reads'][-1] = _bytes(
+            13, b'{"context":{"changed":1},"predict":{}}'
+        )
+    elif changed == 'query':
+        right['materialization_preparations'][0]['output_reads'][1] = _bytes(
+            12, b'"different complete query"'
+        )
+    else:
+        terminal['data']['state']['batches'][0]['rows'] = 2
+        right['materialization_preparations'][0]['value_reads'] = [
+            _bytes(10, json.dumps(terminal).encode())
+        ]
+    assert failures(
+        observed(left, ['prepare_materialize']),
+        observed(right, ['prepare_materialize']),
+    )
+
+
 @pytest.mark.parametrize('changed', ['shared', 'longer-only'])
 def test_shared_prefix_selects_its_actual_materialization_result(changed):
     longer = two_entries()
