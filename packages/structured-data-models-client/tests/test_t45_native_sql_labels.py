@@ -15,9 +15,11 @@ from __future__ import annotations
 import copy
 import dataclasses
 import warnings
+from pathlib import Path
 from unittest.mock import patch
 
 import pandas as pd
+import pyarrow as pa
 import pytest
 import yaml
 from sdm_connectors import DuckDBSource
@@ -222,6 +224,62 @@ def _approved_old(old, case):
         assert items['rows'][phantom[0]] == items['rows'][phantom[1]]
         items['rows'].pop(phantom[1])
     return expected
+
+
+def test_warning_comparison_retains_raw_observations_and_other_products():
+    # Authored WarningMessage inputs exercise only the projection. They
+    # are not receipts of newly executed native warnings or handler effects.
+    pandas_root = Path(pd.__file__).resolve().parent
+    arrow_root = Path(pa.__file__).resolve().parent
+    notices = [
+        warnings.WarningMessage(UserWarning('first'), UserWarning, __file__, 1),
+        warnings.WarningMessage(
+            FutureWarning('pandas'),
+            FutureWarning,
+            str(pandas_root / 'fixture.py'),
+            2,
+        ),
+        warnings.WarningMessage(
+            RuntimeWarning('arrow'),
+            RuntimeWarning,
+            str(arrow_root / 'fixture.py'),
+            3,
+        ),
+        warnings.WarningMessage(
+            UserWarning('last'),
+            UserWarning,
+            str(pandas_root) + '_other/fixture.py',
+            4,
+        ),
+    ]
+    raw = {
+        'outcome': 'success',
+        'request': {'payloads': [{'rows': [[1]]}]},
+        'source_after': {'items': [(0, 'value')]},
+        'warnings': [_warning_record(notice, 'schema') for notice in notices],
+    }
+    before = copy.deepcopy(raw)
+    compared = _comparison(raw)
+    assert [notice['origin'] for notice in raw['warnings']] == [
+        None,
+        'pandas',
+        'pyarrow',
+        None,
+    ]
+    assert compared['warnings'] == [
+        {
+            'type': 'UserWarning',
+            'category': 'builtins.UserWarning',
+            'message': text,
+            'stage': 'schema',
+        }
+        for text in ('first', 'last')
+    ]
+    assert {
+        key: value for key, value in compared.items() if key != 'warnings'
+    } == {key: value for key, value in raw.items() if key != 'warnings'}
+    compared['request']['payloads'][0]['rows'][0][0] = 9
+    assert raw == before
 
 
 @pytest.mark.parametrize(
