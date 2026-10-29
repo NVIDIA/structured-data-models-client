@@ -113,3 +113,81 @@ fn one_part_is_explicit_only_when_its_consumer_requests_partition_data() {
         }
     }
 }
+
+#[test]
+fn result_metadata_has_its_own_purpose_and_does_not_claim_the_future_data_owner() {
+    use arrow_array::{ArrayRef, Int64Array, StringArray};
+    use sdm_contract::data::ProviderChoice;
+    use sdm_contract::run::FetchPurpose;
+    let provider: ProviderChoice = serde_json::from_value(serde_json::json!({
+        "provider":"sql","dialect":"databricks","namespace":["catalog","schema"],
+        "timestamp_encoding":"microseconds"
+    }))
+    .unwrap();
+    let root = crate::CompositionRoot::new(Arc::new(sdm_data::Data::new()));
+    let observed = Arc::new(Mutex::new(None));
+    let returned = Arc::clone(&observed);
+    let mut run = Run::with_data(
+        root.data_access(&provider).unwrap(),
+        move |asker| async move {
+            asker.describe_fetch_partitions();
+            let pending = asker.fetch(DataRequest::Scan {
+                table: Relation::named("events"),
+                columns: vec!["id".into(), "ts".into()],
+                filters: vec![],
+                limit: None,
+            })?;
+            let read = pending.source_read().expect("real future data identity");
+            assert_eq!(read.first(), None);
+            *returned.lock().unwrap() = Some(read);
+            assert!(matches!(pending.await, Reply::Fetch(FetchResult::Data(_))));
+            Ok(done())
+        },
+    );
+    let Step::Fetch { requests } = run.next().unwrap() else {
+        panic!("metadata fetch")
+    };
+    assert_eq!(requests.len(), 1);
+    let metadata = &requests[0];
+    assert_eq!(metadata.purpose, Some(FetchPurpose::DescribeResult));
+    assert_eq!(observed.lock().unwrap().as_ref().unwrap().first(), None);
+    let batch = RecordBatch::try_from_iter([
+        (
+            "name",
+            Arc::new(StringArray::from(vec!["id", "ts"])) as ArrayRef,
+        ),
+        (
+            "type",
+            Arc::new(StringArray::from(vec!["BIGINT", "TIMESTAMP"])) as ArrayRef,
+        ),
+    ])
+    .unwrap();
+    run.submit_fetch(
+        metadata.id,
+        FetchResult::Data(ArrowData::new(batch.schema(), vec![batch])),
+    )
+    .unwrap();
+    let Step::Fetch { requests } = run.next().unwrap() else {
+        panic!("actual data fetch")
+    };
+    assert_eq!(requests.len(), 1);
+    let data = &requests[0];
+    assert_eq!(data.purpose, None);
+    assert_ne!(data.id, metadata.id);
+    assert_eq!(data.partition.as_ref().unwrap().first, data.id);
+    assert_eq!(
+        observed.lock().unwrap().as_ref().unwrap().first(),
+        Some(data.id)
+    );
+    let batch = RecordBatch::try_from_iter([
+        ("id", Arc::new(Int64Array::from(vec![1])) as ArrayRef),
+        ("ts", Arc::new(Int64Array::from(vec![2])) as ArrayRef),
+    ])
+    .unwrap();
+    run.submit_fetch(
+        data.id,
+        FetchResult::Data(ArrowData::new(batch.schema(), vec![batch])),
+    )
+    .unwrap();
+    assert!(matches!(run.next().unwrap(), Step::Done { .. }));
+}
