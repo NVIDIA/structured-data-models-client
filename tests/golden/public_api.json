@@ -112,6 +112,7 @@
   "sdm_client": {
     "__all__": [
       "Column",
+      "Explanations",
       "FittedModel",
       "KumoRelational",
       "KumoTabular",
@@ -148,6 +149,17 @@
           "check_consistent": "(self) -> 'None'"
         },
         "signature": "(name: 'str', dtype: 'str', stype: 'str') -> None"
+      },
+      "Explanations": {
+        "bases": [
+          "builtins.dict"
+        ],
+        "kind": "class",
+        "public_attributes": [],
+        "public_methods": {
+          "to_pandas": "(self) -> 'pd.DataFrame'"
+        },
+        "signature": "(entries: 'Mapping[Any, dict[str, Any]] | None' = None, *, keyed_by: 'tuple[str, ...]' = ('id',), hops: 'Mapping[Any, Mapping[str, Sequence[int | None]]] | None' = None) -> 'None'"
       },
       "FittedModel": {
         "bases": [],
@@ -226,7 +238,7 @@
         "bases": [],
         "kind": "class",
         "public_attributes": [
-          "explanation",
+          "explanations",
           "unscored_candidates"
         ],
         "public_methods": {
@@ -234,7 +246,7 @@
           "merge": "(parts: 'Sequence[PredictionResult]') -> 'PredictionResult'",
           "to_pandas": "(self) -> 'pd.DataFrame'"
         },
-        "signature": "(*, model: 'str', request_id: 'str', items: 'Sequence[PredictionItem]', metadata: 'dict[str, Any] | None' = None, explanation: 'dict[str, Any] | None' = None, outputs: 'Sequence[str]' = (), unscored_candidates: 'Sequence[Any]' = ()) -> 'None'"
+        "signature": "(*, model: 'str', request_id: 'str', items: 'Sequence[PredictionItem]', metadata: 'dict[str, Any] | None' = None, explanations: 'Mapping[Any, dict[str, Any]] | None' = None, outputs: 'Sequence[str]' = (), unscored_candidates: 'Sequence[Any]' = ()) -> 'None'"
       },
       "PredictiveQuery": {
         "bases": [],

@@ -48,7 +48,7 @@ from sdm_client.request import (
     _envelope_rows,
     warn_of_rows_scored_from_their_own_answers,
 )
-from sdm_client.result import PredictionResult
+from sdm_client.result import Explanations, PredictionResult
 from sdm_client.schema import _as_key_tuple
 from sdm_client.wire.keys import (
     _named_by,
@@ -916,7 +916,10 @@ def _carry_the_answers_already_paid_for(
 
 
 def _numbered_from(result: PredictionResult, start: int) -> PredictionResult:
-    r"""``result`` with each row numbered ``start`` places further on."""
+    r"""``result`` with each row numbered ``start`` places further on.
+
+    An explanation kept under its ``row_index`` moves with its row.
+    """
     if start:
         result.items = tuple(
             dataclasses.replace(item, row_index=item.row_index + start)
@@ -924,6 +927,7 @@ def _numbered_from(result: PredictionResult, start: int) -> PredictionResult:
             else item
             for item in result.items
         )
+        result._explanations = result._explanations._renumbered(start)
     return result
 
 
@@ -1256,7 +1260,7 @@ def _warn_of_steps_that_carry_no_explanation(
     missing = [
         step
         for (_, step), answer in zip(rewritten.parts, answers, strict=True)
-        if answer.explanation is None
+        if not answer.explanations
     ]
     if not missing or len(missing) == len(answers):
         return
@@ -1282,26 +1286,26 @@ def _by_step(
     the pair of row and step is what names a point in the series, which is how
     the contract reads it.
 
-    Each step is explained on its own, so the explanations are kept under the
-    step they belong to. Dropping them left the result saying it carried an
-    explanation while holding none.
+    Each step is explained on its own, so each row's explanation is kept
+    under ``(id, forecast_step)``, the pair that names its point in the frame.
     """
     items = [
         dataclasses.replace(item, forecast_step=step)
         for (_, step), answer in zip(rewritten.parts, answers, strict=True)
         for item in answer.items
     ]
-    by_step = {
-        step: answer.explanation
-        for (_, step), answer in zip(rewritten.parts, answers, strict=True)
-        if answer.explanation is not None
-    }
+    explanations = Explanations._merged(
+        [
+            answer.explanations._at_step(step)
+            for (_, step), answer in zip(rewritten.parts, answers, strict=True)
+        ]
+    )
     built = PredictionResult(
         model=answers[0].model if answers else '',
         request_id=answers[0].request_id if answers else '',
         items=items,
         outputs=tuple(answers[0].outputs) if answers else (),
-        explanation={'by_forecast_step': by_step} if by_step else None,
+        explanations=explanations,
     )
     # `forecast_step` is put on the items above, so with no items there is
     # nothing to read it from and an empty forecast lost the column that says

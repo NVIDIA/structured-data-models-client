@@ -130,13 +130,13 @@ class FakeItem:
             setattr(self, name, value)
 
 
-def result(outputs=(), explanation=None, **fields) -> PredictionResult:
+def result(outputs=(), explanations=None, **fields) -> PredictionResult:
     return PredictionResult(
         model='kumo-tabular',
         request_id='r1',
         items=[FakeItem(row_index=0, **fields)],
         outputs=outputs,
-        explanation=explanation,
+        explanations=explanations,
     )
 
 
@@ -167,14 +167,14 @@ def test_a_repeated_request_is_reported_once():
 
 def test_explanation_is_looked_for_where_it_lives():
     assert result(prediction=1.0).absent(['explanation']) == ('explanation',)
-    assert result(prediction=1.0, explanation=None).absent(['explanation']) == (
+    assert result(prediction=1.0, explanations={}).absent(['explanation']) == (
         'explanation',
     )
     carried = PredictionResult(
         model='m',
         request_id='r',
         items=[FakeItem(row_index=0)],
-        explanation={'feature_importance': {}},
+        explanations={0: {'outputs': []}},
     )
     assert carried.absent(['explanation']) == ()
 
