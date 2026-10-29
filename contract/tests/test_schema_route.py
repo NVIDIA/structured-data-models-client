@@ -27,6 +27,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from _actual_core import checked_operations
+
 ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / 'contract/runners/run_python.py'
 CASES = ROOT / 'contract/cases/s1'
@@ -217,7 +219,6 @@ def test_the_runners_hold_each_core_schema_to_its_description() -> None:
     import os
 
     import pytest
-from _actual_core import checked_operations
 
     runner = _runner()
     spec = importlib_module('refusal_map')
