@@ -722,3 +722,11 @@ The frozen predicted record predates the current observed outputs supplement; fu
 Require the current outputs and actual body output fields to equal the known prediction field list, explicitly verify the historical field is absent, and compare every common field after only that local availability projection.
 Retain the existing request-ID rule, all schema/state/SQL/fetch/result assertions and every frozen byte.
 These are consumer inventory repairs, with no producer, warning policy, presentation, comparator exclusion or model behavior change.
+
+
+### Preserve bridge-freeze fault seeds after source movement
+
+Exact R54 passes the normal unscoped local handoff and matched Python 3.10 profile, while actual CI reaches a tooling self-test that still targets the former indentation of provider selection.
+Retarget both existing swallowing-try and aliased-suppress mutations to the unique actual provider-selection statement in the covered gather function, preserving each intended fault and both baseline and rewritten-baseline refusal oracles.
+Require exactly one source mutation site and preserve unchanged-tree and declared-refactor controls; do not change the bridge scanner, production source, declarations or real baseline.
+Collect the remaining actual CI and provider feedback before freezing the grouped successor, and require fresh whole reviews before executing changed source.
