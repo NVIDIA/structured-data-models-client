@@ -20,6 +20,8 @@ Native entity/ranking companions and their real lineage are distinct from intern
 Forecast controls preserve complete logical/body/result and current taken/received byte conservation, while distinguishing native final-call authority from old internal masked hashes.
 Fetch and golden/replay correspondence may rename only validated per-Run attachment and derived seed identities after checking their real owner/plan binding.
 No regex-only semantic SQL normalization or dropping request, SQL, key, value, order or reply assertions is allowed.
+The data layer owns test-witness dialect eligibility, while the host retains actual schema admission and the existing composition root performs complete independent plan rendering.
+The witness helpers remain behind the existing test-ops feature boundary, including the data-layer helper.
 Historical edit pins remain immutable; a field-level comparison requires the actual historical producer and current raw starts, not rebaked digests or removal of true flags.
 Any missing historical native execution becomes an explicit operator prerequisite for root.
 
