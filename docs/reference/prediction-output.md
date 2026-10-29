@@ -157,7 +157,7 @@ Each entry is a plain nested dict:
   'related': {                              # kumo-relational only: every table,
                                             # the entity's own included
       '<table>': {
-          'keys':      [...],               # the table's primary key per row; absent if the table has none
+          'keys':      [...],               # each row's key; only when a relationship joins on the key column
           'rows':      [{...}, ...],        # each row's values as sent to the model
           'columns':   [...],               # model's preprocessed numerical columns
           'gradients': [[[...], ...], ...], # [output][row][column], rows aligned with keys and rows
@@ -203,9 +203,10 @@ by path.
 
 ### Related rows
 
-A related table's rows carry `keys`, the table's primary key per row, when the
-table has one, and always `rows`, each row's values as sent to the model. A
-keyless table has no `keys`, so its rows are identified by their values alone.
+A related table's rows always carry `rows`, each row's values as sent to the
+model. `keys` is present when the table's key column is one the model receives,
+i.e. a column a relationship joins on; otherwise rows are identified by their
+values.
 Keyed or keyless changes only how a row is labelled; both get gradients in the
 same way.
 
@@ -221,9 +222,9 @@ result.explanations['cust_17']
 #               'gradients': [[0.01, -0.03], [-0.01, 0.03]]}}
 ```
 
-`kumo-relational`, user 5 with one order and two login events. `orders` has a
-primary key (`order_id`), so its rows carry `keys`. `events` has none, so its
-rows are identified by their values alone. Both are part of the same entry:
+`kumo-relational`, user 5 with one order and two login events. `users` carries
+`keys` because `user_id` is the join column; `orders` and `events` are
+identified by their values. All are part of the same entry:
 
 ```python
 result.explanations['user_5']
@@ -234,8 +235,7 @@ result.explanations['user_5']
 #                 'rows': [{'user_id': 'user_5', 'tenure_days': 410}],
 #                 'columns': ['tenure_days'],
 #                 'gradients': [[[-0.05]], [[0.05]]]},
-#      'orders': {'keys': ['order_9003'],
-#                 'rows': [{'user_id': 'user_5', 'order_id': 'order_9003', 'amount': 12.0}],
+#      'orders': {'rows': [{'user_id': 'user_5', 'order_id': 'order_9003', 'amount': 12.0}],
 #                 'columns': ['amount'],
 #                 'gradients': [[[-0.02]], [[0.02]]]},
 #      'events': {'rows': [{'user_id': 'user_5', 'kind': 'login', 'at': '2026-10-01T09:00:00'},
@@ -253,7 +253,7 @@ across all entities:
 ```
 id      table     hop  key         row  output           column       gradient
 user_5  users     0    user_5      0    probability_yes  tenure_days   0.05
-user_5  orders    1    order_9003  0    probability_yes  amount        0.02
+user_5  orders    1    None        0    probability_yes  amount        0.02
 user_5  products  2    prod_77     0    probability_yes  price         0.004
 user_5  events    1    None        1    probability_yes  kind_login   -0.02
 ```
@@ -264,8 +264,8 @@ user_5  events    1    None        1    probability_yes  kind_login   -0.02
 - `hop` is how many links the row is from the entity, 0 for the entity's own
   table. The client works it out from the relationships and foreign-key
   values it sent. It is `None` for a row no relationship reaches.
-- `key` is the row's primary key, or `None` for a keyless table. On a
-  `kumo-tabular` `instance` line it is the row's `id`, or `None` when the
+- `key` is the row's entry in `keys`, or `None` when the table has no `keys`.
+  On a `kumo-tabular` `instance` line it is the row's `id`, or `None` when the
   request has no entity key. `row` is the row's position in that entity's
   `related[table]['rows']`, and 0 on a `kumo-tabular` `instance` line.
 - `output` names the score by the column of `result.to_pandas()` that holds

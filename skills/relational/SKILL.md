@@ -199,7 +199,7 @@ and every related row gathered for it, each under its table's name in
 entry = result.explanations['user_5']  # the entity whose id is 'user_5'
 entry['related']['users']              # the entity's own row, hop 0
 orders = entry['related']['orders']    # one block per related table
-orders['keys']                         # each row's primary key; absent if the table has none
+entry['related']['users']['keys']      # present only when a relationship joins on the table's key column
 orders['rows']                         # each row's values as sent
 orders['gradients']                    # [output][row][column]
 result.explanations.to_pandas()        # one line per (row, output, column), with its hop; the entity's users line is hop 0

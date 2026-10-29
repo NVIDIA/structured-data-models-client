@@ -123,10 +123,10 @@ An entry holds `outputs`, the explained scores in order, and `related`, one
 block per table the client gathered for that entity. The entity's own row is
 one of those blocks, under its table's name, such as `related['users']`, at
 hop 0.
-A block carries `keys`, each row's primary key, when the table has one, and
-always `rows`, each row's values as sent, with `columns` and `gradients` as
-`[output][row][column]`, aligned with those rows. A keyless table's rows are
-identified by their values alone, and get gradients the same way.
+A block always carries `rows`, each row's values as sent, with `columns` and
+`gradients` as `[output][row][column]`, aligned with those rows. `keys` is
+present when the table's key column is one the model receives, i.e. a column a
+relationship joins on; otherwise rows are identified by their values.
 
 `columns` are the model's preprocessed numerical columns: categoricals and
 datetimes may appear as derived columns, and a table without numerical
