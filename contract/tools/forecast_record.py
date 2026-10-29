@@ -246,16 +246,25 @@ def check_native_bytes(answer: dict[str, Any]) -> None:
     Current native bytes are never reconstructed from their parsed bodies.
     """
     evidence = answer.get('native_evidence')
-    if type(evidence) is not dict or set(evidence) != {'core', 'operations', 'receipts'}:
+    if type(evidence) is not dict or set(evidence) != {
+        'core',
+        'operations',
+        'receipts',
+    }:
         raise ValueError('actual native forecast evidence is missing')
-    reader = _module('forecast_prediction_observation', ROOT / 'contract/runners/prediction_observation.py')
+    reader = _module(
+        'forecast_prediction_observation',
+        ROOT / 'contract/runners/prediction_observation.py',
+    )
     view = reader.view(evidence['core'], evidence['operations'])
     if view['attempts'] is None:
         raise ValueError('actual native forecast calls are unobserved')
     receipts = []
     if len(evidence['receipts']) != len(answer['payloads']):
         raise ValueError('native forecast receipt extent changed')
-    for receipt, payload in zip(evidence['receipts'], answer['payloads'], strict=True):
+    for receipt, payload in zip(
+        evidence['receipts'], answer['payloads'], strict=True
+    ):
         if set(receipt) != {'method', 'path', 'body_base64'}:
             raise ValueError('native forecast receipt is malformed')
         raw = base64.b64decode(receipt['body_base64'], validate=True)
@@ -263,12 +272,17 @@ def check_native_bytes(answer: dict[str, Any]) -> None:
         if (
             receipt['method'] != payload['method']
             or receipt['path'] != payload['path']
-            or hashlib.sha256(masked_bytes(raw)).hexdigest() != payload['masked_sha256']
+            or hashlib.sha256(masked_bytes(raw)).hexdigest()
+            != payload['masked_sha256']
             or EN.digest(parsed) != payload['digest']
             or EN.tables_with_rows(parsed) != payload['tables']
         ):
-            raise ValueError('native forecast bytes differ from the actual receipt projection')
-        receipts.append({'sha256': hashlib.sha256(raw).hexdigest(), 'parsed': parsed})
+            raise ValueError(
+                'native forecast bytes differ from the actual receipt projection'
+            )
+        receipts.append(
+            {'sha256': hashlib.sha256(raw).hexdigest(), 'parsed': parsed}
+        )
     reader.check_receipts(view['attempts'], receipts)
 
 
@@ -385,7 +399,13 @@ def drive(
                     'core': capture.core(),
                     'operations': list(capture.operations),
                     'receipts': [
-                        {'method': method, 'path': path, 'body_base64': base64.b64encode(body).decode('ascii')}
+                        {
+                            'method': method,
+                            'path': path,
+                            'body_base64': base64.b64encode(body).decode(
+                                'ascii'
+                            ),
+                        }
                         for method, path, body in received.requests
                     ],
                 }

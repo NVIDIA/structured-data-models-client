@@ -675,13 +675,34 @@ def test_one_family_map_per_seam_holds_every_inventory_case() -> None:
 # Exact historical citations remain in their frozen maps. These named current
 # producer functions independently retain the same guard/text after factoring.
 CURRENT_PRODUCERS = {
-    ('predict/one_class_context', 'rust/crates/sdm-request/src/predict.rs:671'): ('rust/crates/sdm-request/src/predict/validation.rs', 'constant'),
-    ('describe_source/empty_table', 'rust/crates/sdm-schema/src/infer.rs:314'): ('rust/crates/sdm-schema/src/infer.rs', 'empty_table'),
-    ('materialize/empty_indices', 'rust/crates/sdm-core/src/materialize.rs:2977-2983'): ('rust/crates/sdm-core/src/materialize.rs', 'one'),
-    ('materialize/int64_range', 'rust/crates/sdm-request/src/payload.rs:381'): ('rust/crates/sdm-request/src/payload.rs', 'int_cell'),
-    ('describe_source/column_type', 'rust/crates/sdm-schema/src/infer.rs:977'): ('rust/crates/sdm-schema/src/infer.rs', 'dtype_of'),
-    ('admission/union', 'rust/crates/sdm-host/src/admission.rs:86'): ('rust/crates/sdm-host/src/admission.rs', 'unsupported'),
-    ('admission/interval', 'rust/crates/sdm-host/src/admission.rs:86'): ('rust/crates/sdm-host/src/admission.rs', 'unsupported'),
+    (
+        'predict/one_class_context',
+        'rust/crates/sdm-request/src/predict.rs:671',
+    ): ('rust/crates/sdm-request/src/predict/validation.rs', 'constant'),
+    (
+        'describe_source/empty_table',
+        'rust/crates/sdm-schema/src/infer.rs:314',
+    ): ('rust/crates/sdm-schema/src/infer.rs', 'empty_table'),
+    (
+        'materialize/empty_indices',
+        'rust/crates/sdm-core/src/materialize.rs:2977-2983',
+    ): ('rust/crates/sdm-core/src/materialize.rs', 'one'),
+    ('materialize/int64_range', 'rust/crates/sdm-request/src/payload.rs:381'): (
+        'rust/crates/sdm-request/src/payload.rs',
+        'int_cell',
+    ),
+    (
+        'describe_source/column_type',
+        'rust/crates/sdm-schema/src/infer.rs:977',
+    ): ('rust/crates/sdm-schema/src/infer.rs', 'dtype_of'),
+    ('admission/union', 'rust/crates/sdm-host/src/admission.rs:86'): (
+        'rust/crates/sdm-host/src/admission.rs',
+        'unsupported',
+    ),
+    ('admission/interval', 'rust/crates/sdm-host/src/admission.rs:86'): (
+        'rust/crates/sdm-host/src/admission.rs',
+        'unsupported',
+    ),
 }
 
 
@@ -690,12 +711,22 @@ def _cited(entry: dict[str, Any]) -> list[str]:
     if current is not None:
         path, name = current
         source = (ROOT / path).read_text()
-        functions = list(re.finditer(r'(?m)^(?:pub(?:\(crate\))? )?(?:async )?fn (\w+)\(', source))
-        found = [i for i, function in enumerate(functions) if function[1] == name]
+        functions = list(
+            re.finditer(
+                r'(?m)^(?:pub(?:\(crate\))? )?(?:async )?fn (\w+)\(', source
+            )
+        )
+        found = [
+            i for i, function in enumerate(functions) if function[1] == name
+        ]
         assert len(found) == 1, entry['id']
         at = found[0]
-        stop = functions[at + 1].start() if at + 1 < len(functions) else len(source)
-        return source[functions[at].start():stop].splitlines()
+        stop = (
+            functions[at + 1].start()
+            if at + 1 < len(functions)
+            else len(source)
+        )
+        return source[functions[at].start() : stop].splitlines()
     path, _, lines = entry['where'].partition(':')
     assert (ROOT / path).is_file(), entry['id']
     first, last = re.match(r'(\d+)(?:-(\d+))?', lines).groups()
@@ -708,9 +739,18 @@ def _cited(entry: dict[str, Any]) -> list[str]:
 
 
 def test_current_family_producer_correspondence_is_exact_and_keeps_the_real_guard():
-    entries = {(entry['id'], entry['where']): entry for document in _family_maps().values() for entry in document['entries']}
+    entries = {
+        (entry['id'], entry['where']): entry
+        for document in _family_maps().values()
+        for entry in document['entries']
+    }
     assert set(CURRENT_PRODUCERS) <= set(entries)
-    constant = entries[('predict/one_class_context', 'rust/crates/sdm-request/src/predict.rs:671')]
+    constant = entries[
+        (
+            'predict/one_class_context',
+            'rust/crates/sdm-request/src/predict.rs:671',
+        )
+    ]
     source = '\n'.join(_cited(constant))
     assert 'if classification {' in source
     assert 'Sentence::OneClassColumn' in source

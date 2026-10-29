@@ -189,7 +189,10 @@ class _Spy:
                 control, sent = self._handle.next()
                 message = codec.read(control, sent)
                 result = message.get('result') or {}
-                if message.get('step') == 'done' and result.get('op') in ('prepare_materialize', 'prepare_request'):
+                if message.get('step') == 'done' and result.get('op') in (
+                    'prepare_materialize',
+                    'prepare_request',
+                ):
                     self._prepared = (result['op'], result['value'])
                 if (
                     spy.edit is not None
@@ -203,16 +206,28 @@ class _Spy:
 
             def take_attachment(self, attachment: int) -> Any:
                 value = self._handle.take_attachment(attachment)
-                if self._prepared is None or attachment != self._prepared[1] or not isinstance(value, bytes):
+                if (
+                    self._prepared is None
+                    or attachment != self._prepared[1]
+                    or not isinstance(value, bytes)
+                ):
                     return value
                 product = json.loads(value)
-                if self._prepared[0] == 'prepare_materialize' and product.get('value') == 'request' and spy.edit is not None:
+                if (
+                    self._prepared[0] == 'prepare_materialize'
+                    and product.get('value') == 'request'
+                    and spy.edit is not None
+                ):
                     envelope = {'result': product['data']}
                     edited = spy.edit(envelope)
                     if edited is not None:
                         product['data'] = edited['result']
                         return codec.encode(product)
-                if self._prepared[0] == 'prepare_request' and product.get('phase') == 'bound' and spy.edit_bound is not None:
+                if (
+                    self._prepared[0] == 'prepare_request'
+                    and product.get('phase') == 'bound'
+                    and spy.edit_bound is not None
+                ):
                     return codec.encode(spy.edit_bound(product))
                 return value
 
@@ -233,7 +248,15 @@ class _Spy:
                 self._native = native
 
             def start(self, message: bytes, attachments: Any) -> Handle:
-                spy.started.append(json.loads(message)['operation'])
+                operation = json.loads(message)['operation']
+                spy.started.append(
+                    {
+                        'operation': operation,
+                        'input': json.loads(attachments[operation['input']])
+                        if operation['op'] == 'prepare_request'
+                        else None,
+                    }
+                )
                 return Handle(self._native.Run.start(message, attachments))
 
         class Native:
@@ -495,7 +518,16 @@ def test_another_request_state_version_is_refused_by_name() -> None:
     # Public gathered calls now consume a distinct versioned bound product.
     state = {'version': 42, 'payload': 1, 'query': 2}
     with pytest.raises(StructuredDataError) as refused:
-        run.run({'op': 'predict', 'state': state, 'model': 'kumo-relational', 'request_id': 'h23-raw', 'outputs': ['prediction']}, {1: b'{}', 2: b'"query"'})
+        run.run(
+            {
+                'op': 'predict',
+                'state': state,
+                'model': 'kumo-relational',
+                'request_id': 'h23-raw',
+                'outputs': ['prediction'],
+            },
+            {1: b'{}', 2: b'"query"'},
+        )
     error = refused.value
     assert error.code == 'INVALID_REQUEST'
     assert (error.details or {}).get('field') == 'state.version'
@@ -510,10 +542,13 @@ def test_another_request_state_version_is_refused_by_name() -> None:
     held(f'{PREFIX}state-version-named', check)
 
 
-def test_the_public_call_refuses_the_actual_unknown_bound_version_before_sending(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_public_call_refuses_the_actual_unknown_bound_version_before_sending(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from sdm_client import StructuredDataError
 
     altered = []
+
     def edit_bound(product):
         product['version'] += 40
         altered.append(dict(product))
@@ -521,7 +556,9 @@ def test_the_public_call_refuses_the_actual_unknown_bound_version_before_sending
 
     spy = _Spy(edit_bound=edit_bound)
     with on_the_core():
-        request = recorder()._materialize(_schema(), recorder().QUERIES['windowed'])
+        request = recorder()._materialize(
+            _schema(), recorder().QUERIES['windowed']
+        )
         spy.install(monkeypatch)
         with endpoint().serve() as (url, received):
             with pytest.raises(StructuredDataError) as refused:
@@ -533,12 +570,16 @@ def test_the_public_call_refuses_the_actual_unknown_bound_version_before_sending
 
     def contains(value):
         if isinstance(value, dict):
-            return value == altered[0] or any(contains(child) for child in value.values())
+            return value == altered[0] or any(
+                contains(child) for child in value.values()
+            )
         if isinstance(value, list):
             return any(contains(child) for child in value)
         return False
 
-    assert any(contains(operation) for operation in spy.started), 'the altered bound must be the actual subsequent native input'
+    assert any(contains(operation) for operation in spy.started), (
+        'the altered bound must be the actual subsequent native input'
+    )
 
 
 # --- the repeats case on python-core ---------------------------------------------------
