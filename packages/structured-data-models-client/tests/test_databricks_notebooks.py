@@ -10,7 +10,10 @@ from __future__ import annotations
 import ast
 import importlib
 import json
+from datetime import timedelta
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 
@@ -71,3 +74,65 @@ def test_every_name_imported_from_this_project_is_public(
         f"{notebook.name} imports {private}, which are not in their module's "
         f'__all__'
     )
+
+
+@pytest.mark.parametrize(
+    ('ready_model', 'ready_version', 'accepted'),
+    [
+        ('catalog.schema.tabular', '1', True),
+        ('CATALOG.SCHEMA.TABULAR', '1', True),
+        ('catalog.schema.other', '1', False),
+        ('catalog.schema.tabular', '2', False),
+    ],
+)
+def test_tabular_notebook_checks_the_model_after_a_pending_update(
+    ready_model: str, ready_version: str, accepted: bool
+) -> None:
+    cells = _cells(EXAMPLES / 'kumo_tabular_quickstart.ipynb', 'code')
+    deploy = next(
+        cell for cell in cells if 'workspace = WorkspaceClient()' in cell
+    )
+    connect = next(
+        cell
+        for cell in cells
+        if 'wait_get_serving_endpoint_not_updating(' in cell
+    )
+
+    def config(name: str, version: str) -> SimpleNamespace:
+        return SimpleNamespace(
+            served_entities=[
+                SimpleNamespace(entity_name=name, entity_version=version)
+            ]
+        )
+
+    workspace = Mock()
+    workspace.serving_endpoints.get.return_value = SimpleNamespace(
+        config=config('catalog.schema.tabular', '1'),
+        pending_config=config(ready_model, ready_version),
+    )
+    workspace.serving_endpoints.wait_get_serving_endpoint_not_updating.return_value = SimpleNamespace(
+        config=config(ready_model, ready_version),
+        state=SimpleNamespace(ready=SimpleNamespace(value='READY')),
+    )
+    client_factory = Mock()
+    namespace = {
+        'WorkspaceClient': lambda: workspace,
+        'NotFound': LookupError,
+        'MODEL_NAME': 'catalog.schema.tabular',
+        'MODEL_VERSION': '1',
+        'ENDPOINT_NAME': 'tabular-demo',
+        'timedelta': timedelta,
+        'SDMClient': SimpleNamespace(for_databricks_serving=client_factory),
+        'KumoTabular': Mock(),
+    }
+    exec(deploy, namespace)
+    workspace.serving_endpoints.create.assert_not_called()
+    if accepted:
+        exec(connect, namespace)
+        client_factory.assert_called_once_with('tabular-demo', timeout=900)
+    else:
+        with pytest.raises(
+            ValueError, match='not catalog.schema.tabular version 1'
+        ):
+            exec(connect, namespace)
+        client_factory.assert_not_called()
