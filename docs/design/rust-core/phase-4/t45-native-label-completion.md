@@ -103,12 +103,24 @@ One logical source read retains the exact ordered partition of bound fetch plans
 When finite native preparation requests this description, each actual FetchStep reports its first reply ID, ordinal and complete part count.
 These fields describe issued I/O data, not an action cursor or callback.
 Independent same-table reads remain distinct partitions, and generic chunk reply, concatenation and failure ordering remain unchanged.
+The finite preparation marks actual data reads as `source_rows` and their schema-only preflights as `describe_result`.
+Both are descriptions of I/O meaning, selected by the existing core request/planning boundary.
+Preflight purpose is local to its actual Ask, including its chunks and pages, and never leaks into another asynchronous read.
+The actual data's identity is allocated as a retained future-read fact before metadata, but receives a reply ID only when real data is issued.
+Metadata failure leaves that identity unobserved and creates no native source owner.
+The Python run loop keeps its ordinary provider path for metadata, catalog and aggregate facts.
+Its separate fixed source-batch I/O port consumes only a complete issued `source_rows` partition and returns all actual data replies or the selected terminal owner.
+No native operation is added to RunStep.
 The native source consumer reads only this complete bound partition, retains the actual raw results, and performs scalar sanitation once after every required chunk succeeds.
 It preserves helper columns and existing core offsets unchanged when splitting the actual converted data back across those replies.
 On a real I/O failure it stops later queries and cancels the incomplete source run without fake data or premature Arrow boxing.
 An error-only source diagnostic binds the existing prepared source and maps the reported failed request and existing provider facts through the shared provider error kernel.
 It authorizes no success rows and claims no stronger issued-request proof than the actual captured request supplies.
 Native sanitation failures remain separate retained native failures.
+Capture retains the actual original fetch IDs, plans, purposes, partitions and cancellation before associating a later diagnostic operation.
+Source meaning retains both the logical relation and the exact already captured pinned/projected read relation, using the same core guard kernel as ordinary planning.
+Source column construction binds the logical relation, while native I/O and reported source failure facts bind the actual read relation.
+Across preparation Runs, the retained source restores its captured pin and guard facts without another source metadata read.
 Names alone are insufficient scalar metadata; preserve the original description objects and their reached name-access timing.
 Scope exit retains each original reader's behavior for ordinary boxing and cancellation failures.
 A native conversion reached after scope exit cannot be reported as an exception that the database context handled.
