@@ -690,3 +690,14 @@ The now-admitted capture journeys reach 706 passes and 26 failures in legacy tes
 Trace those actual records and retain strict proof of native prediction through the same checked typed logical-event reader used by the comparator.
 Do not fabricate a legacy operation, substitute attempted entry for reached native work, or drop call/payload/refusal comparisons.
 Keep all actual R40 failures and profile receipts with their producer, and gather the matched CP310 profile before freezing the next grouped correction.
+
+
+### Complete warehouse comparison fixtures
+
+Exact R51 passes the complete public and capture groups, but normal unscoped handoff reaches three T3.2 fixture failures because their copied public requests have no accompanying model-call observation.
+Keep the current comparator's strict call, original hash and independently received-request conservation checks.
+Author the fixture's single historical Predict operation and input explicitly, retaining the copied reference body and its original wire hash without re-encoding the parsed snapshot.
+Record the result completion and model reply as unobserved with the existing sparse capture capabilities; do not invent an internal result, carried answer, preparation start or native execution claim.
+Retain every existing exact equal-result, changed-digest, SQL statement-count and warehouse-leg oracle.
+Add malformed call ownership, missing call, changed body and corrupt-hash controls before completing the fixture.
+Preserve the frozen observations and actual R51 failure receipts, collect the matched dependency-profile feedback, and obtain fresh whole reviews before any successor SDK or check execution.
