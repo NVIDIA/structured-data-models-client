@@ -33,6 +33,71 @@ fn done() -> OperationResult {
 }
 
 #[test]
+fn counted_native_lookup_chunks_share_only_the_actual_read_and_task_owner() {
+    use crate::materialize::native_lookup::LookupContext;
+    use arrow_array::UInt64Array;
+    use sdm_contract::data::{KeySet, Relation};
+    use sdm_engine::graph::Table;
+    let mut run = Run::new(|asker| async move {
+        asker.describe_fetch_partitions();
+        let context = Arc::new(LookupContext {
+            entity: Table {
+                name: "people".into(),
+                source: Relation::named("people"),
+                columns: vec![],
+                primary_key: Some("id".into()),
+                time_column: None,
+            },
+            key: "id".into(),
+            scored: Arc::new(UInt64Array::from(vec![u64::MAX])),
+            num_train: 2,
+            range: sdm_contract::frames::materialize::FrameBatchRange { start: 4, stop: 5 },
+        });
+        let request = DataRequest::Lookup {
+            table: Relation::named("pinned_people"),
+            key: vec!["id".into()],
+            columns: vec!["id".into()],
+            seeds: KeySet {
+                attachment: AttachmentId(99),
+                columns: vec![],
+            },
+        };
+        let mut first = Box::pin(
+            asker
+                .ask_bound(request.clone(), plans(2))
+                .with_lookup(Arc::clone(&context)),
+        );
+        let mut second = Box::pin(asker.ask_bound(request, plans(1)).with_lookup(context));
+        poll_fn(move |cx| {
+            let _ = first.as_mut().poll(cx);
+            let _ = second.as_mut().poll(cx);
+            Poll::<()>::Pending
+        })
+        .await;
+        Ok(done())
+    });
+    let Step::Fetch { requests } = run.next().unwrap() else {
+        panic!("lookup data")
+    };
+    let first = requests[0].lookup.as_ref().unwrap();
+    assert_eq!(requests[1].lookup.as_ref(), Some(first));
+    let second = requests[2].lookup.as_ref().unwrap();
+    assert_ne!(first.owner, second.owner);
+    assert_eq!(first.read, requests[0].id);
+    assert_eq!(second.read, requests[2].id);
+    assert_eq!(first.source, Relation::named("pinned_people"));
+    assert_eq!(first.context_rows, 2);
+    assert_eq!(first.scored_rows, 1);
+    assert_eq!(first.range.start, 4);
+    let Some(Attachment::LookupRows(owner)) = run.take_attachment(first.owner) else {
+        panic!("lookup owner")
+    };
+    assert!(owner.matches(first));
+    assert!(!owner.matches(second));
+    run.cancel().unwrap();
+}
+
+#[test]
 fn independent_same_request_reads_have_separate_complete_partitions() {
     let mut run = Run::new(|asker| async move {
         asker.describe_fetch_partitions();

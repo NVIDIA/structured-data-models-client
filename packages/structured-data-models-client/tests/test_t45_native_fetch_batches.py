@@ -166,3 +166,44 @@ def test_representation_metadata_keeps_the_ordinary_provider_boundary():
         ('metadata', 3),
         ('reply', 3),
     ]
+
+
+def test_one_actual_counted_lookup_owner_is_taken_once_for_the_complete_partition():
+    events = []
+    requests = _requests()
+    for request in requests:
+        request['lookup'] = {'owner': 77, 'read': 2}
+    owner = object()
+
+    class OwnedHandle(Handle):
+        def take_attachment(self, key):
+            assert key == 77
+            events.append(('take', key))
+            return owner
+
+    handle = OwnedHandle(events, requests)
+    values = pa.table({'value': [1]})
+
+    def source(actual, keys):
+        assert keys == {2: {77: owner}, 3: {77: owner}}
+        events.append('source')
+        return {2: values, 3: values}
+
+    _steps(
+        handle, lambda *args: pytest.fail('ordinary provider reached'), source
+    )
+    assert events == [('take', 77), 'source', ('reply', 2), ('reply', 3)]
+
+
+def test_foreign_lookup_owner_in_a_later_chunk_is_refused_before_any_take_or_io():
+    events = []
+    requests = _requests()
+    requests[0]['lookup'] = {'owner': 77, 'read': 2}
+    requests[1]['lookup'] = {'owner': 78, 'read': 2}
+
+    def forbidden(*args):
+        pytest.fail('a foreign task lookup owner reached native I/O')
+
+    with pytest.raises(codec.CodecError):
+        _steps(Handle(events, requests), forbidden, forbidden)
+    assert events == ['cancel']
