@@ -288,6 +288,10 @@ REGISTER = REPO / 'docs/design/rust-core/register.yaml'
 #: counted. Any other difference still fails.
 RUNTIME_DEPRECATIONS = 'HOST-5'
 RUNTIME_LIBRARIES = ('pandas', 'pyarrow')
+#: The owner's later general policy ignores runtime conversion warnings
+#: on either route, across warning classes and runtime cells (2026-10-29).
+#: Its approval must come from this comparator's own checkpoint register.
+PANDAS_RUNTIME_WARNINGS = 'HOST-6'
 #: The runners a ``more_exact`` item may name: the core's, since it is the
 #: core that is more exact than the reference; from T3.12 the Java host's,
 #: which runs the same core.
@@ -485,6 +489,9 @@ class Report:
         #: rule leaves out the runtime's DeprecationWarnings python-old
         #: alone shows in another cell (decision E81).
         self.narrowed = False
+        #: The owner's general pandas/runtime-conversion warning policy.
+        #: This affects warning diagnostics, never requests or results.
+        self.runtime_warnings = False
         #: The fields left out as more exact than the reference, by case
         #: and runner (:func:`more_exact`).
         self.more_exact: dict[tuple[str, str], tuple[str, ...]] = {}
@@ -2025,7 +2032,17 @@ def _host_fields(
         # first of the runner's, in order.
         shown = shown[: len(reference['host']['warnings'])]
     if shown != reference['host']['warnings']:
-        if against == 'python-old' and _runtime_only(
+        if _runtime_warnings_only(
+            observation['host'],
+            reference['host'],
+            report.runtime_warnings,
+            held=stop is not None,
+        ):
+            report.note(
+                f'{where}: host.warnings: pandas/pyarrow runtime warnings '
+                f'are not gated ({PANDAS_RUNTIME_WARNINGS})'
+            )
+        elif against == 'python-old' and _runtime_only(
             observation['host'],
             reference['host'],
             report.narrowed,
@@ -2092,6 +2109,40 @@ def _host_fields(
     found = _path_of(sent, wanted, 'public.payloads', excused)
     if found:
         report.fail(f'{where}: {found}', 'payload')
+
+
+def _runtime_warnings_only(
+    core: Any, reference: Any, approved: bool, held: bool = False
+) -> bool:
+    """Ignore observed pandas/pyarrow warnings under the general owner rule.
+
+    Warning class, count, side and runtime cell do not restrict HOST-6.
+    Every other warning keeps its original relative order and occurrence.
+    The raw observations remain untouched, and the ordinary public schema,
+    request, result and outcome rules retain their separate checks.
+    """
+    if not approved:
+        return False
+
+    def retained(host: Any) -> list[str] | None:
+        origins = _origins(host)
+        if origins is not None:
+            return [
+                name
+                for name, origin in origins
+                if origin not in RUNTIME_LIBRARIES
+            ]
+        # Historical python-ref deliberately omitted origins. Unclassified
+        # warnings stay present; missing metadata cannot grant an exclusion.
+        shown = host.get('warnings') if isinstance(host, dict) else None
+        if isinstance(shown, list) and all(isinstance(x, str) for x in shown):
+            return list(shown)
+        return None
+
+    kept, wanted = retained(core), retained(reference)
+    if kept is None or wanted is None:
+        return False
+    return (kept[: len(wanted)] if held else kept) == wanted
 
 
 def _runtime_only(
@@ -3738,6 +3789,8 @@ def compare(
         return report
     report = Report(policy['rules'], check.excluded(policy))
     report.narrowed = owner_approved(RUNTIME_DEPRECATIONS, register_file)
+    # A candidate --register cannot grant its own broader warning rule.
+    report.runtime_warnings = owner_approved(PANDAS_RUNTIME_WARNINGS)
     report.more_exact = more_exact(improvements or register_file)
     report.fewer = fewer_deprecations(improvements or register_file)
     report.statements_differ = statements_differ(improvements or register_file)
