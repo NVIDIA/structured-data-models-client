@@ -66,3 +66,12 @@ No new serialized message or opaque continuation is introduced by these owned pr
 Task derivation still uses the existing implementation in this slice and remains an explicit T4.6 extraction obligation.
 Broader entity equality, other index families, custom native protocols, counts outside native row widths, final default activation and complete T4.6 acceptance remain open.
 The current source and controls have not been executed; the frozen frame/link background run provides no validation credit for this new source.
+
+The first source reviews found that supplied-row entity reads and target missingness must retain the reference's intermediate native populations, even when final row values agree.
+The successor observes the supplied entity Series first and completes a useful owned scoring-key set in Rust.
+An empty set selects the original source owner without reading source entity values.
+A nonempty set returns a population of retained original source positions, including a full take when no entity matches.
+Python performs that native holdout take before observing target missingness.
+The retained population checks the mask extent, returns local labelled positions, and maps those positions back to original source ordinals for the existing context selector.
+Candidate values are captured before context-cap validation and advice, preserving that separate native boundary.
+Public source-read controls cover actual target operand identity, present and no-match holdouts, empty scoring and scoring-accessor edits to source keys.

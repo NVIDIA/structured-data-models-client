@@ -60,14 +60,28 @@ fn invalid(message: &str) -> CoreError {
     CoreError::protocol(Sentence::InvalidMessage, message)
 }
 
-/// Supplied scoring rows may include new entities; only present values hold out
-/// source rows. This is membership, not the indices route's missing-key guard.
-pub fn matched_rows(keys: &[i64], requested: &[i64]) -> Vec<usize> {
-    let requested: HashSet<i64> = requested.iter().copied().collect();
-    keys.iter()
-        .enumerate()
-        .filter_map(|(row, key)| requested.contains(key).then_some(row))
-        .collect()
+/// Owned primitive scoring identities, before the source membership read.
+#[derive(Debug, Clone)]
+pub struct ScoringKeys {
+    values: HashSet<i64>,
+}
+
+impl ScoringKeys {
+    pub fn new(values: Vec<i64>) -> Self {
+        Self {
+            values: values.into_iter().collect(),
+        }
+    }
+    pub fn needs_source(&self) -> bool {
+        !self.values.is_empty()
+    }
+    pub fn retain(&self, source: &[i64]) -> Vec<usize> {
+        source
+            .iter()
+            .enumerate()
+            .filter_map(|(row, key)| (!self.values.contains(key)).then_some(row))
+            .collect()
+    }
 }
 
 /// Exclude every held-out row before collecting labelled candidates.

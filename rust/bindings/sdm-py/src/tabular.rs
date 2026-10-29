@@ -28,15 +28,6 @@ pub(crate) fn tabular_indices(
 }
 
 #[pyfunction]
-pub(crate) fn tabular_matched_rows(
-    py: Python<'_>,
-    keys: Vec<i64>,
-    requested: Vec<i64>,
-) -> PyResult<Vec<usize>> {
-    crate::core_call(py, || sdm_host::tabular_matched_rows(&keys, &requested))
-}
-
-#[pyfunction]
 pub(crate) fn tabular_labelled_rows(
     py: Python<'_>,
     known: Vec<bool>,
@@ -73,5 +64,58 @@ impl TabularContext {
     }
     fn positions(&self, py: Python<'_>) -> PyResult<Option<Vec<usize>>> {
         crate::core_call(py, || self.state.positions())
+    }
+}
+
+#[pyclass(module = "sdm_client._native")]
+pub(crate) struct TabularScoringKeys {
+    state: sdm_host::TabularScoringKeys,
+}
+
+#[pymethods]
+impl TabularScoringKeys {
+    #[new]
+    fn new(py: Python<'_>, keys: Vec<i64>) -> PyResult<Self> {
+        Ok(Self {
+            state: crate::core_call(py, || sdm_host::TabularScoringKeys::new(keys))?,
+        })
+    }
+    fn needs_source(&self, py: Python<'_>) -> PyResult<bool> {
+        crate::core_call(py, || self.state.needs_source())
+    }
+    fn source(&self, py: Python<'_>, keys: Vec<i64>) -> PyResult<TabularPopulation> {
+        let state = checked(py, crate::core_call(py, || self.state.source(&keys))?)?;
+        Ok(TabularPopulation { state })
+    }
+}
+
+#[pyclass(module = "sdm_client._native")]
+pub(crate) struct TabularPopulation {
+    state: sdm_host::TabularPopulation,
+}
+
+#[pymethods]
+impl TabularPopulation {
+    fn positions(&self, py: Python<'_>) -> PyResult<Vec<usize>> {
+        crate::core_call(py, || self.state.positions())
+    }
+    fn labelled_rows(&self, py: Python<'_>, known: Vec<bool>) -> PyResult<Vec<usize>> {
+        checked(
+            py,
+            crate::core_call(py, || self.state.labelled_rows(&known))?,
+        )
+    }
+    #[pyo3(signature = (candidates, requested=None))]
+    fn context(
+        &self,
+        py: Python<'_>,
+        candidates: Vec<usize>,
+        requested: Option<usize>,
+    ) -> PyResult<TabularContext> {
+        let state = checked(
+            py,
+            crate::core_call(py, || self.state.context(&candidates, requested))?,
+        )?;
+        Ok(TabularContext { state })
     }
 }

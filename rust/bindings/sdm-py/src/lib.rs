@@ -1035,8 +1035,9 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(frame_keys::check_frame_cell, module)?)?;
     module.add_class::<Run>()?;
     module.add_class::<tabular::TabularContext>()?;
+    module.add_class::<tabular::TabularScoringKeys>()?;
+    module.add_class::<tabular::TabularPopulation>()?;
     module.add_function(wrap_pyfunction!(tabular::tabular_indices, module)?)?;
-    module.add_function(wrap_pyfunction!(tabular::tabular_matched_rows, module)?)?;
     module.add_function(wrap_pyfunction!(tabular::tabular_labelled_rows, module)?)?;
     module.add_function(wrap_pyfunction!(reset_log_cache, module)?)?;
     module.add_function(wrap_pyfunction!(templates, module)?)?;

@@ -78,7 +78,8 @@ pub use sdm_schema::frames::object_infer::{
 /// Owned logical payload data, before JSON escaping or native presentation.
 pub use sdm_wire::json::Value as LogicalValue;
 pub use tabular::{
-    TabularContext, TabularIndexSelection, tabular_labelled_rows, tabular_matched_rows,
+    TabularContext, TabularIndexSelection, TabularPopulation, TabularScoringKeys,
+    tabular_labelled_rows,
 };
 
 /// Finite native sample facts complete one useful physical column meaning.

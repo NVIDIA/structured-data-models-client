@@ -50,11 +50,11 @@ def _integer(value: Any) -> int | None:
 
 def _keys(frame: pd.DataFrame, column: str) -> list[int]:
     series = frame[column]
-    if not isinstance(series, pd.Series) or series.dtype != np.dtype('int64'):
+    if type(series) is not pd.Series or series.dtype != np.dtype('int64'):
         raise RouteError(
             'tabular entity conversion beyond int64 storage is unfinished'
         )
-    return series.tolist()
+    return list(series)
 
 
 def _count(value: Any) -> int | None:
@@ -68,6 +68,17 @@ def _count(value: Any) -> int | None:
             'tabular count conversion beyond native row widths is unfinished'
         )
     return count
+
+
+def _range_source(frame: pd.DataFrame) -> None:
+    if (
+        type(frame) is not pd.DataFrame
+        or type(frame.index) is not pd.RangeIndex
+        or frame.index.step <= 0
+    ):
+        raise RouteError(
+            'tabular subset sorting beyond increasing RangeIndex is unfinished'
+        )
 
 
 def materialize(
@@ -94,14 +105,8 @@ def materialize(
     table = _rows(schema[name])
     # The original reference is captured before consuming the indices iterable.
     asked = list(indices) if predict is None else None
-    if (
-        type(table) is not pd.DataFrame
-        or type(table.index) is not pd.RangeIndex
-        or table.index.step <= 0
-    ):
-        raise RouteError(
-            'tabular subset sorting beyond increasing RangeIndex is unfinished'
-        )
+    population = None
+    _range_source(table)
     if predict is None:
         assert asked is not None
         scored, missing = _native.tabular_indices(
@@ -117,14 +122,17 @@ def materialize(
                 f'to score rows not present in the table',
                 code='INVALID_REQUEST',
             )
+        _range_source(table)
         predict = table.iloc[scored].drop(columns=[target])
         remedy = 'Pass num_context_samples to choose how many, or select the rows yourself.'
     else:
         scored = []
         if entity in table.columns and entity in predict.columns:
-            scored = _native.tabular_matched_rows(
-                _keys(table, entity), _keys(predict, entity)
-            )
+            scoring = _native.TabularScoringKeys(_keys(predict, entity))
+            if scoring.needs_source():
+                population = scoring.source(_keys(table, entity))
+                _range_source(table)
+                table = table.iloc[population.positions()]
         remedy = (
             'This route takes no num_context_samples, so choose the '
             'context by building the schema from the rows you want.'
@@ -135,10 +143,18 @@ def materialize(
         else [True] * len(table)
     )
     try:
-        ordinals = _native.tabular_labelled_rows(known, scored)
+        if population is None:
+            ordinals = _native.tabular_labelled_rows(known, scored)
+        else:
+            ordinals = population.labelled_rows(known)
         # Like the reference's mask, this captures values before cap advice.
         candidates = table.iloc[ordinals]
-        context = _native.TabularContext(ordinals, _count(num_context_samples))
+        requested = _count(num_context_samples)
+        context = (
+            _native.TabularContext(ordinals, requested)
+            if population is None
+            else population.context(ordinals, requested)
+        )
         count = context.notice_rows()
         wanted = context.wanted()
         if count is not None:
