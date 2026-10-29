@@ -1093,7 +1093,7 @@ fn poll_projection(
     projected: &mut ProjectionAsk,
     budget: &mut Option<Box<Budget>>,
     raw: bool,
-    purpose: Option<FetchPurpose>,
+    purpose: Option<sdm_contract::run::FetchPurpose>,
     context: &mut Context<'_>,
 ) -> Poll<Reply> {
     if projected.actual.is_none() {
