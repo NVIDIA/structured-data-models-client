@@ -53,6 +53,12 @@ def tables() -> dict[str, pd.DataFrame]:
     Order counts differ sharply between the two halves, so a prediction that
     tracks them is evidence the whole path works rather than that something
     came back.
+
+    ``events`` has no primary key: ``user_id`` repeats in it, so nothing names
+    one of its rows, and the engine numbers them itself. Its timestamps sit
+    inside the span of ``orders``, and the questions here aggregate
+    ``orders`` only, which is what the engine measures history and anchor
+    times against.
     """
     users = pd.DataFrame(
         {
@@ -79,7 +85,22 @@ def tables() -> dict[str, pd.DataFrame]:
                 }
             )
             order_id += 1
-    return {'users': users, 'orders': pd.DataFrame(rows)}
+    events = [
+        {
+            'user_id': user,
+            'kind': 'login' if k % 2 else 'view',
+            'value': float(user % 5 + k),
+            'ts': pd.Timestamp('2024-01-01')
+            + pd.Timedelta(days=k * 30 + (user % 9)),
+        }
+        for user in range(N_USERS)
+        for k in range(3)
+    ]
+    return {
+        'users': users,
+        'orders': pd.DataFrame(rows),
+        'events': pd.DataFrame(events),
+    }
 
 
 COUNT_QUERY = 'PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id'
@@ -332,9 +353,12 @@ def test_run_mode_is_refused_as_an_option(query):
 
 EXPLAIN = ['prediction', 'probabilities', 'explanation']
 BINARY_QUERY = 'PREDICT COUNT(orders.*, 0, 30, days) > 2 FOR EACH users.user_id'
-#: Each table of ``tables()`` and its primary key. Both have one, so every
-#: related block is expected to carry ``keys``; the graph has no keyless table.
+#: Each keyed table of ``tables()`` and its primary key: its related blocks
+#: are expected to carry ``keys``.
 KEYS = {'users': 'user_id', 'orders': 'order_id'}
+#: The tables of ``tables()`` with no primary key: their related blocks carry
+#: ``rows`` and no ``keys``.
+KEYLESS = {'events'}
 
 
 @pytest.fixture(scope='module')
@@ -349,12 +373,14 @@ def assert_explained_as_sent(result, asked):
     among the related ones. Each block's ``keys`` are the primary keys of its
     ``rows``, whose values are the caller's for that key and belong to that
     entity, and its gradients are ``[output][row][column]``, aligned with
-    ``rows``. In ``to_pandas()`` the entity's own table is at hop 0 and the
-    others at 1 or more.
+    ``rows``. A keyless table's block has ``rows`` and no ``keys``, each row
+    the caller's columns of one of that entity's rows. In ``to_pandas()`` the
+    entity's own table is at hop 0, the others at 1 or more, and a keyless
+    table's lines have no ``key``.
     """
-    graph = {
-        name: frame.set_index(KEYS[name]) for name, frame in tables().items()
-    }
+    sent_tables = tables()
+    graph = {name: sent_tables[name].set_index(KEYS[name]) for name in KEYS}
+    keyless = {name: sent_tables[name] for name in KEYLESS}
     frame = result.to_pandas()
     assert 'explanation' not in frame.columns
     ids = {int(key): key for key in result.explanations}
@@ -370,15 +396,24 @@ def assert_explained_as_sent(result, asked):
         assert outputs == 2
         related = entry['related']
         assert 'users' in related, 'the entity has no block of its own'
-        assert set(related) <= set(KEYS)
+        assert set(related) <= set(KEYS) | KEYLESS
         for name, block in related.items():
-            assert 'keys' in block, f'{name} has a key and came back without'
-            assert len(block['keys']) == len(block['rows'])
             assert len(block['gradients']) == outputs
             for by_row in block['gradients']:
                 assert len(by_row) == len(block['rows'])
                 for by_column in by_row:
                     assert len(by_column) == len(block['columns'])
+            if name in KEYLESS:
+                assert 'keys' not in block, f'{name} has no key and got keys'
+                own_rows = keyless[name][keyless[name]['user_id'] == entity]
+                for row in block['rows']:
+                    # The caller's columns only: no instance_id, no __node_id.
+                    assert set(row) <= set(keyless[name].columns)
+                    assert int(row['user_id']) == entity
+                    assert row['value'] in set(own_rows['value'])
+                continue
+            assert 'keys' in block, f'{name} has a key and came back without'
+            assert len(block['keys']) == len(block['rows'])
             for row_key, row in zip(block['keys'], block['rows'], strict=True):
                 # The caller's columns only: no instance_id, no __node_id.
                 assert set(row) <= {KEYS[name], *graph[name].columns}
@@ -411,6 +446,9 @@ def assert_explained_as_sent(result, asked):
     others = flat[flat['table'] != 'users']
     assert others['hop'].notna().all()
     assert (others['hop'] >= 1).all()
+    unkeyed = flat[flat['table'].isin(KEYLESS)]
+    assert unkeyed['key'].isna().all()
+    assert (unkeyed['hop'] == 1).all()
 
 
 @requires_relational
@@ -423,8 +461,8 @@ def test_every_entity_is_explained_with_its_own_related_rows(
     Assumptions:
     - The NIM explains every predict row, both probabilities of a binary
       target.
-    - ``users`` and ``orders`` both have a primary key; the graph has no
-      keyless table, so the keyless case is not exercised here.
+    - ``users`` and ``orders`` have a primary key and ``events`` has none,
+      so both kinds of related block are read back.
     """
     asked = [0, 1, 2, 3]
     request = binary_query.materialize(indices=asked)
@@ -444,6 +482,8 @@ def test_a_request_sent_in_several_calls_explains_every_entity(
     related rows and keys.
 
     Assumptions:
+    - ``events`` has no primary key, so its rows are checked by entity and
+      value rather than by key.
     - ``rows_per_call=2`` stands in for the cap, as in the batching test
       above, and splits eight entities into four calls.
     """
