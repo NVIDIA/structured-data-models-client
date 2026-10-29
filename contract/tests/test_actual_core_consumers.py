@@ -7,9 +7,9 @@
 import copy
 
 import pytest
-from test_t44_prediction_observation import actual_observation, reader
+from test_t44_prediction_observation import actual_observation
 
-from _actual_core import checked_operations
+from _actual_core import _reader, checked_operations
 
 
 def test_consumer_roles_require_the_real_complete_native_journal():
@@ -22,5 +22,5 @@ def test_consumer_roles_require_the_real_complete_native_journal():
     assert observation == before
     broken = copy.deepcopy(observation)
     broken['core']['predictions'] = []
-    with pytest.raises(reader().ObservationError):
+    with pytest.raises(_reader().ObservationError):
         checked_operations(broken)

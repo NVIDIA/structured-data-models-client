@@ -277,6 +277,10 @@ def observe_all(mode: str) -> dict[str, Any]:
             answer = observe(vector)
             if capture is not None:
                 answer['operations'] = list(capture.operations)
+                answer['core_observation'] = {
+                    'identity': {'operations': list(capture.operations)},
+                    'core': capture.core(),
+                }
             observed[vector['id']] = answer
     finally:
         if previous is None:

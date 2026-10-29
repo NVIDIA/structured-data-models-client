@@ -88,6 +88,7 @@ from types import ModuleType
 from typing import Any
 
 import pytest
+from _actual_core import checked_operations
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -210,7 +211,8 @@ def test_python_core_samples_a_null_key_as_the_reference(
 
     def check() -> None:
         got = copy.deepcopy(core_answers[vector_id])
-        operations = got.pop('operations')
+        got.pop('operations')
+        operations = checked_operations(got.pop('core_observation'))
         got.pop('messages')
         assert 'materialize' in operations, (
             f'the core was not reached: {operations}'
@@ -449,7 +451,8 @@ def test_option_b_leaves_the_null_key_rows_out_with_one_warning(
 
     def check() -> None:
         got = copy.deepcopy(core_answers[vector_id])
-        operations = got.pop('operations')
+        got.pop('operations')
+        operations = checked_operations(got.pop('core_observation'))
         messages = got.pop('messages')
         assert 'materialize' in operations, operations
         assert got['outcome'] == {
@@ -497,7 +500,8 @@ def test_a_null_decimal_key_is_kept_with_no_extra_warning(
     vector = BY_ID[vector_id]
     reference = vector['reference']
     got = copy.deepcopy(core_answers[vector_id])
-    operations = got.pop('operations')
+    got.pop('operations')
+    operations = checked_operations(got.pop('core_observation'))
     messages = got.pop('messages')
     assert 'materialize' in operations, operations
     assert got['outcome'] == reference['outcome'], got['outcome']

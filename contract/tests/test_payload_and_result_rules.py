@@ -38,6 +38,7 @@ from types import ModuleType
 from typing import Any
 
 import pytest
+from _actual_core import checked_operations
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNNERS = ROOT / 'contract/runners'
@@ -161,7 +162,7 @@ def test_capture_on_and_off_agree_on_python_core(runs: dict[str, Path]) -> None:
     ]
     assert capture_check.check(on, off, ['base.regression']) == []
     [observation] = on
-    assert observation['identity']['operations'] == [
+    assert checked_operations(observation) == [
         'describe_source',
         'materialize',
         'predict',
