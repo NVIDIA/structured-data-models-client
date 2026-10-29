@@ -133,6 +133,13 @@ The completed native group result remains authoritative within its admitted logi
 No target conversion performs groupby, distinct, temporal arithmetic, condition truth, quota or task policy in Python.
 Source-first consumers distinguish plain/filtered integer and Boolean storage, pre-selection float conversion, actual changed values, empty/null rows, exact positions, native failures and original dtype ownership.
 
+Filtered targets also retain actual completed native column values for each condition operand occurrence.
+Use the same fixed filter-na-false native column converter, preserving depth-first left-before-right order and repeated reads of the same source column.
+Rust evaluates each newly ready condition and subtree through the existing truth kernel before the following operand can be converted.
+A failed left condition prevents right-side native effects, while a successful false left side still reaches the right side.
+Retain complete converted column and subtree-mask data as historical evidence; neither a serialized program cursor nor a generic next-action instruction belongs to this product.
+An overflow notice alone cannot replace a native condition cast that changes values or fails.
+
 Release evaluation/source/native result owners after their completion is consumed, on native failure, cancellation and explicit close.
 Retain the original graph/current-owner cache rules and already-completed sampler state on failure.
 Do not advance later reads, masks, draws or decomposition children after the selected native failure.
