@@ -7642,6 +7642,7 @@
         "time_columns_refused_birth_date",
         "columns_left_out",
         "time_values_unread",
+        "native_time_values_unread",
         "dates_read_day_first",
         "key_candidates_tied",
         "link_cannot_join_not_the_key",
@@ -10523,6 +10524,13 @@
             "type": "string"
           }
         },
+        "temporal_columns": {
+          "description": "Resolved temporal column meaning, independently of designated time.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "time_column": {
           "type": [
             "string",
@@ -10622,6 +10630,58 @@
           ]
         },
         {
+          "description": "Actual content of a reached post-construction native scalar column.",
+          "type": "object",
+          "properties": {
+            "inferred": {
+              "$ref": "#/$defs/FrameObservedContent"
+            },
+            "all_missing": {
+              "type": "boolean"
+            },
+            "storage": {
+              "type": "string",
+              "const": "column_values"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "storage",
+            "inferred",
+            "all_missing"
+          ]
+        },
+        {
+          "description": "Reached native datetime conversion before timezone/unit finishing.",
+          "type": "object",
+          "properties": {
+            "rows": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "unread": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "examples": {
+              "type": "string"
+            },
+            "storage": {
+              "type": "string",
+              "const": "time_conversion"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "storage",
+            "rows",
+            "unread",
+            "examples"
+          ]
+        },
+        {
           "type": "object",
           "properties": {
             "declaration": {
@@ -10644,6 +10704,16 @@
             "storage"
           ]
         }
+      ]
+    },
+    "FrameObservedContent": {
+      "description": "The observed scalar content, adapted after one reached native inference.\nNone at the containing field means inference was not performed.",
+      "type": "string",
+      "enum": [
+        "text",
+        "decimal",
+        "temporal",
+        "other"
       ]
     },
     "FramePhysicalDeclaration": {
@@ -10713,6 +10783,17 @@
         },
         "scalar": {
           "$ref": "#/$defs/MaterializeScalarMeaning"
+        },
+        "notice": {
+          "description": "Completed conversion notice, presented at the native conversion position.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CoreWarning"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false,
@@ -13039,16 +13120,6 @@
         "string",
         "arrow_decimal",
         "timestamp"
-      ]
-    },
-    "FrameObservedContent": {
-      "description": "The observed scalar content, adapted after one reached native inference.\nNone at the containing field means inference was not performed.",
-      "type": "string",
-      "enum": [
-        "text",
-        "decimal",
-        "temporal",
-        "other"
       ]
     },
     "FrameIntegerColumn": {
