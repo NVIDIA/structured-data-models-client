@@ -274,3 +274,141 @@ def test_cancelled_original_read_cannot_be_written_as_a_completed_legacy_replay(
     record['events'] = [{'event': 'cancelled'}]
     with pytest.raises(RUNNER.RunnerFailure):
         RUNNER._replay_core(capture)
+
+
+def _started(capture, value, attachments=None):
+    capture.started(
+        json.dumps(
+            {'operation': {'op': 'prepare_materialize', 'input': 9}}
+        ).encode(),
+        {9: json.dumps(value).encode(), **(attachments or {})},
+    )
+    return capture._run(None)
+
+
+def _returned(capture, owner, kind, data, opaque=None):
+    capture.done({'op': 'prepare_materialize', 'value': 10}, run=owner)
+    capture.taken(
+        10, json.dumps({'value': kind, 'data': data}).encode(), run=owner
+    )
+    if opaque is not None:
+        capture.taken(data['owner'], opaque, run=owner)
+
+
+def _owned_chain(capture, *, foreign=False):
+    entry = capture.enter_materialization()
+    task = _started(
+        capture,
+        _task(),
+        {
+            1: b'{"tables":[],"links":[]}',
+            2: b'"query"',
+            3: pa.table({'indices': pa.array([7], type=pa.int64())}),
+            5: b'{}',
+        },
+    )
+    source = {
+        'source': 'source',
+        'identity': 'source identity',
+        'owner': 4,
+        'target': {'source': {'source': ['events']}, 'column': 'value'},
+        'tables': [
+            {
+                'source': {'source': ['events']},
+                'read': {'source': ['events']},
+                'columns': ['value'],
+            }
+        ],
+    }
+    source_owner, population_owner = object(), object()
+    _returned(capture, task, 'source', source, source_owner)
+    rebound = {**source, 'owner': 2}
+    population = _started(
+        capture,
+        {'stage': 'population', 'source': rebound},
+        {2: object() if foreign else source_owner},
+    )
+    population_data = {
+        'source': 'source',
+        'identity': 'population identity',
+        'owner': 8,
+        'rows': 0,
+        'batch_rows': 10,
+        'target': source['target'],
+    }
+    _returned(
+        capture, population, 'population', population_data, population_owner
+    )
+    terminal = _started(
+        capture,
+        {
+            'stage': 'request',
+            'population': {**population_data, 'owner': 3},
+            'batches': [],
+            'values': None,
+        },
+        {3: population_owner},
+    )
+    _returned(capture, terminal, 'request', _terminal()['data'])
+    capture.leave_materialization(entry, None, terminal=terminal)
+    capture.taken(11, b'{"context":{},"predict":{}}', run=terminal)
+    capture.taken(12, b'"resolved query"', run=terminal)
+    return entry, task, population, terminal
+
+
+def test_cross_run_proof_uses_actual_opaque_takes_and_rebinds_with_reused_local_ids():
+    capture = RUNNER._Capture(native_cancellations_observed=True)
+    _, task, population, terminal = _owned_chain(capture)
+    records = capture.core()['materialization_preparations']
+    assert records[0]['owner_takes'] == [{'attachment': 4, 'origin': 'result'}]
+    assert records[1]['owner_binds'] == [
+        {
+            'attachment': 2,
+            'producer': {
+                'run': task.ordinal,
+                'attachment': 4,
+                'origin': 'result',
+            },
+        }
+    ]
+    assert records[2]['owner_binds'] == [
+        {
+            'attachment': 3,
+            'producer': {
+                'run': population.ordinal,
+                'attachment': 8,
+                'origin': 'result',
+            },
+        }
+    ]
+    assert reader().view(capture.core(), capture.operations)['operations'] == [
+        'materialize'
+    ]
+    assert capture._materialization_owners == {}
+    _validate(capture.core())
+
+
+def test_same_json_and_local_id_without_actual_owner_identity_cannot_prove_a_chain():
+    capture = RUNNER._Capture(native_cancellations_observed=True)
+    _owned_chain(capture, foreign=True)
+    assert (
+        capture.core()['materialization_preparations'][1]['owner_binds'] == []
+    )
+    with pytest.raises(reader().ObservationError):
+        reader().view(capture.core(), capture.operations)
+
+
+def test_separate_entries_with_reused_ids_keep_distinct_resource_producers():
+    capture = RUNNER._Capture(native_cancellations_observed=True)
+    _owned_chain(capture)
+    _, second_task, _, _ = _owned_chain(capture)
+    second_population = capture.core()['materialization_preparations'][4]
+    assert (
+        second_population['owner_binds'][0]['producer']['run']
+        == second_task.ordinal
+    )
+    assert second_task.ordinal == 3
+    observed = reader().view(capture.core(), capture.operations)
+    assert observed['operations'] == ['materialize', 'materialize']
+    assert len(observed['materializations']) == 2
+    assert capture._materialization_owners == {}
