@@ -604,6 +604,21 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_ObservedRepr.__repr__": {
       "refactor": "T4.4: present the already-observed native repr string without repeating its native conversion."
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::PostgresProvider.source_rows": {
+      "refactor": "T4.5: retain the same statement binding, one cursor/transaction, description and fetchall observations in an explicit scoped raw-row I/O port; the ordinary Arrow conversion remains in that scope and native object construction consumes actual rows there without changing SQL policy."
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_ColumnDescription.name": {
+      "refactor": "T4.5: type-only protocol for the actual driver description; no property is evaluated or native metadata reconstructed here."
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_ColumnDescription.type_code": {
+      "refactor": "T4.5: type-only protocol for the actual driver description; no property is evaluated or native metadata reconstructed here."
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_ColumnDescription.precision": {
+      "refactor": "T4.5: type-only protocol for the actual driver description; no property is evaluated or native metadata reconstructed here."
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_ColumnDescription.scale": {
+      "refactor": "T4.5: type-only protocol for the actual driver description; no property is evaluated or native metadata reconstructed here."
     }
   }
 }

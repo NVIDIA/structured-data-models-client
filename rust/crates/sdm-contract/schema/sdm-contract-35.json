@@ -307,6 +307,15 @@
         "FrameCheckpointManifest.metadata": {
           "$ref": "#/$defs/FrameCheckpointMetadata"
         },
+        "PrepareMaterialize.input": {
+          "$ref": "#/$defs/MaterializePreparation"
+        },
+        "PreparedMaterialize.value": {
+          "$ref": "#/$defs/PreparedMaterializeValue"
+        },
+        "MaterializePreparation/request.values": {
+          "$ref": "#/$defs/CallValues"
+        },
         "PrepareFrames.input": {
           "$ref": "#/$defs/FramePreparation"
         },
@@ -508,6 +517,9 @@
         "Materialize.frames",
         "FrameCheckpoint.manifest",
         "FrameCheckpointManifest.metadata",
+        "PrepareMaterialize.input",
+        "PreparedMaterialize.value",
+        "MaterializePreparation/request.values",
         "PrepareFrames.input",
         "PreparedFrames.value",
         "FramePreparation/source_meaning.schema",
@@ -9527,6 +9539,2171 @@
         "position"
       ]
     },
+    "MaterializePreparation": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "request": {
+              "$ref": "#/$defs/Materialize"
+            },
+            "stage": {
+              "type": "string",
+              "const": "task"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "request"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "source": {
+              "$ref": "#/$defs/PreparedMaterializeSource"
+            },
+            "stage": {
+              "type": "string",
+              "const": "population"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "source"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "lookup": {
+              "$ref": "#/$defs/PreparedLookupRows"
+            },
+            "helpers": {
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "stage": {
+              "type": "string",
+              "const": "lookup_rows"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "lookup",
+            "helpers"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "source": {
+              "$ref": "#/$defs/PreparedMaterializeSource"
+            },
+            "column": {
+              "$ref": "#/$defs/FrameNativeColumnRef"
+            },
+            "input": {
+              "$ref": "#/$defs/MaterializeSourceFacts"
+            },
+            "stage": {
+              "type": "string",
+              "const": "source_column"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "source",
+            "column",
+            "input"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "source": {
+              "$ref": "#/$defs/PreparedMaterializeSource"
+            },
+            "meaning": {
+              "$ref": "#/$defs/MaterializeColumnMeaning"
+            },
+            "failure": {
+              "$ref": "#/$defs/MaterializeCastFailure"
+            },
+            "stage": {
+              "type": "string",
+              "const": "source_fallback"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "source",
+            "meaning",
+            "failure"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "source": {
+              "$ref": "#/$defs/PreparedMaterializeSource"
+            },
+            "read": {
+              "$ref": "#/$defs/MaterializeSourceRead"
+            },
+            "error": {
+              "$ref": "#/$defs/ProviderError"
+            },
+            "stage": {
+              "type": "string",
+              "const": "source_failure"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "source",
+            "read",
+            "error"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "population": {
+              "$ref": "#/$defs/PreparedMaterializePopulation"
+            },
+            "range": {
+              "$ref": "#/$defs/FrameBatchRange"
+            },
+            "previous": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/PreparedMaterializeBatch"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "stage": {
+              "type": "string",
+              "const": "label_inputs"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "population",
+            "range"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "inputs": {
+              "$ref": "#/$defs/PreparedLabelInputs"
+            },
+            "converted": {
+              "$ref": "#/$defs/NativeTargetValues"
+            },
+            "stage": {
+              "type": "string",
+              "const": "target_column"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "inputs",
+            "converted"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "inputs": {
+              "$ref": "#/$defs/PreparedLabelInputs"
+            },
+            "column": {
+              "$ref": "#/$defs/PreparedTargetColumn"
+            },
+            "stage": {
+              "type": "string",
+              "const": "eligibility_column"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "inputs",
+            "column"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "column": {
+              "$ref": "#/$defs/PreparedTargetColumn"
+            },
+            "operand": {
+              "$ref": "#/$defs/NativeConditionColumn"
+            },
+            "stage": {
+              "type": "string",
+              "const": "condition_column"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "column",
+            "operand"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "column": {
+              "$ref": "#/$defs/PreparedTargetColumn"
+            },
+            "converted": {
+              "$ref": "#/$defs/NativeTargetValues"
+            },
+            "stage": {
+              "type": "string",
+              "const": "filtered_target"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "column",
+            "converted"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "column": {
+              "$ref": "#/$defs/PreparedTargetColumn"
+            },
+            "converted": {
+              "$ref": "#/$defs/NativeTargetValues"
+            },
+            "stage": {
+              "type": "string",
+              "const": "windowed_target"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "column",
+            "converted"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "column": {
+              "$ref": "#/$defs/PreparedTargetColumn"
+            },
+            "stage": {
+              "type": "string",
+              "const": "native_label_groups"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "column"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "groups": {
+              "$ref": "#/$defs/PreparedFrameLabelGroups"
+            },
+            "restored": {
+              "$ref": "#/$defs/RestoredFrameLabels"
+            },
+            "stage": {
+              "type": "string",
+              "const": "restore_label_groups"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "groups",
+            "restored"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "groups": {
+              "$ref": "#/$defs/PreparedFrameLabelGroups"
+            },
+            "column": {
+              "$ref": "#/$defs/PreparedTargetColumn"
+            },
+            "stage": {
+              "type": "string",
+              "const": "what_if_column"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "groups",
+            "column"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "population": {
+              "$ref": "#/$defs/PreparedMaterializePopulation"
+            },
+            "groups": {
+              "$ref": "#/$defs/PreparedFrameLabelGroups"
+            },
+            "restored": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/RestoredFrameLabels"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "stage": {
+              "type": "string",
+              "const": "complete_label_batch"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "population",
+            "groups"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "population": {
+              "$ref": "#/$defs/PreparedMaterializePopulation"
+            },
+            "batches": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/PreparedMaterializeBatch"
+              }
+            },
+            "values": {
+              "description": "Mutable native configuration at its reached post-label position.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/AttachmentId"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "stage": {
+              "type": "string",
+              "const": "request"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "population",
+            "batches"
+          ]
+        }
+      ]
+    },
+    "Materialize": {
+      "description": "Build a request for a query over a described source.",
+      "type": "object",
+      "properties": {
+        "provider": {
+          "$ref": "#/$defs/ProviderChoice"
+        },
+        "schema": {
+          "description": "A bytes attachment of a [`HeldSchema`] as JSON: the schema to\nsample, as the host holds it (contract v28, T3.16).",
+          "$ref": "#/$defs/AttachmentId"
+        },
+        "query": {
+          "description": "The query text: a bytes attachment of a JSON string.",
+          "$ref": "#/$defs/AttachmentId"
+        },
+        "indices": {
+          "description": "The entities to predict for: an Arrow attachment of one column.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AttachmentId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "candidates": {
+          "description": "The rows a ranking (`RANK TOP k`) is over, as the caller named them\n(contract v27, optional, T2.8): a bytes attachment of a JSON list of\n[`GivenCandidate`]s, each candidate as the host's value is written,\nso values of several types keep each its own. The core asks a\nranking as one question per distinct candidate, writing each into\nits question by the type of the column ranked, and refuses\ncandidates on any other question.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AttachmentId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "anchor_time": {
+          "description": "The anchor time, a `ts` scalar.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "seed": {
+          "description": "The sampling seed, an integer of any size.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Seed"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "unseeded": {
+          "description": "Whether the caller asked for an unseeded sample, a new one each\ncall (`random_seed=None`), with `seed` left out; from contract v27\nthe core draws it under a seed of its own, new each call (T2.11).",
+          "type": "boolean"
+        },
+        "anchor_entity": {
+          "description": "Whether the caller anchored each entity at its own time\n(`anchor_time='entity'`), with `anchor_time` left out; from contract\nv27 taken for a static query (T2.11).",
+          "type": "boolean"
+        },
+        "values": {
+          "description": "A bytes attachment of a JSON object of the call's option values the\ncore reads (T1.28a), each as the caller gave it and the host's JSON\nwrites it, a member only where the call names the option:\n`num_context_samples`, the context size, whose run mode the core\nchooses and bounds; `num_hops` and `num_neighbors`, whose hops it\nbounds before it refuses them by name; `prediction_statistic`, which\nit checks and records; `inference_config`, which it reads by the\nengine's rules and writes into the payload (decision E45(a)); and\n`random_seed`, in place of `seed` and `unseeded` where it is given\n(`null`, an unseeded sample); from contract v26, `rows_per_call`,\nthe most rows one model call scores, which only lowers the profile's\n(`main`'s multi-call `predict`, read from T2.8c); `top_k`, how\nmany candidates a ranking keeps, in place of the query's `TOP k`,\nread from T2.8; from contract v27, `lag_timesteps`, the past steps\nof a temporal target added as features (T2.9), any value, which the\ncore refuses where the reference's engine refuses it, once the\ncontext is labelled; and from contract v27 the sampling options\n(T2.11): `num_hops` and `num_neighbors`, the hops walked and each\none's size; `max_pq_iterations`; `use_prediction_time`;\n`return_embeddings`, which names `embeddings` among the payload's\noutputs; `exclude_cols_dict`, as given; and `context_anchor_time`,\nwritten as `anchor_time` is (a `ts` scalar), or as the text\n`entity`, `null`, or the text `unreadable` for any other value. The core reads it with `sdm-wire`'s\nbounded reader and holds each value's type to what the reference's\nclient takes, so the host checks none of them.\nWorking v30's option encoding also preserves bare `NaN`, `Infinity`\nand `-Infinity` numeric tokens in this attachment only. The core\nadmits only a NaN `lag_timesteps` under KO3-44; other nonfinite\noption values remain named refusals. Text tokens and ordinary\nmessage JSON retain their existing strict interpretation.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AttachmentId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "options": {
+          "description": "The names of the call's other sampling options, which this message\ncarries no value of (none from contract v27: every sampling option\ntravels in `values`): the core refuses any name it is given as\n`INVALID_REQUEST` (decision E61). The host\npasses each the call gave, so it refuses none of its own.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "most_parts": {
+          "description": "The most steps a forecast is asked as, one call each, which the host\nlets its caller set (the client's `decompose.MOST_PARTS`); 200 where\nit names none. A forecast of more is refused, `INVALID_REQUEST`, rule\n`too_many_parts` (T1.36 fix 21).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "most_entities": {
+          "description": "The most entities one `materialize` gathers, across the calls it is\nasked in, which the host lets its caller set (`main`'s\n`MOST_ENTITIES`); 100,000 where it names none (design choice 1,\nmulti-call `predict`, read from T2.8c, which asks a request of more\nrows than one call scores in several calls; until then the core\nrefuses more than one call's rows, a lower bound than either).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "most_calls": {
+          "description": "The most model calls one request is asked in (`main`'s\n`MOST_CALLS`); 100 where the host names none (read from T2.8c, as\n`most_entities`).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "sampler_state": {
+          "description": "The sampler state the materializer's last run left, which the host\nhands back as it took it (decision E52); none for a materializer's\nfirst run.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SamplerState"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "schema",
+        "query"
+      ]
+    },
+    "ProviderChoice": {
+      "description": "The composition root's choice: a built-in SQL provider by dialect, which\ncompiles each request to SQL the host runs, or a host provider that\nanswers the typed requests itself.\n\nA SQL provider's `namespace` (contract v28) is where the source's tables\nare, as the source was given it: the name parts before a table's own,\noutermost first, a Postgres source's schema (`PostgresSource(schema=...)`),\neach `null` where the source names none, which is then the connection's\ncurrent one. Every relation of one part a request names is read under\nit, and the source's tables are listed in it, as the reference\nqualifies each read by the schema it was given (`PostgresTable`). Left\nout, empty or all `null`, the connection's current one, as before v28.\nA dialect takes as many parts as a relation's parts before its table's,\nand refuses by name more, or a part given inside one left `null`.\n\nA SQL provider's `view` (contract v28, T3.27) names the semantic model\nthe source is read through, a Databricks metric view or a Snowflake\nsemantic view by its dialect, as the caller named it, with whether the\ncaller trusts its expressions: its logical tables are then the\nrelations of one part a request names, each the logical table's name.\nLeft out, the source's own tables, as before.",
+      "oneOf": [
+        {
+          "description": "Frames already admitted for this describe call. This is an internal\ncore source, never a host provider or a SQL dialect.",
+          "type": "object",
+          "properties": {
+            "manifest": {
+              "description": "Bytes containing [`crate::frames::FrameManifest`].",
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "provider": {
+              "type": "string",
+              "const": "frames"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "provider",
+            "manifest"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "dialect": {
+              "$ref": "#/$defs/Dialect"
+            },
+            "namespace": {
+              "type": "array",
+              "items": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "view": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ViewChoice"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "timestamp_encoding": {
+              "description": "A host's required lossless transport for timestamps that its\ndriver cannot preserve through native getters. The data layer\nowns the SQL projection; the host performs only the conversion\nexplicitly named by the resulting plan.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SqlTimestampEncoding"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "provider": {
+              "type": "string",
+              "const": "sql"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "provider",
+            "dialect"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "capabilities": {
+              "$ref": "#/$defs/ProviderCapabilities"
+            },
+            "provider": {
+              "type": "string",
+              "const": "host"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "provider",
+            "capabilities"
+          ]
+        }
+      ]
+    },
+    "Dialect": {
+      "description": "A built-in SQL dialect, by the name the host gives it. The contract\nnames no dialect and knows none (decision E54): which names a build\nserves is the data layer's, which refuses one it does not serve before\nthe run exists ([`DataLayer::capabilities`]).",
+      "type": "string"
+    },
+    "ViewChoice": {
+      "description": "The semantic model a SQL provider's source is read through\n([`ProviderChoice::Sql`]'s `view`): its name as the caller gave it, and\nwhether the caller trusts whoever authored it to run its expressions\n(`semantic_model(name, trust_expressions=...)`).",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "trust_expressions": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "trust_expressions"
+      ]
+    },
+    "SqlTimestampEncoding": {
+      "description": "A driver's requested lossless SQL timestamp transport.",
+      "oneOf": [
+        {
+          "description": "Timestamps as signed microseconds: timezone-free wall fields from\nthe epoch's wall fields, or a zoned timestamp's physical instant\nfrom the Unix epoch. The core selects the source kind from actual\nwarehouse result metadata, independent of the session or JVM zone.",
+          "type": "string",
+          "const": "microseconds"
+        }
+      ]
+    },
+    "ProviderCapabilities": {
+      "description": "What a provider answers: a host provider declares it, and the data\nlayer gives it for each SQL dialect it renders.",
+      "type": "object",
+      "properties": {
+        "optional": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/OptionalRequest"
+          }
+        },
+        "max_keys_per_request": {
+          "description": "The most keys one request may carry; `None` is no limit.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "sampling": {
+          "$ref": "#/$defs/Determinism"
+        },
+        "max_seed": {
+          "description": "The largest seed the provider samples with (register entry RS-7),\nwhich every provider declares: there is no \"any seed\" default\n(design choice 1). The core refuses a sample with a larger seed,\n`INVALID_REQUEST` naming the seed, before the sample is planned;\nwhich seeds a provider takes is the provider's to declare, never a\nname the core matches.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "text_times": {
+          "description": "How the source reads a time it stores as text (register DT-7);\n`None` declares no reading, and the core refuses to read text times\nfrom it (`UNSUPPORTED_REQUEST`, rule `text_times`).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TextTimes"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "null_order": {
+          "description": "Where the source puts a null when it orders (`NullOrder`); `None`\ndeclares none, and the core refuses to ask it for rows in an order\n(`UNSUPPORTED_REQUEST`, rule `null_order`).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NullOrder"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "index_advice": {
+          "description": "Which indexes serve the sampler's reads (`IndexAdvice`); `None`\ndeclares no meaningful index advice: the core neither reads the\nsource's indexes nor warns of missing ones.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/IndexAdvice"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fallback": {
+          "description": "The limits within which the core answers an optional request the\nprovider does not declare itself, in memory, from the rows a `scan`\nreads (design choice 1, the in-memory fallback, T2.6); left out,\nthe provider declares none, and such a request is refused,\n`UNSUPPORTED_REQUEST`, as before. A declared request that fails is\nthe provider's error either way, never answered by the fallback.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FallbackLimits"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "derived_relations": {
+          "description": "The provider reads derived relations ([`Relation::columns`],\n[`Relation::filter`]; contract v28). Left out, `false`: the core\nrefuses a derived relation for the provider by name (rule\n[`DERIVED_RULE`]).",
+          "type": "boolean"
+        },
+        "sample_rows": {
+          "description": "The provider sizes an entity sample by the table's rows, as the\nreference's warehouse samplers do (a sampled percentage of the\nrows): the core counts each sampled table's rows first and names\nthe count on the sample ([`DataRequest::SampleEntities`]'s `rows`;\ncontract v28). Left out, `false`.",
+          "type": "boolean"
+        },
+        "neighbor_lookback": {
+          "description": "The provider's neighbor reads by a foreign key over a table with a\ntime column look back no further than the reference's warehouse\nsamplers do (`_by_fkey`): from each seed's anchor back by five\ntimes the rows asked over the table's rate of rows per referenced\nrow and second, at most five years, the seconds rounded up. The\ncore counts the table's and the referenced table's rows, reads the\ntable's time bounds, and bounds each such read from below by that\nlook-back, exclusive (contract v28). Left out, `false`: no lower\nbound.",
+          "type": "boolean"
+        },
+        "keys_optional": {
+          "description": "The provider's catalog may fail to read a table's declared keys and\nforeign keys where it reads its columns (Unity Catalog's\n`table_constraints` on an older runtime or without the privilege):\nthe core then reads a table's columns and its keys apart, and reads\na failed key or foreign-key read as no declared keys, as the\nreference's Databricks reader carries on without them\n(`DatabricksTable`'s key reads; contract v28). Left out, `false`: a\nfailed key read fails the description.",
+          "type": "boolean"
+        },
+        "key_enforcement": {
+          "description": "The catalog can answer `key_enforcement` for a table's namespace.\nThis optional fact can skip counting an enforced declared primary\nkey; it never certifies uniqueness of values exposed by a lookup.",
+          "type": "boolean"
+        },
+        "opaque_vendor": {
+          "description": "The vendor whose opaque Arrow extension types (`arrow.opaque`, its\nmetadata's `vendor_name`) the provider hands over: the host layer\nreads an opaque column by that vendor's layout only when the column\nnames this vendor (register P1B-43). Left out, none, and no opaque\ncolumn is read as anything but its storage (contract v28, carried\nrow P2-MID2-2: before it, a flag of the data layer's).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "compares_stored_times": {
+          "description": "The provider compares a window's bounds with the stored text of the\nwindow's column, as a source with no time type does (SQLite's\nreference spells each bound as one stored value is spelled,\n`_time_spelling`): the core then reads one non-null value of a\ntable's time column (a `scan` of one row) before that table's first\nwindowed read in a run, and names it on each bound's seed column\n([`SEED_STORED_TIME`]). Left out, `false` (P2-MID2-2).",
+          "type": "boolean"
+        },
+        "samples_by_key_dtype": {
+          "description": "The provider orders a seeded sample by the key's data type, as\nSQLite's does (it hashes an integer key and the `rowid` otherwise):\nthe core then names the schema's type of a key of one column on each\n`sample_entities` (`key_dtype`). Left out, `false` (P2-MID2-2).",
+          "type": "boolean"
+        },
+        "reads_nan_as_missing": {
+          "description": "The reference reads the provider's rows into a frame of NumPy-backed\nfloats, where a NaN is missing and `-0.0` is `0.0` (Postgres's rows,\nread as Python objects); otherwise as Arrow-backed pandas does, where\na NaN is a value and the two zeros are two values (T2.12). Left out,\n`false` (P2-MID2-2).",
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "optional",
+        "sampling",
+        "max_seed"
+      ]
+    },
+    "OptionalRequest": {
+      "description": "The optional requests a provider may declare.",
+      "type": "string",
+      "enum": [
+        "preview",
+        "count_rows",
+        "key_counts",
+        "time_bounds",
+        "column_ranges",
+        "repeated_key",
+        "sample_entities",
+        "neighbors",
+        "lookup"
+      ]
+    },
+    "Determinism": {
+      "description": "Whether a provider's seeded sampling repeats.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "unseeded"
+          ]
+        },
+        {
+          "description": "The same seed gives the same rows on this provider.",
+          "type": "string",
+          "const": "seeded_stable"
+        }
+      ]
+    },
+    "TextTimes": {
+      "description": "How a provider's source reads a time it stores as text: which of the\nreference's two readings the core applies to the text it fetches from\nthe provider (register DT-7). The provider declares it; the core picks\nits reader by it, never by a dialect.",
+      "oneOf": [
+        {
+          "description": "Each value on its own, as the reference's engine reads a SQL\nsource's text time column (`to_datetime(values, unit='ns')`).",
+          "type": "string",
+          "const": "value_by_value"
+        },
+        {
+          "description": "The column by the client's rules (`date-rules.md`, \"The client\nrules\"), as the reference reads a frame's time column.",
+          "type": "string",
+          "const": "client_rules"
+        }
+      ]
+    },
+    "NullOrder": {
+      "description": "Where a provider's source puts a null among the values it orders, in\neither direction: the order the reference's neighbor reads get from the\nsource, which writes no null order of its own (`_neighbor_order_by`).\nThe provider declares it; the core writes it into the tie-break it asks\nfor ([`TieTerm::nulls_last`]), never by a dialect. A source whose order\ndepends on the direction is not declarable yet: the dialect that needs\none adds it under a new contract version.",
+      "oneOf": [
+        {
+          "description": "Nulls first, ascending or descending.",
+          "type": "string",
+          "const": "first"
+        },
+        {
+          "description": "Nulls last, ascending or descending.",
+          "type": "string",
+          "const": "last"
+        }
+      ]
+    },
+    "IndexAdvice": {
+      "description": "Which of the source's indexes the reference's sampler counts as serving\na read on a key or foreign key, for its warning of the indexes it would\nuse and finds missing. The provider declares it; the core reads the\nsource's indexes, and warns, only when it is declared.",
+      "oneOf": [
+        {
+          "description": "An index over exactly that one column, its coverage resolved; one\nover several columns, or one the reader cannot resolve, serves none.",
+          "type": "string",
+          "const": "single_column"
+        },
+        {
+          "description": "The reference's SQLite sampler's: each table's indexes read one\ntable at a time, each index's columns by its name; a read wants an\nindex on the key, and on each foreign key with its table's time\ncolumn, and any index whose first column is the read's first serves\nit.",
+          "type": "string",
+          "const": "leading_column"
+        }
+      ]
+    },
+    "FallbackLimits": {
+      "description": "The in-memory fallback's limits, as a provider declares them\n([`ProviderCapabilities::fallback`]): past either, the fallback fails\nby name rather than read on.",
+      "type": "object",
+      "properties": {
+        "max_rows": {
+          "description": "The most rows the fallback reads to answer one request.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "max_bytes": {
+          "description": "The most bytes of Arrow data it holds to answer one request.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "max_rows",
+        "max_bytes"
+      ]
+    },
+    "Seed": {
+      "type": "string",
+      "pattern": "^(0x0|-?0x[1-9a-f][0-9a-f]*)$"
+    },
+    "SamplerState": {
+      "description": "What a materializer's runs have read of its source, so a later run\nskips a read the reference's sampler makes once (decision E52): the\ncore holds no state across runs. A `materialize` run leaves it, done or\nfailed, and the host takes it after the run ends (a `sampler_state`\nmessage), keeps it on its materializer as it is, opaque, and hands it\nback with that materializer's next `materialize`.",
+      "type": "object",
+      "properties": {
+        "version": {
+          "description": "The version of this state's format, independent of the contract's.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "memo": {
+          "description": "A bytes attachment of a [`SamplerMemo`] as JSON.",
+          "$ref": "#/$defs/AttachmentId"
+        },
+        "frame_checkpoint": {
+          "description": "The numeric frame materializer's owned snapshot and continuing stream.\nAbsent for SQL samplers; metadata and Arrow have distinct ownership.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FrameCheckpoint"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "memo"
+      ]
+    },
+    "FrameCheckpoint": {
+      "description": "A fixed-size reference to an input-sized frame checkpoint manifest.\nEach run uses fresh ids; none identifies a persistent table or snapshot.",
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "manifest": {
+          "$ref": "#/$defs/AttachmentId"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "manifest"
+      ]
+    },
+    "PreparedMaterializeSource": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "identity": {
+          "type": "string"
+        },
+        "owner": {
+          "$ref": "#/$defs/AttachmentId"
+        },
+        "target": {
+          "$ref": "#/$defs/FrameNativeColumnRef"
+        },
+        "tables": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MaterializeSourceTable"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "identity",
+        "owner",
+        "target",
+        "tables"
+      ]
+    },
+    "FrameNativeColumnRef": {
+      "description": "Exact immutable source-column ownership, resolved by the core graph.\nLogical schema aliases are never interpreted by the native converter.",
+      "type": "object",
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/Relation"
+        },
+        "column": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "column"
+      ]
+    },
+    "MaterializeSourceTable": {
+      "description": "Original captured declaration order, independently of fetched projection order.",
+      "type": "object",
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/Relation"
+        },
+        "read": {
+          "description": "Exact resolved/pinned read, including its captured projection.",
+          "$ref": "#/$defs/Relation"
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "read",
+        "columns"
+      ]
+    },
+    "PreparedLookupRows": {
+      "description": "Actual counted task lookup, bound to the issued logical read.",
+      "type": "object",
+      "properties": {
+        "owner": {
+          "$ref": "#/$defs/AttachmentId"
+        },
+        "read": {
+          "$ref": "#/$defs/ReplyId"
+        },
+        "source": {
+          "$ref": "#/$defs/Relation"
+        },
+        "key": {
+          "type": "string"
+        },
+        "range": {
+          "$ref": "#/$defs/FrameBatchRange"
+        },
+        "context_rows": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "scored_rows": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "owner",
+        "read",
+        "source",
+        "key",
+        "range",
+        "context_rows",
+        "scored_rows"
+      ]
+    },
+    "ReplyId": {
+      "description": "Names one fetch or model call within a run, so its reply can be matched.",
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "FrameBatchRange": {
+      "description": "Ordered offsets in the task's prediction half, independent of ids.",
+      "type": "object",
+      "properties": {
+        "start": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "stop": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "start",
+        "stop"
+      ]
+    },
+    "MaterializeSourceFacts": {
+      "description": "Actual raw container form, not the provider or native library's identity.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "storage": {
+              "type": "string",
+              "const": "cell_rows"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "storage"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "declaration": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/FramePhysicalDeclaration"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "storage": {
+              "type": "string",
+              "const": "typed_columns"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "storage"
+          ]
+        }
+      ]
+    },
+    "FramePhysicalDeclaration": {
+      "description": "Original reconstruction declaration, independently of exported buffers.\nNative Decimal widths and full i32 scale are not narrowed to interchange\nadmission's widened scale-zero physical representation.",
+      "oneOf": [
+        {
+          "description": "Canonical non-Decimal scalar declaration. The shared reader rejects\nDecimal interchange variants in favor of the original descriptor below.",
+          "type": "object",
+          "properties": {
+            "physical": {
+              "$ref": "#/$defs/ColumnType"
+            },
+            "declaration": {
+              "type": "string",
+              "const": "physical"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "declaration",
+            "physical"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "declaration": {
+              "type": "string",
+              "const": "large_utf8"
+            }
+          },
+          "required": [
+            "declaration"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "native": {
+              "$ref": "#/$defs/NativeDecimal"
+            },
+            "declaration": {
+              "type": "string",
+              "const": "decimal"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "declaration",
+            "native"
+          ]
+        }
+      ]
+    },
+    "MaterializeColumnMeaning": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "column": {
+          "$ref": "#/$defs/FrameNativeColumnRef"
+        },
+        "input": {
+          "$ref": "#/$defs/MaterializeSourceFacts"
+        },
+        "scalar": {
+          "$ref": "#/$defs/MaterializeScalarMeaning"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "column",
+        "input",
+        "scalar"
+      ]
+    },
+    "MaterializeScalarMeaning": {
+      "description": "Mathematical scalar column meaning selected for its fixed native converter.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "meaning": {
+              "type": "string",
+              "const": "original"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "meaning"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "physical": {
+              "$ref": "#/$defs/ColumnType"
+            },
+            "meaning": {
+              "type": "string",
+              "const": "nullable"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "meaning",
+            "physical"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "physical": {
+              "$ref": "#/$defs/ColumnType"
+            },
+            "meaning": {
+              "type": "string",
+              "const": "decimal"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "meaning",
+            "physical"
+          ]
+        }
+      ]
+    },
+    "MaterializeCastFailure": {
+      "description": "Native ancestry observed without message, arguments or display callbacks.",
+      "type": "object",
+      "properties": {
+        "builtin": {
+          "$ref": "#/$defs/NativeFailure"
+        },
+        "arithmetic": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "builtin",
+        "arithmetic"
+      ]
+    },
+    "MaterializeSourceRead": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/SourceReadKind"
+        },
+        "source": {
+          "$ref": "#/$defs/Relation"
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "source",
+        "columns"
+      ]
+    },
+    "SourceReadKind": {
+      "description": "The actual data-read kind reported after an incomplete native source read.\nThis diagnostic fact contains no borrowed or consumed key attachments.",
+      "type": "string",
+      "enum": [
+        "sample_entities",
+        "neighbors",
+        "lookup",
+        "scan"
+      ]
+    },
+    "ProviderError": {
+      "description": "A provider's failure: its kind, whether trying again may succeed, and\nthe driver's own SQLSTATE, vendor code and error class, and its message\nas a diagnostic for the data layer alone. What the failure means is the\ndata layer's to say ([`DataLayer::failure`]), from these facts; the\nmessage is never echoed into an error the core gives, since drivers\nquote values there (decision H17).",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/ErrorKind"
+        },
+        "retryable": {
+          "type": "boolean"
+        },
+        "sqlstate": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "vendor_code": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "error_class": {
+          "description": "The driver's error class, a name of its closed list such as\nDatabricks's `INSUFFICIENT_PERMISSIONS` (contract v28, T3.27), read\nas the old client reads it (`error_class`: the driver's own answer,\nelse the bracketed name its message opens with). Left out, none.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "driver_message": {
+          "description": "The driver's message, passed through by the host unread (contract\nv28, T3.6): an internal diagnostic only [`DataLayer::failure`] reads,\nwhere the old client reads a failure by its text (Snowflake's\n\"does not exist\", `SNOW/table.py:34-45`), and never echoed into a\npublic error (decision H17). Left out, none.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "retryable"
+      ]
+    },
+    "ErrorKind": {
+      "description": "What kind of problem an error is.",
+      "oneOf": [
+        {
+          "description": "The caller's request is not one the core accepts.",
+          "type": "string",
+          "const": "invalid_request"
+        },
+        {
+          "description": "A valid request the core does not support, such as a type outside\nthe closed set.",
+          "type": "string",
+          "const": "unsupported"
+        },
+        {
+          "description": "Something the request names does not exist.",
+          "type": "string",
+          "const": "not_found"
+        },
+        {
+          "description": "The data source or its driver failed.",
+          "type": "string",
+          "const": "data_source"
+        },
+        {
+          "description": "The model endpoint or its transport failed.",
+          "type": "string",
+          "const": "model_endpoint"
+        },
+        {
+          "description": "The run was cancelled.",
+          "type": "string",
+          "const": "cancelled"
+        },
+        {
+          "description": "The host broke the run protocol: a call in the wrong state, a reply\nthe run did not ask for, a malformed control message.",
+          "type": "string",
+          "const": "protocol"
+        },
+        {
+          "description": "A defect in the core, a contained panic included.",
+          "type": "string",
+          "const": "internal"
+        }
+      ]
+    },
+    "PreparedMaterializePopulation": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "identity": {
+          "type": "string"
+        },
+        "owner": {
+          "$ref": "#/$defs/AttachmentId"
+        },
+        "rows": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "batch_rows": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "target": {
+          "$ref": "#/$defs/FrameNativeColumnRef"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "identity",
+        "owner",
+        "rows",
+        "batch_rows",
+        "target"
+      ]
+    },
+    "PreparedMaterializeBatch": {
+      "type": "object",
+      "properties": {
+        "population": {
+          "type": "string"
+        },
+        "range": {
+          "$ref": "#/$defs/FrameBatchRange"
+        },
+        "owner": {
+          "$ref": "#/$defs/AttachmentId"
+        },
+        "complete": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "population",
+        "range",
+        "owner",
+        "complete"
+      ]
+    },
+    "PreparedLabelInputs": {
+      "description": "Complete reached input rows before native target conversion or grouping.",
+      "type": "object",
+      "properties": {
+        "population": {
+          "type": "string"
+        },
+        "range": {
+          "$ref": "#/$defs/FrameBatchRange"
+        },
+        "owner": {
+          "$ref": "#/$defs/AttachmentId"
+        },
+        "source_read": {
+          "description": "Actual historical logical read within the producing SQL Run.\nFrame sources already bind their original rows through the graph.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ReplyId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "target": {
+          "$ref": "#/$defs/FrameNativeColumnRef"
+        },
+        "form": {
+          "$ref": "#/$defs/TargetColumnForm"
+        },
+        "condition_columns": {
+          "description": "Resolved occurrence order, including repeated native reads of one column.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FrameNativeColumnRef"
+          }
+        },
+        "source_role": {
+          "$ref": "#/$defs/ConditionSourceRole"
+        },
+        "eligibility": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PreparedConditionValues"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "population",
+        "range",
+        "owner",
+        "target",
+        "form",
+        "condition_columns"
+      ]
+    },
+    "TargetColumnForm": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "plain",
+            "filtered"
+          ]
+        },
+        {
+          "description": "An actual condition column, with full row extent and no primitive\ninteger cast, target window or aggregation-result restoration.",
+          "type": "string",
+          "const": "condition"
+        }
+      ]
+    },
+    "ConditionSourceRole": {
+      "description": "Which completed source data supplies this actual column view.",
+      "type": "string",
+      "enum": [
+        "entity",
+        "windowed"
+      ]
+    },
+    "PreparedConditionValues": {
+      "description": "Ordered source views and actual completed target-value owners.\nChild views contain no eligibility history of their own.",
+      "type": "object",
+      "properties": {
+        "columns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PreparedLabelInputs"
+          }
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CompletedConditionValue"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "columns",
+        "values"
+      ]
+    },
+    "CompletedConditionValue": {
+      "description": "Completed native column data retained in its actual condition order.",
+      "type": "object",
+      "properties": {
+        "column": {
+          "$ref": "#/$defs/FrameNativeColumnRef"
+        },
+        "owner": {
+          "$ref": "#/$defs/AttachmentId"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "column",
+        "owner"
+      ]
+    },
+    "NativeTargetValues": {
+      "description": "Actual target values with ordered fetched-row positions and independent\ncomplete native missingness, whose extent is fixed by the predecessor.",
+      "type": "object",
+      "properties": {
+        "rows": {
+          "$ref": "#/$defs/AttachmentId"
+        },
+        "presence": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AttachmentId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "encoding": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StringEncoding"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "rows"
+      ]
+    },
+    "PreparedTargetColumn": {
+      "type": "object",
+      "properties": {
+        "input": {
+          "$ref": "#/$defs/PreparedLabelInputs"
+        },
+        "owner": {
+          "$ref": "#/$defs/AttachmentId"
+        },
+        "derivation": {
+          "$ref": "#/$defs/TargetDerivation"
+        },
+        "rows": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "condition_values": {
+          "description": "Actual completed native columns, not a next-operand cursor.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/NativeConditionColumn"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "input",
+        "owner",
+        "derivation",
+        "rows",
+        "condition_values"
+      ]
+    },
+    "TargetDerivation": {
+      "description": "Historical mathematical meaning of the actual completed target column.",
+      "type": "string",
+      "enum": [
+        "column",
+        "conditioned",
+        "filtered",
+        "windowed"
+      ]
+    },
+    "NativeConditionColumn": {
+      "type": "object",
+      "properties": {
+        "column": {
+          "$ref": "#/$defs/FrameNativeColumnRef"
+        },
+        "converted": {
+          "$ref": "#/$defs/NativeTargetValues"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "column",
+        "converted"
+      ]
+    },
+    "PreparedFrameLabelGroups": {
+      "description": "Complete reached target groups before native restoration or later masks.\nThe owner retains immutable source rows, ordered groups and prior batch data.",
+      "type": "object",
+      "properties": {
+        "population": {
+          "type": "string"
+        },
+        "range": {
+          "$ref": "#/$defs/FrameBatchRange"
+        },
+        "owner": {
+          "$ref": "#/$defs/AttachmentId"
+        },
+        "native_target": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FrameNativeColumnRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "target_encoding": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StringEncoding"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "restored": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RestoredFrameLabels"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "what_if": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PreparedConditionValues"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "population",
+        "range",
+        "owner"
+      ]
+    },
+    "RestoredFrameLabels": {
+      "description": "Actual successful entity/anchor/target rows returned by native restoration.",
+      "type": "object",
+      "properties": {
+        "rows": {
+          "$ref": "#/$defs/AttachmentId"
+        },
+        "encoding": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StringEncoding"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "rows"
+      ]
+    },
+    "PreparedMaterializeValue": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "string",
+              "const": "lookup_rows"
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "positions": {
+                  "$ref": "#/$defs/AttachmentId"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "positions"
+              ]
+            }
+          },
+          "required": [
+            "value",
+            "data"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "string",
+              "const": "source"
+            },
+            "data": {
+              "$ref": "#/$defs/PreparedMaterializeSource"
+            }
+          },
+          "required": [
+            "value",
+            "data"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "string",
+              "const": "population"
+            },
+            "data": {
+              "$ref": "#/$defs/PreparedMaterializePopulation"
+            }
+          },
+          "required": [
+            "value",
+            "data"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "string",
+              "const": "column_meaning"
+            },
+            "data": {
+              "$ref": "#/$defs/MaterializeColumnMeaning"
+            }
+          },
+          "required": [
+            "value",
+            "data"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "string",
+              "const": "label_groups"
+            },
+            "data": {
+              "$ref": "#/$defs/PreparedFrameLabelGroups"
+            }
+          },
+          "required": [
+            "value",
+            "data"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "string",
+              "const": "label_inputs"
+            },
+            "data": {
+              "$ref": "#/$defs/PreparedLabelInputs"
+            }
+          },
+          "required": [
+            "value",
+            "data"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "string",
+              "const": "target_column"
+            },
+            "data": {
+              "$ref": "#/$defs/PreparedTargetColumn"
+            }
+          },
+          "required": [
+            "value",
+            "data"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "string",
+              "const": "label_batch"
+            },
+            "data": {
+              "$ref": "#/$defs/PreparedMaterializeBatch"
+            }
+          },
+          "required": [
+            "value",
+            "data"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "string",
+              "const": "request"
+            },
+            "data": {
+              "$ref": "#/$defs/Materialized"
+            }
+          },
+          "required": [
+            "value",
+            "data"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "Materialized": {
+      "description": "A materialized request, held by the host and handed back to `predict`.",
+      "type": "object",
+      "properties": {
+        "state": {
+          "$ref": "#/$defs/RequestState"
+        },
+        "query": {
+          "description": "What the core resolved of the query it gathered (contract v26,\nT2.18), which a host reads instead of resolving the query itself:\nthe core resolves a query naming any column (KO2-36), which a host's\nown validator may not. Absent from a core that does not say.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/QueryFacts"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "state"
+      ]
+    },
+    "RequestState": {
+      "description": "What `predict` needs of a materialized request: state that outlives the\nrun that made it. `materialize` answers it; the host takes its\nattachments when that run finishes, holds them, and attaches them again\nto the `start` of the `predict` run, under ids it picks for that\nmessage. A version other than [`REQUEST_STATE_VERSION`] is refused by\nname before anything of the state is read.",
+      "type": "object",
+      "properties": {
+        "version": {
+          "description": "The version of this state's format, independent of the contract's.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "payload": {
+          "description": "A bytes attachment of the request's payload as JSON, as\n`materialize` wrote it or as the host holds it since.",
+          "$ref": "#/$defs/AttachmentId"
+        },
+        "query": {
+          "description": "The query text: a bytes attachment of a JSON string.",
+          "$ref": "#/$defs/AttachmentId"
+        },
+        "forecast": {
+          "description": "A forecast (`FORECAST n TIMEFRAMES`), which the core asks as one\nregression per step, the window moved a span along at each (T1.36\nfix 21): `payload` and `query` are step 1's, and this holds every\nlater step's, in order, empty for a forecast of one step. Absent for\nany other request. `predict` sends each step's payload and gives the\nanswers back as one, each row carrying its step.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/ForecastStep"
+          }
+        },
+        "batches": {
+          "description": "A request of more rows than one model call scores, asked in several\ncalls (`main`'s multi-call `predict`, design choice 1, T2.8c):\n`payload` is the first call's, and this holds every later call's, in\norder, each scoring the rows after the last; `predict` numbers each\ncall's rows on from where the previous call's ended and gives the\nanswers back as one. Absent for a request of one call; a forecast or\nranking, already one call per step or candidate, is never batched.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/RequestBatch"
+          }
+        },
+        "ranking": {
+          "description": "A ranking (`RANK TOP k`), which the core asks as one binary question\nper distinct candidate, whether the entity reaches it in the window\n(the client's `_per_candidate`, contract v27, optional, T2.8):\n`payload` and `query` are the first candidate's question, and this\nholds every later one's, in order. Absent for any other request.\n`predict` asks each and gives the answers back as one ranking.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Ranking"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "payload",
+        "query"
+      ]
+    },
+    "ForecastStep": {
+      "description": "One later step of a forecast's request state: its number, from 2, and\nits payload and query, as [`RequestState`]'s.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "payload": {
+          "$ref": "#/$defs/AttachmentId"
+        },
+        "query": {
+          "$ref": "#/$defs/AttachmentId"
+        },
+        "request_id": {
+          "description": "The id this step's call carries in its `metadata.request_id`, which\nthe host draws for each step as it draws [`Predict::request_id`] for\nstep 1's, one per call as the reference's client draws them (T1.36\nfix 24). `materialize` writes none; `predict` refuses a later step\nwithout one (`INVALID_REQUEST`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "step",
+        "payload",
+        "query"
+      ]
+    },
+    "RequestBatch": {
+      "description": "One later call of a request asked in several ([`RequestState::batches`]).",
+      "type": "object",
+      "properties": {
+        "payload": {
+          "description": "A bytes attachment of this call's payload as JSON, as\n[`RequestState::payload`].",
+          "$ref": "#/$defs/AttachmentId"
+        },
+        "rows": {
+          "description": "The rows this call scores.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "request_id": {
+          "description": "The id this call carries in its `metadata.request_id`, which the\nhost draws for each call, as [`ForecastStep::request_id`];\n`materialize` writes none.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "payload",
+        "rows"
+      ]
+    },
+    "Ranking": {
+      "description": "A ranking's request state ([`RequestState::ranking`]).",
+      "type": "object",
+      "properties": {
+        "top_k": {
+          "description": "How many candidates each row keeps, best first (the call's `top_k`,\nelse the query's `TOP k`); none keeps every candidate scored.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "candidate": {
+          "description": "The first candidate's position among the candidates `materialize`\nwas given (0, but where the host held the first a repeat); its\nquestion is the state's own. Each later part's position is past it,\nin increasing order, or `predict` refuses the state.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "value": {
+          "description": "The first candidate as the result's `rankings` names it, the JSON\ntext of its value.",
+          "type": "string"
+        },
+        "parts": {
+          "description": "The question of each later candidate, in the order the candidates\nwere named.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RankingPart"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "candidate",
+        "value",
+        "parts"
+      ]
+    },
+    "RankingPart": {
+      "description": "One later candidate's question of a ranking's request state.",
+      "type": "object",
+      "properties": {
+        "candidate": {
+          "description": "The candidate this question asks after: its position among the\ncandidates `materialize` was given, its first where it was named\nmore than once.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "value": {
+          "description": "The candidate as the result's `rankings` names it: the JSON text of\nits value.",
+          "type": "string"
+        },
+        "payload": {
+          "description": "A bytes attachment of this question's payload as JSON, as\n[`RequestState::payload`].",
+          "$ref": "#/$defs/AttachmentId"
+        },
+        "query": {
+          "description": "This question's text: a bytes attachment of a JSON string.",
+          "$ref": "#/$defs/AttachmentId"
+        },
+        "request_id": {
+          "description": "The id this question's call carries, as [`ForecastStep::request_id`];\n`materialize` writes none, and `predict` refuses a later candidate's\nquestion without one (`INVALID_REQUEST`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "candidate",
+        "value",
+        "payload",
+        "query"
+      ]
+    },
+    "QueryFacts": {
+      "description": "The facts of a resolved query a host reads: plain values, no tree. Its\ntext, as the core writes it back, is the state's `query`.",
+      "type": "object",
+      "properties": {
+        "entity_table": {
+          "description": "The table whose rows are the entities.",
+          "type": "string"
+        },
+        "problem_type": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProblemType"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "windowed": {
+          "description": "Whether the target carries a time range, so its answer moves with\nthe moment it is asked at.",
+          "type": "boolean"
+        },
+        "num_forecasts": {
+          "description": "How many timeframes `FORECAST n TIMEFRAMES` asks for; 1 otherwise.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "text": {
+          "description": "The query as the core writes it back, the reference's\n`ValidatedPredictiveQuery.to_string()` (contract v28, T3.8): given\nby `validate_query`; absent from `materialize`'s, whose state holds\neach question's text.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "entity_table",
+        "windowed",
+        "num_forecasts"
+      ]
+    },
+    "ProblemType": {
+      "type": "string",
+      "enum": [
+        "rank",
+        "classify",
+        "forecast"
+      ]
+    },
+    "CallValues": {
+      "type": "object"
+    },
     "FramePreparation": {
       "description": "Fixed operations over useful values, never host instructions or a program.\nEach invocation ends normally through the existing Done boundary.",
       "oneOf": [
@@ -10000,6 +12177,271 @@
               "$ref": "#/$defs/FrameBatchRange"
             },
             "previous": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/PreparedFrameLabelBatch"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "converted": {
+              "$ref": "#/$defs/FrameReferenceValues"
+            },
+            "stage": {
+              "type": "string",
+              "const": "label_inputs"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "population",
+            "range",
+            "converted"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "inputs": {
+              "$ref": "#/$defs/PreparedLabelInputs"
+            },
+            "converted": {
+              "$ref": "#/$defs/NativeTargetValues"
+            },
+            "stage": {
+              "type": "string",
+              "const": "target_column"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "inputs",
+            "converted"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "inputs": {
+              "$ref": "#/$defs/PreparedLabelInputs"
+            },
+            "column": {
+              "$ref": "#/$defs/PreparedTargetColumn"
+            },
+            "stage": {
+              "type": "string",
+              "const": "eligibility_column"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "inputs",
+            "column"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "column": {
+              "$ref": "#/$defs/PreparedTargetColumn"
+            },
+            "converted": {
+              "$ref": "#/$defs/NativeTargetValues"
+            },
+            "stage": {
+              "type": "string",
+              "const": "filtered_target"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "column",
+            "converted"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "column": {
+              "$ref": "#/$defs/PreparedTargetColumn"
+            },
+            "operand": {
+              "$ref": "#/$defs/NativeConditionColumn"
+            },
+            "stage": {
+              "type": "string",
+              "const": "condition_column"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "column",
+            "operand"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "column": {
+              "$ref": "#/$defs/PreparedTargetColumn"
+            },
+            "converted": {
+              "$ref": "#/$defs/NativeTargetValues"
+            },
+            "stage": {
+              "type": "string",
+              "const": "windowed_target"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "column",
+            "converted"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "column": {
+              "$ref": "#/$defs/PreparedTargetColumn"
+            },
+            "stage": {
+              "type": "string",
+              "const": "native_label_groups"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "column"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "groups": {
+              "$ref": "#/$defs/PreparedFrameLabelGroups"
+            },
+            "restored": {
+              "$ref": "#/$defs/RestoredFrameLabels"
+            },
+            "stage": {
+              "type": "string",
+              "const": "restore_label_groups"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "groups",
+            "restored"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "groups": {
+              "$ref": "#/$defs/PreparedFrameLabelGroups"
+            },
+            "column": {
+              "$ref": "#/$defs/PreparedTargetColumn"
+            },
+            "stage": {
+              "type": "string",
+              "const": "what_if_column"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "groups",
+            "column"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "population": {
+              "$ref": "#/$defs/PreparedFramePopulation"
+            },
+            "range": {
+              "$ref": "#/$defs/FrameBatchRange"
+            },
+            "previous": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/PreparedFrameLabelBatch"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "converted": {
+              "$ref": "#/$defs/FrameReferenceValues"
+            },
+            "stage": {
+              "type": "string",
+              "const": "label_groups"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "population",
+            "range",
+            "converted"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "population": {
+              "$ref": "#/$defs/PreparedFramePopulation"
+            },
+            "groups": {
+              "$ref": "#/$defs/PreparedFrameLabelGroups"
+            },
+            "restored": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/RestoredFrameLabels"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "stage": {
+              "type": "string",
+              "const": "complete_label_batch"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "population",
+            "groups"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "population": {
+              "$ref": "#/$defs/PreparedFramePopulation"
+            },
+            "range": {
+              "$ref": "#/$defs/FrameBatchRange"
+            },
+            "previous": {
               "description": "The last actual evaluated batch and its immutable accepted-prefix facts.",
               "anyOf": [
                 {
@@ -10309,59 +12751,6 @@
         "name",
         "values",
         "meaning"
-      ]
-    },
-    "FramePhysicalDeclaration": {
-      "description": "Original reconstruction declaration, independently of exported buffers.\nNative Decimal widths and full i32 scale are not narrowed to interchange\nadmission's widened scale-zero physical representation.",
-      "oneOf": [
-        {
-          "description": "Canonical non-Decimal scalar declaration. The shared reader rejects\nDecimal interchange variants in favor of the original descriptor below.",
-          "type": "object",
-          "properties": {
-            "physical": {
-              "$ref": "#/$defs/ColumnType"
-            },
-            "declaration": {
-              "type": "string",
-              "const": "physical"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "declaration",
-            "physical"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "declaration": {
-              "type": "string",
-              "const": "large_utf8"
-            }
-          },
-          "required": [
-            "declaration"
-          ],
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "properties": {
-            "native": {
-              "$ref": "#/$defs/NativeDecimal"
-            },
-            "declaration": {
-              "type": "string",
-              "const": "decimal"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "declaration",
-            "native"
-          ]
-        }
       ]
     },
     "FrameConstructorValues": {
@@ -10754,57 +13143,6 @@
         "owner"
       ]
     },
-    "QueryFacts": {
-      "description": "The facts of a resolved query a host reads: plain values, no tree. Its\ntext, as the core writes it back, is the state's `query`.",
-      "type": "object",
-      "properties": {
-        "entity_table": {
-          "description": "The table whose rows are the entities.",
-          "type": "string"
-        },
-        "problem_type": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/ProblemType"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "windowed": {
-          "description": "Whether the target carries a time range, so its answer moves with\nthe moment it is asked at.",
-          "type": "boolean"
-        },
-        "num_forecasts": {
-          "description": "How many timeframes `FORECAST n TIMEFRAMES` asks for; 1 otherwise.",
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0
-        },
-        "text": {
-          "description": "The query as the core writes it back, the reference's\n`ValidatedPredictiveQuery.to_string()` (contract v28, T3.8): given\nby `validate_query`; absent from `materialize`'s, whose state holds\neach question's text.",
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "entity_table",
-        "windowed",
-        "num_forecasts"
-      ]
-    },
-    "ProblemType": {
-      "type": "string",
-      "enum": [
-        "rank",
-        "classify",
-        "forecast"
-      ]
-    },
     "FrameQuestionKind": {
       "type": "string",
       "enum": [
@@ -11078,25 +13416,6 @@
         "fields"
       ]
     },
-    "FrameCheckpoint": {
-      "description": "A fixed-size reference to an input-sized frame checkpoint manifest.\nEach run uses fresh ids; none identifies a persistent table or snapshot.",
-      "type": "object",
-      "properties": {
-        "version": {
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0
-        },
-        "manifest": {
-          "$ref": "#/$defs/AttachmentId"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "version",
-        "manifest"
-      ]
-    },
     "FrameNativeTable": {
       "description": "Native source and column iteration order is observable in graph failures.",
       "type": "object",
@@ -11241,10 +13560,6 @@
         "native_tables"
       ]
     },
-    "Seed": {
-      "type": "string",
-      "pattern": "^(0x0|-?0x[1-9a-f][0-9a-f]*)$"
-    },
     "PreparedFramePopulation": {
       "description": "Complete candidate population and task meaning, before any label lookup.\nThe owner retains actual ordered sampled rows and anchors, not execution state.",
       "type": "object",
@@ -11272,6 +13587,17 @@
           "type": "integer",
           "format": "uint32",
           "minimum": 0
+        },
+        "target_form": {
+          "description": "Resolved list target shape, absent for scalar label populations.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TargetColumnForm"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false,
@@ -12060,44 +14386,6 @@
             "native"
           ]
         }
-      ]
-    },
-    "FrameNativeColumnRef": {
-      "description": "Exact immutable source-column ownership, resolved by the core graph.\nLogical schema aliases are never interpreted by the native converter.",
-      "type": "object",
-      "properties": {
-        "source": {
-          "$ref": "#/$defs/Relation"
-        },
-        "column": {
-          "type": "string"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "source",
-        "column"
-      ]
-    },
-    "FrameBatchRange": {
-      "description": "Ordered offsets in the task's prediction half, independent of ids.",
-      "type": "object",
-      "properties": {
-        "start": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
-        },
-        "stop": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "start",
-        "stop"
       ]
     },
     "PreparedFrameLabelBatch": {
@@ -13221,6 +15509,57 @@
           "properties": {
             "value": {
               "type": "string",
+              "const": "label_inputs"
+            },
+            "data": {
+              "$ref": "#/$defs/PreparedLabelInputs"
+            }
+          },
+          "required": [
+            "value",
+            "data"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "string",
+              "const": "target_column"
+            },
+            "data": {
+              "$ref": "#/$defs/PreparedTargetColumn"
+            }
+          },
+          "required": [
+            "value",
+            "data"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "string",
+              "const": "label_groups"
+            },
+            "data": {
+              "$ref": "#/$defs/PreparedFrameLabelGroups"
+            }
+          },
+          "required": [
+            "value",
+            "data"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "string",
               "const": "label_batch"
             },
             "data": {
@@ -13478,51 +15817,6 @@
         "code",
         "sentence",
         "message"
-      ]
-    },
-    "ErrorKind": {
-      "description": "What kind of problem an error is.",
-      "oneOf": [
-        {
-          "description": "The caller's request is not one the core accepts.",
-          "type": "string",
-          "const": "invalid_request"
-        },
-        {
-          "description": "A valid request the core does not support, such as a type outside\nthe closed set.",
-          "type": "string",
-          "const": "unsupported"
-        },
-        {
-          "description": "Something the request names does not exist.",
-          "type": "string",
-          "const": "not_found"
-        },
-        {
-          "description": "The data source or its driver failed.",
-          "type": "string",
-          "const": "data_source"
-        },
-        {
-          "description": "The model endpoint or its transport failed.",
-          "type": "string",
-          "const": "model_endpoint"
-        },
-        {
-          "description": "The run was cancelled.",
-          "type": "string",
-          "const": "cancelled"
-        },
-        {
-          "description": "The host broke the run protocol: a call in the wrong state, a reply\nthe run did not ask for, a malformed control message.",
-          "type": "string",
-          "const": "protocol"
-        },
-        {
-          "description": "A defect in the core, a contained panic included.",
-          "type": "string",
-          "const": "internal"
-        }
       ]
     },
     "ErrorCode": {
@@ -13842,221 +16136,6 @@
         "payloads"
       ]
     },
-    "Materialized": {
-      "description": "A materialized request, held by the host and handed back to `predict`.",
-      "type": "object",
-      "properties": {
-        "state": {
-          "$ref": "#/$defs/RequestState"
-        },
-        "query": {
-          "description": "What the core resolved of the query it gathered (contract v26,\nT2.18), which a host reads instead of resolving the query itself:\nthe core resolves a query naming any column (KO2-36), which a host's\nown validator may not. Absent from a core that does not say.",
-          "anyOf": [
-            {
-              "$ref": "#/$defs/QueryFacts"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "state"
-      ]
-    },
-    "RequestState": {
-      "description": "What `predict` needs of a materialized request: state that outlives the\nrun that made it. `materialize` answers it; the host takes its\nattachments when that run finishes, holds them, and attaches them again\nto the `start` of the `predict` run, under ids it picks for that\nmessage. A version other than [`REQUEST_STATE_VERSION`] is refused by\nname before anything of the state is read.",
-      "type": "object",
-      "properties": {
-        "version": {
-          "description": "The version of this state's format, independent of the contract's.",
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0
-        },
-        "payload": {
-          "description": "A bytes attachment of the request's payload as JSON, as\n`materialize` wrote it or as the host holds it since.",
-          "$ref": "#/$defs/AttachmentId"
-        },
-        "query": {
-          "description": "The query text: a bytes attachment of a JSON string.",
-          "$ref": "#/$defs/AttachmentId"
-        },
-        "forecast": {
-          "description": "A forecast (`FORECAST n TIMEFRAMES`), which the core asks as one\nregression per step, the window moved a span along at each (T1.36\nfix 21): `payload` and `query` are step 1's, and this holds every\nlater step's, in order, empty for a forecast of one step. Absent for\nany other request. `predict` sends each step's payload and gives the\nanswers back as one, each row carrying its step.",
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "$ref": "#/$defs/ForecastStep"
-          }
-        },
-        "batches": {
-          "description": "A request of more rows than one model call scores, asked in several\ncalls (`main`'s multi-call `predict`, design choice 1, T2.8c):\n`payload` is the first call's, and this holds every later call's, in\norder, each scoring the rows after the last; `predict` numbers each\ncall's rows on from where the previous call's ended and gives the\nanswers back as one. Absent for a request of one call; a forecast or\nranking, already one call per step or candidate, is never batched.",
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "$ref": "#/$defs/RequestBatch"
-          }
-        },
-        "ranking": {
-          "description": "A ranking (`RANK TOP k`), which the core asks as one binary question\nper distinct candidate, whether the entity reaches it in the window\n(the client's `_per_candidate`, contract v27, optional, T2.8):\n`payload` and `query` are the first candidate's question, and this\nholds every later one's, in order. Absent for any other request.\n`predict` asks each and gives the answers back as one ranking.",
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Ranking"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "version",
-        "payload",
-        "query"
-      ]
-    },
-    "ForecastStep": {
-      "description": "One later step of a forecast's request state: its number, from 2, and\nits payload and query, as [`RequestState`]'s.",
-      "type": "object",
-      "properties": {
-        "step": {
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0
-        },
-        "payload": {
-          "$ref": "#/$defs/AttachmentId"
-        },
-        "query": {
-          "$ref": "#/$defs/AttachmentId"
-        },
-        "request_id": {
-          "description": "The id this step's call carries in its `metadata.request_id`, which\nthe host draws for each step as it draws [`Predict::request_id`] for\nstep 1's, one per call as the reference's client draws them (T1.36\nfix 24). `materialize` writes none; `predict` refuses a later step\nwithout one (`INVALID_REQUEST`).",
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "step",
-        "payload",
-        "query"
-      ]
-    },
-    "RequestBatch": {
-      "description": "One later call of a request asked in several ([`RequestState::batches`]).",
-      "type": "object",
-      "properties": {
-        "payload": {
-          "description": "A bytes attachment of this call's payload as JSON, as\n[`RequestState::payload`].",
-          "$ref": "#/$defs/AttachmentId"
-        },
-        "rows": {
-          "description": "The rows this call scores.",
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
-        },
-        "request_id": {
-          "description": "The id this call carries in its `metadata.request_id`, which the\nhost draws for each call, as [`ForecastStep::request_id`];\n`materialize` writes none.",
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "payload",
-        "rows"
-      ]
-    },
-    "Ranking": {
-      "description": "A ranking's request state ([`RequestState::ranking`]).",
-      "type": "object",
-      "properties": {
-        "top_k": {
-          "description": "How many candidates each row keeps, best first (the call's `top_k`,\nelse the query's `TOP k`); none keeps every candidate scored.",
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint32",
-          "minimum": 0
-        },
-        "candidate": {
-          "description": "The first candidate's position among the candidates `materialize`\nwas given (0, but where the host held the first a repeat); its\nquestion is the state's own. Each later part's position is past it,\nin increasing order, or `predict` refuses the state.",
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0
-        },
-        "value": {
-          "description": "The first candidate as the result's `rankings` names it, the JSON\ntext of its value.",
-          "type": "string"
-        },
-        "parts": {
-          "description": "The question of each later candidate, in the order the candidates\nwere named.",
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/RankingPart"
-          }
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "candidate",
-        "value",
-        "parts"
-      ]
-    },
-    "RankingPart": {
-      "description": "One later candidate's question of a ranking's request state.",
-      "type": "object",
-      "properties": {
-        "candidate": {
-          "description": "The candidate this question asks after: its position among the\ncandidates `materialize` was given, its first where it was named\nmore than once.",
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0
-        },
-        "value": {
-          "description": "The candidate as the result's `rankings` names it: the JSON text of\nits value.",
-          "type": "string"
-        },
-        "payload": {
-          "description": "A bytes attachment of this question's payload as JSON, as\n[`RequestState::payload`].",
-          "$ref": "#/$defs/AttachmentId"
-        },
-        "query": {
-          "description": "This question's text: a bytes attachment of a JSON string.",
-          "$ref": "#/$defs/AttachmentId"
-        },
-        "request_id": {
-          "description": "The id this question's call carries, as [`ForecastStep::request_id`];\n`materialize` writes none, and `predict` refuses a later candidate's\nquestion without one (`INVALID_REQUEST`).",
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "candidate",
-        "value",
-        "payload",
-        "query"
-      ]
-    },
     "NativePayload": {
       "description": "Independently owned complete logical value and its complete encoded body.\nCore validates their identity and derives the model bytes and inspection\nfrom the same logical value before using either attachment.",
       "type": "object",
@@ -14144,9 +16223,6 @@
           ]
         }
       ]
-    },
-    "CallValues": {
-      "type": "object"
     },
     "GivenCandidate": {
       "description": "One candidate of a ranking as a host gives it (`Materialize.candidates`,\nT2.8), each in one of these forms:\n\n- `{\"value\": <scalar>}`: the host's value as the contract's scalar of\n  its own type, a missing value `null`.\n- `{\"integer\": \"<digits>\"}`: an integer wider than an integer scalar\n  holds, by its digits (`-` before a negative one).\n- `{\"decimal\": \"<digits>\"}`: an exact decimal of any precision, by its\n  fixed-point digits (`-12.50`), its scale the digits after the point.\n- `{\"spelled\": \"<text>\"}`: a value of a type no scalar holds, by the\n  text the reference writes into its question (in Python, `str` of it);\n  it is no text candidate, and the core holds it equal to no other.\n- `{\"typed\": {\"text\": \"<text>\", \"type\": \"<name>\"}}`: a value of a type\n  no scalar holds, written into its question by its text as `spelled`\n  is, with the name of the kind of value it is (`date`, `datetime` for a\n  timestamp with no zone, `datetime_zoned` for one with one, `time`).\n  Two of one kind and one text are one candidate; a host whose language\n  holds others equal (two zones of one instant) says so with `repeat`\n  (T2.14b).\n- `repeat`: a value the host's own language holds equal to one given\n  before it, left out as the reference's `dict.fromkeys` leaves it out.\n  A host whose candidates are all scalars sends none, the core keeping\n  each distinct value once by its own equality.\n- `unreadable`: a value the host cannot look up by value (in Python,\n  one it cannot hash), which names no row and which the core refuses by\n  name, as the reference fails on it.",
@@ -16188,6 +18264,23 @@
             "op",
             "input"
           ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "input": {
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "op": {
+              "type": "string",
+              "const": "prepare_materialize"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "input"
+          ]
         }
       ]
     },
@@ -16257,376 +18350,6 @@
         "TABULAR",
         "TIMESERIES",
         "ANOMALY"
-      ]
-    },
-    "ProviderChoice": {
-      "description": "The composition root's choice: a built-in SQL provider by dialect, which\ncompiles each request to SQL the host runs, or a host provider that\nanswers the typed requests itself.\n\nA SQL provider's `namespace` (contract v28) is where the source's tables\nare, as the source was given it: the name parts before a table's own,\noutermost first, a Postgres source's schema (`PostgresSource(schema=...)`),\neach `null` where the source names none, which is then the connection's\ncurrent one. Every relation of one part a request names is read under\nit, and the source's tables are listed in it, as the reference\nqualifies each read by the schema it was given (`PostgresTable`). Left\nout, empty or all `null`, the connection's current one, as before v28.\nA dialect takes as many parts as a relation's parts before its table's,\nand refuses by name more, or a part given inside one left `null`.\n\nA SQL provider's `view` (contract v28, T3.27) names the semantic model\nthe source is read through, a Databricks metric view or a Snowflake\nsemantic view by its dialect, as the caller named it, with whether the\ncaller trusts its expressions: its logical tables are then the\nrelations of one part a request names, each the logical table's name.\nLeft out, the source's own tables, as before.",
-      "oneOf": [
-        {
-          "description": "Frames already admitted for this describe call. This is an internal\ncore source, never a host provider or a SQL dialect.",
-          "type": "object",
-          "properties": {
-            "manifest": {
-              "description": "Bytes containing [`crate::frames::FrameManifest`].",
-              "$ref": "#/$defs/AttachmentId"
-            },
-            "provider": {
-              "type": "string",
-              "const": "frames"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "provider",
-            "manifest"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "dialect": {
-              "$ref": "#/$defs/Dialect"
-            },
-            "namespace": {
-              "type": "array",
-              "items": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              }
-            },
-            "view": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/ViewChoice"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "timestamp_encoding": {
-              "description": "A host's required lossless transport for timestamps that its\ndriver cannot preserve through native getters. The data layer\nowns the SQL projection; the host performs only the conversion\nexplicitly named by the resulting plan.",
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/SqlTimestampEncoding"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "provider": {
-              "type": "string",
-              "const": "sql"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "provider",
-            "dialect"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "capabilities": {
-              "$ref": "#/$defs/ProviderCapabilities"
-            },
-            "provider": {
-              "type": "string",
-              "const": "host"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "provider",
-            "capabilities"
-          ]
-        }
-      ]
-    },
-    "Dialect": {
-      "description": "A built-in SQL dialect, by the name the host gives it. The contract\nnames no dialect and knows none (decision E54): which names a build\nserves is the data layer's, which refuses one it does not serve before\nthe run exists ([`DataLayer::capabilities`]).",
-      "type": "string"
-    },
-    "ViewChoice": {
-      "description": "The semantic model a SQL provider's source is read through\n([`ProviderChoice::Sql`]'s `view`): its name as the caller gave it, and\nwhether the caller trusts whoever authored it to run its expressions\n(`semantic_model(name, trust_expressions=...)`).",
-      "type": "object",
-      "properties": {
-        "name": {
-          "type": "string"
-        },
-        "trust_expressions": {
-          "type": "boolean"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "name",
-        "trust_expressions"
-      ]
-    },
-    "SqlTimestampEncoding": {
-      "description": "A driver's requested lossless SQL timestamp transport.",
-      "oneOf": [
-        {
-          "description": "Timestamps as signed microseconds: timezone-free wall fields from\nthe epoch's wall fields, or a zoned timestamp's physical instant\nfrom the Unix epoch. The core selects the source kind from actual\nwarehouse result metadata, independent of the session or JVM zone.",
-          "type": "string",
-          "const": "microseconds"
-        }
-      ]
-    },
-    "ProviderCapabilities": {
-      "description": "What a provider answers: a host provider declares it, and the data\nlayer gives it for each SQL dialect it renders.",
-      "type": "object",
-      "properties": {
-        "optional": {
-          "type": "array",
-          "uniqueItems": true,
-          "items": {
-            "$ref": "#/$defs/OptionalRequest"
-          }
-        },
-        "max_keys_per_request": {
-          "description": "The most keys one request may carry; `None` is no limit.",
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint64",
-          "minimum": 0
-        },
-        "sampling": {
-          "$ref": "#/$defs/Determinism"
-        },
-        "max_seed": {
-          "description": "The largest seed the provider samples with (register entry RS-7),\nwhich every provider declares: there is no \"any seed\" default\n(design choice 1). The core refuses a sample with a larger seed,\n`INVALID_REQUEST` naming the seed, before the sample is planned;\nwhich seeds a provider takes is the provider's to declare, never a\nname the core matches.",
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
-        },
-        "text_times": {
-          "description": "How the source reads a time it stores as text (register DT-7);\n`None` declares no reading, and the core refuses to read text times\nfrom it (`UNSUPPORTED_REQUEST`, rule `text_times`).",
-          "anyOf": [
-            {
-              "$ref": "#/$defs/TextTimes"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "null_order": {
-          "description": "Where the source puts a null when it orders (`NullOrder`); `None`\ndeclares none, and the core refuses to ask it for rows in an order\n(`UNSUPPORTED_REQUEST`, rule `null_order`).",
-          "anyOf": [
-            {
-              "$ref": "#/$defs/NullOrder"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "index_advice": {
-          "description": "Which indexes serve the sampler's reads (`IndexAdvice`); `None`\ndeclares no meaningful index advice: the core neither reads the\nsource's indexes nor warns of missing ones.",
-          "anyOf": [
-            {
-              "$ref": "#/$defs/IndexAdvice"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "fallback": {
-          "description": "The limits within which the core answers an optional request the\nprovider does not declare itself, in memory, from the rows a `scan`\nreads (design choice 1, the in-memory fallback, T2.6); left out,\nthe provider declares none, and such a request is refused,\n`UNSUPPORTED_REQUEST`, as before. A declared request that fails is\nthe provider's error either way, never answered by the fallback.",
-          "anyOf": [
-            {
-              "$ref": "#/$defs/FallbackLimits"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "derived_relations": {
-          "description": "The provider reads derived relations ([`Relation::columns`],\n[`Relation::filter`]; contract v28). Left out, `false`: the core\nrefuses a derived relation for the provider by name (rule\n[`DERIVED_RULE`]).",
-          "type": "boolean"
-        },
-        "sample_rows": {
-          "description": "The provider sizes an entity sample by the table's rows, as the\nreference's warehouse samplers do (a sampled percentage of the\nrows): the core counts each sampled table's rows first and names\nthe count on the sample ([`DataRequest::SampleEntities`]'s `rows`;\ncontract v28). Left out, `false`.",
-          "type": "boolean"
-        },
-        "neighbor_lookback": {
-          "description": "The provider's neighbor reads by a foreign key over a table with a\ntime column look back no further than the reference's warehouse\nsamplers do (`_by_fkey`): from each seed's anchor back by five\ntimes the rows asked over the table's rate of rows per referenced\nrow and second, at most five years, the seconds rounded up. The\ncore counts the table's and the referenced table's rows, reads the\ntable's time bounds, and bounds each such read from below by that\nlook-back, exclusive (contract v28). Left out, `false`: no lower\nbound.",
-          "type": "boolean"
-        },
-        "keys_optional": {
-          "description": "The provider's catalog may fail to read a table's declared keys and\nforeign keys where it reads its columns (Unity Catalog's\n`table_constraints` on an older runtime or without the privilege):\nthe core then reads a table's columns and its keys apart, and reads\na failed key or foreign-key read as no declared keys, as the\nreference's Databricks reader carries on without them\n(`DatabricksTable`'s key reads; contract v28). Left out, `false`: a\nfailed key read fails the description.",
-          "type": "boolean"
-        },
-        "key_enforcement": {
-          "description": "The catalog can answer `key_enforcement` for a table's namespace.\nThis optional fact can skip counting an enforced declared primary\nkey; it never certifies uniqueness of values exposed by a lookup.",
-          "type": "boolean"
-        },
-        "opaque_vendor": {
-          "description": "The vendor whose opaque Arrow extension types (`arrow.opaque`, its\nmetadata's `vendor_name`) the provider hands over: the host layer\nreads an opaque column by that vendor's layout only when the column\nnames this vendor (register P1B-43). Left out, none, and no opaque\ncolumn is read as anything but its storage (contract v28, carried\nrow P2-MID2-2: before it, a flag of the data layer's).",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "compares_stored_times": {
-          "description": "The provider compares a window's bounds with the stored text of the\nwindow's column, as a source with no time type does (SQLite's\nreference spells each bound as one stored value is spelled,\n`_time_spelling`): the core then reads one non-null value of a\ntable's time column (a `scan` of one row) before that table's first\nwindowed read in a run, and names it on each bound's seed column\n([`SEED_STORED_TIME`]). Left out, `false` (P2-MID2-2).",
-          "type": "boolean"
-        },
-        "samples_by_key_dtype": {
-          "description": "The provider orders a seeded sample by the key's data type, as\nSQLite's does (it hashes an integer key and the `rowid` otherwise):\nthe core then names the schema's type of a key of one column on each\n`sample_entities` (`key_dtype`). Left out, `false` (P2-MID2-2).",
-          "type": "boolean"
-        },
-        "reads_nan_as_missing": {
-          "description": "The reference reads the provider's rows into a frame of NumPy-backed\nfloats, where a NaN is missing and `-0.0` is `0.0` (Postgres's rows,\nread as Python objects); otherwise as Arrow-backed pandas does, where\na NaN is a value and the two zeros are two values (T2.12). Left out,\n`false` (P2-MID2-2).",
-          "type": "boolean"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "optional",
-        "sampling",
-        "max_seed"
-      ]
-    },
-    "OptionalRequest": {
-      "description": "The optional requests a provider may declare.",
-      "type": "string",
-      "enum": [
-        "preview",
-        "count_rows",
-        "key_counts",
-        "time_bounds",
-        "column_ranges",
-        "repeated_key",
-        "sample_entities",
-        "neighbors",
-        "lookup"
-      ]
-    },
-    "Determinism": {
-      "description": "Whether a provider's seeded sampling repeats.",
-      "oneOf": [
-        {
-          "type": "string",
-          "enum": [
-            "unseeded"
-          ]
-        },
-        {
-          "description": "The same seed gives the same rows on this provider.",
-          "type": "string",
-          "const": "seeded_stable"
-        }
-      ]
-    },
-    "TextTimes": {
-      "description": "How a provider's source reads a time it stores as text: which of the\nreference's two readings the core applies to the text it fetches from\nthe provider (register DT-7). The provider declares it; the core picks\nits reader by it, never by a dialect.",
-      "oneOf": [
-        {
-          "description": "Each value on its own, as the reference's engine reads a SQL\nsource's text time column (`to_datetime(values, unit='ns')`).",
-          "type": "string",
-          "const": "value_by_value"
-        },
-        {
-          "description": "The column by the client's rules (`date-rules.md`, \"The client\nrules\"), as the reference reads a frame's time column.",
-          "type": "string",
-          "const": "client_rules"
-        }
-      ]
-    },
-    "NullOrder": {
-      "description": "Where a provider's source puts a null among the values it orders, in\neither direction: the order the reference's neighbor reads get from the\nsource, which writes no null order of its own (`_neighbor_order_by`).\nThe provider declares it; the core writes it into the tie-break it asks\nfor ([`TieTerm::nulls_last`]), never by a dialect. A source whose order\ndepends on the direction is not declarable yet: the dialect that needs\none adds it under a new contract version.",
-      "oneOf": [
-        {
-          "description": "Nulls first, ascending or descending.",
-          "type": "string",
-          "const": "first"
-        },
-        {
-          "description": "Nulls last, ascending or descending.",
-          "type": "string",
-          "const": "last"
-        }
-      ]
-    },
-    "IndexAdvice": {
-      "description": "Which of the source's indexes the reference's sampler counts as serving\na read on a key or foreign key, for its warning of the indexes it would\nuse and finds missing. The provider declares it; the core reads the\nsource's indexes, and warns, only when it is declared.",
-      "oneOf": [
-        {
-          "description": "An index over exactly that one column, its coverage resolved; one\nover several columns, or one the reader cannot resolve, serves none.",
-          "type": "string",
-          "const": "single_column"
-        },
-        {
-          "description": "The reference's SQLite sampler's: each table's indexes read one\ntable at a time, each index's columns by its name; a read wants an\nindex on the key, and on each foreign key with its table's time\ncolumn, and any index whose first column is the read's first serves\nit.",
-          "type": "string",
-          "const": "leading_column"
-        }
-      ]
-    },
-    "FallbackLimits": {
-      "description": "The in-memory fallback's limits, as a provider declares them\n([`ProviderCapabilities::fallback`]): past either, the fallback fails\nby name rather than read on.",
-      "type": "object",
-      "properties": {
-        "max_rows": {
-          "description": "The most rows the fallback reads to answer one request.",
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
-        },
-        "max_bytes": {
-          "description": "The most bytes of Arrow data it holds to answer one request.",
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "max_rows",
-        "max_bytes"
-      ]
-    },
-    "SamplerState": {
-      "description": "What a materializer's runs have read of its source, so a later run\nskips a read the reference's sampler makes once (decision E52): the\ncore holds no state across runs. A `materialize` run leaves it, done or\nfailed, and the host takes it after the run ends (a `sampler_state`\nmessage), keeps it on its materializer as it is, opaque, and hands it\nback with that materializer's next `materialize`.",
-      "type": "object",
-      "properties": {
-        "version": {
-          "description": "The version of this state's format, independent of the contract's.",
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0
-        },
-        "memo": {
-          "description": "A bytes attachment of a [`SamplerMemo`] as JSON.",
-          "$ref": "#/$defs/AttachmentId"
-        },
-        "frame_checkpoint": {
-          "description": "The numeric frame materializer's owned snapshot and continuing stream.\nAbsent for SQL samplers; metadata and Arrow have distinct ownership.",
-          "anyOf": [
-            {
-              "$ref": "#/$defs/FrameCheckpoint"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "version",
-        "memo"
       ]
     },
     "HeldRequest": {
@@ -16778,12 +18501,6 @@
         "parts"
       ]
     },
-    "ReplyId": {
-      "description": "Names one fetch or model call within a run, so its reply can be matched.",
-      "type": "integer",
-      "format": "uint32",
-      "minimum": 0
-    },
     "FetchOutcome": {
       "oneOf": [
         {
@@ -16827,49 +18544,6 @@
             "error"
           ]
         }
-      ]
-    },
-    "ProviderError": {
-      "description": "A provider's failure: its kind, whether trying again may succeed, and\nthe driver's own SQLSTATE, vendor code and error class, and its message\nas a diagnostic for the data layer alone. What the failure means is the\ndata layer's to say ([`DataLayer::failure`]), from these facts; the\nmessage is never echoed into an error the core gives, since drivers\nquote values there (decision H17).",
-      "type": "object",
-      "properties": {
-        "kind": {
-          "$ref": "#/$defs/ErrorKind"
-        },
-        "retryable": {
-          "type": "boolean"
-        },
-        "sqlstate": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "vendor_code": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "error_class": {
-          "description": "The driver's error class, a name of its closed list such as\nDatabricks's `INSUFFICIENT_PERMISSIONS` (contract v28, T3.27), read\nas the old client reads it (`error_class`: the driver's own answer,\nelse the bracketed name its message opens with). Left out, none.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "driver_message": {
-          "description": "The driver's message, passed through by the host unread (contract\nv28, T3.6): an internal diagnostic only [`DataLayer::failure`] reads,\nwhere the old client reads a failure by its text (Snowflake's\n\"does not exist\", `SNOW/table.py:34-45`), and never echoed into a\npublic error (decision H17). Left out, none.",
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "kind",
-        "retryable"
       ]
     },
     "ModelOutcome": {
@@ -17011,6 +18685,28 @@
           "anyOf": [
             {
               "$ref": "#/$defs/FetchPurpose"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "partition": {
+          "description": "Complete issued-plan partition of one logical read, when requested\nby a consumer that constructs an actual whole native source column.\nIndependent reads of the same relation have different first IDs.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FetchPartition"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "lookup": {
+          "description": "Counted task lookup data, before native business-column construction.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PreparedLookupRows"
             },
             {
               "type": "null"
@@ -18006,7 +19702,41 @@
           "description": "A read of a table as it stands at this `materialize`.",
           "type": "string",
           "const": "locate"
+        },
+        {
+          "description": "Schema-only facts used to select the actual data representation.",
+          "type": "string",
+          "const": "describe_result"
+        },
+        {
+          "description": "Actual source rows whose original native column construction is\ncompleted through the finite provider-backed materialization port.",
+          "type": "string",
+          "const": "source_rows"
         }
+      ]
+    },
+    "FetchPartition": {
+      "type": "object",
+      "properties": {
+        "first": {
+          "$ref": "#/$defs/ReplyId"
+        },
+        "ordinal": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "parts": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "first",
+        "ordinal",
+        "parts"
       ]
     },
     "Endpoint": {
@@ -18257,6 +19987,23 @@
             "op": {
               "type": "string",
               "const": "prepare_frames"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "op": {
+              "type": "string",
+              "const": "prepare_materialize"
             }
           },
           "additionalProperties": false,

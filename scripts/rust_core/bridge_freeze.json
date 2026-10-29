@@ -18,7 +18,7 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py": {
       "<module>": {
-        "fingerprint": "067965988a80ede5f2bc3732a824dafedbd91742ba8e5be596d2401039459cc9"
+        "fingerprint": "d76b43db580e504d9527c5d061429a32115a2e8ba0fe78091f7ebf9e49fe2e46"
       },
       "_anchor": {
         "fingerprint": "8845c755285774562396f76aecab772e0dc002483f9f9ada1951406a3ebe523f"
@@ -42,7 +42,7 @@
         "fingerprint": "32485edb4f50fd57ef9c965f6d5eebcfdb8b2f520cb1c260b9cd8596a91390d5"
       },
       "gather": {
-        "fingerprint": "24e18f34c086014b2035bd07d1b1f7df03680e61785e0b320c98cc0739655fd8"
+        "fingerprint": "e3ca38471dd8b1753ffe3561664bc9965bbba773796add9dedf7d537cefbe15e"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py": {
@@ -325,27 +325,39 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py": {
       "<module>": {
-        "fingerprint": "c9d86a4f0f9663e0207aa985419d54d449a09112086936ea7965c0f6fb39c5fc"
+        "fingerprint": "f4ba71720733a690c68b3d8ee0b4b69ec9341bde66109c4f5a28a3b6352a67b0"
       },
       "PostgresProvider.__call__": {
-        "fingerprint": "0aa28c4347a8faf44f42e8e6e264171dafe8a8dc8ce8dd2ddde613f560f1bfef"
+        "fingerprint": "4a7a9c4466559a1ef839570af2d4d83800fd7358ede7455b9901c18f326edc35"
       },
       "PostgresProvider.__init__": {
         "fingerprint": "3e278560d028fd3cf21e43d5d3da95154b0daf3e1dc8cca7683d4ca59c9f97f4"
+      },
+      "PostgresProvider.source_rows": {
+        "fingerprint": "1026170a2bd2ab6ee6d95eb4ea4d92e4b3114a24bed8ac0d14862dfd5d0b5fb0"
+      },
+      "_ColumnDescription.name": {
+        "fingerprint": "57924436a09a1a0195d6dcf559924c4328a206d44ed338491709da98305a5846"
+      },
+      "_ColumnDescription.precision": {
+        "fingerprint": "649bb427bd30fc4384e856c0f925a99f1579966310f93d41289405b03734c411"
+      },
+      "_ColumnDescription.scale": {
+        "fingerprint": "728dfb6a44f3991ef7aa663ba37e08244d4ab9f8583e8184b20042ec227b487a"
+      },
+      "_ColumnDescription.type_code": {
+        "fingerprint": "68eb6b901f78cb19f5773ca71338cf581326e0c752fe750036368d5c4a6a7bfb"
       },
       "_own_transaction": {
         "fingerprint": "223bfb1d59011dcd424a1deafdb3a04f4dccdb0546daccf2ab5b981647467684"
       },
       "_psycopg_text": {
         "fingerprint": "0bca2858b29ddcf9c6f04be6ed0ce8a5fc119d122f171022b31bb8358319f828"
-      },
-      "_result": {
-        "fingerprint": "e661aeed8eb9d870a929ed2eebe1390316ced0294ee58af8177ea74cb37418bd"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres_arrow.py": {
       "<module>": {
-        "fingerprint": "3a398505d3992ea5a2496ef9bb010cf4867ced751d9d548eb37fc43c20b8f8d7"
+        "fingerprint": "00371e7413cae79e95c0ddbd1ebc37c52dac43ae5b769a24cc48c3a8cc2a6439"
       },
       "_array": {
         "fingerprint": "8373cfcd4c2046e8068c0336c4d292064110aa7cf69989a24bd449f2323ed33d"
@@ -384,7 +396,7 @@
         "fingerprint": "cea6477af1ca7a4d35ac934e1ab6c9b6dce11e130a2f1f4d01dfc3c6ab5b5241"
       },
       "rows_arrow": {
-        "fingerprint": "768c36d7f1b2d08e8a0db0eae8ecd22ac5079005fd333baf992634895173c141"
+        "fingerprint": "07356e433eccc63d844ff23dd5caa5508cb587b84c53509843a42e47652a39f3"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/client.py": {
