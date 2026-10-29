@@ -2717,10 +2717,16 @@ def _core_payload(
             _lossless(_capture_check().masked_request(item, report.paths))
             for item in reference['public']['payloads']
         ]
+        # Existing approved fields describe one actual body or the complete
+        # ordered calls product. Their semantic vocabulary predates the
+        # current call journal; raw conservation above still uses that journal.
+        semantic_path = (
+            'core.predicted.calls' if len(bodies) > 1 else 'core.predicted.body'
+        )
         found = _path_of(
             compared,
             wanted,
-            named,
+            semantic_path,
             report.more_exact.get((case['id'], who), ()),
         )
         if found:
