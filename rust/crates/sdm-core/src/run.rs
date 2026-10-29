@@ -1093,6 +1093,7 @@ fn poll_projection(
     projected: &mut ProjectionAsk,
     budget: &mut Option<Box<Budget>>,
     raw: bool,
+    purpose: Option<FetchPurpose>,
     context: &mut Context<'_>,
 ) -> Poll<Reply> {
     if projected.actual.is_none() {
@@ -1127,6 +1128,9 @@ fn poll_projection(
             actual.bind_lookup(Arc::clone(lookup));
         }
         projected.actual = Some(Box::new(actual));
+    }
+    if let (Some(actual), Some(purpose)) = (projected.actual.as_mut(), purpose) {
+        actual.set_purpose(purpose);
     }
     match projected.actual.as_mut() {
         Some(actual) => Pin::new(actual.as_mut()).poll(context),
@@ -1260,7 +1264,7 @@ impl Future for Ask {
             if projected.lookup.is_none() {
                 projected.lookup = this.lookup.take();
             }
-            return poll_projection(projected, &mut this.budget, this.raw, context);
+            return poll_projection(projected, &mut this.budget, this.raw, this.purpose, context);
         }
         // The fallback's own asks, and a chunked request's fetches, lock the
         // run's state as they are polled.
