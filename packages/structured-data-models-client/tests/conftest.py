@@ -10,7 +10,8 @@ that nothing is downloaded and no GPU is needed.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
+from typing import Any
 
 import pandas as pd
 import pytest
@@ -45,9 +46,12 @@ def tabular_request() -> Callable[..., Request]:
     """Build a single-table request: 20 labelled context rows, ``rows`` to score.
 
     A classification target alternates 0/1; a regression target is a float.
+    ``keyed=False`` drops the ``row_id`` column, so the rows have no key.
     """
 
-    def build(rows: int = 1, task: str = 'classification') -> Request:
+    def build(
+        rows: int = 1, task: str = 'classification', keyed: bool = True
+    ) -> Request:
         labels = [
             i % 2 if task == 'classification' else float(i) for i in range(20)
         ]
@@ -64,8 +68,56 @@ def tabular_request() -> Callable[..., Request]:
                 'age': [33.0 + i for i in range(rows)],
             }
         )
+        if not keyed:
+            context = context.drop(columns='row_id')
+            predict = predict.drop(columns='row_id')
         return Request(
             context=context, predict=predict, target='churn', task=task
         )
+
+    return build
+
+
+@pytest.fixture
+def gradient_explanation() -> Callable[..., dict[str, Any]]:
+    """Build one prediction record's ``explanation``, as a NIM sends it.
+
+    The ``sdm_gradient_v1`` shape of the NIM user guides: ``row`` is the
+    record's position in the predict table, ``gradients`` its own
+    ``[output][column]`` (sent as ``[output][row][column]`` with one row), and
+    ``related`` maps a table to ``(row_indices, columns, gradients)`` with
+    gradients ``[output][row][column]``.
+    """
+
+    def build(
+        *,
+        outputs: Sequence[Mapping[str, Any]],
+        row: int,
+        columns: Sequence[str],
+        gradients: Sequence[Sequence[float]],
+        related: Mapping[str, tuple[list[int], list[str], list]] | None = None,
+    ) -> dict[str, Any]:
+        return {
+            'format': 'sdm_gradient_v1',
+            'details': {
+                'input_space': 'preprocessed_numerical',
+                'outputs': [dict(output) for output in outputs],
+                'instance_table': {
+                    'row_indices': [row],
+                    'columns': list(columns),
+                    'gradients': [[list(by_column)] for by_column in gradients],
+                },
+                'related_tables': {
+                    name: {
+                        'row_indices': list(indices),
+                        'columns': list(names),
+                        'gradients': values,
+                    }
+                    for name, (indices, names, values) in (
+                        related or {}
+                    ).items()
+                },
+            },
+        }
 
     return build
