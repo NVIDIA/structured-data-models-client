@@ -1147,7 +1147,7 @@ def test_public_boxed_time_native_repr_keeps_surrogates_and_actual_failure(
         assert len(actual) == len(notices)
         assert all(
             '(for example [\ud800])' in notice['message']
-            and notice['category'] == 'builtins.UserWarning'
+            and notice['category'] == 'sdm_client._rust.errors.UserWarning'
             and notice['stage'] == 'materialize'
             for notice in actual
         )
