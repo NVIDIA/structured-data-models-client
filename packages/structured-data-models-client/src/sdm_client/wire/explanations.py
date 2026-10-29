@@ -20,10 +20,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
-from sdm_client.errors import StructuredDataError
 from sdm_client.result import Explanations
-
-GRADIENT_FORMAT = 'sdm_gradient_v1'
 
 #: Reads one record's ``related_tables`` into the entry's ``related``, and
 #: says how many links each of those rows is from the entity.
@@ -42,10 +39,6 @@ def explanations_of(
     frame shows: the ``id``, or the ``row_index`` when the rows carry none.
     ``related`` is given for a model that reads related tables; without it an
     entry has no ``related`` at all, rather than an empty one.
-
-    Raises:
-        StructuredDataError: If a record's explanation is in a format this
-            client cannot read.
     """
     explained = [item for item in items if item.explanation]
     if not explained:
@@ -55,7 +48,7 @@ def explanations_of(
     hops: dict[Any, dict[str, list[int | None]]] = {}
     for item in explained:
         key = item.id if by_id else item.row_index
-        details = _details_of(item.explanation)
+        details = item.explanation.get('details') or {}
         instance = details.get('instance_table') or {}
         entry: dict[str, Any] = {
             'outputs': list(details.get('outputs') or []),
@@ -78,14 +71,3 @@ def explanations_of(
         hops=hops,
     )
 
-
-def _details_of(explanation: Mapping[str, Any]) -> Mapping[str, Any]:
-    r"""The body of an explanation, in the one format this client reads."""
-    given = explanation.get('format')
-    if given != GRADIENT_FORMAT:
-        raise StructuredDataError(
-            f'the response carries an explanation in format {given!r}, and '
-            f'this client reads {GRADIENT_FORMAT!r} only',
-            code='INVALID_RESPONSE',
-        )
-    return explanation.get('details') or {}
