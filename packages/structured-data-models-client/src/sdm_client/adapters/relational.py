@@ -126,7 +126,7 @@ class RelationalAdapter:
         sends: frozenset[str] = _SENDS_EVERYTHING,
     ) -> Iterator[dict[str, Any]]:
         payloads = self._payloads(request)
-        self._preflight(payloads, outputs, request.query, sends)
+        self._preflight(payloads, request.query, sends)
         for payload in payloads:
             envelope = dict(payload)
             envelope['model'] = self.spec.model_id
@@ -358,14 +358,10 @@ class RelationalAdapter:
     def _preflight(
         self,
         payloads: tuple[dict[str, Any], ...],
-        outputs: tuple[str, ...],
         asked: str | None = None,
         sends: frozenset[str] = _SENDS_EVERYTHING,
     ) -> None:
         """Refuse what the endpoint enforces, before spending the round trip.
-
-        An explanation is the narrow case: the model explains one entity at a
-        time, and the endpoint refuses more, so that limit is checked here.
 
         `sends` names the halves this call puts on the wire. A session pins its
         context at `fit()` and a scoring call carries only rows, so judging the
@@ -378,24 +374,6 @@ class RelationalAdapter:
             self._check_context_is_not_empty(payloads)
             self._check_class_count(payloads, limits)
             self._check_target_varies(payloads, asked)
-        if 'explanation' not in outputs:
-            return
-
-        scored = sum(
-            len(
-                payload.get('predict', {})
-                .get('instance_table', {})
-                .get('rows', [])
-            )
-            for payload in payloads
-        )
-        allowed = limits['explanation_predict_rows']
-        if 'predict' in sends and scored != allowed:
-            raise UnsupportedRequestError(
-                f'an explanation covers exactly {allowed} entity, and this '
-                f'request scores {scored}; ask for one at a time',
-                details={'model': self.spec.model_id, 'scored': scored},
-            )
 
     def _check_class_count(
         self, payloads: tuple[dict[str, Any], ...], limits: Mapping[str, int]

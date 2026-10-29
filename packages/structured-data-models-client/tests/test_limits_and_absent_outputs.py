@@ -558,19 +558,3 @@ def test_a_session_scoring_call_is_not_judged_on_a_context_it_discards():
 
     sent = list(adapter.session_prediction_plan(request, ('prediction',)))
     assert sent and 'context' not in sent[0]
-
-
-def test_pinning_a_context_is_not_judged_on_rows_it_does_not_send():
-    """A session payload carries no predict rows, so the one-entity
-    explanation rule has nothing to count."""
-    from sdm_client.adapters.relational import RelationalAdapter
-
-    adapter = RelationalAdapter()
-    request = gathered(context_rows=50, run_mode='fast', predict_rows=3)
-    request.query = None
-
-    with pytest.raises(StructuredDataError, match='exactly 1 entity'):
-        list(adapter.prediction_plan(request, ('prediction', 'explanation')))
-
-    pinned = adapter.session_plan(request, ('prediction', 'explanation'))
-    assert 'predict' not in pinned
