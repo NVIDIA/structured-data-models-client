@@ -236,7 +236,7 @@ def test_a_wheel_with_no_native_library_is_no_control(
         smoke.without_native(wheel, tmp_path / 'control')
 
 
-COUNTS = {'test_binding.py': {'passed': 12}}
+COUNTS = {'test_binding.py': {'passed': 30}}
 ITEMS = [
     f'rust/bindings/sdm-py/tests/test_binding.py::{name}'
     for name in smoke.EXPECTED['test_binding.py']

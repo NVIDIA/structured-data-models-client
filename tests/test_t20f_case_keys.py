@@ -426,14 +426,14 @@ def test_a_core_observation_on_a_database_without_its_baseline_fails_by_name(
         'T2.0f: the twin',
         _propose(files, {'python-core': both, 'python-old': both}),
     )
-    assert helpers.check(recorded, landed, files) == []
+    assert helpers.check(recorded, landed, files, database=None) == []
     git(recorded, 'reset', '-q', '--hard', landed)
     commit(
         recorded,
         'T2.0f: the seed',
         _propose(files, {'python-core': (SQLITE,), 'python-old': both}),
     )
-    found = helpers.check(recorded, landed, files)
+    found = helpers.check(recorded, landed, files, database=None)
     assert found, 'a core observation on Postgres with no baseline passed'
     assert _naming(found, POSTGRES) == found, found
     assert any('python-core' in p for p in found), found
@@ -555,7 +555,7 @@ def test_accept_writes_the_database_baselines_check_then_needs(
         written = {x['case'] for x in _jsonl(_baseline_file(recorded, runner))}
         assert {X, SQLITE, POSTGRES} <= written, (runner, sorted(written))
     commit(recorded, 'T2.0f: the baselines accept wrote')
-    found = helpers.check(recorded, landed, files)
+    found = helpers.check(recorded, landed, files, database=None)
     assert found == [], '\n'.join(found)
 
 
@@ -609,7 +609,7 @@ def _moved_on_postgres(
         ),
     )
     commit(held, 'T2.0f: no entry')
-    found = helpers.check(held, landed, files)
+    found = helpers.check(held, landed, files, database=None)
     assert found, 'an unapproved move of a database baseline passed'
     assert _naming(found, POSTGRES) == found, found
     suggesting = [p for p in found if '{' in p]
@@ -634,7 +634,7 @@ def test_the_suggested_entry_approves_a_database_baseline_move(
         _replace_baseline(files, 'python-old', POSTGRES)(tree)
 
     commit(held, 'T2.0f: the move approved', approve)
-    found = helpers.check(held, landed, files)
+    found = helpers.check(held, landed, files, database=None)
     assert found == [], '\n'.join(found)
 
 
