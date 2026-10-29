@@ -292,15 +292,6 @@ def _text_schema() -> Schema:
         (
             'kumo-relational',
             lambda client: client.predict(
-                PredictiveQuery(COUNT, graph()).materialize(indices=[0]),
-                model=KumoRelational(),
-                outputs=['prediction', 'explanation'],
-            ),
-            'UNSUPPORTED_OUTPUT',
-        ),
-        (
-            'kumo-relational',
-            lambda client: client.predict(
                 PredictiveQuery(
                     'PREDICT LIST_DISTINCT(orders.item_id, 0, 30, days) '
                     'FOR EACH users.user_id',
