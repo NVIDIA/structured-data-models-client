@@ -260,6 +260,14 @@ def test_new_journals_preserve_existing_long_list_admission_proof():
 
 def test_cancelled_original_read_cannot_be_written_as_a_completed_legacy_replay():
     capture = RUNNER._Capture(native_cancellations_observed=True)
+    capture.inputs = [
+        {
+            'op': 'describe_source',
+            'provider': {},
+            'source': {},
+            'check_keys': False,
+        }
+    ]
     # This independently authored cancellation carries no reply. It cannot
     # stand in for a provider-error reply to an original materialize Run.
     capture.operations = ['prepare_materialize']
@@ -272,7 +280,7 @@ def test_cancelled_original_read_cannot_be_written_as_a_completed_legacy_replay(
     record['value_reads'] = []
     record['output_reads'] = []
     record['events'] = [{'event': 'cancelled'}]
-    with pytest.raises(RUNNER.RunnerFailure):
+    with pytest.raises(RUNNER.RunnerFailure, match='cancelled|unanswered'):
         RUNNER._replay_core(capture)
 
 
@@ -396,6 +404,51 @@ def test_same_json_and_local_id_without_actual_owner_identity_cannot_prove_a_cha
     )
     with pytest.raises(reader().ObservationError):
         reader().view(capture.core(), capture.operations)
+
+
+def test_actual_owner_producer_kind_and_description_are_checked_before_a_common_role():
+    for change in ('kind', 'identity'):
+        capture = RUNNER._Capture(native_cancellations_observed=True)
+        _owned_chain(capture)
+        core = copy.deepcopy(capture.core())
+        terminal = core['materialization_preparations'][2]
+        if change == 'kind':
+            terminal['owner_binds'][0]['producer'].update(run=0, attachment=4)
+        else:
+            changed = terminal['input']['parsed']
+            changed['population']['identity'] = 'unobserved replacement'
+            terminal['input'] = _bytes(9, json.dumps(changed).encode())
+        with pytest.raises(reader().ObservationError):
+            reader().view(core, capture.operations)
+
+
+@pytest.mark.parametrize(
+    'change', ['missing_done', 'value_before_done', 'duplicate_core_error']
+)
+def test_materialization_lifecycle_facts_must_match_the_actual_product(change):
+    core = actual_materialization()
+    record = core['materialization_preparations'][0]
+    if change == 'missing_done':
+        record['events'] = [record['events'][1]]
+    elif change == 'value_before_done':
+        record['events'].reverse()
+    else:
+        record.update(
+            completion='error',
+            result=None,
+            value_reads=[],
+            output_reads=[],
+            error={'kind': 'data_source', 'code': 'PROVIDER_ERROR'},
+            events=[{'event': 'core_error'}, {'event': 'core_error'}],
+        )
+        core['error'] = record['error']
+        core['materialization_entries'][0].update(
+            completion='raised',
+            terminal=None,
+            failure={'run': 0, 'relation': 'selected'},
+        )
+    with pytest.raises(reader().ObservationError):
+        reader().view(core, ['prepare_materialize'])
 
 
 def test_separate_entries_with_reused_ids_keep_distinct_resource_producers():
