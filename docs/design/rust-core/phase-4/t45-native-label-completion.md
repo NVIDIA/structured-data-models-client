@@ -296,3 +296,13 @@ The four presentation controls must distinguish the existing coded public string
 The sparse range observer must bind both native retry faults to the actual failed candidate and count completed candidate ranges after the real preparation returns successfully.
 Keep all frozen cast populations, both retry failures, full error/warning outcomes, exact committed prefix and final assembly assertions unchanged.
 These bounded fixes do not change label math, sampling, quota, schema, native callback populations or approved comparison rules.
+
+### Actual older-profile SQL outcomes
+
+The matched older-profile run reaches three existing SQL tests' unconditional legacy-success assumptions before their Core legs.
+Their inputs already have complete same-runtime native failure twins: text LIST_DISTINCT restoration can refuse list<string> to utf8, and the filtered distinct cases can refuse list<int64> to int64.
+Always observe both actual route outcomes with the existing full observer, retaining the actual successful Request for the existing ranking/payload assertions rather than materializing it twice.
+On actual native failure, require the exact original wrapper/cause/body and complete old/Core error, details, warning/stage and source-integrity equality under existing approved projections.
+Only the observed text RHS input admits its exact alternate failure; unrelated numeric RHS failures remain invalid.
+On success retain all existing mathematical order/null/window/reference assertions and actual ranking decode checks unchanged.
+Complete missing optional test dependencies rather than granting acceptance credit to skipped serving consumers.
