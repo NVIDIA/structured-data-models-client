@@ -112,8 +112,8 @@
   "sdm_client": {
     "__all__": [
       "Column",
-      "Explanations",
       "FittedModel",
+      "GradientExplanations",
       "KumoRelational",
       "KumoTabular",
       "MissingExtraError",
@@ -150,17 +150,6 @@
         },
         "signature": "(name: 'str', dtype: 'str', stype: 'str') -> None"
       },
-      "Explanations": {
-        "bases": [
-          "builtins.dict"
-        ],
-        "kind": "class",
-        "public_attributes": [],
-        "public_methods": {
-          "to_pandas": "(self) -> 'pd.DataFrame'"
-        },
-        "signature": "(entries: 'Mapping[Any, dict[str, Any]] | None' = None, *, keyed_by: 'tuple[str, ...]' = ('id',), hops: 'Mapping[Any, Mapping[str, Sequence[int | None]]] | None' = None) -> 'None'"
-      },
       "FittedModel": {
         "bases": [],
         "kind": "class",
@@ -173,6 +162,17 @@
           "predict": "(self, request: 'Request') -> 'PredictionResult'"
         },
         "signature": "() -> 'None'"
+      },
+      "GradientExplanations": {
+        "bases": [
+          "builtins.dict"
+        ],
+        "kind": "class",
+        "public_attributes": [],
+        "public_methods": {
+          "to_pandas": "(self) -> 'pd.DataFrame'"
+        },
+        "signature": "(entries: 'Mapping[Any, dict[str, Any]] | None' = None, *, keyed_by: 'tuple[str, ...]' = ('id',), hops: 'Mapping[Any, Mapping[str, Sequence[int | None]]] | None' = None) -> 'None'"
       },
       "KumoRelational": {
         "bases": [

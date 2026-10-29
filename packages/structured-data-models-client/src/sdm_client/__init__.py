@@ -33,7 +33,7 @@ from sdm_client.errors import (
 from sdm_client.models import KumoRelational, KumoTabular, Model
 from sdm_client.query import PredictiveQuery
 from sdm_client.request import Request, Split, Target, Task
-from sdm_client.result import Explanations, PredictionResult
+from sdm_client.result import GradientExplanations, PredictionResult
 from sdm_client.schema import (
     Column,
     Relationship,
@@ -45,8 +45,8 @@ from sdm_client.schema import (
 __all__ = [
     'SDMWarning',
     'Column',
-    'Explanations',
     'FittedModel',
+    'GradientExplanations',
     'KumoRelational',
     'KumoTabular',
     'MissingExtraError',
