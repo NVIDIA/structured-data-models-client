@@ -24,6 +24,11 @@ driven through it:
 - panic: the test-only operation, panicking in the run's body with the
   sentinel as its payload.
 
+The privacy cases keep private response metadata outside the native
+response contract's displayed operands.
+Separate public prediction twins retain the original endpoint operands
+and compare their complete native diagnostic graphs.
+
 None of our sentinels may appear in the core's error (its message, every
 field and every cause, as the control message carried it), in ``str`` or
 ``repr`` of the exception, in its formatted traceback, in any warning
@@ -476,20 +481,7 @@ def test_endpoint_response_display_operands_keep_native_diagnostics(
 
 
 def _scenarios() -> dict[str, Callable[[], Any]]:
-    answer_under_another_id = json.dumps(
-        {
-            'id': 'r1',
-            'model': 'kumo-relational',
-            'metadata': {},
-            'predictions': [
-                {'id': DATA, 'row_index': 0, 'prediction': 1.0},
-                {'id': DSN, 'row_index': 1, 'prediction': 1.0},
-            ],
-        }
-    ).encode()
-    answer_not_the_contract_s = json.dumps(
-        {'id': [DATA], 'model': DSN, 'metadata': {}, 'predictions': []}
-    ).encode()
+    bodies = _codec_bodies(private_diagnostic=False)
 
     def answered(body: bytes, status: int = 200) -> Callable[[], Any]:
         def call() -> Any:
@@ -528,12 +520,8 @@ def _scenarios() -> dict[str, Callable[[], Any]]:
     return {
         'codec: an operation the contract cannot read': operation,
         'codec: an attachment that is not its JSON': attachment,
-        'codec: an answer under another row s id': answered(
-            answer_under_another_id
-        ),
-        'codec: an answer not the contract s': answered(
-            answer_not_the_contract_s
-        ),
+        'codec: an answer under another row s id': answered(bodies['mismatch']),
+        'codec: an answer not the contract s': answered(bodies['contract']),
         'provider: a statement failing on the credential': _provider_error(
             'dsn'
         ),
@@ -576,6 +564,23 @@ def test_no_sentinel_reaches_anything_written(
         assert error.__cause__ is None and error.__context__ is None, name
         if 'own words' in name:
             _shows_the_endpoint_s_own_words(error)
+    elif name == 'codec: an answer not the contract s':
+        from sdm_api.generated.tfm_api import ResponseContractError
+
+        assert error.code == 'INVALID_RESPONSE'
+        assert getattr(error, '_sentence') == 'direct_response_contract'
+        cause = error.__cause__
+        assert type(cause) is ResponseContractError
+        assert str(cause) == (
+            "PredictionResponse response has 'id' = [], "
+            'where the contract requires a string'
+        )
+        assert error.__context__ is cause
+        assert error.__suppress_context__ is True
+        assert cause.__cause__ is None and cause.__context__ is None
+        assert cause.__suppress_context__ is False
+        assert error.details == {'field': 'id', 'reason': 'not_text'}
+        assert any(where == 'core error' for where, _ in seen.texts), name
     else:
         # The error is the core's, raised with no cause chained.
         assert error.__cause__ is None and error.__suppress_context__, name
@@ -593,6 +598,8 @@ def test_no_sentinel_reaches_anything_written(
 def test_each_sentinel_is_on_the_path_that_fails(
     capfd: pytest.CaptureFixture[str],
 ) -> None:
+    for body in _codec_bodies(private_diagnostic=False).values():
+        assert DATA.encode() in body and DSN.encode() in body
     # Data and the credential: the driver's own message quotes each.
     for kind, sentinel in (('data', DATA), ('dsn', DSN)):
         with pytest.raises(duckdb.Error) as driver:
