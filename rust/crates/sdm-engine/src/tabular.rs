@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! Single-table row selection over admitted primitive entity and validity facts.
-//! Increasing RangeIndex labels are order-isomorphic to original row ordinals.
+//! Native candidate labels are input facts for sampled-subset ordering.
 
 use std::collections::{HashMap, HashSet};
 
@@ -118,9 +118,7 @@ impl ContextSelection {
         maximum: usize,
     ) -> Result<Self, CoreError> {
         if candidates.windows(2).any(|pair| pair[0] >= pair[1]) {
-            return Err(invalid(
-                "tabular RangeIndex candidates must retain original row order",
-            ));
+            return Err(invalid("tabular candidates must retain original row order"));
         }
         let wanted = requested.unwrap_or(maximum);
         if wanted == 0 {
@@ -158,24 +156,43 @@ impl ContextSelection {
         self.candidates.len() > self.wanted
     }
 
-    /// Seed-42 RandomState sampling without replacement followed by index sort.
-    /// Strictly increasing RangeIndex labels have no unstable ties: their sort
-    /// is exactly sorting the selected original ordinals, on every profile.
-    pub fn select(&self) -> Vec<usize> {
-        self.positions()
-            .into_iter()
-            .map(|row| self.candidates[row])
-            .collect()
+    /// Original source rows, after sampling and ordering by actual index facts.
+    pub fn select(&self, labels: Option<&[i64]>) -> Result<Vec<usize>, CoreError> {
+        Ok(match self.positions(labels)? {
+            Some(positions) => positions
+                .into_iter()
+                .map(|row| self.candidates[row])
+                .collect(),
+            None => self.candidates.clone(),
+        })
     }
 
-    /// Positions within the already captured candidate frame, for native take.
-    pub fn positions(&self) -> Vec<usize> {
-        if self.candidates.len() <= self.wanted {
-            return (0..self.candidates.len()).collect();
+    /// Candidate-frame positions: seed-42 sample prefix, then unique-label sort.
+    /// Uncapped populations consume no labels and require no replacement take.
+    pub fn positions(&self, labels: Option<&[i64]>) -> Result<Option<Vec<usize>>, CoreError> {
+        if !self.reduced() {
+            if labels.is_some() {
+                return Err(invalid(
+                    "uncapped tabular context does not consume index labels",
+                ));
+            }
+            return Ok(None);
+        }
+        let labels = labels.ok_or_else(|| {
+            invalid("sampled tabular context requires actual candidate index labels")
+        })?;
+        if labels.len() != self.candidates.len() {
+            return Err(invalid(
+                "tabular index label extent differs from its captured candidates",
+            ));
+        }
+        let mut unique = HashSet::with_capacity(labels.len());
+        if labels.iter().any(|label| !unique.insert(*label)) {
+            return Err(invalid("tabular candidate index labels must be unique"));
         }
         let mut selected = Mt19937::seeded(42).permutation(self.candidates.len());
         selected.truncate(self.wanted);
-        selected.sort_unstable_by_key(|&row| self.candidates[row]);
-        selected
+        selected.sort_unstable_by_key(|&row| labels[row]);
+        Ok(Some(selected))
     }
 }

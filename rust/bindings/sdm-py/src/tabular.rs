@@ -62,8 +62,15 @@ impl TabularContext {
     fn wanted(&self, py: Python<'_>) -> PyResult<usize> {
         crate::core_call(py, || self.state.wanted())
     }
-    fn positions(&self, py: Python<'_>) -> PyResult<Option<Vec<usize>>> {
-        crate::core_call(py, || self.state.positions())
+    fn reduced(&self, py: Python<'_>) -> PyResult<bool> {
+        crate::core_call(py, || self.state.reduced())
+    }
+    #[pyo3(signature = (labels=None))]
+    fn positions(&self, py: Python<'_>, labels: Option<Vec<i64>>) -> PyResult<Option<Vec<usize>>> {
+        checked(
+            py,
+            crate::core_call(py, || self.state.positions(labels.as_deref()))?,
+        )
     }
 }
 

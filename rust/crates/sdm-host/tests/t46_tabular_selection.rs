@@ -18,13 +18,18 @@ fn supplied_population_binds_native_missingness_and_original_source_positions() 
     let known: Vec<bool> = retained.iter().map(|row| row % 7 != 0).collect();
     let candidates = population.labelled_rows(&known).unwrap();
     let context = population.context(&candidates, Some(5)).unwrap();
+    let labels: Vec<i64> = candidates
+        .iter()
+        .map(|&row| source[retained[row]])
+        .collect();
     let actual: Vec<usize> = context
-        .positions()
+        .positions(Some(&labels))
+        .unwrap()
         .unwrap()
         .iter()
         .map(|&position| retained[candidates[position]])
         .collect();
-    assert_eq!(actual, context.select());
+    assert_eq!(actual, context.select(Some(&labels)).unwrap());
     assert!(population.labelled_rows(&[true]).is_err());
     assert!(population.context(&[42], Some(1)).is_err());
     assert!(population.context(&[2, 1], Some(1)).is_err());
@@ -41,13 +46,15 @@ fn typed_host_filters_before_sampling_and_applies_candidate_positions() {
     let known: Vec<bool> = (0..43).map(|row| row % 7 != 0).collect();
     let candidates = tabular_labelled_rows(&known, &selected.scored).unwrap();
     let context = TabularContext::new(candidates.clone(), Some(5)).unwrap();
+    let labels: Vec<i64> = candidates.iter().map(|&row| keys[row]).collect();
     let actual: Vec<usize> = context
-        .positions()
+        .positions(Some(&labels))
+        .unwrap()
         .unwrap()
         .into_iter()
         .map(|position| candidates[position])
         .collect();
-    assert_eq!(actual, context.select());
+    assert_eq!(actual, context.select(Some(&labels)).unwrap());
     assert_eq!(actual.len(), 5);
     assert!(actual.windows(2).all(|pair| pair[0] < pair[1]));
     assert!(
@@ -61,8 +68,8 @@ fn typed_host_filters_before_sampling_and_applies_candidate_positions() {
 #[test]
 fn typed_host_keeps_the_uncapped_population_without_a_second_take() {
     let context = TabularContext::new(vec![1, 4, 8], None).unwrap();
-    assert!(context.positions().is_none());
-    assert_eq!(context.select(), [1, 4, 8]);
+    assert!(context.positions(None).unwrap().is_none());
+    assert_eq!(context.select(None).unwrap(), [1, 4, 8]);
 }
 
 #[test]
