@@ -442,3 +442,52 @@ def test_malformed_terminal_request_keeps_state_owners_unread():
     with pytest.raises(CodecError):
         products.request(finished)
     assert handle.takes == [17]
+
+
+def test_source_temporal_meaning_and_completed_notice_have_no_owner_slots():
+    source = _data('source')
+    source['tables'][0]['temporal_columns'] = ['value']
+    actual = object()
+    bindings = Bindings()
+    rebound = products.bind(Product('source', source, {4: actual}), bindings)
+    assert rebound['tables'] == source['tables']
+    assert bindings.attachments == {2: actual}
+    meaning = _data('column_meaning')
+    meaning['notice'] = {
+        'code': 'TIME_VALUES_UNREAD',
+        'sentence': 'native_time_values_unread',
+        'message': 'native time conversion',
+        'fields': {'rows': {'t': 'u64', 'v': '4'}},
+    }
+    before = copy.deepcopy(meaning)
+    bindings = Bindings()
+    assert (
+        products.bind(Product('column_meaning', meaning, {}), bindings)
+        == before
+    )
+    assert meaning == before
+    assert bindings.attachments == {}
+
+
+@pytest.mark.parametrize(
+    'notice',
+    [
+        3,
+        {'code': 'TIME_VALUES_UNREAD'},
+        {
+            'code': 'TIME_VALUES_UNREAD',
+            'sentence': 'native_time_values_unread',
+            'message': 'actual',
+            'extra': True,
+        },
+    ],
+)
+def test_completed_notice_reader_rejects_malformed_data_before_any_owner_take(
+    notice,
+):
+    data = _data('column_meaning')
+    data['notice'] = notice
+    bindings = Bindings()
+    with pytest.raises(CodecError):
+        products.bind(Product('column_meaning', data, {}), bindings)
+    assert bindings.attachments == {}
