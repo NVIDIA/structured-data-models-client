@@ -1414,6 +1414,14 @@ def _written_identities(table: dict[str, Any]) -> list[Any] | None:
     """
     names = [column['name'] for column in table['columns']]
     if 'id_as_written' not in names:
+        # id_columns uses its key's text/integer carrier even when every
+        # actual identity is absent. No written companion exists then.
+        if names.count('id') == 1:
+            at = names.index('id')
+            if table['columns'][at]['type'] in ('int64', 'utf8') and all(
+                row[at] is None for row in table['rows']
+            ):
+                return [None for _ in table['rows']]
         return None
     require(
         names.count('id') == names.count('id_as_written') == 1,

@@ -224,7 +224,6 @@ def test_native_semantic_companion_is_complete_and_bound_to_actual_rows(fault):
         (1, 'one'),
         (10**25, -(10**25)),
         (None, 1.5),
-        (None, None),
     ],
 )
 def test_observed_native_ids_agree_with_complete_rust_written_ids(values):
@@ -302,3 +301,33 @@ def test_nonprimitive_written_owners_and_absent_results_keep_their_exact_layout(
         row[names.index('id')] = {'utf8': '[1]'}
         row.append({'utf8': '[1]'})
     assert reader().semantic_result(actual) == actual
+
+
+@pytest.mark.parametrize('carrier', ['int64', 'utf8'])
+@pytest.mark.parametrize('count', [0, 2])
+def test_actual_all_null_and_empty_rust_layouts_have_no_written_companion(
+    carrier, count
+):
+    core, operations = actual_observation()
+    actual = reader().view(core, operations)['events'][0]['result']
+    actual['result']['rows'] = actual['result']['rows'][:count]
+    native = copy.deepcopy(actual)
+    native['presentation'] = presentation()
+    native['presentation']['rows'] = native['presentation']['rows'][:count]
+    for row in native['presentation']['rows']:
+        row['id'] = None
+    rust = copy.deepcopy(actual)
+    table = rust['result']
+    names = [column['name'] for column in table['columns']]
+    assert 'id_as_written' not in names
+    table['columns'][names.index('id')]['type'] = carrier
+    for row in table['rows']:
+        row[names.index('id')] = None
+    before = copy.deepcopy((native, rust))
+    assert reader().semantic_result(native) == reader().semantic_result(rust)
+    assert (native, rust) == before
+    if count:
+        table['rows'][0][names.index('id')] = {'utf8': 'a real identity'}
+        assert reader().semantic_result(native) != reader().semantic_result(
+            rust
+        )
