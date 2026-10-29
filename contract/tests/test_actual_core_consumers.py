@@ -21,6 +21,6 @@ def test_consumer_roles_require_the_real_complete_native_journal():
     ]
     assert observation == before
     broken = copy.deepcopy(observation)
-    broken['core']['prediction_entries'] = []
+    broken['core']['predictions'] = []
     with pytest.raises(reader().ObservationError):
         checked_operations(broken)
