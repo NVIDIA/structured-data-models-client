@@ -36,6 +36,7 @@ __all__ = [
     'CoreRequest',
     'Described',
     'InferredFrames',
+    'MaterializePrepared',
     'Diagnostic',
     'Edited',
     'Gathered',
@@ -407,6 +408,21 @@ class Gathered:
     state: GatheredState
     query: QueryFacts | None
 
+    @classmethod
+    def from_contract(cls, value: Any) -> Gathered:
+        """Read a complete Materialized value without an operation envelope."""
+        read = _fields(
+            value, 'the materialized request', ('state',), ('query',)
+        )
+        return cls(
+            state=_state(read['state']),
+            query=(
+                None
+                if read['query'] is None
+                else QueryFacts.from_contract(read['query'])
+            ),
+        )
+
 
 def _state(value: Any) -> GatheredState:
     read = _fields(
@@ -535,6 +551,13 @@ class FramePrepared:
 
 
 @dataclasses.dataclass(frozen=True)
+class MaterializePrepared:
+    """The actual value attachment of a source materialization operation."""
+
+    value: int
+
+
+@dataclasses.dataclass(frozen=True)
 class DecodedDirectResponse:
     """Owned decoded response buffers for native builtin conversion."""
 
@@ -562,14 +585,7 @@ _RESULTS: dict[str, tuple[tuple[str, ...], tuple[str, ...], Any]] = {
     'materialize': (
         ('state',),
         ('query',),
-        lambda read: Gathered(
-            state=_state(read['state']),
-            query=(
-                None
-                if read['query'] is None
-                else QueryFacts.from_contract(read['query'])
-            ),
-        ),
+        Gathered.from_contract,
     ),
     'prepare_request': (
         ('value',),
@@ -580,6 +596,11 @@ _RESULTS: dict[str, tuple[tuple[str, ...], tuple[str, ...], Any]] = {
         ('value',),
         (),
         lambda read: FramePrepared(_int(read['value'], 'value')),
+    ),
+    'prepare_materialize': (
+        ('value',),
+        (),
+        lambda read: MaterializePrepared(_int(read['value'], 'value')),
     ),
     'predict': (
         ('result', 'model', 'request_id', 'metadata', 'outputs'),
@@ -600,6 +621,7 @@ def decode(
     | Predicted
     | Prepared
     | FramePrepared
+    | MaterializePrepared
     | DecodedDirectResponse
 ):
     r"""The result a ``done`` step carries, decoded once.
@@ -629,6 +651,7 @@ def decode(
         | Predicted
         | Prepared
         | FramePrepared
+        | MaterializePrepared
         | DecodedDirectResponse
     ) = build(read)
     return built
@@ -644,6 +667,7 @@ _T = TypeVar(
     Predicted,
     Prepared,
     FramePrepared,
+    MaterializePrepared,
     DecodedDirectResponse,
 )
 
