@@ -955,3 +955,113 @@ def test_fresh_call_task_observations_preserve_truth_and_selected_refusal(
             < current[2].index(('truth', 'forecast'))
         )
         assert current[0][0] == 'ok'
+
+
+@pytest.mark.parametrize(
+    'effect',
+    ['changed-display', 'second-call-failure', 'invalid-response', 'empty'],
+)
+def test_response_task_display_uses_captured_payload_owner_after_row_admission(
+    monkeypatch, effect
+):
+    from dataclasses import replace
+
+    from sdm_client import Request
+
+    def observe(core):
+        events = []
+        context = pd.DataFrame({'answer': [0, 1, 0], 'feature': [2, 3, 4]})
+        scoring = (
+            pd.DataFrame({'feature': pd.Series([], dtype='int64')})
+            if effect == 'empty'
+            else pd.DataFrame({'feature': [5]})
+        )
+        calls = [0]
+        native_failure = LookupError('actual second task display')
+
+        class Choice(str):
+            def __str__(self):
+                calls[0] += 1
+                events.append(('task display', calls[0]))
+                if effect == 'second-call-failure' and calls[0] == 2:
+                    raise native_failure
+                return (
+                    'regression'
+                    if effect == 'changed-display'
+                    else 'classification'
+                )
+
+        owner = Choice('classification')
+        results = []
+        with monkeypatch.context() as patch:
+            patch.setenv(
+                _routing.ENVIRONMENT,
+                ','.join(_routing.DIRECT_CONSUMERS) if core else '',
+            )
+            request = Request(context, scoring, target='answer', task=owner)
+            assert request.task.kind is owner
+
+            class Answer(Scripted):
+                def predict(self, payload):
+                    result = super().predict(payload)
+                    events.append('transport')
+                    if effect == 'changed-display':
+                        request.task = replace(
+                            request.task, kind='classification'
+                        )
+                        assert request.task.kind is not owner
+                    if effect == 'invalid-response':
+                        result['predictions'] = []
+                    else:
+                        for item in result['predictions']:
+                            item['prediction'] = '3'
+                    return result
+
+            scripted = Answer()
+            with warnings.catch_warnings(record=True):
+                warnings.simplefilter('always')
+                with SDMClient('http://localhost:1', max_retries=0) as client:
+                    client._transport.close()
+                    client._transport = scripted
+                    for _ in range(2 if effect == 'second-call-failure' else 1):
+                        try:
+                            result = client.predict(
+                                request, model='kumo-tabular'
+                            )
+                            results.append(
+                                ('ok', result.to_pandas().to_dict('split'))
+                            )
+                        except Exception as error:
+                            results.append(
+                                (
+                                    'error',
+                                    type(error),
+                                    str(error),
+                                    getattr(error, 'code', None),
+                                    getattr(error, 'details', None),
+                                    error is native_failure,
+                                )
+                            )
+            for body in scripted.calls:
+                body['metadata']['request_id'] = '<drawn>'
+            return results, scripted.calls, events, calls[0]
+
+    old, current = observe(False), observe(True)
+    assert current == old
+    if effect == 'changed-display':
+        assert current[3] == 1
+        frame = current[0][0][1]
+        assert frame['data'][0][frame['columns'].index('prediction')] == '3'
+        assert current[2] == ['transport', ('task display', 1)]
+    elif effect == 'second-call-failure':
+        assert current[3] == 2
+        assert current[0][0][0] == 'ok'
+        assert current[0][1][-1] is True
+        assert len(current[1]) == 2
+    else:
+        assert current[3] == 0
+        assert current[0][0][0] == (
+            'error' if effect == 'invalid-response' else 'ok'
+        )
+        if effect == 'empty':
+            assert current[1] == []

@@ -182,6 +182,16 @@ fn finish_response_limit(
     native_member: Option<(&str, bool)>,
     decimal_limit: u32,
 ) -> Result<HostRun, sdm_contract::CoreError> {
+    finish_response_task(run, value, native_member, decimal_limit, None)
+}
+
+fn finish_response_task(
+    run: &HostRun,
+    value: AttachmentId,
+    native_member: Option<(&str, bool)>,
+    decimal_limit: u32,
+    native_task: Option<&str>,
+) -> Result<HostRun, sdm_contract::CoreError> {
     let mut data: Value = serde_json::from_slice(&response_bytes(run, value)).unwrap();
     let mut buffers = Attachments::new();
     for (n, name) in ["payload", "response", "rows"].iter().enumerate() {
@@ -247,10 +257,17 @@ fn finish_response_limit(
         )?);
         at += 1;
     }
+    if native_task.is_some() {
+        accepted = serde_json::from_value(prepare(
+            json!({"stage":"complete_response_rows","scope":data["scope"],"rows":accepted}),
+            Attachments::new(),
+        )?)
+        .unwrap();
+    }
     buffers.insert(AttachmentId(5), bytes(json!(accepted)));
     buffers.insert(
         AttachmentId(1),
-        bytes(json!({"stage":"layout_response","data":data,"attributed":5,"decimal_limit":decimal_limit})),
+        bytes(json!({"stage":"layout_response","data":data,"attributed":5,"decimal_limit":decimal_limit,"native_task":native_task.map(|text|text.chars().map(u32::from).collect::<Vec<_>>())})),
     );
     let layout = start(json!({"op":"prepare_request","input":1}), buffers);
     Ok(layout)
@@ -1760,6 +1777,16 @@ fn classified_result_with_target(
     probabilities: serde_json::Map<String, Value>,
     decimal_limit: u32,
 ) -> ArrowData {
+    classified_result_with_native_task(target, label, probabilities, decimal_limit, None)
+}
+
+fn classified_result_with_native_task(
+    target: ArrayRef,
+    label: Value,
+    probabilities: serde_json::Map<String, Value>,
+    decimal_limit: u32,
+    native_task: Option<&str>,
+) -> ArrowData {
     let feature = Arc::new(arrow_array::Int64Array::from(vec![1, 2, 3])) as ArrayRef;
     let context = [RecordBatch::try_from_iter([("0", feature), ("1", target)]).unwrap()];
     let scoring = [RecordBatch::try_from_iter([(
@@ -1803,7 +1830,7 @@ fn classified_result_with_target(
     else {
         panic!("decoded")
     };
-    let laid = finish_response_limit(&run, decoded.value, None, decimal_limit).unwrap();
+    let laid = finish_response_task(&run, decoded.value, None, decimal_limit, native_task).unwrap();
     let message = next(&laid);
     let ControlMessage::Step(Step::Done {
         result: OperationResult::Predict(result),
@@ -2508,4 +2535,77 @@ fn actual_json_resource_outcome_precedes_fallback_and_is_bound_to_the_source_row
     .unwrap_err();
     assert_eq!(error.sentence, sdm_contract::Sentence::DirectNativeFailure);
     assert_eq!(error.fields["stage"], sdm_contract::Detail::text("json"));
+}
+
+#[test]
+fn completed_native_response_task_text_selects_restoration_without_rewriting_wire_kind() {
+    use arrow_array::cast::AsArray;
+    use arrow_array::types::Int64Type;
+    for native_task in [
+        "classification",
+        "regression",
+        "native classification display",
+    ] {
+        let target = Arc::new(arrow_array::Int64Array::from(vec![0, 1, 0])) as ArrayRef;
+        let result = classified_result_with_native_task(
+            target,
+            json!("3"),
+            serde_json::Map::new(),
+            4300,
+            Some(native_task),
+        );
+        let prediction = result.batches[0].column_by_name("prediction").unwrap();
+        if native_task.contains("classification") {
+            assert_eq!(prediction.as_primitive::<Int64Type>().value(0), 3);
+        } else {
+            assert_eq!(prediction.as_string::<i32>().value(0), "3");
+        }
+    }
+}
+
+#[test]
+fn complete_response_rows_refuses_missing_repeated_and_reordered_facts_before_display() {
+    let scope = json!({"version":sdm_contract::prepare::DIRECT_RESPONSE_VERSION,"model":"kumo-tabular","request_id":"server-nonce","call_request_id":"sdm-fixed","response_rows":2,"scoring_rows":2});
+    let rows = json!([
+        {"ordinal":0,"row_index":"0","id":null,"key":null,"raw_in_batch":false,"prior_ordinal":null},
+        {"ordinal":1,"row_index":"1","id":null,"key":null,"raw_in_batch":false,"prior_ordinal":null}
+    ]);
+    let checked = prepare(
+        json!({"stage":"check_response_rows","scope":scope,"rows":rows}),
+        Attachments::new(),
+    )
+    .unwrap();
+    let ready = checked["rows"].clone();
+    let complete = prepare(
+        json!({"stage":"complete_response_rows","scope":scope,"rows":ready}),
+        Attachments::new(),
+    )
+    .unwrap();
+    assert_eq!(complete, ready);
+    for changed in [
+        json!([ready[0]]),
+        json!([ready[1], ready[0]]),
+        json!([ready[0], ready[0]]),
+    ] {
+        assert_eq!(
+            prepare(
+                json!({"stage":"complete_response_rows","scope":scope,"rows":changed}),
+                Attachments::new()
+            )
+            .unwrap_err()
+            .sentence,
+            sdm_contract::Sentence::InvalidMessage
+        );
+    }
+    let mut incomplete = scope.clone();
+    incomplete["response_rows"] = json!(1);
+    assert_eq!(
+        prepare(
+            json!({"stage":"complete_response_rows","scope":incomplete,"rows":[ready[0]]}),
+            Attachments::new()
+        )
+        .unwrap_err()
+        .sentence,
+        sdm_contract::Sentence::TabularRowsUnanswered
+    );
 }
