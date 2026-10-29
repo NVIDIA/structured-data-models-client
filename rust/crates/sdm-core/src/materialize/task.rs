@@ -27,7 +27,6 @@ use super::{
     Asked, Fetch, Labelling, MOST_CALLS, Memo, TIME_MAX, Times, Windowed, count, empty_sample,
     invalid, named, nan_rows, null_compared, one_batch, rows_of, take, times_ns,
 };
-use crate::describe::ask;
 use crate::run::{Asker, internal};
 
 /// Typed rows obtained by the existing entity draw, before labels or any

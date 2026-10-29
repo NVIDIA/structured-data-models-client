@@ -24,6 +24,7 @@ mod overlap_tests;
 #[cfg(test)]
 mod source_keys_tests;
 
+use arrow_array::UInt64Array;
 use sdm_contract::frames::materialize::*;
 use sdm_wire::json::Value;
 

@@ -3461,10 +3461,10 @@ pub(crate) async fn prepare_source(
     let entity = graph
         .table(&asked.entity_table)
         .ok_or_else(|| internal("the query's entity table is not in the graph"))?;
-    let key = entity
+    entity
         .primary_key
-        .clone()
-        .filter(|k| *k == asked.entity_column)
+        .as_ref()
+        .filter(|k| **k == asked.entity_column)
         .ok_or_else(|| not_yet("entity_key"))?;
     // A temporal query's aggregated tables, each with the foreign key by
     // which it refers to the entity table and the window its rows are read

@@ -529,7 +529,7 @@ async fn label_inputs(
         })
         .transpose()?
         .unwrap_or_default();
-    let mut meaning = PreparedLabelInputs {
+    let meaning = PreparedLabelInputs {
         population: population.0.meaning.identity.clone(),
         range,
         owner: AttachmentId(0),

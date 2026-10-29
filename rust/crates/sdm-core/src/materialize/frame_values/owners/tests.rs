@@ -5,7 +5,7 @@
 //! Source-first immutable task/reference ownership, complexity and release.
 
 use super::*;
-use arrow_array::{Array, Int64Array};
+use arrow_array::{Array, Int64Array, UInt64Array};
 use sdm_contract::pql::{EntityClause, QueryMode};
 
 fn bound_graph(owner: crate::RetainedFrameGraph) -> BoundGraph {

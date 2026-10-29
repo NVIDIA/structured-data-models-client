@@ -34,8 +34,11 @@ fn native_column_positions_bind_the_complete_actual_missingness_observation() {
     let present = [true, false, true];
     assert_eq!(column_positions(3, &present, true).unwrap(), [0, 2]);
     assert_eq!(column_positions(3, &present, false).unwrap(), [0, 1, 2]);
-    assert_eq!(column_positions(0, &[], true).unwrap(), []);
-    assert_eq!(column_positions(2, &[false, false], true).unwrap(), []);
+    assert_eq!(column_positions(0, &[], true).unwrap(), Vec::<usize>::new());
+    assert_eq!(
+        column_positions(2, &[false, false], true).unwrap(),
+        Vec::<usize>::new()
+    );
     for present in [vec![], vec![true], vec![true, false, true, true]] {
         assert_eq!(
             column_positions(3, &present, true).unwrap_err().code,
@@ -50,7 +53,7 @@ fn native_filter_and_window_selection_keep_source_order_and_complete_alignment()
         selected_positions(&[0, 2, 7], &[false, true, true]).unwrap(),
         [2, 7]
     );
-    assert_eq!(selected_positions(&[], &[]).unwrap(), []);
+    assert_eq!(selected_positions(&[], &[]).unwrap(), Vec::<usize>::new());
     for selection in [vec![], vec![true], vec![true, false, true, false]] {
         assert_eq!(
             selected_positions(&[0, 2, 7], &selection).unwrap_err().code,

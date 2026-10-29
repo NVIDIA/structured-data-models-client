@@ -200,7 +200,7 @@ struct Shared {
     describe_partitions: bool,
 }
 
-fn lock(shared: &Mutex<Shared>) -> MutexGuard<'_, Shared> {
+fn lock<T>(shared: &Mutex<T>) -> MutexGuard<'_, T> {
     // A panic while the lock is held panics the body, and that poisons the
     // run, so a poisoned lock is never read in a half-changed state that
     // matters.
