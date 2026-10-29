@@ -368,7 +368,11 @@ def test_reduced_duplicate_candidate_index_is_an_unfinished_family(
 ):
     monkeypatch.setenv(
         _routing.ENVIRONMENT,
-        ','.join(_routing.MATERIALIZE['frames']) if core else '',
+        ','.join(
+            _routing.MATERIALIZE['frames'] + _routing.TABULAR_PREDICT_FRAME
+        )
+        if core
+        else '',
     )
     source = _table(12_019)
     scoring = pd.DataFrame({'entity_id': [11], 'feature': [0.5]})
