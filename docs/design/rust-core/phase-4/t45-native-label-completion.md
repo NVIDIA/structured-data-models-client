@@ -339,3 +339,13 @@ The completed notice uses the established unread-time category and code-prefix p
 
 The empty-content fact comes from that same skip-null inference result, avoiding an extra native missingness read before datetime conversion.
 Actual temporal content short-circuits the need to infer missingness, and the later native conversion retains its original coercion-mask reads.
+
+### Lossless native time-example presentation
+
+Whole R48 review identifies that an actual datetime subclass can produce lone-surrogate text while rendering a coerced example.
+Keep the actual already formatted native string locally and transport it as the existing validated UnicodeText codepoints, preserving distinct surrogate units without escaping, normalization or a second native formatter call.
+Core retains those points in the completed notice and continues to select its sentence, counts, category and established code-prefix policy.
+Use the existing call-local holding presenter around that one notice to supply the same immutable native text; release the scoped companion on success or failure.
+Require the completed notice points to match the reported native text before presentation.
+Add actual datetime-subclass surrogate and repr-failure source controls plus lossless/malformed raw-host facts before implementation, preserving all existing coercion, handler and ordinary-source observations.
+Regenerate only working canonical artifacts through their existing writers, then obtain a fresh whole review pair before execution.
