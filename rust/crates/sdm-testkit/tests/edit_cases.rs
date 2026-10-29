@@ -180,3 +180,20 @@ fn the_pin_check_fails_closed() {
         [format!("{name}: inputs is not a digest")]
     );
 }
+
+#[test]
+fn the_cli_observation_keeps_actual_complete_edit_starts() {
+    let bases = bases::load(&contract().join("bases.yaml")).unwrap();
+    let path = contract().join("cases/s1/edit.accepted-meaning-key-links.json");
+    let loaded = case::load(&[path]).unwrap().remove(0);
+    let observed = host::run(&loaded.case, &bases).unwrap();
+    assert!(!observed.edits.is_empty());
+    let identity = sdm_testkit::observation::Identity {
+        platform: "linux-x86_64".into(),
+        commit: json!({"sha":"authored-observation-control","clean":true}),
+        duckdb: "1.5.6".into(),
+    };
+    let written = sdm_testkit::observation::write(&identity, &loaded, &observed, None);
+    assert_eq!(written["core"]["edits"], json!(observed.edits));
+    assert_eq!(written["core"]["inputs"], json!(observed.inputs));
+}
