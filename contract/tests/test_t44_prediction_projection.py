@@ -204,3 +204,43 @@ def test_raw_call_tamper_cannot_be_hidden_by_a_named_column(producer):
     )
     call['body_sha256'] = 'f' * 64
     assert payload_failures(observed, reference, 'python-core')
+
+
+@pytest.mark.parametrize('producer', ['gathered', 'legacy'])
+@pytest.mark.parametrize(
+    'changed', [None, 'receipt-body', 'receipt-hash', 'missing']
+)
+def test_sql_compares_projected_reads_but_conserves_original_call_evidence(
+    producer, changed
+):
+    from test_t45_private_observation_publication import T32
+
+    observed, _ = fixture(producer)
+    baseline = T32._reference_line()
+    observed['identity']['runner'] = 'python-core'
+    observed['driver'] = copy.deepcopy(baseline['driver'])
+    if changed == 'receipt-body':
+        observed['public']['payloads'][0]['parsed']['context'][
+            'related_tables'
+        ]['items']['rows'][0][0] = {'number': '700'}
+    elif changed == 'receipt-hash':
+        observed['public']['payloads'][0]['sha256'] = '0' * 64
+    elif changed == 'missing':
+        observed['public']['payloads'].clear()
+    original = copy.deepcopy(observed)
+    shown = COMPARE.without_core_only(observed, NAMED)
+    reference = copy.deepcopy(shown)
+    reference['core'] = None
+    reference['identity']['runner'] = 'python-ref'
+    report = COMPARE.Report()
+    COMPARE._sql(
+        report,
+        CASE,
+        'python-core',
+        shown,
+        reference,
+        {},
+        original=observed,
+    )
+    assert bool(report.failures) is (changed is not None), report.texts
+    assert observed == original

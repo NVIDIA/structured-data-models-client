@@ -44,10 +44,7 @@ REFUSALS = (ValueError, ValidationError, RUNNER.RunnerFailure)
 
 
 def publication():
-    return _module(
-        't45_observation_publication',
-        ROOT / 'contract/runners/observation_publication.py',
-    )
+    return RUNNER._sibling('observation_publication')
 
 
 def encoded(attachment, value):
@@ -797,3 +794,44 @@ def test_private_map_is_closed_and_leg_and_source_specific(tmp_path, changed):
         private_name_map=name_map(tmp_path, source, **changes),
     )
     assert report.failures
+
+
+def test_serving_unicode_escapes_are_projected_only_in_decoded_publication():
+    raw = prediction(serving=True)
+    call = raw['core']['predictions'][0]['calls'][0]
+    logical = call['body']['dataframe_records'][0]['request_json']
+    private = NAMES['catalog']
+    escaped = ''.join(f'\\u{ord(character):04x}' for character in private)
+    posted = json.dumps(
+        {
+            'dataframe_records': [
+                {'request_json': logical.replace(private, escaped)}
+            ]
+        }
+    ).encode()
+    receipt = RUNNER._payload(posted)
+    call.update(body=receipt['parsed'], body_sha256=receipt['sha256'])
+    raw['core']['predicted']['body'] = copy.deepcopy(call['body'])
+    raw['public']['payloads'] = [
+        {
+            'method': 'POST',
+            'path': '/serving-endpoints/fixture/invocations',
+            **receipt,
+        }
+    ]
+    original = copy.deepcopy(raw)
+    prepared = prepare(raw)
+    derivative = publication().public_derivative(
+        prepared,
+        source_sha256='c' * 64,
+        line=1,
+    )
+    body = derivative['observation']['public']['payloads'][0]['parsed']
+    decoded = json.loads(body['dataframe_records'][0]['request_json'])
+    assert private not in json.dumps(decoded)
+    assert '{catalog}' in json.dumps(decoded)
+    assert prepared.raw == original and raw == original
+    reader().check_receipts(
+        prepared.raw_view['attempts'],
+        raw['public']['payloads'],
+    )
