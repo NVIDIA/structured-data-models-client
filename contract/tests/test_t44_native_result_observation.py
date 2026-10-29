@@ -68,19 +68,37 @@ def test_actual_builtin_result_storage_is_observed_without_custom_hooks():
 
 
 @pytest.mark.parametrize('field', ['prediction', 'rankings'])
-def test_ranking_candidate_companion_uses_the_actual_requested_native_field(field):
+def test_ranking_candidate_companion_uses_the_actual_requested_native_field(
+    field,
+):
     from sdm_api.generated.tfm_api import PredictionItem
     from sdm_client.result import PredictionResult
 
-    item = PredictionItem(row_index=0, id=7, **{field: [9, 8] if field == 'prediction' else ({'candidate': 9, 'score': .5}, {'candidate': 8, 'score': .25})})
-    result = PredictionResult(model='kumo-relational', request_id='actual', items=[item])
+    item = PredictionItem(
+        row_index=0,
+        id=7,
+        **{
+            field: [9, 8]
+            if field == 'prediction'
+            else (
+                {'candidate': 9, 'score': 0.5},
+                {'candidate': 8, 'score': 0.25},
+            )
+        },
+    )
+    result = PredictionResult(
+        model='kumo-relational', request_id='actual', items=[item]
+    )
     shown = RUNNER.native_result_snapshot(result, ranking=True)['rows'][0]
     if field == 'prediction':
         assert shown['prediction_candidates'] == [{'i64': '9'}, {'i64': '8'}]
         assert shown['rankings'] is None
     else:
         assert 'prediction_candidates' not in shown
-        assert [row['candidate'] for row in shown['rankings']] == [{'i64': '9'}, {'i64': '8'}]
+        assert [row['candidate'] for row in shown['rankings']] == [
+            {'i64': '9'},
+            {'i64': '8'},
+        ]
 
 
 def test_native_semantic_projection_keeps_the_raw_ordinal_result():
@@ -104,7 +122,7 @@ def test_native_semantic_projection_keeps_the_raw_ordinal_result():
     assert semantic['result'] != reader().semantic_result(value)['result']
 
 
-@pytest.mark.parametrize('fault', ['short', 'row', 'extra', 'scalar'])
+@pytest.mark.parametrize('fault', ['short', 'row', 'extra', 'scalar', 'width'])
 def test_native_semantic_companion_is_complete_and_bound_to_actual_rows(fault):
     core, operations = actual_observation()
     shown = presentation()
@@ -114,8 +132,10 @@ def test_native_semantic_companion_is_complete_and_bound_to_actual_rows(fault):
         shown['rows'][0]['row_index'] = 9
     elif fault == 'extra':
         shown['rows'][0]['guessed'] = True
-    else:
+    elif fault == 'scalar':
         shown['rows'][0]['id'] = {'i64': 'not an integer'}
+    else:
+        shown['rows'][0]['id'] = {'i64': str(10**25)}
     core['predictions'][0]['results'][0]['presentation'] = shown
     core['predicted']['presentation'] = copy.deepcopy(shown)
     with pytest.raises(reader().ObservationError):

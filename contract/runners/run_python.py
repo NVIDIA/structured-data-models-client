@@ -1524,7 +1524,11 @@ class _Capture:
             and record['metadata'] is not None
             and record['result'] is not None
         ):
-            shown = native_result_snapshot(result)
+            shown = native_result_snapshot(
+                result,
+                ranking=owner.preparation['input']['aggregation']['kind']
+                == 'ranking',
+            )
             if shown is not None:
                 record['presentation'] = shown
             self._result_presentations.append((result, owner.ordinal))
@@ -2299,7 +2303,9 @@ def _carried_result(stream: Any, rows: int) -> dict[str, Any]:
     }
 
 
-def native_result_snapshot(result: Any) -> dict[str, Any] | None:
+def native_result_snapshot(
+    result: Any, *, ranking: bool = False
+) -> dict[str, Any] | None:
     """Read exact SDK storage after presentation, without converting custom owners.
 
     The Arrow result and its lineage remain recorded independently.
@@ -2320,7 +2326,8 @@ def native_result_snapshot(result: Any) -> dict[str, Any] | None:
         if type(value) is str:
             return {'utf8': value}
         if type(value) is int:
-            return {'i64': str(value)}
+            kind = 'i64' if -(2**63) <= value < 2**63 else 'integer'
+            return {kind: str(value)}
         if type(value) is float:
             return {'f64_bits': struct.pack('>d', value).hex()}
         if type(value) is bool:
@@ -2363,14 +2370,20 @@ def native_result_snapshot(result: Any) -> dict[str, Any] | None:
                             'score': struct.pack('>d', score).hex(),
                         }
                     )
-            rows.append(
-                {
-                    'row_index': row_index,
-                    'forecast_step': step,
-                    'id': scalar(fields.get('id')),
-                    'rankings': shown,
-                }
-            )
+            row = {
+                'row_index': row_index,
+                'forecast_step': step,
+                'id': scalar(fields.get('id')),
+                'rankings': shown,
+            }
+            if ranking and fields.get('prediction') is not None:
+                prediction = fields['prediction']
+                if type(prediction) is not list:
+                    return None
+                row['prediction_candidates'] = [
+                    scalar(item) for item in prediction
+                ]
+            rows.append(row)
     except (ValueError, TypeError):
         return None
     return {'rows': rows}

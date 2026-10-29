@@ -1236,7 +1236,7 @@ def _native_scalar(value: Any) -> Any:
         (kind == 'utf8' and type(content) is str)
         or (kind == 'bool' and type(content) is bool)
         or (
-            kind == 'i64'
+            kind in ('i64', 'integer')
             and type(content) is str
             and content.removeprefix('-').isascii()
             and content.removeprefix('-').isdigit()
@@ -1255,6 +1255,11 @@ def _native_scalar(value: Any) -> Any:
         )
     )
     require(valid, 'native result scalar has invalid typed content')
+    if kind in ('i64', 'integer'):
+        require(
+            (kind == 'i64') == (-(2**63) <= int(content) < 2**63),
+            'native result integer width differs from its typed content',
+        )
     return value
 
 
@@ -1278,7 +1283,15 @@ def _presentation(shown: Any, table: Any) -> None:
         native = shown['rows'][ordinal]
         require(
             type(native) is dict
-            and set(native) == {'row_index', 'forecast_step', 'id', 'rankings'},
+            and {'row_index', 'forecast_step', 'id', 'rankings'}
+            <= set(native)
+            <= {
+                'row_index',
+                'forecast_step',
+                'id',
+                'rankings',
+                'prediction_candidates',
+            },
             'native result presentation has unknown row fields',
         )
         require(
@@ -1301,6 +1314,18 @@ def _presentation(shown: Any, table: Any) -> None:
             'native result presentation changed forecast step',
         )
         _native_scalar(native['id'])
+        prediction = native.get('prediction_candidates')
+        if 'prediction_candidates' in native:
+            require(
+                type(prediction) is list
+                and 'candidates' in columns
+                and 'rankings' in columns
+                and len(prediction)
+                == len(row[columns.index('candidates')]['list']),
+                'native ranking prediction has no complete candidate selection',
+            )
+            for candidate in prediction:
+                _native_scalar(candidate)
         ranked = native['rankings']
         if ranked is not None:
             require(
@@ -1331,6 +1356,12 @@ def _presentation(shown: Any, table: Any) -> None:
                     score == {'f64_bits': candidate['score']},
                     'native ranking changed its actual score',
                 )
+            if prediction is not None:
+                require(
+                    prediction
+                    == [candidate['candidate'] for candidate in ranked],
+                    'native ranking outputs disagree on candidate identity',
+                )
 
 
 def semantic_result(value: dict[str, Any]) -> dict[str, Any]:
@@ -1353,7 +1384,7 @@ def semantic_result(value: dict[str, Any]) -> dict[str, Any]:
             row[names.index('id')] = native['id']
             if native['id'] is not None:
                 kinds.add(next(iter(native['id'])))
-        if native['rankings'] is not None:
+        if native['rankings'] is not None or 'prediction_candidates' in native:
 
             def literal(cell: Any) -> Any:
                 if cell is None:
@@ -1361,29 +1392,35 @@ def semantic_result(value: dict[str, Any]) -> dict[str, Any]:
                 kind, content = next(iter(cell.items()))
                 return (
                     int(content)
-                    if kind == 'i64'
+                    if kind in ('i64', 'integer')
                     else struct.unpack('>d', bytes.fromhex(content))[0]
                     if kind == 'f64_bits'
                     else content
                 )
 
+            candidates = (
+                [candidate['candidate'] for candidate in native['rankings']]
+                if native['rankings'] is not None
+                else native['prediction_candidates']
+            )
             row[names.index('rankings')] = {
                 'list': [
                     {
                         'utf8': json.dumps(
-                            literal(candidate['candidate']),
+                            literal(candidate),
                             ensure_ascii=False,
                             separators=(',', ':'),
                             allow_nan=False,
                         )
                     }
-                    for candidate in native['rankings']
+                    for candidate in candidates
                 ]
             }
     if 'id' in names and kinds:
         table['columns'][names.index('id')]['type'] = (
             {
                 'i64': 'int64',
+                'integer': 'native_integer',
                 'f64_bits': 'float64',
                 'utf8': 'utf8',
                 'bool': 'bool',

@@ -949,6 +949,7 @@
       "oneOf": [
         {"type": "null"},
         {"type": "object", "additionalProperties": false, "required": ["i64"], "properties": {"i64": {"type": "string", "pattern": "^(0|-?[1-9][0-9]*)$"}}},
+        {"type": "object", "additionalProperties": false, "required": ["integer"], "properties": {"integer": {"type": "string", "pattern": "^(0|-?[1-9][0-9]*)$"}}},
         {"type": "object", "additionalProperties": false, "required": ["utf8"], "properties": {"utf8": {"type": "string"}}},
         {"type": "object", "additionalProperties": false, "required": ["f64_bits"], "properties": {"f64_bits": {"type": "string", "pattern": "^[0-9a-f]{16}$"}}},
         {"type": "object", "additionalProperties": false, "required": ["bool"], "properties": {"bool": {"type": "boolean"}}}
@@ -966,6 +967,7 @@
           "row_index": {"type": "integer"},
           "forecast_step": {"type": ["integer", "null"]},
           "id": {"$ref": "#/$defs/nativeResultScalar"},
+          "prediction_candidates": {"type": "array", "items": {"$ref": "#/$defs/nativeResultScalar"}},
           "rankings": {"type": ["array", "null"], "items": {
             "type": "object", "additionalProperties": false, "required": ["candidate", "score"],
             "properties": {"candidate": {"$ref": "#/$defs/nativeResultScalar"}, "score": {"type": "string", "pattern": "^[0-9a-f]{16}$"}}
