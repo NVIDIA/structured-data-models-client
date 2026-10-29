@@ -711,6 +711,11 @@ fn sql_temporal_sources_retain_whole_issued_reads_before_native_completion() {
         assert_eq!(descriptor["source"], logical);
         assert!(!seen.contains(&role.to_owned()));
         seen.push(role.to_owned());
+        let table = tables
+            .iter()
+            .find(|table| json!(table.source) == logical)
+            .unwrap();
+        let physical = serde_json::to_value(&table.read).unwrap();
         let batches = stages
             .returned
             .iter()
@@ -721,16 +726,12 @@ fn sql_temporal_sources_retain_whole_issued_reads_before_native_completion() {
                     .as_ref()
                     .is_some_and(|part| part.first.0 == read)
                     && asked["request"] == request
-                    && asked["table"] == logical
+                    && asked["table"] == physical
             })
             .flat_map(|(_, rows)| rows.batches.iter())
             .collect::<Vec<_>>();
         assert!(!batches.is_empty(), "view must name a real issued read");
         let fetched = arrow_select::concat::concat_batches(&batches[0].schema(), batches).unwrap();
-        let table = tables
-            .iter()
-            .find(|table| json!(table.source) == logical)
-            .unwrap();
         let columns = fetched
             .schema()
             .fields()
