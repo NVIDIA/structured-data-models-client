@@ -47,6 +47,80 @@ fn initial_flags_follow_the_actual_initial_time_assignment_not_physical_dtype() 
 }
 
 #[test]
+fn initial_untyped_fact_survives_unrelated_adoption_and_explicit_encoding() {
+    let mut source = description();
+    source
+        .tables
+        .iter_mut()
+        .find(|table| table.name == "orders")
+        .unwrap()
+        .columns
+        .iter_mut()
+        .find(|column| column.name == "price")
+        .unwrap()
+        .untyped = true;
+    let mut owner = SchemaOwner::new(source);
+    assert_eq!(flag(owner.held(), "orders", "price"), (true, false));
+    assert_eq!(flag(owner.held(), "users", "age"), (false, false));
+    assert_eq!(flag(owner.held(), "orders", "ts"), (false, true));
+
+    let mut answer = owner.held().clone();
+    for table in &mut answer.tables {
+        for column in &mut table.columns {
+            column.untyped = false;
+            column.stype_declared = false;
+        }
+    }
+    owner
+        .adopt(
+            answer,
+            Some(&ColumnRef {
+                table: "users".into(),
+                column: "age".into(),
+            }),
+        )
+        .unwrap();
+    assert_eq!(flag(owner.held(), "orders", "price"), (true, false));
+    assert_eq!(flag(owner.held(), "users", "age"), (false, true));
+    assert_eq!(flag(owner.held(), "orders", "ts"), (false, true));
+    assert_eq!(flag(owner.held(), "orders", "user_id"), (false, false));
+
+    let written: Value = serde_json::from_slice(&encode(owner.held()).unwrap()).unwrap();
+    for table in &owner.held().tables {
+        let encoded = written["tables"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|encoded| encoded["name"] == table.name)
+            .unwrap();
+        for column in &table.columns {
+            let encoded = encoded["columns"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|encoded| encoded["name"] == column.name)
+                .unwrap();
+            assert_eq!(encoded["untyped"], Value::Bool(column.untyped));
+            assert_eq!(
+                encoded["stype_declared"],
+                Value::Bool(column.stype_declared)
+            );
+        }
+    }
+    let described = owner
+        .description()
+        .tables
+        .iter()
+        .find(|table| table.name == "orders")
+        .unwrap()
+        .columns
+        .iter()
+        .find(|column| column.name == "price")
+        .unwrap();
+    assert!(described.untyped);
+}
+
+#[test]
 fn adoption_keeps_host_flags_and_the_actual_core_fields_and_declared_reference() {
     let mut owner = SchemaOwner::new(description());
     let mut answer = owner.held().clone();
