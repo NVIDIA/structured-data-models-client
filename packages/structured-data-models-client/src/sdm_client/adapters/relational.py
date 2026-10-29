@@ -49,7 +49,7 @@ from sdm_client.request import Request
 from sdm_client.result import PredictionResult
 from sdm_client.wire import as_declared
 from sdm_client.wire.answers import as_declared_target
-from sdm_client.wire.explanations import RelatedReader, explanations_of
+from sdm_client.wire.explanations import GradientDecoder
 from sdm_client.wire.inference import typed_inference
 
 # What to ask for when the caller named nothing, by task kind. Asking for
@@ -292,9 +292,7 @@ class RelationalAdapter:
             outputs=outputs,
             # Read against this call's own tables, whose positions restart at
             # 0 in every call of a split request.
-            explanations=explanations_of(
-                named, _related_rows_of(payload or {})
-            ),
+            explanations=GradientDecoder(payload or {}).decode(named),
         )
 
     def explain_error(
@@ -825,176 +823,3 @@ def _key_dtype(payload: dict[str, Any], reference: str) -> str | None:
             .get('dtype')
         )
     return None
-
-
-#: The engine's own transport columns on a related table: the instance a row
-#: was sampled for, and the key it numbers a keyless table's rows by
-#: (`rfm/inference/payload.py`). Neither is a value the caller sent, so a
-#: related row is given back without them.
-_INSTANCE_ID = 'instance_id'
-_SYNTHETIC_KEY = '__node_id'
-
-
-def _related_rows_of(payload: Mapping[str, Any]) -> RelatedReader:
-    r"""Read a record's related blocks as rows of this call, not positions.
-
-    The endpoint names each related row by its position in the table as this
-    call sent it, which the caller never saw and which a split request
-    restarts at 0 in every call. Each is given back as its primary key, when
-    the table has one of the caller's, and always as its values as sent.
-
-    How far each row is from the entity is worked out once per call, and only
-    if some record is explained.
-    """
-    schema = payload.get('schema') or {}
-    sent = (payload.get('predict') or {}).get('related_tables') or {}
-    hops: dict[str, list[int | None]] | None = None
-
-    def read(
-        blocks: Mapping[str, Any],
-    ) -> tuple[dict[str, Any], dict[str, list[int | None]]]:
-        nonlocal hops
-        if hops is None:
-            hops = _hops_from_the_entity(payload)
-        related: dict[str, Any] = {}
-        away: dict[str, list[int | None]] = {}
-        for name, block in blocks.items():
-            table = sent.get(name) or {}
-            columns = list(table.get('columns') or [])
-            rows = [table['rows'][index] for index in block['row_indices']]
-            described = (schema.get('related_tables') or {}).get(name) or {}
-            key = _caller_key(described)
-            hidden = {_INSTANCE_ID, *_synthetic_keys(described)}
-            read_back: dict[str, Any] = {}
-            if key is not None and key in columns:
-                dtype = (
-                    (described.get('columns') or {}).get(key, {}).get('dtype')
-                )
-                read_back['keys'] = [
-                    as_declared(row[columns.index(key)], dtype) for row in rows
-                ]
-            read_back['rows'] = [
-                {
-                    column: value
-                    for column, value in zip(columns, row, strict=True)
-                    if column not in hidden
-                }
-                for row in rows
-            ]
-            read_back['columns'] = list(block.get('columns') or [])
-            read_back['gradients'] = block.get('gradients') or []
-            related[name] = read_back
-            away[name] = [hops[name][index] for index in block['row_indices']]
-        return related, away
-
-    return read
-
-
-def _key_columns(described: Mapping[str, Any]) -> list[str]:
-    r"""A related table's primary key, less the instance that scopes it."""
-    key = described.get('primary_key') or []
-    key = [key] if isinstance(key, str) else list(key)
-    return [column for column in key if column != _INSTANCE_ID]
-
-
-def _synthetic_keys(described: Mapping[str, Any]) -> list[str]:
-    r"""The key columns the engine made up for a table that had none."""
-    return [
-        column
-        for column in _key_columns(described)
-        if column.startswith(_SYNTHETIC_KEY)
-    ]
-
-
-def _caller_key(described: Mapping[str, Any]) -> str | None:
-    r"""The table's own primary key, or ``None`` if it has none of its own."""
-    key = _key_columns(described)
-    if len(key) != 1 or _synthetic_keys(described):
-        return None
-    return key[0]
-
-
-def _hops_from_the_entity(
-    payload: Mapping[str, Any],
-) -> dict[str, list[int | None]]:
-    r"""How many links each related row of this call is from its entity.
-
-    Read from the relationships and key values sent, the same ones the model
-    joins on. A relationship with no ``source_table`` starts at the instance
-    table, and the rows it reaches are the entity's own: 0. Every other one is
-    followed either way, and a row is as far as its nearest path. Joins stay
-    within one instance, as the engine scopes them, so two entities sharing a
-    product never meet through it.
-
-    Positions are this call's, one list per related table of its predict half.
-    ``None`` for a row no relationship reaches from an entity.
-    """
-    schema = payload.get('schema') or {}
-    predict = payload.get('predict') or {}
-    instance = predict.get('instance_table') or {}
-    tables = predict.get('related_tables') or {}
-    hops: dict[str, list[int | None]] = {
-        name: [None] * len(table.get('rows') or [])
-        for name, table in tables.items()
-    }
-    linked: dict[tuple[str, int], list[tuple[str, int]]] = {}
-    reached: list[tuple[str, int]] = []
-    for link in schema.get('relationships') or []:
-        target = link.get('target_table')
-        if target not in tables:
-            continue
-        by_value: dict[Any, list[int]] = {}
-        for position, value in enumerate(
-            _joined_on(tables[target], link.get('target_columns') or [])
-        ):
-            if value is not None:
-                by_value.setdefault(value, []).append(position)
-        source = link.get('source_table')
-        columns = link.get('source_columns') or []
-        if source is None:
-            for value in _joined_on(instance, columns):
-                reached += [(target, at) for at in by_value.get(value, ())]
-            continue
-        if source not in tables:
-            continue
-        for position, value in enumerate(_joined_on(tables[source], columns)):
-            for at in by_value.get(value, ()):
-                linked.setdefault((source, position), []).append((target, at))
-                linked.setdefault((target, at), []).append((source, position))
-
-    for name, position in reached:
-        hops[name][position] = 0
-    frontier = reached
-    distance = 0
-    while frontier:
-        distance += 1
-        following = []
-        for row in frontier:
-            for name, position in linked.get(row, ()):
-                if hops[name][position] is None:
-                    hops[name][position] = distance
-                    following.append((name, position))
-        frontier = following
-    return hops
-
-
-def _joined_on(table: Mapping[str, Any], columns: Sequence[str]) -> list[Any]:
-    r"""What each row of ``table`` joins on through ``columns``.
-
-    The instance a row belongs to, and its values in ``columns``; ``None`` for
-    a row holding a null there, which joins nothing. Empty when the table does
-    not carry every one of ``columns``.
-    """
-    names = list(table.get('columns') or [])
-    if not columns or any(column not in names for column in columns):
-        return []
-    at = [names.index(column) for column in columns]
-    scope = names.index(_INSTANCE_ID) if _INSTANCE_ID in names else None
-    joined: list[Any] = []
-    for row in table.get('rows') or []:
-        values = tuple(row[index] for index in at)
-        if any(value is None for value in values):
-            joined.append(None)
-            continue
-        joined.append((None if scope is None else row[scope], values))
-    return joined

@@ -62,7 +62,7 @@ _ITEM_FIELDS = (
     'embeddings',
 )
 
-# The columns of `Explanations.to_pandas()` after the ones naming the row.
+# The columns of `GradientExplanations.to_pandas()` after the ones naming the row.
 _GRADIENT_COLUMNS = (
     'table',
     'hop',
@@ -74,7 +74,7 @@ _GRADIENT_COLUMNS = (
 )
 
 
-class Explanations(dict[Any, dict[str, Any]]):
+class GradientExplanations(dict[Any, dict[str, Any]]):
     r"""Each explained row's explanation, under the key naming it in the frame.
 
     The key is the row's ``id``, ``(id, forecast_step)`` for a forecast, and
@@ -180,29 +180,31 @@ class Explanations(dict[Any, dict[str, Any]]):
             lines, columns=[*self._keyed_by, *_GRADIENT_COLUMNS], dtype=object
         ).astype({'hop': 'Int64', 'row': 'int64', 'gradient': 'float64'})
 
-    def _renumbered(self, start: int) -> Explanations:
+    def _renumbered(self, start: int) -> GradientExplanations:
         r"""These, with each ``row_index`` key ``start`` places further on.
 
         A key that is an ``id`` is not a position and is left alone.
         """
         if not start or self._keyed_by != ('row_index',):
             return self
-        return Explanations(
+        return GradientExplanations(
             {key + start: entry for key, entry in self.items()},
             keyed_by=self._keyed_by,
             hops={key + start: hops for key, hops in self._hops.items()},
         )
 
-    def _at_step(self, step: Any) -> Explanations:
+    def _at_step(self, step: Any) -> GradientExplanations:
         r"""These, as the explanations of one forecast step."""
-        return Explanations(
+        return GradientExplanations(
             {(key, step): entry for key, entry in self.items()},
             keyed_by=(*self._keyed_by, 'forecast_step'),
             hops={(key, step): hops for key, hops in self._hops.items()},
         )
 
     @classmethod
-    def _merged(cls, parts: Sequence[Explanations]) -> Explanations:
+    def _merged(
+        cls, parts: Sequence[GradientExplanations]
+    ) -> GradientExplanations:
         r"""The explanations of several calls, as one.
 
         Each call answers about its own rows, so no key is in two parts.
@@ -274,8 +276,8 @@ class PredictionResult:
         self.metadata = dict(metadata or {})
         self._explanations = (
             explanations
-            if isinstance(explanations, Explanations)
-            else Explanations(explanations)
+            if isinstance(explanations, GradientExplanations)
+            else GradientExplanations(explanations)
         )
         self._unscored_candidates = tuple(unscored_candidates)
 
@@ -317,7 +319,7 @@ class PredictionResult:
         )
 
     @property
-    def explanations(self) -> Explanations:
+    def explanations(self) -> GradientExplanations:
         r"""Each explained row's explanation, under the key naming that row.
 
         The key is the one ``to_pandas()`` names the row by: its ``id``,
@@ -458,7 +460,7 @@ class PredictionResult:
         # would otherwise survive. That is the one you do not have when a
         # later batch is the one that misbehaved.
         metadata['batch_request_ids'] = [part.request_id for part in parts]
-        explanations = Explanations._merged(
+        explanations = GradientExplanations._merged(
             [part.explanations for part in parts]
         )
         # Every part answers one slice of the same request, so they were asked

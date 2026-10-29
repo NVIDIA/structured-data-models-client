@@ -48,7 +48,7 @@ from sdm_client.request import (
     _envelope_rows,
     warn_of_rows_scored_from_their_own_answers,
 )
-from sdm_client.result import Explanations, PredictionResult
+from sdm_client.result import GradientExplanations, PredictionResult
 from sdm_client.schema import _as_key_tuple
 from sdm_client.wire.keys import (
     _named_by,
@@ -1294,7 +1294,7 @@ def _by_step(
         for (_, step), answer in zip(rewritten.parts, answers, strict=True)
         for item in answer.items
     ]
-    explanations = Explanations._merged(
+    explanations = GradientExplanations._merged(
         [
             answer.explanations._at_step(step)
             for (_, step), answer in zip(rewritten.parts, answers, strict=True)
