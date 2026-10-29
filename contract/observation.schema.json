@@ -580,7 +580,7 @@
       "required": ["run", "relation"],
       "properties": {
         "run": {"type": "integer", "minimum": 0},
-        "relation": {"enum": ["selected", "cause", "refused"]}
+        "relation": {"enum": ["selected", "cause", "refused", "native"]}
       }
     },
     "materializationEntry": {

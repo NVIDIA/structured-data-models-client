@@ -412,3 +412,84 @@ def test_separate_entries_with_reused_ids_keep_distinct_resource_producers():
     assert observed['operations'] == ['materialize', 'materialize']
     assert len(observed['materializations']) == 2
     assert capture._materialization_owners == {}
+
+
+def test_actual_pass_through_guard_has_native_selection_without_a_core_error():
+    core = actual_materialization()
+    entry = core['materialization_entries'][0]
+    entry.update(
+        runs=[0, 1],
+        completion='raised',
+        terminal=None,
+        failure={'run': 1, 'relation': 'native'},
+    )
+    core['materialization_preparations'][0].update(
+        value_reads=[], output_reads=[]
+    )
+    facts = {
+        'builtin': {'ancestry': []},
+        'key_error': False,
+        'structured_data_error': True,
+        'relational_error': False,
+        'deepest_module': None,
+        'message_casing': {'mapping': 'full_root', 'unicode_version': '14.0.0'},
+    }
+    guard_input = {
+        'stage': 'assess_failure',
+        'origin': 'engine',
+        'failure': facts,
+        'signature': None,
+        'window_outran': None,
+    }
+    assessment = {
+        'origin': 'engine',
+        'failure': facts,
+        'signature': None,
+        'category': 'pass_through',
+        'part': None,
+    }
+    core['materialization_guards'] = [
+        {
+            'run': 1,
+            'entry': 0,
+            'operation': {'op': 'prepare_frames', 'input': 1},
+            'input': _bytes(1, json.dumps(guard_input).encode()),
+            'completion': 'done',
+            'result': {'op': 'prepare_frames', 'value': 20},
+            'value_reads': [
+                _bytes(
+                    20,
+                    json.dumps(
+                        {'value': 'failure_assessment', 'data': assessment}
+                    ).encode(),
+                )
+            ],
+            'error': None,
+            'events': [
+                {'event': 'done'},
+                {'event': 'value_taken', 'attachment': 20},
+            ],
+            'origin': None,
+        }
+    ]
+    observed = reader().view(core, ['prepare_materialize', 'prepare_frames'])
+    assert observed['operations'] == ['materialize']
+    assert observed['materializations'][0]['failure'] == {
+        'run': 1,
+        'relation': 'native',
+    }
+    assert observed['materializations'][0]['native'] is True
+    assert observed['materialized'] is None
+    assert observed['error'] is None
+    _validate(core)
+    core['materialization_guards'][0]['value_reads'][0] = _bytes(
+        20,
+        json.dumps(
+            {
+                'value': 'failure_assessment',
+                'data': {**assessment, 'category': 'caller_data'},
+            }
+        ).encode(),
+    )
+    with pytest.raises(reader().ObservationError):
+        reader().view(core, ['prepare_materialize', 'prepare_frames'])
