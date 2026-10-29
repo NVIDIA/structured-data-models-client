@@ -21,14 +21,23 @@ public final class Column {
   private final String stype;
   private final String stypeBeforeKey;
   private final Map<String, Object> source;
+  private final boolean untyped;
+  private final boolean stypeDeclared;
 
   Column(
       String name, String dtype, String stype, String stypeBeforeKey, Map<String, Object> source) {
+    this(name, dtype, stype, stypeBeforeKey, source, false, false);
+  }
+
+  Column(String name, String dtype, String stype, String stypeBeforeKey,
+      Map<String, Object> source, boolean untyped, boolean stypeDeclared) {
     this.name = Objects.requireNonNull(name, "name");
     this.dtype = dtype;
     this.stype = stype;
     this.stypeBeforeKey = stypeBeforeKey;
     this.source = source;
+    this.untyped = untyped;
+    this.stypeDeclared = stypeDeclared;
   }
 
   /** The column's name. */
@@ -52,6 +61,14 @@ public final class Column {
 
   Map<String, Object> source() {
     return source;
+  }
+
+  boolean untyped() {
+    return untyped;
+  }
+
+  boolean stypeDeclared() {
+    return stypeDeclared;
   }
 
   @Override

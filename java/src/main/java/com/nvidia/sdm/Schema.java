@@ -257,7 +257,7 @@ public final class Schema {
     attachments.put(2, Host.attachment(edit));
     try (Host.Finished finished = Host.run(operation, attachments)) {
       Results.Edited edited = (Results.Edited) Results.expect(finished.result(), "edit_schema");
-      Schema changed = held(read(finished.bytes(edited.schema())), source);
+      Schema changed = held(read(finished.bytes(edited.schema())), source, this, edited.declared());
       return new Schema(changed.tables, changed.relationships, source, conversionNotes);
     }
   }
@@ -280,6 +280,8 @@ public final class Schema {
         each.put("dtype", column.dtype());
         each.put("stype", column.stype());
         each.put("stype_before_key", column.stypeBeforeKey());
+        each.put("untyped", column.untyped());
+        each.put("stype_declared", column.stypeDeclared());
         if (column.source() != null) {
           each.put("source", column.source());
         }
@@ -368,7 +370,10 @@ public final class Schema {
                 (String) dtype,
                 (String) column.get("stype"),
                 (String) column.get("stype_before_key"),
-                facts));
+                facts,
+                Boolean.TRUE.equals(column.get("untyped")),
+                Objects.equals(column.get("name"), table.get("time_column"))
+                    || Objects.equals(column.get("name"), table.get("time_column_inferred"))));
       }
       tables.add(table(table, columns));
     }
@@ -377,7 +382,8 @@ public final class Schema {
 
   /** The schema of a {@code HeldSchema} the core answered an edit with. */
   @SuppressWarnings("unchecked")
-  private static Schema held(Object read, Source source) {
+  private static Schema held(Object read, Source source, Schema previous,
+      Map<String, Object> declared) {
     Map<String, Object> answer = (Map<String, Object>) read;
     List<Table> tables = new ArrayList<>();
     for (Object item : (List<Object>) answer.get("tables")) {
@@ -385,13 +391,20 @@ public final class Schema {
       List<Column> columns = new ArrayList<>();
       for (Object c : (List<Object>) table.get("columns")) {
         Map<String, Object> column = (Map<String, Object>) c;
+        Column before = previous.table((String) table.get("name"))
+            .column((String) column.get("name"));
+        boolean assigned = declared != null
+            && Objects.equals(declared.get("table"), table.get("name"))
+            && Objects.equals(declared.get("column"), column.get("name"));
         columns.add(
             new Column(
                 (String) column.get("name"),
                 (String) column.get("dtype"),
                 (String) column.get("stype"),
                 (String) column.get("stype_before_key"),
-                (Map<String, Object>) column.get("source")));
+                (Map<String, Object>) column.get("source"),
+                before.untyped(),
+                before.stypeDeclared() || assigned));
       }
       tables.add(table(table, columns));
     }

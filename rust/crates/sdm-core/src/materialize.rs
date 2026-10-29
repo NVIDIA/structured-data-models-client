@@ -1190,18 +1190,18 @@ impl Times {
         let stored = match known {
             Some(stored) => stored,
             None => {
-                let read = ask(
-                    asker,
-                    DataRequest::Scan {
+                let mut probe = asker.fetch(DataRequest::Scan {
                         table: table.source.clone(),
                         columns: vec![window.column.clone()],
                         filters: vec![Filter::NotNull {
                             column: window.column.clone(),
                         }],
                         limit: Some(1),
-                    },
-                )
-                .await?;
+                    })?;
+                // This reads the source spelling, not native business rows.
+                // Keep it out of the completed retained-source population.
+                probe.set_purpose(sdm_contract::run::FetchPurpose::Locate);
+                let read = crate::describe::data(probe.await, "scan")?;
                 // The reference spells the bounds by the value only when it
                 // is text, and by its default otherwise.
                 let stored = read

@@ -900,7 +900,7 @@ impl Ask {
         }
     }
 
-    fn set_purpose(&mut self, purpose: sdm_contract::run::FetchPurpose) {
+    pub(crate) fn set_purpose(&mut self, purpose: sdm_contract::run::FetchPurpose) {
         self.purpose = Some(purpose);
         if let AskState::Chunks(chunked) = &mut self.state {
             for part in &mut chunked.parts {
