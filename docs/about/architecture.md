@@ -594,9 +594,10 @@ position in the tables as submitted. The caller never sees those tables: the
 related ones are gathered by this client, and a keyless one is identified on
 the wire only by the engine's own synthetic node id. So the client turns each
 position back into what the caller can recognise. The predicted row's position
-is dropped, since the mapping's key already names it. A related row carries its
-primary key when its table has one, and always its values as sent, so a keyless
-table's rows are still identified, by their contents.
+is dropped, since the mapping's key already names it. A related row always
+carries its values as sent; `keys` is present when the table's key column is
+one the model receives, i.e. a column a relationship joins on; otherwise rows
+are identified by their values.
 
 **Translated per call, before merging.** A request split across several calls
 numbers its positions from zero in each call. Read after merging, the second

@@ -100,8 +100,9 @@ class GradientExplanations(dict[Any, dict[str, Any]]):
         name for a related one, the ``kumo-relational`` entity's own table
         among them. ``hop`` is how many links the row is from the entity: 0
         for the entity itself, and ``None`` where the rows sent do not link
-        it. ``key`` is the related row's primary key, ``None`` for a keyless
-        table, and the row's own ``id`` for its instance block. ``row`` is the
+        it. ``key`` is the related row's entry in ``keys``, present only when a
+        relationship joins on the table's key column, else ``None``; for an
+        instance block it is the row's own ``id``. ``row`` is the
         position in that entry's ``related[table]['rows']``. ``output`` names
         the score as the column of ``result.to_pandas()`` that holds it.
         """

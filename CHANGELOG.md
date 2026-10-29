@@ -35,8 +35,9 @@ these packages. All five distributions share one version and one entry.
   request has no entity id. Each entry is a plain dict of `outputs` and, on
   `kumo-tabular`, the row's own columns under `instance`, or, on
   `kumo-relational`, every table, the entity's own included, under `related`,
-  whose rows carry their primary key when the table has one and always their
-  values as sent. It is kept out of
+  whose rows always carry their values as sent; `keys` is present when the
+  table's key column is one the model receives, i.e. a column a relationship
+  joins on; otherwise rows are identified by their values. It is kept out of
   `result.to_pandas()`; `result.explanations.to_pandas()` flattens it into one
   line per row, output and column, with each row's `hop` from the entity.
 
