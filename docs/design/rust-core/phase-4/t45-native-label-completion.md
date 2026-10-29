@@ -202,3 +202,15 @@ Update every contract, attachment inventory, binding, host, stub, checkpoint and
 Keep unpublished working35 coherent and published locks unchanged; use only the canonical writers for generated artifacts.
 Two fresh independent whole CODE approvals precede any execution of the resulting candidate.
 Normal unscoped handoff, matched and minimum dependency profiles where required, provider/replay, ARM/CI, live, ownership/RNG and resource acceptance remain mandatory before landing.
+
+### Grouped R41 whole-review repair
+
+The exact R41 candidate remains frozen with both complete CHANGES REQUIRED reports and no candidate validation.
+The successor closes the concrete producer/reader mismatches together before another whole-code pair.
+Entity-key presence must enter the existing condition kernel as an explicit meaningful predicate or Truth product, preserving its full mask and later WHERE occurrence order; arbitrary bare query columns remain invalid conditions.
+Core-produced UInt64 lookup positions remain an ordered neutral data product, while the native reply restores their already bounded values to the existing Int64 batch helper without changing offsets or business keys.
+Completed native timestamp operands use the same UTC/zone-removal kernel as existing source-time reading before condition comparisons; raw timestamp guards and actual completed value authority stay intact.
+Every actually observed materialization entry and complete nested product is compared at its common logical position, including ordinary equal traces and shared prefixes, while historical missing detail remains explicitly unobserved.
+A coherent actual Task and owner/lifecycle chain may end in an unattributed host failure with no selected Core/native association; retain the complete public failure independently and never invent a Core kind/code or infer authority from incidental exception context.
+Source-first pure, real Host and complete public consumers cover the repaired key presence, actual UInt64 helper producer, zoned/naive conditions, earlier/nested product changes and actual captured-versus-uncaptured native formatter failure.
+Regenerate only applicable canonical outputs through their writers and require two fresh full exact whole-code approvals before any successor SDK execution.
