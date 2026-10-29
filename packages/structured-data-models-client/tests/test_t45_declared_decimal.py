@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import hashlib
+import copy
 import json
 import warnings
 from decimal import Decimal
@@ -28,6 +29,37 @@ REFERENCE = json.loads(
     .with_name(f't45_declared_decimal_pandas{PANDAS}_reference.json')
     .read_text()
 )
+
+
+@pytest.mark.parametrize(
+    'changed', ['message', 'class', 'order', 'call', 'effect']
+)
+def test_bounded_decimal_pair_keeps_all_native_warnings_and_call_effects(
+    changed,
+):
+    [case] = [
+        case
+        for case in REFERENCE['cases']
+        if (case['storage'], case['shape'], case['declared'], case['mutation'])
+        == ('object', 'scale-minus129', 'float64', False)
+    ]
+    original = copy.deepcopy(case['expected'])
+    _assert_decimal_profile(
+        original, copy.deepcopy(original), case['expected'], core=False
+    )
+    actual = copy.deepcopy(original)
+    if changed == 'message':
+        actual['warnings'][0]['message'] += ' changed'
+    elif changed == 'class':
+        actual['warnings'][0]['type'] = 'OtherWarning'
+    elif changed == 'order':
+        actual['warnings'].reverse()
+    elif changed == 'call':
+        actual['calls'][0]['error']['message'] += ' changed'
+    else:
+        actual['effect_reached'] = True
+    with pytest.raises(AssertionError):
+        _assert_decimal_profile(actual, original, case['expected'], core=False)
 
 
 def payload_digest(value):

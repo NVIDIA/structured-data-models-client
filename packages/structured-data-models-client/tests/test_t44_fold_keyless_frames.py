@@ -25,6 +25,50 @@ from sdm_client.materializers.relational import RelationalMaterializer
 ROUTES = FRAME_ROUTES
 
 
+@pytest.mark.parametrize(
+    'changed', ['warning', 'phase', 'input', 'body', 'result']
+)
+def test_fold_profile_pair_keeps_caller_warning_and_every_pinned_product(
+    changed,
+):
+    expected = json.loads(
+        Path(__file__)
+        .with_name('t44_fold_keyless_pandas3_reference.json')
+        .read_text()
+    )['records']['fold-entity']
+    original = _frozen_fold_product(expected)
+    original['serialization'] = [
+        {'phase': 'result.to_json', 'warnings': []},
+        {
+            'phase': 'merged.to_json',
+            'warnings': [
+                {
+                    'type': 'Pandas4Warning',
+                    'message': 'actual native words',
+                    'module': 'pandas.errors',
+                    'filename': __file__,
+                }
+            ],
+        },
+    ]
+    _assert_fold_profile(
+        original, copy.deepcopy(original), expected, core=False
+    )
+    actual = copy.deepcopy(original)
+    if changed == 'warning':
+        actual['serialization'][1]['warnings'][0]['message'] += ' changed'
+    elif changed == 'phase':
+        actual['serialization'].reverse()
+    elif changed == 'input':
+        actual['input']['entity_counts'][0] += 1
+    elif changed == 'body':
+        actual['sent'][0]['metadata']['source_query'] += ' '
+    else:
+        actual['result']['data'][0][-1] += 1
+    with pytest.raises(AssertionError):
+        _assert_fold_profile(actual, original, expected, core=False)
+
+
 def question(case):
     users = pd.DataFrame(
         {'user_id': np.arange(1, 9), 'age': np.arange(21, 29, dtype=np.int32)}
