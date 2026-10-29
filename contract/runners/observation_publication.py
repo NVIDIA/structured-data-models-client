@@ -86,6 +86,95 @@ def _serving_record(value: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
+def _project_json_text(held: Any, text: str) -> tuple[str, bool]:
+    """Map decoded names using the existing lossless ordered JSON reader."""
+    reader = runner()._sibling('prediction_observation')
+    try:
+        decoded = reader._ordered_json(text)
+    except (ValueError, RecursionError):
+        raise PublicationError('nested request JSON is unreadable') from None
+    pending = [('value', decoded)]
+    written = []
+    changed = False
+    while pending:
+        action, value = pending.pop()
+        if action == 'literal':
+            written.append(value)
+        elif type(value) is tuple and value[0] == 'number':
+            # The decoder already validated this exact token as JSON.
+            written.append(value[1])
+        elif type(value) is tuple and value[0] == 'object':
+            pairs = value[1]
+            # Preserve the existing finite nested Serving boundary too.
+            if len(pairs) == 1 and pairs[0][0] == 'dataframe_records':
+                rows = pairs[0][1]
+                if type(rows) is list and len(rows) == 1:
+                    row = rows[0]
+                    if (
+                        type(row) is tuple
+                        and row[0] == 'object'
+                        and len(row[1]) == 1
+                    ):
+                        key, nested = row[1][0]
+                        if key == 'request_json' and type(nested) is str:
+                            mapped, altered = _project_json_text(held, nested)
+                            if altered:
+                                pairs = [
+                                    (
+                                        'dataframe_records',
+                                        [
+                                            (
+                                                'object',
+                                                [('request_json', mapped)],
+                                            )
+                                        ],
+                                    )
+                                ]
+                                changed = True
+            members = []
+            originals = {}
+            for key, item in pairs:
+                mapped = held.text(key)
+                if mapped in originals and originals[mapped] != key:
+                    raise PublicationError(
+                        'warehouse names collide with object members'
+                    )
+                originals[mapped] = key
+                changed |= mapped != key
+                members.append((mapped, item))
+            written.append('{')
+            pending.append(('literal', '}'))
+            for at in range(len(members) - 1, -1, -1):
+                key, item = members[at]
+                pending.extend(
+                    [
+                        ('value', item),
+                        ('literal', ':'),
+                        ('literal', json.dumps(key, ensure_ascii=True)),
+                    ]
+                )
+                if at:
+                    pending.append(('literal', ','))
+        elif type(value) is list:
+            written.append('[')
+            pending.append(('literal', ']'))
+            for at in range(len(value) - 1, -1, -1):
+                pending.append(('value', value[at]))
+                if at:
+                    pending.append(('literal', ','))
+        elif type(value) is str:
+            mapped = held.text(value)
+            changed |= mapped != value
+            written.append(json.dumps(mapped, ensure_ascii=True))
+        elif value is None:
+            written.append('null')
+        elif type(value) is bool:
+            written.append('true' if value else 'false')
+        else:
+            raise PublicationError('nested request JSON has no typed value')
+    return ''.join(written) if changed else text, changed
+
+
 def _project(held: Any, value: Any) -> Any:
     pending = [value]
     while pending:
@@ -111,27 +200,9 @@ def _project(held: Any, value: Any) -> Any:
                 None if nested_owner is None else nested_owner['request_json']
             )
             if isinstance(nested, str):
-                try:
-                    decoded = json.loads(nested)
-                except (ValueError, RecursionError):
-                    raise PublicationError(
-                        'nested request JSON is unreadable'
-                    ) from None
-                strings = [decoded]
-                changed = False
-                while strings:
-                    item = strings.pop()
-                    if isinstance(item, str):
-                        changed |= held.text(item) != item
-                    elif isinstance(item, dict):
-                        strings.extend(item)
-                        strings.extend(item.values())
-                    elif isinstance(item, list):
-                        strings.extend(item)
+                mapped, changed = _project_json_text(held, nested)
                 if changed:
-                    nested_owner['request_json'] = json.dumps(
-                        _project(held, decoded), ensure_ascii=True
-                    )
+                    nested_owner['request_json'] = mapped
             pending.extend(current.values())
         elif isinstance(current, list):
             pending.extend(current)
