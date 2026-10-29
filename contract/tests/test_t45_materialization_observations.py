@@ -476,8 +476,25 @@ def test_actual_pass_through_guard_has_native_selection_without_a_core_error():
         terminal=None,
         failure={'run': 1, 'relation': 'native'},
     )
+    source = {
+        'source': 'source',
+        'identity': 'source identity',
+        'owner': 4,
+        'target': {'source': {'source': ['events']}, 'column': 'value'},
+        'tables': [
+            {
+                'source': {'source': ['events']},
+                'read': {'source': ['events']},
+                'columns': ['value'],
+            }
+        ],
+    }
     core['materialization_preparations'][0].update(
-        value_reads=[], output_reads=[]
+        value_reads=[
+            _bytes(10, json.dumps({'value': 'source', 'data': source}).encode())
+        ],
+        owner_takes=[{'attachment': 4, 'origin': 'result'}],
+        output_reads=[],
     )
     facts = {
         'builtin': {'ancestry': []},
