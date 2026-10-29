@@ -691,21 +691,26 @@ pub(super) fn complete_label_groups(
     };
     // What-if conditions consume the retained rows only after a successful
     // native restoration. No source or later candidate slice is reread.
-    if draw.asked.task == Task::TemporalLink {
-        if let Some(selected) = entity_selection {
-            labelled = select_labelled(labelled, selected)?;
-        }
+    let selection = if draw.asked.task == Task::TemporalLink {
+        let mut selection = entity_selection.clone();
         for shape in draw
             .asked
             .choosing
             .iter()
             .skip(usize::from(entity_selection.is_some()))
         {
-            let selected = labels::truth(&labelling.build(shape, fetched, false)?)?.values;
-            labelled = select_labelled(labelled, &selected)?;
+            let next = labels::truth(&labelling.build(shape, fetched, false)?)?.values;
+            selection = Some(match selection {
+                None => next,
+                Some(before) => before.iter().zip(&next).map(|(&a, &b)| a && b).collect(),
+            });
         }
-    } else if let Some(selected) = scalar_selection {
-        labelled = select_labelled(labelled, selected)?;
+        selection
+    } else {
+        scalar_selection.clone()
+    };
+    if let Some(selected) = selection {
+        labelled = select_labelled(labelled, &selected)?;
     }
     if !population.nan_key.is_empty() {
         let selected = population

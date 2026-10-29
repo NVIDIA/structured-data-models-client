@@ -93,7 +93,9 @@ A provider's scoped `source_rows` I/O primitive executes and reads once while re
 The ordinary Arrow consumer remains pandas-free and uses its current concrete encoding, including full Postgres type-registry/precision/scale/array metadata and Snowflake's existing scalar text fallback.
 The native consumer retains the actual fetched data and constructs its source array at the original reader's position relative to cursor and transaction exit, before eligibility or target aggregation.
 The Arrow-backed DuckDB and Snowflake readers close their cursor before pandas construction and sanitation; do not extend that cursor lifetime through native callbacks.
-Scalar construction and sanitation may occupy distinct original positions, which must be traced separately rather than assigned one global timing rule.
+Postgres constructs its object DataFrame inside the read, then performs nullable construction and sanitation after cursor/transaction exit and chunk concatenation.
+SQLite and Databricks also perform pandas conversion after their Arrow cursor closes.
+Snowflake's original windowed reader has no scalar fallback; its ordinary provider fallback remains separate and cannot turn that original Arrow failure into a successful native label source.
 No completed task retains a cursor.
 Names alone are insufficient scalar metadata; preserve the original description objects and their reached name-access timing.
 Scope exit retains each original reader's behavior for ordinary boxing and cancellation failures.
