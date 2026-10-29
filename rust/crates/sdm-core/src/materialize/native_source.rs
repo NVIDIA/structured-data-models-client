@@ -74,6 +74,8 @@ pub(super) fn scalar_meaning(
         } else {
             M::Original {}
         }),
+        MaterializeSourceFacts::ColumnValues { .. }
+        | MaterializeSourceFacts::TimeConversion { .. } => Ok(M::Original {}),
         MaterializeSourceFacts::TypedColumns { declaration } => {
             if let Some(declaration) = declaration {
                 crate::frame_materialize::values::check_declaration(declaration)?;
@@ -117,6 +119,19 @@ pub(super) fn timestamp_meaning(
         return None;
     }
     match input {
+        MaterializeSourceFacts::ColumnValues {
+            inferred,
+            all_missing,
+        } if *all_missing
+            || *inferred == sdm_contract::frames::materialize::FrameObservedContent::Temporal =>
+        {
+            Some(MaterializeScalarMeaning::Nullable {
+                physical: ColumnType::Timestamp {
+                    unit: sdm_contract::types::TimestampUnit::Ns,
+                    zone: None,
+                },
+            })
+        }
         MaterializeSourceFacts::TypedColumns {
             declaration:
                 Some(FramePhysicalDeclaration::Physical {
@@ -130,4 +145,42 @@ pub(super) fn timestamp_meaning(
         }),
         _ => None,
     }
+}
+
+pub(super) fn time_notice(
+    declared: Option<Dtype>,
+    stype: Stype,
+    column: &str,
+    input: &MaterializeSourceFacts,
+) -> Result<Option<CoreWarning>, CoreError> {
+    let MaterializeSourceFacts::TimeConversion {
+        rows,
+        unread,
+        examples,
+    } = input
+    else {
+        return Ok(None);
+    };
+    if (declared != Some(Dtype::Time) && stype != Stype::Timestamp)
+        || *unread == 0
+        || unread > rows
+        || examples.is_empty()
+    {
+        return Err(crate::prepare::invalid(
+            "native time outcome does not retain a reached temporal coercion",
+        ));
+    }
+    Ok(Some(CoreWarning {
+        fields: [
+            ("column".to_owned(), Detail::text(column)),
+            ("unread".to_owned(), Detail::Scalar(Scalar::UInt64(*unread))),
+            ("rows".to_owned(), Detail::Scalar(Scalar::UInt64(*rows))),
+            ("examples".to_owned(), Detail::text(examples)),
+        ]
+        .into(),
+        ..CoreWarning::new(
+            Sentence::NativeTimeValuesUnread,
+            "native datetime values were read as no time and dropped",
+        )
+    }))
 }

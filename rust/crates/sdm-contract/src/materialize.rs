@@ -10,8 +10,8 @@ use crate::ColumnType;
 use crate::data::strings::StringEncoding;
 use crate::data::{AttachmentId, ProviderError, Relation};
 use crate::frames::materialize::{
-    FrameBatchRange, FrameNativeColumnRef, FramePhysicalDeclaration, PreparedFrameLabelGroups,
-    RestoredFrameLabels,
+    FrameBatchRange, FrameNativeColumnRef, FrameObservedContent, FramePhysicalDeclaration,
+    PreparedFrameLabelGroups, RestoredFrameLabels,
 };
 use crate::ops::{AttachmentKind, Materialize, Materialized, Operation};
 use crate::prepare::NativeFailure;
@@ -51,6 +51,9 @@ pub struct MaterializeSourceTable {
     /// Exact resolved/pinned read, including its captured projection.
     pub read: Relation,
     pub columns: Vec<String>,
+    /// Resolved temporal column meaning, independently of designated time.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub temporal_columns: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub time_column: Option<String>,
 }
@@ -248,6 +251,17 @@ pub struct NativeConditionColumn {
 #[serde(tag = "storage", rename_all = "snake_case", deny_unknown_fields)]
 pub enum MaterializeSourceFacts {
     CellRows {},
+    /// Actual content of a reached post-construction native scalar column.
+    ColumnValues {
+        inferred: FrameObservedContent,
+        all_missing: bool,
+    },
+    /// Reached native datetime conversion before timezone/unit finishing.
+    TimeConversion {
+        rows: u64,
+        unread: u64,
+        examples: String,
+    },
     TypedColumns {
         declaration: Option<FramePhysicalDeclaration>,
     },
@@ -277,6 +291,9 @@ pub struct MaterializeColumnMeaning {
     pub column: FrameNativeColumnRef,
     pub input: MaterializeSourceFacts,
     pub scalar: MaterializeScalarMeaning,
+    /// Completed conversion notice, presented at the native conversion position.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notice: Option<crate::error::CoreWarning>,
 }
 
 /// Native ancestry observed without message, arguments or display callbacks.

@@ -21,6 +21,7 @@ fn error() -> ProviderError {
 fn reported_native_source_io_reuses_the_same_provider_policy_and_request_location() {
     let source = sdm_contract::data::Relation::named("events");
     let tables = vec![MaterializeSourceTable {
+        temporal_columns: Vec::new(),
         time_column: None,
         source: source.clone(),
         read: source.clone(),
@@ -50,6 +51,7 @@ fn reported_native_source_io_reuses_the_same_provider_policy_and_request_locatio
 fn a_terminal_source_diagnostic_does_not_authorize_foreign_or_partial_source_meaning() {
     let source = sdm_contract::data::Relation::named("events");
     let tables = vec![MaterializeSourceTable {
+        temporal_columns: Vec::new(),
         time_column: None,
         source: source.clone(),
         read: source.clone(),
@@ -90,6 +92,7 @@ fn an_actual_derived_read_is_distinct_from_its_logical_source_relation() {
         expression: None,
     });
     let tables = vec![MaterializeSourceTable {
+        temporal_columns: Vec::new(),
         time_column: None,
         source: source.clone(),
         read: actual.clone(),

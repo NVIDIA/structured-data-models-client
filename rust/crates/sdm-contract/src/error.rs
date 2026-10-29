@@ -868,6 +868,7 @@ sentences! {
     TimeColumnsRefusedBirthDate = "time_columns_refused_birth_date", W::TimeColumnsGuessed;
     ColumnsLeftOut = "columns_left_out", W::ColumnsLeftOut;
     TimeValuesUnread = "time_values_unread", W::TimeValuesUnread;
+    NativeTimeValuesUnread = "native_time_values_unread", W::TimeValuesUnread;
     DatesReadDayFirst = "dates_read_day_first", W::DatesReadDayFirst;
     KeyCandidatesTied = "key_candidates_tied", W::KeyCandidatesTied;
     LinkCannotJoinNotTheKey = "link_cannot_join_not_the_key", W::LinkCannotJoin;

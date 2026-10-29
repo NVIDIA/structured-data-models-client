@@ -109,6 +109,8 @@ def _ids(kind: str, data: dict[str, Any]) -> list[int]:
         if kind == 'label_inputs'
         else ('restored', 'what_if')
         if kind == 'label_groups'
+        else ('notice',)
+        if kind == 'column_meaning'
         else (),
     )
     if kind in ('source', 'population'):
@@ -117,13 +119,28 @@ def _ids(kind: str, data: dict[str, Any]) -> list[int]:
         if not isinstance(value['tables'], list):
             raise CodecError('native SQL source tables are not an ordered list')
         for table in value['tables']:
-            _object(table, ('source', 'read', 'columns'), ('time_column',))
+            _object(
+                table,
+                ('source', 'read', 'columns'),
+                ('time_column', 'temporal_columns'),
+            )
     if kind in ('label_inputs', 'label_groups', 'label_batch', 'lookup'):
         _object(value['range'], ('start', 'stop'))
     if kind == 'label_groups' and value['native_target'] is not None:
         _object(value['native_target'], ('source', 'column'))
     if kind == 'column_meaning':
         _object(value['column'], ('source', 'column'))
+        if value.get('notice') is not None:
+            notice = _object(
+                value['notice'], ('code', 'sentence', 'message'), ('fields',)
+            )
+            if any(
+                not isinstance(notice[key], str)
+                for key in ('code', 'sentence', 'message')
+            ) or not isinstance(notice.get('fields', {}), dict):
+                raise CodecError(
+                    'native column notice has no complete typed data'
+                )
         if not isinstance(value['input'], dict) or not isinstance(
             value['scalar'], dict
         ):

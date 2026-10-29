@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import json
+import warnings
 from collections.abc import Mapping
 from typing import TypeAlias
 
@@ -77,19 +78,28 @@ def scalar_column(
 
 
 def typed_timestamp(values: pd.Series) -> pd.Series:
-    """Actual whole native boxing, timezone and unit casts at sanitization.
+    """Fixed typed conversion; source completion retains any coercion outcome."""
+    converted, _ = box_timestamp(values)
+    return finish_timestamp(converted)
 
-    The core selected this for an actual typed timestamp source. String
-    source formats use the fixed Reader at a different boundary.
-    """
+
+def box_timestamp(values: pd.Series) -> tuple[pd.Series, pd.Series | None]:
+    """Actual typed boxing and reached native datetime conversion."""
     if isinstance(values.dtype, pd.ArrowDtype):
         values = pd.Series(
             values.to_numpy(), index=values.index, name=values.name
         )
+    source = None
     if not pd.api.types.is_datetime64_any_dtype(values):
-        # A native typed timestamp can box to real datetime objects. This
-        # is their original native unit conversion, not string admission.
-        values = pd.to_datetime(values, unit='ns', errors='coerce')
+        source = values
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', message='Could not infer format')
+            values = pd.to_datetime(values, unit='ns', errors='coerce')
+    return values, source
+
+
+def finish_timestamp(values: pd.Series) -> pd.Series:
+    """Finish only after any reached native coercion notice has been presented."""
     if isinstance(values.dtype, pd.DatetimeTZDtype):
         values = values.dt.tz_convert('UTC').dt.tz_localize(None)
     if values.dtype != 'datetime64[ns]':

@@ -382,6 +382,15 @@ pub(crate) async fn task(asker: Asker, inputs: Inputs) -> Result<OperationResult
                 .iter()
                 .map(|column| column.name.clone())
                 .collect(),
+            temporal_columns: table
+                .columns
+                .iter()
+                .filter(|column| {
+                    (!column.untyped && column.dtype == Dtype::Time)
+                        || column.stype == Stype::Timestamp
+                })
+                .map(|column| column.name.clone())
+                .collect(),
             time_column: table.time_column.clone(),
         })
         .collect();
@@ -465,11 +474,13 @@ fn column_meaning(
     let dtype = (!declared.untyped).then_some(declared.dtype);
     let scalar = native_source::scalar_meaning(dtype, &input)?;
     let scalar = native_source::timestamp_meaning(dtype, declared.stype, &input).unwrap_or(scalar);
+    let notice = native_source::time_notice(dtype, declared.stype, &column.column, &input)?;
     Ok(MaterializeColumnMeaning {
         source: owner.0.meaning.identity.clone(),
         column,
         scalar,
         input,
+        notice,
     })
 }
 

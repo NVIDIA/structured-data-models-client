@@ -19,12 +19,17 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 
+from sdm_client._rust import errors
 from sdm_client._rust.codec import CodecError
 from sdm_client._rust.frame_decimals import native_decimal_type
-from sdm_client._rust.frame_facts import native_declaration
+from sdm_client._rust.frame_facts import native_declaration, observed_content
 from sdm_client._rust.frame_native import NativeFrameFailure
 from sdm_client._rust.native_products import Product
-from sdm_client._rust.native_source import scalar_column
+from sdm_client._rust.native_source import (
+    box_timestamp,
+    finish_timestamp,
+    scalar_column,
+)
 from sdm_client._rust.native_source_rows import (
     SourceReadFailure,
     SourceRowsProvider,
@@ -298,14 +303,36 @@ class SourceCompletion:
             # Common sanitation assigns this column before advancing to the
             # next physical column or capturing the native time Series.
             try:
-                timestamp = _timestamp_declaration(frame[name].dtype)
+                values = frame[name]
+                temporal = name in binding.get('temporal_columns', ())
+                timestamp = (
+                    _timestamp_declaration(values.dtype) if temporal else None
+                )
+                content = None
+                if (
+                    temporal
+                    and timestamp is None
+                    and pd.api.types.is_object_dtype(values.dtype)
+                ):
+                    content = {
+                        'storage': 'column_values',
+                        'inferred': observed_content(
+                            pd.api.types.infer_dtype(values, skipna=True)
+                        ),
+                        'all_missing': bool(values.isna().all()),
+                    }
             except Exception as error:
                 self.native_error = error
                 raise
-            if timestamp is not None:
+            if timestamp is not None or content is not None:
+                facts = (
+                    content
+                    if content is not None
+                    else {'storage': 'typed_columns', 'declaration': timestamp}
+                )
                 meaning = self.service.column(
                     {'source': binding['source'], 'column': name},
-                    {'storage': 'typed_columns', 'declaration': timestamp},
+                    facts,
                 )
                 if meaning['scalar']['meaning'] != 'original':
                     self._scalar(frame, name, meaning, decimal=False)
@@ -374,6 +401,22 @@ class SourceCompletion:
         decimal: bool,
     ) -> None:
         recipe = meaning['scalar']
+        if recipe == {
+            'meaning': 'nullable',
+            'physical': {'type': 'timestamp', 'unit': 'ns', 'zone': None},
+        }:
+            try:
+                values = frame[name]
+            except Exception as error:
+                self.native_error = error
+                raise
+            converted = self._timestamp(values, meaning)
+            try:
+                frame[name] = converted
+            except Exception as error:
+                self.native_error = error
+                raise
+            return
         failure = None
         try:
             converted = scalar_column(frame[name], recipe)
@@ -399,6 +442,46 @@ class SourceCompletion:
                 raise
         try:
             frame[name] = converted
+        except Exception as error:
+            self.native_error = error
+            raise
+
+    def _timestamp(
+        self, values: pd.Series, meaning: dict[str, Any]
+    ) -> pd.Series:
+        try:
+            converted, source = box_timestamp(values)
+            outcome = None
+            if source is not None:
+                coerced = converted.isna() & source.notna()
+                unread = int(coerced.sum())
+                if unread > 0:
+                    examples = source[coerced].unique()[:3].tolist()
+                    rows = len(source)
+                    shown = str(examples)
+                    outcome = {
+                        'storage': 'time_conversion',
+                        'rows': rows,
+                        'unread': unread,
+                        'examples': shown,
+                    }
+        except Exception as error:
+            self.native_error = error
+            raise
+        if outcome is not None:
+            # Core owns the notice selection. The actual native presenter
+            # remains after parsing/examples and before timezone/unit casts.
+            completed = self.service.column(meaning['column'], outcome)
+            notice = completed.get('notice')
+            if notice is None:
+                raise CodecError('native time outcome has no completed notice')
+            try:
+                errors.warn_held([notice])
+            except Exception as error:
+                self.native_error = error
+                raise
+        try:
+            return finish_timestamp(converted)
         except Exception as error:
             self.native_error = error
             raise

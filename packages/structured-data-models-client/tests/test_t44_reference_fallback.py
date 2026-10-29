@@ -258,8 +258,9 @@ def test_native_label_ranges_stop_at_actual_context_completeness(
         if len(observed) == 2 and case['second_label_fault']:
             faults.append(len(series))
             if core:
-                assert candidate_ranges
-                failed_candidates.add(candidate_ranges[-1])
+                candidate = len(observed) - 1
+                assert candidate == len(candidate_ranges)
+                failed_candidates.add(candidate)
             raise TypeError('explicit second label chunk witness')
         return original(series, dtype, *args, **kwargs)
 
@@ -293,10 +294,14 @@ def test_native_label_ranges_stop_at_actual_context_completeness(
     assert len(faults) == expected['native_faults']
     if core:
         assert len(label_resources) == len(expected['label_cast_rows'])
+        assert all(
+            0 <= ordinal < len(candidate_ranges)
+            for ordinal in failed_candidates
+        )
         expected_commits = [
             candidate
-            for candidate in candidate_ranges
-            if candidate not in failed_candidates
+            for ordinal, candidate in enumerate(candidate_ranges)
+            if ordinal not in failed_candidates
         ]
         assert [
             (value['start'], value['stop']) for value in committed_ranges
