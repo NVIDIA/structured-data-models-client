@@ -224,7 +224,41 @@ fn base_regression_s_schema_completes_on_the_pure_rust_host() {
     assert_eq!(described, pinned["described"]);
     assert_eq!(materialized, pinned["materialized"]);
     assert_eq!(Value::from(observed.fetches), pinned["fetches"]);
-    assert_eq!(Value::from(observed.inputs.clone()), pinned["inputs"]);
+    // This pin predates the corrected host metadata. Its omitted time
+    // declaration meant false, which was defective, not equivalent to true.
+    // Independently pin the corrected actual flags before comparing every
+    // remaining historical input field without changing the frozen receipt.
+    let mut inputs = Value::from(observed.inputs.clone());
+    let mut checked = 0;
+    for input in inputs.as_array_mut().unwrap() {
+        if input["op"] != "materialize" {
+            continue;
+        }
+        for table in input["schema"]["tables"].as_array_mut().unwrap() {
+            let name = table["name"].as_str().unwrap().to_owned();
+            for column in table["columns"].as_array_mut().unwrap() {
+                assert_eq!(column["untyped"], false);
+                let declared = name == "orders" && column["name"] == "ts";
+                assert_eq!(column["stype_declared"], declared);
+                assert!(column["untyped"].is_boolean() && column["stype_declared"].is_boolean());
+                column.as_object_mut().unwrap().remove("untyped");
+                column.as_object_mut().unwrap().remove("stype_declared");
+                checked += 1;
+            }
+        }
+    }
+    assert_eq!(checked, 7);
+    for input in pinned["inputs"].as_array().unwrap() {
+        if input["op"] == "materialize" {
+            for table in input["schema"]["tables"].as_array().unwrap() {
+                for column in table["columns"].as_array().unwrap() {
+                    assert!(column.get("untyped").is_none());
+                    assert!(column.get("stype_declared").is_none());
+                }
+            }
+        }
+    }
+    assert_eq!(inputs, pinned["inputs"]);
     // predict's call and result (T1.11d): the call's request id compared by
     // presence and type only, as capture_check.masked compares it (decision
     // E35, approved by the owner on 2026-10-10, the one exclusion of

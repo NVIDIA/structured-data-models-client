@@ -53,6 +53,7 @@ from typing import Any
 import duckdb
 import pyarrow as pa
 import pytest
+from test_t44_legacy_pin_inputs import assert_corrected_inputs
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNNERS = ROOT / 'contract/runners'
@@ -165,7 +166,8 @@ def test_base_regression_reaches_the_reference_s_payload_on_the_core(
         assert sent[section] == built[section], section
     # The two core hosts agree on everything the core did and answered.
     pinned = json.loads(PINNED.read_text())
-    for field in ('inputs', 'fetches', 'described', 'materialized'):
+    assert_corrected_inputs(core['core']['inputs'], pinned['inputs'])
+    for field in ('fetches', 'described', 'materialized'):
         assert core['core'][field] == pinned[field], field
 
 

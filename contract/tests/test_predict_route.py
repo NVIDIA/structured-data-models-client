@@ -40,6 +40,7 @@ none of, its differences); these tests gate the claims above in CI.
 
 from __future__ import annotations
 
+import copy
 import importlib.util
 import json
 import struct
@@ -48,6 +49,8 @@ import sys
 from pathlib import Path
 from types import ModuleType
 from typing import Any
+
+from test_t44_legacy_pin_inputs import assert_corrected_inputs
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNNERS = ROOT / 'contract/runners'
@@ -167,7 +170,17 @@ def test_base_regression_completes_a_model_request_and_its_result_on_the_core(
 
     # The two core hosts agree, against the pin rust-host is held to.
     pinned = json.loads(PINNED.read_text())
-    assert core['core']['inputs'] == pinned['inputs']
+    assert_corrected_inputs(core['core']['inputs'], pinned['inputs'])
+    # Current capture observes this actual Done supplement; the historical
+    # writer did not record it. Every other pinned prediction field stays.
+    assert (
+        predicted['outputs']
+        == predicted['body']['output']['fields']
+        == ['prediction']
+    )
+    assert 'outputs' not in pinned['predicted']
+    predicted = copy.deepcopy(predicted)
+    predicted.pop('outputs')
     assert {
         **predicted,
         'body': capture_check.masked(predicted['body']),
