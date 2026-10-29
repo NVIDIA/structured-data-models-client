@@ -3,7 +3,7 @@
   "about": "Each change to frozen bridge code against the merge base, with one reason: moved (a rule moved into Rust, naming its task), refactor (behaviour kept), gone (an entry that left the freeze) or main (a change main made, merged by this change: the full SHA of the main commit, then its title). Entries the merge base already holds are spent and may be pruned.",
   "changes": {
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::<module>": {
-      "moved": "T3.8: RouteError no longer raised here, and the provider choice from _rust/providers; T3.8 fix 3: the core route reads what it needs of a query from the core's own validation through CoreQuery; T3.16: the schema handed over as plain data (spec.held_schema), the results read typed (results), CoreQuery moved to results; T3.5: the model's values held while a schema of a semantic model is materialized, for the core's refusals naming it"
+      "moved": "T3.8: RouteError no longer raised here, and the provider choice from _rust/providers; T3.8 fix 3: the core route reads what it needs of a query from the core's own validation through CoreQuery; T3.16: the schema handed over as plain data (spec.held_schema), the results read typed (results), CoreQuery moved to results; T3.5: the model's values held while a schema of a semantic model is materialized, for the core's refusals naming it; T4.5: provider-backed native label gathering uses native_sql instead of the former opaque Materialize call; only native I/O/conversion ownership is in the Python host."
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_indices": {
       "moved": "T1.32a: the cast to the key's type with pandas (pd.Series(indices, dtype=...)) and its INVALID_REQUEST and INTERNAL_ERROR split are the core's rule table; the bridge hands over the values as pyarrow infers them, or as their text where it infers no one type"
@@ -15,7 +15,7 @@
       "moved": "T1.32a: the bridge's key_type refusal, for a key type it had no cast for, is the core's (sdm_engine::keys::cast refuses a key type no rule casts to)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::gather": {
-      "moved": "T4.4: delegate native frame traversal and typed Arrow/native observations to frame_facade; sdm-core owns retained graph, labels, questions, sampling and payload products; provider-backed gathering is unchanged."
+      "moved": "T4.4/T4.5: hand native frame and provider-backed LIST_DISTINCT data through useful typed source, population, converted column, restored label and Request products; Rust retains query, eligibility, comparison, grouping, mask, stop and payload policy. Actual native source construction and extension restoration occur before the next dependent Rust result."
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_text": {
       "moved": "T1.36 fix 4 (the final review's P2-2): the host's half of the moved cast: a float in a mix written as the core now writes a float entity (sdm_engine::keys's float_text), the reference's text of it, pyarrow's cast of the float to text at its own width (1e16 is 1e+16), so the core reads back the number the host was given; a boolean as before"
