@@ -1631,6 +1631,9 @@ pub fn direct_target_declaration(
         (None, None) => Ok(None),
         (Some(task), Some(target)) if direct_task_classification(task) => {
             let dtype = match target {
+                sdm_contract::prepare::DirectTargetDeclaration::Converted { .. } => {
+                    return Ok(Some(AnswerType::Float));
+                }
                 sdm_contract::prepare::DirectTargetDeclaration::Missing => None,
                 sdm_contract::prepare::DirectTargetDeclaration::Text { value } => {
                     Some(value.as_bytes())

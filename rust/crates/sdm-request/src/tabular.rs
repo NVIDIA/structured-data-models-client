@@ -20,6 +20,7 @@ use sdm_wire::json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 
 pub mod response;
+pub(crate) mod restoration;
 
 #[cfg(test)]
 mod refusal_tests;

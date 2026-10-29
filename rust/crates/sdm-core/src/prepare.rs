@@ -438,6 +438,9 @@ pub(crate) async fn run(
             sdm_request::tabular::response::attribute(selected, string, crate::pql::float_text)?,
         ),
         Preparation::CompleteResponseRows { scope, rows } => serde_json::to_value(sdm_request::tabular::response::complete_rows(&scope, rows, crate::pql::float_text)?),
+        Preparation::ResponseTargetRows { data, attributed } => {
+            return crate::prepare_response::target_rows(&asker, data, attributed, attached);
+        }
         Preparation::ResponseTaskMeaning { task } => serde_json::to_value(DirectTaskClassification { classification: policy::direct_task_classification(&task), numeric_prefixes: policy::numeric_target_prefixes() }),
         Preparation::LayoutResponse { data, attributed, decimal_limit, native_task, native_target } => {
             return crate::prepare_response::layout(&asker, data, attributed, decimal_limit, native_task, native_target, attached);

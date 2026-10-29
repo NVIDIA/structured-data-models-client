@@ -2934,7 +2934,7 @@ fn native_converted_rows_preserve_results_order_and_probability_population() {
                 changed["value"]["rows"].as_array_mut().unwrap().pop();
             }
             "probability" => {
-                changed["value"]["rows"][0]["probabilities"] = json!([{"ordinal":0,"value":{"kind":"integer","digits":"3"},"name":"3","probability":{"type":"float64","value":0.5}}])
+                changed["value"]["rows"][0]["probabilities"] = json!([{"ordinal":0,"value":{"kind":"integer","digits":"3"},"name":"3","probability":{"t":"f64","v":"0.5"}}])
             }
             _ => {
                 changed["value"]["scope"] = json!({"version":1,"model":"kumo-tabular","request_id":"another","call_request_id":"sdm-fixed","response_rows":2,"scoring_rows":2})
@@ -2950,6 +2950,63 @@ fn native_converted_rows_preserve_results_order_and_probability_population() {
         );
         let ControlMessage::Error { error } = next(&run) else {
             panic!("malformed native conversion must fail Host layout: {axis}")
+        };
+        assert_eq!(
+            error.sentence,
+            sdm_contract::Sentence::InvalidMessage,
+            "{axis}"
+        );
+    }
+}
+
+#[test]
+fn native_key_conversions_conserve_probabilities_and_keep_original_keys_on_collision() {
+    use arrow_array::cast::AsArray;
+    use arrow_array::types::Float64Type;
+    let task = json!({"representation":"builtin","value":"classification".chars().map(u32::from).collect::<Vec<_>>()});
+    let probabilities =
+        serde_json::Map::from_iter([("03".to_owned(), json!(0.4)), ("3".to_owned(), json!(0.6))]);
+    let rows = (0..2).map(|ordinal|json!({"ordinal":ordinal,"prediction":{"kind":"integer","digits":"3"},"probabilities":[
+        {"ordinal":0,"value":{"kind":"integer","digits":"3"},"name":"3","probability":{"t":"f64","v":"0.4"}},
+        {"ordinal":1,"value":{"kind":"integer","digits":"3"},"name":"3","probability":{"t":"f64","v":"0.6"}}
+    ]})).collect::<Vec<_>>();
+    let target = json!({"storage":"converted","value":{"rows":rows}});
+    let result = classified_result_with_task_declaration(
+        Arc::new(arrow_array::Int64Array::from(vec![0, 1, 0])) as ArrayRef,
+        json!("3"),
+        probabilities.clone(),
+        4300,
+        Some(task.clone()),
+        Some(target.clone()),
+    );
+    let classes = result.batches[0]
+        .column_by_name("probabilities")
+        .unwrap()
+        .as_map()
+        .value(0);
+    let names = classes.column(0).as_string::<i32>();
+    let values = classes.column(1).as_primitive::<Float64Type>();
+    assert_eq!((names.value(0), values.value(0)), ("03", 0.4));
+    assert_eq!((names.value(1), values.value(1)), ("3", 0.6));
+    for axis in ["probability", "ordinal", "missing", "storage"] {
+        let mut changed = target.clone();
+        let row = &mut changed["value"]["rows"][0];
+        match axis {
+            "probability" => row["probabilities"][0]["probability"] = json!({"t":"f64","v":"0.9"}),
+            "ordinal" => row["probabilities"][1]["ordinal"] = json!(0),
+            "missing" => row["probabilities"] = Value::Null,
+            _ => row["prediction"] = json!({"kind":"integer","digits":"03"}),
+        }
+        let run = classified_response_declaration_run(
+            Arc::new(arrow_array::Int64Array::from(vec![0, 1, 0])) as ArrayRef,
+            json!("3"),
+            probabilities.clone(),
+            4300,
+            Some(task.clone()),
+            Some(changed),
+        );
+        let ControlMessage::Error { error } = next(&run) else {
+            panic!("malformed native key facts must fail actual Host layout: {axis}")
         };
         assert_eq!(
             error.sentence,

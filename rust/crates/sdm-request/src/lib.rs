@@ -20,6 +20,7 @@
 
 #![forbid(unsafe_code)]
 
+pub(crate) mod native_value;
 pub mod options;
 pub mod payload;
 pub mod predict;

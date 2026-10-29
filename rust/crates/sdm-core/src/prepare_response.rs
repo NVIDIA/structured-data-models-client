@@ -53,6 +53,55 @@ fn bytes(attached: &mut Attachments, id: AttachmentId) -> Result<Vec<u8>, CoreEr
     }
 }
 
+fn read(
+    data: &DirectResponseData,
+    attributed: AttachmentId,
+    attached: &mut Attachments,
+) -> Result<(Value, PredictionResponse, Vec<AttributedDirectRow>), CoreError> {
+    let payload = json::read(&bytes(attached, data.payload)?)
+        .map_err(|_| invalid("direct response payload is unreadable"))?;
+    if payload.get("output").and_then(|v| v.get("fields"))
+        != Some(&Value::texts(data.outputs.iter().map(String::as_str)))
+    {
+        return Err(invalid(
+            "direct response outputs disagree with the encoded call",
+        ));
+    }
+    let value = json::read_answer(&bytes(attached, data.response)?)
+        .map_err(|_| invalid("direct decoded response is unreadable"))?;
+    let response = PredictionResponse::read_direct(&value)
+        .map_err(|_| invalid("direct decoded response has another shape"))?;
+    let decoded: Vec<DecodedDirectRow> = take_json(attached, data.rows)?;
+    let (scope, actual) = rows::decode(&payload, &response, crate::pql::float_text)?;
+    if scope != data.scope || decoded != actual {
+        return Err(invalid(
+            "direct response buffers disagree with their typed rows",
+        ));
+    }
+    let accepted: Vec<AttributedDirectRow> = take_json(attached, attributed)?;
+    Ok((payload, response, accepted))
+}
+
+pub(crate) fn target_rows(
+    asker: &Asker,
+    data: DirectResponseData,
+    attributed: AttachmentId,
+    mut attached: Attachments,
+) -> Result<OperationResult, CoreError> {
+    let (payload, response, accepted) = read(&data, attributed, &mut attached)?;
+    let value = rows::target_rows(
+        &payload,
+        &response,
+        &data.scope,
+        accepted,
+        crate::pql::float_text,
+    )?;
+    let value = asker.attach(encoded(&value)?)?;
+    Ok(OperationResult::PrepareRequest(
+        sdm_contract::prepare::PreparedRequest { value },
+    ))
+}
+
 pub(crate) fn layout(
     asker: &Asker,
     data: DirectResponseData,
@@ -62,31 +111,12 @@ pub(crate) fn layout(
     native_target: Option<sdm_contract::prepare::DirectTargetDeclaration>,
     mut attached: Attachments,
 ) -> Result<OperationResult, CoreError> {
-    let payload = json::read(&bytes(&mut attached, data.payload)?)
-        .map_err(|_| invalid("direct response payload is unreadable"))?;
-    if payload.get("output").and_then(|v| v.get("fields"))
-        != Some(&Value::texts(data.outputs.iter().map(String::as_str)))
-    {
-        return Err(invalid(
-            "direct response outputs disagree with the encoded call",
-        ));
-    }
-    let value = json::read_answer(&bytes(&mut attached, data.response)?)
-        .map_err(|_| invalid("direct decoded response is unreadable"))?;
-    let response = PredictionResponse::read_direct(&value)
-        .map_err(|_| invalid("direct decoded response has another shape"))?;
-    let decoded: Vec<DecodedDirectRow> = take_json(&mut attached, data.rows)?;
-    let (scope, actual) = rows::decode(&payload, &response, crate::pql::float_text)?;
-    if scope != data.scope || decoded != actual {
-        return Err(invalid(
-            "direct response buffers disagree with their typed rows",
-        ));
-    }
-    let accepted: Vec<AttributedDirectRow> = take_json(&mut attached, attributed)?;
+    let (payload, response, accepted) = read(&data, attributed, &mut attached)?;
+    let scope = &data.scope;
     let part = rows::layout(
         &payload,
         &response,
-        &scope,
+        scope,
         accepted,
         decimal_limit,
         crate::pql::float_text,

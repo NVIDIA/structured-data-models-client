@@ -101,7 +101,9 @@ pub fn resolved_attachments(
                     .map_err(|_| invalid("unreadable direct preparation input", request.input))?;
                 if let sdm_contract::prepare::Preparation::LayoutResponse {
                     data, attributed, ..
-                } = &input
+                }
+                | sdm_contract::prepare::Preparation::ResponseTargetRows { data, attributed } =
+                    &input
                 {
                     named.extend(
                         [data.payload, data.response, data.rows, *attributed]

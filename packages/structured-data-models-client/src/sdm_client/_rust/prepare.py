@@ -281,6 +281,12 @@ def _response(finished: Finished, payload_owner: dict[str, Any]) -> Finished:
     )
     completion = results.expect(completed.result, results.Prepared)
     accepted = json.loads(completed.take(completion.value))
+    attached = {
+        n: buffers[name]
+        for n, name in enumerate(('payload', 'response', 'rows'), 2)
+    }
+    data.update(payload=2, response=3, rows=4)
+    attached[5] = codec.attachment(accepted)
     # Keep the actual call-local task container, including decoded-transport
     # replacements. Display can mutate data read later from this same owner.
     task_owner = (payload_owner or {}).get('task', {})
@@ -318,20 +324,31 @@ def _response(finished: Finished, payload_owner: dict[str, Any]) -> Finished:
                 else None
             )
             if prefix:
-                raise RouteError(
-                    'direct response restoration with native dtype conversion overrides remains unfinished'
+                from sdm_client._rust.tabular_restoration import restore
+
+                source = _call(
+                    {
+                        'stage': 'response_target_rows',
+                        'data': data,
+                        'attributed': 5,
+                    },
+                    attached,
                 )
-            native_target = {
-                'storage': 'unrestored',
-                'truth': truth,
-                'numeric_prefix': prefix,
-            }
-    attached = {
-        n: buffers[name]
-        for n, name in enumerate(('payload', 'response', 'rows'), 2)
-    }
-    data.update(payload=2, response=3, rows=4)
-    attached[5] = codec.attachment(accepted)
+                native_target = {
+                    'storage': 'converted',
+                    'value': restore(source, dtype),
+                }
+            else:
+                native_target = {
+                    'storage': 'unrestored',
+                    'truth': truth,
+                    'numeric_prefix': prefix,
+                }
+    # Native function exit clears its captured task container before its
+    # dtype local. Preserve that ordering for replacement finalizers too.
+    del task_owner
+    if meaning['classification']:
+        del dtype
     return _prepared_run(
         {
             'stage': 'layout_response',
@@ -1041,6 +1058,9 @@ def predict(
         # added. Byte transports need no additional native body decoding.
         normalization_owner = json.loads(attached[2])
         normalization_owner['task']['kind'] = task
+        # The genuine payload is now the owner, just as in the native adapter.
+        # A transport replacement must not retain another local operand.
+        del task
         body['payload'] = 2
         # Both encoders have finished before native ID/inference observations.
         request_id = _request_id()

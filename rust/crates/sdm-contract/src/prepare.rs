@@ -160,11 +160,24 @@ pub enum DirectTargetDeclaration {
     Text {
         value: UnicodeText,
     },
+    /// Actually completed per-item native dtype conversions, in response order.
+    Converted {
+        value: DirectTargetRows,
+    },
     /// Native truth/startswith short circuits that leave answers as written.
     Unrestored {
         truth: bool,
         numeric_prefix: Option<bool>,
     },
+}
+
+/// Native prediction/key conversions bound to one complete direct response.
+/// The existing target-row vocabulary carries builtins, never native owners.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct DirectTargetRows {
+    pub scope: ResponseScope,
+    pub rows: Vec<RelationalTargetRow>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -535,6 +548,10 @@ pub enum Preparation {
     },
     ResponseTaskMeaning {
         task: DirectTaskMeaning,
+    },
+    ResponseTargetRows {
+        data: DirectResponseData,
+        attributed: AttachmentId,
     },
     LayoutResponse {
         data: DirectResponseData,

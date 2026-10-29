@@ -548,16 +548,13 @@ pub fn complete_rows(
     Ok(attributed)
 }
 
-pub fn layout(
+fn admitted(
     payload: &Value,
     response: &PredictionResponse,
     scope: &ResponseScope,
     attributed: Vec<AttributedDirectRow>,
-    decimal_limit: u32,
     float_text: fn(f64) -> String,
-    native_task: Option<&sdm_contract::prepare::DirectTaskMeaning>,
-    native_target: Option<&sdm_contract::prepare::DirectTargetDeclaration>,
-) -> Result<Part, CoreError> {
+) -> Result<Vec<AttributedDirectRow>, CoreError> {
     let (actual, rows) = decode(payload, response, float_text)?;
     if actual != *scope || attributed.len() != rows.len() {
         return Err(protocol(
@@ -571,7 +568,31 @@ pub fn layout(
     {
         return Err(protocol("attribution source differs from decoded response"));
     }
-    let attributed = complete_rows(scope, attributed, float_text)?;
+    complete_rows(scope, attributed, float_text)
+}
+
+pub fn target_rows(
+    payload: &Value,
+    response: &PredictionResponse,
+    scope: &ResponseScope,
+    attributed: Vec<AttributedDirectRow>,
+    float_text: fn(f64) -> String,
+) -> Result<sdm_contract::prepare::DirectTargetRows, CoreError> {
+    admitted(payload, response, scope, attributed, float_text)?;
+    crate::tabular::restoration::source(response, scope)
+}
+
+pub fn layout(
+    payload: &Value,
+    response: &PredictionResponse,
+    scope: &ResponseScope,
+    attributed: Vec<AttributedDirectRow>,
+    decimal_limit: u32,
+    float_text: fn(f64) -> String,
+    native_task: Option<&sdm_contract::prepare::DirectTaskMeaning>,
+    native_target: Option<&sdm_contract::prepare::DirectTargetDeclaration>,
+) -> Result<Part, CoreError> {
+    let attributed = admitted(payload, response, scope, attributed, float_text)?;
     let mut part = predict::layout_tabular_task(
         payload,
         response,
@@ -580,6 +601,10 @@ pub fn layout(
         native_task,
         native_target,
     )?;
+    if let Some(sdm_contract::prepare::DirectTargetDeclaration::Converted { value }) = native_target
+    {
+        crate::tabular::restoration::apply(&mut part, response, scope, value)?;
+    }
     for (row, accepted) in part.rows.iter_mut().zip(attributed) {
         row.id = entity(&accepted.id)?;
     }

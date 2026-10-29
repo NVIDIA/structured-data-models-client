@@ -1616,7 +1616,11 @@ def test_positive_native_dtype_restores_each_prediction_and_key_in_order(
                     client._transport = scripted
                     try:
                         result = client.predict(request, model='kumo-tabular')
-                        outcome = ('ok', result.to_pandas().to_dict('split'))
+                        frame = result.to_pandas().astype(object)
+                        outcome = (
+                            'ok',
+                            frame.where(pd.notna(frame), None).to_dict('split'),
+                        )
                     except Exception as error:
                         outcome = ('error', _error_graph(error), error is held)
             for body in scripted.calls:
@@ -1702,3 +1706,79 @@ def test_transport_replacement_releases_original_payload_kind_before_normalizati
     assert current[2] == ['released original kind', 'after replacement']
     frame = current[0]
     assert frame['data'][0][frame['columns'].index('prediction')] == '3'
+
+
+def test_native_normalization_releases_captured_task_before_held_dtype(
+    monkeypatch,
+):
+    from sdm_client import Request
+
+    def observe(core):
+        events, holder = [], {}
+
+        class Dtype:
+            def startswith(self, prefix):
+                return isinstance(prefix, tuple) or prefix == 'int'
+
+            def __del__(self):
+                events.append('released dtype')
+
+        class TaskDict(dict):
+            def __del__(self):
+                events.append('release task start')
+                self['target'] = {}
+                events.append('release task end')
+
+        class Choice(str):
+            def __str__(self):
+                events.append('display')
+                holder['payload']['task'] = {
+                    'kind': 'classification',
+                    'target': {'dtype': 'string'},
+                }
+                return 'classification'
+
+        class Answer(Scripted):
+            def predict(self, payload):
+                answer = super().predict(payload)
+                holder['payload'] = payload
+                payload['task'] = TaskDict(payload['task'])
+                payload['task']['target']['dtype'] = Dtype()
+                for item in answer['predictions']:
+                    item['prediction'] = '3'
+                return answer
+
+        scripted = Answer()
+        with monkeypatch.context() as patch:
+            patch.setenv(
+                _routing.ENVIRONMENT,
+                ','.join(_routing.DIRECT_CONSUMERS) if core else '',
+            )
+            request = Request(
+                pd.DataFrame({'answer': [0, 1, 0], 'feature': [2, 3, 4]}),
+                pd.DataFrame({'feature': [5]}),
+                target='answer',
+                task=Choice('classification'),
+            )
+            with warnings.catch_warnings(record=True):
+                warnings.simplefilter('always')
+                with SDMClient('http://localhost:1', max_retries=0) as client:
+                    client._transport.close()
+                    client._transport = scripted
+                    result = client.predict(request, model='kumo-tabular')
+                    events.append('returned')
+            for body in scripted.calls:
+                body['metadata']['request_id'] = '<drawn>'
+            return result.to_pandas().to_dict('split'), scripted.calls, events
+
+    old, current = observe(False), observe(True)
+    assert current == old
+    assert current[2] == [
+        'display',
+        'release task start',
+        'release task end',
+        'released dtype',
+        'returned',
+    ]
+    frame = current[0]
+    assert frame['data'][0][frame['columns'].index('prediction')] == 3

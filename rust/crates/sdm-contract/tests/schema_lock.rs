@@ -513,7 +513,7 @@ fn unaccounted(schema: &Value) -> Result<(), String> {
 
 /// The fields whose attachment is JSON of the contract's, with the entry of
 /// `$defs/Attachments` that locks it.
-const JSON: [(&str, &str); 72] = [
+const JSON: [(&str, &str); 73] = [
     (
         "Operation/prepare_materialize.input",
         "PrepareMaterialize.input",
@@ -549,6 +549,10 @@ const JSON: [(&str, &str); 72] = [
     (
         "Preparation/layout_response.attributed",
         "LayoutResponse.attributed",
+    ),
+    (
+        "Preparation/response_target_rows.attributed",
+        "ResponseTargetRows.attributed",
     ),
     ("ProviderChoice/frames.manifest", "Frames.manifest"),
     // The same provider manifest field has an operation-specific JSON type.

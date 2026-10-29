@@ -168,6 +168,11 @@ Rust validates required versus unsolicited facts and owns builtin dtype restorat
 Sent bytes and completed row facts are never replaced by this later declaration.
 
 Native dtype truth and startswith failures remain native, and false native shortcuts leave answers unchanged.
-Positive custom dtype conversion overrides remain an explicit unfinished native-conversion family after their reached truth and prefix observations.
+Positive custom dtype overrides consume a complete, scope-bound native target-row product after complete attribution and the reached truth/prefix observations.
+The native host applies the existing as_declared protocol per prediction and then per probability key, retaining actual key-display and exception ordering with the same held dtype owner.
+Rust validates complete response scope, row and key ordinals, unchanged probability values, native storage and collision fallback, then lays out those completed builtin values without recasting them.
+Ordinary builtin target dtypes retain their Rust kernels.
+Representation-only native value codecs are shared by direct and relational responses, with the existing relational entry points preserved.
+The original task local is released when the genuine native payload takes ownership, and temporary dtype/task-container locals are released at native normalization completion before final layout.
 This does not authorize a blanket conversion-timing exception or complete the broader entity, index, sorter, default-route, session or full Phase4 obligations.
 The public old/Core controls and Host malformed/ordered controls are source-first controls until the canonical generation, whole-source review and execution gates complete.
