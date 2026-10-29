@@ -49,7 +49,6 @@ from types import ModuleType
 from typing import Any
 
 import yaml
-
 from _actual_core import checked_operations
 
 ROOT = Path(__file__).resolve().parents[2]

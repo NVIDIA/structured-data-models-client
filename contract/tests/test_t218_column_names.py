@@ -77,8 +77,8 @@ from types import ModuleType
 from typing import Any
 
 import pytest
-from _actual_core import checked_operations
 import yaml
+from _actual_core import checked_operations
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / 'contract/runners/run_python.py'

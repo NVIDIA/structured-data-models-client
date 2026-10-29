@@ -49,9 +49,8 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
-from test_t44_legacy_pin_inputs import assert_corrected_inputs
-
 from _actual_core import _reader, checked_operations, checked_view
+from test_t44_legacy_pin_inputs import assert_corrected_inputs
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNNERS = ROOT / 'contract/runners'

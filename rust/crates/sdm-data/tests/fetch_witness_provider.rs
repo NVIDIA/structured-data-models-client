@@ -30,6 +30,20 @@ fn witness_candidates_are_owned_by_the_data_layer_and_keep_text_and_mixed_plans_
         let FetchPlan::Sql { statements, .. } = &mut changed else {
             panic!("SQL plan")
         };
+        let mut other = statements[0].clone();
+        other.dialect = Dialect::new("postgres");
+        statements.push(other);
+        assert!(sdm_data::fetch_witness_provider(&changed).is_none());
+        let mut changed = plan.clone();
+        let FetchPlan::Sql { statements, .. } = &mut changed else {
+            panic!("SQL plan")
+        };
+        statements.clear();
+        assert!(sdm_data::fetch_witness_provider(&changed).is_none());
+        let mut changed = plan.clone();
+        let FetchPlan::Sql { statements, .. } = &mut changed else {
+            panic!("SQL plan")
+        };
         statements[0].params.push(SqlParam::Text {
             attachment: sdm_contract::data::AttachmentId(42),
         });

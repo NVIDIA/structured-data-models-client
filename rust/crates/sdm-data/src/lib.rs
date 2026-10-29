@@ -43,6 +43,8 @@
 mod blake2b;
 mod databricks;
 mod duckdb;
+#[cfg(feature = "test-ops")]
+mod fetch_witness;
 mod json;
 mod key_text;
 mod keys;
@@ -58,6 +60,8 @@ mod sql_tests;
 mod sqlite;
 pub mod view_expr;
 
+#[cfg(feature = "test-ops")]
+pub use fetch_witness::fetch_witness_provider;
 pub use keys::canonical_decimal_text;
 pub use pg_values::json_text;
 

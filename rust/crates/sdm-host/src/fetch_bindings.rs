@@ -7,7 +7,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use arrow_schema::SchemaRef;
-use sdm_contract::data::{AttachmentId, DataRequest, Dialect, FetchPlan, ProviderChoice, SqlParam};
+use sdm_contract::data::{AttachmentId, DataRequest, FetchPlan, SqlParam};
 use sdm_contract::types::Field;
 use sdm_contract::{CoreError, Sentence};
 use serde_json::{Value, json};
@@ -90,29 +90,8 @@ pub fn fetch_plan_witness(
     request: &DataRequest,
     plan: &FetchPlan,
 ) -> Result<Option<Value>, CoreError> {
-    let FetchPlan::Sql { statements, .. } = plan else {
+    let Some(provider) = sdm_data::fetch_witness_provider(plan) else {
         return Ok(None);
-    };
-    let Some(first) = statements.first() else {
-        return Ok(None);
-    };
-    let dialect = first.dialect.name();
-    if !matches!(dialect, "sqlite" | "duckdb")
-        || statements
-            .iter()
-            .any(|statement| statement.dialect.name() != dialect)
-        || statements
-            .iter()
-            .flat_map(|statement| &statement.params)
-            .any(|param| matches!(param, SqlParam::Text { .. }))
-    {
-        return Ok(None);
-    }
-    let provider = ProviderChoice::Sql {
-        dialect: Dialect::new(dialect),
-        namespace: vec![],
-        view: None,
-        timestamp_encoding: None,
     };
     let access = crate::default_root().data_access(&provider)?;
     let Ok(rendered) = access.plan(request) else {

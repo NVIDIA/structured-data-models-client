@@ -92,7 +92,6 @@ from typing import Any
 
 import pytest
 import yaml
-
 from _actual_core import _reader, checked_view
 
 ROOT = Path(__file__).resolve().parents[2]

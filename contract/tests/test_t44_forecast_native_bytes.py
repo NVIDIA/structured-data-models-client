@@ -9,8 +9,8 @@ import copy
 import hashlib
 
 import pytest
-from test_t136_forecast import R
 from test_t44_prediction_observation import actual_observation
+from test_t136_forecast import R
 
 
 def sample():

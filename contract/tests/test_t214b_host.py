@@ -511,7 +511,6 @@ def test_another_request_state_version_is_refused_by_name() -> None:
     refused, the request's state version, not only that the request is not
     one the core accepts."""
     from sdm_client import StructuredDataError
-
     from sdm_client._rust import run
 
     # A genuine raw legacy RequestState control retains H23's exact format.

@@ -7,9 +7,8 @@
 import copy
 
 import pytest
-from test_t44_prediction_observation import actual_observation
-
 from _actual_core import _reader, checked_operations
+from test_t44_prediction_observation import actual_observation
 
 
 def test_consumer_roles_require_the_real_complete_native_journal():
