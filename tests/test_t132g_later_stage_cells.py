@@ -399,18 +399,40 @@ def test_python_old_s_warnings_hosts_five_does_not_reconcile_still_fail(
     assert has(found, 'warnings', PAIR), found
 
 
-def _unapproved(tmp: Path) -> Path:
-    r"""The register with HOST-5 proposed, not approved by the owner."""
+def _unapproved(tmp: Path, *, broad: bool = True) -> Path:
+    r"""Revoke each applicable runtime-warning policy independently."""
     import yaml
 
     loaded = yaml.safe_load(compare.REGISTER.read_text(encoding='utf-8'))
+    revoked = {compare.RUNTIME_DEPRECATIONS}
+    if broad:
+        revoked.add(compare.PANDAS_RUNTIME_WARNINGS)
     for each in loaded['entries']:
-        if each.get('id') == compare.RUNTIME_DEPRECATIONS:
+        if each.get('id') in revoked:
             each.update(status='proposed', approved_by=None)
     path = tmp / 'register.yaml'
     path.write_text(yaml.safe_dump(loaded), encoding='utf-8')
     assert not compare.owner_approved(compare.RUNTIME_DEPRECATIONS, path)
+    assert compare.owner_approved(compare.PANDAS_RUNTIME_WARNINGS, path) == (
+        not broad
+    )
     return path
+
+
+def test_host_6_independently_covers_proved_runtime_warnings(
+    repo: Path, tmp_path: Path
+) -> None:
+    found = pair(
+        compared(
+            repo,
+            tmp_path,
+            APPROVED,
+            _floor(AS_RUN),
+            _unapproved(tmp_path, broad=False),
+        ),
+        FIXED,
+    )
+    assert not has(found, 'warnings', PAIR), found
 
 
 def test_the_floor_cell_s_runtime_deprecations_need_host_5_approved(
