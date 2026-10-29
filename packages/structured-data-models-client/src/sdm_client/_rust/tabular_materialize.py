@@ -81,6 +81,17 @@ def _range_source(frame: pd.DataFrame) -> None:
         )
 
 
+def _index_labels(frame: pd.DataFrame) -> list[int]:
+    index = frame.index
+    if type(index) not in (pd.Index, pd.RangeIndex) or index.dtype != np.dtype(
+        'int64'
+    ):
+        raise RouteError(
+            'tabular candidate sorting beyond builtin int64 index labels is unfinished'
+        )
+    return [int(label) for label in index]
+
+
 def materialize(
     schema: Schema,
     query: ValidatedPredictiveQuery,
@@ -122,7 +133,6 @@ def materialize(
                 f'to score rows not present in the table',
                 code='INVALID_REQUEST',
             )
-        _range_source(table)
         predict = table.iloc[scored].drop(columns=[target])
         remedy = 'Pass num_context_samples to choose how many, or select the rows yourself.'
     else:
@@ -131,7 +141,6 @@ def materialize(
             scoring = _native.TabularScoringKeys(_keys(predict, entity))
             if scoring.needs_source():
                 population = scoring.source(_keys(table, entity))
-                _range_source(table)
                 table = table.iloc[population.positions()]
         remedy = (
             'This route takes no num_context_samples, so choose the '
@@ -165,7 +174,8 @@ def materialize(
                 category=SDMWarning,
                 stacklevel=caller_stacklevel(),
             )
-        positions = context.positions()
+        labels = _index_labels(candidates) if context.reduced() else None
+        positions = context.positions(labels)
         selected = (
             candidates if positions is None else candidates.iloc[positions]
         )

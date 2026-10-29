@@ -54,17 +54,22 @@ T4.7 sessions and T4.8 activation remain follow-ups to this shared preparation f
 
 ## First connected source slice
 
-The first implementation admits ordinary frames with primitive int64 entity storage and a strictly increasing RangeIndex.
-Original source ordinals are order-isomorphic to those unique labels, so sorting only the selected ordinals preserves the reference sample-then-sort result without choosing an unproved SIMD profile or changing duplicate-label ties.
+The first implementation admits ordinary frames with primitive int64 entity storage and an initially strictly increasing RangeIndex.
+Native getters can change the actual candidate index after that initial admission.
+For reduced contexts only, Python captures the complete actual built-in int64 index labels after the native reads, candidate take and cap advice, before Rust draws any sample.
+Rust validates the full label extent and uniqueness, draws the seed-42 sample prefix, and sorts only that subset by those labels.
+This unique integer ordering needs no unstable sorter profile, duplicate-label tie rule or precomputed native permutation.
 The shared engine returns missing requested ordinals before expanding scored rows, and preserves every duplicate source occurrence and requested repetition for this primitive key family.
 Core binds the context selector to the existing model limit; Python retains only native conversion, original-value error presentation, frame takes and the existing cap notice presentation.
 An already captured candidate frame survives cap advice, and the selector supplies positions within that frame rather than rereading the caller's potentially edited source afterward.
 An uncapped population returns no replacement take, preserving the existing candidate frame and avoiding another copy.
+It consumes no native index labels and runs no sampling or sorting.
+Missing required label facts, inconsistent extents and duplicate labels are refused rather than replaced with source-row ordering.
 The Rust host exercises the same public typed selection product exported through the composition root and host layer.
 No new serialized message or opaque continuation is introduced by these owned primitive values.
 
 Task derivation still uses the existing implementation in this slice and remains an explicit T4.6 extraction obligation.
-Broader entity equality, other index families, custom native protocols, counts outside native row widths, final default activation and complete T4.6 acceptance remain open.
+Broader entity equality, duplicate or mixed index labels, other index families, custom native protocols, counts outside native row widths, final default activation and complete T4.6 acceptance remain open.
 The current source and controls have not been executed; the frozen frame/link background run provides no validation credit for this new source.
 
 The first source reviews found that supplied-row entity reads and target missingness must retain the reference's intermediate native populations, even when final row values agree.
@@ -75,3 +80,4 @@ Python performs that native holdout take before observing target missingness.
 The retained population checks the mask extent, returns local labelled positions, and maps those positions back to original source ordinals for the existing context selector.
 Candidate values are captured before context-cap validation and advice, preserving that separate native boundary.
 Public source-read controls cover actual target operand identity, present and no-match holdouts, empty scoring and scoring-accessor edits to source keys.
+The next controls also retain full old/core contexts, request bodies and results when an empty-scoring getter changes the source index or a target getter changes the held-out index before sampling.

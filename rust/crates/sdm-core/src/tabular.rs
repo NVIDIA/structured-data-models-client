@@ -32,11 +32,14 @@ impl TabularContext {
     pub fn wanted(&self) -> usize {
         self.selection.wanted()
     }
-    pub fn select(&self) -> Vec<usize> {
-        self.selection.select()
+    pub fn reduced(&self) -> bool {
+        self.selection.reduced()
     }
-    pub fn positions(&self) -> Option<Vec<usize>> {
-        self.selection.reduced().then(|| self.selection.positions())
+    pub fn select(&self, labels: Option<&[i64]>) -> Result<Vec<usize>, CoreError> {
+        self.selection.select(labels)
+    }
+    pub fn positions(&self, labels: Option<&[i64]>) -> Result<Option<Vec<usize>>, CoreError> {
+        self.selection.positions(labels)
     }
 }
 
