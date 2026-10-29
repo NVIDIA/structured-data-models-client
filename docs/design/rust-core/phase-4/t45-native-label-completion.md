@@ -332,3 +332,7 @@ The host presents that actual completed notice at the original native warning po
 No synthetic warning, provider flag, general object parser, action token or callback-bearing RunStep is introduced.
 Add actual scalar-port through Core/native conversion controls, empty/null/date/datetime/text cases, native failure and coercion-warning handler controls, malformed closed facts and notice readers before implementation.
 Regenerate the working canonical schema and any applicable bridge artifact through their existing writers, preserving published locks and recording actual source-only producer hashes.
+
+The retained source table also carries Core's readonly temporal-column names, so content/missingness is observed only for columns whose resolved meaning the old sanitizer reads as time.
+This schema meaning avoids introducing inference or missingness callbacks on unrelated object columns and is validated by the existing exact source owner.
+The completed notice uses the established unread-time category and code-prefix presenter; it grants no new warning exception.

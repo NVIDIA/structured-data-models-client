@@ -32,12 +32,17 @@ READ = {
 }
 
 
-def _source(columns=('value',)):
+def _source(columns=('value',), *, temporal_columns=()):
     return Product(
         'source',
         {
             'tables': [
-                {'source': LOGICAL, 'read': READ, 'columns': list(columns)}
+                {
+                    'source': LOGICAL,
+                    'read': READ,
+                    'columns': list(columns),
+                    'temporal_columns': list(temporal_columns),
+                }
             ]
         },
         {},
@@ -759,9 +764,19 @@ def test_typed_timestamp_is_assigned_in_physical_order_before_time_capture(
         converted.append(values.name)
         return actual(values, meaning)
 
+    timestamp = completion.SourceCompletion._timestamp
+
+    def observed_timestamp(self, values, meaning):
+        assert provider.active == set()
+        converted.append(values.name)
+        return timestamp(self, values, meaning)
+
     monkeypatch.setattr(completion, 'scalar_column', observed)
+    monkeypatch.setattr(
+        completion.SourceCompletion, '_timestamp', observed_timestamp
+    )
     adapter = completion.SourceCompletion(
-        provider, _source(raw.column_names), service
+        provider, _source(raw.column_names, temporal_columns=['ts']), service
     )
     steps = _steps(lookup=False)
     result = adapter(steps, {})
@@ -822,7 +837,9 @@ def test_boxed_source_content_is_observed_after_scalar_construction(kind):
         return result
 
     service.column = column
-    adapter = completion.SourceCompletion(provider, _source(), service)
+    adapter = completion.SourceCompletion(
+        provider, _source(temporal_columns=['value']), service
+    )
     result = adapter(_steps(lookup=False), {})
     assert isinstance(result, dict)
     facts = [call[2] for call in service.calls if call[0] == 'column']
@@ -887,16 +904,10 @@ def test_actual_boxed_time_coercion_notice_precedes_finishing_and_keeps_native_f
                 'sentence': 'native_time_values_unread',
                 'message': 'native time conversion',
                 'fields': {
-                    'column': {'kind': 'text', 'text': 'value'},
-                    'unread': {
-                        'kind': 'scalar',
-                        'value': {'type': 'u64', 'value': '1'},
-                    },
-                    'rows': {
-                        'kind': 'scalar',
-                        'value': {'type': 'u64', 'value': '2'},
-                    },
-                    'examples': {'kind': 'text', 'text': facts['examples']},
+                    'column': {'t': 'utf8', 'v': 'value'},
+                    'unread': {'t': 'u64', 'v': '1'},
+                    'rows': {'t': 'u64', 'v': '2'},
+                    'examples': {'t': 'utf8', 'v': facts['examples']},
                 },
             }
         return result
@@ -914,7 +925,9 @@ def test_actual_boxed_time_coercion_notice_precedes_finishing_and_keeps_native_f
     provider = Provider(
         {7: _scalars([[datetime(3000, 1, 1)], [None]], ['value'])}, []
     )
-    adapter = completion.SourceCompletion(provider, _source(), service)
+    adapter = completion.SourceCompletion(
+        provider, _source(temporal_columns=['value']), service
+    )
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter('always')
         result = adapter(_steps(lookup=False), {})
@@ -1025,3 +1038,28 @@ def test_public_scalar_row_source_uses_actual_core_selected_boxed_time_recipe(
     else:
         assert outcome['request']['predict_rows'] == 2
         assert outcome['request']['context_rows'] > 0
+
+
+def test_unrelated_object_source_has_no_new_native_time_content_reads(
+    monkeypatch,
+):
+    observed = []
+    infer = pd.api.types.infer_dtype
+
+    def inferred(values, *args, **kwargs):
+        observed.append(values)
+        return infer(values, *args, **kwargs)
+
+    monkeypatch.setattr(pd.api.types, 'infer_dtype', inferred)
+    provider = Provider(
+        {7: _scalars([['ordinary'], ['unread']], ['value'])}, []
+    )
+    service = Service()
+    adapter = completion.SourceCompletion(provider, _source(), service)
+    actual = adapter(_steps(lookup=False), {})
+    assert isinstance(actual, dict)
+    assert observed == []
+    assert [call[2] for call in service.calls if call[0] == 'column'] == [
+        {'storage': 'cell_rows'}
+    ]
+    assert actual[7]['value'].to_pylist() == ['ordinary', 'unread']
