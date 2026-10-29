@@ -4208,6 +4208,45 @@ entries:
     2.2.0, NumPy 1.26.4); the cell is now pandas 2.2.2, pyarrow 14.0.1 and
     NumPy 1.23.5 (KO2-37).
 
+- id: HOST-6
+  title: Pandas runtime warning differences do not block Phase 4
+  kind: change
+  old_behavior: >-
+    HOST-5 permits only old-only exact DeprecationWarnings of measured
+    pandas/pyarrow origin in the nonreference comparison. Other classes,
+    either-side additions and warning-related effects remained blockers.
+  new_behavior: >-
+    The owner's 2026-10-29 direction makes pandas warnings generally and
+    their warning-related effects irrelevant to Phase 4 acceptance.
+    Compare actual requests, results, substantive failures and architecture
+    without gating differences in native pandas/pyarrow conversion warning
+    class, count, side or runtime cell. Retain truthful raw warning records;
+    the comparator ignores warnings of observed pandas or pyarrow origin
+    on both sides and retains every other warning in relative order.
+    No artificial conversion, new warning-effect probe, general error
+    suppression or request/result exclusion follows from this policy.
+    The approval is read from the comparator's own checkpoint register;
+    candidate data cannot activate it before this policy genuinely lands.
+  affected_inputs: >-
+    Phase 4 Python journeys with native pandas or pyarrow conversion
+    warnings, across supported runtime cells and warning classes; the
+    measured DBR16.4 Pandas4Warning journeys are examples, not a whitelist.
+  cases: []
+  refs: [HOST-5]
+  status: approved
+  approved_by: owner
+  decision_ref:
+    file: docs/design/rust-core/phase-4/decisions.md
+    row: T4-PANDAS-WARNINGS-2026-10-29
+  notes: >-
+    Direct owner answer in the Phase 4 root thread on 2026-10-29:
+    "Don't overindex on warnings/errors. We don't care about pandas warnings
+    in general / and what impact they have, since they're just warnings".
+    This supersedes the pending F17 narrow class/cell/journey proposal and
+    warning-handler parity requirements for these runtime warnings.
+    Existing unrelated schema, request, result, failure, ownership and
+    source/artifact provenance checks remain in force.
+
 # --- PQL validation (T1.12) ---------------------------------------------------
 
 - id: PQL-1
