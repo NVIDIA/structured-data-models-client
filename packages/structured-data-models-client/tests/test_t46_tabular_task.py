@@ -4,6 +4,7 @@
 
 """Public materialize/predict twins for native PQL tabular task observations."""
 
+import json
 import numbers
 import warnings
 from decimal import Decimal
@@ -107,12 +108,12 @@ def _journey(
         return native_snapshot()
 
     with monkeypatch.context() as patch:
-        # Isolate the task materialization seam. The independent direct
-        # constructor's exact-str conversion family is not selected here.
         patch.setenv(
             _routing.ENVIRONMENT,
             ','.join(
-                _routing.MATERIALIZE['frames'] + _routing.TABULAR_PREDICT_FRAME
+                _routing.MATERIALIZE['frames']
+                + _routing.TABULAR_PREDICT_FRAME
+                + _routing.DIRECT_CONSUMERS
             )
             if core
             else '',
@@ -705,3 +706,139 @@ def test_task_refusal_retains_the_ordinary_active_caller_context(monkeypatch):
         assert answer[4][2] is False
         assert answer[4][4][0] is RuntimeError
     assert answers[0] == answers[1]
+
+
+@pytest.mark.parametrize('text', ['classification', 'native-choice'])
+def test_native_stated_object_keeps_constructor_and_per_call_protocol(
+    monkeypatch, text
+):
+    def task(events, owners, active):
+        class NativeTask(str):
+            def __hash__(self):
+                events.append('task hash')
+                return hash('classification')
+
+            def __eq__(self, other):
+                events.append(
+                    (
+                        'task equal',
+                        str.__str__(other)
+                        if isinstance(other, str)
+                        else type(other).__name__,
+                    )
+                )
+                return other == 'classification'
+
+            def __ne__(self, other):
+                events.append(('task unequal', str.__str__(other)))
+                return other != 'classification'
+
+        return NativeTask(text)
+
+    old = _journey(
+        monkeypatch, core=False, factory=lambda events: (), task=task
+    )
+    current = _journey(
+        monkeypatch, core=True, factory=lambda events: (), task=task
+    )
+    # JSON storage observes the original spelling without invoking equality or
+    # formatting hooks, while the native operation trace is compared separately.
+    assert json.dumps(current[0:2], default=str) == json.dumps(
+        old[0:2], default=str
+    )
+    assert current[2:] == old[2:]
+    assert current[0][0] == 'ok'
+    assert str.__str__(current[0][1]) == text
+    assert current[1][0]['task']['kind'] == text
+    assert ('original-stated', True) in current[2]
+    assert ('request-original-stated', True) in current[2]
+    assert 'dropna' not in current[2]
+    assert current[2].count('task hash') >= 4
+
+
+def _envelope_task_journey(monkeypatch, *, core, effect):
+    from sdm_client import Request
+    from sdm_client.request import Task
+
+    events = []
+    context = pd.DataFrame({'answer': [0, 1, 0], 'later': [2, 3, 4]})
+    scoring = pd.DataFrame({'later': [5]})
+    scripted = Scripted()
+    native_classification = Task.is_classification.fget
+
+    with monkeypatch.context() as patch:
+        patch.setenv(
+            _routing.ENVIRONMENT,
+            ','.join(_routing.DIRECT_CONSUMERS) if core else '',
+        )
+        request = Request(
+            context, scoring, target='answer', task='classification'
+        )
+        if effect == 'text':
+            target = request.schema[request.entity_table]['answer']
+            target.stype = 'categorical'
+            target.dtype = 'string'
+            target.stype = 'text'
+
+        def classification(task):
+            assert task is request.task
+            events.append('actual classification')
+            if effect == 'later':
+                later = request.schema[request.entity_table]['later']
+                later.stype = 'categorical'
+                later.dtype = 'string'
+                later.stype = 'text'
+            elif effect == 'failure':
+                raise LookupError('actual task meaning read')
+            return native_classification(task)
+
+        patch.setattr(Task, 'is_classification', property(classification))
+        caught = None
+        with warnings.catch_warnings(record=True):
+            warnings.simplefilter('always')
+            try:
+                with SDMClient('http://localhost:1', max_retries=0) as client:
+                    client._transport.close()
+                    client._transport = scripted
+                    result = client.predict(request, model='kumo-tabular')
+                    observed = ('ok', result.to_pandas().to_dict('split'))
+            except Exception as error:
+                caught = error
+                observed = ('error', _error_graph(error))
+        for body in scripted.calls:
+            body['metadata']['request_id'] = '<drawn>'
+        return (
+            observed,
+            scripted.calls,
+            events,
+            projection(request.schema),
+            caught,
+        )
+
+
+@pytest.mark.parametrize('effect', ['ordinary', 'text', 'later', 'failure'])
+def test_task_column_meaning_uses_reached_native_property_and_later_metadata(
+    monkeypatch, effect
+):
+    old = _envelope_task_journey(monkeypatch, core=False, effect=effect)
+    current = _envelope_task_journey(monkeypatch, core=True, effect=effect)
+    assert current[:4] == old[:4]
+    if effect == 'text':
+        assert current[2] == []
+        assert (
+            current[1][0]['schema']['instance_table']['columns']['answer'][
+                'stype'
+            ]
+            == 'categorical'
+        )
+    elif effect == 'failure':
+        assert current[1] == []
+        assert type(current[4]) is LookupError
+        assert str(current[4]) == 'actual task meaning read'
+    else:
+        assert current[2] == ['actual classification']
+        assert current[0][0] == 'ok'
+        if effect == 'later':
+            assert current[1][0]['schema']['instance_table']['columns'][
+                'later'
+            ] == {'dtype': 'int64', 'stype': 'categorical'}

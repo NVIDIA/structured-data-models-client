@@ -187,3 +187,148 @@ fn native_decimal_truth_and_real_failure_ancestry_are_completed_input_facts() {
     assert_eq!(native.kind(), None);
     assert!(native.exhausted(1).is_err());
 }
+
+fn envelope_widths() -> sdm_contract::prepare::TabularEnvelopeWidths {
+    use sdm_contract::prepare::{CALL_PREPARATION_VERSION, TABULAR_ENVELOPE_VERSION};
+    serde_json::from_value(serde_json::json!({
+        "version": TABULAR_ENVELOPE_VERSION,
+        "bound": {
+            "phase":"bound", "version":CALL_PREPARATION_VERSION,
+            "model":"kumo-tabular", "outputs":["prediction"], "named":true,
+            "shape":{"kind":"classification","anchored":false,"relationships":false,"tables":1},
+            "kind":"classification", "context_rows":3
+        },
+        "dtypes":[["answer","int64"],["later","int64"]],
+        "names":["answer","later"], "target":"answer"
+    }))
+    .unwrap()
+}
+
+#[test]
+fn native_task_vocabulary_is_not_the_pql_two_task_rule_and_keeps_original_text() {
+    use sdm_contract::prepare::{NativeConstructorConstant, TaskValue};
+    let words = sdm_host::constructor_task_vocabulary();
+    assert_eq!(words.tasks.len(), 7);
+    assert_eq!(words.classification, words.tasks[..3]);
+    assert_eq!(words.regression, "regression");
+    assert_eq!(sdm_host::tabular_task_vocabulary().tasks.len(), 2);
+    let task = TaskValue::Native {
+        value: "native-choice".into(),
+    };
+    let notice = sdm_host::constructor_constant_notice(
+        &task,
+        Some(&NativeConstructorConstant {
+            classification_first: true,
+            regression_not_equal: None,
+            classification_second: Some(false),
+        }),
+        "answer",
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!(notice.sentence, Sentence::DirectConstantRegression);
+    assert_eq!(
+        serde_json::to_value(&task).unwrap(),
+        serde_json::json!({"value":"native-choice".chars().map(u32::from).collect::<Vec<_>>()})
+    );
+    assert!(sdm_host::constructor_constant_notice(&task, None, "answer").is_err());
+    for facts in [
+        NativeConstructorConstant {
+            classification_first: true,
+            regression_not_equal: Some(false),
+            classification_second: Some(true),
+        },
+        NativeConstructorConstant {
+            classification_first: false,
+            regression_not_equal: None,
+            classification_second: Some(true),
+        },
+        NativeConstructorConstant {
+            classification_first: false,
+            regression_not_equal: Some(true),
+            classification_second: Some(false),
+        },
+    ] {
+        assert_eq!(
+            sdm_host::constructor_constant_notice(&task, Some(&facts), "answer")
+                .unwrap_err()
+                .sentence,
+            Sentence::InvalidMessage
+        );
+    }
+}
+
+#[test]
+fn complete_native_column_meaning_is_bound_to_actual_order_and_owner() {
+    use sdm_contract::ops::Stype;
+    let bytes = serde_json::to_vec(&envelope_widths()).unwrap();
+    let mut columns = sdm_host::tabular_envelope::columns(&bytes).unwrap();
+    let foreign = sdm_host::tabular_envelope::columns(&bytes).unwrap();
+    assert!(columns.finish().is_err());
+    assert!(columns.declaration("later".into(), Stype::Text).is_err());
+    let target = columns
+        .declaration("answer".into(), Stype::Numerical)
+        .unwrap();
+    assert!(target.target());
+    assert!(!target.text());
+    assert!(target.meaning(None).is_err());
+    let actual = target.meaning(Some(true)).unwrap();
+    let other = foreign
+        .declaration("answer".into(), Stype::Numerical)
+        .unwrap()
+        .meaning(Some(true))
+        .unwrap();
+    assert!(columns.complete(&other, None).is_err());
+    assert!(columns.complete(&actual, Some(false)).is_err());
+    columns.complete(&actual, None).unwrap();
+    assert!(columns.complete(&actual, None).is_err());
+    // A task comparison changed the actual later native declaration after
+    // widths were captured. Its reached Text shortcut does not read task.
+    let later = columns.declaration("later".into(), Stype::Text).unwrap();
+    assert!(later.text());
+    assert!(!later.target());
+    assert!(later.meaning(Some(true)).is_err());
+    columns
+        .complete(&later.meaning(None).unwrap(), None)
+        .unwrap();
+    let (finished, notices) = columns.finish().unwrap();
+    assert_eq!(finished.columns.columns[0].stype, Stype::Categorical);
+    assert_eq!(finished.columns.columns[1].stype, Stype::Categorical);
+    assert_eq!(notices.len(), 1);
+    assert_eq!(notices[0].sentence, Sentence::DirectTextCategorical);
+    let (encoded, held) = sdm_host::tabular_envelope::finish(&columns).unwrap();
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&encoded).unwrap(),
+        serde_json::to_value(finished).unwrap()
+    );
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&held)
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+}
+
+#[test]
+fn text_target_has_no_task_fact_and_incoherent_widths_are_not_accepted() {
+    use sdm_contract::ops::Stype;
+    let mut data = envelope_widths();
+    data.names = vec!["answer".into()];
+    let mut columns =
+        sdm_host::tabular_envelope::columns(&serde_json::to_vec(&data).unwrap()).unwrap();
+    let target = columns.declaration("answer".into(), Stype::Text).unwrap();
+    assert!(target.meaning(Some(false)).is_err());
+    columns
+        .complete(&target.meaning(None).unwrap(), None)
+        .unwrap();
+    assert_eq!(
+        columns.finish().unwrap().0.columns.columns[0].stype,
+        Stype::Categorical
+    );
+    data.names.push("answer".into());
+    assert!(sdm_host::tabular_envelope::columns(&serde_json::to_vec(&data).unwrap()).is_err());
+    data.names = vec!["answer".into(), "absent".into()];
+    assert!(sdm_host::tabular_envelope::columns(&serde_json::to_vec(&data).unwrap()).is_err());
+}

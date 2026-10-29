@@ -1578,7 +1578,10 @@ fn encoded_numeric_body_is_useful_before_native_inference_is_observed() {
             continue;
         }
         let (body, payload) = encoded.unwrap();
-        assert_eq!(body["version"], 1);
+        assert_eq!(
+            body["version"],
+            sdm_contract::prepare::ENCODED_DIRECT_BODY_VERSION
+        );
         assert_eq!(body["context_shape"]["rows"], 3);
         assert_eq!(body["predict_shape"]["rows"], 2);
         let payload: Value = serde_json::from_slice(&payload).unwrap();
