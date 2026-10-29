@@ -129,3 +129,29 @@ fn selected_target_completion_keeps_the_actual_predecessor_and_never_walks_row_c
     extra["column"]["origin"] = json!("native-library");
     assert!(serde_json::from_value::<FramePreparation>(extra).is_err());
 }
+
+#[test]
+fn condition_completion_keeps_complete_actual_columns_for_repeated_occurrences() {
+    let binding = json!({"source":{"source":["buys"]},"column":"amount"});
+    let value = json!({"stage":"condition_column","column":{
+        "input":{"population":"population-1","range":{"start":0,"stop":10000},"owner":21,
+            "target":{"source":{"source":["buys"]},"column":"item_id"},"form":"filtered","condition_columns":[binding.clone(),binding.clone()]},
+        "owner":24,"derivation":"column","rows":137,
+        "condition_values":[{"column":binding.clone(),"converted":{"rows":25,"presence":26,"encoding":null}}]
+    },"operand":{"column":binding,"converted":{"rows":27,"presence":28,"encoding":null}}});
+    let input: FramePreparation = serde_json::from_value(value.clone()).unwrap();
+    assert_eq!(
+        input.attachments(),
+        vec![
+            (AttachmentId(21), AttachmentKind::LabelInputs),
+            (AttachmentId(24), AttachmentKind::TargetColumn),
+            (AttachmentId(25), AttachmentKind::Arrow),
+            (AttachmentId(26), AttachmentKind::Arrow),
+            (AttachmentId(27), AttachmentKind::Arrow),
+            (AttachmentId(28), AttachmentKind::Arrow)
+        ]
+    );
+    let mut wrong = value;
+    wrong["column"]["next_operand"] = json!(1);
+    assert!(serde_json::from_value::<FramePreparation>(wrong).is_err());
+}
