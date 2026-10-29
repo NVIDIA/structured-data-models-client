@@ -2335,7 +2335,12 @@ def native_result_snapshot(
         raise TypeError('unobserved native scalar')
 
     items = object.__getattribute__(result, '__dict__').get('items')
-    if type(items) is not tuple:
+    outputs = object.__getattribute__(result, '__dict__').get('outputs')
+    if (
+        type(items) is not tuple
+        or type(outputs) is not tuple
+        or any(type(value) is not str for value in outputs)
+    ):
         return None
     rows = []
     try:
@@ -2386,7 +2391,7 @@ def native_result_snapshot(
             rows.append(row)
     except (ValueError, TypeError):
         return None
-    return {'rows': rows}
+    return {'rows': rows, 'outputs': list(outputs), 'ranking': ranking}
 
 
 def _result_rows(stream: Any) -> dict[str, Any]:

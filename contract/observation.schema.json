@@ -959,8 +959,11 @@
       "description": "Actual primitive identity/ranking storage observed after the same owned native _present returns; Arrow carriers and lineage remain separate.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["rows"],
-      "properties": {"rows": {"type": "array", "items": {
+      "required": ["rows", "outputs", "ranking"],
+      "properties": {
+        "outputs": {"type": "array", "items": {"type": "string"}},
+        "ranking": {"type": "boolean"},
+        "rows": {"type": "array", "items": {
         "type": "object", "additionalProperties": false,
         "required": ["row_index", "forecast_step", "id", "rankings"],
         "properties": {

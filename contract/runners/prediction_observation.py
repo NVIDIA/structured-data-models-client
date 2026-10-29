@@ -1263,13 +1263,27 @@ def _native_scalar(value: Any) -> Any:
     return value
 
 
-def _presentation(shown: Any, table: Any) -> None:
+def _presentation(
+    shown: Any,
+    table: Any,
+    *,
+    ranking: bool | None = None,
+    outputs: list[str] | None = None,
+) -> None:
     require(
         type(shown) is dict
-        and set(shown) == {'rows'}
+        and set(shown) == {'rows', 'outputs', 'ranking'}
         and type(shown['rows']) is list
+        and type(shown['outputs']) is list
+        and all(type(value) is str for value in shown['outputs'])
+        and type(shown['ranking']) is bool
         and type(table) is dict,
         'native result presentation is malformed',
+    )
+    require(
+        (ranking is None or shown['ranking'] == ranking)
+        and (outputs is None or shown['outputs'] == outputs),
+        'native result presentation has another aggregation or output owner',
     )
     columns = [column['name'] for column in table['columns']]
     require(
@@ -1314,6 +1328,19 @@ def _presentation(shown: Any, table: Any) -> None:
             'native result presentation changed forecast step',
         )
         _native_scalar(native['id'])
+        if shown['ranking']:
+            require(
+                ('prediction_candidates' in native)
+                == ('prediction' in shown['outputs'])
+                and (native['rankings'] is not None)
+                == ('rankings' in shown['outputs']),
+                'requested native ranking field is missing or unsolicited',
+            )
+        else:
+            require(
+                'prediction_candidates' not in native,
+                'ordinary native result has ranking prediction candidates',
+            )
         prediction = native.get('prediction_candidates')
         if 'prediction_candidates' in native:
             require(
@@ -1497,7 +1524,12 @@ def _final(
         )
     predicted = final['data']['predicted']
     if 'presentation' in final:
-        _presentation(final['presentation'], table)
+        _presentation(
+            final['presentation'],
+            table,
+            ranking=final['input']['aggregation']['kind'] == 'ranking',
+            outputs=predicted['outputs'],
+        )
         names = [column['name'] for column in table['columns']]
         if 'id' in names:
             for row in table['rows']:
