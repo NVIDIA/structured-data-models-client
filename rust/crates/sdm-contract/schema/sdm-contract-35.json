@@ -10636,7 +10636,8 @@
             "inferred": {
               "$ref": "#/$defs/FrameObservedContent"
             },
-            "all_missing": {
+            "inferred_empty": {
+              "description": "The same native skip-null inference reported no scalar content.",
               "type": "boolean"
             },
             "storage": {
@@ -10648,7 +10649,7 @@
           "required": [
             "storage",
             "inferred",
-            "all_missing"
+            "inferred_empty"
           ]
         },
         {
