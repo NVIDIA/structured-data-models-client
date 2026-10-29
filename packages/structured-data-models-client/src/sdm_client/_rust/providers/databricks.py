@@ -39,7 +39,8 @@ from __future__ import annotations
 
 import datetime
 import re
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from typing import Any
 
 from sdm_connectors import providers
@@ -66,6 +67,14 @@ class DatabricksProvider:
     def __call__(
         self, step: dict[str, Any], keys: Mapping[int, Any] | None = None
     ) -> Any:
+        with self.source_rows(step, keys) as source:
+            return source
+
+    @contextmanager
+    def source_rows(
+        self, step: dict[str, Any], keys: Mapping[int, Any] | None = None
+    ) -> Iterator[object]:
+        """Expose actual fetched Arrow data within its original cursor scope."""
         statements = providers.statements(step, 'databricks')
         # Each text read once, however many statements bind it.
         read: dict[int, str] = {}
@@ -73,7 +82,7 @@ class DatabricksProvider:
         with self._connection.cursor() as cursor:
             for statement, values in zip(statements, bound, strict=True):
                 _execute(cursor, statement['text'], values)
-            return cursor.fetchall_arrow()
+            yield cursor.fetchall_arrow()
 
 
 class DatabricksSqlProvider(DatabricksProvider):

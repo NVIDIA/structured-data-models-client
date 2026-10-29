@@ -31,7 +31,8 @@ pyarrow, the client's base dependency.
 from __future__ import annotations
 
 import weakref
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from typing import Any
 
 from sdm_connectors import providers
@@ -64,6 +65,14 @@ class SqliteProvider:
     def __call__(
         self, step: dict[str, Any], keys: Mapping[int, Any] | None = None
     ) -> Any:
+        with self.source_rows(step, keys) as source:
+            return source
+
+    @contextmanager
+    def source_rows(
+        self, step: dict[str, Any], keys: Mapping[int, Any] | None = None
+    ) -> Iterator[object]:
+        """Expose actual fetched Arrow data within its original cursor scope."""
         statements = providers.statements(step, 'sqlite')
         relations = providers.bound_relations(statements, keys)
         made = _made(self._connection)
@@ -78,4 +87,4 @@ class SqliteProvider:
                 made.add(relation)
             for statement in statements:
                 cursor.execute(statement['text'])
-            return cursor.fetch_arrow_table()
+            yield cursor.fetch_arrow_table()
