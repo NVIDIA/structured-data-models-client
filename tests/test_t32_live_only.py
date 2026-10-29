@@ -20,8 +20,11 @@ their tests with them:
 
 The fixture is a real reference line: ``base.binary``'s, python-ref's on
 DuckDB, made a case of its own (``t32.live.binary``, no ``core``) and keyed
-on the leg, beside a python-core line that copies it. On DuckDB the same
-pair compares with no difference (``test_t32_the_fixture_is_valid_on_duckdb``,
+on the leg, beside an authored sparse python-core observation of its model call.
+The call fixture copies the recorded parsed body and original wire hash,
+while internal results, model replies and carried error control remain
+explicitly unobserved; it does not claim a modern observer executed it.
+On DuckDB the same pair compares with no difference (``test_t32_the_fixture_is_valid_on_duckdb``,
 which keeps the others from being vacuous).
 
 Each test listed in ``contract/tests/t32-pending.json`` failed when written,
@@ -140,16 +143,52 @@ class Pair:
             reference=None,
             native={'sha256': '0' * 64},
             native_loaded=True,
-            operations=[],
+            operations=['predict'],
         )
+        [received] = core['public']['payloads']
+        payload = copy.deepcopy(received['parsed'])
+        for field in ('model', 'output', 'inference'):
+            payload.pop(field, None)
+        payload['metadata'].pop('request_id')
         core['core'] = {
-            'inputs': [],
+            'inputs': [
+                {
+                    'op': 'predict',
+                    'model': received['parsed']['model'],
+                    'state': {
+                        'version': 1,
+                        'query': case['input']['pql'],
+                        'payload': payload,
+                    },
+                }
+            ],
             'fetches': [],
             'accepted': None,
             'described': None,
             'materialized': None,
             'predicted': None,
             'error': None,
+            'model_calls': [
+                {
+                    'run': 0,
+                    'body': copy.deepcopy(received['parsed']),
+                    'body_sha256': received['sha256'],
+                    'reply': None,
+                    'model_endpoint': None,
+                }
+            ],
+            'legacy_predictions': [
+                {
+                    'run': 0,
+                    'completion': 'unobserved',
+                    'result': None,
+                    'error': None,
+                }
+            ],
+            'capture_capabilities': {
+                'model_replies': False,
+                'native_error_control': False,
+            },
         }
         self.core = core
         self.observed = tmp / 'python-core.jsonl'
