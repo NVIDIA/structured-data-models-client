@@ -559,13 +559,16 @@ def check(
     checkpoint: str,
     observations: tuple[Path, ...] = (),
     protected: str | None = None,
+    *,
+    database: str | None = 'duckdb',
 ) -> list[str]:
+    """Authored DuckDB evidence by default; aggregate callers select None."""
     return ratchet.check(
         repo,
         checkpoint,
         list(observations),
         protected,
-        database='duckdb' if observations else None,
+        database=database if observations else None,
     ).problems
 
 
@@ -582,6 +585,25 @@ def test_duckdb_fixture_declares_its_scope_without_changing_production_default(
             f'@{database}:' in problem and 'not observed' in problem
             for problem in aggregate
         ), aggregate
+
+
+@pytest.mark.parametrize('database', ['duckdb', None])
+def test_fixture_scope_is_an_explicit_argument_and_preserves_every_problem(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, database: str | None
+) -> None:
+    called = []
+    problems = ['scope: retained', 'baselines: retained']
+
+    def checking(*args: Any, **kwargs: Any) -> Any:
+        called.append((args, kwargs))
+        return ratchet.Report(problems=problems)
+
+    monkeypatch.setattr(ratchet, 'check', checking)
+    files = (tmp_path / 'observations.jsonl',)
+    assert check(tmp_path, 'checkpoint', files, database=database) is problems
+    assert called == [
+        ((tmp_path, 'checkpoint', list(files), None), {'database': database})
+    ]
 
 
 def test_one_check_parses_unchanged_reference_bytes_once_for_all_rules(

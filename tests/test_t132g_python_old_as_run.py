@@ -111,12 +111,21 @@ def as_run(cell: str) -> dict[str, dict[str, Any]]:
 def observed(
     r: Path, tmp: Path, cell: str = 'ref-pandas3', edit: Edit | None = None
 ) -> Path:
-    r"""python-old's observations: the reference's, relabelled, but for
-    the seven, which are python-old's own lines as run in ``cell``,
-    ``CASE``'s changed by ``edit``."""
+    r"""Seven actual receipts over an explicitly authored complete scaffold.
+
+    Filler records retain the reference-based test data, with a coherent
+    requested runtime profile. They were not executed in that runtime and
+    are never runtime acceptance evidence. The seven actual records are
+    overlaid unchanged, with only CASE deliberately changed by ``edit``.
+    """
 
     def real(lines: dict[str, dict[str, Any]]) -> None:
-        for case, line in as_run(cell).items():
+        recorded = as_run(cell)
+        profile = next(iter(recorded.values()))['identity']
+        for line in lines.values():
+            for field in ('cell', 'versions', 'platform'):
+                line['identity'][field] = copy.deepcopy(profile[field])
+        for case, line in recorded.items():
             lines[case] = copy.deepcopy(line)
         if edit is not None:
             edit(lines[CASE])
@@ -154,6 +163,41 @@ def test_the_lines_are_python_old_s_as_run() -> None:
             assert 'origins' not in (reference[case]['host'] or {})
     floor = as_run('floor-pandas2.2')[CASE]['host']['warnings']
     assert floor.count('DeprecationWarning') >= 2
+
+
+@pytest.mark.parametrize('cell', sorted(AS_RUN))
+def test_authored_filler_is_coherent_and_the_seven_receipts_remain_complete(
+    repo: Path, tmp_path: Path, cell: str
+) -> None:
+    raw = AS_RUN[cell].read_bytes()
+    expected = as_run(cell)
+    actual = lines_of(observed(repo, tmp_path, cell))
+    assert len(expected) == 7
+    assert {case: actual[case] for case in SEVEN} == expected
+    filler = {case: line for case, line in actual.items() if case not in SEVEN}
+    assert filler
+    profile = next(iter(expected.values()))['identity']
+    for line in filler.values():
+        assert {
+            field: line['identity'][field]
+            for field in ('cell', 'versions', 'platform')
+        } == {
+            field: profile[field] for field in ('cell', 'versions', 'platform')
+        }
+    assert AS_RUN[cell].read_bytes() == raw
+    report = ratchet.Report()
+    ratchet.check_database_scope(report, {'python-old': actual}, 'duckdb')
+    assert report.problems == []
+    next(iter(filler.values()))['identity']['cell'] = next(
+        name for name in AS_RUN if name != cell
+    )
+    mixed = ratchet.Report()
+    ratchet.check_database_scope(mixed, {'python-old': actual}, 'duckdb')
+    assert mixed.problems == [
+        'scope: python-old: observations mix runtime cells'
+    ]
+    assert {case: actual[case] for case in SEVEN} == expected
+    assert AS_RUN[cell].read_bytes() == raw
 
 
 # --- P1.1 and P1.2: held and proposed as run -------------------------------------

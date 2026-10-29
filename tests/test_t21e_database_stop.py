@@ -16,12 +16,15 @@ not run still fails, and DuckDB's lines are held to the whole block.
 
 from __future__ import annotations
 
+import copy
 import importlib.util
 import json
 import sys
 from pathlib import Path
 from types import ModuleType
 from typing import Any
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 CASE = ROOT / 'contract/cases/s1/decimal.sum-10-2.json'
@@ -40,13 +43,61 @@ def _compare() -> ModuleType:
 
 
 def _observation(operations: list[str]) -> dict[str, Any]:
+    """Finite route evidence, without claiming a completed prediction.
+
+    The catalog fetch uses SQLite's actual Tables request/plan spelling.
+    The route-only materialization has no observed completion product.
+    """
+    case = json.loads(CASE.read_text(encoding='utf-8'))
+    described = {'tables': [], 'links': []}
+    starts = []
+    for op in operations:
+        # The historical Rust host did not journal edit inputs.
+        if op == 'edit_schema':
+            continue
+        start = {'op': op, **copy.deepcopy(case['core'][op])}
+        start['provider']['dialect'] = 'sqlite'
+        if op == 'materialize':
+            start.update(schema=described, query=case['input']['pql'])
+        starts.append(start)
     return {
         'identity': {
             'native_loaded': True,
             'native': {'sha256': '0' * 64},
-            'operations': operations,
+            'operations': list(operations),
         },
-        'core': {},
+        'core': {
+            'inputs': starts,
+            'fetches': [
+                {
+                    'request': {
+                        'request': 'describe',
+                        'tables': [],
+                        'part': 'tables',
+                    },
+                    'plan': {
+                        'plan': 'sql',
+                        'statements': [
+                            {
+                                'dialect': 'sqlite',
+                                'text': "SELECT name FROM sqlite_master WHERE type='table'",
+                                'params': [],
+                            }
+                        ],
+                        'expect': {'expect': 'discover'},
+                    },
+                }
+            ]
+            if 'describe_source' in operations
+            else [],
+            'accepted': None,
+            'described': described if 'describe_source' in operations else None,
+            'materialized': None,
+            'predicted': None,
+            'error': None,
+            'model_calls': [],
+            'legacy_predictions': [],
+        },
     }
 
 
@@ -55,6 +106,31 @@ def _route(case: dict[str, Any], operations: list[str]) -> list[str]:
     report = c.Report()
     c._route(report, case, 'python-core', _observation(operations))
     return [text for _, text in report.failures]
+
+
+@pytest.mark.parametrize(
+    'operations', [[], ['describe_source'], ['describe_source', 'materialize']]
+)
+def test_stop_fixture_has_exact_inputs_and_no_invented_prediction(
+    operations: list[str],
+) -> None:
+    line = _observation(operations)
+    view = _compare()._prediction_view(line)
+    assert view['operations'] == operations
+    assert [record['op'] for record in view['inputs']] == operations
+    assert view['events'] == []
+    assert line['core']['predicted'] is None
+    assert line['core']['model_calls'] == []
+
+
+def test_stop_fixture_missing_required_trace_is_refused() -> None:
+    line = _observation(['describe_source'])
+    assert _compare()._prediction_view(line)['operations'] == [
+        'describe_source'
+    ]
+    line['core'].pop('fetches')
+    with pytest.raises(_compare()._prediction_reader().ObservationError):
+        _compare()._prediction_view(line)
 
 
 def test_a_database_line_is_held_to_the_calls_up_to_its_stop() -> None:
@@ -102,15 +178,12 @@ def test_rust_host_s_refused_edit_is_one_error_by_its_operations() -> None:
         'id': 'decimal.target-regression-collide@sqlite',
         'core': {'describe_source': {}},
     }
-    observation = {
-        'identity': {'operations': ['describe_source', 'edit_schema']},
-        'core': {
-            'described': {'tables': []},
-            'error': {'kind': 'invalid_request', 'code': 'INVALID_REQUEST'},
-            'fetches': [{}],
-        },
-        'outcome': {'result': 'refusal', 'code': 'INVALID_REQUEST'},
+    observation = _observation(['describe_source', 'edit_schema'])
+    observation['core']['error'] = {
+        'kind': 'invalid_request',
+        'code': 'INVALID_REQUEST',
     }
+    observation['outcome'] = {'result': 'refusal', 'code': 'INVALID_REQUEST'}
     report = c.Report()
     c._core_consistent(report, case, 'rust-host', observation, 'sqlite')
     assert report.failures == []

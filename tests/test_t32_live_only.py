@@ -20,8 +20,11 @@ their tests with them:
 
 The fixture is a real reference line: ``base.binary``'s, python-ref's on
 DuckDB, made a case of its own (``t32.live.binary``, no ``core``) and keyed
-on the leg, beside a python-core line that copies it. On DuckDB the same
-pair compares with no difference (``test_t32_the_fixture_is_valid_on_duckdb``,
+on the leg, beside an authored sparse python-core observation of its model call.
+The call fixture copies the recorded parsed body and original wire hash,
+while internal results, model replies and carried error control remain
+explicitly unobserved; it does not claim a modern observer executed it.
+On DuckDB the same pair compares with no difference (``test_t32_the_fixture_is_valid_on_duckdb``,
 which keeps the others from being vacuous).
 
 Each test listed in ``contract/tests/t32-pending.json`` failed when written,
@@ -43,6 +46,8 @@ import sys
 from pathlib import Path
 from types import ModuleType
 from typing import Any
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 COMPARE = ROOT / 'scripts/rust_core/compare.py'
@@ -138,16 +143,52 @@ class Pair:
             reference=None,
             native={'sha256': '0' * 64},
             native_loaded=True,
-            operations=[],
+            operations=['predict'],
         )
+        [received] = core['public']['payloads']
+        payload = copy.deepcopy(received['parsed'])
+        for field in ('model', 'output', 'inference'):
+            payload.pop(field, None)
+        payload['metadata'].pop('request_id')
         core['core'] = {
-            'inputs': [],
+            'inputs': [
+                {
+                    'op': 'predict',
+                    'model': received['parsed']['model'],
+                    'state': {
+                        'version': 1,
+                        'query': case['input']['pql'],
+                        'payload': payload,
+                    },
+                }
+            ],
             'fetches': [],
             'accepted': None,
             'described': None,
             'materialized': None,
             'predicted': None,
             'error': None,
+            'model_calls': [
+                {
+                    'run': 0,
+                    'body': copy.deepcopy(received['parsed']),
+                    'body_sha256': received['sha256'],
+                    'reply': None,
+                    'model_endpoint': None,
+                }
+            ],
+            'legacy_predictions': [
+                {
+                    'run': 0,
+                    'completion': 'unobserved',
+                    'result': None,
+                    'error': None,
+                }
+            ],
+            'capture_capabilities': {
+                'model_replies': False,
+                'native_error_control': False,
+            },
         }
         self.core = core
         self.observed = tmp / 'python-core.jsonl'
@@ -191,6 +232,52 @@ def test_t32_the_fixture_is_valid_on_duckdb(tmp_path: Path) -> None:
     fewer['driver']['query_log']['statements'] -= 1
     rules = [rule for rule, _ in pair.judge(fewer).failures]
     assert rules == ['sql.count']
+
+
+def test_t32_model_call_fixture_has_complete_sparse_observations(
+    tmp_path: Path,
+) -> None:
+    pair = Pair(tmp_path, 'duckdb')
+    line = pair.answered(None)
+    untouched = copy.deepcopy(line)
+    view = compare_module()._prediction_view(line)
+    [received] = line['public']['payloads']
+    assert view['operations'] == ['predict']
+    assert view['inputs'] == [
+        {'op': 'predict', 'model': received['parsed']['model']}
+    ]
+    assert view['calls'] == [received['parsed']]
+    [attempt] = view['attempts']
+    assert attempt['run'] == 0
+    assert attempt['body_sha256'] == received['sha256']
+    assert attempt['reply'] is None
+    assert view['events'][0]['result'] is None
+    assert line['core']['predicted'] is None
+    assert 'answered' not in line['core']
+    assert line == untouched
+
+
+@pytest.mark.parametrize('changed', ['missing', 'owner', 'body', 'hash'])
+def test_t32_model_call_fixture_still_refuses_invalid_evidence(
+    tmp_path: Path, changed: str
+) -> None:
+    pair = Pair(tmp_path, 'duckdb')
+    line = pair.answered(None)
+    assert len(line['core']['model_calls']) == 1
+    [call] = line['core']['model_calls']
+    if changed == 'missing':
+        line['core']['model_calls'].clear()
+    elif changed == 'owner':
+        call['run'] = len(line['identity']['operations'])
+    elif changed == 'body':
+        call['body']['metadata']['source_query'] += ' '
+    else:
+        call['body_sha256'] = '0' * 64
+    untouched = copy.deepcopy(line)
+    report = pair.judge(line)
+    expected = 'core' if changed == 'owner' else 'payload'
+    assert expected in [rule for rule, _ in report.failures]
+    assert line == untouched
 
 
 @pending
@@ -275,6 +362,9 @@ def test_t32_a_java_leg_once_baselined_is_held_by_the_no_removal_rule() -> None:
             if path.endswith('/java.jsonl'):
                 return json.dumps(line) + '\n'
             return ''
+
+        def json_lines(self, path: str) -> list[dict[str, Any]]:
+            return ratchet.jsonl(self.read(path), path)
 
     held = ratchet.baselines(Tree())
     assert held['java'] == {line['case']: line}

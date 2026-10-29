@@ -666,6 +666,122 @@ def test_t32_the_gate_runs_the_java_legs() -> None:
     assert 'run_java.py' in body
 
 
+def _sparse_text_observation(
+    line: dict[str, Any], query: str
+) -> dict[str, Any]:
+    """Authored call evidence, keeping the original received wire hash.
+
+    As in the independent LIVE.Pair, this fixture claims neither a model
+    reply nor a completed native product or carried error observation.
+    """
+    core = copy.deepcopy(line)
+    core['identity'].update(
+        runner='python-core',
+        reference=None,
+        native={'sha256': '0' * 64},
+        native_loaded=True,
+        operations=['predict'],
+    )
+    [received] = core['public']['payloads']
+    payload = copy.deepcopy(received['parsed'])
+    for field in ('model', 'output', 'inference'):
+        payload.pop(field, None)
+    payload['metadata'].pop('request_id')
+    core['core'] = {
+        'inputs': [
+            {
+                'op': 'predict',
+                'model': received['parsed']['model'],
+                'state': {'version': 1, 'query': query, 'payload': payload},
+            }
+        ],
+        'fetches': [],
+        'accepted': None,
+        'described': None,
+        'materialized': None,
+        'predicted': None,
+        'error': None,
+        'model_calls': [
+            {
+                'run': 0,
+                'body': copy.deepcopy(received['parsed']),
+                'body_sha256': received['sha256'],
+                'reply': None,
+                'model_endpoint': None,
+            }
+        ],
+        'legacy_predictions': [
+            {
+                'run': 0,
+                'completion': 'unobserved',
+                'result': None,
+                'error': None,
+            }
+        ],
+        'capture_capabilities': {
+            'model_replies': False,
+            'native_error_control': False,
+        },
+    }
+    return core
+
+
+def test_sparse_text_fixture_keeps_actual_body_hash_and_unobserved_products() -> (
+    None
+):
+    live = _module(
+        't32_tools_live_fixture', ROOT / 'tests/test_t32_live_only.py'
+    )
+    line = live._reference_line()
+    original = copy.deepcopy(line)
+    core = _sparse_text_observation(line, _case('base.binary')['input']['pql'])
+    compare = _module('t32_tools_compare', RUST_CORE / 'compare.py')
+    view = compare._prediction_view(core)
+    [received] = line['public']['payloads']
+    assert view['operations'] == ['predict']
+    assert view['calls'] == [received['parsed']]
+    [attempt] = view['attempts']
+    assert attempt['run'] == 0 and attempt['body_sha256'] == received['sha256']
+    assert attempt['reply'] is None and attempt['model_endpoint'] is None
+    assert view['events'][0]['result'] is None
+    assert core['core']['predicted'] is None and 'answered' not in core['core']
+    compare._prediction_reader().check_receipts(
+        view['attempts'], line['public']['payloads']
+    )
+    assert line == original
+
+
+@pytest.mark.parametrize('changed', ['missing', 'owner', 'body', 'hash'])
+def test_sparse_text_fixture_rejects_missing_or_changed_call_evidence(
+    changed: str,
+) -> None:
+    live = _module(
+        't32_tools_live_fixture', ROOT / 'tests/test_t32_live_only.py'
+    )
+    line = live._reference_line()
+    core = _sparse_text_observation(line, _case('base.binary')['input']['pql'])
+    compare = _module('t32_tools_compare', RUST_CORE / 'compare.py')
+    clean = compare.Report()
+    compare._core_payload(
+        clean, {'id': line['case']}, 'python-core', core, None
+    )
+    assert clean.failures == [], clean.texts
+    [call] = core['core']['model_calls']
+    if changed == 'missing':
+        core['core']['model_calls'].clear()
+    elif changed == 'owner':
+        call['run'] = 1
+    elif changed == 'body':
+        call['body']['metadata']['source_query'] += ' '
+    else:
+        call['body_sha256'] = '0' * 64
+    report = compare.Report()
+    compare._core_payload(
+        report, {'id': line['case']}, 'python-core', core, None
+    )
+    assert [rule for rule, _ in report.failures] == ['payload'], report.texts
+
+
 @pending
 def test_t32_result_rows_are_compared_as_text_where_the_digest_is_excused(
     tmp_path: Path,
@@ -711,23 +827,7 @@ def test_t32_result_rows_are_compared_as_text_where_the_digest_is_excused(
     )
 
     def judged(text_digest: str) -> list[str]:
-        core = copy.deepcopy(line)
-        core['identity'].update(
-            runner='python-core',
-            reference=None,
-            native={'sha256': '0' * 64},
-            native_loaded=True,
-            operations=[],
-        )
-        core['core'] = {
-            'inputs': [],
-            'fetches': [],
-            'accepted': None,
-            'described': None,
-            'materialized': None,
-            'predicted': None,
-            'error': None,
-        }
+        core = _sparse_text_observation(line, case['input']['pql'])
         core['public']['result']['digest'] = '0' * 64
         core['public']['result']['text_digest'] = text_digest
         observed = tmp_path / 'python-core.jsonl'

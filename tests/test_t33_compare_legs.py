@@ -71,11 +71,55 @@ class Leg:
             reference=None,
             native={'sha256': '0' * 64},
             native_loaded=True,
-            operations=[],
+            operations=['predict'],
         )
-        core['core'] = dict.fromkeys(
-            ('accepted', 'described', 'materialized', 'predicted', 'error')
-        ) | {'inputs': [], 'fetches': []}
+        # Like the independent successful T32 Pair, retain the reference's
+        # actual body/hash while leaving unread internal products unobserved.
+        [received] = core['public']['payloads']
+        payload = copy.deepcopy(received['parsed'])
+        for field in ('model', 'output', 'inference'):
+            payload.pop(field, None)
+        payload['metadata'].pop('request_id')
+        core['core'] = {
+            'inputs': [
+                {
+                    'op': 'predict',
+                    'model': received['parsed']['model'],
+                    'state': {
+                        'version': 1,
+                        'query': case['input']['pql'],
+                        'payload': payload,
+                    },
+                }
+            ],
+            'fetches': [],
+            'accepted': None,
+            'described': None,
+            'materialized': None,
+            'predicted': None,
+            'error': None,
+            'model_calls': [
+                {
+                    'run': 0,
+                    'body': copy.deepcopy(received['parsed']),
+                    'body_sha256': received['sha256'],
+                    'reply': None,
+                    'model_endpoint': None,
+                }
+            ],
+            'legacy_predictions': [
+                {
+                    'run': 0,
+                    'completion': 'unobserved',
+                    'result': None,
+                    'error': None,
+                }
+            ],
+            'capture_capabilities': {
+                'model_replies': False,
+                'native_error_control': False,
+            },
+        }
         self.core = core
         self.observed = tmp / 'python-core.jsonl'
 
@@ -92,6 +136,43 @@ class Leg:
 @pytest.fixture
 def leg(tmp_path: Path) -> Leg:
     return Leg(tmp_path)
+
+
+def test_warehouse_fixture_observes_only_its_recorded_call(leg: Leg) -> None:
+    line = copy.deepcopy(leg.core)
+    before = copy.deepcopy(line)
+    view = _compare()._prediction_view(line)
+    [received] = line['public']['payloads']
+    assert view['operations'] == ['predict']
+    assert view['calls'] == [received['parsed']]
+    [attempt] = view['attempts']
+    assert attempt['run'] == 0
+    assert attempt['body_sha256'] == received['sha256']
+    assert attempt['reply'] is None and attempt['model_endpoint'] is None
+    assert view['events'][0]['result'] is None
+    assert line['core']['predicted'] is None
+    assert line == before
+
+
+@pytest.mark.parametrize('changed', ['missing', 'owner', 'body', 'hash'])
+def test_warehouse_fixture_keeps_model_call_evidence_strict(
+    leg: Leg, changed: str
+) -> None:
+    line = copy.deepcopy(leg.core)
+    assert leg.judge(copy.deepcopy(line)).failures == []
+    [call] = line['core']['model_calls']
+    if changed == 'missing':
+        line['core']['model_calls'].clear()
+    elif changed == 'owner':
+        call['run'] = 1
+    elif changed == 'body':
+        call['body']['metadata']['source_query'] += ' '
+    else:
+        call['body_sha256'] = '0' * 64
+    report = leg.judge(line)
+    assert ('core' if changed == 'owner' else 'payload') in [
+        rule for rule, _ in report.failures
+    ], report.texts
 
 
 def test_t33_an_equal_warehouse_line_passes_with_no_stand_in_verdict(

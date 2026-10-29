@@ -17,8 +17,10 @@ r"""compare.py's fixes of T3.2's first review round (Codex r1, 4 to 6):
 from __future__ import annotations
 
 import copy
+import hashlib
 import importlib.util
 import inspect
+import json
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -60,6 +62,189 @@ REFUSED = {
 }
 
 
+def _append_legacy_prediction(
+    line: dict[str, Any], value: Any, *, calls: bool = False
+) -> None:
+    """Finite authored Predict evidence, with unread Arrow/reply left absent.
+
+    Each body has one numeric-token or string cell, so its original JSON
+    bytes can be written independently of the observation snapshot codec.
+    These are comparator fixtures, not records of an executed SDK call.
+    """
+    core = line['core']
+    run = len(line['identity']['operations'])
+    line['identity']['operations'].append('predict')
+    if type(value) is int:
+        value = {'number': str(value)}
+    values = [{'number': '0.0'}, value] if calls else [value]
+    bodies = [{'value': copy.deepcopy(item)} for item in values]
+    for body, item in zip(bodies, values, strict=True):
+        token = (
+            item['number']
+            if isinstance(item, dict) and set(item) == {'number'}
+            else json.dumps(item)
+        )
+        raw = ('{"value":' + token + '}').encode()
+        wire_hash = hashlib.sha256(raw).hexdigest()
+        core['model_calls'].append(
+            {
+                'run': run,
+                'body': body,
+                'body_sha256': wire_hash,
+                'reply': None,
+                'model_endpoint': None,
+            }
+        )
+        line['public']['payloads'].append(
+            {'parsed': copy.deepcopy(body), 'sha256': wire_hash}
+        )
+    state = {
+        'version': 1,
+        'query': 'PREDICT users.age FOR EACH users.user_id',
+        'payload': copy.deepcopy(bodies[0]),
+    }
+    core['inputs'].append(
+        {'op': 'predict', 'model': 'kumo-relational', 'state': state}
+    )
+    product = {
+        'body': copy.deepcopy(bodies[-1]),
+        **({'calls': copy.deepcopy(bodies)} if calls else {}),
+        'model': 'kumo-relational',
+        'request_id': f'numeric-{run}',
+        'metadata': None,
+        'result': None,
+        'outputs': ['prediction'],
+    }
+    core['legacy_predictions'].append(
+        {
+            'run': run,
+            'completion': 'done',
+            'result': product,
+            'error': None,
+        }
+    )
+    core['predicted'] = copy.deepcopy(product)
+
+
+def _legacy_observation(value: Any, *, calls: bool = False) -> dict[str, Any]:
+    line = {
+        'identity': {
+            'operations': [],
+            'contract': 30,
+            'native_loaded': True,
+            'native': {'sha256': '0' * 64},
+        },
+        'public': {'payloads': []},
+        'core': {
+            'inputs': [],
+            'fetches': [],
+            'described': None,
+            'materialized': None,
+            'predicted': None,
+            'accepted': None,
+            'error': None,
+            'model_calls': [],
+            'legacy_predictions': [],
+            'capture_capabilities': {
+                'model_replies': False,
+                'native_error_control': False,
+            },
+        },
+    }
+    _append_legacy_prediction(line, value, calls=calls)
+    return line
+
+
+def test_sparse_numeric_fixture_has_owned_products_without_mutating_it() -> (
+    None
+):
+    line = _legacy_observation({'number': '3e-06'}, calls=True)
+    before = copy.deepcopy(line)
+    view = COMPARE._prediction_view(line)
+    assert view['operations'] == ['predict']
+    assert view['inputs'] == [{'op': 'predict', 'model': 'kumo-relational'}]
+    [event] = view['events']
+    assert event['position'] == 0
+    assert event['result'] == line['core']['legacy_predictions'][0]['result']
+    assert event['calls'] == line['core']['predicted']['calls']
+    assert all(attempt['reply'] is None for attempt in view['attempts'])
+    assert all(
+        attempt['model_endpoint'] is None for attempt in view['attempts']
+    )
+    COMPARE._prediction_reader().check_receipts(
+        view['attempts'], line['public']['payloads']
+    )
+    assert line == before
+
+
+@pytest.mark.parametrize('changed', ['body', 'hash', 'receipt'])
+def test_sparse_numeric_fixture_keeps_independent_body_hash_receipts(
+    changed: str,
+) -> None:
+    line = _legacy_observation({'number': '-3e-06'})
+    reader = COMPARE._prediction_reader()
+    reader.check_receipts(
+        COMPARE._prediction_view(line)['attempts'], line['public']['payloads']
+    )
+    if changed == 'body':
+        line['core']['model_calls'][0]['body']['value'] = {'number': '7.0'}
+    elif changed == 'hash':
+        line['core']['model_calls'][0]['body_sha256'] = '0' * 64
+    else:
+        line['public']['payloads'][0]['sha256'] = '0' * 64
+    with pytest.raises(reader.ObservationError):
+        reader.check_receipts(
+            COMPARE._prediction_view(line)['attempts'],
+            line['public']['payloads'],
+        )
+
+
+@pytest.mark.parametrize(
+    'changed', ['input', 'owner', 'journal', 'product', 'state', 'endpoint']
+)
+def test_sparse_numeric_fixture_refuses_incomplete_or_foreign_run_evidence(
+    changed: str,
+) -> None:
+    line = _legacy_observation({'number': '3e-06'})
+    if changed == 'state':
+        line['core']['materialized'] = copy.deepcopy(
+            line['core']['inputs'][0]['state']
+        )
+    assert len(COMPARE._prediction_view(line)['events']) == 1
+    if changed == 'input':
+        line['core']['inputs'][0].pop('model')
+    elif changed == 'owner':
+        line['core']['model_calls'][0]['run'] = 1
+    elif changed == 'journal':
+        line['core']['legacy_predictions'].clear()
+    elif changed == 'product':
+        line['core']['legacy_predictions'][0]['result'].pop('request_id')
+    elif changed == 'state':
+        line['core']['inputs'][0]['state']['payload'] = {'value': 'changed'}
+    else:
+        line['core']['model_calls'][0]['model_endpoint'] = {
+            'endpoint': 'unknown'
+        }
+    with pytest.raises(COMPARE._prediction_reader().ObservationError):
+        COMPARE._prediction_view(line)
+
+
+def test_shared_numeric_fixture_keeps_its_first_product_separate_from_the_last() -> (
+    None
+):
+    line = _legacy_observation({'number': '3e-06'})
+    first = copy.deepcopy(line['core']['legacy_predictions'][0]['result'])
+    _append_legacy_prediction(line, {'number': '99.0'})
+    view = COMPARE._prediction_view(line)
+    assert [event['position'] for event in view['events']] == [0, 1]
+    assert view['events'][0]['result'] == first
+    assert view['events'][1]['result'] == line['core']['predicted']
+    assert view['events'][0]['result'] != view['events'][1]['result']
+    line['core'].pop('legacy_predictions')
+    with pytest.raises(COMPARE._prediction_reader().ObservationError):
+        COMPARE._prediction_view(line)
+
+
 # --- 4: a refusal on a warehouse leg fails as anywhere -----------------------------
 
 
@@ -80,38 +265,39 @@ def test_a_refusal_on_a_warehouse_leg_fails(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize('who', ['rust-host', 'java'])
 def test_a_core_host_s_changed_payload_fails(who: str) -> None:
+    observation = _legacy_observation(999)
+    clean = COMPARE.Report()
+    COMPARE._core_payload(
+        clean,
+        {'id': 'probe'},
+        who,
+        observation,
+        {'public': {'payloads': [{'parsed': {'value': {'number': '999'}}}]}},
+    )
+    assert clean.failures == [], clean.texts
     report = COMPARE.Report()
     COMPARE._core_payload(
         report,
         {'id': 'probe'},
         who,
-        {'core': {'predicted': {'body': {'value': 999}}}},
-        {'public': {'payloads': [{'parsed': {'value': 1}}]}},
+        observation,
+        {'public': {'payloads': [{'parsed': {'value': {'number': '1'}}}]}},
     )
     assert [rule for rule, _ in report.failures] == ['payload'], report.texts
     assert who in report.failures[0][1]
 
 
 def test_java_agrees_with_python_core_on_the_core_fields() -> None:
-    core = {
-        'inputs': [],
-        'fetches': [],
-        'described': None,
-        'materialized': None,
-        'predicted': {'body': {'value': 1}},
-        'accepted': None,
-        'error': None,
-    }
-    python = {
-        'identity': {'operations': ['predict'], 'contract': 1},
-        'core': core,
-    }
-    java = copy.deepcopy(python)
-    java['core']['predicted'] = {'body': {'value': 999}}
+    python = _legacy_observation(1)
+    java = _legacy_observation(999)
     report = COMPARE.Report()
     COMPARE._core_agree(report, {'id': 'probe'}, python, java, host='java')
-    assert [rule for rule, _ in report.failures] == ['core'], report.texts
-    assert 'python-core against java' in report.failures[0][1]
+    assert [rule for rule, _ in report.failures] == ['payload', 'core'], (
+        report.texts
+    )
+    assert all(
+        'python-core against java' in text for _, text in report.failures
+    )
     # compare() pairs Java's observation with python-core's.
     assert "observed.get('java'" in inspect.getsource(COMPARE.compare)
 
@@ -124,55 +310,49 @@ def _numeric_core_agreement(
     shared: bool = False,
     state_part: str | None = None,
     held: bool = False,
-) -> Any:
-    """Compare captured numeric tokens without parsing them through floats."""
-    core: dict[str, Any] = {
-        'inputs': [{'op': 'predict', 'state': {'payload': mine}}],
-        'fetches': [],
-        'described': None,
-        'materialized': None,
-        'predicted': None,
-        'accepted': None,
-        'error': None,
-    }
-    state_key = 'held' if held else 'state'
+) -> tuple[Any, bool]:
+    """Check numeric boundaries alongside admitted, owned event observations.
+
+    The common Predict input intentionally retains only its canonical model.
+    Exercise the raw state/held payload normalizer explicitly, rather than
+    claiming that a removed common input field was compared by the reader.
+    """
+    input_agrees = True
     if field == 'inputs':
-        state = core['inputs'][0].pop('state')
-        if state_part == 'ranking':
-            state = {'payload': None, 'ranking': {'parts': [state]}}
-        elif state_part is not None:
-            state = {'payload': None, state_part: [state]}
-        core['inputs'][0][state_key] = state
-    elif field == 'materialized':
-        core['inputs'] = []
-        core['materialized'] = {'payload': mine}
+        probes = []
+        for value in (mine, theirs):
+            state = {'payload': value}
+            if state_part == 'ranking':
+                state = {'payload': None, 'ranking': {'parts': [state]}}
+            elif state_part is not None:
+                state = {'payload': None, state_part: [state]}
+            probes.append(
+                [{'op': 'predict', 'held' if held else 'state': state}]
+            )
+        input_agrees = COMPARE._core_field('inputs', probes[0]) == (
+            COMPARE._core_field('inputs', probes[1])
+        )
+        python = _legacy_observation(mine)
+        rust = _legacy_observation(theirs)
     else:
-        core['inputs'] = []
-        core['predicted'] = {'body': {'value': mine}}
-        if field == 'calls':
-            core['predicted']['body'] = {'value': None}
-            core['predicted']['calls'] = [{'value': mine}]
-    python = {
-        'identity': {'operations': ['predict'], 'contract': 30},
-        'core': core,
-    }
-    rust = copy.deepcopy(python)
-    if field == 'inputs':
-        state = rust['core']['inputs'][0][state_key]
-        if state_part == 'ranking':
-            state = state['ranking']['parts'][0]
-        elif state_part is not None:
-            state = state[state_part][0]
-        state['payload'] = theirs
-    elif field == 'materialized':
-        rust['core']['materialized']['payload'] = theirs
-    elif field == 'calls':
-        rust['core']['predicted']['calls'][0]['value'] = theirs
-    else:
-        rust['core']['predicted']['body']['value'] = theirs
+        python = _legacy_observation(mine, calls=field == 'calls')
+        rust = _legacy_observation(theirs, calls=field == 'calls')
+        if field == 'materialized':
+            for line in (python, rust):
+                core = line['core']
+                core['materialized'] = copy.deepcopy(core['inputs'][0]['state'])
+                core['predicted'] = None
+                core['model_calls'] = []
+                line['public']['payloads'] = []
+                core['legacy_predictions'][0].update(
+                    completion='unobserved', result=None
+                )
     if shared:
-        rust['identity']['operations'].append('predict')
-        rust['core']['inputs'].append({'op': 'predict', 'state': {}})
+        _append_legacy_prediction(rust, {'number': '99.0'})
+        assert [
+            event['position']
+            for event in COMPARE._prediction_view(rust)['events']
+        ] == [0, 1]
     report = COMPARE.Report()
     COMPARE._core_agree(
         report,
@@ -181,7 +361,7 @@ def _numeric_core_agreement(
         rust,
         stop='predict' if shared else None,
     )
-    return report
+    return report, input_agrees
 
 
 @pytest.mark.parametrize(
@@ -194,10 +374,11 @@ def _numeric_core_agreement(
 def test_core_fields_agree_on_exact_float_values_with_different_spelling(
     field: str, mine: str, theirs: str
 ) -> None:
-    report = _numeric_core_agreement(
+    report, input_agrees = _numeric_core_agreement(
         field, {'number': mine}, {'number': theirs}
     )
     assert report.failures == [], report.texts
+    assert input_agrees
 
 
 @pytest.mark.parametrize(
@@ -216,8 +397,12 @@ def test_core_fields_agree_on_exact_float_values_with_different_spelling(
 def test_core_numeric_agreement_keeps_kind_sign_exact_value_and_strings(
     field: str, mine: Any, theirs: Any
 ) -> None:
-    report = _numeric_core_agreement(field, mine, theirs)
-    assert [rule for rule, _ in report.failures] == ['core'], report.texts
+    report, input_agrees = _numeric_core_agreement(field, mine, theirs)
+    if field == 'inputs':
+        assert not input_agrees
+    assert [rule for rule, _ in report.failures] == (
+        ['core'] if field == 'materialized' else ['payload', 'core']
+    ), report.texts
 
 
 @pytest.mark.parametrize(
@@ -227,10 +412,11 @@ def test_core_numeric_agreement_keeps_kind_sign_exact_value_and_strings(
 def test_shared_core_inputs_use_the_same_lossless_numeric_rule(
     mine: str, theirs: str, agrees: bool
 ) -> None:
-    report = _numeric_core_agreement(
+    report, input_agrees = _numeric_core_agreement(
         'inputs', {'number': mine}, {'number': theirs}, shared=True
     )
     assert (report.failures == []) is agrees, report.texts
+    assert input_agrees is agrees
 
 
 @pytest.mark.parametrize('held', [False, True])
@@ -239,7 +425,7 @@ def test_later_and_held_request_payloads_keep_exact_numeric_agreement(
     part: str | None, held: bool
 ) -> None:
     for theirs, agrees in [('3e-6', True), ('3.000000000000001e-6', False)]:
-        report = _numeric_core_agreement(
+        report, input_agrees = _numeric_core_agreement(
             'inputs',
             {'number': '3e-06'},
             {'number': theirs},
@@ -247,39 +433,35 @@ def test_later_and_held_request_payloads_keep_exact_numeric_agreement(
             held=held,
         )
         assert (report.failures == []) is agrees, report.texts
+        assert input_agrees is agrees
 
 
 @pytest.mark.parametrize('field', ['source', 'state', 'metadata'])
 def test_numeric_payload_rule_does_not_rewrite_other_core_maps(
     field: str,
 ) -> None:
-    python = {
-        'identity': {'operations': ['predict'], 'contract': 30},
-        'core': {
-            'inputs': [],
-            'fetches': [],
-            'described': None,
-            'materialized': None,
-            'predicted': None,
-            'accepted': None,
-            'error': None,
-        },
-    }
+    python = _legacy_observation(0)
+    rust = copy.deepcopy(python)
     before, after = {'number': '1e-06'}, {'number': '1e-6'}
     if field == 'metadata':
-        python['core']['predicted'] = {'metadata': before}
+        for line, value in ((python, before), (rust, after)):
+            line['core']['predicted']['metadata'] = value
+            line['core']['legacy_predictions'][0]['result']['metadata'] = value
     else:
-        python['core']['inputs'] = [
-            {'op': 'predict', field: {'primary_keys': before}}
+        # Pure raw input boundary controls stay explicit: these maps are not
+        # canonical-model fields in a current common prediction observation.
+        probes = [
+            [{'op': 'predict', field: {'primary_keys': value}}]
+            for value in (before, after)
         ]
-    rust = copy.deepcopy(python)
-    if field == 'metadata':
-        rust['core']['predicted']['metadata'] = after
-    else:
-        rust['core']['inputs'][0][field]['primary_keys'] = after
+        assert COMPARE._core_field('inputs', probes[0]) != (
+            COMPARE._core_field('inputs', probes[1])
+        )
     report = COMPARE.Report()
     COMPARE._core_agree(report, {'id': 'numeric-map'}, python, rust)
-    assert [rule for rule, _ in report.failures] == ['core'], report.texts
+    assert [rule for rule, _ in report.failures] == (
+        ['core'] if field == 'metadata' else []
+    ), report.texts
 
 
 # --- 6: the warehouse drivers' reads -------------------------------------------------
