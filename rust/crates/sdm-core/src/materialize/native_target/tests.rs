@@ -12,6 +12,7 @@ fn native_timestamp_conditions_reuse_utc_normalization_and_reject_other_families
             arrow_array::TimestampMillisecondArray::from(vec![Some(0), None, Some(3_600_000)])
                 .with_timezone(zone),
         );
+        assert!(times_ns(&actual, "raw").is_err());
         validate_condition_values(&before, None, &actual, None).unwrap();
         let labels::Column::Time(values) =
             native_condition_column(&actual, &[0, 1, 2], None).unwrap()
