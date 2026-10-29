@@ -365,13 +365,28 @@ def legacy_materialization_observation(schema):
 def test_legacy_materialize_keeps_omitted_flag_availability_separate_from_task():
     schema = expected()
     for column in schema['tables'][0]['columns']:
-        column.pop('untyped')
-        column.pop('stype_declared')
+        for flag in ('untyped', 'stype_declared'):
+            if column[flag] is False:
+                column.pop(flag)
     legacy = legacy_materialization_observation(schema)
     before = copy.deepcopy(legacy)
     assert case_input_failures(legacy) == []
     assert legacy == before
     assert case_input_failures(materialization_observation(schema))
+
+
+@pytest.mark.parametrize(
+    ('column', 'flag'), [(1, 'untyped'), (2, 'stype_declared')]
+)
+def test_missing_legacy_false_default_never_claims_an_expected_true_value(
+    column, flag
+):
+    schema = expected()
+    schema['tables'][0]['columns'][column].pop(flag)
+    observed = legacy_materialization_observation(schema)
+    before = copy.deepcopy(observed)
+    assert [rule for rule, _ in case_input_failures(observed)] == ['inputs']
+    assert observed == before
 
 
 @pytest.mark.parametrize(
@@ -383,8 +398,9 @@ def test_legacy_availability_does_not_excuse_any_present_flag_or_other_field(
     schema = expected()
     columns = schema['tables'][0]['columns']
     for column in columns:
-        column.pop('untyped')
-        column.pop('stype_declared')
+        for flag in ('untyped', 'stype_declared'):
+            if column[flag] is False:
+                column.pop(flag)
     if changed == 'declared':
         columns[2]['stype_declared'] = False
     elif changed == 'untyped':
@@ -406,8 +422,9 @@ def test_legacy_availability_does_not_excuse_any_present_flag_or_other_field(
 def test_mixed_trace_binds_flag_availability_to_each_checked_logical_position():
     schema = expected()
     for column in schema['tables'][0]['columns']:
-        column.pop('untyped')
-        column.pop('stype_declared')
+        for flag in ('untyped', 'stype_declared'):
+            if column[flag] is False:
+                column.pop(flag)
     mixed = materialization_observation(expected())
     mixed['identity']['operations'].insert(0, 'materialize')
     core = mixed['core']
