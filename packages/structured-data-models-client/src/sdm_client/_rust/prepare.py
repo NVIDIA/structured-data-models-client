@@ -272,13 +272,15 @@ def _response(finished: Finished, task_owner: Any) -> Finished:
         # Native JSON is observed only for the reached checked row. Bounded
         # later slices never replay a growing response or scoring-key set.
         end = min(len(rows), at + 256)
-    accepted = _call(
+    completed = _prepared_run(
         {
             'stage': 'complete_response_rows',
             'scope': data['scope'],
             'rows': accepted,
         }
     )
+    completion = results.expect(completed.result, results.Prepared)
+    accepted = json.loads(completed.take(completion.value))
     # The original payload captured this owner before encoding/transport.
     # Complete row admission precedes its one reached native str conversion.
     task_text = str(task_owner)
