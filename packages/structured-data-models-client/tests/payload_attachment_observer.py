@@ -22,7 +22,10 @@ def record_payload_bytes(monkeypatch: Any, taken: list[bytes]) -> None:
 
     def recording(self: Finished, attachment: int) -> Any:
         got = original(self, attachment)
-        result = self.result
+        envelope = self.result
+        if envelope['op'] not in ('materialize', 'prepare_materialize'):
+            return got
+        result = results.decode(envelope)
         if isinstance(result, results.Gathered):
             payloads[self] = result.state.payload
         elif (
