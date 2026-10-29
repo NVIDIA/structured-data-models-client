@@ -82,7 +82,7 @@
                       }
                     }
                   },
-                  "purpose": {"description": "The purpose of the core's fetch the statement answers, where the core gave one (FetchStep.purpose): locate, plan B's read of a table as it stands (T3.4).", "enum": ["locate"]}
+                  "purpose": {"description": "The actual core fetch purpose: source location, result representation metadata or completed native source rows.", "enum": ["locate", "describe_result", "source_rows"]}
                 }
               }
             },
@@ -186,6 +186,12 @@
       "type": ["object", "null"],
       "additionalProperties": false,
       "required": ["inputs", "fetches", "accepted", "described", "materialized", "predicted", "error"],
+      "dependentRequired": {
+        "materialization_entries": ["materialization_preparations", "materialization_guards", "materialization_capture_capabilities"],
+        "materialization_guards": ["materialization_entries"],
+        "materialization_preparations": ["materialization_capture_capabilities"],
+        "materialization_capture_capabilities": ["materialization_preparations"]
+      },
       "properties": {
         "inputs": {
           "type": "array",
@@ -246,9 +252,37 @@
                     }
                   }
                 }
-              }
+              },
+              {"$ref": "#/$defs/preparationObservation"}
             ]
           }
+        },
+        "predictions": {
+          "description": "Actual gathered Python prediction invocations, their independently observed native Runs/calls/results and exact presentation relationships; never synthetic Predict operations or public-result reconstruction.",
+          "type": "array",
+          "items": {"$ref": "#/$defs/predictionEntry"}
+        },
+        "materialization_preparations": {
+          "description": "Actual materialization preparation Runs in start order, their JSON boundaries and lifecycle events. This raw journal supplies no common materialize role or opaque-resource identity claim.",
+          "type": "array",
+          "items": {"$ref": "#/$defs/materializationPreparationObservation"}
+        },
+        "materialization_entries": {
+          "description": "Actual native SQL gather invocations and selected terminal Run or public/Core failure associations; completeness requires the referenced raw journal and actual later state takes.",
+          "type": "array",
+          "items": {"$ref": "#/$defs/materializationEntry"}
+        },
+        "materialization_guards": {
+          "description": "Actual prepare_frames failure assessment/report Runs scoped to a materialization entry, never invented provider replies.",
+          "type": "array",
+          "items": {"$ref": "#/$defs/materializationGuardObservation"}
+        },
+        "materialization_capture_capabilities": {
+          "description": "Availability of the installed cancellation interceptor, independent of native failure classification or logical projection.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["cancellation"],
+          "properties": {"cancellation": {"type": "boolean"}}
         },
         "fetches": {
           "type": "array",
@@ -256,7 +290,7 @@
             "type": "object",
             "additionalProperties": false,
             "required": ["request", "plan"],
-            "properties": {"request": {"type": "object"}, "plan": {"type": "object"}, "purpose": {"enum": ["locate"]}}
+            "properties": {"request": {"type": "object"}, "plan": {"type": "object"}, "purpose": {"enum": ["locate", "describe_result", "source_rows"]}}
           }
         },
         "accepted": {"type": ["boolean", "null"]},
@@ -281,8 +315,9 @@
           "additionalProperties": false,
           "required": ["body", "model", "request_id", "metadata", "result"],
           "properties": {
-            "body": {"type": "object"},
+            "body": {"type": ["object", "null"]},
             "calls": {"description": "Where predict made more than one call (a forecast's steps, a request asked in several calls), every call's body in the order sent, body the last's (T2.1g); absent for one call.", "type": "array", "minItems": 2, "items": {"type": "object"}},
+            "outputs": {"type": "array", "items": {"type": "string"}},
             "model": {"type": "string"},
             "request_id": {"type": "string"},
             "metadata": {"type": "object"},
@@ -296,6 +331,62 @@
                 "explanation": {"description": "The result's explanation where the core gave one: its Arrow schema's metadata key explanation, the JSON text the core wrote, as text (T2.13; recorded by both core runners from T2.16a, so the gate holds the hosts to the same bytes); absent where it gave none. An item's explanation and metadata are the result's own columns, among the rows.", "type": "string"}
               }
             }
+          }
+        },
+        "capture_capabilities": {
+          "description": "Existing capture interception availability, independent of SDK model policy. Sparse Trace producers never fabricate unavailable products.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["model_replies", "native_error_control"],
+          "properties": {
+            "model_replies": {"type": "boolean"},
+            "native_error_control": {"type": "boolean"}
+          }
+        },
+        "legacy_predictions": {
+          "description": "Run-local legacy prediction completion and actually taken products, in actual native Run order. No product is inherited from a predecessor.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["run", "completion", "result", "error"],
+            "properties": {
+              "run": {"type": "integer", "minimum": 0},
+              "completion": {"enum": ["done", "error", "unobserved"]},
+              "result": {"$ref": "#/$defs/legacyPredictionResult"},
+              "error": {"$ref": "#/properties/core/properties/error"},
+              "answered": {"$ref": "#/properties/core/properties/answered"}
+            }
+          }
+        },
+        "model_calls": {
+          "description": "Actually taken legacy Predict CallModel bodies in call order, including failed calls. Absent in older observations means unobserved, not observed-empty. Gathered entry call records remain in predictions.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["run", "body", "body_sha256", "reply", "model_endpoint"],
+            "properties": {
+              "run": {"type": "integer", "minimum": 0},
+              "body": {"type": "object"},
+              "body_sha256": {"$ref": "#/$defs/sha256"},
+              "reply": {"$ref": "#/$defs/modelReplyObservation"},
+              "model_endpoint": {"$ref": "#/$defs/modelEndpointObservation"}
+            }
+          }
+        },
+        "answered": {
+          "description": "The carried partial Arrow product actually taken from a legacy native error. Null means observed without a carried product; absent means not observed by that checkpoint.",
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": ["rows", "result", "model", "request_id", "metadata", "outputs"],
+          "properties": {
+            "rows": {"type": "integer", "minimum": 0},
+            "result": {"$ref": "#/properties/core/properties/predicted/properties/result"},
+            "model": {"type": "string"},
+            "request_id": {"type": "string"},
+            "metadata": {"type": "object"},
+            "outputs": {"type": "array", "items": {"type": "string"}}
           }
         },
         "error": {
@@ -350,6 +441,734 @@
     }
   },
   "$defs": {
+    "legacyPredictionResult": {
+      "description": "The actual native completion, with each attachment product present only when the host actually took it.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "body",
+        "model",
+        "request_id",
+        "metadata",
+        "result"
+      ],
+      "properties": {
+        "body": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "calls": {
+          "description": "Where predict made more than one call (a forecast's steps, a request asked in several calls), every call's body in the order sent, body the last's (T2.1g); absent for one call.",
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "object"
+          }
+        },
+        "outputs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "model": {
+          "type": "string"
+        },
+        "request_id": {
+          "type": "string"
+        },
+        "metadata": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "result": {
+          "anyOf": [
+            {
+              "$ref": "#/properties/core/properties/predicted/properties/result"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "predictionCoreError": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "code"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "pattern": "^[a-z_]+$"
+        },
+        "code": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$"
+        }
+      }
+    },
+    "materializationBytesObservation": {
+      "description": "One actually received JSON bytes attachment; parsed data remains raw and is not reclassified as a domain product by this wrapper.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["attachment", "base64", "sha256", "parsed"],
+      "properties": {
+        "attachment": {"type": "integer", "minimum": 0},
+        "base64": {"type": "string"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "parsed": {}
+      }
+    },
+    "materializationResultEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "value"],
+      "properties": {
+        "op": {"const": "prepare_materialize"},
+        "value": {"type": "integer", "minimum": 0}
+      }
+    },
+    "materializationLifecycleEvent": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["event", "requests"],
+          "properties": {
+            "event": {"const": "fetch"},
+            "requests": {"type": "array", "items": {"type": "integer", "minimum": 1}},
+            "positions": {"type": "array", "items": {"type": "integer", "minimum": 0}}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["event"],
+          "properties": {
+            "event": {"enum": ["done", "core_error", "cancelled", "cancel_failed"]}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["event", "attachment"],
+          "properties": {
+            "event": {"const": "value_taken"},
+            "attachment": {"type": "integer", "minimum": 0}
+          }
+        }
+      ]
+    },
+    "materializationRunReference": {
+      "type": "object", "additionalProperties": false,
+      "required": ["run"],
+      "properties": {"run": {"type": "integer", "minimum": 0}}
+    },
+    "materializationFailureReference": {
+      "type": "object", "additionalProperties": false,
+      "required": ["run", "relation"],
+      "properties": {
+        "run": {"type": "integer", "minimum": 0},
+        "relation": {"enum": ["selected", "cause", "refused", "native"]}
+      }
+    },
+    "materializationEntry": {
+      "type": "object", "additionalProperties": false,
+      "required": ["ordinal", "parent", "prediction_parent", "runs", "completion", "terminal", "failure"],
+      "properties": {
+        "ordinal": {"type": "integer", "minimum": 0},
+        "parent": {"type": ["integer", "null"], "minimum": 0},
+        "prediction_parent": {"type": ["integer", "null"], "minimum": 0},
+        "runs": {"type": "array", "items": {"type": "integer", "minimum": 0}},
+        "completion": {"enum": ["active", "returned", "raised"]},
+        "terminal": {"anyOf": [{"$ref": "#/$defs/materializationRunReference"}, {"type": "null"}]},
+        "failure": {"anyOf": [{"$ref": "#/$defs/materializationFailureReference"}, {"type": "null"}]}
+      }
+    },
+    "materializationReadOrigin": {
+      "type": "object", "additionalProperties": false,
+      "required": ["run", "first", "failed"],
+      "properties": {
+        "run": {"type": "integer", "minimum": 0},
+        "first": {"type": "integer", "minimum": 1},
+        "failed": {"type": ["integer", "null"], "minimum": 1}
+      }
+    },
+    "materializationOwnerTake": {
+      "oneOf": [
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["attachment", "origin"],
+          "properties": {
+            "attachment": {"type": "integer", "minimum": 0},
+            "origin": {"const": "result"}
+          }
+        },
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["attachment", "origin", "fetch_id"],
+          "properties": {
+            "attachment": {"type": "integer", "minimum": 0},
+            "origin": {"const": "fetch"},
+            "fetch_id": {"type": "integer", "minimum": 1}
+          }
+        }
+      ]
+    },
+    "materializationOwnerBind": {
+      "type": "object", "additionalProperties": false,
+      "required": ["attachment", "producer"],
+      "properties": {
+        "attachment": {"type": "integer", "minimum": 0},
+        "producer": {
+          "oneOf": [
+            {
+              "type": "object", "additionalProperties": false,
+              "required": ["run", "attachment", "origin"],
+              "properties": {
+                "run": {"type": "integer", "minimum": 0},
+                "attachment": {"type": "integer", "minimum": 0},
+                "origin": {"const": "result"}
+              }
+            },
+            {
+              "type": "object", "additionalProperties": false,
+              "required": ["run", "attachment", "origin", "fetch_id"],
+              "properties": {
+                "run": {"type": "integer", "minimum": 0},
+                "attachment": {"type": "integer", "minimum": 0},
+                "origin": {"const": "fetch"},
+                "fetch_id": {"type": "integer", "minimum": 1}
+              }
+            }
+          ]
+        }
+      }
+    },
+    "materializationInputRead": {
+      "oneOf": [
+        {"$ref": "#/$defs/materializationBytesObservation"},
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["attachment", "scalars"],
+          "properties": {
+            "attachment": {"type": "integer", "minimum": 0},
+            "scalars": {"type": "array", "items": {"type": "object"}}
+          }
+        }
+      ]
+    },
+    "materializationGuardObservation": {
+      "type": "object", "additionalProperties": false,
+      "required": ["run", "entry", "operation", "input", "completion", "result", "value_reads", "error", "events", "origin"],
+      "properties": {
+        "run": {"type": "integer", "minimum": 0},
+        "entry": {"type": "integer", "minimum": 0},
+        "operation": {
+          "type": "object", "additionalProperties": false,
+          "required": ["op", "input"],
+          "properties": {
+            "op": {"const": "prepare_frames"},
+            "input": {"type": "integer", "minimum": 0},
+            "part": {"type": "object"}
+          }
+        },
+        "input": {"$ref": "#/$defs/materializationBytesObservation"},
+        "completion": {"enum": ["active", "done", "error", "cancelled", "cancel_failed"]},
+        "result": {
+          "anyOf": [
+            {
+              "type": "object", "additionalProperties": false,
+              "required": ["op", "value"],
+              "properties": {"op": {"const": "prepare_frames"}, "value": {"type": "integer", "minimum": 0}}
+            },
+            {"type": "null"}
+          ]
+        },
+        "value_reads": {"type": "array", "items": {"$ref": "#/$defs/materializationBytesObservation"}},
+        "error": {"anyOf": [{"$ref": "#/$defs/predictionCoreError"}, {"type": "null"}]},
+        "events": {"type": "array", "items": {"$ref": "#/$defs/materializationLifecycleEvent"}},
+        "origin": {"anyOf": [{"$ref": "#/$defs/materializationReadOrigin"}, {"type": "null"}]}
+      }
+    },
+    "materializationPreparationObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run", "operation", "input", "completion", "result", "value_reads", "fetches", "error", "events"],
+      "properties": {
+        "run": {"type": "integer", "minimum": 0},
+        "entry": {"type": "integer", "minimum": 0},
+        "input_reads": {"type": "array", "items": {"$ref": "#/$defs/materializationInputRead"}},
+        "owner_binds": {"type": "array", "items": {"$ref": "#/$defs/materializationOwnerBind"}},
+        "owner_takes": {"type": "array", "items": {"$ref": "#/$defs/materializationOwnerTake"}},
+        "output_reads": {"type": "array", "items": {"$ref": "#/$defs/materializationBytesObservation"}},
+        "origin": {"anyOf": [{"$ref": "#/$defs/materializationReadOrigin"}, {"type": "null"}]},
+        "operation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["op", "input"],
+          "properties": {
+            "op": {"const": "prepare_materialize"},
+            "input": {"type": "integer", "minimum": 0}
+          }
+        },
+        "input": {"$ref": "#/$defs/materializationBytesObservation"},
+        "completion": {"enum": ["active", "done", "error", "cancelled", "cancel_failed"]},
+        "result": {
+          "anyOf": [
+            {"$ref": "#/$defs/materializationResultEnvelope"},
+            {"type": "null"}
+          ]
+        },
+        "value_reads": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/materializationBytesObservation"}
+        },
+        "fetches": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "request", "plan"],
+            "properties": {
+              "id": {"type": "integer", "minimum": 1},
+              "request": {"type": "object"},
+              "plan": {"type": "object"},
+              "continuation": {"type": "string"},
+              "purpose": {"enum": ["locate", "describe_result", "source_rows"]},
+              "lookup": {"type": "object"},
+              "partition": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["first", "ordinal", "parts"],
+                "properties": {
+                  "first": {"type": "integer", "minimum": 1},
+                  "ordinal": {"type": "integer", "minimum": 0},
+                  "parts": {"type": "integer", "minimum": 1}
+                }
+              }
+            }
+          }
+        },
+        "error": {
+          "anyOf": [
+            {"$ref": "#/$defs/predictionCoreError"},
+            {"type": "null"}
+          ]
+        },
+        "events": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/materializationLifecycleEvent"}
+        }
+      }
+    },
+    "preparationObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "op",
+        "run",
+        "entry",
+        "input",
+        "result",
+        "error"
+      ],
+      "properties": {
+        "op": {
+          "const": "prepare_request"
+        },
+        "run": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "entry": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "input": {
+          "type": "object",
+          "required": [
+            "stage"
+          ],
+          "properties": {
+            "stage": {
+              "type": "string"
+            }
+          }
+        },
+        "result": {},
+        "error": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/predictionCoreError"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "predictionResponseScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "call_request_id",
+        "model",
+        "request_id",
+        "response_rows"
+      ],
+      "properties": {
+        "version": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "call_request_id": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "request_id": {
+          "type": "string"
+        },
+        "response_rows": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "modelEndpointObservation": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["endpoint", "name", "max_request_bytes"],
+      "properties": {
+        "endpoint": {"const": "serving_endpoint"},
+        "name": {"type": "string"},
+        "max_request_bytes": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615}
+      }
+    },
+    "modelReplyObservation": {
+      "description": "A host-reported reply submitted to the native Run, before forwarding. Null is an actually unobserved reply, distinct from absent historical evidence; it is not physical endpoint delivery proof.",
+      "anyOf": [
+        {"type": "null"},
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["outcome", "status"],
+          "properties": {
+            "outcome": {"enum": ["response", "failed"]},
+            "status": {"type": "integer", "minimum": 0, "maximum": 65535}
+          }
+        },
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["outcome"],
+          "properties": {"outcome": {"const": "transport_error"}}
+        }
+      ]
+    },
+    "predictionCallObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run",
+        "request_id",
+        "input_body_sha256",
+        "input_body_base64",
+        "body",
+        "body_sha256",
+        "scope",
+        "reply"
+      ],
+      "properties": {
+        "run": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "input_body_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "reply": {"$ref": "#/$defs/modelReplyObservation"},
+        "input_body_base64": {
+          "type": "string",
+          "contentEncoding": "base64"
+        },
+        "body": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "body_sha256": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/sha256"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/predictionResponseScope"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "predictionResultObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run",
+        "input",
+        "data",
+        "metadata",
+        "result"
+      ],
+      "properties": {
+        "run": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "input": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "input"
+          ],
+          "properties": {
+            "stage": {
+              "const": "finish_relational_response"
+            },
+            "input": {
+              "type": "object"
+            }
+          }
+        },
+        "data": {
+          "type": "object",
+          "required": [
+            "predicted",
+            "lineage",
+            "answer_details"
+          ],
+          "properties": {
+            "predicted": {
+              "type": "object"
+            },
+            "lineage": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "call_request_id",
+                  "answer_ordinal",
+                  "source_row"
+                ],
+                "properties": {
+                  "call_request_id": {
+                    "type": "string"
+                  },
+                  "answer_ordinal": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "source_row": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            "answer_details": {
+              "type": "object"
+            }
+          }
+        },
+        "metadata": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "result": {
+          "type": [
+            "object",
+            "null"
+          ]
+        }
+      }
+    },
+    "predictionEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ordinal",
+        "parent",
+        "argument",
+        "completion",
+        "runs",
+        "calls",
+        "results",
+        "final",
+        "carried"
+      ],
+      "properties": {
+        "ordinal": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "parent": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "argument": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "form"
+              ],
+              "properties": {
+                "form": {
+                  "const": "unobserved"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "form",
+                "value"
+              ],
+              "properties": {
+                "form": {
+                  "const": "exact_string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              }
+            }
+          ]
+        },
+        "completion": {
+          "enum": [
+            "returned",
+            "raised"
+          ]
+        },
+        "runs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "calls": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/predictionCallObservation"
+          }
+        },
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/predictionResultObservation"
+          }
+        },
+        "final": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "carried": {
+          "description": "Successful SDK carry operation associated by terminal identity/explicit cause with this complete native result Run. This is not a readback of arbitrary public error.details.",
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": ["run", "relation"],
+          "properties": {
+            "run": {"type": "integer", "minimum": 0},
+            "relation": {"enum": ["selected", "cause"]}
+          }
+        },
+        "failure": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "run",
+            "relation"
+          ],
+          "properties": {
+            "run": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "relation": {
+              "enum": [
+                "selected",
+                "cause",
+                "refused"
+              ]
+            }
+          }
+        }
+      }
+    },
     "key": {
       "description": "The case a line is of, and the database or warehouse leg it ran on (design choice 2, T2.0f; Phase 3 design choice 1): a DuckDB line is keyed by the bare case ID (case.schema.json's id), a SQLite or Postgres line by <case>@sqlite or <case>@postgres, and a warehouse leg's by <case>@<leg> (databricks-sql, databricks-spark, snowflake, lakebase). Observations, reference lines, captures and baselines use the same keys.",
       "type": "string",
@@ -459,7 +1278,7 @@
           "type": ["boolean", "null"]
         },
         "operations": {
-          "description": "The HostRun operations the case started, in order.",
+          "description": "The actual HostRun operations the case started, in order. An observed gathered prediction entry is recorded separately and never adds a synthetic operation.",
           "type": "array",
           "items": {"type": "string", "pattern": "^[a-z_]+$"}
         },

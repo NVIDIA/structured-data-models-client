@@ -217,6 +217,7 @@ from __future__ import annotations
 import argparse
 import copy
 import functools
+import hashlib
 import importlib.util
 import json
 import re
@@ -328,6 +329,82 @@ def _capture_check() -> ModuleType:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+@functools.cache
+def _prediction_reader() -> ModuleType:
+    path = REPO / 'contract/runners/prediction_observation.py'
+    spec = importlib.util.spec_from_file_location(
+        'common_prediction_observation', path
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@functools.cache
+def _publication() -> ModuleType:
+    return _runner()._sibling('observation_publication')
+
+
+def _raw_observation(observation: Any) -> dict[str, Any]:
+    if isinstance(observation, _publication().ComparisonObservation):
+        return observation.raw
+    return observation
+
+
+def _prediction_view(observation: dict[str, Any]) -> dict[str, Any]:
+    if isinstance(observation, _publication().ComparisonObservation):
+        return observation.view
+    core = observation.get('core')
+    operations = observation['identity'].get('operations') or []
+    if core is None:
+        return {'operations': operations, 'inputs': [], 'predictions': []}
+    return _prediction_reader().view(core, operations)
+
+
+def _checked_core(
+    observation: dict[str, Any],
+    view: dict[str, Any],
+    shared: list[str] | None = None,
+) -> dict[str, Any] | None:
+    """Read actual domain products without publishing them into the raw DTO.
+
+    A shared prefix selects its own completed native materialization entry,
+    rather than a later entry's global summary. Historical unobserved detail
+    remains available through the existing ordinary core fields.
+    """
+    raw = observation['core']
+    if raw is None:
+        return None
+    core = {
+        **raw,
+        'inputs': view['inputs'],
+        'fetches': view.get('fetches', raw.get('fetches')),
+        'materialized': view.get('materialized', raw.get('materialized')),
+        'error': view.get('error', raw.get('error')),
+    }
+    if shared is not None:
+        core['inputs'] = [
+            value
+            for position, value in zip(
+                view['input_positions'], view['inputs'], strict=True
+            )
+            if position < len(shared)
+        ]
+        completed = [
+            entry
+            for entry in view.get('materializations', [])
+            if entry['native']
+            and entry['parent'] is None
+            and entry['position'] < len(shared)
+            and entry['through'] < len(shared)
+        ]
+        if completed:
+            last = max(completed, key=lambda entry: entry['position'])
+            core['materialized'] = last['materialized']
+    return core
 
 
 def _predicted(core: dict[str, Any], paths: tuple[Any, ...]) -> Any:
@@ -463,7 +540,13 @@ class Report:
 
 
 def _observations(
-    path: Path, runner: ModuleType, report: Report
+    path: Path,
+    runner: ModuleType,
+    report: Report,
+    *,
+    private_names: dict[str, dict[str, str]] | None = None,
+    private_used: set[str] | None = None,
+    database: str = 'duckdb',
 ) -> tuple[str | None, dict[str, dict[str, Any]]]:
     r"""One runner's observations by case, each validated."""
     validate = runner.validator('observation')
@@ -472,9 +555,17 @@ def _observations(
     if not path.is_file():
         report.fail(f'{path.name}: runner failure: no observations written')
         return None, by_case
-    for number, line in enumerate(
-        path.read_text(encoding='utf-8').splitlines(), 1
-    ):
+    source_bytes = path.read_bytes()
+    names = None
+    if private_names is not None:
+        source_sha = hashlib.sha256(source_bytes).hexdigest()
+        names = private_names.get(source_sha)
+        if names is None:
+            report.fail(f'{path.name}: no matching private source mapping')
+            return None, by_case
+        if private_used is not None:
+            private_used.add(source_sha)
+    for number, line in enumerate(source_bytes.decode('utf-8').splitlines(), 1):
         try:
             observation = json.loads(line)
         except (json.JSONDecodeError, RecursionError):
@@ -497,9 +588,19 @@ def _observations(
         if problem is not None:
             report.fail(
                 f'{path.name}:{number}: runner failure: not a valid '
-                f'observation: {problem}'
+                f'observation: {problem if names is None else "invalid private raw shape"}'
             )
             continue
+        if names is not None:
+            try:
+                observation = _publication().prepare_comparison(
+                    observation, database, names
+                )
+            except _publication().PublicationError:
+                report.fail(
+                    f'{path.name}:{number}: invalid private original evidence'
+                )
+                continue
         case = observation['case']
         if case in by_case:
             report.fail(f'{path.name}: {case} observed twice')
@@ -739,7 +840,7 @@ def core_held(
     before."""
     if stop is None:
         return case
-    ran = set(observation['identity'].get('operations') or [])
+    ran = set(_prediction_view(observation)['operations'])
     limit = STAGES.index(stop)
     held = {
         op: spec
@@ -755,12 +856,19 @@ def _route(
     identity = observation['identity']
     where = f'{case["id"]}: {who}'
     wanted = sorted(case.get('core', {}))
+    try:
+        operations = _prediction_view(observation)['operations']
+    except _prediction_reader().ObservationError:
+        report.fail(
+            f'{where}: route: invalid actual prediction evidence', 'route'
+        )
+        return
     if who == 'python-core':
         if identity['native_loaded'] is not True or identity['native'] is None:
             report.fail(
                 f'{where}: route: sdm_client._native was not loaded', 'route'
             )
-        missing = [op for op in wanted if op not in identity['operations']]
+        missing = [op for op in wanted if op not in operations]
         if missing or observation['core'] is None:
             report.fail(
                 f'{where}: route: {missing} did not run on the core', 'route'
@@ -773,7 +881,7 @@ def _route(
         if who == 'python-ref' and identity['reference'] is None:
             report.fail(f'{where}: route: no reference guard result', 'route')
     elif who == 'rust-host':
-        missing = [op for op in wanted if op not in identity['operations']]
+        missing = [op for op in wanted if op not in operations]
         if missing or observation['core'] is None:
             report.fail(
                 f'{where}: route: {missing} did not run on the host', 'route'
@@ -876,7 +984,15 @@ def _core_consistent(
     query and that call ended it (T2.1r, DT-5). Off DuckDB an accepted
     query goes on through the case's ``until``, and a later call's error
     is the outcome (:func:`_later_error`)."""
-    core = observation['core']
+    try:
+        view = _prediction_view(observation)
+        core = _checked_core(observation, view)
+    except _prediction_reader().ObservationError:
+        report.fail(
+            f'{case["id"]}: {who}: core: invalid actual domain evidence',
+            'core',
+        )
+        return
     if core is None:
         return
     if (
@@ -893,6 +1009,54 @@ def _core_consistent(
             'state with no fetch recorded',
             'core',
         )
+    prediction = view['predictions']
+    outer = next(
+        (entry for entry in reversed(prediction) if entry['parent'] is None),
+        None,
+    )
+    if (
+        outer is not None
+        and outer['completion'] == 'raised'
+        and (
+            outer['failure'] is None
+            or outer['failure']['relation'] in ('cause', 'refused')
+        )
+    ):
+        # A host/native failure has its independently observed public outcome.
+        # An explicit wrapper may be linked to a core refusal, but cannot be
+        # replaced by that ancestor's code. Context alone gives no core error.
+        if observation['outcome']['result'] != 'refusal':
+            report.fail(
+                f'{case["id"]}: {who}: raised prediction entry has a success outcome',
+                'outcome',
+            )
+        return
+    materialization = next(
+        (
+            entry
+            for entry in reversed(view.get('materializations', []))
+            if entry['parent'] is None
+            and entry['prediction_parent'] is None
+            and entry['native']
+        ),
+        None,
+    )
+    if (
+        materialization is not None
+        and materialization['completion'] == 'raised'
+        and (
+            materialization['failure'] is None
+            or materialization['failure']['relation']
+            in ('cause', 'refused', 'native')
+        )
+        and (outer is None or materialization['position'] > outer['position'])
+    ):
+        if observation['outcome']['result'] != 'refusal':
+            report.fail(
+                f'{case["id"]}: {who}: raised materialization entry has a success outcome',
+                'outcome',
+            )
+        return
     if 'predict' in case.get('core', {}) and core['materialized'] is not None:
         # Materialized, the call goes on to predict, which answers its call
         # and result or an error, never both (T1.11d); its error ends the
@@ -942,7 +1106,7 @@ def _core_consistent(
         # beside the description (decision E67).
         edits = core.get('edits') or []
         edited = bool(edits) and edits[-1].get('op') == 'edit_schema'
-        operations = observation['identity'].get('operations') or []
+        operations = view['operations']
         if 'edits' not in core:
             # rust-host records no edits: its operations say the last call
             # was an edit (T2.1e, a line held to the calls it makes).
@@ -1007,16 +1171,171 @@ def shared_operations(
     None otherwise, and the hosts are held to each other whole."""
     if stop is None:
         return None
-    mine = python['identity']['operations']
-    theirs = rust['identity']['operations']
+    views = (_prediction_view(python), _prediction_view(rust))
+    mine, theirs = (view['operations'] for view in views)
     short, long = (mine, theirs) if len(mine) <= len(theirs) else (theirs, mine)
     if mine == theirs or long[: len(short)] != short:
+        return None
+    if any(
+        event['position'] < len(short) <= event['through']
+        for view in views
+        for event in [
+            *view.get('events', []),
+            *[
+                entry
+                for entry in view.get('materializations', [])
+                if entry['native']
+            ],
+        ]
+    ):
         return None
     limit = STAGES.index(stop)
     for op in long[len(short) :]:
         if op not in STAGE_OF or STAGES.index(STAGE_OF[op]) < limit:
             return None
     return list(short)
+
+
+def _event_payload(body: Any, endpoint: Any, paths: tuple[Any, ...]) -> Any:
+    if body is None:
+        return None
+    check = _capture_check()
+    return _lossless(
+        check.masked_serving(body, paths)
+        if endpoint is not None
+        else check.masked(body, paths)
+    )
+
+
+def _event_product(value: Any, attempts: Any, paths: tuple[Any, ...]) -> Any:
+    if value is None:
+        return None
+
+    def payload(body: Any) -> Any:
+        # Products retain actual selected call bodies. Their envelope mode
+        # comes from that call's typed input, never a shape-based guess.
+        matched = [item for item in attempts or [] if item['body'] == body]
+        endpoint = matched[0]['model_endpoint'] if matched else None
+        return _event_payload(body, endpoint, paths)
+
+    result = dict(value)
+    if 'body' in result:
+        result['body'] = payload(result['body'])
+    if 'calls' in result:
+        result['calls'] = [payload(body) for body in result['calls']]
+    return result
+
+
+def _prediction_events_agree(
+    report: Report,
+    where: str,
+    mine: dict[str, Any],
+    theirs: dict[str, Any],
+    shared: list[str] | None = None,
+) -> None:
+    """Compare products owned by each actually shared logical prediction."""
+    events = [
+        [
+            event
+            for event in view['events']
+            if shared is None or event['position'] < len(shared)
+        ]
+        for view in (mine, theirs)
+    ]
+    if [event['position'] for event in events[0]] != [
+        event['position'] for event in events[1]
+    ]:
+        report.fail(f'{where}: prediction event positions differ', 'core')
+        return
+    for left, right in zip(*events, strict=True):
+        at = f'{where}: prediction[{left["position"]}]'
+        calls = [
+            None
+            if event['calls'] is None
+            else [
+                _event_product({'body': body}, event['attempts'], report.paths)[
+                    'body'
+                ]
+                for body in event['calls']
+            ]
+            for event in (left, right)
+        ]
+        # Known historical bodies remain compared while their newer
+        # reply/hash/attempt observations remain genuinely unavailable.
+        if calls[0] != calls[1]:
+            _differ(
+                report,
+                at,
+                'core.model_calls',
+                None,
+                None,
+                show=False,
+                rule='payload',
+            )
+        for field in ('model', 'error'):
+            if left[field] != right[field]:
+                _differ(
+                    report,
+                    at,
+                    f'core.{field}',
+                    None,
+                    None,
+                    show=False,
+                    rule='core',
+                )
+        results = [
+            _event_product(event['result'], event['attempts'], report.paths)
+            for event in (left, right)
+        ]
+        if all(isinstance(result, dict) for result in results) and not all(
+            'outputs' in result for result in results
+        ):
+            # This supplement was not emitted by older sole-run snapshots.
+            # Mandatory products and actual observed calls stay complete.
+            results = [
+                {
+                    key: value
+                    for key, value in result.items()
+                    if key != 'outputs'
+                }
+                for result in results
+            ]
+        if results[0] != results[1]:
+            _differ(
+                report,
+                at,
+                'core.predicted',
+                None,
+                None,
+                show=False,
+                rule='core',
+            )
+        partials = [event['partial'] for event in (left, right)]
+        if (
+            all(partial['observed'] for partial in partials)
+            and partials[0]['answered'] != partials[1]['answered']
+        ):
+            _differ(
+                report, at, 'core.answered', None, None, show=False, rule='core'
+            )
+        if all(partial['results'] is not None for partial in partials):
+            partial_results = [
+                [
+                    _event_product(value, event['attempts'], report.paths)
+                    for value in event['partial']['results']
+                ]
+                for event in (left, right)
+            ]
+            if partial_results[0] != partial_results[1]:
+                _differ(
+                    report,
+                    at,
+                    'core.partial_results',
+                    None,
+                    None,
+                    show=False,
+                    rule='core',
+                )
 
 
 def _core_agree(
@@ -1035,12 +1354,31 @@ def _core_agree(
     on the operations both ran, their fetches the shorter's, and not on
     the results of the operations one alone ran."""
     where = f'{case["id"]}: python-core against {host}'
+    try:
+        python_view = _prediction_view(python)
+        rust_view = _prediction_view(rust)
+    except _prediction_reader().ObservationError:
+        report.fail(f'{where}: invalid actual prediction evidence', 'core')
+        return
     shared = shared_operations(python, rust, stop)
     if shared is not None:
-        _core_agree_shared(report, where, python['core'], rust['core'], shared)
+        if python['core'] is None or rust['core'] is None:
+            _same_contract(report, where, python, rust)
+            return
+        _core_agree_shared(
+            report,
+            where,
+            _checked_core(python, python_view, shared),
+            _checked_core(rust, rust_view, shared),
+            shared,
+        )
+        _prediction_events_agree(report, where, python_view, rust_view, shared)
+        _materialization_events_agree(
+            report, where, python_view, rust_view, shared
+        )
         _same_contract(report, where, python, rust)
         return
-    if python['identity']['operations'] != rust['identity']['operations']:
+    if python_view['operations'] != rust_view['operations']:
         _differ(
             report,
             where,
@@ -1049,9 +1387,12 @@ def _core_agree(
             rust['identity']['operations'],
             rule='core',
         )
-    mine, theirs = python['core'], rust['core']
+    mine = _checked_core(python, python_view)
+    theirs = _checked_core(rust, rust_view)
     if mine is None or theirs is None:
         return
+    _prediction_events_agree(report, where, python_view, rust_view)
+    _materialization_events_agree(report, where, python_view, rust_view)
     for field in ('inputs', 'fetches', 'described', 'materialized'):
         if _core_field(field, mine[field]) != _core_field(field, theirs[field]):
             _differ(
@@ -1063,10 +1404,6 @@ def _core_agree(
                 show=False,
                 rule='core',
             )
-    if _predicted(mine, report.paths) != _predicted(theirs, report.paths):
-        _differ(
-            report, where, 'core.predicted', None, None, show=False, rule='core'
-        )
     for field in ('accepted', 'error'):
         if mine[field] != theirs[field]:
             _differ(
@@ -1078,6 +1415,67 @@ def _core_agree(
                 rule='core',
             )
     _same_contract(report, where, python, rust)
+
+
+def _materialization_events_agree(
+    report: Report,
+    where: str,
+    mine: dict[str, Any],
+    theirs: dict[str, Any],
+    shared: list[str] | None = None,
+) -> None:
+    """Every actually observed native request in the common logical scope.
+
+    Historical hosts have no such per-entry evidence; their common summary
+    remains compared separately without inventing earlier native products.
+    """
+    entries = [
+        {
+            entry['position']: entry
+            for entry in view.get('materializations', [])
+            if entry['native']
+            and (shared is None or entry['through'] < len(shared))
+        }
+        for view in (mine, theirs)
+    ]
+    if not mine.get('materializations') or not theirs.get('materializations'):
+        return
+    if entries[0].keys() != entries[1].keys():
+        _differ(
+            report,
+            where,
+            'core.materializations positions',
+            sorted(entries[0]),
+            sorted(entries[1]),
+            rule='core',
+        )
+    for position in sorted(entries[0].keys() & entries[1].keys()):
+        left, right = entries[0][position], entries[1][position]
+        for field in ('completion', 'error', 'materialized', 'product'):
+            a, b = left[field], right[field]
+            if field == 'materialized':
+                a, b = _state_payloads(a), _state_payloads(b)
+            elif field == 'product':
+                a = (
+                    None
+                    if a is None
+                    else {**a, 'state': _state_payloads(a['state'])}
+                )
+                b = (
+                    None
+                    if b is None
+                    else {**b, 'state': _state_payloads(b['state'])}
+                )
+            if a != b:
+                _differ(
+                    report,
+                    where,
+                    f'core.materializations/{position}/{field}',
+                    None,
+                    None,
+                    show=False,
+                    rule='core',
+                )
 
 
 def _same_contract(
@@ -1106,12 +1504,11 @@ def _core_agree_shared(
     r""":func:`_core_agree` on the operations both hosts ran (``shared``)."""
     if mine is None or theirs is None:
         return
-    count = len(shared)
     fetched = min(len(mine['fetches'] or []), len(theirs['fetches'] or []))
     held = {
         'inputs': (
-            (mine['inputs'] or [])[:count],
-            (theirs['inputs'] or [])[:count],
+            mine['inputs'] or [],
+            theirs['inputs'] or [],
         ),
         'fetches': (
             (mine['fetches'] or [])[:fetched],
@@ -1268,12 +1665,17 @@ def held_schema(described: Any) -> Any:
     try:
         tables = []
         for table in described['tables']:
+            timed = {table['time_column_inferred'], table['time_column']} - {
+                None
+            }
             held = {
                 'name': table['name'],
                 'source': table['source'],
                 'columns': [
                     {
                         'name': column['name'],
+                        'untyped': column.get('untyped', False),
+                        'stype_declared': column['name'] in timed,
                         'dtype': _WIRE_NAMES[column['dtype']],
                         'stype': column['stype'],
                         'stype_before_key': column['stype_before_key'],
@@ -1300,6 +1702,33 @@ def held_schema(described: Any) -> Any:
         return described
 
 
+def _held_input_matches(actual: Any, described: Any, *, legacy: bool) -> bool:
+    """Keep legacy omitted flags unavailable; actual Tasks carry full flags.
+
+    Every present flag and every other field stays exact.
+    The observation itself is never filled or projected in place.
+    """
+    if actual == described:
+        return True
+    expected = copy.deepcopy(held_schema(described))
+    try:
+        for table, wanted in zip(
+            actual['tables'], expected['tables'], strict=True
+        ):
+            for column, reference in zip(
+                table['columns'], wanted['columns'], strict=True
+            ):
+                for flag in ('untyped', 'stype_declared'):
+                    if flag in column:
+                        if type(column[flag]) is not bool:
+                            return False
+                    elif legacy:
+                        reference.pop(flag, None)
+    except (KeyError, TypeError, ValueError):
+        return False
+    return actual == expected
+
+
 def _case_inputs(
     report: Report,
     case: dict[str, Any],
@@ -1318,6 +1747,14 @@ def _case_inputs(
     (:func:`stored_schema`, T2.1d: SQLite keeps a timestamp as text)."""
     core = observation['core']
     if core is None:
+        return
+    try:
+        view = _prediction_view(observation)
+        inputs = view['inputs']
+    except _prediction_reader().ObservationError:
+        report.fail(
+            f'{case["id"]}: {who}: invalid actual prediction inputs', 'inputs'
+        )
         return
     wanted = []
     if 'validate_query' in case.get('core', {}):
@@ -1339,7 +1776,7 @@ def _case_inputs(
         wanted.append(
             {'op': 'describe_source', **case['core']['describe_source']}
         )
-    missing = any(each not in core['inputs'] for each in wanted)
+    missing = any(each not in inputs for each in wanted)
     if 'materialize' in case.get('core', {}):
         # The schema it samples is the host's own; the case names the rest.
         wanted_materialize = {
@@ -1348,19 +1785,31 @@ def _case_inputs(
             **case['core']['materialize'],
         }
         started = [
-            each for each in core['inputs'] if each.get('op') == 'materialize'
+            (position, each)
+            for position, each in zip(
+                view['input_positions'], inputs, strict=True
+            )
+            if each.get('op') == 'materialize'
         ]
+        task_positions = {
+            entry['position']
+            for entry in view['materializations']
+            if entry['native']
+        }
         missing = missing or not any(
             all(
                 each.get(key) == value
                 for key, value in wanted_materialize.items()
             )
-            for each in started
+            for _, each in started
         )
         if not case['input'].get('edits') and any(
-            each.get('schema')
-            not in (core['described'], held_schema(core['described']))
-            for each in started
+            not _held_input_matches(
+                each.get('schema'),
+                core['described'],
+                legacy=position not in task_positions,
+            )
+            for position, each in started
         ):
             _differ(
                 report,
@@ -1377,7 +1826,7 @@ def _case_inputs(
         wanted_predict = {'op': 'predict', **case['core']['predict']}
         missing = missing or not any(
             all(each.get(key) == value for key, value in wanted_predict.items())
-            for each in core['inputs']
+            for each in inputs
             if each.get('op') == 'predict'
         )
     if missing:
@@ -1505,7 +1954,7 @@ def _lossless(value: Any) -> Any:
             # -0.0 and 0.0 differ while 1e-05 and 1e-5 agree.
             return ['number', kind, value, value.is_signed()]
         return {key: _lossless(item) for key, item in value.items()}
-    if isinstance(value, list):
+    if isinstance(value, (list, tuple)):
         return [_lossless(item) for item in value]
     return value
 
@@ -1638,14 +2087,8 @@ def _host_fields(
     )
     if found:
         report.fail(f'{where}: {found}', 'result')
-    sent = [
-        (each['method'], each['path'], _payload(each['parsed'], report.paths))
-        for each in mine['payloads']
-    ]
-    wanted = [
-        (each['method'], each['path'], _payload(each['parsed'], report.paths))
-        for each in theirs['payloads']
-    ]
+    sent = _lossless(_capture_check()._payloads(mine, report.paths))
+    wanted = _lossless(_capture_check()._payloads(theirs, report.paths))
     found = _path_of(sent, wanted, 'public.payloads', excused)
     if found:
         report.fail(f'{where}: {found}', 'payload')
@@ -2251,43 +2694,83 @@ def _core_payload(
     T3.2 r1, Codex 5), and the requests the endpoint received, on
     ``python-core``, call by call, in order: the ``payload`` rule on the
     core; on those hosts, held to the reference only where it reached
-    ``predict`` when past its ``stop`` (:func:`past_stop`). One call is
-    ``core.predicted.body``; several are ``core.predicted.calls``, every
-    call's body in order (T2.1g)."""
-    predicted = (observation.get('core') or {}).get('predicted')
-    if not predicted or predicted.get('body') is None:
+    ``predict`` when past its ``stop`` (:func:`past_stop`). The shared reader
+    retains every taken call on success or failure; older successful
+    observations expose their actual calls through core.predicted."""
+    if observation.get('core') is None:
         return
-    several = isinstance(predicted.get('calls'), list)
-    named = 'core.predicted.calls' if several else 'core.predicted.body'
-    bodies = [
-        _payload(body, report.paths)
-        for body in (predicted['calls'] if several else [predicted['body']])
-    ]
-    if who == 'python-core':
-        sent = [
-            _payload(each['parsed'], report.paths)
-            for each in (observation.get('public') or {}).get('payloads', [])
-        ]
-        found = _path_of(bodies, sent, named)
-        if found:
+    try:
+        original = _raw_observation(observation)
+        viewed = _prediction_view(original)
+        calls = viewed['calls']
+    except _prediction_reader().ObservationError:
+        report.fail(
+            f'{case["id"]}: invalid actual model call evidence', 'payload'
+        )
+        return
+    named = 'core.model_calls'
+    if calls is None:
+        expected = observation if who == 'python-core' else reference
+        if (expected or {}).get('public', {}).get('payloads'):
             report.fail(
-                f'{case["id"]}: python-core: the call against the request '
-                f'received: {found}',
-                'payload',
+                f'{case["id"]}: {who}: model calls were not observed', 'payload'
             )
+        return
+    bodies = (
+        [
+            _event_payload(item['body'], item['model_endpoint'], report.paths)
+            for item in viewed['attempts']
+        ]
+        if viewed['attempts'] is not None
+        else [_payload(body, report.paths) for body in calls]
+    )
+    if who == 'python-core':
+        received = (original.get('public') or {}).get('payloads', [])
+        if viewed['attempts'] is not None:
+            try:
+                _prediction_reader().check_receipts(
+                    viewed['attempts'], received
+                )
+            except _prediction_reader().ObservationError:
+                report.fail(
+                    f'{case["id"]}: python-core: actual attempts and received requests disagree',
+                    'payload',
+                )
+        else:
+            sent = [_payload(each['parsed'], report.paths) for each in received]
+            found = _path_of(bodies, sent, named)
+            if found:
+                report.fail(
+                    f'{case["id"]}: python-core: the call against the request '
+                    f'received: {found}',
+                    'payload',
+                )
+    if isinstance(observation, _publication().ComparisonObservation):
+        bodies = observation.project(bodies)
     if (
         who in UNOBSERVING
         and reference is not None
         and stop in (None, 'predict')
     ):
+        # Validate/conserve the original journal above. The approved
+        # core-only column projection belongs solely to this reference
+        # comparison; it must never rewrite receipt/hash owner evidence.
+        named_columns = report.core_only.get(case['id'].partition('@')[0], {})
+        compared = [_without_in_payload(body, named_columns) for body in bodies]
         wanted = [
-            _payload(each['parsed'], report.paths)
-            for each in reference['public']['payloads']
+            _lossless(_capture_check().masked_request(item, report.paths))
+            for item in reference['public']['payloads']
         ]
+        # Existing approved fields describe one actual body or the complete
+        # ordered calls product. Their semantic vocabulary predates the
+        # current call journal; raw conservation above still uses that journal.
+        semantic_path = (
+            'core.predicted.calls' if len(bodies) > 1 else 'core.predicted.body'
+        )
         found = _path_of(
-            bodies,
+            compared,
             wanted,
-            named,
+            semantic_path,
             report.more_exact.get((case['id'], who), ()),
         )
         if found:
@@ -2789,7 +3272,7 @@ def _complete(report: Report, where: str, observation: dict[str, Any]) -> bool:
     if driver is None or driver.get('capture') is None:
         report.fail(f'{where}: no record of the statements run', 'sql.count')
         return False
-    problems = _capture_check().complete(observation)
+    problems = _capture_check().complete(_raw_observation(observation))
     for problem in problems:
         report.fail(f'{where}: the record of what ran: {problem}', 'sql.count')
     return not problems
@@ -2806,6 +3289,8 @@ def _sql(
     large: bool = False,
     database: str = 'duckdb',
     answered: bool = False,
+    *,
+    original: dict[str, Any] | None = None,
 ) -> None:
     r"""Decision H9 against the reference: ``sql.count`` and ``sql.result``,
     with ``sql.text``, ``sql.parameters`` and ``sql.bindings`` reported;
@@ -2831,7 +3316,9 @@ def _sql(
     where = f'{case["id"]}: {who} against python-ref'
     if not _complete(report, f'{case["id"]}: python-ref', reference):
         return
-    if not _complete(report, where, observation):
+    if not _complete(
+        report, where, observation if original is None else original
+    ):
         return
     mine, theirs = _by_stage(observation), _by_stage(reference)
     assert mine is not None and theirs is not None
@@ -3235,6 +3722,7 @@ def compare(
     register_file: Path = REGISTER,
     improvements: Path | None = None,
     database: str = 'duckdb',
+    private_name_map: Path | list[Path] | None = None,
 ) -> Report:
     r"""The comparison of ``files``' observations on ``database``, a
     database or a warehouse leg. A warehouse leg is judged as any database
@@ -3291,14 +3779,36 @@ def compare(
         if who != 'python-ref':
             report.fail(f'{reference_file.name}: not python-ref observations')
     observed: dict[str, dict[str, dict[str, Any]]] = {}
+    private_names = None
+    private_used: set[str] = set()
+    if private_name_map is not None:
+        try:
+            private_names = _publication().load_name_maps(
+                [private_name_map]
+                if isinstance(private_name_map, Path)
+                else private_name_map,
+                database,
+            )
+        except _publication().PublicationError:
+            report.fail('invalid private source mappings')
+            return report
     for path in files:
-        who, by_case = _observations(path, runner, report)
+        who, by_case = _observations(
+            path,
+            runner,
+            report,
+            private_names=private_names,
+            private_used=private_used,
+            database=database,
+        )
         if who is None:
             report.fail(f'{path.name}: runner failure: no valid observations')
             continue
         if who in observed:
             report.fail(f'{path.name}: a second file of {who}')
         observed[who] = by_case
+    if private_names is not None and set(private_names) != private_used:
+        report.fail('private source maps do not match all observed input files')
     # A line's key is its case, or its case and database (``<case>@sqlite``,
     # ``<case>@postgres``; the schema holds its form): the part before ``@``
     # must be a case. A line of another database than this run's is read,
@@ -3402,6 +3912,14 @@ def compare(
                 continue
             _shape(report, case, who, observation)
             _inputs(report, case, who, observation, digests)
+            try:
+                _prediction_view(observation)
+            except _prediction_reader().ObservationError:
+                report.fail(
+                    f'{case["id"]}: {who}: invalid actual prediction evidence',
+                    'core',
+                )
+                continue
             wanted = effective.get(case['id'], {}).get(who)
             # An approved move of the reference's refusal to an earlier
             # call (T2.1r) holds the line to the calls up to that one, on
@@ -3448,9 +3966,11 @@ def compare(
             seen, against = observation, ref
             named = report.core_only.get(case['id'].partition('@')[0], {})
             if named and who in MORE_EXACT_RUNNERS and ref is not None:
-                seen = without_core_only(observation, named)
+                seen = without_core_only(dict(observation), named)
                 against = without_left_out_warning(ref, named, observation)
-            _core_payload(report, case, who, seen, against, earlier or stop)
+            _core_payload(
+                report, case, who, observation, against, earlier or stop
+            )
             refused = (
                 statements_refused(report, case['id'], who, wanted, ref)
                 or earlier
@@ -3490,6 +4010,7 @@ def compare(
                     refused or kept or stop,
                     large,
                     database,
+                    original=observation,
                     answered=refused is not None
                     or kept is not None
                     or statements_opted_in(
@@ -3594,6 +4115,7 @@ def main(argv: list[str] | None = None) -> int:
         "more_exact fields (default: this tree's)",
     )
     parser.add_argument('--database', default='duckdb')
+    parser.add_argument('--private-name-map', type=Path, action='append')
     parser.add_argument('observations', type=Path, nargs='*')
     arguments = parser.parse_args(argv)
     if not arguments.observations and arguments.reference is None:
@@ -3610,6 +4132,7 @@ def main(argv: list[str] | None = None) -> int:
         arguments.expect,
         improvements=arguments.register,
         database=arguments.database,
+        private_name_map=arguments.private_name_map,
     )
     for text in report.info:
         print(f'statements per public call: {text}')

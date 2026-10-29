@@ -451,9 +451,44 @@ def masked(parsed: Any, paths: Paths | None = None) -> Any:
     return parsed
 
 
-def _payloads(public: dict[str, Any]) -> list[Any]:
+def masked_serving(parsed: Any, paths: Paths | None = None) -> Any:
+    """Apply E35 to the logical payload at a proved serving boundary.
+
+    The posted envelope and its hash remain separate evidence. Number
+    tokens are retained just as in the ordinary payload observation.
+    """
+    if (
+        type(parsed) is not dict
+        or set(parsed) != {'dataframe_records'}
+        or type(parsed['dataframe_records']) is not list
+        or len(parsed['dataframe_records']) != 1
+        or type(parsed['dataframe_records'][0]) is not dict
+        or set(parsed['dataframe_records'][0]) != {'request_json'}
+        or type(parsed['dataframe_records'][0]['request_json']) is not str
+    ):
+        raise ValueError('invalid observed serving request envelope')
+    logical = json.loads(
+        parsed['dataframe_records'][0]['request_json'],
+        parse_int=lambda token: {'number': token},
+        parse_float=lambda token: {'number': token},
+    )
+    return masked(logical, paths)
+
+
+def masked_request(payload: dict[str, Any], paths: Paths | None = None) -> Any:
+    """The existing E35 projection, with serving proved by physical path."""
+    path = payload.get('path')
+    return (
+        masked_serving(payload['parsed'], paths)
+        if type(path) is str
+        and re.fullmatch(r'/serving-endpoints/[^/]+/invocations', path)
+        else masked(payload['parsed'], paths)
+    )
+
+
+def _payloads(public: dict[str, Any], paths: Paths | None = None) -> list[Any]:
     return [
-        (payload['method'], payload['path'], masked(payload['parsed']))
+        (payload['method'], payload['path'], masked_request(payload, paths))
         for payload in public['payloads']
     ]
 
@@ -484,6 +519,44 @@ def complete(observation: dict[str, Any]) -> list[str]:
     if capture is None:
         return ['the capture was off']
     problems = [f'could not record: {what}' for what in capture['incomplete']]
+    core = observation.get('core')
+    materialization = isinstance(core, dict) and (
+        'materialization_entries' in core
+        or 'prepare_materialize'
+        in (observation['identity'].get('operations') or [])
+    )
+    if isinstance(core, dict) and (
+        'predictions' in core
+        or 'model_calls' in core
+        or any(
+            item.get('op') == 'prepare_request'
+            for item in core.get('inputs', [])
+        )
+        or materialization
+    ):
+        reader = runner()._sibling('prediction_observation')
+        try:
+            observed = reader.view(core, observation['identity']['operations'])
+            if materialization and not any(
+                entry['native'] for entry in observed['materializations']
+            ):
+                problems.append(
+                    'actual materialization evidence has no proved Task/terminal association'
+                )
+            if observation['identity']['runner'] == 'python-core':
+                received = (observation.get('public') or {}).get('payloads', [])
+                if observed['attempts'] is not None:
+                    reader.check_receipts(observed['attempts'], received)
+                elif observed['calls'] != [item['parsed'] for item in received]:
+                    problems.append(
+                        'actual model call bodies differ from received requests'
+                    )
+        except reader.ObservationError:
+            problems.append(
+                'actual materialization evidence is incomplete or contradictory'
+                if materialization
+                else 'actual prediction evidence is incomplete or contradictory'
+            )
     if logged is None:
         # Every line has its log: DuckDB's own, or off DuckDB the driver's
         # statement log (T2.1a fix 4); a capture held to none is incomplete.

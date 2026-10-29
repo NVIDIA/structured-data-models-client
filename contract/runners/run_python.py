@@ -56,7 +56,12 @@ one. A runner failure is anything else: the guard failing, a missing
 ``sdm_client._native`` or a refused forced route (``RouteError``), an error
 in the runner itself, an observation that does not validate, or the process
 dying. It exits non-zero and leaves no output file, an earlier run's
-included; observations are written only when every case was recorded. No message text is recorded (decision H17).
+included; observations are written only when every case was recorded.
+Exported error summaries retain only kind/code, never exception messages
+(decision H17). Explicitly requested private raw preparation/replay operands
+can contain the unchanged driver diagnostics supplied to the core.
+Those operand bytes and hashes are retained as observed; they are distinct
+from public exception text and the exported error summary.
 
 This file also holds the case loader and the Phase 1b inventory loader,
 which maps each inventory case into the case format and back without loss.
@@ -65,6 +70,7 @@ which maps each inventory case into the case format and back without loss.
 from __future__ import annotations
 
 import argparse
+import base64
 import copy
 import functools
 import hashlib
@@ -290,6 +296,34 @@ def _at(document: Any, where: tuple[str | int, ...]) -> Any:
     return document
 
 
+def _excludes_long_list(schema: Any, branch: Any, name: str) -> bool:
+    """Prove that a sibling cannot consume the trimmed list's field."""
+    if not isinstance(branch, dict):
+        return False
+    if '$ref' in branch:
+        # Only this exact, single local definition is proved here. Ref
+        # siblings, pointer traversal and chained references need a new proof.
+        reference = branch['$ref']
+        if (
+            set(branch) != {'$ref'}
+            or not isinstance(reference, str)
+            or not reference.startswith('#/$defs/')
+        ):
+            return False
+        definition = reference.removeprefix('#/$defs/')
+        if not definition or '/' in definition or '~' in definition:
+            return False
+        branch = _at(schema, ('$defs', definition))
+    return (
+        isinstance(branch, dict)
+        and '$ref' not in branch
+        and branch.get('additionalProperties') is False
+        and 'patternProperties' not in branch
+        and isinstance(branch.get('properties', {}), dict)
+        and name not in branch.get('properties', {})
+    )
+
+
 def _long_lists_held(schema: Any) -> None:
     r"""Refuse a schema whose long lists hold more than their items' one
     rule, or whose list a ``oneOf`` beside it could read too: the items
@@ -307,10 +341,7 @@ def _long_lists_held(schema: Any) -> None:
                 held
                 and isinstance(branches, list)
                 and all(
-                    isinstance(branch, dict)
-                    and branch.get('additionalProperties') is False
-                    and 'patternProperties' not in branch
-                    and where[-1] not in branch.get('properties', {})
+                    _excludes_long_list(schema, branch, str(where[-1]))
                     for number, branch in enumerate(branches)
                     if number != where[at + 1]
                 )
@@ -882,8 +913,68 @@ class _Guard:
 # --- the core's boundary, for python-core --------------------------------------------
 
 
+def _materialization_bytes(attachment: int, value: bytes) -> dict[str, Any]:
+    """Actual private JSON operands, including any supplied driver diagnostic.
+
+    This reads no opaque owner and does not export exception messages;
+    CoreError summaries remain the existing kind/code pair.
+    """
+    return {
+        'attachment': attachment,
+        'base64': base64.b64encode(value).decode('ascii'),
+        'sha256': digest(value),
+        'parsed': json.loads(value),
+    }
+
+
+class _CapturedRun:
+    """Attachment state belongs to this actual Run, never the next start."""
+
+    def __init__(self, ordinal: int, operation: str, entry: int | None) -> None:
+        self.ordinal = ordinal
+        self.operation = operation
+        self.entry = entry
+        self.description: int | None = None
+        self.state: dict[str, Any] | None = None
+        self.request_ids: list[str] = []
+        self.skippable: set[str] = set()
+        self.call: int | None = None
+        self.call_id: int | None = None
+        self.pending_model: dict[str, Any] | None = None
+        self.model_endpoint: dict[str, Any] | None = None
+        self.body: dict[str, Any] | None = None
+        self.bodies: list[dict[str, Any]] = []
+        self.answer: dict[str, Any] | None = None
+        self.prepared: int | None = None
+        self.preparation: dict[str, Any] | None = None
+        self.input_record: dict[str, Any] | None = None
+        self.materialization_record: dict[str, Any] | None = None
+        self.call_record: dict[str, Any] | None = None
+        self.result_record: dict[str, Any] | None = None
+        self.error: dict[str, str] | None = None
+        self.completion = 'unobserved'
+        self.predicted: dict[str, Any] | None = None
+        self.partial: dict[str, Any] | None = None
+        self.error_owner: BaseException | None = None
+        self.carried: dict[str, Any] | None = None
+        self.asked: dict[int, dict[str, Any]] = {}
+        self.materialization_entry: int | None = None
+        self.materialization_guard: dict[str, Any] | None = None
+        self.materialization_output_owners: set[int] = set()
+        self.materialization_fetch_owners: dict[int, int] = {}
+        self.materialization_state: dict[str, Any] | None = None
+
+
 class _Capture:
-    r"""What crossed ``sdm_client._native`` during one case: each operation
+    r"""Actual native Runs plus separately observed gathered prediction entries.
+
+    The entry/model-argument observation establishes invocation only; typed
+    native starts/results independently establish core execution and model.
+    Each handle retains its own attachment state, while entry journals retain
+    actual ordered calls, response scopes and complete final result reads.
+    Neither actual operations nor public answers are reconstructed.
+
+    What crossed ``sdm_client._native`` during one case: each operation
     started with its inputs, each fetch the core asked for (its request and
     plan, the step trace), and the core's answers: ``validate_query``'s
     acceptance, ``describe_source``'s description, ``materialize``'s
@@ -903,7 +994,34 @@ class _Capture:
     ``core.predicted.calls``, beside ``body``, the last's (T2.1g); a request
     of one call records ``body`` alone, as before."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        model_replies_observed: bool = True,
+        native_error_control_observed: bool = True,
+        native_cancellations_observed: bool = False,
+    ) -> None:
+        self.model_replies_observed = model_replies_observed
+        self.native_error_control_observed = native_error_control_observed
+        self.native_cancellations_observed = native_cancellations_observed
+        self.materialization_preparations: list[dict[str, Any]] = []
+        self.materialization_entries: list[dict[str, Any]] = []
+        self.materialization_guards: list[dict[str, Any]] = []
+        self._materialization_stack: list[int] = []
+        self._materialization_owners: dict[
+            int, list[tuple[Any, dict[str, Any]]]
+        ] = {}
+        self._materialization_presented: list[
+            tuple[BaseException, int, str]
+        ] = []
+        self._materialization_source_scopes: list[tuple[_CapturedRun, Any]] = []
+        self._materialization_refusals: list[
+            tuple[BaseException, dict[str, Any]]
+        ] = []
+        self._materialization_origin: dict[str, Any] | None = None
+        self._materialization_guard_origins: dict[
+            int, dict[str, Any] | None
+        ] = {}
         self.operations: list[str] = []
         self.inputs: list[dict[str, Any]] = []
         #: What the host passed ``edit_schema`` and ``materialize``'s held
@@ -917,7 +1035,6 @@ class _Capture:
         #: replied, for ``--record-fetches`` (the replay's recording, T2.3).
         self.answered: list[dict[str, Any]] = []
         self.recording = False
-        self._asked: dict[int, dict[str, Any]] = {}
         self.accepted: bool | None = None
         self.described: dict[str, Any] | None = None
         self.materialized: dict[str, Any] | None = None
@@ -927,15 +1044,558 @@ class _Capture:
         #: ``warnings`` control message carries them, in the order given
         #: (T1.23).
         self.warnings: list[dict[str, Any]] = []
-        self._description: int | None = None
-        self._state: dict[str, Any] | None = None
-        self._request_id: str | None = None
-        self._request_ids: list[str] = []
-        self._skippable: set[str] = set()
-        self._call: int | None = None
-        self._body: dict[str, Any] | None = None
-        self._bodies: list[dict[str, Any]] = []
-        self._answer: dict[str, Any] | None = None
+        self._runs: dict[int, _CapturedRun] = {}
+        self._current_run: _CapturedRun | None = None
+        self.predictions: list[dict[str, Any]] = []
+        self._entries: list[int] = []
+        self._presented: list[tuple[BaseException, int, str]] = []
+        self._result_presentations: list[tuple[Any, int]] = []
+        self._result_carries: list[tuple[BaseException, int]] = []
+        self.model_calls: list[dict[str, Any]] = []
+        self.partial: dict[str, Any] | None = None
+
+    def _run(self, owner: _CapturedRun | None) -> _CapturedRun:
+        owner = self._current_run if owner is None else owner
+        if owner is None:
+            raise RunnerFailure('a capture event has no actual Run')
+        return owner
+
+    def enter_materialization(self) -> int:
+        ordinal = len(self.materialization_entries)
+        self.materialization_entries.append(
+            {
+                'ordinal': ordinal,
+                'parent': self._materialization_stack[-1]
+                if self._materialization_stack
+                else None,
+                'prediction_parent': self._entries[-1]
+                if self._entries
+                else None,
+                'runs': [],
+                'completion': 'active',
+                'terminal': None,
+                'failure': None,
+            }
+        )
+        self._materialization_stack.append(ordinal)
+        self._materialization_owners[ordinal] = []
+        return ordinal
+
+    def _materialization_within(self, run: int, entry: int) -> bool:
+        parent = self._runs[run].materialization_entry
+        while parent is not None:
+            if parent == entry:
+                return True
+            parent = self.materialization_entries[parent]['parent']
+        return False
+
+    def leave_materialization(
+        self,
+        ordinal: int,
+        error: BaseException | None,
+        *,
+        terminal: _CapturedRun | None = None,
+    ) -> None:
+        if (
+            not self._materialization_stack
+            or self._materialization_stack[-1] != ordinal
+        ):
+            raise RunnerFailure(
+                'materialization entries did not finish in nesting order'
+            )
+        entry = self.materialization_entries[ordinal]
+        try:
+            entry['completion'] = 'returned' if error is None else 'raised'
+            self.error = None
+            if (
+                terminal is not None
+                and self._runs.get(terminal.ordinal) is terminal
+                and terminal.materialization_entry == ordinal
+            ):
+                entry['terminal'] = {'run': terminal.ordinal}
+            selected = error
+            seen: set[int] = set()
+            while selected is not None and id(selected) not in seen:
+                seen.add(id(selected))
+                matched = next(
+                    (
+                        (run, relation)
+                        for owner, run, relation in reversed(
+                            self._materialization_presented
+                        )
+                        if owner is selected
+                        and self._materialization_within(run, ordinal)
+                    ),
+                    None,
+                )
+                run = (
+                    matched[0]
+                    if matched is not None
+                    else next(
+                        (
+                            run
+                            for run, owner in self._runs.items()
+                            if owner.error_owner is selected
+                            and self._materialization_within(run, ordinal)
+                        ),
+                        None,
+                    )
+                )
+                if run is not None:
+                    entry['failure'] = {
+                        'run': run,
+                        'relation': matched[1]
+                        if matched is not None
+                        and matched[1] in ('refused', 'native')
+                        else 'selected'
+                        if selected is error
+                        else 'cause',
+                    }
+                    self.error = self._runs[run].error
+                    break
+                selected = BaseException.__cause__.__get__(selected)
+        finally:
+            self._materialization_stack.pop()
+            self._materialization_owners.pop(ordinal, None)
+            self._materialization_guard_origins.pop(ordinal, None)
+            self._materialization_refusals = [
+                (error, origin)
+                for error, origin in self._materialization_refusals
+                if self._runs[origin['run']].materialization_entry != ordinal
+            ]
+            if not self._materialization_stack:
+                self._materialization_presented.clear()
+                self._materialization_refusals.clear()
+                if not self._entries:
+                    for owner in self._runs.values():
+                        if owner.materialization_entry is not None:
+                            owner.error_owner = None
+
+    @staticmethod
+    def _materialization_components(
+        value: dict[str, Any],
+    ) -> list[tuple[str, dict[str, Any]]]:
+        stage = value.get('stage')
+        if stage in (
+            'population',
+            'source_column',
+            'source_fallback',
+            'source_failure',
+        ):
+            return [('source', value['source'])]
+        if stage == 'lookup_rows':
+            return [('lookup', value['lookup'])]
+        if stage == 'label_inputs':
+            return [('population', value['population'])] + (
+                []
+                if value.get('previous') is None
+                else [('label_batch', value['previous'])]
+            )
+        if stage == 'target_column':
+            return [('label_inputs', value['inputs'])]
+        if stage in (
+            'condition_column',
+            'filtered_target',
+            'windowed_target',
+            'native_label_groups',
+        ):
+            return [('target_column', value['column'])]
+        if stage == 'eligibility_column':
+            return [
+                ('label_inputs', value['inputs']),
+                ('target_column', value['column']),
+            ]
+        if stage == 'complete_label_batch':
+            return [
+                ('population', value['population']),
+                ('label_groups', value['groups']),
+            ]
+        if stage == 'restore_label_groups':
+            return [('label_groups', value['groups'])]
+        if stage == 'what_if_column':
+            return [
+                ('label_groups', value['groups']),
+                ('target_column', value['column']),
+            ]
+        if stage == 'request':
+            return [('population', value['population'])] + [
+                ('label_batch', batch) for batch in value['batches']
+            ]
+        return []
+
+    @staticmethod
+    def _materialization_ids(kind: str, data: dict[str, Any]) -> list[int]:
+        # This finite tooling declaration is shared with the strict reader,
+        # including when the checkpoint SDK predates native SQL products.
+        # Malformed output still belongs to the SDK's normal refusal path;
+        # observation must not replace that failure or probe an opaque owner.
+        owner_ids = _sibling('prediction_observation').materialization_owner_ids
+        try:
+            return owner_ids(kind, data)
+        except Exception:  # noqa: BLE001 - observation never changes admission
+            return []
+
+    def _materialization_started(
+        self, owner: _CapturedRun, record: dict[str, Any], attachments: Any
+    ) -> None:
+        entry = owner.materialization_entry
+        if entry is None:
+            return
+        record.update(
+            entry=entry,
+            input_reads=[],
+            owner_binds=[],
+            owner_takes=[],
+            output_reads=[],
+            origin=copy.deepcopy(self._materialization_origin),
+        )
+        value = record['input']['parsed']
+        if not isinstance(value, dict):
+            return
+        if value.get('stage') == 'task':
+            task = value['request']
+            for name in (
+                'schema',
+                'query',
+                'indices',
+                'values',
+                'candidates',
+                'held',
+            ):
+                key = task.get(name)
+                if key is None:
+                    continue
+                if name == 'indices':
+                    record['input_reads'].append(
+                        {
+                            'attachment': key,
+                            'scalars': _scalars(attachments[key]),
+                        }
+                    )
+                else:
+                    record['input_reads'].append(
+                        _materialization_bytes(key, attachments[key])
+                    )
+        elif (
+            value.get('stage') == 'request' and value.get('values') is not None
+        ):
+            key = value['values']
+            record['input_reads'].append(
+                _materialization_bytes(key, attachments[key])
+            )
+        ids = list(
+            dict.fromkeys(
+                key
+                for kind, data in self._materialization_components(value)
+                for key in self._materialization_ids(kind, data)
+            )
+        )
+        live = self._materialization_owners[entry]
+        for key in ids:
+            actual = attachments.get(key)
+            producer = next(
+                (
+                    reference
+                    for observed, reference in reversed(live)
+                    if actual is observed
+                ),
+                None,
+            )
+            if producer is not None:
+                record['owner_binds'].append(
+                    {'attachment': key, 'producer': dict(producer)}
+                )
+
+    def _materialization_take(
+        self, owner: _CapturedRun, attachment: int, value: Any
+    ) -> None:
+        record = owner.materialization_record or owner.materialization_guard
+        if record is None or owner.materialization_entry is None:
+            return
+        if (
+            record['result'] is not None
+            and attachment == record['result'].get('value')
+            and isinstance(value, bytes)
+        ):
+            decoded = json.loads(value)
+            if owner.materialization_record is not None:
+                if decoded.get('value') == 'request':
+                    owner.materialization_state = decoded['data']['state']
+                else:
+                    owner.materialization_output_owners = set(
+                        self._materialization_ids(
+                            decoded.get('value'), decoded.get('data')
+                        )
+                    )
+        state = owner.materialization_state
+        if state is not None and isinstance(value, bytes):
+            ids = [state['payload'], state['query']]
+            ids.extend(batch['payload'] for batch in state.get('batches') or [])
+            for part in (state.get('forecast') or []) + (
+                (state.get('ranking') or {}).get('parts') or []
+            ):
+                ids.extend([part['payload'], part['query']])
+            if attachment in ids:
+                record['output_reads'].append(
+                    _materialization_bytes(attachment, value)
+                )
+        if any(
+            type(value) is primitive
+            for primitive in (bytes, str, int, float, bool, type(None))
+        ):
+            return
+        reference = None
+        if attachment in owner.materialization_output_owners:
+            reference = {'attachment': attachment, 'origin': 'result'}
+        elif attachment in owner.materialization_fetch_owners:
+            reference = {
+                'attachment': attachment,
+                'origin': 'fetch',
+                'fetch_id': owner.materialization_fetch_owners[attachment],
+            }
+        if reference is not None:
+            record['owner_takes'].append(reference)
+            live = self._materialization_owners.get(owner.materialization_entry)
+            if live is not None:
+                live.append((value, {'run': owner.ordinal, **reference}))
+
+    def enter_prediction(self, model: Any) -> int:
+        ordinal = len(self.predictions)
+        self.predictions.append(
+            {
+                'ordinal': ordinal,
+                'parent': self._entries[-1] if self._entries else None,
+                'argument': {'form': 'exact_string', 'value': model}
+                if type(model) is str
+                else {'form': 'unobserved'},
+                'completion': 'active',
+                'runs': [],
+                'calls': [],
+                'results': [],
+                'final': None,
+                'carried': None,
+            }
+        )
+        self._entries.append(ordinal)
+        return ordinal
+
+    def _within(self, run: int, parent: int) -> bool:
+        entry = self._runs[run].entry
+        while entry is not None:
+            if entry == parent:
+                return True
+            entry = self.predictions[entry]['parent']
+        return False
+
+    def leave_prediction(
+        self, ordinal: int, error: BaseException | None
+    ) -> None:
+        if not self._entries or self._entries[-1] != ordinal:
+            raise RunnerFailure(
+                'prediction entries did not finish in nesting order'
+            )
+        entry = self.predictions[ordinal]
+        try:
+            entry['completion'] = 'returned' if error is None else 'raised'
+            self.error = None
+            self.predicted = None
+            if error is None and entry['results']:
+                entry['final'] = len(entry['results']) - 1
+                final = entry['results'][entry['final']]
+                if final['metadata'] is None or final['result'] is None:
+                    raise RunnerFailure(
+                        'prediction returned without its actual final result reads'
+                    )
+                self.predicted = self._final_prediction(entry, final)
+            if error is not None:
+                # Context may be incidental recovery; only exact identity or
+                # an explicit cause establishes this selected relationship.
+                selected = error
+                seen: set[int] = set()
+                while selected is not None and id(selected) not in seen:
+                    seen.add(id(selected))
+                    if entry['carried'] is None:
+                        carried = next(
+                            (
+                                run
+                                for owner, run in reversed(self._result_carries)
+                                if owner is selected
+                                and self._within(run, ordinal)
+                            ),
+                            None,
+                        )
+                        if carried is not None:
+                            entry['carried'] = {
+                                'run': carried,
+                                'relation': 'selected'
+                                if selected is error
+                                else 'cause',
+                            }
+                    matched = next(
+                        (
+                            (run, relation)
+                            for owner, run, relation in reversed(
+                                self._presented
+                            )
+                            if owner is selected and self._within(run, ordinal)
+                        ),
+                        None,
+                    )
+                    run = matched[0] if matched is not None else None
+                    if run is None:
+                        run = next(
+                            (
+                                at
+                                for at in self._runs
+                                if self._within(at, ordinal)
+                                and self._runs[at].error_owner is selected
+                            ),
+                            None,
+                        )
+                    if run is not None and 'failure' not in entry:
+                        self.error = self._runs[run].error
+                        entry['failure'] = {
+                            'run': run,
+                            'relation': 'refused'
+                            if matched is not None and matched[1] == 'refused'
+                            else ('selected' if selected is error else 'cause'),
+                        }
+                    selected = BaseException.__cause__.__get__(selected)
+        finally:
+            self._entries.pop()
+            if not self._entries:
+                # Child identities remain useful for an exact outer rethrow.
+                # No exception owner survives the completed outer observation.
+                self._presented = [
+                    (owner, run, relation)
+                    for owner, run, relation in self._presented
+                    if not self._within(run, ordinal)
+                ]
+                self._result_presentations = [
+                    (owner, run)
+                    for owner, run in self._result_presentations
+                    if not self._within(run, ordinal)
+                ]
+                self._result_carries = [
+                    (owner, run)
+                    for owner, run in self._result_carries
+                    if not self._within(run, ordinal)
+                ]
+                for run, owner in self._runs.items():
+                    if self._within(run, ordinal):
+                        owner.error_owner = None
+
+    def presented(
+        self, result: BaseException, internal: BaseException | None
+    ) -> None:
+        if internal is not None and self._materialization_stack:
+            entry = self._materialization_stack[-1]
+            for ordinal in self.materialization_entries[entry]['runs']:
+                if self._runs[ordinal].error_owner is internal:
+                    self._materialization_presented.append(
+                        (result, ordinal, 'selected')
+                    )
+                    break
+        if internal is None or not self._entries:
+            return
+        for ordinal in self.predictions[self._entries[-1]]['runs']:
+            if self._runs[ordinal].error_owner is internal:
+                self._presented.append((result, ordinal, 'selected'))
+                return
+
+    def carried(self, error: BaseException, raised: BaseException) -> None:
+        if not self._entries:
+            return
+        for owner, run, _relation in reversed(self._presented):
+            if owner is error and self._within(run, self._entries[-1]):
+                self._presented.append((raised, run, 'refused'))
+                return
+
+    def presented_result(self, result: Any, owner: _CapturedRun | None) -> None:
+        if owner is None or not self._entries:
+            return
+        record = owner.result_record
+        if (
+            self._runs.get(owner.ordinal) is owner
+            and self._within(owner.ordinal, self._entries[-1])
+            and owner.preparation is not None
+            and owner.preparation['stage'] == 'finish_relational_response'
+            and record is not None
+            and record['metadata'] is not None
+            and record['result'] is not None
+        ):
+            self._result_presentations.append((result, owner.ordinal))
+
+    def carried_result(self, error: BaseException, result: Any) -> None:
+        if not self._entries:
+            return
+        for owner, run in reversed(self._result_presentations):
+            if owner is result and self._within(run, self._entries[-1]):
+                self._result_carries.append((error, run))
+                return
+
+    @staticmethod
+    def _parts(value: dict[str, Any]) -> list[dict[str, Any]]:
+        aggregation = value['input']['aggregation']
+        if aggregation['kind'] == 'calls':
+            return aggregation['parts']
+        if aggregation['kind'] in ('steps', 'ranking'):
+            return [
+                part
+                for child in aggregation['children']
+                for part in child['parts']
+            ]
+        raise RunnerFailure(
+            'an unknown prediction result aggregation was observed'
+        )
+
+    def _selected_calls(
+        self, entry: dict[str, Any], value: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        calls = {call['request_id']: call for call in entry['calls']}
+        selected = []
+        seen = set()
+        for part in self._parts(value):
+            scope = part['data']['scope']
+            request_id = scope['call_request_id']
+            call = calls.get(request_id)
+            if (
+                call is None
+                or request_id in seen
+                or call['scope'] != scope
+                or call['body'] is None
+            ):
+                raise RunnerFailure(
+                    'prediction result names a missing or contradictory completed call'
+                )
+            selected.append(call)
+            seen.add(request_id)
+        if [call['run'] for call in selected] != sorted(
+            call['run'] for call in selected
+        ):
+            raise RunnerFailure(
+                'prediction result changes actual model call order'
+            )
+        return selected
+
+    def _final_prediction(
+        self, entry: dict[str, Any], final: dict[str, Any]
+    ) -> dict[str, Any]:
+        calls = self._selected_calls(entry, final['input'])
+        if len(calls) != len(entry['calls']):
+            raise RunnerFailure(
+                'prediction returned without all actual model calls in its final result'
+            )
+        bodies = [call['body'] for call in calls]
+        predicted = final['data']['predicted']
+        return {
+            'body': bodies[-1] if bodies else None,
+            **({'calls': bodies} if len(bodies) > 1 else {}),
+            'model': predicted['model'],
+            'request_id': predicted['request_id'],
+            'metadata': final['metadata'],
+            'result': final['result'],
+        }
 
     def warned(self, message: bytes) -> None:
         for warning in json.loads(message)['warnings']:
@@ -945,15 +1605,118 @@ class _Capture:
 
     def started(self, message: bytes, attachments: Any) -> None:
         operation = json.loads(message)['operation']
+        ordinal = len(self.operations)
+        entry = self._entries[-1] if self._entries else None
+        owner = _CapturedRun(ordinal, operation['op'], entry)
+        if self._materialization_stack:
+            owner.materialization_entry = self._materialization_stack[-1]
+            self.materialization_entries[owner.materialization_entry][
+                'runs'
+            ].append(ordinal)
+        self._runs[ordinal] = owner
+        self._current_run = owner
         self.operations.append(operation['op'])
-        self._description = None
-        self._state = None
-        self._call = None
-        self._answer = None
-        self._bodies = []
+        if entry is not None:
+            self.predictions[entry]['runs'].append(ordinal)
+        if operation['op'] == 'prepare_materialize':
+            attachment = operation['input']
+            raw = attachments[attachment]
+            if not isinstance(raw, bytes):
+                raise RunnerFailure(
+                    'an actual materialization input has no JSON bytes'
+                )
+            owner.materialization_record = {
+                'run': ordinal,
+                'operation': operation,
+                'input': _materialization_bytes(attachment, raw),
+                'completion': 'active',
+                'result': None,
+                'value_reads': [],
+                'fetches': [],
+                'error': None,
+                'events': [],
+            }
+            self.materialization_preparations.append(
+                owner.materialization_record
+            )
+            self._materialization_started(
+                owner, owner.materialization_record, attachments
+            )
+        if (
+            operation['op'] == 'prepare_frames'
+            and owner.materialization_entry is not None
+        ):
+            raw = attachments[operation['input']]
+            value = json.loads(raw)
+            if isinstance(value, dict) and value.get('stage') in (
+                'assess_failure',
+                'report_failure',
+            ):
+                owner.materialization_guard = {
+                    'run': ordinal,
+                    'entry': owner.materialization_entry,
+                    'operation': copy.deepcopy(operation),
+                    'input': _materialization_bytes(operation['input'], raw),
+                    'completion': 'active',
+                    'result': None,
+                    'value_reads': [],
+                    'error': None,
+                    'events': [],
+                    'origin': copy.deepcopy(
+                        self._materialization_guard_origins.get(
+                            owner.materialization_entry
+                        )
+                    ),
+                }
+                self.materialization_guards.append(owner.materialization_guard)
+        if operation['op'] == 'prepare_request':
+            value = json.loads(attachments[operation['input']])
+            owner.preparation = value
+            owner.input_record = {
+                'op': 'prepare_request',
+                'run': ordinal,
+                'entry': entry,
+                'input': value,
+                'result': None,
+                'error': None,
+            }
+            self.inputs.append(owner.input_record)
+            if value['stage'] == 'call_relational':
+                if entry is None:
+                    raise RunnerFailure(
+                        'a gathered model call has no observed prediction entry'
+                    )
+                call = value['input']
+                request_id = call['request_id']
+                if any(
+                    item['request_id'] == request_id
+                    for item in self.predictions[entry]['calls']
+                ):
+                    raise RunnerFailure(
+                        'the model call does not carry a unique request id'
+                    )
+                body = attachments[call['body']]
+                if not isinstance(body, bytes):
+                    raise RunnerFailure(
+                        'an actual gathered call input has no encoded bytes'
+                    )
+                owner.call_record = {
+                    'run': ordinal,
+                    'request_id': request_id,
+                    'input_body_sha256': digest(body),
+                    'input_body_base64': base64.b64encode(body).decode('ascii'),
+                    'body': None,
+                    'body_sha256': None,
+                    'scope': None,
+                    'reply': None,
+                }
+                self.predictions[entry]['calls'].append(owner.call_record)
         if operation['op'] == 'predict':
+            self.predicted = None
+            self.partial = None
+            self.error = None
+            owner.model_endpoint = operation.get('model_endpoint')
             state = operation['state']
-            self._request_id = operation['request_id']
             # The id each call carries: one call per step with rows to
             # score, in step order, each with its own step's id (T1.36 fixes
             # 24 and 27); a step with none makes no call, as in the core.
@@ -974,14 +1737,14 @@ class _Capture:
                     for part in (state.get('ranking') or {}).get('parts', ())
                 ]
             )
-            self._request_ids = [
+            owner.request_ids = [
                 request_id
                 for request_id, payload in steps
                 if not _nothing_to_score(json.loads(attachments[payload]))
             ]
             # A ranking's question whose context holds one answer is asked
             # no call (T2.8): its id may be passed over, in order.
-            self._skippable = (
+            owner.skippable = (
                 {request_id for request_id, _ in steps}
                 if state.get('ranking') is not None
                 else set()
@@ -1065,8 +1828,40 @@ class _Capture:
                 }
             )
 
-    def stepped(self, step: dict[str, Any]) -> None:
+    def stepped(
+        self, step: dict[str, Any], *, run: _CapturedRun | None = None
+    ) -> None:
+        owner = self._run(run)
         if step.get('step') == 'fetch':
+            if owner.materialization_record is not None:
+                record = owner.materialization_record
+                record['fetches'].extend(copy.deepcopy(step['requests']))
+                record['events'].append(
+                    {
+                        'event': 'fetch',
+                        'requests': [asked['id'] for asked in step['requests']],
+                        **(
+                            {
+                                'positions': list(
+                                    range(
+                                        len(self.fetches),
+                                        len(self.fetches)
+                                        + len(step['requests']),
+                                    )
+                                )
+                            }
+                            if owner.materialization_entry is not None
+                            else {}
+                        ),
+                    }
+                )
+                if owner.materialization_entry is not None:
+                    for asked in step['requests']:
+                        lookup = asked.get('lookup')
+                        if isinstance(lookup, dict):
+                            owner.materialization_fetch_owners[
+                                lookup['owner']
+                            ] = lookup['read']
             self.fetches.extend(
                 {
                     'request': asked['request'],
@@ -1087,26 +1882,70 @@ class _Capture:
                     purposes.pop() if len(purposes) == 1 else None
                 )
             for asked in step['requests']:
-                self._asked[asked['id']] = {
+                owner.asked[asked['id']] = {
                     'request': asked['request'],
                     'plan': asked['plan'],
                 }
         elif self.driver_log is not None:
             self.driver_log.purpose = None
         if step.get('step') == 'call_model':
-            self._call = step['body']
+            if (
+                self.model_replies_observed
+                and owner.pending_model is not None
+                and owner.pending_model['reply'] is None
+                and (
+                    owner.call_id != step.get('id')
+                    or owner.call != step['body']
+                )
+            ):
+                raise RunnerFailure(
+                    'a new model call precedes the outstanding reply'
+                )
+            if owner.call_id != step.get('id') or owner.call != step['body']:
+                owner.pending_model = None
+            owner.call = step['body']
+            owner.call_id = step.get('id')
 
-    def replied(self, message: bytes, attachments: Any) -> None:
+    def replied(
+        self,
+        message: bytes,
+        attachments: Any,
+        *,
+        run: _CapturedRun | None = None,
+    ) -> None:
         r"""A fetch's answer as the host replies with it, kept beside the
         fetch: its rows as an Arrow IPC stream in base64, or the provider's
         error, as the replay's recording holds it (``sdm-testkit``'s
         ``replay``)."""
+        reply = json.loads(message)
+        if reply.get('message') == 'model_reply':
+            owner = self._run(run)
+            call = owner.pending_model
+            if (
+                type(reply.get('id')) is not int
+                or type(owner.call_id) is not int
+                or reply['id'] != owner.call_id
+                or call is None
+                or call['reply'] is not None
+            ):
+                raise RunnerFailure(
+                    'model reply has no exact outstanding taken call'
+                )
+            try:
+                call['reply'] = _sibling('prediction_observation').model_reply(
+                    reply['outcome']
+                )
+            except (KeyError, TypeError, ValueError) as error:
+                raise RunnerFailure(
+                    'the model reply observation is malformed'
+                ) from error
+            owner.call = None
+            return
         if not self.recording:
             return
-        reply = json.loads(message)
         if reply.get('message') != 'fetch_reply':
             return
-        asked = self._asked.pop(reply['id'], None)
+        asked = self._run(run).asked.pop(reply['id'], None)
         if asked is None:
             raise RunnerFailure('a fetch replied to that was never asked')
         outcome = reply['outcome']
@@ -1130,57 +1969,218 @@ class _Capture:
             }
         )
 
-    def failed(self, error: Any) -> None:
-        self.error = {'kind': str(error.kind), 'code': str(error.code)}
+    def failed(self, error: Any, *, run: _CapturedRun | None = None) -> None:
+        owner = self._run(run)
+        owner.completion = 'error'
+        owner.error = {'kind': str(error.kind), 'code': str(error.code)}
+        if (
+            owner.materialization_record is not None
+            or owner.materialization_guard is not None
+        ):
+            record = owner.materialization_record or owner.materialization_guard
+            record['completion'] = 'error'
+            record['error'] = dict(owner.error)
+            record['events'].append({'event': 'core_error'})
+        owner.error_owner = (
+            error
+            if (owner.entry is not None and self._entries)
+            or (
+                owner.materialization_entry is not None
+                and self._materialization_stack
+            )
+            else None
+        )
+        if owner.input_record is not None:
+            owner.input_record['error'] = owner.error
+        if owner.entry is None:
+            self.error = owner.error
+        if owner.operation == 'predict' and self.native_error_control_observed:
+            owner.carried = json.loads(error.control)['error'].get('answered')
 
-    def done(self, result: dict[str, Any]) -> None:
+    def done(
+        self, result: dict[str, Any], *, run: _CapturedRun | None = None
+    ) -> None:
+        owner = self._run(run)
+        owner.completion = 'done'
+        if (
+            owner.materialization_record is not None
+            or owner.materialization_guard is not None
+        ):
+            record = owner.materialization_record or owner.materialization_guard
+            record['completion'] = 'done'
+            record['result'] = dict(result)
+            record['events'].append({'event': 'done'})
+        if result.get('op') == 'prepare_request':
+            owner.prepared = result['value']
         if 'accepted' in result:
             self.accepted = bool(result['accepted'])
         if result.get('op') == 'describe_source':
-            self._description = result['description']
+            owner.description = result['description']
         if result.get('op') == 'materialize':
-            self._state = result['state']
+            owner.state = result['state']
             self.materialized = {'version': result['state']['version']}
         if result.get('op') == 'predict':
-            self._passed_over()
-            if self._request_ids:
+            self._passed_over(owner)
+            if owner.request_ids:
                 raise RunnerFailure(
                     'predict answered without calling the model for a step '
                     'with rows to score'
                 )
-            self._answer = result
-            self.predicted = {
-                'body': self._body,
-                **({'calls': self._bodies} if len(self._bodies) > 1 else {}),
+            owner.answer = result
+            owner.predicted = {
+                'body': owner.body,
+                **({'calls': owner.bodies} if len(owner.bodies) > 1 else {}),
                 'model': result['model'],
                 'request_id': result['request_id'],
                 'metadata': None,
                 'result': None,
             }
+            self.predicted = owner.predicted
 
-    def taken(self, attachment: int, value: Any) -> None:
-        if attachment == self._call and isinstance(value, bytes):
-            self._body = json.loads(
+    def taken(
+        self, attachment: int, value: Any, *, run: _CapturedRun | None = None
+    ) -> None:
+        owner = self._run(run)
+        self._materialization_take(owner, attachment, value)
+        record = owner.materialization_record or owner.materialization_guard
+        if (
+            record is not None
+            and record['result'] is not None
+            and attachment == record['result'].get('value')
+            and isinstance(value, bytes)
+        ):
+            record['value_reads'].append(
+                _materialization_bytes(attachment, value)
+            )
+            record['events'].append(
+                {'event': 'value_taken', 'attachment': attachment}
+            )
+        if attachment == owner.call and isinstance(value, bytes):
+            owner.body = json.loads(
                 value, parse_int=_number, parse_float=_number
             )
-            self._bodies.append(self._body)
-            # The next step with rows to score's id, and no call past them.
-            carried = self._body.get('metadata', {}).get('request_id')
-            self._passed_over(carried)
-            if not self._request_ids or carried != self._request_ids.pop(0):
+            owner.bodies.append(owner.body)
+            carried = owner.body.get('metadata', {}).get('request_id')
+            if owner.call_record is not None:
+                record = owner.call_record
+                if record['body'] is not None:
+                    raise RunnerFailure(
+                        'an actual model call body was taken more than once'
+                    )
+                record['body'] = owner.body
+                record['body_sha256'] = digest(value)
+                owner.pending_model = record
+                reader = _sibling('prediction_observation')
+                try:
+                    reader.observed_call_body(
+                        record, owner.preparation['input']
+                    )
+                except (ValueError, TypeError) as error:
+                    raise RunnerFailure(
+                        'the model call does not carry the request id and bytes it was started with'
+                    ) from error
+            else:
+                self._passed_over(owner, carried)
+            if owner.call_record is None and (
+                not owner.request_ids or carried != owner.request_ids.pop(0)
+            ):
                 raise RunnerFailure(
                     'the model call does not carry the request id predict '
                     'was started with'
                 )
-        answer = self._answer
-        if answer is not None and self.predicted is not None:
+            if owner.call_record is None:
+                owner.pending_model = {
+                    'run': owner.ordinal,
+                    'body': owner.body,
+                    'body_sha256': digest(value),
+                    'reply': None,
+                    'model_endpoint': owner.model_endpoint,
+                }
+                self.model_calls.append(owner.pending_model)
+        if owner.carried is not None and attachment == owner.carried['result']:
+            if value is not None:
+                owner.partial = _carried_result(value, owner.carried['rows'])
+                if self._current_run is owner:
+                    self.partial = owner.partial
+        if attachment == owner.prepared and isinstance(value, bytes):
+            prepared = json.loads(value)
+            if owner.input_record is not None:
+                owner.input_record['result'] = prepared
+            stage = (owner.preparation or {}).get('stage')
+            if stage == 'call_relational':
+                record = owner.call_record
+                if (
+                    record is None
+                    or prepared['scope']['call_request_id']
+                    != record['request_id']
+                ):
+                    raise RunnerFailure(
+                        'the response scope does not carry the request id of its actual call'
+                    )
+                record['scope'] = prepared['scope']
+            elif stage == 'finish_relational_response':
+                if owner.entry is None:
+                    raise RunnerFailure(
+                        'a gathered result has no observed prediction entry'
+                    )
+                entry = self.predictions[owner.entry]
+                calls = self._selected_calls(entry, owner.preparation)
+                scopes = {call['request_id']: call['scope'] for call in calls}
+                for lineage in prepared['lineage']:
+                    scope = scopes.get(lineage['call_request_id'])
+                    if (
+                        scope is None
+                        or not 0
+                        <= lineage['answer_ordinal']
+                        < scope['response_rows']
+                    ):
+                        raise RunnerFailure(
+                            'final prediction lineage names an unobserved call or row'
+                        )
+                owner.result_record = {
+                    'run': owner.ordinal,
+                    'input': owner.preparation,
+                    'data': prepared,
+                    'metadata': None,
+                    'result': None,
+                }
+                entry['results'].append(owner.result_record)
+        if owner.result_record is not None:
+            final = owner.result_record
+            predicted = final['data']['predicted']
+            if attachment == predicted['metadata'] and isinstance(value, bytes):
+                final['metadata'] = json.loads(value)
+            if attachment == predicted['result'] and not isinstance(
+                value, bytes
+            ):
+                final['result'] = _result_rows(value)
+                rows = final['result']['rows']
+                names = [
+                    column['name'] for column in final['result']['columns']
+                ]
+                if (
+                    len(rows) != len(final['data']['lineage'])
+                    or 'answer_index' not in names
+                ):
+                    raise RunnerFailure(
+                        'final prediction Arrow rows disagree with their actual lineage'
+                    )
+                at = names.index('answer_index')
+                if sorted(int(row[at]['i64']) for row in rows) != list(
+                    range(len(rows))
+                ):
+                    raise RunnerFailure(
+                        'final prediction Arrow answer indices disagree with lineage'
+                    )
+        answer = owner.answer
+        if answer is not None and owner.predicted is not None:
             if attachment == answer['metadata'] and isinstance(value, bytes):
-                self.predicted['metadata'] = json.loads(value)
+                owner.predicted['metadata'] = json.loads(value)
             if attachment == answer['result'] and not isinstance(value, bytes):
-                self.predicted['result'] = _result_rows(value)
-        if attachment == self._description and isinstance(value, bytes):
+                owner.predicted['result'] = _result_rows(value)
+        if attachment == owner.description and isinstance(value, bytes):
             self.described = json.loads(value)
-        state = self._state
+        state = owner.state
         if state is None or self.materialized is None:
             return
         if attachment == state['payload'] and isinstance(value, bytes):
@@ -1190,15 +2190,26 @@ class _Capture:
         if attachment == state['query'] and isinstance(value, bytes):
             self.materialized['query'] = json.loads(value)
 
-    def _passed_over(self, carried: str | None = None) -> None:
+    def cancelled(self, succeeded: bool, *, run: _CapturedRun) -> None:
+        """Observe only whether the actual cancel returned or raised."""
+        record = run.materialization_record or run.materialization_guard
+        if record is not None:
+            event = 'cancelled' if succeeded else 'cancel_failed'
+            run.completion = event
+            record['completion'] = event
+            record['events'].append({'event': event})
+
+    def _passed_over(
+        self, owner: _CapturedRun, carried: str | None = None
+    ) -> None:
         r"""Drops the ids of a ranking's questions asked no call before the
         call carrying ``carried``, or, with none, all that are left."""
         while (
-            self._request_ids
-            and self._request_ids[0] != carried
-            and self._request_ids[0] in self._skippable
+            owner.request_ids
+            and owner.request_ids[0] != carried
+            and owner.request_ids[0] in owner.skippable
         ):
-            self._request_ids.pop(0)
+            owner.request_ids.pop(0)
 
     def core(self) -> dict[str, Any]:
         core: dict[str, Any] = {
@@ -1209,29 +2220,85 @@ class _Capture:
             'materialized': self.materialized,
             'predicted': self.predicted,
             'error': self.error,
+            'model_calls': self.model_calls,
+            'capture_capabilities': {
+                'model_replies': self.model_replies_observed,
+                'native_error_control': self.native_error_control_observed,
+            },
+            'legacy_predictions': [
+                {
+                    'run': owner.ordinal,
+                    'completion': owner.completion,
+                    'result': {
+                        **owner.predicted,
+                        'outputs': owner.answer['outputs'],
+                    }
+                    if owner.predicted is not None
+                    else None,
+                    'error': owner.error,
+                    **(
+                        {'answered': owner.partial}
+                        if self.native_error_control_observed
+                        else {}
+                    ),
+                }
+                for owner in self._runs.values()
+                if owner.operation == 'predict'
+            ],
+            **(
+                {'answered': self.partial}
+                if self.native_error_control_observed
+                else {}
+            ),
         }
         if self.edits:
             core['edits'] = self.edits
+        if self.materialization_preparations or self.materialization_entries:
+            core['materialization_preparations'] = (
+                self.materialization_preparations
+            )
+            core['materialization_capture_capabilities'] = {
+                'cancellation': self.native_cancellations_observed
+            }
+        if self.materialization_entries:
+            core['materialization_entries'] = self.materialization_entries
+            core['materialization_guards'] = self.materialization_guards
+        if self.predictions or any(
+            item['op'] == 'prepare_request' for item in self.inputs
+        ):
+            core['predictions'] = self.predictions
         return core
 
 
-def _result_rows(stream: Any) -> dict[str, Any]:
-    r"""An Arrow result the core gave, as the pure-Rust host records one:
-    the result's explanation where the core gave one (its schema's
-    ``explanation``, T2.16a), its columns' names and types, and its rows in
-    order, each cell an
-    integer's digits (``i64``), a float's IEEE-754 bits (``f64_bits``, 16
-    hex digits, so no text form of a float is compared) or text
-    (``utf8``); from T1.28b a boolean (``bool``) and a class's
-    probabilities (``map``: each class and its probability's bits, in
-    order); from T2.8 a list (``list``: a ranking's scores and rankings, an
-    item's own, each member a cell as above, a null ``None``), as the
-    pure-Rust host records one."""
+def _result_table(stream: Any) -> Any:
     import pyarrow as pa
 
-    table = pa.RecordBatchReader._import_from_c_capsule(
+    return pa.RecordBatchReader._import_from_c_capsule(
         stream.__arrow_c_stream__()
     ).read_all()
+
+
+def _carried_result(stream: Any, rows: int) -> dict[str, Any]:
+    table = _result_table(stream)
+    metadata = table.schema.metadata or {}
+    return {
+        'rows': rows,
+        'result': _result_snapshot(table),
+        'model': metadata[b'model'].decode('utf-8'),
+        'request_id': metadata[b'request_id'].decode('utf-8'),
+        'metadata': json.loads(metadata[b'metadata']),
+        'outputs': json.loads(metadata[b'outputs']),
+    }
+
+
+def _result_rows(stream: Any) -> dict[str, Any]:
+    return _result_snapshot(_result_table(stream))
+
+
+def _result_snapshot(table: Any) -> dict[str, Any]:
+    """Actual Arrow columns/cells/bits and optional explanation metadata."""
+    import pyarrow as pa
+
     kinds = {
         pa.int64(): 'int64',
         pa.float64(): 'float64',
@@ -1434,7 +2501,10 @@ def _float_text(value: float) -> str:
 
 
 class _Handle:
-    def __init__(self, handle: Any, native: Any, capture: _Capture) -> None:
+    def __init__(
+        self, handle: Any, native: Any, capture: _Capture, owner: _CapturedRun
+    ) -> None:
+        self._owner = owner
         self._handle = handle
         self._native = native
         self._capture = capture
@@ -1445,18 +2515,18 @@ class _Handle:
         try:
             control, sent = self._handle.next()
         except self._native.CoreError as error:
-            self._capture.failed(error)
+            self._capture.failed(error, run=self._owner)
             raise
         message = codec.read(control, sent)
         if message.get('message') == 'step':
-            self._capture.stepped(message)
+            self._capture.stepped(message, run=self._owner)
             if message.get('step') == 'done':
-                self._capture.done(message['result'])
+                self._capture.done(message['result'], run=self._owner)
         return control, sent
 
     def take_attachment(self, attachment: int) -> Any:
         value = self._handle.take_attachment(attachment)
-        self._capture.taken(attachment, value)
+        self._capture.taken(attachment, value, run=self._owner)
         return value
 
     def take_warnings(self) -> Any:
@@ -1466,12 +2536,23 @@ class _Handle:
         return taken
 
     def reply(self, message: bytes, attachments: Any) -> None:
-        self._capture.replied(message, attachments)
+        self._capture.replied(message, attachments, run=self._owner)
         try:
             self._handle.reply(message, attachments)
         except self._native.CoreError as error:
-            self._capture.failed(error)
+            self._capture.failed(error, run=self._owner)
             raise
+
+    def cancel(self) -> Any:
+        try:
+            value = self._handle.cancel()
+        except BaseException:
+            # Observation only: no classification or attribute/message read
+            # of a native, driver or process-control exception.
+            self._capture.cancelled(False, run=self._owner)
+            raise
+        self._capture.cancelled(True, run=self._owner)
+        return value
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._handle, name)
@@ -1484,12 +2565,13 @@ class _Run:
 
     def start(self, message: bytes, attachments: Any) -> _Handle:
         self._capture.started(message, attachments)
+        owner = self._capture._run(None)
         try:
             handle = self._native.Run.start(message, attachments)
         except self._native.CoreError as error:
-            self._capture.failed(error)
+            self._capture.failed(error, run=owner)
             raise
-        return _Handle(handle, self._native, self._capture)
+        return _Handle(handle, self._native, self._capture, owner)
 
 
 class _Native:
@@ -1503,24 +2585,373 @@ class _Native:
         return getattr(self._native, name)
 
 
+def _optional_sdk_module(name: str) -> Any:
+    """Only an absent exact future SDK module is an unobserved hook group."""
+    try:
+        return importlib.import_module(name)
+    except ModuleNotFoundError as error:
+        if error.name != name:
+            raise
+        return None
+
+
 class _Boundary:
-    r"""Records each case's core runs, by wrapping the one function through
-    which the Python host imports ``sdm_client._native``."""
+    """One explicit lifetime for actual native, entry and presentation reads."""
 
     def __init__(self) -> None:
-        from sdm_client._rust import run
+        from sdm_client._rust import errors, run
 
-        self.capture = _Capture()
-        imported = run.native
+        frame_native = _optional_sdk_module('sdm_client._rust.frame_native')
+        native_sql = _optional_sdk_module('sdm_client._rust.native_sql')
+        relational_predict = _optional_sdk_module(
+            'sdm_client._rust.relational_predict'
+        )
+        if (native_sql is None) != (frame_native is None):
+            raise RunnerFailure(
+                'incomplete native materialization capture hook group'
+            )
+
+        self.capture = _Capture(native_cancellations_observed=True)
+        self._closed = False
+        self._native_before = run.native
+        self._predict_before = (
+            None if relational_predict is None else relational_predict.predict
+        )
+        self._presentation_before = errors.error_from_core
+        self._carried_before = run._carried
+        self._present_before = (
+            None if relational_predict is None else relational_predict._present
+        )
+        self._result_carry_before = (
+            None if relational_predict is None else relational_predict._carry
+        )
+        self._gather_before = None if native_sql is None else native_sql.gather
+        self._steps_before = run._steps
+        self._read_failure_before = (
+            None if native_sql is None else native_sql._Preparation.read_failure
+        )
+        self._assessment_before = (
+            None if frame_native is None else frame_native._assessment
+        )
+        imported = self._native_before
+        predict_before = self._predict_before
+        presentation_before = self._presentation_before
+        carried_before = self._carried_before
+        present_before = self._present_before
+        result_carry_before = self._result_carry_before
+        gather_before = self._gather_before
+        steps_before = self._steps_before
+        read_failure_before = self._read_failure_before
+        assessment_before = self._assessment_before
+        finished_type = run.Finished
 
         def native() -> Any:
             return _Native(imported(), self.capture)
 
-        run.native = native  # type: ignore[assignment]
+        def predict(*args: Any, **kwargs: Any) -> Any:
+            capture = self.capture
+            model = args[2] if len(args) > 2 else kwargs.get('model')
+            entry = capture.enter_prediction(model)
+            try:
+                value = predict_before(*args, **kwargs)
+            except BaseException as error:
+                capture.leave_prediction(entry, error)
+                raise
+            else:
+                capture.leave_prediction(entry, None)
+                return value
+
+        def captured_handle(handle: Any) -> _CapturedRun | None:
+            seen: set[int] = set()
+            while type(handle) is _Handle and id(handle) not in seen:
+                seen.add(id(handle))
+                if object.__getattribute__(handle, '_capture') is self.capture:
+                    return object.__getattribute__(handle, '_owner')
+                handle = object.__getattribute__(handle, '_handle')
+            return None
+
+        def gather(*args: Any, **kwargs: Any) -> Any:
+            capture = self.capture
+            entry = capture.enter_materialization()
+            try:
+                value = gather_before(*args, **kwargs)
+            except BaseException as error:
+                capture.leave_materialization(entry, error)
+                raise
+            else:
+                terminal = None
+                if (
+                    type(value) is tuple
+                    and len(value) == 2
+                    and type(value[0]) is finished_type
+                ):
+                    terminal = captured_handle(
+                        object.__getattribute__(value[0], '_run')
+                    )
+                capture.leave_materialization(entry, None, terminal=terminal)
+                return value
+
+        def steps(*args: Any, **kwargs: Any) -> Any:
+            source = kwargs.get('source_provider')
+            handle = args[1] if len(args) > 1 else kwargs.get('handle')
+            owner = captured_handle(handle)
+            capture = self.capture
+            if (
+                source is None
+                or owner is None
+                or owner.materialization_entry is None
+            ):
+                return steps_before(*args, **kwargs)
+
+            def source_read(requests: Any, keys: Any) -> Any:
+                scope = (owner, requests)
+                capture._materialization_source_scopes.append(scope)
+                try:
+                    value = source(requests, keys)
+                    if isinstance(value, run.FetchRefused):
+                        capture._materialization_refusals.append(
+                            (
+                                value.raised,
+                                {
+                                    'run': owner.ordinal,
+                                    'first': requests[0]['partition']['first'],
+                                    'failed': None,
+                                },
+                            )
+                        )
+                    return value
+                finally:
+                    capture._materialization_source_scopes.pop()
+
+            return steps_before(
+                *args, **{**kwargs, 'source_provider': source_read}
+            )
+
+        def read_failure(preparation: Any, failure: Any) -> Any:
+            capture = self.capture
+            previous = capture._materialization_origin
+            if capture._materialization_source_scopes:
+                owner, requests = capture._materialization_source_scopes[-1]
+                selected = next(
+                    (
+                        request
+                        for request in requests
+                        if request is failure.step
+                    ),
+                    None,
+                )
+                if selected is not None:
+                    capture._materialization_origin = {
+                        'run': owner.ordinal,
+                        'first': requests[0]['partition']['first'],
+                        'failed': selected['id'],
+                    }
+            try:
+                return read_failure_before(preparation, failure)
+            finally:
+                capture._materialization_origin = previous
+
+        def assessment(*args: Any, **kwargs: Any) -> Any:
+            capture = self.capture
+            native_failure = args[0] if args else kwargs.get('native')
+            entry = (
+                capture._materialization_stack[-1]
+                if capture._materialization_stack
+                else None
+            )
+            beginning = len(capture.operations)
+            if entry is not None:
+                origin = next(
+                    (
+                        reference
+                        for error, reference in reversed(
+                            capture._materialization_refusals
+                        )
+                        if error is native_failure.error
+                    ),
+                    None,
+                )
+                capture._materialization_guard_origins[entry] = copy.deepcopy(
+                    origin
+                )
+            value = assessment_before(*args, **kwargs)
+            if entry is not None and value.get('category') == 'pass_through':
+                guarded = [
+                    record
+                    for record in capture.materialization_guards
+                    if record['entry'] == entry
+                    and record['run'] >= beginning
+                    and record['input']['parsed'].get('stage')
+                    == 'assess_failure'
+                    and record['completion'] == 'done'
+                ]
+                if len(guarded) == 1:
+                    capture._materialization_presented.append(
+                        (native_failure.error, guarded[0]['run'], 'native')
+                    )
+            return value
+
+        def presentation(*args: Any, **kwargs: Any) -> Any:
+            capture = self.capture
+            # Forward exact argument owners and call form. A failed
+            # reconstruction has no successfully selected presentation pair.
+            value = presentation_before(*args, **kwargs)
+            capture.presented(value, kwargs.get('internal_context'))
+            return value
+
+        def carried(*args: Any, **kwargs: Any) -> Any:
+            # Observe only a completed native handover, including its no-op
+            # metadata branch. Never inspect or replace either error owner.
+            value = carried_before(*args, **kwargs)
+            error = args[0] if args else kwargs['error']
+            raised = args[1] if len(args) > 1 else kwargs['raised']
+            self.capture.carried(error, raised)
+            return value
+
+        def result_owner(finished: Any) -> _CapturedRun | None:
+            if type(finished) is not finished_type:
+                return None
+            handle = object.__getattribute__(finished, '_run')
+            seen = set()
+            while type(handle) is _Handle and id(handle) not in seen:
+                seen.add(id(handle))
+                if object.__getattribute__(handle, '_capture') is self.capture:
+                    owner = object.__getattribute__(handle, '_owner')
+                    control = object.__getattribute__(finished, 'result')
+                    if (
+                        type(owner) is _CapturedRun
+                        and type(control) is dict
+                        and set(control) == {'op', 'value'}
+                        and type(control['op']) is str
+                        and control['op'] == 'prepare_request'
+                        and type(control['value']) is int
+                        and control['value'] == owner.prepared
+                    ):
+                        return owner
+                    return None
+                handle = object.__getattribute__(handle, '_handle')
+            return None
+
+        def present(*args: Any, **kwargs: Any) -> Any:
+            finished = args[0] if args else kwargs.get('finished')
+            owner = result_owner(finished)
+            value = present_before(*args, **kwargs)
+            if (
+                type(value) is tuple
+                and len(value) == 2
+                and owner is result_owner(finished)
+            ):
+                self.capture.presented_result(value[0], owner)
+            return value
+
+        def result_carry(*args: Any, **kwargs: Any) -> Any:
+            value = result_carry_before(*args, **kwargs)
+            error = args[0] if args else kwargs.get('error')
+            result = args[1] if len(args) > 1 else kwargs.get('result')
+            self.capture.carried_result(error, result)
+            return value
+
+        self._native_hook = native
+        self._predict_hook = predict
+        self._presentation_hook = presentation
+        self._carried_hook = carried
+        self._present_hook = present
+        self._result_carry_hook = result_carry
+        self._gather_hook = gather
+        self._steps_hook = steps
+        self._read_failure_hook = read_failure
+        self._assessment_hook = assessment
+        # Validate every existing module's API before changing any hook.
+        # A missing future module is honest unavailability, while an internal
+        # import failure or incomplete present module remains a hard failure.
+        hooks = [
+            (run, 'native', self._native_before, native),
+            (
+                errors,
+                'error_from_core',
+                self._presentation_before,
+                presentation,
+            ),
+            (run, '_carried', self._carried_before, carried),
+        ]
+        if relational_predict is not None:
+            hooks.extend(
+                [
+                    (
+                        relational_predict,
+                        'predict',
+                        self._predict_before,
+                        predict,
+                    ),
+                    (
+                        relational_predict,
+                        '_present',
+                        self._present_before,
+                        present,
+                    ),
+                    (
+                        relational_predict,
+                        '_carry',
+                        self._result_carry_before,
+                        result_carry,
+                    ),
+                ]
+            )
+        if native_sql is not None:
+            hooks.extend(
+                [
+                    (native_sql, 'gather', self._gather_before, gather),
+                    (run, '_steps', self._steps_before, steps),
+                    (
+                        native_sql._Preparation,
+                        'read_failure',
+                        self._read_failure_before,
+                        read_failure,
+                    ),
+                ]
+            )
+        if frame_native is not None:
+            hooks.append(
+                (
+                    frame_native,
+                    '_assessment',
+                    self._assessment_before,
+                    assessment,
+                )
+            )
+        self._hook_bindings = hooks
+        for target, name, before, hook in hooks:
+            assert getattr(target, name) is before
+        for target, name, before, hook in hooks:
+            setattr(target, name, hook)
 
     def reset(self) -> _Capture:
-        self.capture = _Capture()
+        if (
+            self._closed
+            or self.capture._entries
+            or self.capture._materialization_stack
+        ):
+            raise RunnerFailure(
+                'cannot reset an active or closed prediction capture'
+            )
+        self.capture = _Capture(native_cancellations_observed=True)
         return self.capture
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        if self.capture._entries or self.capture._materialization_stack:
+            raise RunnerFailure('cannot close an active prediction entry')
+        if any(
+            getattr(target, name) is not hook
+            for target, name, _, hook in self._hook_bindings
+        ):
+            raise RunnerFailure(
+                'capture hooks must close in LIFO installation order'
+            )
+        for target, name, before, _ in reversed(self._hook_bindings):
+            setattr(target, name, before)
+        self._closed = True
 
 
 def _sibling(name: str) -> Any:
@@ -5191,141 +6622,158 @@ def run(
     bases = load_bases(bases_path)
     bases_digest = digest(bases_path.read_bytes())
     boundary = _Boundary() if mode == 'python-core' else None
-    versions = _versions()
-    if 'duckdb' not in versions:
-        raise RunnerFailure('duckdb is not installed')
-    if mode == 'python-core':
-        from sdm_client import _native
-
-        refused = stale_client(getattr(_native, 'CONTRACT_VERSION', None))
-        if refused is not None:
-            raise RunnerFailure(refused)
-    if mode == 'python-core' and database != 'duckdb':
-        from sdm_client import _native
-
-        if provider_for_leg(database) not in _native.PROVIDERS:
-            raise RunnerFailure(
-                f'the core reports no {database} provider: the {database} '
-                'job runs the reference side only'
-            )
-    recorded = []
-    kept: list[dict[str, Any]] = []
-    for case, case_digest in cases:
-        capture = boundary.reset() if boundary is not None else None
-        if capture is not None:
-            capture.recording = record_fetches is not None
+    try:
+        versions = _versions()
+        if 'duckdb' not in versions:
+            raise RunnerFailure('duckdb is not installed')
         if mode == 'python-core':
-            os.environ['SDM_CORE_ROUTES'] = ','.join(routes_on(case, database))
-        else:
-            os.environ['SDM_CORE_ROUTES'] = ''
-        keep: dict[str, Any] | None = {} if record is not None else None
-        try:
-            outcome, shown, driver, public, origins = _call(
-                case, bases, driver_capture, database, keep, capture
-            )
-        finally:
-            os.environ.pop('SDM_CORE_ROUTES', None)
-        if keep is not None and record is not None:
-            kept.append(keep)
-        recorded.append(
-            (
-                case,
-                case_digest,
-                outcome,
-                shown,
-                capture,
-                'sdm_client._native' in sys.modules,
-                driver,
-                public,
-                origins,
-            )
-        )
-    reference_identity = None
-    if guard is not None and reference is not None:
-        guard.check('after the last case')
-        reference_identity = {
-            'commit': _git(reference),
-            'environment': _environment(),
-            'guard': {'before': 'passed', 'after': 'passed'},
-        }
-    native_sha256 = _native_sha256() if mode == 'python-core' else None
-    contract = None
-    if mode == 'python-core' and 'sdm_client._native' in sys.modules:
-        contract = sys.modules['sdm_client._native'].CONTRACT_VERSION
-    commit = _git(REPO)
-    validate = validator('observation')
-    observations = []
-    for (
-        case,
-        case_digest,
-        outcome,
-        shown,
-        capture,
-        loaded,
-        driver,
-        public,
-        origins,
-    ) in recorded:
-        observation = {
-            'format': 'sdm-observation/1',
-            'case': case_key(case['id'], database),
-            'identity': {
-                'runner': mode,
-                'cell': _cell(versions),
-                'platform': f'{sys.platform}-{platform.machine()}',
-                'commit': commit,
-                'reference': reference_identity,
-                'native': (
-                    {'sha256': native_sha256} if native_sha256 else None
-                ),
-                'native_loaded': loaded,
-                'operations': capture.operations if capture else [],
-                'contract': contract,
-                'versions': versions,
-                'inputs': {'case': case_digest, 'bases': bases_digest},
-            },
-            'outcome': outcome,
-            # Each warning's origin on the candidate's runners, which a
-            # cell other than the reference's compares (HOST-5); never on
-            # python-ref, whose committed lines it would change.
-            'host': (
-                {'warnings': shown}
-                if mode == 'python-ref'
-                else {'warnings': shown, 'origins': origins}
-            ),
-            'core': capture.core() if capture else None,
-            'driver': driver,
-            'public': public,
-        }
-        problem = _invalid(validate, observation)
-        if problem is not None:
-            raise RunnerFailure(
-                f'{case["id"]}: its observation is not valid: {problem}'
-            )
-        observations.append(observation)
-    if database in WAREHOUSES and mode == 'python-ref':
-        observations = _held_observations(
-            observations, cases, bases, kept, record
-        )
-    if record_fetches is not None:
-        # The replay's recording (T2.3, KO2-20): each case's fetches, with
-        # the answers the Postgres provider replied with, in order, and the
-        # statements the driver ran for each, so the replay's record of what
-        # ran is python-core's.
-        record_fetches.write_text(
-            ''.join(
-                json.dumps(
-                    _replay_line(case, database, capture, driver),
-                    sort_keys=True,
+            from sdm_client import _native
+
+            refused = stale_client(getattr(_native, 'CONTRACT_VERSION', None))
+            if refused is not None:
+                raise RunnerFailure(refused)
+        if mode == 'python-core' and database != 'duckdb':
+            from sdm_client import _native
+
+            if provider_for_leg(database) not in _native.PROVIDERS:
+                raise RunnerFailure(
+                    f'the core reports no {database} provider: the {database} '
+                    'job runs the reference side only'
                 )
-                + '\n'
-                for case, _, _, _, capture, _, driver, *_ in recorded
-                if capture is not None
-                and (capture.answered or database in WAREHOUSES)
-            ),
-            encoding='utf-8',
-        )
-    return observations
+        recorded = []
+        kept: list[dict[str, Any]] = []
+        for case, case_digest in cases:
+            capture = boundary.reset() if boundary is not None else None
+            if capture is not None:
+                capture.recording = record_fetches is not None
+            if mode == 'python-core':
+                os.environ['SDM_CORE_ROUTES'] = ','.join(
+                    routes_on(case, database)
+                )
+            else:
+                os.environ['SDM_CORE_ROUTES'] = ''
+            keep: dict[str, Any] | None = {} if record is not None else None
+            try:
+                outcome, shown, driver, public, origins = _call(
+                    case, bases, driver_capture, database, keep, capture
+                )
+            finally:
+                os.environ.pop('SDM_CORE_ROUTES', None)
+            if keep is not None and record is not None:
+                kept.append(keep)
+            recorded.append(
+                (
+                    case,
+                    case_digest,
+                    outcome,
+                    shown,
+                    capture,
+                    'sdm_client._native' in sys.modules,
+                    driver,
+                    public,
+                    origins,
+                )
+            )
+        reference_identity = None
+        if guard is not None and reference is not None:
+            guard.check('after the last case')
+            reference_identity = {
+                'commit': _git(reference),
+                'environment': _environment(),
+                'guard': {'before': 'passed', 'after': 'passed'},
+            }
+        native_sha256 = _native_sha256() if mode == 'python-core' else None
+        contract = None
+        if mode == 'python-core' and 'sdm_client._native' in sys.modules:
+            contract = sys.modules['sdm_client._native'].CONTRACT_VERSION
+        commit = _git(REPO)
+        validate = validator('observation')
+        observations = []
+        for (
+            case,
+            case_digest,
+            outcome,
+            shown,
+            capture,
+            loaded,
+            driver,
+            public,
+            origins,
+        ) in recorded:
+            observation = {
+                'format': 'sdm-observation/1',
+                'case': case_key(case['id'], database),
+                'identity': {
+                    'runner': mode,
+                    'cell': _cell(versions),
+                    'platform': f'{sys.platform}-{platform.machine()}',
+                    'commit': commit,
+                    'reference': reference_identity,
+                    'native': (
+                        {'sha256': native_sha256} if native_sha256 else None
+                    ),
+                    'native_loaded': loaded,
+                    'operations': capture.operations if capture else [],
+                    'contract': contract,
+                    'versions': versions,
+                    'inputs': {'case': case_digest, 'bases': bases_digest},
+                },
+                'outcome': outcome,
+                # Each warning's origin on the candidate's runners, which a
+                # cell other than the reference's compares (HOST-5); never on
+                # python-ref, whose committed lines it would change.
+                'host': (
+                    {'warnings': shown}
+                    if mode == 'python-ref'
+                    else {'warnings': shown, 'origins': origins}
+                ),
+                'core': capture.core() if capture else None,
+                'driver': driver,
+                'public': public,
+            }
+            if capture is not None:
+                reader = _sibling('prediction_observation')
+                try:
+                    reader.view(
+                        observation['core'],
+                        observation['identity']['operations'],
+                    )
+                except reader.ObservationError as error:
+                    raise RunnerFailure(
+                        'the actual prediction observation is inconsistent'
+                    ) from error
+            problem = _invalid(validate, observation)
+            if problem is not None:
+                raise RunnerFailure(
+                    f'{case["id"]}: its observation is not valid: {problem}'
+                )
+            observations.append(observation)
+        if database in WAREHOUSES and mode == 'python-ref':
+            observations = _held_observations(
+                observations, cases, bases, kept, record
+            )
+        if record_fetches is not None:
+            # The replay's recording (T2.3, KO2-20): each case's fetches, with
+            # the answers the Postgres provider replied with, in order, and the
+            # statements the driver ran for each, so the replay's record of what
+            # ran is python-core's.
+            record_fetches.write_text(
+                ''.join(
+                    json.dumps(
+                        _replay_line(case, database, capture, driver),
+                        sort_keys=True,
+                    )
+                    + '\n'
+                    for case, _, _, _, capture, _, driver, *_ in recorded
+                    if capture is not None
+                    and (capture.answered or database in WAREHOUSES)
+                ),
+                encoding='utf-8',
+            )
+        return observations
+    finally:
+        if boundary is not None:
+            boundary.close()
 
 
 def _held_observations(
@@ -5411,8 +6859,46 @@ def _replay_core(capture: _Capture) -> dict[str, Any]:
         'materialize': ('provider', 'indices', 'anchor_time', 'seed'),
         'predict': ('model',),
     }
+    inputs = capture.inputs
+    native_materialization = 'prepare_materialize' in capture.operations
+    if native_materialization and any(
+        record['completion'] in ('active', 'cancelled', 'cancel_failed')
+        for record in capture.materialization_preparations
+    ):
+        raise RunnerFailure(
+            'a cancelled or unanswered native source read cannot be written as a reply replay'
+        )
+    if native_materialization and capture.materialization_guards:
+        raise RunnerFailure(
+            'a native materialization guard has no complete mathematical reply replay'
+        )
+    if native_materialization or any(
+        started['op'] == 'prepare_request' for started in inputs
+    ):
+        reader = _sibling('prediction_observation')
+        try:
+            observed = reader.view(capture.core(), capture.operations)
+        except reader.ObservationError as error:
+            raise RunnerFailure(
+                'a replay has invalid actual prediction evidence'
+            ) from error
+        if native_materialization and not any(
+            entry['native'] for entry in observed['materializations']
+        ):
+            raise RunnerFailure(
+                'a replay has no proved actual materialization Task'
+            )
+        entries = observed['predictions']
+        if any(started['op'] == 'prepare_request' for started in inputs):
+            if len(entries) != 1 or entries[0]['parent'] is not None:
+                raise RunnerFailure(
+                    'a replay has multiple or ambiguous prediction entries'
+                )
+            if entries[0]['model'] is None or not entries[0]['native']:
+                raise RunnerFailure('a replay has no resolved prediction model')
+        inputs = observed['inputs']
     core: dict[str, Any] = {}
-    for started in capture.inputs:
+    for started in inputs:
         operation = started['op']
         if operation not in fields:
             raise RunnerFailure('an operation this replay does not carry')
@@ -5531,19 +7017,54 @@ def environment_refusal(
 
 
 def publish_observations(
-    observations: list[dict[str, Any]], database: str
+    observations: list[dict[str, Any]],
+    database: str,
+    *,
+    private_source: Path | None = None,
 ) -> list[dict[str, Any]]:
-    """A publication copy, after raw starts/fetches have been recorded.
+    """Publish decoded views; actual encoded evidence stays in its private source.
 
-    Java and reference warehouse runners already publish through Placeheld.
-    Python core and Rust keep their private replay data unchanged and use
-    this same mapping only at the final observation-file boundary.
+    Current byte-owning observations require the original file and identify it
+    by its actual digest and line. Historical byte-free publication is unchanged.
+    Neither branch modifies raw capture or replay operands.
     """
     if database not in WAREHOUSES:
         return observations
     _, names, private = live_configuration(database)
     held = Placeheld(names, private)
-    published = held.value(observations)
+    publication = _sibling('observation_publication')
+    modern = any(publication.encoded_operands(value) for value in observations)
+    if modern:
+        if private_source is None:
+            raise RunnerFailure(
+                'encoded observations require a private original file'
+            )
+        source = private_source.read_bytes()
+        lines = source.decode('utf-8').splitlines()
+        originals = [json.loads(line) for line in lines]
+        if not _sibling('prediction_observation')._same_jsonl_snapshot(
+            originals, observations
+        ):
+            raise RunnerFailure(
+                'private original file differs from the supplied observations'
+            )
+        digest = hashlib.sha256(source).hexdigest()
+        published = []
+        for line, observation in enumerate(originals, 1):
+            prepared = publication.prepare_comparison(
+                observation, database, names
+            )
+            if publication.private_leak(prepared, held):
+                raise RunnerFailure(
+                    'a published observation retained private configuration'
+                )
+            published.append(
+                publication.public_derivative(
+                    prepared, source_sha256=digest, line=line
+                )
+            )
+    else:
+        published = held.value(observations)
     if held.leaked(json.dumps(published, sort_keys=True, ensure_ascii=False)):
         raise RunnerFailure(
             'a published observation retained private configuration'
@@ -5565,7 +7086,9 @@ def publish_main(argv: list[str]) -> int:
             for line in args.on.read_text().splitlines()
             if line.strip()
         ]
-        published = publish_observations(raw, args.database)
+        published = publish_observations(
+            raw, args.database, private_source=args.on
+        )
         with args.out.open('x') as stream:
             for observation in published:
                 stream.write(json.dumps(observation, sort_keys=True) + '\n')
