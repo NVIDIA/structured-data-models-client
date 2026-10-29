@@ -16,6 +16,23 @@ pub(super) struct Context {
     pub(super) what_if: Vec<Shape>,
 }
 
+pub(super) fn entity_condition(column: String, filter: Option<Shape>) -> Shape {
+    // Presence is complete Boolean data, not an untested query column.
+    // Use the existing predicate kernel and retain its exact false rows.
+    let key = Shape::Condition {
+        target: Box::new(Shape::Column(column)),
+        test: Test::Compare(labels::RelOp::Eq, Some(labels::Constant::Bool(true))),
+    };
+    match filter {
+        Some(filter) => Shape::Both {
+            op: labels::BoolOp::And,
+            left: Box::new(key),
+            right: Box::new(filter),
+        },
+        None => key,
+    }
+}
+
 #[derive(Clone)]
 pub(super) struct Conditions {
     shape: Shape,
@@ -28,15 +45,7 @@ pub(super) struct Conditions {
 impl Conditions {
     pub(super) fn entity(input: &RetainedLabelInputs) -> Result<Self, CoreError> {
         let context = input.data.root.condition_context()?;
-        let key = Shape::Column(context.entity.column.clone());
-        let shape = match context.filter {
-            Some(filter) => Shape::Both {
-                op: labels::BoolOp::And,
-                left: Box::new(key),
-                right: Box::new(filter),
-            },
-            None => key,
-        };
+        let shape = entity_condition(context.entity.column, context.filter);
         Self::new(input, shape, true)
     }
 

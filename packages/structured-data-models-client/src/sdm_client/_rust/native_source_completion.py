@@ -255,7 +255,9 @@ class SourceCompletion:
         try:
             exported = pa.Table.from_pandas(frame, preserve_index=False)
             if positions is not None:
-                helper_columns[_BATCH] = positions
+                # Core positions are UInt64 row data. The issued SQL batch
+                # helper remains the established signed int64 transport.
+                helper_columns[_BATCH] = positions.cast(pa.int64())
             # The completed native frame is helper-free; the replied source
             # still supplies every actual transport helper in its original
             # column slot for the plan and later shared Core readers.
