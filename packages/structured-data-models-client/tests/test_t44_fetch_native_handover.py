@@ -316,6 +316,31 @@ def test_process_control_exceptions_are_not_native_or_io_outcomes(failure):
     assert handle.replies == []
 
 
+@pytest.mark.parametrize('failure', [KeyboardInterrupt(), SystemExit(3)])
+def test_process_control_during_cancellation_is_not_masked(
+    monkeypatch, failure
+):
+    events = []
+    handle = _Handle(events)
+    native = _native_error()
+    original_context = native.__context__
+
+    def provider(request, keys):
+        return run_module.FetchRefused(native)
+
+    def cancel():
+        events.append('cancel')
+        raise failure
+
+    monkeypatch.setattr(handle, 'cancel', cancel)
+    with pytest.raises(type(failure)) as caught:
+        _steps(handle, provider)
+    assert caught.value is failure
+    assert events == ['cancel']
+    assert handle.replies == []
+    assert native.__context__ is original_context
+
+
 def test_refusal_releases_the_owned_run_after_publishing_its_memo(monkeypatch):
     events = []
     handles = []
