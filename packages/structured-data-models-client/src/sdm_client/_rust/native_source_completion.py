@@ -156,6 +156,10 @@ class SourceCompletion:
                     pa.int64()
                 )
             helper_rows = pa.table(helper_columns)
+            if isinstance(rows, pa.Table):
+                for canonical in ('__kumo_row__', '__kumo_id__'):
+                    if canonical in helpers:
+                        helper_columns[canonical] = rows[helpers[canonical]]
         except Exception as error:
             self.native_error = error
             raise
@@ -213,7 +217,10 @@ class SourceCompletion:
                         positions = pa.array(observed, type=pa.int64())
                 for canonical in ('__kumo_row__', '__kumo_id__'):
                     if canonical in helpers:
-                        frame.pop(helpers[canonical])
+                        observed_row = frame.pop(helpers[canonical])
+                        helper_columns[canonical] = pa.array(
+                            observed_row, type=pa.int64()
+                        )
             except Exception as error:
                 self.native_error = error
                 raise
@@ -247,7 +254,36 @@ class SourceCompletion:
         try:
             exported = pa.Table.from_pandas(frame, preserve_index=False)
             if positions is not None:
-                exported = exported.append_column(_BATCH, positions)
+                helper_columns[_BATCH] = positions
+            # The completed native frame is helper-free; the replied source
+            # still supplies every actual transport helper in its original
+            # column slot for the plan and later shared Core readers.
+            helper_names = {
+                actual: canonical for canonical, actual in helpers.items()
+            }
+            arrays, fields = [], []
+            business_index = 0
+            for original_index, name in enumerate(columns):
+                canonical = helper_names.get(name)
+                if canonical is not None:
+                    array = helper_columns[canonical]
+                    field = (
+                        rows.schema.field(original_index)
+                        .with_name(canonical)
+                        .with_type(array.type)
+                        if isinstance(rows, pa.Table)
+                        else pa.field(canonical, array.type)
+                    )
+                else:
+                    array = exported.column(business_index)
+                    field = exported.schema.field(business_index)
+                    business_index += 1
+                arrays.append(array)
+                fields.append(field)
+            exported = pa.Table.from_arrays(
+                arrays,
+                schema=pa.schema(fields, metadata=exported.schema.metadata),
+            )
             replies = {}
             offset = 0
             for step, count in zip(steps, raw.row_counts, strict=True):
