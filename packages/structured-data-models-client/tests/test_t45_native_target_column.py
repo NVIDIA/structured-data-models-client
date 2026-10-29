@@ -36,7 +36,11 @@ def test_plain_and_filtered_targets_keep_distinct_actual_storage(
     assert filtered.values.dtype == source.dtype
     assert plain.positions.tolist() == [0, 2]
     assert filtered.positions.tolist() == [0, 1, 2]
-    assert plain.present.tolist() == filtered.present.tolist() == [True, False, True]
+    assert (
+        plain.present.tolist()
+        == filtered.present.tolist()
+        == [True, False, True]
+    )
     assert plain.values.name is None and plain.values.index.name is None
     assert filtered.values.name is None and filtered.values.index.name is None
     assert plain.values.index.tolist() == [0, 1]
@@ -145,13 +149,17 @@ def test_group_restoration_uses_the_actual_derived_owner(source, drop_missing):
     else:
         assert actual_error is None
         pd.testing.assert_series_equal(
-            pd.Series(actual), expected.reset_index(drop=True), check_names=False
+            pd.Series(actual),
+            expected.reset_index(drop=True),
+            check_names=False,
         )
 
 
 @pytest.mark.parametrize('drop_missing', [False, True])
 @pytest.mark.parametrize('values', [[], [None, None]])
-def test_empty_targets_preserve_actual_native_empty_conversion(values, drop_missing):
+def test_empty_targets_preserve_actual_native_empty_conversion(
+    values, drop_missing
+):
     column = NativeTargetColumn.column(
         pd.Series(values, dtype='Int64'), drop_missing=drop_missing
     )
