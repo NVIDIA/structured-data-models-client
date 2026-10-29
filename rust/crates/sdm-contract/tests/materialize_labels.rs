@@ -13,6 +13,12 @@ fn population() -> Value {
     json!({"source":"source-1","identity":"population-1","owner":11,"rows":12000,"batch_rows":10000,"target":{"source":{"source":["buys"]},"column":"item_id"}})
 }
 
+fn source() -> Value {
+    json!({"source":"source-1","identity":"source-meaning-1","owner":10,
+        "target":{"source":{"source":["buys"]},"column":"item_id"},
+        "tables":[{"source":{"source":["buys"]},"columns":["buy_id","user_id","item_id","ts"]}]})
+}
+
 #[test]
 fn task_input_reuses_the_real_materialize_attachment_contract() {
     let request: Materialize = serde_json::from_value(json!({
@@ -67,7 +73,7 @@ fn completed_chain_owns_only_actual_batches_and_does_not_reinterpret_counts_as_i
 #[test]
 fn source_conversion_facts_are_closed_data_and_keep_full_original_decimal_metadata() {
     for (bits, scale) in [(32, -129), (64, 129), (128, 0), (256, i32::MAX)] {
-        let value = json!({"stage":"source_column","population":population(),"column":"item_id","input":{
+        let value = json!({"stage":"source_column","source":source(),"column":{"source":{"source":["buys"]},"column":"item_id"},"input":{
             "storage":"typed_columns","declaration":{"declaration":"decimal","native":{"type":format!("decimal{bits}"),"precision":7,"scale":scale}}
         }});
         let input: MaterializePreparation = serde_json::from_value(value.clone()).unwrap();

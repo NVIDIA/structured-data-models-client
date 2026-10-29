@@ -84,7 +84,9 @@ The common owned `PreparedTask` retains the original graph/query, sampled entity
 Its borrowed fetch descriptions and label draw are reconstructed from that owned meaning, without replaying schema/PQL checks or source reads.
 Both the original opaque operation and finite preparation operations use this factory and the same finalization implementation.
 
-The finite SQL preparation interface produces a task population, evaluated groups, completed batch data or an actual request.
+The finite SQL preparation interface first produces the captured source/query meaning before the entity read, then a task population, evaluated groups, completed batch data or an actual request.
+The captured source product allows the original entity-source scalar construction to complete before entity eligibility and candidate generation, without reading rows early or freezing future native dtype observations.
+Its ordered source column names are data; each reached column meaning uses the actual physical facts observed at that original native conversion position.
 Each message names the exact previous useful product and its actual source/provider binding.
 The ordinary non-list and decomposed operations keep their existing policy through the shared opaque implementation.
 The harness observes these real preparation inputs/results and attributes the final actual request to materialization; it must never fabricate a legacy operation to satisfy a route assertion.
