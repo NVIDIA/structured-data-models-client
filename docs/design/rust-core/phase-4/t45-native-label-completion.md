@@ -151,6 +151,11 @@ The native owner of a plain Arrow integer may therefore be NumPy-backed, while a
 Do not choose restoration from the source dtype or provider identity, and do not duplicate the raw-host overflow warning after a completed native float cast.
 
 Keep the target's current source and time data live through the reached fixed native operations rather than precomputing later time selections before an earlier native callback.
+The time companion is the actual captured Series reference, retained when the source-time dictionary is constructed before eligibility and target callbacks.
+Replacing its parent frame column does not replace that captured owner.
+Export the complete current values of that owner at plain-column completion or filtered-column completion, after the corresponding native operations and before Rust window selection.
+Bind those values to the same source extent and order; use the existing timestamp reader and shifted-bound kernels, without another opaque owner, operation stage or Python time comparison.
+Native condition-only columns carry no time companion, and missing or foreign time values cannot select a raw mathematical fallback.
 The completed native group result remains authoritative within its admitted logical family, including losslessly encoded text whose exported physical storage changes.
 No target conversion performs groupby, distinct, temporal arithmetic, condition truth, quota or task policy in Python.
 Source-first consumers distinguish plain/filtered integer and Boolean storage, pre-selection float conversion, actual changed values, empty/null rows, exact positions, native failures and original dtype ownership.
