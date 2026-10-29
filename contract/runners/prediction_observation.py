@@ -52,13 +52,26 @@ def _ordered_json(value: bytes | str) -> Any:
 
 
 def _same_snapshot(left: Any, right: Any) -> bool:
+    return _compare_snapshot(left, right, ordered_objects=True)
+
+
+def _same_jsonl_snapshot(left: Any, right: Any) -> bool:
+    """Canonical JSONL can sort DTO object keys, but never its arrays."""
+    return _compare_snapshot(left, right, ordered_objects=False)
+
+
+def _compare_snapshot(left: Any, right: Any, *, ordered_objects: bool) -> bool:
     pending = [(left, right)]
     while pending:
         left, right = pending.pop()
         if type(left) is not type(right):
             return False
         if isinstance(left, dict):
-            if list(left) != list(right):
+            if (
+                list(left) != list(right)
+                if ordered_objects
+                else left.keys() != right.keys()
+            ):
                 return False
             pending.extend((left[key], right[key]) for key in left)
         elif isinstance(left, list):
@@ -193,7 +206,7 @@ def observed_call_body(call: dict[str, Any], encoded: dict[str, Any]) -> None:
     if endpoint is None:
         require(
             call['body_sha256'] == call['input_body_sha256']
-            and _same_snapshot(
+            and _same_jsonl_snapshot(
                 json.loads(
                     original,
                     parse_int=lambda token: {'number': token},
