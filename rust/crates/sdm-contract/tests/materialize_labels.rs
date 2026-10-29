@@ -5,6 +5,7 @@
 //! Closed materialization data products account for every actual owner.
 
 use sdm_contract::data::AttachmentId;
+use sdm_contract::frames::materialize::FramePreparation;
 use sdm_contract::materialize::MaterializePreparation;
 use sdm_contract::ops::{AttachmentKind, Materialize, Operation};
 use serde_json::{Value, json};
@@ -83,4 +84,48 @@ fn source_conversion_facts_are_closed_data_and_keep_full_original_decimal_metada
         extra["input"]["provider"] = json!("pretend-native");
         assert!(serde_json::from_value::<MaterializePreparation>(extra).is_err());
     }
+}
+
+#[test]
+fn actual_target_completion_declares_the_source_owner_values_and_full_presence_fact() {
+    let value = json!({"stage":"target_column","inputs":{
+        "population":"population-1","range":{"start":0,"stop":10000},"owner":21,
+        "target":{"source":{"source":["buys"]},"column":"item_id"},"form":"plain"
+    },"converted":{"rows":22,"presence":23,"encoding":null}});
+    let input: FramePreparation = serde_json::from_value(value.clone()).unwrap();
+    assert_eq!(
+        input.attachments(),
+        vec![
+            (AttachmentId(21), AttachmentKind::LabelInputs),
+            (AttachmentId(22), AttachmentKind::Arrow),
+            (AttachmentId(23), AttachmentKind::Arrow)
+        ]
+    );
+    for field in ["accepted", "next_action", "callback"] {
+        let mut malformed = value.clone();
+        malformed["inputs"][field] = json!(true);
+        assert!(serde_json::from_value::<FramePreparation>(malformed).is_err());
+    }
+}
+
+#[test]
+fn selected_target_completion_keeps_the_actual_predecessor_and_never_walks_row_counts_as_ids() {
+    let value = json!({"stage":"windowed_target","column":{
+        "input":{"population":"population-1","range":{"start":0,"stop":10000},"owner":21,
+            "target":{"source":{"source":["buys"]},"column":"item_id"},"form":"filtered"},
+        "owner":24,"derivation":"filtered","rows":137
+    },"converted":{"rows":25,"presence":26,"encoding":"utf8_surrogatepass"}});
+    let input: FramePreparation = serde_json::from_value(value.clone()).unwrap();
+    assert_eq!(
+        input.attachments(),
+        vec![
+            (AttachmentId(21), AttachmentKind::LabelInputs),
+            (AttachmentId(24), AttachmentKind::TargetColumn),
+            (AttachmentId(25), AttachmentKind::Arrow),
+            (AttachmentId(26), AttachmentKind::Arrow)
+        ]
+    );
+    let mut extra = value;
+    extra["column"]["origin"] = json!("native-library");
+    assert!(serde_json::from_value::<FramePreparation>(extra).is_err());
 }
