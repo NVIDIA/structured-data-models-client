@@ -107,12 +107,12 @@ def _journey(
         return native_snapshot()
 
     with monkeypatch.context() as patch:
+        # Isolate the task materialization seam. The independent direct
+        # constructor's exact-str conversion family is not selected here.
         patch.setenv(
             _routing.ENVIRONMENT,
             ','.join(
-                _routing.MATERIALIZE['frames']
-                + _routing.TABULAR_PREDICT_FRAME
-                + _routing.DIRECT_CONSUMERS
+                _routing.MATERIALIZE['frames'] + _routing.TABULAR_PREDICT_FRAME
             )
             if core
             else '',
@@ -189,6 +189,10 @@ def _journey(
                     else {'predict': pd.DataFrame({'entity_id': [11]})}
                 )
                 request = query.materialize(**arguments, task=stated)
+                if stated is not None:
+                    events.append(
+                        ('request-original-stated', request.task.kind is stated)
+                    )
                 # Constructor/predict distinct reads are separate from inference.
                 patch.setattr(pd.Series, 'dropna', native_dropna)
                 patch.setattr(pd.Series, 'unique', native_unique)
@@ -414,6 +418,7 @@ def test_stated_subclass_native_protocols_and_original_object_survive(
     assert 'dropna' not in current[2]
     if mode == 'accepted':
         assert ('original-stated', True) in current[2]
+        assert ('request-original-stated', True) in current[2]
     else:
         assert current[0][0] == 'error'
 
