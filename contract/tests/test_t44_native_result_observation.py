@@ -13,6 +13,8 @@ from test_t136_forecast_capture import RUNNER
 
 def presentation():
     return {
+        'outputs': ['prediction'],
+        'ranking': False,
         'rows': [
             {
                 'row_index': i,
@@ -21,7 +23,7 @@ def presentation():
                 'rankings': None,
             }
             for i in range(2)
-        ]
+        ],
     }
 
 
@@ -41,6 +43,8 @@ def test_actual_builtin_result_storage_is_observed_without_custom_hooks():
         ],
     )
     assert RUNNER.native_result_snapshot(result) == {
+        'outputs': [],
+        'ranking': False,
         'rows': [
             {
                 'row_index': 0,
@@ -50,7 +54,7 @@ def test_actual_builtin_result_storage_is_observed_without_custom_hooks():
                     {'candidate': {'i64': '9'}, 'score': '3fe0000000000000'}
                 ],
             }
-        ]
+        ],
     }
 
     class Custom:
@@ -87,7 +91,10 @@ def test_ranking_candidate_companion_uses_the_actual_requested_native_field(
         },
     )
     result = PredictionResult(
-        model='kumo-relational', request_id='actual', items=[item]
+        model='kumo-relational',
+        request_id='actual',
+        items=[item],
+        outputs=[field],
     )
     shown = RUNNER.native_result_snapshot(result, ranking=True)['rows'][0]
     if field == 'prediction':
@@ -99,6 +106,65 @@ def test_ranking_candidate_companion_uses_the_actual_requested_native_field(
             {'i64': '9'},
             {'i64': '8'},
         ]
+
+
+@pytest.mark.parametrize('missing', ['prediction', 'rankings'])
+def test_requested_native_ranking_field_cannot_disappear_behind_the_other(
+    missing,
+):
+    from sdm_api.generated.tfm_api import PredictionItem
+    from sdm_client.result import PredictionResult
+
+    result = PredictionResult(
+        model='kumo-relational',
+        request_id='actual',
+        outputs=['prediction', 'rankings'],
+        items=[
+            PredictionItem(
+                row_index=0,
+                id=7,
+                prediction=[9],
+                rankings=({'candidate': 9, 'score': 0.5},),
+            )
+        ],
+    )
+    shown = RUNNER.native_result_snapshot(result, ranking=True)
+    table = {
+        'columns': [
+            {'name': name, 'type': kind}
+            for name, kind in (
+                ('answer_index', 'int64'),
+                ('row_index', 'int64'),
+                ('id', 'int64'),
+                ('candidates', 'list'),
+                ('scores', 'list'),
+                ('rankings', 'list'),
+            )
+        ],
+        'rows': [
+            [
+                {'i64': '0'},
+                {'i64': '0'},
+                {'i64': '0'},
+                {'list': [{'i64': '0'}]},
+                {'list': [{'f64_bits': '3fe0000000000000'}]},
+                {'list': [{'utf8': 'null'}]},
+            ]
+        ],
+    }
+    reader()._presentation(
+        shown, table, ranking=True, outputs=['prediction', 'rankings']
+    )
+    if missing == 'prediction':
+        del shown['rows'][0]['prediction_candidates']
+    else:
+        shown['rows'][0]['rankings'] = None
+    with pytest.raises(
+        reader().ObservationError, match='requested native ranking'
+    ):
+        reader()._presentation(
+            shown, table, ranking=True, outputs=['prediction', 'rankings']
+        )
 
 
 def test_native_semantic_projection_keeps_the_raw_ordinal_result():
