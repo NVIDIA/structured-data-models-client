@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import weakref
+from dataclasses import replace
 
 import pandas as pd
 import pyarrow as pa
@@ -598,3 +599,67 @@ def test_what_if_cannot_read_any_native_operand_before_restored_groups():
 
     with pytest.raises(CodecError, match='precede restored'):
         complete_what_if(Product('label_groups', {}, {}), NoSources(), object())
+
+
+@pytest.mark.parametrize('form', ['plain', 'filtered'])
+@pytest.mark.parametrize('effect', ['in-place', 'replacement'])
+def test_window_time_values_come_from_the_captured_native_owner_after_conversion(
+    monkeypatch, form, effect
+):
+    inputs, source, preparation, _, events, _ = setup(
+        monkeypatch, 'provider', form=form
+    )
+    binding = {'source': TARGET['source'], 'column': 'ts'}
+    inputs.data['time'] = binding
+    captured = pd.Series(pd.date_range('2026-01-01', periods=4))
+    current = [captured]
+    actual_read = source.target_series
+
+    def time_series(actual):
+        assert actual == binding
+        events.append('capture-time')
+        return current[0]
+
+    def values(actual, rows):
+        original = actual_read(actual, rows)
+
+        class Editing(pd.Series):
+            @property
+            def _constructor(self):
+                return Editing
+
+            def reset_index(self, *args, **kwargs):
+                if effect == 'in-place':
+                    captured.iloc[:] = pd.Timestamp('2030-01-01')
+                else:
+                    current[0] = pd.Series([pd.Timestamp('2030-01-01')] * 4)
+                return super().reset_index(*args, **kwargs)
+
+        return Editing(original)
+
+    source.time_series = time_series
+    source.target_series = values
+    observed = []
+    target_column, filtered_target = (
+        preparation.target_column,
+        preparation.filtered_target,
+    )
+
+    def target(inputs, converted):
+        observed.append(converted.times)
+        return target_column(inputs, replace(converted, times=None))
+
+    def filtered(column, converted):
+        observed.append(converted.times)
+        return filtered_target(column, replace(converted, times=None))
+
+    preparation.target_column = target
+    preparation.filtered_target = filtered
+    complete_target(inputs, source, preparation)
+    assert events[:2] == ['input-rows', 'capture-time']
+    expected = captured.iloc[ROWS].tolist()
+    assert observed[-1].column(0).to_pylist() == expected
+    if form == 'filtered':
+        assert observed[0] is None
+    if effect == 'replacement':
+        assert expected != current[0].iloc[ROWS].tolist()

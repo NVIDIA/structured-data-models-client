@@ -53,3 +53,49 @@ def test_each_reached_condition_role_consumes_actual_native_values_and_failure(
     assert old[0]['outcome'] == 'error'
     assert old[0]['stage'] == 'materialize'
     assert current[0] == public._approved_old(old[0], 'ordinary')
+
+
+def _time_observed(monkeypatch, effect, core):
+    getitem, astype = pd.DataFrame.__getitem__, pd.Series.astype
+    captured = []
+    events = []
+
+    def column(self, key):
+        value = getitem(self, key)
+        if type(key) is str and key == 'ts':
+            captured.append((self, value))
+        return value
+
+    def convert(self, dtype, *args, **kwargs):
+        if self.name == 'amount' and dtype == 'float32':
+            frame, times = captured[-1]
+            earlier = times.iloc[0] - pd.Timedelta(days=1000)
+            events.append((len(self), len(times)))
+            if effect == 'in-place':
+                times.iloc[:] = earlier
+            else:
+                frame['ts'] = earlier
+        return astype(self, dtype, *args, **kwargs)
+
+    with monkeypatch.context() as selected:
+        selected.setattr(pd.DataFrame, '__getitem__', column)
+        selected.setattr(pd.Series, 'astype', convert)
+        result = public._observe(selected, 'ordinary', core)
+    return result, events
+
+
+@pytest.mark.parametrize('effect', ['in-place', 'replacement'])
+def test_actual_captured_time_owner_remains_authoritative_until_window_selection(
+    monkeypatch, effect
+):
+    query = (
+        'PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) '
+        'FOR EACH users.user_id ASSUMING SUM(buys.amount, 0, 30, days) > 0'
+    )
+    setup = ['ALTER TABLE buys ADD COLUMN amount DOUBLE DEFAULT 1']
+    monkeypatch.setattr(public, '_input', lambda case: (setup, query))
+    old = _time_observed(monkeypatch, effect, False)
+    current = _time_observed(monkeypatch, effect, True)
+    assert old[1]
+    assert current[1] == old[1]
+    assert current[0] == public._approved_old(old[0], 'ordinary')
