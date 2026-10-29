@@ -11,12 +11,12 @@ import sys
 from functools import cache
 from pathlib import Path
 
-import pytest
 import pandas as pd
+import pytest
 import test_t45_native_sql_labels as public
+from sdm_connectors import DuckDBSource
 
 from sdm_client import PredictiveQuery, Schema
-from sdm_connectors import DuckDBSource
 
 
 @cache

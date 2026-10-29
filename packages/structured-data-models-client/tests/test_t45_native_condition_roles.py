@@ -127,7 +127,22 @@ def test_native_timestamp_condition_family_matches_its_complete_original_journey
     monkeypatch.setattr(public, '_input', lambda case: (setup, query))
     original = public._observe(monkeypatch, 'ordinary', False)
     current = public._observe(monkeypatch, 'ordinary', True)
-    assert (
-        original['outcome'] == 'success' or original['stage'] == 'materialize'
-    )
+    if original['outcome'] == 'error':
+        assert original['stage'] == 'materialize'
+        assert (
+            original['error']['type'] == 'sdm_client.errors.StructuredDataError'
+        )
+        assert original['error']['code'] == 'INTERNAL_ERROR'
+        assert (
+            original['error']['cause']['type']
+            == 'pyarrow.lib.ArrowNotImplementedError'
+        )
+        assert (
+            original['error']['cause']['text']
+            == 'Unsupported cast from list<item: int64> to int64 using function cast_int64'
+        )
+    else:
+        assert original['request']['task']['kind'] == 'temporal_link_prediction'
+        assert original['request']['predict_rows'] == 2
+        assert original['request']['context_rows'] > 0
     assert current == public._approved_old(original, 'ordinary')
