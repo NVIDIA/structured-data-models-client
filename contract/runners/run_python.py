@@ -56,7 +56,12 @@ one. A runner failure is anything else: the guard failing, a missing
 ``sdm_client._native`` or a refused forced route (``RouteError``), an error
 in the runner itself, an observation that does not validate, or the process
 dying. It exits non-zero and leaves no output file, an earlier run's
-included; observations are written only when every case was recorded. No message text is recorded (decision H17).
+included; observations are written only when every case was recorded.
+Exported error summaries retain only kind/code, never exception messages
+(decision H17). Explicitly requested private raw preparation/replay operands
+can contain the unchanged driver diagnostics supplied to the core.
+Those operand bytes and hashes are retained as observed; they are distinct
+from public exception text and the exported error summary.
 
 This file also holds the case loader and the Phase 1b inventory loader,
 which maps each inventory case into the case format and back without loss.
@@ -909,7 +914,11 @@ class _Guard:
 
 
 def _materialization_bytes(attachment: int, value: bytes) -> dict[str, Any]:
-    """Actual JSON bytes at this attachment boundary, with no opaque reads."""
+    """Actual private JSON operands, including any supplied driver diagnostic.
+
+    This reads no opaque owner and does not export exception messages;
+    CoreError summaries remain the existing kind/code pair.
+    """
     return {
         'attachment': attachment,
         'base64': base64.b64encode(value).decode('ascii'),
