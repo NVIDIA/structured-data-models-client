@@ -797,7 +797,7 @@ const OTHER: [(&str, &str); 67] = [
         "Arrow complete raw lookup helper rows before native business-column sanitation",
     ),
     (
-        "PreparedMaterializeValue/lookup_rows.positions",
+        "PreparedMaterializeValue.positions",
         "Arrow actual validated lookup seed positions",
     ),
     (
