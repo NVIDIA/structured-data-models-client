@@ -85,7 +85,7 @@ fn actual_decimal_scale_and_declaration_select_one_native_cast_without_narrowing
             for dtype in [Dtype::Byte, Dtype::Int16, Dtype::Int32, Dtype::Int64] {
                 assert_eq!(
                     scalar_meaning(Some(dtype), &input).unwrap(),
-                    Meaning::Decimal {
+                    Meaning::ExactDecimal {
                         physical: ColumnType::Int64
                     }
                 );
@@ -93,7 +93,7 @@ fn actual_decimal_scale_and_declaration_select_one_native_cast_without_narrowing
             for dtype in [Dtype::Float32, Dtype::Float64] {
                 assert_eq!(
                     scalar_meaning(Some(dtype), &input).unwrap(),
-                    Meaning::Decimal {
+                    Meaning::ExactDecimal {
                         physical: ColumnType::Float64
                     }
                 );
@@ -106,7 +106,7 @@ fn actual_decimal_scale_and_declaration_select_one_native_cast_without_narrowing
             );
             assert_eq!(
                 scalar_meaning(None, &input).unwrap(),
-                Meaning::Decimal {
+                Meaning::ExactDecimal {
                     physical: if scale == 0 {
                         ColumnType::Int64
                     } else {

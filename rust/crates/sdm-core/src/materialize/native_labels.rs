@@ -282,3 +282,52 @@ pub(super) fn read_link_labels(
         .collect::<Result<Vec<_>, CoreError>>()?;
     Ok(labels::Labels::Lists(lists))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn native_decimal_restoration_preserves_exact_mathematical_lists_and_full_identity() {
+        let labels = labels::Labels::Lists(vec![
+            vec![labels::LinkValue::Decimal(9_007_199_254_740_993, 3)],
+            vec![],
+        ]);
+        let before = task::LabelledContext {
+            keys: Arc::new(arrow_array::Int64Array::from(vec![1, 2])),
+            anchors: vec![0, 0],
+            labels: labels.clone(),
+        };
+        let expected = group_rows(&before, Some(&DataType::Decimal128(38, 3))).unwrap();
+        let native = task::LabelledContext {
+            keys: Arc::clone(&before.keys),
+            anchors: before.anchors.clone(),
+            labels: labels::Labels::Lists(vec![vec![labels::LinkValue::Float(1.0)], vec![]]),
+        };
+        let actual = labelled_rows(&native.keys, &native.anchors, &native.labels).unwrap();
+        assert_eq!(
+            restored(&before, &expected, &actual, None, None).unwrap(),
+            labels
+        );
+        let short = actual.slice(0, 1);
+        assert!(restored(&before, &expected, &short, None, None).is_err());
+        let text = task::LabelledContext {
+            labels: labels::Labels::Lists(vec![
+                vec![labels::LinkValue::Text("wrong".into())],
+                vec![],
+            ]),
+            ..native
+        };
+        let text_rows = labelled_rows(&text.keys, &text.anchors, &text.labels).unwrap();
+        assert!(
+            restored(
+                &before,
+                &expected,
+                &text_rows,
+                None,
+                Some(StringEncoding::Utf8)
+            )
+            .is_err()
+        );
+    }
+}

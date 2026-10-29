@@ -668,3 +668,56 @@ def test_public_request_reuses_actual_early_lookup_and_late_shared_helper_reader
         '__kumo_matches__' in helpers.column_names for helpers, _ in early
     )
     assert all(answer.column_names == ['position'] for _, answer in early)
+
+
+@pytest.mark.parametrize('width', [128, 256])
+@pytest.mark.parametrize('fallback', [False, True])
+def test_exact_decimal_reply_and_actual_native_frame_are_independent(
+    monkeypatch, width, fallback
+):
+    dtype = (pa.decimal128 if width == 128 else pa.decimal256)(38, 3)
+    values = [
+        Decimal('9007199254740992.001'),
+        None,
+        Decimal('9007199254740992.002'),
+    ]
+    raw = pa.table(
+        {'value': pa.array(values, type=dtype), '__kumo_batch__': [0, 1, 2]}
+    )
+    events = []
+    actual = completion.scalar_column
+
+    def observed(series, meaning):
+        events.append(meaning['meaning'])
+        if fallback and meaning['meaning'] == 'exact_decimal':
+            raise ValueError('actual reached cast failure')
+        return actual(series, meaning)
+
+    monkeypatch.setattr(completion, 'scalar_column', observed)
+    service = Service(
+        recipes={
+            'value': {
+                'meaning': 'exact_decimal',
+                'physical': {'type': 'float64'},
+            }
+        }
+    )
+    adapter = completion.SourceCompletion(
+        Provider({7: raw}, []), _source(), service
+    )
+    steps = _steps(lookup=False)
+    answer = adapter(steps, _keys(steps, object()))
+    assert isinstance(answer, dict)
+    assert answer[7]['value'].type == dtype
+    assert answer[7]['value'].to_pylist() == values
+    native = adapter.tables[7].frame['value']
+    assert native.dtype == pd.ArrowDtype(dtype if fallback else pa.float64())
+    if not fallback:
+        assert native.iloc[0] == native.iloc[2]
+    assert events == (
+        ['exact_decimal', 'original'] if fallback else ['exact_decimal']
+    )
+    assert [call[0] for call in service.calls] == (
+        ['column', 'fallback'] if fallback else ['column']
+    )
+    assert adapter.native_error is None
