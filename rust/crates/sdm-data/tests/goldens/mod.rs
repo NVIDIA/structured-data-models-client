@@ -129,6 +129,52 @@ fn on(database: &str, case: &str) -> bool {
     }
 }
 
+/// Only the typed seed handle is local to a Run; its schema and every
+/// business/request field remain exact. SQL is checked by both renderings,
+/// never by rewriting text or stripping generated-looking identifiers.
+fn seeded_request(mut request: DataRequest) -> DataRequest {
+    match &mut request {
+        DataRequest::Lookup { seeds, .. } | DataRequest::Neighbors { seeds, .. } => {
+            seeds.attachment = sdm_contract::data::AttachmentId(0);
+        }
+        _ => {}
+    }
+    request
+}
+
+fn rendered(database: &str, request: &DataRequest) -> Option<Vec<String>> {
+    let choice = ProviderChoice::Sql {
+        timestamp_encoding: None,
+        dialect: Dialect::new(database),
+        namespace: settled(database, request),
+        view: None,
+    };
+    match Data::new().plan(request, &choice).ok()? {
+        FetchPlan::Sql { statements, .. } => {
+            Some(statements.into_iter().map(|statement| statement.text).collect())
+        }
+        _ => None,
+    }
+}
+
+fn same_issued_read(
+    database: &str, request: &Value, texts: &[String],
+    golden: &Value, pinned: &[String],
+) -> bool {
+    if request == golden && texts == pinned {
+        return true;
+    }
+    let (Ok(request), Ok(golden)) = (
+        serde_json::from_value::<DataRequest>(request.clone()),
+        serde_json::from_value::<DataRequest>(golden.clone()),
+    ) else {
+        return false;
+    };
+    seeded_request(request.clone()) == seeded_request(golden.clone())
+        && rendered(database, &request).as_deref() == Some(texts)
+        && rendered(database, &golden).as_deref() == Some(pinned)
+}
+
 /// The fetches of `observations` (one JSON object per line) on `database`
 /// that no golden holds with their statements, each ready to paste; an
 /// error where the run is unreadable or holds no fetch on the database.
@@ -174,7 +220,7 @@ fn unpinned(database: &str, observations: &str, goldens: &Owned) -> Result<Vec<S
                 }
                 texts.push(statement["text"].as_str().unwrap_or_default().to_owned());
             }
-            if !pinned.iter().any(|(r, s)| r == request && **s == texts) {
+            if !pinned.iter().any(|(r, s)| same_issued_read(database, request, &texts, r, s)) {
                 let entry = literal(&request.to_string(), &texts);
                 if !problems.contains(&entry) {
                     problems.push(entry);
