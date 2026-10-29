@@ -256,6 +256,47 @@ def prepare_comparison(
     )
 
 
+def load_name_maps(
+    paths: list[Path],
+    database: str,
+) -> dict[str, dict[str, str]]:
+    """Closed names-only maps, each identifying its own actual input bytes."""
+    if not paths or any(not isinstance(path, Path) for path in paths):
+        raise PublicationError('private source maps are unreadable')
+    sources = {}
+    try:
+        for path in paths:
+            value = json.loads(path.read_text())
+            if type(value) is not dict or set(value) != {
+                'format',
+                'database',
+                'names',
+                'source_sha256',
+            }:
+                raise PublicationError(
+                    'private name map has no closed identity'
+                )
+            if value['format'] != MAP_FORMAT or value['database'] != database:
+                raise PublicationError(
+                    'private name map belongs to another warehouse'
+                )
+            digest = value['source_sha256']
+            if (
+                type(digest) is not str
+                or re.fullmatch(r'[0-9a-f]{64}', digest) is None
+                or digest in sources
+            ):
+                raise PublicationError(
+                    'private source maps repeat or lack a source identity'
+                )
+            sources[digest] = _names(database, value['names'])
+    except PublicationError:
+        raise
+    except (OSError, ValueError, TypeError, KeyError, RecursionError):
+        raise PublicationError('private name map is unreadable') from None
+    return sources
+
+
 def load_name_map(
     path: Path,
     database: str,
@@ -263,34 +304,17 @@ def load_name_map(
     *,
     source_bytes: bytes | None = None,
 ) -> dict[str, str]:
-    """An explicit private names-only map bound to the actual input file bytes."""
+    """One explicit map bound to the actual input file bytes."""
+    sources = load_name_maps([path], database)
     try:
-        value = json.loads(path.read_text())
-        if type(value) is not dict or set(value) != {
-            'format',
-            'database',
-            'names',
-            'source_sha256',
-        }:
-            raise PublicationError('private name map has no closed identity')
-        if value['format'] != MAP_FORMAT or value['database'] != database:
-            raise PublicationError(
-                'private name map belongs to another warehouse'
-            )
-        if (
-            value['source_sha256']
-            != hashlib.sha256(
-                source.read_bytes() if source_bytes is None else source_bytes
-            ).hexdigest()
-        ):
-            raise PublicationError(
-                'private name map names different source bytes'
-            )
-        return _names(database, value['names'])
-    except PublicationError:
-        raise
-    except (OSError, ValueError, TypeError, KeyError, RecursionError):
-        raise PublicationError('private name map is unreadable') from None
+        digest = hashlib.sha256(
+            source.read_bytes() if source_bytes is None else source_bytes
+        ).hexdigest()
+    except OSError:
+        raise PublicationError('private source file is unreadable') from None
+    if digest not in sources:
+        raise PublicationError('private name map names different source bytes')
+    return sources[digest]
 
 
 def public_derivative(

@@ -217,6 +217,7 @@ from __future__ import annotations
 import argparse
 import copy
 import functools
+import hashlib
 import importlib.util
 import json
 import re
@@ -543,7 +544,8 @@ def _observations(
     runner: ModuleType,
     report: Report,
     *,
-    private_name_map: Path | None = None,
+    private_names: dict[str, dict[str, str]] | None = None,
+    private_used: set[str] | None = None,
     database: str = 'duckdb',
 ) -> tuple[str | None, dict[str, dict[str, Any]]]:
     r"""One runner's observations by case, each validated."""
@@ -555,14 +557,14 @@ def _observations(
         return None, by_case
     source_bytes = path.read_bytes()
     names = None
-    if private_name_map is not None:
-        try:
-            names = _publication().load_name_map(
-                private_name_map, database, path, source_bytes=source_bytes
-            )
-        except _publication().PublicationError:
-            report.fail(f'{path.name}: invalid private source mapping')
+    if private_names is not None:
+        source_sha = hashlib.sha256(source_bytes).hexdigest()
+        names = private_names.get(source_sha)
+        if names is None:
+            report.fail(f'{path.name}: no matching private source mapping')
             return None, by_case
+        if private_used is not None:
+            private_used.add(source_sha)
     for number, line in enumerate(source_bytes.decode('utf-8').splitlines(), 1):
         try:
             observation = json.loads(line)
@@ -586,7 +588,7 @@ def _observations(
         if problem is not None:
             report.fail(
                 f'{path.name}:{number}: runner failure: not a valid '
-                f'observation: {problem}'
+                f'observation: {problem if names is None else "invalid private raw shape"}'
             )
             continue
         if names is not None:
@@ -3678,7 +3680,7 @@ def compare(
     register_file: Path = REGISTER,
     improvements: Path | None = None,
     database: str = 'duckdb',
-    private_name_map: Path | None = None,
+    private_name_map: Path | list[Path] | None = None,
 ) -> Report:
     r"""The comparison of ``files``' observations on ``database``, a
     database or a warehouse leg. A warehouse leg is judged as any database
@@ -3735,12 +3737,26 @@ def compare(
         if who != 'python-ref':
             report.fail(f'{reference_file.name}: not python-ref observations')
     observed: dict[str, dict[str, dict[str, Any]]] = {}
+    private_names = None
+    private_used: set[str] = set()
+    if private_name_map is not None:
+        try:
+            private_names = _publication().load_name_maps(
+                [private_name_map]
+                if isinstance(private_name_map, Path)
+                else private_name_map,
+                database,
+            )
+        except _publication().PublicationError:
+            report.fail('invalid private source mappings')
+            return report
     for path in files:
         who, by_case = _observations(
             path,
             runner,
             report,
-            private_name_map=private_name_map,
+            private_names=private_names,
+            private_used=private_used,
             database=database,
         )
         if who is None:
@@ -3749,6 +3765,8 @@ def compare(
         if who in observed:
             report.fail(f'{path.name}: a second file of {who}')
         observed[who] = by_case
+    if private_names is not None and set(private_names) != private_used:
+        report.fail('private source maps do not match all observed input files')
     # A line's key is its case, or its case and database (``<case>@sqlite``,
     # ``<case>@postgres``; the schema holds its form): the part before ``@``
     # must be a case. A line of another database than this run's is read,
@@ -4055,7 +4073,7 @@ def main(argv: list[str] | None = None) -> int:
         "more_exact fields (default: this tree's)",
     )
     parser.add_argument('--database', default='duckdb')
-    parser.add_argument('--private-name-map', type=Path)
+    parser.add_argument('--private-name-map', type=Path, action='append')
     parser.add_argument('observations', type=Path, nargs='*')
     arguments = parser.parse_args(argv)
     if not arguments.observations and arguments.reference is None:
