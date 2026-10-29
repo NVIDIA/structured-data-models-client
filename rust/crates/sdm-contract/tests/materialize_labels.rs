@@ -33,6 +33,31 @@ fn task_input_reuses_the_real_materialize_attachment_contract() {
 }
 
 #[test]
+fn native_window_time_values_are_typed_arrow_not_an_opaque_or_policy_flag() {
+    let input: MaterializePreparation = serde_json::from_value(json!({
+        "stage":"target_column",
+        "inputs":{"population":"population-1","range":{"start":0,"stop":3},
+            "owner":10,"target":{"source":{"source":["buys"]},"column":"item_id"},
+            "time":{"source":{"source":["buys"]},"column":"ts"},
+            "form":"plain","condition_columns":[]},
+        "converted":{"rows":11,"presence":12,"encoding":null,"times":13}
+    }))
+    .unwrap();
+    assert_eq!(
+        input.attachments(),
+        vec![
+            (AttachmentId(10), AttachmentKind::LabelInputs),
+            (AttachmentId(11), AttachmentKind::Arrow),
+            (AttachmentId(12), AttachmentKind::Arrow),
+            (AttachmentId(13), AttachmentKind::Arrow),
+        ]
+    );
+    let mut malformed = serde_json::to_value(input).unwrap();
+    malformed["converted"]["times"] = json!(true);
+    assert!(serde_json::from_value::<MaterializePreparation>(malformed).is_err());
+}
+
+#[test]
 fn actual_groups_completion_names_typed_population_groups_and_arrow_rows() {
     let value = json!({"stage":"complete_label_batch","population":population(),
         "groups":{"population":"population-1","range":{"start":0,"stop":10000},"owner":12,"native_target":{"source":{"source":["buys"]},"column":"item_id"},"target_encoding":null},
