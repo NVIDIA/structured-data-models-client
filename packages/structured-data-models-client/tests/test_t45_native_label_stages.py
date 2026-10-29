@@ -185,6 +185,43 @@ class Preparation:
         raise_native(failure.error)
 
 
+def test_condition_input_keeps_all_native_values_without_a_filter_or_window_handover():
+    events = []
+    owner = InputOwner(events)
+    inputs = Product(
+        'label_inputs',
+        {
+            'population': 'population',
+            'range': {'start': 0, 'stop': 4},
+            'owner': 1,
+            'target': TARGET,
+            'form': 'condition',
+            'condition_columns': [],
+        },
+        {1: owner},
+    )
+    preparation = Preparation(inputs, events)
+    completed, native = complete_target(inputs, Source(events), preparation)
+    assert native.values.dtype == pd.Int64Dtype()
+    assert native.positions.tolist() == [0, 1, 2, 3]
+    assert native.values.tolist() == [20, pd.NA, 2**53 + 1, 10]
+    assert events == ['input-rows', ('read', 'target', 0), ('core', 'target')]
+    assert preparation.converted == [
+        (
+            'target',
+            {
+                'rows': {
+                    'position': [0, 1, 2, 3],
+                    'target': [20, None, 2**53 + 1, 10],
+                },
+                'presence': [True, False, True, True],
+                'encoding': None,
+            },
+        )
+    ]
+    assert completed.owners
+
+
 def frame_port(monkeypatch, preparation):
     """Exercise the real frame methods, bindings, prepare cleanup and adoption."""
 
