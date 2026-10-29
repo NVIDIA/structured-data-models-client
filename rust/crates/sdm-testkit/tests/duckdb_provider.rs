@@ -752,6 +752,8 @@ fn two_key_sets_bound_to_one_name_are_refused() {
         },
         continuation: None,
         purpose: None,
+        partition: None,
+        lookup: None,
     };
     let keys = |values: &[&str]| {
         let batch = seeds_of(&serde_json::json!({"type": "int64"}), values);

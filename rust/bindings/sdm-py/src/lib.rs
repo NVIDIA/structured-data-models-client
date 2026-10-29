@@ -244,6 +244,45 @@ struct FrameLabelGroups {
     owner: sdm_host::RetainedFrameLabelGroups,
 }
 
+#[pyclass(frozen, module = "sdm_client._native")]
+struct LabelInputs {
+    owner: sdm_host::RetainedLabelInputs,
+}
+
+#[pymethods]
+impl LabelInputs {
+    fn rows(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let rows = self
+            .owner
+            .rows()
+            .map_err(|error| PyValueError::new_err(error.message))?;
+        to_python(py, Attachment::Arrow(rows), true)
+    }
+}
+
+#[pyclass(frozen, module = "sdm_client._native")]
+struct TargetColumn {
+    owner: sdm_host::RetainedTargetColumn,
+}
+
+#[pymethods]
+impl TargetColumn {
+    fn rows(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let rows = self
+            .owner
+            .rows()
+            .map_err(|error| PyValueError::new_err(error.message))?;
+        to_python(py, Attachment::Arrow(rows), true)
+    }
+    fn selection(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let rows = self
+            .owner
+            .selection()
+            .map_err(|error| PyValueError::new_err(error.message))?;
+        to_python(py, Attachment::Arrow(rows), true)
+    }
+}
+
 #[pymethods]
 impl FrameLabelGroups {
     fn rows(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
@@ -253,6 +292,42 @@ impl FrameLabelGroups {
             .map_err(|error| PyValueError::new_err(error.message))?;
         to_python(py, Attachment::Arrow(rows), true)
     }
+}
+
+#[pyclass(frozen, module = "sdm_client._native")]
+struct LookupRows {
+    owner: sdm_host::RetainedLookupRows,
+}
+
+#[pyclass(frozen, module = "sdm_client._native")]
+struct MaterializeSource {
+    owner: sdm_host::RetainedMaterializeSource,
+}
+
+#[pyclass(frozen, module = "sdm_client._native")]
+struct MaterializePopulation {
+    owner: sdm_host::RetainedMaterializePopulation,
+}
+
+#[pyclass(frozen, module = "sdm_client._native")]
+struct MaterializeGroups {
+    owner: sdm_host::RetainedMaterializeGroups,
+}
+
+#[pymethods]
+impl MaterializeGroups {
+    fn rows(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let rows = self
+            .owner
+            .rows()
+            .map_err(|error| PyValueError::new_err(error.message))?;
+        to_python(py, Attachment::Arrow(rows), true)
+    }
+}
+
+#[pyclass(frozen, module = "sdm_client._native")]
+struct MaterializeBatch {
+    owner: sdm_host::RetainedMaterializeBatch,
 }
 
 #[pyclass(frozen, module = "sdm_client._native")]
@@ -379,6 +454,19 @@ fn to_python(py: Python<'_>, attachment: Attachment, retained: bool) -> PyResult
         .into_any(),
         Attachment::FrameGraph(owner) => Py::new(py, FrameGraph { owner })?.into_any(),
         Attachment::FrameLabelGroups(owner) => Py::new(py, FrameLabelGroups { owner })?.into_any(),
+        Attachment::LabelInputs(owner) => Py::new(py, LabelInputs { owner })?.into_any(),
+        Attachment::TargetColumn(owner) => Py::new(py, TargetColumn { owner })?.into_any(),
+        Attachment::LookupRows(owner) => Py::new(py, LookupRows { owner })?.into_any(),
+        Attachment::MaterializeSource(owner) => {
+            Py::new(py, MaterializeSource { owner })?.into_any()
+        }
+        Attachment::MaterializePopulation(owner) => {
+            Py::new(py, MaterializePopulation { owner })?.into_any()
+        }
+        Attachment::MaterializeGroups(owner) => {
+            Py::new(py, MaterializeGroups { owner })?.into_any()
+        }
+        Attachment::MaterializeBatch(owner) => Py::new(py, MaterializeBatch { owner })?.into_any(),
         Attachment::FrameLabelBatch(owner) => Py::new(py, FrameLabelBatch { owner })?.into_any(),
         Attachment::FramePopulation(owner) => Py::new(py, FramePopulation { owner })?.into_any(),
         Attachment::FrameQuestion(owner) => Py::new(py, FrameQuestion { owner })?.into_any(),
@@ -646,6 +734,40 @@ fn attachments_from_python(
             Attachment::Bytes(bytes.as_bytes().to_vec())
         } else if value.is_exact_instance_of::<FrameGraph>() {
             Attachment::FrameGraph(value.extract::<PyRef<'_, FrameGraph>>()?.owner.clone())
+        } else if value.is_exact_instance_of::<LabelInputs>() {
+            Attachment::LabelInputs(value.extract::<PyRef<'_, LabelInputs>>()?.owner.clone())
+        } else if value.is_exact_instance_of::<LookupRows>() {
+            Attachment::LookupRows(value.extract::<PyRef<'_, LookupRows>>()?.owner.clone())
+        } else if value.is_exact_instance_of::<MaterializeSource>() {
+            Attachment::MaterializeSource(
+                value
+                    .extract::<PyRef<'_, MaterializeSource>>()?
+                    .owner
+                    .clone(),
+            )
+        } else if value.is_exact_instance_of::<MaterializePopulation>() {
+            Attachment::MaterializePopulation(
+                value
+                    .extract::<PyRef<'_, MaterializePopulation>>()?
+                    .owner
+                    .clone(),
+            )
+        } else if value.is_exact_instance_of::<MaterializeGroups>() {
+            Attachment::MaterializeGroups(
+                value
+                    .extract::<PyRef<'_, MaterializeGroups>>()?
+                    .owner
+                    .clone(),
+            )
+        } else if value.is_exact_instance_of::<MaterializeBatch>() {
+            Attachment::MaterializeBatch(
+                value
+                    .extract::<PyRef<'_, MaterializeBatch>>()?
+                    .owner
+                    .clone(),
+            )
+        } else if value.is_exact_instance_of::<TargetColumn>() {
+            Attachment::TargetColumn(value.extract::<PyRef<'_, TargetColumn>>()?.owner.clone())
         } else if value.is_exact_instance_of::<FrameLabelGroups>() {
             Attachment::FrameLabelGroups(
                 value
@@ -877,6 +999,13 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<FrameQuestion>()?;
     module.add_class::<FramePopulation>()?;
     module.add_class::<FrameLabelGroups>()?;
+    module.add_class::<LabelInputs>()?;
+    module.add_class::<TargetColumn>()?;
+    module.add_class::<LookupRows>()?;
+    module.add_class::<MaterializeSource>()?;
+    module.add_class::<MaterializePopulation>()?;
+    module.add_class::<MaterializeGroups>()?;
+    module.add_class::<MaterializeBatch>()?;
     module.add_class::<FrameLabelBatch>()?;
     module.add_class::<FrameTask>()?;
     module.add_class::<FrameReferences>()?;

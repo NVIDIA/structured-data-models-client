@@ -16,7 +16,12 @@ from typing import Any
 
 from sdm_client._rust import results
 from sdm_client._rust.codec import CodecError
-from sdm_client._rust.native_products import Bindings, Product
+from sdm_client._rust.native_products import (
+    Bindings,
+    Product,
+    bound_groups,
+    bound_label_input,
+)
 from sdm_client._rust.run import Finished
 
 _FIELDS = {
@@ -98,7 +103,13 @@ def _ids(kind: str, data: dict[str, Any]) -> list[int]:
     if fields is None:
         raise CodecError('unknown retained native SQL value')
     value = _object(
-        data, fields, ('source_read',) if kind == 'label_inputs' else ()
+        data,
+        fields,
+        ('source_read', 'source_role', 'eligibility')
+        if kind == 'label_inputs'
+        else ('restored', 'what_if')
+        if kind == 'label_groups'
+        else (),
     )
     if kind in ('source', 'population'):
         _object(value['target'], ('source', 'column'))
@@ -129,7 +140,32 @@ def _ids(kind: str, data: dict[str, Any]) -> list[int]:
         for column in columns:
             _object(column, ('source', 'column'))
     if kind in _OWNED:
-        return [_attachment(value['owner'])]
+        ids = [_attachment(value['owner'])]
+        history = (
+            value.get('eligibility')
+            if kind == 'label_inputs'
+            else value.get('what_if')
+            if kind == 'label_groups'
+            else None
+        )
+        if history is not None:
+            history = _object(history, ('columns', 'values'))
+            if not isinstance(history['columns'], list) or not isinstance(
+                history['values'], list
+            ):
+                raise CodecError(
+                    'native condition history has no ordered columns and values'
+                )
+            for column in history['columns']:
+                ids.extend(_ids('label_inputs', column))
+            for completed in history['values']:
+                completed = _object(completed, ('column', 'owner'))
+                _object(completed['column'], ('source', 'column'))
+                ids.append(_attachment(completed['owner']))
+        if kind == 'label_groups' and value.get('restored') is not None:
+            restored = _object(value['restored'], ('rows', 'encoding'))
+            ids.append(_attachment(restored['rows']))
+        return ids
     if kind == 'column_meaning':
         return []
     if kind == 'lookup_rows':
@@ -151,6 +187,26 @@ def _ids(kind: str, data: dict[str, Any]) -> list[int]:
         if converted['presence'] is not None:
             ids.append(_attachment(converted['presence']))
     return ids
+
+
+def owner_ids(kind: str, data: dict[str, Any]) -> list[int]:
+    """Only typed opaque resources, never Arrow, ordinals or ordinary numbers."""
+    _ids(kind, data)
+    if kind == 'target_column':
+        return owner_ids('label_inputs', data['input']) + [data['owner']]
+    if kind not in _OWNED:
+        return []
+    out = [data['owner']]
+    history = (
+        data.get('eligibility')
+        if kind == 'label_inputs'
+        else data.get('what_if')
+    )
+    if history is not None:
+        for column in history['columns']:
+            out.extend(owner_ids('label_inputs', column))
+        out.extend(column['owner'] for column in history['values'])
+    return out
 
 
 def _read(
@@ -218,6 +274,10 @@ def bind(product: Product, bindings: Bindings) -> dict[str, Any]:
         )
     bound = {key: bindings.add(product.owners[key]) for key in ids}
     data = product.data
+    if product.kind == 'label_inputs':
+        return bound_label_input(data, bound)
+    if product.kind == 'label_groups':
+        return bound_groups(data, bound)
     if product.kind in _OWNED:
         return {**data, 'owner': bound[data['owner']]}
     if product.kind == 'column_meaning':
@@ -226,7 +286,7 @@ def bind(product: Product, bindings: Bindings) -> dict[str, Any]:
         return {**data, 'positions': bound[data['positions']]}
     return {
         **data,
-        'input': {**data['input'], 'owner': bound[data['input']['owner']]},
+        'input': bound_label_input(data['input'], bound),
         'owner': bound[data['owner']],
         'condition_values': [
             {

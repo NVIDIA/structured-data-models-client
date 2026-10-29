@@ -487,7 +487,13 @@ fn unaccounted(schema: &Value) -> Result<(), String> {
         }
         known.push(field);
     }
-    if listed.len() != JSON.len() {
+    // A typed payload can be named by both an operation's inline fields and
+    // the same struct retained inside another closed preparation product.
+    let locked = JSON
+        .iter()
+        .map(|(_, payload)| payload)
+        .collect::<std::collections::BTreeSet<_>>();
+    if listed.len() != locked.len() {
         return Err("the lock lists an attachment no field names".into());
     }
     for field in &found {
@@ -507,7 +513,23 @@ fn unaccounted(schema: &Value) -> Result<(), String> {
 
 /// The fields whose attachment is JSON of the contract's, with the entry of
 /// `$defs/Attachments` that locks it.
-const JSON: [(&str, &str); 65] = [
+const JSON: [(&str, &str); 72] = [
+    (
+        "Operation/prepare_materialize.input",
+        "PrepareMaterialize.input",
+    ),
+    (
+        "OperationResult/prepare_materialize.value",
+        "PreparedMaterialize.value",
+    ),
+    (
+        "MaterializePreparation/request.values",
+        "MaterializePreparation/request.values",
+    ),
+    ("Materialize.schema", "Materialize.schema"),
+    ("Materialize.query", "Materialize.query"),
+    ("Materialize.values", "Materialize.values"),
+    ("Materialize.candidates", "Materialize.candidates"),
     ("FrameManifest.inference", "FrameManifest.inference"),
     (
         "OperationResult/inferred_frames.value",
@@ -661,7 +683,11 @@ const JSON: [(&str, &str); 65] = [
 ];
 
 /// The other fields naming an attachment, and why the lock needs no entry.
-const OTHER: [(&str, &str); 52] = [
+const OTHER: [(&str, &str); 64] = [
+    (
+        "Materialize.indices",
+        "Arrow actual task indices, shared with Operation/materialize.indices",
+    ),
     (
         "PreparedFrameQuestions.question",
         "Core-created immutable FrameQuestion resource",
@@ -759,12 +785,56 @@ const OTHER: [(&str, &str); 52] = [
         "Core-created immutable FramePopulation resource",
     ),
     (
+        "PreparedLookupRows.owner",
+        "Core-created immutable counted task lookup and actual issued read resource",
+    ),
+    (
+        "MaterializePreparation/lookup_rows.helpers",
+        "Arrow complete raw lookup helper rows before native business-column sanitation",
+    ),
+    (
+        "PreparedMaterializeValue/lookup_rows.positions",
+        "Arrow actual validated lookup seed positions",
+    ),
+    (
+        "PreparedMaterializeSource.owner",
+        "Core-created immutable captured source/query resource",
+    ),
+    (
+        "PreparedMaterializePopulation.owner",
+        "Core-created immutable actual sampled population resource",
+    ),
+    (
+        "PreparedMaterializeBatch.owner",
+        "Core-created immutable completed label-batch resource",
+    ),
+    (
         "PreparedFrameLabelGroups.owner",
-        "Core-created immutable pre-mask FrameLabelGroups resource",
+        "Core-created immutable evaluated-label resource, with its kind fixed by the closed frame or source producer",
     ),
     (
         "RestoredFrameLabels.rows",
         "Arrow complete aligned entity, anchor and restored target groups",
+    ),
+    (
+        "PreparedLabelInputs.owner",
+        "Core-created immutable reached label source rows and eligibility",
+    ),
+    (
+        "CompletedConditionValue.owner",
+        "Core-created immutable actual completed condition column resource",
+    ),
+    (
+        "PreparedTargetColumn.owner",
+        "Core-created immutable completed target values and actual predecessor lineage",
+    ),
+    (
+        "NativeTargetValues.rows",
+        "Arrow complete ordered source positions and actual target values",
+    ),
+    (
+        "NativeTargetValues.presence",
+        "Arrow complete native Boolean missingness observation at its reached extent",
     ),
     (
         "PreparedFrameLabelBatch.owner",

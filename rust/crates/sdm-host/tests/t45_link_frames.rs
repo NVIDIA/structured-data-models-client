@@ -286,6 +286,98 @@ impl FrameStages {
 
 /// Explicit typed resource fields only. Counts, ordinals and native source
 /// positions are data and can never be treated as attachment ids here.
+fn complete_entity_inputs(
+    stages: &mut FrameStages,
+    mut inputs: sdm_contract::materialize::PreparedLabelInputs,
+) -> sdm_contract::materialize::PreparedLabelInputs {
+    let views = inputs
+        .eligibility
+        .as_ref()
+        .expect("required entity history")
+        .columns
+        .clone();
+    for view in views {
+        assert_eq!(
+            view.form,
+            sdm_contract::materialize::TargetColumnForm::Condition
+        );
+        let Attachment::LabelInputs(owner) = &stages.held[&view.owner] else {
+            panic!("actual entity column view")
+        };
+        let rows = owner.rows().unwrap().batches[0].clone();
+        let target = rows.column(2).clone();
+        let presence = (0..target.len())
+            .map(|row| target.is_valid(row))
+            .collect::<Vec<_>>();
+        let values =
+            RecordBatch::try_from_iter([("position", rows.column(0).clone()), ("target", target)])
+                .unwrap();
+        let present = RecordBatch::try_from_iter([(
+            "present",
+            Arc::new(arrow_array::BooleanArray::from(presence)) as ArrayRef,
+        )])
+        .unwrap();
+        let next = stages
+            .held
+            .keys()
+            .map(|id| id.0)
+            .max()
+            .unwrap_or(0)
+            .checked_add(1)
+            .unwrap();
+        stages.held.insert(
+            AttachmentId(next),
+            Attachment::Arrow(ArrowData::new(values.schema(), vec![values])),
+        );
+        stages.held.insert(
+            AttachmentId(next + 1),
+            Attachment::Arrow(ArrowData::new(present.schema(), vec![present])),
+        );
+        let PreparedFrameValue::TargetColumn(column)=stages.stage(json!({"stage":"target_column","inputs":view,"converted":{"rows":next,"presence":next+1,"encoding":null}})).unwrap() else {panic!("completed entity values")};
+        let PreparedFrameValue::LabelInputs(completed) = stages
+            .stage(json!({"stage":"eligibility_column","inputs":inputs,"column":column}))
+            .unwrap()
+        else {
+            panic!("completed entity history")
+        };
+        inputs = completed;
+    }
+    inputs
+}
+
+fn rebind_inputs(
+    value: &mut sdm_contract::materialize::PreparedLabelInputs,
+    keep: &mut impl FnMut(&mut AttachmentId),
+) {
+    keep(&mut value.owner);
+    if let Some(history) = &mut value.eligibility {
+        for column in &mut history.columns {
+            rebind_inputs(column, keep);
+        }
+        for column in &mut history.values {
+            keep(&mut column.owner);
+        }
+    }
+}
+
+fn rebind_groups(
+    value: &mut sdm_contract::frames::materialize::PreparedFrameLabelGroups,
+    keep: &mut impl FnMut(&mut AttachmentId),
+) {
+    keep(&mut value.owner);
+    if let Some(restored) = &mut value.restored {
+        keep(&mut restored.rows);
+    }
+    if let Some(history) = &mut value.what_if {
+        for column in &mut history.columns {
+            rebind_inputs(column, keep);
+        }
+        for column in &mut history.values {
+            keep(&mut column.owner);
+        }
+    }
+}
+
 fn rebind_frame_product(value: &mut PreparedFrameValue, keep: &mut impl FnMut(&mut AttachmentId)) {
     use sdm_contract::frames::materialize::{
         CompletedFrameTask, FrameRequestPlan, LabelledFrameTask, PreparedFrameGraph,
@@ -337,10 +429,10 @@ fn rebind_frame_product(value: &mut PreparedFrameValue, keep: &mut impl FnMut(&m
             keep(&mut value.owner);
         }
         PreparedFrameValue::LabelBatch(value) => keep(&mut value.owner),
-        PreparedFrameValue::LabelGroups(value) => keep(&mut value.owner),
-        PreparedFrameValue::LabelInputs(value) => keep(&mut value.owner),
+        PreparedFrameValue::LabelGroups(value) => rebind_groups(value, keep),
+        PreparedFrameValue::LabelInputs(value) => rebind_inputs(value, keep),
         PreparedFrameValue::TargetColumn(value) => {
-            keep(&mut value.input.owner);
+            rebind_inputs(&mut value.input, keep);
             keep(&mut value.owner);
             for condition in &mut value.condition_values {
                 keep(&mut condition.converted.rows);
@@ -431,6 +523,7 @@ fn completed_native_target_rows_and_occurrences_reach_the_real_link_payload() {
         let PreparedFrameValue::LabelInputs(inputs) = stages.stage(input.clone()).unwrap() else {
             panic!("label inputs")
         };
+        let inputs = complete_entity_inputs(&mut stages, inputs);
         let Attachment::LabelInputs(owner) = &stages.held[&inputs.owner] else {
             panic!("source owner")
         };
@@ -476,6 +569,7 @@ fn completed_native_target_rows_and_occurrences_reach_the_real_link_payload() {
         let PreparedFrameValue::LabelInputs(foreign) = stages.stage(input).unwrap() else {
             panic!("foreign inputs")
         };
+        let foreign = complete_entity_inputs(&mut stages, foreign);
         let mut wrong = column.clone();
         wrong.input = foreign;
         let error = stages
@@ -566,7 +660,10 @@ fn completed_native_target_rows_and_occurrences_reach_the_real_link_payload() {
         assert!(rows.batches[0].num_rows() > 0);
         let id = AttachmentId(stages.held.keys().map(|id| id.0).max().unwrap() + 1);
         stages.held.insert(id, Attachment::Arrow(rows));
-        let PreparedFrameValue::LabelBatch(batch) = stages.stage(json!({"stage":"complete_label_batch","population":population,"groups":groups,"restored":{"rows":id,"encoding":null}})).unwrap() else { panic!("batch") };
+        let PreparedFrameValue::LabelGroups(groups)=stages.stage(json!({"stage":"restore_label_groups","groups":groups,"restored":{"rows":id,"encoding":null}})).unwrap() else {panic!("actual restored groups")};
+        assert!(groups.restored.is_some());
+        assert!(groups.what_if.is_none());
+        let PreparedFrameValue::LabelBatch(batch) = stages.stage(json!({"stage":"complete_label_batch","population":population,"groups":groups,"restored":null})).unwrap() else { panic!("batch") };
         let PreparedFrameValue::Labels(labelled) = stages
             .stage(json!({"stage":"labels","population":population,"batches":[batch]}))
             .unwrap()

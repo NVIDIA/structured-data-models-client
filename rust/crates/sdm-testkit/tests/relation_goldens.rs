@@ -80,6 +80,8 @@ fn run(connection: &Connection, request: DataRequest) -> (String, Vec<duck::Fetc
         plan,
         continuation: None,
         purpose: None,
+        partition: None,
+        lookup: None,
     };
     let fetched = duck::answer(connection, &step).unwrap_or_else(|e| panic!("{text}: {e:?}"));
     (text, vec![fetched])

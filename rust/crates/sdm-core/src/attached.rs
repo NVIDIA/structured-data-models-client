@@ -82,6 +82,19 @@ pub fn resolved_attachments(
             }
             return Ok(named);
         }
+        Operation::PrepareMaterialize(request) => {
+            if let Some(Attachment::Bytes(bytes)) = attachments.get(&request.input) {
+                let input: sdm_contract::materialize::MaterializePreparation =
+                    serde_json::from_slice(bytes).map_err(|_| {
+                        invalid(
+                            "unreadable materialization preparation input",
+                            request.input,
+                        )
+                    })?;
+                named.extend(input.attachments());
+            }
+            return Ok(named);
+        }
         Operation::PrepareRequest(request) => {
             if let Some(Attachment::Bytes(bytes)) = attachments.get(&request.input) {
                 let input: sdm_contract::prepare::Preparation = serde_json::from_slice(bytes)
@@ -338,7 +351,14 @@ pub fn check_attachments(
             (Some(Attachment::Bytes(_)), AttachmentKind::Bytes)
             | (Some(Attachment::Arrow(_)), AttachmentKind::Arrow)
             | (Some(Attachment::FrameGraph(_)), AttachmentKind::FrameGraph) => {}
-            (Some(Attachment::FrameLabelGroups(_)), AttachmentKind::FrameLabelGroups)
+            (Some(Attachment::LookupRows(_)), AttachmentKind::LookupRows)
+            | (Some(Attachment::MaterializeSource(_)), AttachmentKind::MaterializeSource)
+            | (Some(Attachment::MaterializePopulation(_)), AttachmentKind::MaterializePopulation)
+            | (Some(Attachment::MaterializeGroups(_)), AttachmentKind::MaterializeGroups)
+            | (Some(Attachment::MaterializeBatch(_)), AttachmentKind::MaterializeBatch)
+            | (Some(Attachment::FrameLabelGroups(_)), AttachmentKind::FrameLabelGroups)
+            | (Some(Attachment::LabelInputs(_)), AttachmentKind::LabelInputs)
+            | (Some(Attachment::TargetColumn(_)), AttachmentKind::TargetColumn)
             | (Some(Attachment::FrameLabelBatch(_)), AttachmentKind::FrameLabelBatch)
             | (Some(Attachment::FramePopulation(_)), AttachmentKind::FramePopulation)
             | (Some(Attachment::FrameQuestion(_)), AttachmentKind::FrameQuestion)

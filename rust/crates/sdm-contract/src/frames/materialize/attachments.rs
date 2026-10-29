@@ -53,6 +53,17 @@ fn converted(value: &FrameReferenceValues, out: &mut Named) {
         } => {}
     }
 }
+fn native_values(value: &NativeTargetValues, out: &mut Named) {
+    out.push((value.rows, AttachmentKind::Arrow));
+    out.extend(value.presence.map(|id| (id, AttachmentKind::Arrow)));
+}
+fn target(value: &PreparedTargetColumn, out: &mut Named) {
+    out.extend(value.input.attachments());
+    out.push((value.owner, AttachmentKind::TargetColumn));
+    for condition in &value.condition_values {
+        native_values(&condition.converted, out);
+    }
+}
 fn context(value: &SampledFrameContext, out: &mut Named) {
     plan(&value.plan, out);
     out.push((value.anchors, AttachmentKind::Arrow));
@@ -77,10 +88,21 @@ impl FramePreparation {
         match self {
             Self::Graph { retained, .. } => *retained,
             Self::Population { graph, .. } => Some(graph.owner),
-            Self::LabelGroups { population, .. }
+            Self::LabelInputs { population, .. }
+            | Self::LabelGroups { population, .. }
             | Self::CompleteLabelBatch { population, .. }
             | Self::LabelBatch { population, .. }
             | Self::Labels { population, .. } => Some(population.graph.owner),
+            Self::TargetColumn { inputs, .. } | Self::EligibilityColumn { inputs, .. } => {
+                Some(inputs.owner)
+            }
+            Self::RestoreLabelGroups { groups, .. } | Self::WhatIfColumn { groups, .. } => {
+                Some(groups.owner)
+            }
+            Self::FilteredTarget { column, .. }
+            | Self::ConditionColumn { column, .. }
+            | Self::WindowedTarget { column, .. }
+            | Self::NativeLabelGroups { column } => Some(column.owner),
             Self::Task { labelled, .. } => Some(labelled.graph.owner),
             Self::Plan { task, .. } => Some(task.labelled.graph.owner),
             Self::References { plan, .. } => Some(plan.task.labelled.graph.owner),
@@ -159,7 +181,13 @@ impl FramePreparation {
                 );
                 out.extend(values.iter().map(|values| (*values, Bytes)));
             }
-            Self::LabelGroups {
+            Self::LabelInputs {
+                population,
+                previous,
+                converted: values,
+                ..
+            }
+            | Self::LabelGroups {
                 population,
                 previous,
                 converted: values,
@@ -180,6 +208,34 @@ impl FramePreparation {
                 );
                 converted(values, &mut out);
             }
+            Self::TargetColumn { inputs, converted } => {
+                out.extend(inputs.attachments());
+                native_values(converted, &mut out);
+            }
+            Self::EligibilityColumn { inputs, column } => {
+                out.extend(inputs.attachments());
+                target(column, &mut out);
+            }
+            Self::FilteredTarget { column, converted }
+            | Self::WindowedTarget { column, converted } => {
+                target(column, &mut out);
+                native_values(converted, &mut out);
+            }
+            Self::NativeLabelGroups { column } => {
+                target(column, &mut out);
+            }
+            Self::ConditionColumn { column, operand } => {
+                target(column, &mut out);
+                native_values(&operand.converted, &mut out);
+            }
+            Self::RestoreLabelGroups { groups, restored } => {
+                out.extend(groups.attachments(AttachmentKind::FrameLabelGroups));
+                out.push((restored.rows, Arrow));
+            }
+            Self::WhatIfColumn { groups, column } => {
+                out.extend(groups.attachments(AttachmentKind::FrameLabelGroups));
+                target(column, &mut out);
+            }
             Self::CompleteLabelBatch {
                 population,
                 groups,
@@ -187,7 +243,7 @@ impl FramePreparation {
             } => {
                 graph(&population.graph, &mut out);
                 out.push((population.owner, AttachmentKind::FramePopulation));
-                out.push((groups.owner, AttachmentKind::FrameLabelGroups));
+                out.extend(groups.attachments(AttachmentKind::FrameLabelGroups));
                 out.extend(restored.iter().map(|value| (value.rows, Arrow)));
             }
             Self::Labels {

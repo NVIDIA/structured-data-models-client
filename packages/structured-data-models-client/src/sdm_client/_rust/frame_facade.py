@@ -15,7 +15,6 @@ from __future__ import annotations
 import json
 import secrets
 from collections.abc import Sequence
-from dataclasses import dataclass
 from typing import Any, Literal, NoReturn, TypedDict
 
 import pandas as pd
@@ -32,6 +31,21 @@ from sdm_client._rust.frame_native import (
     convert_text,
     guard_failure,
 )
+from sdm_client._rust.native_label_stage import (
+    ColumnExport,
+    complete_eligibility,
+    complete_what_if,
+    complete_target,
+)
+from sdm_client._rust.native_products import (
+    bound_label_input,
+    bound_groups,
+    group_ids,
+    label_input_ids,
+)
+from sdm_client._rust.native_products import Bindings as _Bindings
+from sdm_client._rust.native_products import Product as _Product
+from sdm_client._rust.native_target import NativeTargetColumn, export_groups
 from sdm_client._rust.run import Finished, run
 from sdm_client.errors import StructuredDataError
 
@@ -70,32 +84,6 @@ class _ConvertedText(TypedDict):
     facts: NativeCasingFacts
 
 
-@dataclass(frozen=True)
-class _Product:
-    """One closed core value and exactly the owners its typed fields name."""
-
-    kind: str
-    data: dict[str, Any]
-    owners: dict[int, Any]
-
-
-class _Bindings:
-    """Call-local attachment bindings, with no persistent ids or registry."""
-
-    def __init__(self) -> None:
-        self.attachments: dict[int, Any] = {}
-
-    def add(self, owner: Any) -> int:
-        key = len(self.attachments) + 2
-        self.attachments[key] = owner
-        return key
-
-    def json(self, value: Any, *, options: bool = False) -> int:
-        return self.add(
-            codec.attachment(value, named=options, option_values=options)
-        )
-
-
 def _ids(kind: str, value: dict[str, Any]) -> list[int]:
     """Attachment fields of the fixed contract, never an arbitrary JSON scan."""
     if kind in (
@@ -120,8 +108,23 @@ def _ids(kind: str, value: dict[str, Any]) -> list[int]:
         ]
     if kind == 'graph':
         return [value['owner']]
-    if kind in ('label_groups', 'label_batch'):
+    if kind == 'label_inputs':
+        return label_input_ids(value)
+    if kind == 'label_groups':
+        return group_ids(value)
+    if kind == 'label_batch':
         return [value['owner']]
+    if kind == 'target_column':
+        return (
+            label_input_ids(value['input'])
+            + [value['owner']]
+            + [
+                attachment
+                for condition in value['condition_values']
+                for name in ('rows', 'presence')
+                if (attachment := condition['converted'][name]) is not None
+            ]
+        )
     if kind == 'population':
         return [*_ids('graph', value['graph']), value['owner']]
     if kind == 'labels':
@@ -210,8 +213,31 @@ def _bind(product: _Product, into: _Bindings) -> dict[str, Any]:
         return {**value, 'owner': bound[value['owner']]}
     if product.kind == 'graph':
         return graph(value)
-    if product.kind in ('label_groups', 'label_batch'):
+    if product.kind == 'label_inputs':
+        return bound_label_input(value, bound)
+    if product.kind == 'label_groups':
+        return bound_groups(value, bound)
+    if product.kind == 'label_batch':
         return {**value, 'owner': bound[value['owner']]}
+    if product.kind == 'target_column':
+        return {
+            **value,
+            'input': bound_label_input(value['input'], bound),
+            'owner': bound[value['owner']],
+            'condition_values': [
+                {
+                    **condition,
+                    'converted': {
+                        **condition['converted'],
+                        'rows': bound[condition['converted']['rows']],
+                        'presence': None
+                        if condition['converted']['presence'] is None
+                        else bound[condition['converted']['presence']],
+                    },
+                }
+                for condition in value['condition_values']
+            ],
+        }
     if product.kind == 'population':
         return {
             **value,
@@ -287,6 +313,130 @@ def _table(stream: Any) -> Any:
     import pyarrow as pa
 
     return pa.table(stream)
+
+
+class _FrameTargetPreparation:
+    """Fixed frame product transport for the shared native target handover."""
+
+    def __init__(
+        self,
+        state: dict[str, Any],
+        graph: dict[str, Any],
+        part: dict[str, Any] | None,
+    ) -> None:
+        self.state, self.graph, self.part = state, graph, part
+
+    def _finish(self, value: dict[str, Any], bindings: _Bindings) -> _Product:
+        return _adopt(_prepare(value, bindings, self.state), 'target_column')
+
+    def target_column(
+        self, inputs: _Product, converted: ColumnExport
+    ) -> _Product:
+        bindings = _Bindings()
+        values = converted.bind(bindings)
+        return self._finish(
+            {
+                'stage': 'target_column',
+                'inputs': _bind(inputs, bindings),
+                'converted': values,
+            },
+            bindings,
+        )
+
+    def eligibility_column(
+        self, inputs: _Product, column: _Product
+    ) -> _Product:
+        bindings = _Bindings()
+        return _adopt(
+            _prepare(
+                {
+                    'stage': 'eligibility_column',
+                    'inputs': _bind(inputs, bindings),
+                    'column': _bind(column, bindings),
+                },
+                bindings,
+                self.state,
+            ),
+            'label_inputs',
+        )
+
+    def what_if_column(self, groups: _Product, column: _Product) -> _Product:
+        bindings = _Bindings()
+        return _adopt(
+            _prepare(
+                {
+                    'stage': 'what_if_column',
+                    'groups': _bind(groups, bindings),
+                    'column': _bind(column, bindings),
+                },
+                bindings,
+                self.state,
+            ),
+            'label_groups',
+        )
+
+    def condition_column(
+        self,
+        column: _Product,
+        occurrence: dict[str, Any],
+        converted: ColumnExport,
+    ) -> _Product:
+        bindings = _Bindings()
+        values = converted.bind(bindings)
+        return self._finish(
+            {
+                'stage': 'condition_column',
+                'column': _bind(column, bindings),
+                'operand': {'column': occurrence, 'converted': values},
+            },
+            bindings,
+        )
+
+    def filtered_target(
+        self, column: _Product, converted: ColumnExport
+    ) -> _Product:
+        bindings = _Bindings()
+        values = converted.bind(bindings)
+        return self._finish(
+            {
+                'stage': 'filtered_target',
+                'column': _bind(column, bindings),
+                'converted': values,
+            },
+            bindings,
+        )
+
+    def windowed_target(
+        self, column: _Product, converted: ColumnExport
+    ) -> _Product:
+        bindings = _Bindings()
+        values = converted.bind(bindings)
+        return self._finish(
+            {
+                'stage': 'windowed_target',
+                'column': _bind(column, bindings),
+                'converted': values,
+            },
+            bindings,
+        )
+
+    def native_failure(self, failure: NativeFrameFailure) -> NoReturn:
+        _guard(failure, self.graph, part=self.part)
+
+
+def _native_target(
+    inputs: _Product,
+    columns: NativeFrameColumns,
+    state: dict[str, Any],
+    graph: dict[str, Any],
+    part: dict[str, Any] | None,
+) -> tuple[_Product, NativeTargetColumn]:
+    preparation = _FrameTargetPreparation(state, graph, part)
+    completed = complete_eligibility(inputs, columns, preparation)
+    try:
+        return complete_target(completed, columns, preparation)
+    finally:
+        completed.owners.clear()
 
 
 def _string_encoding(
@@ -618,7 +768,9 @@ def _single(
                     evidence = adopt(
                         _prepare(
                             {
-                                'stage': 'label_groups',
+                                'stage': 'label_inputs'
+                                if population.data['target_form'] is not None
+                                else 'label_groups',
                                 'population': _bind(population, bindings),
                                 'range': candidate_range,
                                 'previous': _bind(label_batches[-1], bindings)
@@ -629,13 +781,39 @@ def _single(
                             bindings,
                             state,
                         ),
-                        'label_groups',
+                        'label_inputs'
+                        if population.data['target_form'] is not None
+                        else 'label_groups',
                     )
                 except StructuredDataError as error:
                     _native_rejected(
                         error, native_failure, graph.data, part=part
                     )
                     raise
+                target_column = None
+                native_target_values = None
+                if evidence.kind == 'label_inputs':
+                    try:
+                        target_column, native_target_values = _native_target(
+                            evidence, columns, state, graph.data, part
+                        )
+                        bindings = _Bindings()
+                        next_evidence = adopt(
+                            _prepare(
+                                {
+                                    'stage': 'native_label_groups',
+                                    'column': _bind(target_column, bindings),
+                                },
+                                bindings,
+                                state,
+                            ),
+                            'label_groups',
+                        )
+                    finally:
+                        evidence.owners.clear()
+                        if target_column is not None:
+                            target_column.owners.clear()
+                    evidence = next_evidence
                 try:
                     native_target = evidence.data['native_target']
                     bindings = _Bindings()
@@ -661,24 +839,23 @@ def _single(
                                 for row in values
                             ]
                         try:
-                            native_labels = columns.label_result(
-                                native_target, values
+                            if native_target_values is None:
+                                raise codec.CodecError(
+                                    'native list groups lack their actual derived target owner'
+                                )
+                            native_labels = native_target_values.group_result(
+                                values
                             )
-                            converted_labels: object = native_labels
-                            if exceptional:
-                                converted_labels = [
-                                    [
-                                        str.encode(
-                                            value, 'utf-8', 'surrogatepass'
-                                        )
-                                        for value in row
-                                    ]
-                                    for row in native_labels
-                                ]
+                            restored_target, restored_encoding = export_groups(
+                                native_labels,
+                                target,
+                                text=evidence.data['target_encoding']
+                                is not None,
+                            )
                             restored_rows = label_rows.set_column(
                                 2,
-                                label_rows.schema.field(2),
-                                pa.array(converted_labels, type=target.type),
+                                pa.field('target', restored_target.type),
+                                restored_target,
                             )
                         except Exception as error:
                             _guard(
@@ -688,8 +865,32 @@ def _single(
                             )
                         restored = {
                             'rows': bindings.add(restored_rows),
-                            'encoding': evidence.data['target_encoding'],
+                            'encoding': restored_encoding,
                         }
+                        restored_groups = adopt(
+                            _prepare(
+                                {
+                                    'stage': 'restore_label_groups',
+                                    'groups': _bind(evidence, bindings),
+                                    'restored': restored,
+                                },
+                                bindings,
+                                state,
+                            ),
+                            'label_groups',
+                        )
+                        evidence.owners.clear()
+                        evidence = restored_groups
+                        following = complete_what_if(
+                            evidence,
+                            columns,
+                            _FrameTargetPreparation(state, graph.data, part),
+                        )
+                        if following is not evidence:
+                            evidence.owners.clear()
+                            evidence = following
+                        bindings = _Bindings()
+                        restored = None
                     completed = adopt(
                         _prepare(
                             {
@@ -705,6 +906,8 @@ def _single(
                     )
                 finally:
                     evidence.owners.clear()
+                    native_target_values = None
+                    target_column = None
                 evidence = completed
                 label_batches.append(evidence)
                 if evidence.data['complete']:

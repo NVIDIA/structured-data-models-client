@@ -30,6 +30,24 @@ pub(super) struct PopulationData {
     pub entity_filter: Option<String>,
 }
 
+impl PopulationData {
+    pub(super) fn target_form(&self) -> Option<sdm_contract::materialize::TargetColumnForm> {
+        use sdm_contract::materialize::TargetColumnForm;
+        match &self.asked.target {
+            Shape::Aggregated(window)
+                if window.aggregation == labels::Aggregation::ListDistinct =>
+            {
+                Some(if window.filter.is_some() {
+                    TargetColumnForm::Filtered
+                } else {
+                    TargetColumnForm::Plain
+                })
+            }
+            _ => None,
+        }
+    }
+}
+
 struct OwnedPopulation {
     data: PopulationData,
     keys: ArrowData,
@@ -61,6 +79,30 @@ fn candidate_range(start: u64, rows: usize) -> Option<FrameBatchRange> {
 }
 
 impl RetainedFramePopulation {
+    pub(in crate::materialize) fn condition_context(
+        &self,
+    ) -> Result<crate::materialize::native_conditions::Context, CoreError> {
+        let source = &self.data.data;
+        let filtered = source.entity_filter.is_some();
+        Ok(crate::materialize::native_conditions::Context {
+            entity: source.meaning.entity.clone(),
+            filter: if filtered {
+                source.asked.choosing.first().cloned()
+            } else {
+                None
+            },
+            what_if: source
+                .asked
+                .choosing
+                .iter()
+                .skip(usize::from(filtered))
+                .cloned()
+                .collect(),
+        })
+    }
+    pub(super) fn target_form(&self) -> Option<sdm_contract::materialize::TargetColumnForm> {
+        self.data.data.target_form()
+    }
     pub(super) fn new(data_: PopulationData) -> Result<Self, CoreError> {
         let keys = data(
             RecordBatch::try_from_iter([
@@ -81,12 +123,16 @@ impl RetainedFramePopulation {
     }
 }
 
+#[derive(Clone)]
 struct LabelGroupsData {
     range: FrameBatchRange,
     previous: Option<RetainedFrameLabelBatch>,
-    groups: task::EvaluatedLabelGroups,
+    groups: Arc<task::EvaluatedLabelGroups>,
+    native_input: Option<crate::materialize::native_target::RetainedLabelInputs>,
+    restored: Option<crate::materialize::native_conditions::RestoredGroups>,
     native_target: Option<FrameNativeColumnRef>,
     target_encoding: Option<sdm_contract::data::strings::StringEncoding>,
+    target_type: Option<DataType>,
 }
 
 #[derive(Clone)]
@@ -105,17 +151,21 @@ impl std::fmt::Debug for RetainedFrameLabelGroups {
 }
 
 impl RetainedFrameLabelGroups {
+    pub(crate) fn carry(&self, asker: &Asker) {
+        asker.keep_retained_frame(self.population.data.data.graph.clone());
+    }
     pub fn rows(&self) -> Result<ArrowData, CoreError> {
+        if let Some(restored) = &self.data.restored {
+            return Ok(data(restored.rows.clone()));
+        }
         let labels = self
             .data
             .groups
             .native_labels()?
             .ok_or_else(|| protocol("the evaluated target has no native list groups"))?;
-        Ok(data(labelled_rows(
-            &labels.keys,
-            &labels.anchors,
-            &labels.labels,
-        )?))
+        let rows =
+            super::super::native_labels::group_rows(&labels, self.data.target_type.as_ref())?;
+        Ok(data(rows))
     }
 }
 
@@ -202,6 +252,7 @@ fn bind_population(
         || !source.graph.same_owner(&graph.retained())
         || value.rows != source.population.examples.index.len() as u64
         || value.batch_rows != LABEL_BATCH_ROWS as u32
+        || value.target_form != source.target_form()
     {
         return Err(protocol(
             "candidate population meaning or graph no longer matches its actual immutable owner",
@@ -335,7 +386,7 @@ fn converted(
     Ok(Some((keys, encoding)))
 }
 
-async fn evaluate_groups(
+async fn read_inputs(
     asker: &Asker,
     graph: &BoundGraph,
     source: &PopulationData,
@@ -344,13 +395,14 @@ async fn evaluate_groups(
         ArrayRef,
         Option<sdm_contract::data::strings::StringEncoding>,
     )>,
-) -> Result<task::EvaluatedLabelGroups, FrameStageError> {
+    observed_conditions: bool,
+) -> Result<Arc<task::LabelInputs>, FrameStageError> {
     let entity = graph
         .prepared
         .graph
         .table(&source.meaning.entity.table)
         .ok_or_else(|| protocol("candidate population lost its entity table"))?;
-    let native_rows = match native {
+    let (native_rows, positions) = match native {
         Some((keys, encoding)) => {
             let frames = crate::frame_materialize::lock(&graph.frames);
             let nodes = frames.resolve_encoded_references(entity, &[(&keys, encoding)])?;
@@ -362,9 +414,24 @@ async fn evaluate_groups(
                 .iter()
                 .map(|field| field.name().clone())
                 .collect::<Vec<_>>();
-            Some(frames.source_rows(entity, &nodes, &columns)?)
+            (
+                Some(frames.source_rows(entity, &nodes, &columns)?),
+                Some(nodes),
+            )
         }
-        None => None,
+        None if observed_conditions => {
+            let keys = population.keys()?;
+            let frames = crate::frame_materialize::lock(&graph.frames);
+            let encoding = frames
+                .string_encodings(&entity.name)?
+                .get(entity.primary_key.as_deref().unwrap_or(""))
+                .copied();
+            (
+                None,
+                Some(frames.resolve_encoded_references(entity, &[(&keys, encoding)])?),
+            )
+        }
+        None => (None, None),
     };
     let mut memo = Memo {
         asker,
@@ -372,44 +439,21 @@ async fn evaluate_groups(
         memo: source.memo.clone(),
     };
     let times = Times::new(source.reader, None, &memo.memo);
-    let mut windows = Vec::new();
-    source.asked.target.windowed(&mut windows);
-    let labelled_fetches = fetches(
-        &graph.prepared.graph,
-        &source.meaning.entity.table,
-        &source.asked.every_windowed(),
-    )?;
-    let target_fetches = fetches(
-        &graph.prepared.graph,
-        &source.meaning.entity.table,
-        &windows,
-    )?;
-    let entropy = Entropy::from_hex(source.meaning.seed.magnitude_hex())
-        .ok_or_else(|| protocol("candidate population lost its original sampling entropy"))?;
-    let labelled = task::evaluate_label_groups(
+    let plan = PopulationDraw::new(&graph.prepared.graph, source)?;
+    let mut labelled = task::read_label_inputs(
         asker,
         &mut memo,
-        LabelDraw {
-            entity,
-            key: &source.meaning.entity.column,
-            asked: &source.asked,
-            read_times: &times,
-            labelled_fetches: &labelled_fetches,
-            fetches: &target_fetches,
-            windows: &windows,
-            entropy: &entropy,
-            context_anchor: source.context_anchor,
-            anchor_entity: source.meaning.entity_anchor,
-            span: source.span,
-            earliest: source.earliest,
-            context_examples: source.context_examples,
-            trials: source.trials,
-            entity_filter: source.entity_filter.as_deref(),
-        },
+        plan.draw(&times),
         population,
         native_rows,
+        observed_conditions,
     )
     .await?;
+    if let Some(positions) = positions {
+        Arc::get_mut(&mut labelled)
+            .ok_or_else(|| protocol("new label inputs were already shared"))?
+            .entity_positions = positions;
+    }
     keep_stored_times(&mut memo, &times);
     Ok(labelled)
 }
@@ -421,37 +465,63 @@ fn complete_groups(
     groups: &task::EvaluatedLabelGroups,
     restored: Option<labels::Labels>,
 ) -> Result<task::LabelledContext, FrameStageError> {
-    let entity = graph
-        .prepared
-        .graph
-        .table(&source.meaning.entity.table)
-        .ok_or_else(|| protocol("candidate population lost its entity table"))?;
     let times = Times::new(source.reader, None, &source.memo);
-    let mut windows = Vec::new();
-    source.asked.target.windowed(&mut windows);
-    let labelled_fetches = fetches(
-        &graph.prepared.graph,
-        &source.meaning.entity.table,
-        &source.asked.every_windowed(),
-    )?;
-    let target_fetches = fetches(
-        &graph.prepared.graph,
-        &source.meaning.entity.table,
-        &windows,
-    )?;
-    let entropy = Entropy::from_hex(source.meaning.seed.magnitude_hex())
-        .ok_or_else(|| protocol("candidate population lost its original sampling entropy"))?;
+    let plan = PopulationDraw::new(&graph.prepared.graph, source)?;
     Ok(task::complete_label_groups(
         asker,
-        LabelDraw {
+        plan.draw(&times),
+        groups,
+        restored,
+    )?)
+}
+
+/// The already resolved immutable population's borrowed mathematical reads.
+/// No mutable task stage or native conversion is retained here.
+struct PopulationDraw<'a> {
+    source: &'a PopulationData,
+    entity: &'a Table,
+    windows: Vec<&'a Windowed>,
+    labelled_fetches: Vec<Fetch<'a>>,
+    target_fetches: Vec<Fetch<'a>>,
+    entropy: Entropy,
+}
+
+impl<'a> PopulationDraw<'a> {
+    fn new(graph: &'a Graph, source: &'a PopulationData) -> Result<Self, CoreError> {
+        let entity = graph
+            .table(&source.meaning.entity.table)
+            .ok_or_else(|| protocol("candidate population lost its entity table"))?;
+        let mut windows = Vec::new();
+        source.asked.target.windowed(&mut windows);
+        let labelled_fetches = fetches(
+            graph,
+            &source.meaning.entity.table,
+            &source.asked.every_windowed(),
+        )?;
+        let target_fetches = fetches(graph, &source.meaning.entity.table, &windows)?;
+        let entropy = Entropy::from_hex(source.meaning.seed.magnitude_hex())
+            .ok_or_else(|| protocol("candidate population lost its original sampling entropy"))?;
+        Ok(Self {
+            source,
             entity,
+            windows,
+            labelled_fetches,
+            target_fetches,
+            entropy,
+        })
+    }
+
+    fn draw<'b>(&'b self, times: &'b Times) -> LabelDraw<'b> {
+        let source = self.source;
+        LabelDraw {
+            entity: self.entity,
             key: &source.meaning.entity.column,
             asked: &source.asked,
-            read_times: &times,
-            labelled_fetches: &labelled_fetches,
-            fetches: &target_fetches,
-            windows: &windows,
-            entropy: &entropy,
+            read_times: times,
+            labelled_fetches: &self.labelled_fetches,
+            fetches: &self.target_fetches,
+            windows: &self.windows,
+            entropy: &self.entropy,
             context_anchor: source.context_anchor,
             anchor_entity: source.meaning.entity_anchor,
             span: source.span,
@@ -459,9 +529,27 @@ fn complete_groups(
             context_examples: source.context_examples,
             trials: source.trials,
             entity_filter: source.entity_filter.as_deref(),
-        },
-        groups,
-        restored,
+        }
+    }
+}
+
+async fn evaluate_groups(
+    asker: &Asker,
+    graph: &BoundGraph,
+    source: &PopulationData,
+    population: task::ExamplePopulation,
+    native: Option<(
+        ArrayRef,
+        Option<sdm_contract::data::strings::StringEncoding>,
+    )>,
+) -> Result<task::EvaluatedLabelGroups, FrameStageError> {
+    let inputs = read_inputs(asker, graph, source, population, native, false).await?;
+    let plan = PopulationDraw::new(&graph.prepared.graph, source)?;
+    let times = Times::new(source.reader, None, &source.memo);
+    Ok(task::evaluate_input_groups(
+        asker,
+        plan.draw(&times),
+        inputs,
     )?)
 }
 
@@ -545,21 +633,315 @@ pub(super) async fn label_groups(
         owner: AttachmentId(0),
         native_target: native_target.clone(),
         target_encoding,
+        restored: None,
+        what_if: None,
     };
     let groups = RetainedFrameLabelGroups {
         population: owner,
         data: Arc::new(LabelGroupsData {
             range,
             previous,
-            groups,
+            groups: Arc::new(groups),
+            native_input: None,
+            restored: None,
             native_target,
             target_encoding,
+            target_type: None,
         }),
     };
     Ok(PreparedFrameLabelGroups {
         owner: asker.attach(Attachment::FrameLabelGroups(groups))?,
         ..result
     })
+}
+
+pub(super) async fn label_inputs(
+    asker: &Asker,
+    value: PreparedFramePopulation,
+    range: FrameBatchRange,
+    previous: Option<PreparedFrameLabelBatch>,
+    converted_: FrameReferenceValues,
+    attachments: &mut Attachments,
+) -> Result<sdm_contract::materialize::PreparedLabelInputs, FrameStageError> {
+    use crate::materialize::native_target::{LabelRoot, RetainedLabelInputs};
+    use sdm_contract::materialize::{PreparedLabelInputs, TargetColumnForm};
+    let (graph, owner) = bind_population(asker, value, attachments)?;
+    let previous = previous
+        .map(|value| bind_batch(&owner, value, attachments))
+        .transpose()?;
+    let source = &owner.data.data;
+    if range.start != previous.as_ref().map_or(0, |batch| batch.data.range.stop)
+        || candidate_range(range.start, source.population.examples.index.len()) != Some(range)
+        || previous.as_ref().is_some_and(|batch| batch.data.complete)
+    {
+        return Err(
+            protocol("native candidate range does not follow its actual completed prefix").into(),
+        );
+    }
+    let window = match &source.asked.target {
+        Shape::Aggregated(window) if window.aggregation == labels::Aggregation::ListDistinct => {
+            window
+        }
+        _ => {
+            return Err(
+                protocol("native target inputs require their actual complete list query").into(),
+            );
+        }
+    };
+    let target = graph.native_binding(&ColumnRef {
+        table: window.table.clone(),
+        column: window
+            .column
+            .clone()
+            .ok_or_else(|| protocol("list labels lack their source column"))?,
+    })?;
+    let form = if window.filter.is_some() {
+        TargetColumnForm::Filtered
+    } else {
+        TargetColumnForm::Plain
+    };
+    let condition_columns = window
+        .filter
+        .as_deref()
+        .map(|filter| {
+            crate::materialize::native_target::operand_columns(filter)?
+                .into_iter()
+                .map(|column| {
+                    graph.native_binding(&ColumnRef {
+                        table: window.table.clone(),
+                        column: column.into(),
+                    })
+                })
+                .collect::<Result<Vec<_>, CoreError>>()
+        })
+        .transpose()?
+        .unwrap_or_default();
+    let native = converted(
+        source,
+        converted_,
+        attachments,
+        (range.stop - range.start) as usize,
+    )?;
+    let inputs = read_inputs(
+        asker,
+        &graph,
+        source,
+        source
+            .population
+            .slice(range.start as usize..range.stop as usize)?,
+        native,
+        true,
+    )
+    .await?;
+    let meaning = PreparedLabelInputs {
+        population: source.meaning.identity.clone(),
+        range,
+        owner: AttachmentId(0),
+        source_read: None,
+        target,
+        form,
+        condition_columns,
+        source_role: Default::default(),
+        eligibility: None,
+    };
+    let root = LabelRoot::Frame {
+        population: owner,
+        previous,
+        graph: graph.retained(),
+    };
+    let retained = RetainedLabelInputs::new(meaning, root, inputs)?;
+    Ok(retained.publish(asker)?)
+}
+
+pub(super) fn native_groups(
+    asker: &Asker,
+    value: sdm_contract::materialize::PreparedTargetColumn,
+    attachments: &mut Attachments,
+) -> Result<PreparedFrameLabelGroups, FrameStageError> {
+    use crate::materialize::native_target::{LabelRoot, RetainedTargetColumn};
+    let column = RetainedTargetColumn::bind(value, attachments)?;
+    let LabelRoot::Frame {
+        population,
+        previous,
+        graph,
+    } = &column.input.data.root
+    else {
+        return Err(protocol("frame groups require their actual frame population root").into());
+    };
+    let source = &population.data.data;
+    let prepared = graph.prepared();
+    let plan = PopulationDraw::new(&prepared.graph, source)?;
+    let times = Times::new(source.reader, None, &source.memo);
+    let target = column.data.groups()?;
+    let mut groups = task::evaluate_target_groups(
+        asker,
+        plan.draw(&times),
+        Arc::clone(&column.input.data.inputs),
+        target,
+    )?;
+    groups.entity_selection = column
+        .input
+        .data
+        .eligibility
+        .as_ref()
+        .and_then(|condition| condition.selection().map(<[bool]>::to_vec));
+    let native_labels = groups.native_labels()?;
+    let native_target = Some(column.input.data.meaning.target.clone());
+    let target_encoding = native_labels
+        .as_ref()
+        .and_then(|labels| label_encoding(&labels.labels))
+        .or_else(|| column.data.group_encoding());
+    let target_type = Some(column.data.group_type()?);
+    let value = PreparedFrameLabelGroups {
+        population: source.meaning.identity.clone(),
+        range: column.input.data.meaning.range,
+        owner: AttachmentId(0),
+        native_target: native_target.clone(),
+        target_encoding,
+        restored: None,
+        what_if: None,
+    };
+    let groups = RetainedFrameLabelGroups {
+        population: population.clone(),
+        data: Arc::new(LabelGroupsData {
+            range: value.range,
+            previous: previous.clone(),
+            groups: Arc::new(groups),
+            native_input: Some(column.input.clone()),
+            restored: None,
+            native_target,
+            target_encoding,
+            target_type,
+        }),
+    };
+    Ok(PreparedFrameLabelGroups {
+        owner: asker.attach(Attachment::FrameLabelGroups(groups))?,
+        ..value
+    })
+}
+
+fn bind_groups(
+    value: PreparedFrameLabelGroups,
+    attachments: &mut Attachments,
+) -> Result<RetainedFrameLabelGroups, FrameStageError> {
+    let Some(Attachment::FrameLabelGroups(owner)) = attachments.remove(&value.owner) else {
+        return Err(protocol("native groups lack their actual evaluated owner").into());
+    };
+    if value.population != owner.population.data.data.meaning.identity
+        || value.range != owner.data.range
+        || value.native_target != owner.data.native_target
+        || value.target_encoding != owner.data.target_encoding
+    {
+        return Err(
+            protocol("native groups rewrite their actual source and candidate range").into(),
+        );
+    }
+    match &owner.data.restored {
+        Some(restored) => restored.matches(value.restored, value.what_if, attachments)?,
+        None if value.restored.is_none() && value.what_if.is_none() => {}
+        None => {
+            return Err(
+                protocol("native groups invent restored values or what-if observations").into(),
+            );
+        }
+    }
+    Ok(owner)
+}
+
+fn publish_groups(
+    asker: &Asker,
+    owner: RetainedFrameLabelGroups,
+) -> Result<PreparedFrameLabelGroups, FrameStageError> {
+    let (restored, what_if) = match &owner.data.restored {
+        Some(restored) => {
+            let (rows, conditions) = restored.publish(asker)?;
+            (Some(rows), conditions)
+        }
+        None => (None, None),
+    };
+    owner.carry(asker);
+    let mut value = PreparedFrameLabelGroups {
+        population: owner.population.data.data.meaning.identity.clone(),
+        range: owner.data.range,
+        owner: AttachmentId(0),
+        native_target: owner.data.native_target.clone(),
+        target_encoding: owner.data.target_encoding,
+        restored,
+        what_if,
+    };
+    value.owner = asker.attach(Attachment::FrameLabelGroups(owner))?;
+    Ok(value)
+}
+
+pub(super) fn restore_groups(
+    asker: &Asker,
+    value: PreparedFrameLabelGroups,
+    restored: RestoredFrameLabels,
+    attachments: &mut Attachments,
+) -> Result<PreparedFrameLabelGroups, FrameStageError> {
+    let owner = bind_groups(value, attachments)?;
+    if owner.data.restored.is_some() {
+        return Err(protocol("native groups already contain restored values").into());
+    }
+    let input =
+        owner.data.native_input.as_ref().ok_or_else(|| {
+            protocol("observed restoration requires its actual native target data")
+        })?;
+    let rows = one_batch(&take_arrow(attachments, restored.rows)?)?;
+    let expected = one_batch(&owner.rows()?)?;
+    let before = owner
+        .data
+        .groups
+        .native_labels()?
+        .ok_or_else(|| protocol("native groups have no actual list values"))?;
+    let labels = super::super::native_labels::restored(
+        &before,
+        &expected,
+        &rows,
+        owner.data.target_encoding,
+        restored.encoding,
+    )?;
+    let restored = crate::materialize::native_conditions::RestoredGroups::new(
+        input,
+        labels,
+        rows,
+        restored.encoding,
+    )?;
+    let mut updated = owner.data.as_ref().clone();
+    updated.restored = Some(restored);
+    publish_groups(
+        asker,
+        RetainedFrameLabelGroups {
+            population: owner.population,
+            data: Arc::new(updated),
+        },
+    )
+}
+
+pub(super) fn what_if(
+    asker: &Asker,
+    value: PreparedFrameLabelGroups,
+    column: sdm_contract::materialize::PreparedTargetColumn,
+    attachments: &mut Attachments,
+) -> Result<PreparedFrameLabelGroups, FrameStageError> {
+    let owner = bind_groups(value, attachments)?;
+    let column =
+        crate::materialize::native_target::RetainedTargetColumn::bind(column, attachments)?;
+    let restored = owner
+        .data
+        .restored
+        .as_ref()
+        .ok_or_else(|| protocol("what-if input precedes actual native restoration"))?
+        .complete(column)?;
+    let mut updated = owner.data.as_ref().clone();
+    updated.restored = Some(restored);
+    publish_groups(
+        asker,
+        RetainedFrameLabelGroups {
+            population: owner.population,
+            data: Arc::new(updated),
+        },
+    )
 }
 
 pub(super) fn complete_batch(
@@ -570,64 +952,59 @@ pub(super) fn complete_batch(
     attachments: &mut Attachments,
 ) -> Result<PreparedFrameLabelBatch, FrameStageError> {
     let (graph, owner) = bind_population(asker, population, attachments)?;
-    let Some(Attachment::FrameLabelGroups(groups)) = attachments.remove(&value.owner) else {
-        return Err(protocol("native label completion lacks its actual evaluated groups").into());
-    };
-    if !groups.population.same_owner(&owner)
-        || value.population != owner.data.data.meaning.identity
-        || value.range != groups.data.range
-        || value.native_target != groups.data.native_target
-        || value.target_encoding != groups.data.target_encoding
-    {
-        return Err(protocol(
-            "native label completion does not match its actual source, range and groups",
-        )
-        .into());
+    let groups = bind_groups(value.clone(), attachments)?;
+    if !groups.population.same_owner(&owner) {
+        return Err(protocol("native groups belong to another population").into());
     }
-    let restored = match (groups.data.groups.native_labels()?, restored) {
-        (Some(before), Some(restored)) => {
-            let rows = take_arrow(attachments, restored.rows)?;
-            let rows = one_batch(&rows)?;
-            if rows.num_columns() != 3
-                || rows
-                    .schema()
-                    .fields()
-                    .iter()
-                    .map(|f| f.name().as_str())
-                    .collect::<Vec<_>>()
-                    != ["entity", "anchor", "target"]
-                || rows.num_rows() != before.keys.len()
-                || rows.column(2).null_count() != 0
-                || rows.column(0).to_data() != before.keys.to_data()
-                || rows.column(1).data_type()
-                    != &DataType::Timestamp(arrow_schema::TimeUnit::Nanosecond, None)
-                || times_ns(rows.column(1), "anchor")?
-                    != before.anchors.iter().copied().map(Some).collect::<Vec<_>>()
-            {
-                return Err(protocol("restored native groups do not retain their complete ordered entity and anchor identities").into());
-            }
-            let expected = labelled_rows(&before.keys, &before.anchors, &before.labels)?;
-            if restored.encoding != groups.data.target_encoding
-                || rows.column(2).data_type() != expected.column(2).data_type()
-            {
-                return Err(protocol("restored native groups do not retain their actual source scalar family and encoding").into());
-            }
-            Some(read_link_labels(rows.column(2), restored.encoding)?)
+    let labelled = if let Some(observed) = &groups.data.restored {
+        if restored.is_some() {
+            return Err(protocol("native batch repeats its restored group values").into());
         }
-        (None, None) => None,
-        _ => {
-            return Err(
-                protocol("native list groups require exactly one complete restored value").into(),
-            );
+        let times = Times::new(owner.data.data.reader, None, &owner.data.data.memo);
+        let plan = PopulationDraw::new(&graph.prepared.graph, &owner.data.data)?;
+        task::complete_observed_label_groups(
+            asker,
+            plan.draw(&times),
+            &groups.data.groups,
+            observed.labels.as_ref().clone(),
+            observed.selection()?,
+        )?
+    } else {
+        if groups.data.native_input.is_some() {
+            return Err(protocol(
+                "native batch precedes actual restored group and what-if completion",
+            )
+            .into());
         }
+        let restored = match (groups.data.groups.native_labels()?, restored) {
+            (Some(before), Some(restored)) => {
+                let rows = take_arrow(attachments, restored.rows)?;
+                let rows = one_batch(&rows)?;
+                let expected = one_batch(&groups.rows()?)?;
+                Some(super::super::native_labels::restored(
+                    &before,
+                    &expected,
+                    &rows,
+                    groups.data.target_encoding,
+                    restored.encoding,
+                )?)
+            }
+            (None, None) => None,
+            _ => {
+                return Err(protocol(
+                    "native list groups require exactly one complete restored value",
+                )
+                .into());
+            }
+        };
+        complete_groups(
+            asker,
+            &graph,
+            &owner.data.data,
+            &groups.data.groups,
+            restored,
+        )?
     };
-    let labelled = complete_groups(
-        asker,
-        &graph,
-        &owner.data.data,
-        &groups.data.groups,
-        restored,
-    )?;
     let previous = groups.data.previous.as_ref();
     let accepted_rows = previous
         .map_or(0, |batch| batch.data.accepted_rows)
@@ -635,7 +1012,7 @@ pub(super) fn complete_batch(
         .ok_or_else(|| protocol("completed native labels exceed this host's row capacity"))?;
     let complete = accepted_rows >= owner.data.data.context_examples;
     let native_target = groups.data.native_target.clone();
-    let target_encoding = groups.data.target_encoding;
+    let target_encoding = label_encoding(&labelled.labels).or(groups.data.target_encoding);
     let batch = RetainedFrameLabelBatch {
         population: owner,
         data: Arc::new(LabelBatchData {

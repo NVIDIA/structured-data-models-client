@@ -457,14 +457,107 @@ impl Stages {
     }
 }
 
+fn complete_entity_inputs(
+    stages: &mut Stages,
+    mut inputs: sdm_contract::materialize::PreparedLabelInputs,
+) -> sdm_contract::materialize::PreparedLabelInputs {
+    let views = inputs
+        .eligibility
+        .as_ref()
+        .expect("required entity history")
+        .columns
+        .clone();
+    for view in views {
+        assert_eq!(
+            view.form,
+            sdm_contract::materialize::TargetColumnForm::Condition
+        );
+        let Attachment::LabelInputs(owner) = &stages.held[&view.owner] else {
+            panic!("actual entity column view")
+        };
+        let rows = owner.rows().unwrap().batches[0].clone();
+        let target = rows.column(2).clone();
+        let presence = (0..target.len())
+            .map(|row| target.is_valid(row))
+            .collect::<Vec<_>>();
+        let values =
+            RecordBatch::try_from_iter([("position", rows.column(0).clone()), ("target", target)])
+                .unwrap();
+        let present = RecordBatch::try_from_iter([(
+            "present",
+            Arc::new(arrow_array::BooleanArray::from(presence)) as ArrayRef,
+        )])
+        .unwrap();
+        let next = stages
+            .held
+            .keys()
+            .map(|id| id.0)
+            .max()
+            .unwrap_or(0)
+            .checked_add(1)
+            .unwrap();
+        stages.held.insert(
+            AttachmentId(next),
+            Attachment::Arrow(ArrowData::new(values.schema(), vec![values])),
+        );
+        stages.held.insert(
+            AttachmentId(next + 1),
+            Attachment::Arrow(ArrowData::new(present.schema(), vec![present])),
+        );
+        let PreparedMaterializeValue::TargetColumn(column)=stages.stage(json!({"stage":"target_column","inputs":view,"converted":{"rows":next,"presence":next+1,"encoding":null}})).unwrap() else {panic!("completed entity values")};
+        let PreparedMaterializeValue::LabelInputs(completed) = stages
+            .stage(json!({"stage":"eligibility_column","inputs":inputs,"column":column}))
+            .unwrap()
+        else {
+            panic!("completed entity history")
+        };
+        inputs = completed;
+    }
+    inputs
+}
+
+fn rebind_inputs(
+    value: &mut sdm_contract::materialize::PreparedLabelInputs,
+    keep: &mut impl FnMut(&mut AttachmentId),
+) {
+    keep(&mut value.owner);
+    if let Some(history) = &mut value.eligibility {
+        for column in &mut history.columns {
+            rebind_inputs(column, keep);
+        }
+        for column in &mut history.values {
+            keep(&mut column.owner);
+        }
+    }
+}
+
+fn rebind_groups(
+    value: &mut sdm_contract::frames::materialize::PreparedFrameLabelGroups,
+    keep: &mut impl FnMut(&mut AttachmentId),
+) {
+    keep(&mut value.owner);
+    if let Some(restored) = &mut value.restored {
+        keep(&mut restored.rows);
+    }
+    if let Some(history) = &mut value.what_if {
+        for column in &mut history.columns {
+            rebind_inputs(column, keep);
+        }
+        for column in &mut history.values {
+            keep(&mut column.owner);
+        }
+    }
+}
+
 fn rebind(value: &mut PreparedMaterializeValue, keep: &mut impl FnMut(&mut AttachmentId)) {
     match value {
+        PreparedMaterializeValue::LookupRows { positions } => keep(positions),
         PreparedMaterializeValue::Source(value) => keep(&mut value.owner),
         PreparedMaterializeValue::Population(value) => keep(&mut value.owner),
         PreparedMaterializeValue::ColumnMeaning(_) => {}
-        PreparedMaterializeValue::LabelInputs(value) => keep(&mut value.owner),
+        PreparedMaterializeValue::LabelInputs(value) => rebind_inputs(value, keep),
         PreparedMaterializeValue::TargetColumn(value) => {
-            keep(&mut value.input.owner);
+            rebind_inputs(&mut value.input, keep);
             keep(&mut value.owner);
             for operand in &mut value.condition_values {
                 keep(&mut operand.converted.rows);
@@ -473,7 +566,7 @@ fn rebind(value: &mut PreparedMaterializeValue, keep: &mut impl FnMut(&mut Attac
                 }
             }
         }
-        PreparedMaterializeValue::LabelGroups(value) => keep(&mut value.owner),
+        PreparedMaterializeValue::LabelGroups(value) => rebind_groups(value, keep),
         PreparedMaterializeValue::LabelBatch(value) => keep(&mut value.owner),
         PreparedMaterializeValue::Request(value) => {
             keep(&mut value.state.payload);
@@ -588,6 +681,7 @@ fn sql_native_target_and_changed_group_completion_reach_the_actual_request() {
     else {
         panic!("actual SQL inputs")
     };
+    let inputs = complete_entity_inputs(&mut stages, inputs);
     assert!(inputs.source_read.is_some());
     assert!(stages.issued.iter().any(|fetch| fetch["partition"]["first"]
         == json!(inputs.source_read.unwrap())
@@ -626,6 +720,7 @@ fn sql_native_target_and_changed_group_completion_reach_the_actual_request() {
     let PreparedMaterializeValue::LabelInputs(other) = stages.stage(request).unwrap() else {
         panic!("other inputs")
     };
+    let other = complete_entity_inputs(&mut stages, other);
     let mut stale = column.clone();
     stale.input = other;
     assert_eq!(
@@ -691,15 +786,18 @@ fn sql_native_target_and_changed_group_completion_reach_the_actual_request() {
         AttachmentId(50_001),
         Attachment::Arrow(data(changed.slice(0, changed.num_rows() - 1))),
     );
-    let complete = |rows| json!({"stage":"complete_label_batch","population":population,"groups":groups,"restored":{"rows":rows,"encoding":null}});
+    let complete = |rows| json!({"stage":"restore_label_groups","groups":groups,"restored":{"rows":rows,"encoding":null}});
     assert_eq!(
         stages.stage(complete(50_001)).unwrap_err()["error"]["code"],
         "INVALID_MESSAGE"
     );
-    let PreparedMaterializeValue::LabelBatch(batch) = stages.stage(complete(50_000)).unwrap()
+    let PreparedMaterializeValue::LabelGroups(restored) = stages.stage(complete(50_000)).unwrap()
     else {
-        panic!("complete batch")
+        panic!("actual restored groups")
     };
+    assert!(restored.restored.is_some());
+    assert!(restored.what_if.is_none());
+    let PreparedMaterializeValue::LabelBatch(batch)=stages.stage(json!({"stage":"complete_label_batch","population":population,"groups":restored,"restored":null})).unwrap() else {panic!("completed batch")};
     let PreparedMaterializeValue::Request(Materialized { state, query }) = stages
         .stage(json!({"stage":"request","population":population,"batches":[batch],"values":null}))
         .unwrap()

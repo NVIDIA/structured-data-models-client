@@ -95,7 +95,7 @@ def native_inputs(
     exported = []
     native_tables = []
     native_types = {}
-    arrays_by_source = {}
+    series_by_source = {}
     held_tables = []
     prepared_tables = []
     for name, table in schema.tables.items():
@@ -201,7 +201,7 @@ def native_inputs(
         arrays = []
         origins = []
         types = {}
-        native_arrays = {}
+        native_series = {}
         for ordinal, column in enumerate(frame.columns):
             series = time_feature(held, column, frame.iloc[:, ordinal], state)
             dtype = series.dtype
@@ -248,7 +248,7 @@ def native_inputs(
                     encoding = 'utf8'
             arrays.append(array)
             types[column] = dtype
-            native_arrays[column] = series.array
+            native_series[column] = series
             origins.append(
                 {
                     'name': column,
@@ -264,7 +264,7 @@ def native_inputs(
         )
         native_tables.append({'source': source, 'columns': origins})
         native_types[source_name] = types
-        arrays_by_source[source_name] = native_arrays
+        series_by_source[source_name] = native_series
     state['frame_row_identities'] = [
         (definition, *NativeColumn(frame[definition['derived']]).arrow())
         for definition, frame in identities
@@ -272,7 +272,7 @@ def native_inputs(
     return (
         exported,
         graph_schema,
-        NativeFrameColumns(native_types, arrays_by_source),
+        NativeFrameColumns(native_types, series=series_by_source),
         native_tables,
     )
 

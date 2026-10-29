@@ -88,6 +88,9 @@ impl FrameLags {
                     times: times_ns(named(&selected.rows, time)?, time)?,
                     rows: selected.rows,
                     batch: selected.batch,
+                    source_positions: Some(selected.source_rows),
+                    source_read: None,
+                    time_column: time.to_owned(),
                 },
             );
         }

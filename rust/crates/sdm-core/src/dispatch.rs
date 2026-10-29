@@ -116,7 +116,38 @@ pub fn start(
             Arc::clone(&zones),
             #[cfg(feature = "test-ops")]
             false,
+            false,
         )?,
+        Operation::PrepareMaterialize(request) => {
+            use sdm_contract::materialize::MaterializePreparation;
+            let input: MaterializePreparation = take_json(&mut attachments, request.input)?;
+            match input {
+                MaterializePreparation::Task { request } => {
+                    if matches!(
+                        request.provider,
+                        sdm_contract::data::ProviderChoice::Frames { .. }
+                    ) {
+                        return Err(CoreError::protocol(
+                            Sentence::InvalidMessage,
+                            "provider-backed preparation cannot consume a frame source",
+                        ));
+                    }
+                    materialize(
+                        root,
+                        Operation::Materialize(request),
+                        attachments,
+                        facts,
+                        zones,
+                        #[cfg(feature = "test-ops")]
+                        false,
+                        true,
+                    )?
+                }
+                input => Run::new(move |asker| {
+                    crate::materialize::native_sql::run(asker, input, attachments)
+                }),
+            }
+        }
         Operation::PrepareRequest(request) => {
             let input: Preparation = take_json(&mut attachments, request.input)?;
             Run::new(move |asker| crate::prepare::run(asker, input, attachments))
@@ -358,6 +389,7 @@ pub(crate) fn materialize(
     facts: HostFacts,
     zones: Arc<dyn Zones>,
     #[cfg(feature = "test-ops")] labels_only: bool,
+    native_preparation: bool,
 ) -> Result<Run, CoreError> {
     match operation {
         Operation::Materialize(request) => {
@@ -529,16 +561,17 @@ pub(crate) fn materialize(
                             .collect(),
                     );
                 }
-                crate::materialize::run(
-                    asker,
-                    inputs(
-                        description,
-                        source,
-                        (source_tables || lacking).then_some(held),
-                        read.types,
-                    ),
-                )
-                .await
+                let inputs = inputs(
+                    description,
+                    source,
+                    (source_tables || lacking).then_some(held),
+                    read.types,
+                );
+                if native_preparation {
+                    crate::materialize::native_sql::task(asker, inputs).await
+                } else {
+                    crate::materialize::run(asker, inputs).await
+                }
             }))
         }
         _ => Err(internal("a materialize run of another operation")),

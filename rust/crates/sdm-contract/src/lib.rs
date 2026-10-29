@@ -25,6 +25,7 @@ pub mod data;
 pub mod error;
 pub mod facts;
 pub mod frames;
+pub mod materialize;
 pub mod ops;
 pub mod pql;
 pub mod prepare;

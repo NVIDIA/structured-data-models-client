@@ -45,9 +45,9 @@ and class), and names (T3.13).
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from types import ModuleType
-from typing import Any, Protocol
+from typing import Any, NoReturn, Protocol
 
 from sdm_client._routing import RouteError
 from sdm_client._rust import codec, errors, facts
@@ -79,10 +79,12 @@ class Page:
 
 
 class FetchRefused:
-    """A reached native fetch conversion failed, holding its actual owner.
+    """A reached source fetch failed, holding its selected actual owner.
 
     Returned by a host adapter, never raised as a provider I/O failure.
-    This handover carries no model response, retry policy or classification.
+    Native conversion failures and a separately core-presented terminal
+    source I/O diagnostic share this cancellation handover. It carries no
+    model response, retry policy or host-selected error classification.
     """
 
     __slots__ = ('raised',)
@@ -104,6 +106,21 @@ class FetchProvider(Protocol):
     def __call__(
         self, step: dict[str, Any], keys: Mapping[int, Any] | None = None
     ) -> ArrowData | Page | FetchRefused: ...
+
+
+class SourceBatchProvider(Protocol):
+    """Complete one actual issued source partition before any data reply.
+
+    The fixed I/O adapter owns raw rows and native source construction.
+    Its terminal selected failure crosses as FetchRefused; arbitrary raised
+    host exceptions are not reclassified as an ordinary driver failure.
+    """
+
+    def __call__(
+        self,
+        requests: Sequence[dict[str, Any]],
+        keys: Mapping[int, Mapping[int, Any]],
+    ) -> Mapping[int, ArrowData] | FetchRefused: ...
 
 
 class TransportFailed(Exception):
@@ -218,6 +235,8 @@ def run(
     state: dict[str, Any] | None = None,
     warning_presentation: errors.WarningPresentation | None = None,
     error_presentation: errors.ErrorPresentation = 'coded',
+    source_provider: SourceBatchProvider | None = None,
+    driver_class: str | None = None,
 ) -> Finished:
     r"""Runs ``operation`` to its result, with the attachments its fields name.
 
@@ -246,6 +265,7 @@ def run(
         operation.get('provider', {}).get('provider') == 'frames'
         or operation['op'] == 'prepare_request'
         or operation['op'] == 'prepare_frames'
+        or operation['op'] == 'prepare_materialize'
         or operation.get('direct') is not None
     )
     if warning_presentation is None:
@@ -260,7 +280,10 @@ def run(
         ):
             warning_presentation = 'frame_graph'
     held = None if state is None else state.get('held')
-    if held is not None and operation['op'] != 'prepare_frames':
+    if held is not None and operation['op'] not in (
+        'prepare_frames',
+        'prepare_materialize',
+    ):
         memo = max(attachments, default=0) + 1
         operation = {
             **operation,
@@ -296,6 +319,7 @@ def run(
             refused.attachments,
             internal_context=refused,
             presentation=error_presentation,
+            driver_class=driver_class,
         )
     if owned_frame:
         attachments.clear()
@@ -311,9 +335,13 @@ def run(
             kept,
             owned_frame,
             warning_presentation,
-            state if operation['op'] == 'prepare_frames' else None,
+            state
+            if operation['op'] in ('prepare_frames', 'prepare_materialize')
+            else None,
             operation.get('part'),
             error_presentation=error_presentation,
+            source_provider=source_provider,
+            initial_driver_class=driver_class,
         )
     except BaseException:
         if owned_frame:
@@ -381,10 +409,12 @@ def _steps(
     state: dict[str, Any] | None = None,
     frame_part: dict[str, Any] | None = None,
     error_presentation: errors.ErrorPresentation = 'coded',
+    source_provider: SourceBatchProvider | None = None,
+    initial_driver_class: str | None = None,
 ) -> Finished:
     r"""The run's steps, each answered, to its result."""
     try:
-        driver_class: str | None = None
+        driver_class: str | None = initial_driver_class
         refused: Refused | None = None
         while True:
             error: StructuredDataError | None = None
@@ -450,46 +480,80 @@ def _steps(
             # read it falls back from, T1.32e), and a later error is no other
             # step's.
             driver_class = None
-            for request in step['requests']:
+            source_answers: dict[int, ArrowData] = {}
+            for ordinal, request in enumerate(step['requests']):
                 attached: dict[int, Any] = {}
-                try:
-                    # A later page's step names the key sets the first took.
-                    keys = (
-                        {}
-                        if request.get('continuation')
-                        else _key_sets(handle, request)
-                    )
-                    answer = provider(request, keys)
-                except RouteError:
-                    # The route itself failed (an import of the old engine on
-                    # it, say), which is no provider's error to hand the core.
-                    handle.cancel()
-                    raise
-                except Exception as failure:  # noqa: BLE001 - the provider's
-                    provided, driver_class = _driver(failure, provider)
-                    outcome: dict[str, Any] = {
-                        'outcome': 'error',
-                        'error': provided,
-                    }
-                else:
-                    # Native conversion is a host boundary, not an I/O
-                    # diagnostic or a core/model refusal. In particular this
-                    # handover must be outside the provider's error handler.
-                    if isinstance(answer, FetchRefused):
+                outcome: dict[str, Any]
+                if (
+                    source_provider is not None
+                    and request.get('purpose') == 'source_rows'
+                ):
+                    if request['id'] not in source_answers:
                         try:
+                            partition = _source_partition(
+                                step['requests'], ordinal
+                            )
+                        except codec.CodecError:
                             handle.cancel()
-                        except Exception:
-                            # An ordinary cancellation failure must not
-                            # replace the native owner. Process-control
-                            # exceptions retain their normal propagation.
-                            errors.raise_native(answer.raised)
-                        errors.raise_native(answer.raised)
+                            raise
+                        bound_keys = {
+                            member['id']: _key_sets(handle, member)
+                            for member in partition
+                        }
+                        lookup = request.get('lookup')
+                        if lookup is not None:
+                            # The one actual counted task owner is shared by
+                            # every chunk of this issued logical lookup.
+                            owner = handle.take_attachment(lookup['owner'])
+                            for member in partition:
+                                bound_keys[member['id']][lookup['owner']] = (
+                                    owner
+                                )
+                        completed = source_provider(partition, bound_keys)
+                        if isinstance(completed, FetchRefused):
+                            _raise_fetch_refused(handle, completed)
+                        if set(completed) != {
+                            member['id'] for member in partition
+                        }:
+                            handle.cancel()
+                            raise codec.CodecError(
+                                'native source result does not cover its complete issued partition'
+                            )
+                        source_answers.update(completed)
                     outcome = {'outcome': 'data', 'data': 1}
-                    if isinstance(answer, Page):
-                        attached[1] = answer.data
-                        outcome['continuation'] = answer.continuation
+                    attached[1] = source_answers.pop(request['id'])
+                else:
+                    try:
+                        # A later page's step names the key sets the first took.
+                        keys = (
+                            {}
+                            if request.get('continuation')
+                            else _key_sets(handle, request)
+                        )
+                        answer = provider(request, keys)
+                    except RouteError:
+                        # The route itself failed (an import of the old engine on
+                        # it, say), which is no provider's error to hand the core.
+                        handle.cancel()
+                        raise
+                    except Exception as failure:  # noqa: BLE001 - the provider's
+                        provided, driver_class = _driver(failure, provider)
+                        outcome = {
+                            'outcome': 'error',
+                            'error': provided,
+                        }
                     else:
-                        attached[1] = answer
+                        # Native conversion is a host boundary, not an I/O
+                        # diagnostic or a core/model refusal. In particular this
+                        # handover must be outside the provider's error handler.
+                        if isinstance(answer, FetchRefused):
+                            _raise_fetch_refused(handle, answer)
+                        outcome = {'outcome': 'data', 'data': 1}
+                        if isinstance(answer, Page):
+                            attached[1] = answer.data
+                            outcome['continuation'] = answer.continuation
+                        else:
+                            attached[1] = answer
                 reply = codec.encode(
                     {
                         'message': 'fetch_reply',
@@ -510,6 +574,65 @@ def _steps(
         if owned_frame:
             handle = None
         raise
+
+
+def _raise_fetch_refused(handle: Any, refused: FetchRefused) -> NoReturn:
+    try:
+        handle.cancel()
+    except Exception:
+        # Preserve the selected actual owner across ordinary cleanup errors;
+        # process-control exceptions retain their normal propagation.
+        errors.raise_native(refused.raised)
+    errors.raise_native(refused.raised)
+
+
+def _source_partition(
+    requests: Sequence[dict[str, Any]], start: int
+) -> Sequence[dict[str, Any]]:
+    first = requests[start]
+    shape = first.get('partition')
+    if not isinstance(shape, dict) or set(shape) != {
+        'first',
+        'ordinal',
+        'parts',
+    }:
+        raise codec.CodecError(
+            'native source read lacks its complete issued partition'
+        )
+    if (
+        any(type(shape[name]) is not int for name in shape)
+        or shape['first'] != first['id']
+        or shape['ordinal'] != 0
+        or shape['parts'] <= 0
+    ):
+        raise codec.CodecError(
+            'native source read has an invalid first partition'
+        )
+    parts = requests[start : start + shape['parts']]
+    if len(parts) != shape['parts']:
+        raise codec.CodecError('native source read omits an issued chunk')
+    ids: set[int] = set()
+    for ordinal, member in enumerate(parts):
+        expected = {
+            'first': first['id'],
+            'ordinal': ordinal,
+            'parts': len(parts),
+        }
+        if (
+            member.get('purpose') != 'source_rows'
+            or member.get('continuation') is not None
+            or member.get('partition') != expected
+            or member.get('request') != first.get('request')
+            or member.get('lookup') != first.get('lookup')
+            or type(member.get('id')) is not int
+            or member['id'] <= 0
+            or member['id'] in ids
+        ):
+            raise codec.CodecError(
+                'native source chunks do not retain their exact ordered read partition'
+            )
+        ids.add(member['id'])
+    return parts
 
 
 def _call(

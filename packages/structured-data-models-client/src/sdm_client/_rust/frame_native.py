@@ -18,7 +18,6 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType, TracebackType
 from typing import (
-    TYPE_CHECKING,
     Any,
     Literal,
     NoReturn,
@@ -31,9 +30,6 @@ import pandas as pd
 
 from sdm_client._rust.codec import relation_name
 from sdm_client.errors import StructuredDataError
-
-if TYPE_CHECKING:
-    import numpy as np
 
 _ExceptionChain: TypeAlias = tuple[
     TracebackType | None, BaseException | None, BaseException | None, bool
@@ -286,7 +282,7 @@ class NativeFrameColumns:
     def __init__(
         self,
         columns: Mapping[str, Mapping[str, Any]],
-        arrays: Mapping[str, Mapping[str, Any]] | None = None,
+        series: Mapping[str, Mapping[str, pd.Series]] | None = None,
     ) -> None:
         self._columns = MappingProxyType(
             {
@@ -294,49 +290,32 @@ class NativeFrameColumns:
                 for source, types in columns.items()
             }
         )
-        self._arrays = MappingProxyType(
+        self._series = MappingProxyType(
             {
-                source: MappingProxyType(dict(arrays))
-                for source, arrays in (arrays or {}).items()
+                source: MappingProxyType(dict(values))
+                for source, values in (series or {}).items()
             }
         )
+
+    def target_series(
+        self, binding: Mapping[str, Any], rows: list[int]
+    ) -> pd.Series:
+        """Select this reached snapshot's original source positions once."""
+        if binding['column'] == '*':
+            import numpy as np
+
+            return pd.Series(np.ones(len(rows), dtype='int64'))
+        source = relation_name(binding['source'])
+        return self._series[source][binding['column']].iloc[rows]
+
+    def columns(self, view: Any) -> NativeFrameColumns:
+        """All source views are bound to this same retained frame snapshot."""
+        return self
 
     def dtype(self, binding: Mapping[str, Any]) -> Any:
         """Read exactly the source Relation/column resolved by the core graph."""
         source = relation_name(binding['source'])
         return self._columns[source][binding['column']]
-
-    def label_result(
-        self, binding: Mapping[str, Any], values: list[Any]
-    ) -> (
-        np.ndarray[Any, np.dtype[np.object_]] | pd.api.extensions.ExtensionArray
-    ):
-        """Perform the reached native pointwise-result conversion.
-
-        Values are the core's actual list labels, never host aggregations.
-        The original array retains its actual native dtype and storage owner.
-        Native pandas chooses its own conversion/fallback behavior, including
-        the measured unhashable-list failure; no runtime-version policy lives
-        here. The actual successful native result is authoritative.
-        """
-        import numpy as np
-
-        source = relation_name(binding['source'])
-        native = self._arrays[source][binding['column']]
-        boxed = np.empty(len(values), dtype=object)
-        for ordinal, value in enumerate(values):
-            boxed[ordinal] = value
-        cast = getattr(native, '_cast_pointwise_result', None)
-        if cast is not None:
-            return cast(boxed)
-        else:
-            # This is the native operation used by pandas' earlier groupby
-            # implementation, including its own extension-cast fallback.
-            from pandas.core.dtypes.cast import maybe_cast_pointwise_result
-
-            return maybe_cast_pointwise_result(
-                boxed, self.dtype(binding), numeric_only=True
-            )
 
     def prediction(
         self, binding: Mapping[str, Any], indices: list[Any]

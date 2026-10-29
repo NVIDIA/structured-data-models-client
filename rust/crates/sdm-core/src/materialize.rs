@@ -58,8 +58,14 @@
 //! anything is fetched.
 
 pub(crate) mod frame_values;
-mod prepared;
+mod lookup_rows;
+mod native_conditions;
+mod native_labels;
+pub(crate) mod native_lookup;
 mod native_source;
+pub(crate) mod native_sql;
+pub(crate) mod native_target;
+mod prepared;
 mod task;
 
 use task::{BatchLayout, EntityDraw, LabelDraw, TaskRows, entity_sample};
@@ -2527,7 +2533,9 @@ fn fresh_seed(now: &Scalar, max_seed: u64) -> u64 {
     }
 }
 
-/// The rows of `array` holding a NaN: none but in a float column.
+/// Missing floating keys, including the null representation produced by
+/// actual nullable-float source construction from a native NaN.
+/// Other scalar families keep their existing independent missingness policy.
 fn nan_rows(array: &ArrayRef) -> BTreeSet<usize> {
     use arrow_array::types::{Float32Type, Float64Type};
     match array.data_type() {
@@ -2535,14 +2543,14 @@ fn nan_rows(array: &ArrayRef) -> BTreeSet<usize> {
             .as_primitive::<Float32Type>()
             .iter()
             .enumerate()
-            .filter(|(_, v)| v.is_some_and(f32::is_nan))
+            .filter(|(_, v)| v.is_none_or(f32::is_nan))
             .map(|(row, _)| row)
             .collect(),
         DataType::Float64 => array
             .as_primitive::<Float64Type>()
             .iter()
             .enumerate()
-            .filter(|(_, v)| v.is_some_and(f64::is_nan))
+            .filter(|(_, v)| v.is_none_or(f64::is_nan))
             .map(|(row, _)| row)
             .collect(),
         _ => BTreeSet::new(),
@@ -2862,6 +2870,45 @@ pub(crate) enum Gathered {
     Done(OperationResult),
 }
 
+fn gathered_result(
+    asker: &Asker,
+    gathered: Gathered,
+    facts: Option<QueryFacts>,
+) -> Result<OperationResult, CoreError> {
+    match gathered {
+        Gathered::Done(result) => Ok(result),
+        Gathered::Request(calls, query) => {
+            // The first call's payload is the state's, and each later
+            // call's a batch of it, in order (`main`'s multi-call
+            // `predict`): `predict` sends them one after another.
+            let mut calls = calls.into_iter();
+            let (first, _) = calls
+                .next()
+                .ok_or_else(|| internal("a request gathered as no call"))?;
+            let (payload, query) = attach_request(asker, first, &query)?;
+            let mut batches = Vec::new();
+            for (later, rows) in calls {
+                batches.push(RequestBatch {
+                    payload: asker.attach(Attachment::Bytes(later))?,
+                    rows,
+                    request_id: None,
+                });
+            }
+            Ok(OperationResult::Materialize(Materialized {
+                state: RequestState {
+                    version: REQUEST_STATE_VERSION,
+                    payload,
+                    query,
+                    forecast: None,
+                    batches: (!batches.is_empty()).then_some(batches),
+                    ranking: None,
+                },
+                query: facts,
+            }))
+        }
+    }
+}
+
 pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult, CoreError> {
     let (steps, ranked, facts) = resolved(&inputs);
     // A ranking, asked as one binary question per candidate (T2.8).
@@ -2875,38 +2922,7 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
         return Err(crate::ranking::candidates_on_no_ranking());
     }
     let Some(steps) = steps else {
-        return match one(&asker, inputs).await? {
-            Gathered::Done(result) => Ok(result),
-            Gathered::Request(calls, query) => {
-                // The first call's payload is the state's, and each later
-                // call's a batch of it, in order (`main`'s multi-call
-                // `predict`): `predict` sends them one after another.
-                let mut calls = calls.into_iter();
-                let (first, _) = calls
-                    .next()
-                    .ok_or_else(|| internal("a request gathered as no call"))?;
-                let (payload, query) = attach_request(&asker, first, &query)?;
-                let mut batches = Vec::new();
-                for (later, rows) in calls {
-                    batches.push(RequestBatch {
-                        payload: asker.attach(Attachment::Bytes(later))?,
-                        rows,
-                        request_id: None,
-                    });
-                }
-                Ok(OperationResult::Materialize(Materialized {
-                    state: RequestState {
-                        version: REQUEST_STATE_VERSION,
-                        payload,
-                        query,
-                        forecast: None,
-                        batches: (!batches.is_empty()).then_some(batches),
-                        ranking: None,
-                    },
-                    query: facts,
-                }))
-            }
-        };
+        return gathered_result(&asker, one(&asker, inputs).await?, facts);
     };
     // A forecast, asked as one regression per step, each gathered as the
     // client's `_in_parts` gathers it (T1.36 fix 21): in order, each by a
@@ -3138,6 +3154,20 @@ pub(crate) async fn prepare_one(
     asker: &Asker,
     inputs: Inputs,
 ) -> Result<prepared::PreparedTask, CoreError> {
+    let source = Arc::new(prepare_source(asker, inputs).await?);
+    prepared::population(asker, source).await
+}
+
+pub(crate) async fn prepare_source(
+    asker: &Asker,
+    inputs: Inputs,
+) -> Result<prepared::PreparedSource, CoreError> {
+    let mut option_identity = crate::frame_materialize::identity::Identity::new("source-options");
+    match &inputs.values {
+        Some(values) => option_identity.logical(values),
+        None => option_identity.bytes(b"absent"),
+    }
+    let options_identity = option_identity.finish();
     let frames = inputs.frames.clone();
     // The memo the run leaves the host: the one handed back, or a new one
     // (decision E52), left as it is by a run refused before it reads.
@@ -3238,8 +3268,6 @@ pub(crate) async fn prepare_one(
         })),
         None => Seed::from(DEFAULT_SEED),
     };
-    let entropy = Entropy::from_hex(seed.magnitude_hex())
-        .ok_or_else(|| internal("a seed's digits do not read"))?;
 
     let indices = indices.ok_or_else(|| {
         invalid(
@@ -3442,7 +3470,7 @@ pub(crate) async fn prepare_one(
     // assumption aggregate, each over the windows of them all pooled; the
     // lags and the anchor's bounds the target's alone
     // (`to_autoregressive_query`, `get_all_target_aggregations`).
-    let labelled_fetches = fetches(&graph, &asked.entity_table, &asked.every_windowed())?;
+    fetches(&graph, &asked.entity_table, &asked.every_windowed())?;
     let mut windows = Vec::new();
     asked.target.windowed(&mut windows);
     let fetches = fetches(&graph, &asked.entity_table, &windows)?;
@@ -3546,57 +3574,17 @@ pub(crate) async fn prepare_one(
                 "max_pq_iterations",
             )
         })?;
-    let sampled = entity_sample(
-        asker,
-        EntityDraw {
-            entity,
-            key: &key,
-            asked: &asked,
-            read_times: &read_times,
-            memo: &memo.memo,
-            frames: frames.as_ref(),
-            trials,
-            seed: &seed,
-            seed_value,
-            unseeded,
-        },
-    )
-    .await?;
-    // The entities, cast to the sampled key's type under the core's rule
-    // table (T1.32a), where the reference casts them, after its sample
-    // (`pd.Series(indices, dtype=train_pkey.dtype)`): an entity that does
-    // not cast is the caller's error, never the core's (E41(l)).
-    let indices = keys::cast(&indices, sampled.entity_key.data_type())?;
-    let population = task::example_population(
-        &LabelDraw {
-            entity,
-            key: &key,
-            asked: &asked,
-            read_times: &read_times,
-            labelled_fetches: &labelled_fetches,
-            fetches: &fetches,
-            windows: &windows,
-            entropy: &entropy,
-            context_anchor,
-            anchor_entity,
-            span,
-            earliest,
-            context_examples,
-            trials,
-            entity_filter: entity_filter.as_deref(),
-        },
-        sampled,
-    )?;
     keep_stored_times(&mut memo, &read_times);
     let no_time_marker = bounded.is_empty();
-    Ok(prepared::PreparedTask {
+    Ok(prepared::PreparedSource {
+        source: memo.memo.source.clone(),
         description,
         graph,
         asked,
         source_query,
-        population,
         indices,
         seed,
+        seed_value,
         unseeded,
         anchor_entity,
         anchor,
@@ -3616,6 +3604,7 @@ pub(crate) async fn prepare_one(
         read_times,
         memo: memo.memo,
         frames,
+        options_identity,
         #[cfg(feature = "test-ops")]
         labels_only,
     })
@@ -4202,6 +4191,11 @@ struct Fetched {
     rows: RecordBatch,
     batch: Vec<usize>,
     times: Vec<Option<i64>>,
+    /// Native frame positions selected by this exact reached source read.
+    /// Provider-backed rows have their own retained fetched-table owner.
+    source_positions: Option<Vec<usize>>,
+    source_read: Option<sdm_contract::run::ReplyId>,
+    time_column: String,
 }
 
 impl Labelling<'_> {
@@ -4356,35 +4350,31 @@ async fn fetch_rows(
         .clone()
         .ok_or_else(|| internal("the aggregated table has no time column"))?;
     let seeds = sample::seeds(keys, vec![(SEED_END, ends), (SEED_START, starts)])?;
-    let rows = times
-        .read(
+    let requested = times
+        .windowed(
             asker,
             table,
-            one_batch(
-                &ask(
-                    asker,
-                    times
-                        .windowed(
-                            asker,
-                            table,
-                            sample::by_time(
-                                table,
-                                &fetch.edge.fkey,
-                                table.ordered(&fetch.columns),
-                                key_set(asker, seeds)?,
-                                true,
-                            )?,
-                        )
-                        .await?,
-                )
-                .await?,
+            sample::by_time(
+                table,
+                &fetch.edge.fkey,
+                table.ordered(&fetch.columns),
+                key_set(asker, seeds)?,
+                true,
             )?,
         )
         .await?;
+    let name = requested.name();
+    let pending = asker.fetch(requested)?;
+    let source_read = pending.source_read();
+    let raw = crate::describe::data(pending.await, name)?;
+    let rows = times.read(asker, table, one_batch(&raw)?).await?;
     Ok(Fetched {
         strings: BTreeMap::new(),
+        source_positions: None,
+        source_read: source_read.and_then(|read| read.first()),
         batch: batches(&rows, examples)?,
         times: times_ns(named(&rows, &time_column)?, &time_column)?,
+        time_column,
         rows,
     })
 }

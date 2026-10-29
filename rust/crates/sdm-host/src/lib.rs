@@ -34,7 +34,9 @@ pub use sdm_core::{
     FrameKeyCandidates, FrameNativeConstructor, FrameObjectConstructor, FrameObjectContent,
     FrameObjectRead, LogicalValue, RetainedFrameGraph, RetainedFrameLabelBatch,
     RetainedFrameLabelGroups, RetainedFramePayload, RetainedFramePopulation, RetainedFrameQuestion,
-    RetainedFrameReferences, RetainedFrameTask, check_frame_cell, dtype_names, meanings,
+    RetainedFrameReferences, RetainedFrameTask, RetainedLabelInputs, RetainedLookupRows,
+    RetainedMaterializeBatch, RetainedMaterializeGroups, RetainedMaterializePopulation,
+    RetainedMaterializeSource, RetainedTargetColumn, check_frame_cell, dtype_names, meanings,
     native_constructed_dtype, wire_names,
 };
 pub use zones::{ZoneError, ZoneResolver, ZoneRoot, ZoneSource, session_zone_offset};

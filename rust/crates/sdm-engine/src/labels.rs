@@ -303,6 +303,39 @@ pub fn aggregate_kept(
             taken[batch[row]].push(row);
         }
     }
+    aggregate_rows(aggregation, examples, values, &taken)
+}
+
+/// The same numeric kernel over complete already-selected source rows.
+/// Window and filter policy has been consumed by the bound native column;
+/// this entry point introduces no sentinel timestamps or second time window.
+pub fn aggregate_selected(
+    aggregation: Aggregation,
+    examples: usize,
+    batch: &[usize],
+    values: &Values,
+) -> Result<Aggregated, CoreError> {
+    if values.len() != batch.len() || batch.iter().any(|&row| row >= examples) {
+        return Err(CoreError::protocol(
+            Sentence::InvalidMessage,
+            "selected aggregation rows do not align with their candidate identities",
+        ));
+    }
+    let mut taken = vec![Vec::new(); examples];
+    for (row, &candidate) in batch.iter().enumerate() {
+        if values.present(row) {
+            taken[candidate].push(row);
+        }
+    }
+    aggregate_rows(aggregation, examples, values, &taken)
+}
+
+fn aggregate_rows(
+    aggregation: Aggregation,
+    examples: usize,
+    values: &Values,
+    taken: &[Vec<usize>],
+) -> Result<Aggregated, CoreError> {
     let present: Vec<bool> = match aggregation {
         Aggregation::Sum | Aggregation::Count => vec![true; examples],
         _ => taken.iter().map(|rows| !rows.is_empty()).collect(),
@@ -968,45 +1001,55 @@ pub fn truth(target: &Target) -> Result<Truth, CoreError> {
             constant,
         } => leaf(target, &Test::Compare(*op, constant.as_ref()), false),
         Target::Member { target, values } => leaf(target, &Test::In(values), false),
-        Target::Not(inner) => {
-            let Truth { values, mask } = truth(inner)?;
-            Ok(Truth {
-                values: values.into_iter().map(|v| !v).collect(),
-                mask,
-            })
-        }
+        Target::Not(inner) => Ok(negate_truth(&truth(inner)?)),
         Target::Both { op, left, right } => {
             let left = truth(left)?;
             let right = truth(right)?;
-            if left.values.len() != right.values.len() {
-                return Err(CoreError::new(
-                    Sentence::Internal,
-                    "a logical target's sides do not cover the same rows",
-                ));
-            }
-            Ok(Truth {
-                values: left
-                    .values
-                    .iter()
-                    .zip(&right.values)
-                    .map(|(&l, &r)| match op {
-                        BoolOp::And => l && r,
-                        BoolOp::Or => l || r,
-                    })
-                    .collect(),
-                mask: left
-                    .mask
-                    .iter()
-                    .zip(&right.mask)
-                    .map(|(&l, &r)| l && r)
-                    .collect(),
-            })
+            combine_truth(*op, &left, &right)
         }
         Target::Column(_) | Target::Aggregated(_) | Target::Listed(_) => Err(CoreError::new(
             Sentence::Internal,
             "a column or an aggregation stands where a condition is read",
         )),
     }
+}
+
+/// The same Boolean kernel over actual already completed condition data.
+/// Presence remains independent from a value such as the result of = NULL.
+pub fn negate_truth(truth: &Truth) -> Truth {
+    Truth {
+        values: truth.values.iter().map(|value| !value).collect(),
+        mask: truth.mask.clone(),
+    }
+}
+
+pub fn combine_truth(op: BoolOp, left: &Truth, right: &Truth) -> Result<Truth, CoreError> {
+    if left.values.len() != right.values.len()
+        || left.mask.len() != left.values.len()
+        || right.mask.len() != right.values.len()
+    {
+        return Err(CoreError::new(
+            Sentence::Internal,
+            "a logical target's sides do not cover the same rows",
+        ));
+    }
+    Ok(Truth {
+        values: left
+            .values
+            .iter()
+            .zip(&right.values)
+            .map(|(&left, &right)| match op {
+                BoolOp::And => left && right,
+                BoolOp::Or => left || right,
+            })
+            .collect(),
+        mask: left
+            .mask
+            .iter()
+            .zip(&right.mask)
+            .map(|(&left, &right)| left && right)
+            .collect(),
+    })
 }
 
 /// One condition's truth over its operand, a column or an aggregation.

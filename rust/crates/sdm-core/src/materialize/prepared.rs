@@ -8,14 +8,15 @@
 
 use super::*;
 
-pub(crate) struct PreparedTask {
+pub(crate) struct PreparedSource {
+    pub(super) source: String,
     pub(super) description: SourceDescription,
     pub(super) graph: Graph,
     pub(super) asked: Asked,
     pub(super) source_query: String,
-    pub(super) population: task::ExamplePopulation,
     pub(super) indices: ArrayRef,
     pub(super) seed: Seed,
+    pub(super) seed_value: Scalar,
     pub(super) unseeded: bool,
     pub(super) anchor_entity: bool,
     pub(super) anchor: i64,
@@ -35,51 +36,161 @@ pub(crate) struct PreparedTask {
     pub(super) read_times: Times,
     pub(super) memo: SamplerMemo,
     pub(super) frames: Option<crate::frame_materialize::Context>,
+    pub(super) options_identity: String,
     #[cfg(feature = "test-ops")]
     pub(super) labels_only: bool,
 }
 
-impl PreparedTask {
-    pub(super) async fn context(&self, asker: &Asker) -> Result<task::LabelledContext, CoreError> {
-        let entity = self
+pub(crate) struct PreparedTask {
+    pub(super) source: Arc<PreparedSource>,
+    pub(super) population: task::ExamplePopulation,
+    pub(super) indices: ArrayRef,
+    pub(super) memo: SamplerMemo,
+}
+
+/// Borrowed label kernels reconstructed from the same owned task meaning.
+/// The owner contains neither these borrows nor a suspended computation.
+pub(super) struct Draw<'a> {
+    source: &'a PreparedSource,
+    entity: &'a Table,
+    windows: Vec<&'a Windowed>,
+    labelled: Vec<Fetch<'a>>,
+    target: Vec<Fetch<'a>>,
+    entropy: Entropy,
+}
+
+impl<'a> Draw<'a> {
+    pub(super) fn new(source: &'a PreparedSource) -> Result<Self, CoreError> {
+        let entity = source
             .graph
-            .table(&self.asked.entity_table)
-            .ok_or_else(|| internal("the prepared task lost its entity table"))?;
-        let labelled_fetches = fetches(
-            &self.graph,
-            &self.asked.entity_table,
-            &self.asked.every_windowed(),
-        )?;
+            .table(&source.asked.entity_table)
+            .ok_or_else(|| internal("the captured source lost its entity table"))?;
         let mut windows = Vec::new();
-        self.asked.target.windowed(&mut windows);
-        let target_fetches = fetches(&self.graph, &self.asked.entity_table, &windows)?;
-        let entropy = Entropy::from_hex(self.seed.magnitude_hex())
-            .ok_or_else(|| internal("the prepared task lost its sampling entropy"))?;
-        let mut memo = Memo {
-            asker,
-            frames: self.frames.clone(),
-            memo: self.memo.clone(),
-        };
-        let draw = LabelDraw {
+        source.asked.target.windowed(&mut windows);
+        Ok(Self {
+            source,
             entity,
-            key: &self.asked.entity_column,
-            asked: &self.asked,
-            read_times: &self.read_times,
+            labelled: fetches(
+                &source.graph,
+                &source.asked.entity_table,
+                &source.asked.every_windowed(),
+            )?,
+            target: fetches(&source.graph, &source.asked.entity_table, &windows)?,
+            windows,
+            entropy: Entropy::from_hex(source.seed.magnitude_hex())
+                .ok_or_else(|| internal("the captured source lost its sampling entropy"))?,
+        })
+    }
+
+    pub(super) fn draw<'b>(&'b self, times: &'b Times) -> LabelDraw<'b> {
+        let source = self.source;
+        LabelDraw {
+            entity: self.entity,
+            key: &source.asked.entity_column,
+            asked: &source.asked,
+            read_times: times,
+            labelled_fetches: &self.labelled,
+            fetches: &self.target,
+            windows: &self.windows,
+            entropy: &self.entropy,
+            context_anchor: source.context_anchor,
+            anchor_entity: source.anchor_entity,
+            span: source.span,
+            earliest: source.earliest,
+            context_examples: source.context_examples,
+            trials: source.trials,
+            entity_filter: source.entity_filter.as_deref(),
+        }
+    }
+}
+
+pub(super) async fn population(
+    asker: &Asker,
+    source: Arc<PreparedSource>,
+) -> Result<PreparedTask, CoreError> {
+    let entity = source
+        .graph
+        .table(&source.asked.entity_table)
+        .ok_or_else(|| internal("the captured source lost its entity table"))?;
+    let mut memo = Memo {
+        asker,
+        frames: source.frames.clone(),
+        memo: source.memo.clone(),
+    };
+    let sampled = entity_sample(
+        asker,
+        EntityDraw {
+            entity,
+            key: &source.asked.entity_column,
+            asked: &source.asked,
+            read_times: &source.read_times,
+            memo: &memo.memo,
+            frames: source.frames.as_ref(),
+            trials: source.trials,
+            seed: &source.seed,
+            seed_value: source.seed_value.clone(),
+            unseeded: source.unseeded,
+        },
+    )
+    .await?;
+    let indices = keys::cast(&source.indices, sampled.entity_key.data_type())?;
+    let entropy = Entropy::from_hex(source.seed.magnitude_hex())
+        .ok_or_else(|| internal("the captured source lost its sampling entropy"))?;
+    let labelled_fetches = fetches(
+        &source.graph,
+        &source.asked.entity_table,
+        &source.asked.every_windowed(),
+    )?;
+    let mut windows = Vec::new();
+    source.asked.target.windowed(&mut windows);
+    let target_fetches = fetches(&source.graph, &source.asked.entity_table, &windows)?;
+    let population = task::example_population(
+        &LabelDraw {
+            entity,
+            key: &source.asked.entity_column,
+            asked: &source.asked,
+            read_times: &source.read_times,
             labelled_fetches: &labelled_fetches,
             fetches: &target_fetches,
             windows: &windows,
             entropy: &entropy,
-            context_anchor: self.context_anchor,
-            anchor_entity: self.anchor_entity,
-            span: self.span,
-            earliest: self.earliest,
-            context_examples: self.context_examples,
-            trials: self.trials,
-            entity_filter: self.entity_filter.as_deref(),
+            context_anchor: source.context_anchor,
+            anchor_entity: source.anchor_entity,
+            span: source.span,
+            earliest: source.earliest,
+            context_examples: source.context_examples,
+            trials: source.trials,
+            entity_filter: source.entity_filter.as_deref(),
+        },
+        sampled,
+    )?;
+    keep_stored_times(&mut memo, &source.read_times);
+    Ok(PreparedTask {
+        source,
+        population,
+        indices,
+        memo: memo.memo,
+    })
+}
+
+impl PreparedTask {
+    pub(super) async fn context(&self, asker: &Asker) -> Result<task::LabelledContext, CoreError> {
+        let source = &self.source;
+        let plan = Draw::new(source)?;
+        let mut memo = Memo {
+            asker,
+            frames: source.frames.clone(),
+            memo: self.memo.clone(),
         };
-        let result =
-            task::label_population(asker, &mut memo, draw, self.population.clone(), None).await;
-        keep_stored_times(&mut memo, &self.read_times);
+        let result = task::label_population(
+            asker,
+            &mut memo,
+            plan.draw(&source.read_times),
+            self.population.clone(),
+            None,
+        )
+        .await;
+        keep_stored_times(&mut memo, &source.read_times);
         result
     }
 }
@@ -89,12 +200,35 @@ pub(super) async fn finish(
     task: &PreparedTask,
     labelled: task::LabelledContext,
 ) -> Result<Gathered, CoreError> {
-    let PreparedTask {
+    finish_observed(asker, task, labelled, None).await
+}
+
+pub(super) async fn finish_native(
+    asker: &Asker,
+    task: &PreparedTask,
+    labelled: task::LabelledContext,
+    current: Option<&sdm_wire::json::Value>,
+) -> Result<Gathered, CoreError> {
+    finish_observed(
+        asker,
+        task,
+        labelled,
+        Some(current.and_then(|values| values.get("inference_config"))),
+    )
+    .await
+}
+
+async fn finish_observed(
+    asker: &Asker,
+    task: &PreparedTask,
+    labelled: task::LabelledContext,
+    current_inference: Option<Option<&sdm_wire::json::Value>>,
+) -> Result<Gathered, CoreError> {
+    let PreparedSource {
         description,
         graph,
         asked,
         source_query,
-        indices,
         seed,
         unseeded,
         anchor_entity,
@@ -109,7 +243,7 @@ pub(super) async fn finish(
         read_times,
         frames,
         ..
-    } = task;
+    } = task.source.as_ref();
     let (unseeded, anchor_entity, anchor, mode, asked_examples, most_calls, nulls, no_time_marker) = (
         *unseeded,
         *anchor_entity,
@@ -120,7 +254,7 @@ pub(super) async fn finish(
         *nulls,
         *no_time_marker,
     );
-    let indices = Arc::clone(indices);
+    let indices = Arc::clone(&task.indices);
     let options::Asked {
         num_context_samples,
         inference_config,
@@ -131,7 +265,7 @@ pub(super) async fn finish(
     } = deferred;
     let (num_context_samples, rows_per_call, lag_timesteps) =
         (*num_context_samples, *rows_per_call, *lag_timesteps);
-    let span = task.span;
+    let span = task.source.span;
     let mut memo = Memo {
         asker,
         frames: frames.clone(),
@@ -146,7 +280,7 @@ pub(super) async fn finish(
     asked.target.windowed(&mut windows);
     let fetches = fetches(graph, &asked.entity_table, &windows)?;
     #[cfg(feature = "test-ops")]
-    let labels_only = task.labels_only;
+    let labels_only = task.source.labels_only;
     let gathered = labelled.keys.len();
     // The target's own past as features (`lag_timesteps`, T2.9), where the
     // reference's engine adds them: its value refused, as the engine
@@ -238,7 +372,10 @@ pub(super) async fn finish(
     // options, read for the task's config class, as the engine reads them
     // before it lays out any request.
     let top_k = top_k.as_ref().map(options::top_k).transpose()?;
-    let options = options::options(asked.task, inference_config.as_ref())?;
+    let options = options::options(
+        asked.task,
+        current_inference.unwrap_or(inference_config.as_ref()),
+    )?;
     // A static target's columns, kept out of what the request reads and
     // sends (`get_exclude_cols_dict`); each must be one of its table's
     // features, as the reference's sampler requires.
@@ -349,84 +486,35 @@ pub(super) async fn finish(
         let looked_up = if let Some(frames) = frames {
             crate::frame_materialize::lock(frames).lookup(entity, &all_keys, &entity_read)?
         } else {
+            let request = sample::by_pkey(
+                entity,
+                entity_read.clone(),
+                key_set(asker, sample::seeds(Arc::clone(&all_keys), vec![])?)?,
+                true,
+            )?;
+            let name = request.name();
+            let pending =
+                asker
+                    .fetch(request)?
+                    .with_lookup(Arc::new(super::native_lookup::LookupContext {
+                        entity: entity.clone(),
+                        key: key.clone(),
+                        scored: Arc::clone(&scored),
+                        num_train,
+                        range: sdm_contract::frames::materialize::FrameBatchRange {
+                            start: batch.range.start as u64,
+                            stop: batch.range.end as u64,
+                        },
+                    }));
             read_times
                 .read(
                     asker,
                     entity,
-                    one_batch(
-                        &ask(
-                            asker,
-                            sample::by_pkey(
-                                entity,
-                                entity_read.clone(),
-                                key_set(asker, sample::seeds(Arc::clone(&all_keys), vec![])?)?,
-                                true,
-                            )?,
-                        )
-                        .await?,
-                    )?,
+                    one_batch(&crate::describe::data(pending.await, name)?)?,
                 )
                 .await?
         };
-        let positions = batches(&looked_up, examples_total)?;
-        // A key the source enforces unique is held by one row each: a
-        // dialect may leave its count out (`SEED_KEY_UNIQUE`), and any
-        // other count is read.
-        let unique = entity.column(&key).is_some_and(|c| c.unique);
-        let matches = match looked_up.column_by_name(MATCHES_COLUMN) {
-            None if unique => None,
-            _ => Some(
-                named(&looked_up, MATCHES_COLUMN)?
-                    .as_primitive_opt::<Int64Type>()
-                    .ok_or_else(|| {
-                        crate::run::schema_mismatch("expected", Some(MATCHES_COLUMN), "not int64")
-                    })?,
-            ),
-        };
-        // Each entity to score that more than one row holds, in the order
-        // the caller gave them, each value once, as the reference names
-        // them (`_refuse_an_id_scored_twice`): the table, its key and the
-        // values, values of the caller's own call (KO2-86).
-        let mut repeated: Vec<usize> = positions
-            .iter()
-            .enumerate()
-            .filter(|&(row, &at)| at >= num_train && matches.is_some_and(|m| m.value(row) > 1))
-            .map(|(_, &at)| at)
-            .collect();
-        if !repeated.is_empty() {
-            repeated.sort_unstable();
-            repeated.dedup();
-            let mut keys: Vec<Scalar> = Vec::with_capacity(repeated.len());
-            for at in repeated {
-                let value = key_scalar(scored.as_ref(), at - num_train);
-                if !keys.contains(&value) {
-                    keys.push(value);
-                }
-            }
-            // Said of the first five, and how many more, as the reference
-            // says them (`_refuse_an_id_scored_twice`).
-            let (sentence, more) = match keys.len() {
-                1 => (Sentence::HeldBySeveralRowsOne, 0),
-                2..=5 => (Sentence::HeldBySeveralRows, 0),
-                n => (Sentence::HeldBySeveralRowsMany, n - 5),
-            };
-            let mut refused = invalid(
-                sentence,
-                "an entity to predict for is held by more than one row, so which is meant \
-                 would be a guess",
-                "indices",
-            );
-            if more > 0 {
-                refused = refused
-                    .with_field("shown", Detail::List(keys[..5].to_vec()))
-                    .with_field("more", count(more));
-            }
-            return Err(refused
-                .with_field("reason", Detail::text("held_by_several_rows"))
-                .with_field("table", Detail::text(&entity.name))
-                .with_field("key", Detail::text(&key))
-                .with_field("keys", Detail::List(keys)));
-        }
+        let positions = super::lookup_rows::validate(entity, &key, &scored, num_train, &looked_up)?;
         if positions.len() != examples_total {
             // The table and the keys not found, in the order the caller gave
             // them: values of the caller's own call, which a refusal may name

@@ -55,7 +55,6 @@ from typing import TYPE_CHECKING, Any
 
 from sdm_client._rust import codec, errors, providers, results
 from sdm_client._rust.results import CoreQuery, CoreRequest, QueryFacts
-from sdm_client._rust.run import run
 from sdm_client._rust.spec import held_schema
 from sdm_client.errors import StructuredDataError
 
@@ -414,13 +413,15 @@ def gather(
             fields['key']
         ],
     ):
-        finished = run(
+        from sdm_client._rust import native_sql
+
+        finished, gathered = native_sql.gather(
             operation,
             attachments,
-            provider=provider,
-            state=materializer._core_sampler_state,
+            provider,
+            materializer._core_sampler_state,
+            options,
         )
-    gathered = results.expect(finished.result, results.Gathered)
     state = gathered.state
     if gathered.query is None:
         raise StructuredDataError(

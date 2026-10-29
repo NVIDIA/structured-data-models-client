@@ -268,6 +268,8 @@ fn fetch_step(fetch: &TestFetch) -> ControlMessage {
             plan: fetch.plan.clone().expect("the test fetch's own plan"),
             continuation: None,
             purpose: None,
+            partition: None,
+            lookup: None,
         }],
     })
 }

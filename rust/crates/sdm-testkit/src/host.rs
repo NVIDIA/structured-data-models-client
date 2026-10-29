@@ -968,7 +968,11 @@ fn drive(
                     let mut fetched = json!({"request": step.request, "plan": step.plan});
                     // Plan B's read of a table as it stands, marked as the
                     // core marks it (T3.4), on the fetch and its statements.
-                    log.purpose = step.purpose.map(|_| "locate");
+                    log.purpose = step.purpose.map(|purpose| match purpose {
+                        sdm_contract::run::FetchPurpose::Locate => "locate",
+                        sdm_contract::run::FetchPurpose::DescribeResult => "describe_result",
+                        sdm_contract::run::FetchPurpose::SourceRows => "source_rows",
+                    });
                     if let Some(purpose) = step.purpose {
                         fetched["purpose"] = json!(purpose);
                     }

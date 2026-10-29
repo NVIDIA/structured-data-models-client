@@ -43,6 +43,7 @@ pub enum Operation {
     Predict(Predict),
     PrepareRequest(crate::prepare::PrepareRequest),
     PrepareFrames(crate::frames::materialize::PrepareFrames),
+    PrepareMaterialize(crate::materialize::PrepareMaterialize),
     /// Operations only tests reach, built only with the `test-ops` feature,
     /// which a shipped build leaves off; not part of the contract's schema.
     #[cfg(feature = "test-ops")]
@@ -64,6 +65,13 @@ pub enum AttachmentKind {
     FramePopulation,
     FrameLabelGroups,
     FrameLabelBatch,
+    LabelInputs,
+    TargetColumn,
+    LookupRows,
+    MaterializeSource,
+    MaterializePopulation,
+    MaterializeGroups,
+    MaterializeBatch,
     FrameTask,
     FrameReferences,
     FramePayload,
@@ -80,6 +88,7 @@ impl Operation {
             Operation::Predict(_) => "predict",
             Operation::PrepareRequest(_) => "prepare_request",
             Operation::PrepareFrames(_) => "prepare_frames",
+            Operation::PrepareMaterialize(_) => "prepare_materialize",
             #[cfg(feature = "test-ops")]
             Operation::Test(_) => "test",
         }
@@ -91,6 +100,7 @@ impl Operation {
         use AttachmentKind::{Arrow, Bytes};
         match self {
             Operation::PrepareFrames(request) => vec![(request.input, Bytes)],
+            Operation::PrepareMaterialize(request) => vec![(request.input, Bytes)],
             Operation::ValidateQuery(v) => vec![(v.query, Bytes), (v.schema, Bytes)],
             Operation::DescribeSource(d) => {
                 let mut named = vec![(d.source, Bytes)];
@@ -171,6 +181,7 @@ pub enum OperationResult {
     Predict(Predicted),
     PrepareRequest(crate::prepare::PreparedRequest),
     PrepareFrames(crate::frames::materialize::PreparedFrames),
+    PrepareMaterialize(crate::materialize::PreparedMaterialize),
     DecodedDirectResponse(crate::prepare::DecodedDirectResponse),
     #[cfg(feature = "test-ops")]
     #[schemars(skip)]
@@ -1574,6 +1585,12 @@ pub struct Attachments {
     pub frame_checkpoint_manifest: crate::frames::FrameCheckpointManifest,
     #[schemars(rename = "FrameCheckpointManifest.metadata")]
     pub frame_checkpoint_metadata: crate::frames::FrameCheckpointMetadata,
+    #[schemars(rename = "PrepareMaterialize.input")]
+    pub prepare_materialize_input: crate::materialize::MaterializePreparation,
+    #[schemars(rename = "PreparedMaterialize.value")]
+    pub prepare_materialize_value: crate::materialize::PreparedMaterializeValue,
+    #[schemars(rename = "MaterializePreparation/request.values")]
+    pub materialize_native_inference: CallValues,
     #[schemars(rename = "PrepareFrames.input")]
     pub prepare_frames_input: crate::frames::materialize::FramePreparation,
     #[schemars(rename = "PreparedFrames.value")]

@@ -304,10 +304,23 @@ fn attachment_object<'local>(
 ) -> Result<JObject<'local>, jni::errors::Error> {
     Ok(match attachment {
         Attachment::Bytes(bytes) => env.byte_array_from_slice(&bytes)?.into(),
+        Attachment::LookupRows(_)
+        | Attachment::MaterializeSource(_)
+        | Attachment::MaterializePopulation(_)
+        | Attachment::MaterializeGroups(_)
+        | Attachment::MaterializeBatch(_) => {
+            env.throw_new(
+                jni_str!("java/lang/IllegalArgumentException"),
+                jni_str!("native materialization data ownership is not a Java operation"),
+            )?;
+            return Err(jni::errors::Error::JavaException);
+        }
         Attachment::FrameGraph(_)
         | Attachment::FrameQuestion(_)
         | Attachment::FramePopulation(_)
         | Attachment::FrameLabelGroups(_)
+        | Attachment::LabelInputs(_)
+        | Attachment::TargetColumn(_)
         | Attachment::FrameLabelBatch(_)
         | Attachment::FrameTask(_)
         | Attachment::FrameReferences(_)

@@ -24,10 +24,10 @@ mod overlap_tests;
 #[cfg(test)]
 mod source_keys_tests;
 
-use arrow_array::UInt64Array;
 use sdm_contract::frames::materialize::*;
 use sdm_wire::json::Value;
 
+use super::native_labels::{label_encoding, labelled_rows, read_link_labels};
 use super::*;
 use crate::attached::{take_json, take_option_values, take_option_values_if};
 use crate::frame_materialize::identity::{Identity, ordered_coverage};
@@ -219,10 +219,12 @@ impl FrameStageError {
 /// Preserve an already constructed graph even when a HostRun is cancelled
 /// before its first poll. This captures a resource, not a program position.
 pub(crate) fn carry(asker: &Asker, input: &FramePreparation, attachments: &Attachments) {
-    if let Some(Attachment::FrameGraph(owner)) =
-        input.retained_owner().and_then(|id| attachments.get(&id))
-    {
-        asker.keep_retained_frame(owner.clone());
+    match input.retained_owner().and_then(|id| attachments.get(&id)) {
+        Some(Attachment::FrameGraph(owner)) => asker.keep_retained_frame(owner.clone()),
+        Some(Attachment::LabelInputs(owner)) => owner.carry(asker),
+        Some(Attachment::TargetColumn(owner)) => owner.carry(asker),
+        Some(Attachment::FrameLabelGroups(owner)) => owner.carry(asker),
+        _ => {}
     }
 }
 
@@ -305,6 +307,52 @@ pub(crate) async fn run(
         }
         input @ FramePreparation::Population { .. } => PreparedFrameValue::Population(
             population(&asker, input, &facts, &*zones, &mut attachments).await?,
+        ),
+        FramePreparation::LabelInputs {
+            population,
+            range,
+            previous,
+            converted,
+        } => PreparedFrameValue::LabelInputs(
+            population::label_inputs(
+                &asker,
+                population,
+                range,
+                previous,
+                converted,
+                &mut attachments,
+            )
+            .await
+            .map_err(|error| error.into_core())?,
+        ),
+        FramePreparation::TargetColumn { inputs, converted } => PreparedFrameValue::TargetColumn(
+            super::native_target::column(&asker, inputs, converted, &mut attachments)?,
+        ),
+        FramePreparation::EligibilityColumn { inputs, column } => PreparedFrameValue::LabelInputs(
+            super::native_conditions::eligibility(&asker, inputs, column, &mut attachments)?,
+        ),
+        FramePreparation::ConditionColumn { column, operand } => PreparedFrameValue::TargetColumn(
+            super::native_target::condition(&asker, column, operand, &mut attachments)?,
+        ),
+        FramePreparation::FilteredTarget { column, converted } => PreparedFrameValue::TargetColumn(
+            super::native_target::selected(&asker, column, converted, false, &mut attachments)?,
+        ),
+        FramePreparation::WindowedTarget { column, converted } => PreparedFrameValue::TargetColumn(
+            super::native_target::selected(&asker, column, converted, true, &mut attachments)?,
+        ),
+        FramePreparation::RestoreLabelGroups { groups, restored } => {
+            PreparedFrameValue::LabelGroups(
+                population::restore_groups(&asker, groups, restored, &mut attachments)
+                    .map_err(|error| error.into_core())?,
+            )
+        }
+        FramePreparation::WhatIfColumn { groups, column } => PreparedFrameValue::LabelGroups(
+            population::what_if(&asker, groups, column, &mut attachments)
+                .map_err(|error| error.into_core())?,
+        ),
+        FramePreparation::NativeLabelGroups { column } => PreparedFrameValue::LabelGroups(
+            population::native_groups(&asker, column, &mut attachments)
+                .map_err(|error| error.into_core())?,
         ),
         FramePreparation::LabelGroups {
             population,
@@ -464,6 +512,9 @@ pub(super) fn label_rows(
                 times: times_ns(named(&selected.rows, time)?, time)?,
                 rows: selected.rows,
                 batch: selected.batch,
+                source_positions: Some(selected.source_rows),
+                source_read: None,
+                time_column: time.to_owned(),
             },
         );
     }
@@ -505,215 +556,6 @@ fn one_column(data: &ArrowData) -> Result<ArrayRef, CoreError> {
 
 fn data(batch: RecordBatch) -> ArrowData {
     ArrowData::new(batch.schema(), vec![batch])
-}
-
-fn labelled_rows(
-    keys: &ArrayRef,
-    anchors: &[i64],
-    labels: &labels::Labels,
-) -> Result<RecordBatch, CoreError> {
-    use arrow_array::{BooleanArray, Decimal128Array, Float32Array, Int64Array, ListArray};
-    use sdm_engine::labels::LinkValue;
-    let labels::Labels::Lists(lists) = labels else {
-        return task::labelled_rows(keys, anchors, labels);
-    };
-    let mut offsets = vec![0_i32];
-    let mut flat = Vec::new();
-    for list in lists {
-        flat.extend(list.iter());
-        offsets.push(i32::try_from(flat.len()).map_err(|_| {
-            internal("link label offsets exceed the declared Arrow representation")
-        })?);
-    }
-    let mixed = || protocol("typed link labels mix incompatible native value families");
-    let values: ArrayRef = match flat.first() {
-        None | Some(LinkValue::Int(_)) => Arc::new(Int64Array::from(
-            flat.iter()
-                .map(|value| match value {
-                    LinkValue::Int(value) => Ok(*value),
-                    _ => Err(mixed()),
-                })
-                .collect::<Result<Vec<_>, _>>()?,
-        )),
-        Some(LinkValue::UInt(_)) => Arc::new(UInt64Array::from(
-            flat.iter()
-                .map(|value| match value {
-                    LinkValue::UInt(value) => Ok(*value),
-                    _ => Err(mixed()),
-                })
-                .collect::<Result<Vec<_>, _>>()?,
-        )),
-        Some(LinkValue::Float(_)) => Arc::new(Float32Array::from(
-            flat.iter()
-                .map(|value| match value {
-                    LinkValue::Float(value) => Ok(*value),
-                    _ => Err(mixed()),
-                })
-                .collect::<Result<Vec<_>, _>>()?,
-        )),
-        Some(LinkValue::Bool(_)) => Arc::new(BooleanArray::from(
-            flat.iter()
-                .map(|value| match value {
-                    LinkValue::Bool(value) => Ok(*value),
-                    _ => Err(mixed()),
-                })
-                .collect::<Result<Vec<_>, _>>()?,
-        )),
-        Some(LinkValue::Text(_)) => {
-            sdm_engine::strings::encode(
-                &flat
-                    .iter()
-                    .map(|value| match value {
-                        LinkValue::Text(value) => Ok(value.clone()),
-                        _ => Err(mixed()),
-                    })
-                    .collect::<Result<Vec<_>, _>>()?,
-            )
-            .0
-        }
-        Some(LinkValue::Decimal(_, scale)) => {
-            let scale = *scale;
-            let values = flat
-                .iter()
-                .map(|value| match value {
-                    LinkValue::Decimal(value, observed) if *observed == scale => Ok(*value),
-                    _ => Err(mixed()),
-                })
-                .collect::<Result<Vec<_>, _>>()?;
-            Arc::new(
-                Decimal128Array::from(values)
-                    .with_precision_and_scale(38, scale)
-                    .map_err(|_| mixed())?,
-            )
-        }
-    };
-    let target: ArrayRef = Arc::new(
-        ListArray::try_new(
-            Arc::new(arrow_schema::Field::new(
-                "item",
-                values.data_type().clone(),
-                false,
-            )),
-            arrow_buffer::OffsetBuffer::new(offsets.into()),
-            values,
-            None,
-        )
-        .map_err(|_| mixed())?,
-    );
-    RecordBatch::try_from_iter([
-        ("entity", Arc::clone(keys)),
-        (
-            "anchor",
-            Arc::new(TimestampNanosecondArray::from(anchors.to_vec())) as ArrayRef,
-        ),
-        ("target", target),
-    ])
-    .map_err(|_| protocol("typed link labels do not align with their entity and anchor rows"))
-}
-
-/// Text representation belongs to the same typed labels, not to physical
-/// Binary inference or a separately replayed host conversion.
-fn label_encoding(labels: &labels::Labels) -> Option<sdm_contract::data::strings::StringEncoding> {
-    use sdm_contract::data::strings::StringEncoding;
-    let exceptional = match labels {
-        labels::Labels::Text(values) => values.iter().any(|value| value.utf8().is_none()),
-        labels::Labels::Lists(values)
-            if values
-                .iter()
-                .flatten()
-                .any(|value| matches!(value, labels::LinkValue::Text(_))) =>
-        {
-            values.iter().flatten().any(
-                |value| matches!(value, labels::LinkValue::Text(text) if text.utf8().is_none()),
-            )
-        }
-        _ => return None,
-    };
-    Some(if exceptional {
-        StringEncoding::Utf8Surrogatepass
-    } else {
-        StringEncoding::Utf8
-    })
-}
-
-fn read_link_labels(
-    target: &ArrayRef,
-    encoding: Option<sdm_contract::data::strings::StringEncoding>,
-) -> Result<labels::Labels, CoreError> {
-    use sdm_engine::labels::LinkValue;
-    let target = target
-        .as_list_opt::<i32>()
-        .ok_or_else(|| protocol("typed frame link labels are not a declared Arrow list"))?;
-    let lists = (0..target.len())
-        .map(|row| {
-            let values = target.value(row);
-            if values.null_count() != 0 {
-                return Err(protocol(
-                    "typed frame link labels contain missing child values",
-                ));
-            }
-            Ok(match values.data_type() {
-                _ if encoding.is_some() => sdm_engine::strings::owned(&values, encoding.unwrap())
-                    .map_err(|_| protocol("frame link text does not match its explicit encoding"))?
-                    .into_iter()
-                    .map(|value| {
-                        value
-                            .map(LinkValue::Text)
-                            .ok_or_else(|| protocol("frame link text contains missing values"))
-                    })
-                    .collect::<Result<Vec<_>, _>>()?,
-                DataType::Int64 => values
-                    .as_primitive::<Int64Type>()
-                    .values()
-                    .iter()
-                    .copied()
-                    .map(LinkValue::Int)
-                    .collect(),
-                DataType::UInt64 => values
-                    .as_primitive::<UInt64Type>()
-                    .values()
-                    .iter()
-                    .copied()
-                    .map(LinkValue::UInt)
-                    .collect(),
-                DataType::Float32 => values
-                    .as_primitive::<Float32Type>()
-                    .values()
-                    .iter()
-                    .copied()
-                    .map(LinkValue::Float)
-                    .collect(),
-                DataType::Boolean => values
-                    .as_boolean()
-                    .values()
-                    .iter()
-                    .map(LinkValue::Bool)
-                    .collect(),
-                DataType::Utf8 => values
-                    .as_string::<i32>()
-                    .iter()
-                    .map(|value| LinkValue::Text(value.unwrap().into()))
-                    .collect(),
-                DataType::LargeUtf8 => values
-                    .as_string::<i64>()
-                    .iter()
-                    .map(|value| LinkValue::Text(value.unwrap().into()))
-                    .collect(),
-                DataType::Decimal128(_, scale) => values
-                    .as_primitive::<Decimal128Type>()
-                    .values()
-                    .iter()
-                    .map(|&value| LinkValue::Decimal(value, *scale))
-                    .collect(),
-                _ => {
-                    return Err(protocol(
-                        "typed frame link labels contain an incompatible value family",
-                    ));
-                }
-            })
-        })
-        .collect::<Result<Vec<_>, CoreError>>()?;
-    Ok(labels::Labels::Lists(lists))
 }
 
 /// Existing early call guards shared by metadata-only preflight and graph
@@ -1199,6 +1041,7 @@ pub(crate) async fn population(
         trials,
         entity_filter: resolved.entity_filter,
     })?;
+    let target_form = owner.target_form();
     Ok(PreparedFramePopulation {
         graph: graph_value,
         meaning,
@@ -1206,6 +1049,7 @@ pub(crate) async fn population(
         owner: asker.attach(Attachment::FramePopulation(owner))?,
         rows,
         batch_rows: population::LABEL_BATCH_ROWS as u32,
+        target_form,
     })
 }
 

@@ -126,6 +126,19 @@ class FrameLabelBatch:
     def rows(self) -> ArrowStream: ...
 
 @final
+class LabelInputs:
+    """Reached source rows of an actual target evaluation."""
+
+    def rows(self) -> ArrowStream: ...
+
+@final
+class TargetColumn:
+    """Actual completed native target values and mathematical row selection."""
+
+    def rows(self) -> ArrowStream: ...
+    def selection(self) -> ArrowStream: ...
+
+@final
 class FrameTask:
     """An immutable task owner created by the core."""
 
@@ -145,19 +158,51 @@ class FramePayload:
     def wire(self) -> bytes: ...
     def value(self) -> _LogicalValue: ...
 
+@final
+class LookupRows:
+    """Actual counted task lookup data created by the core."""
+
+@final
+class MaterializeSource:
+    """Actual immutable provider-backed materialization data."""
+
+@final
+class MaterializePopulation:
+    """Actual immutable provider-backed materialization data."""
+
+@final
+class MaterializeGroups:
+    """Actual immutable provider-backed materialization data."""
+
+    def rows(self) -> ArrowStream: ...
+
+@final
+class MaterializeBatch:
+    """Actual immutable provider-backed materialization data."""
+
 _FrameOwner = (
     FrameGraph
     | FrameQuestion
     | FramePopulation
+    | FrameLabelGroups
     | FrameLabelBatch
+    | LabelInputs
+    | TargetColumn
     | FrameTask
     | FrameReferences
     | FramePayload
 )
 #: An attachment a caller sends.
-_AttachmentIn = bytes | _ArrowStreamExportable | _FrameOwner
+_MaterializeOwner = (
+    LookupRows
+    | MaterializeSource
+    | MaterializePopulation
+    | MaterializeGroups
+    | MaterializeBatch
+)
+_AttachmentIn = bytes | _ArrowStreamExportable | _FrameOwner | _MaterializeOwner
 #: An attachment the core gives.
-_AttachmentOut = bytes | ArrowStream | _FrameOwner
+_AttachmentOut = bytes | ArrowStream | _FrameOwner | _MaterializeOwner
 #: A control message the core wrote, with the attachments it names.
 _Outgoing = tuple[bytes, dict[int, _AttachmentOut]]
 

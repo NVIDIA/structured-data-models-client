@@ -29,6 +29,9 @@ pub use native::{
 
 use crate::data::strings::StringEncoding;
 use crate::data::{AttachmentId, Relation};
+use crate::materialize::{
+    NativeConditionColumn, NativeTargetValues, PreparedLabelInputs, PreparedTargetColumn,
+};
 use crate::ops::{ColumnRef, Dtype, Materialized, QueryFacts, Seed, Stype};
 use crate::pql::ValidatedQuery;
 use crate::{ColumnType, Scalar};
@@ -234,6 +237,8 @@ pub struct PreparedFramePopulation {
     pub rows: u64,
     /// Fixed core-selected native lookup width, with a possibly shorter last range.
     pub batch_rows: u32,
+    /// Resolved list target shape, absent for scalar label populations.
+    pub target_form: Option<crate::materialize::TargetColumnForm>,
 }
 
 /// Complete reached target groups before native restoration or later masks.
@@ -246,6 +251,33 @@ pub struct PreparedFrameLabelGroups {
     pub owner: AttachmentId,
     pub native_target: Option<FrameNativeColumnRef>,
     pub target_encoding: Option<StringEncoding>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub restored: Option<RestoredFrameLabels>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub what_if: Option<crate::materialize::PreparedConditionValues>,
+}
+
+impl PreparedFrameLabelGroups {
+    pub fn attachments(
+        &self,
+        kind: crate::ops::AttachmentKind,
+    ) -> Vec<(AttachmentId, crate::ops::AttachmentKind)> {
+        use crate::ops::AttachmentKind as Kind;
+        let mut out = vec![(self.owner, kind)];
+        out.extend(self.restored.iter().map(|value| (value.rows, Kind::Arrow)));
+        if let Some(conditions) = &self.what_if {
+            for column in &conditions.columns {
+                out.extend(column.attachments());
+            }
+            out.extend(
+                conditions
+                    .values
+                    .iter()
+                    .map(|value| (value.owner, Kind::TargetColumn)),
+            );
+        }
+        out
+    }
 }
 
 /// Actual successful entity/anchor/target rows returned by native restoration.
@@ -540,6 +572,43 @@ pub enum FramePreparation {
         num_context_samples: Option<u64>,
         limits: FrameLimits,
     },
+    LabelInputs {
+        population: PreparedFramePopulation,
+        range: FrameBatchRange,
+        previous: Option<PreparedFrameLabelBatch>,
+        converted: FrameReferenceValues,
+    },
+    TargetColumn {
+        inputs: PreparedLabelInputs,
+        converted: NativeTargetValues,
+    },
+    EligibilityColumn {
+        inputs: PreparedLabelInputs,
+        column: PreparedTargetColumn,
+    },
+    FilteredTarget {
+        column: PreparedTargetColumn,
+        converted: NativeTargetValues,
+    },
+    ConditionColumn {
+        column: PreparedTargetColumn,
+        operand: NativeConditionColumn,
+    },
+    WindowedTarget {
+        column: PreparedTargetColumn,
+        converted: NativeTargetValues,
+    },
+    NativeLabelGroups {
+        column: PreparedTargetColumn,
+    },
+    RestoreLabelGroups {
+        groups: PreparedFrameLabelGroups,
+        restored: RestoredFrameLabels,
+    },
+    WhatIfColumn {
+        groups: PreparedFrameLabelGroups,
+        column: PreparedTargetColumn,
+    },
     LabelGroups {
         population: PreparedFramePopulation,
         range: FrameBatchRange,
@@ -621,6 +690,8 @@ pub enum PreparedFrameValue {
     FailureAssessment(FrameFailureAssessment),
     Graph(PreparedFrameGraph),
     Population(PreparedFramePopulation),
+    LabelInputs(PreparedLabelInputs),
+    TargetColumn(PreparedTargetColumn),
     LabelGroups(PreparedFrameLabelGroups),
     LabelBatch(PreparedFrameLabelBatch),
     Labels(LabelledFrameTask),
