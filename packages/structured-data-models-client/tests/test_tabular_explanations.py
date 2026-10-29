@@ -4,8 +4,8 @@
 
 """Asking ``kumo-tabular`` for an explanation.
 
-The endpoint explains one scored row at a time, so the client refuses more
-before sending, and hands the explanation it gets back to the caller.
+The endpoint explains every scored row, and the client hands each row's
+explanation back under the key naming that row.
 """
 
 from __future__ import annotations
@@ -82,23 +82,40 @@ def test_session_rows_sent(tabular_request):
 
 
 def test_result_carries_explanation():
-    """The explanation in the response reaches the result unchanged.
+    """The row's explanation reaches the result under its row_index.
 
     Assumptions:
-    - The endpoint returns one record with an explanation dictionary.
+    - The endpoint returns one record, with no id, and its explanation.
     """
-    explanation = {'format': 'sdm_gradient_v1', 'details': {'outputs': []}}
+    explanation = {
+        'format': 'sdm_gradient_v1',
+        'details': {
+            'outputs': [{'kind': 'prediction', 'statistic': 'mean'}],
+            'instance_table': {
+                'row_indices': [0],
+                'columns': ['x'],
+                'gradients': [[[0.5]]],
+            },
+            'related_tables': {},
+        },
+    }
     result = TabularAdapter().normalize(
         response(explanation=explanation), EXPLAIN
     )
-    assert result.explanation == explanation
+    assert result.explanations == {
+        0: {
+            'outputs': [{'kind': 'prediction', 'statistic': 'mean'}],
+            'instance': {'columns': ['x'], 'gradients': [[0.5]]},
+        }
+    }
 
 
 def test_result_without_explanation():
-    """A response without an explanation leaves the result's explanation None.
+    """A response without an explanation leaves the result's explanations
+    empty.
 
     Assumptions:
     - The record carries no explanation field.
     """
     result = TabularAdapter().normalize(response(), ('prediction',))
-    assert result.explanation is None
+    assert result.explanations == {}

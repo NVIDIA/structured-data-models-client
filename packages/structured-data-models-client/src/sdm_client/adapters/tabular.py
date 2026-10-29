@@ -50,6 +50,7 @@ from sdm_client.wire import (
     widen_tfm_dtype,
 )
 from sdm_client.wire.answers import as_declared_target
+from sdm_client.wire.explanations import explanations_of
 from sdm_client.wire.inference import typed_inference
 
 # Output fields to ask for when the caller named none, by task kind. Asking for
@@ -163,16 +164,15 @@ class TabularAdapter:
         request_id: str = '',
         metadata: Mapping[str, Any] | None = None,
     ) -> PredictionResult:
-        explanation = next(
-            (item.explanation for item in items if item.explanation), None
-        )
+        named = as_declared_target(_named_entities(items, payload), payload)
         return PredictionResult(
             model=model,
             request_id=request_id,
-            items=as_declared_target(_named_entities(items, payload), payload),
+            items=named,
             metadata=dict(metadata or {}),
             outputs=outputs,
-            explanation=explanation,
+            # One table, so an entry has no related rows to name.
+            explanations=explanations_of(named),
         )
 
     def explain_error(

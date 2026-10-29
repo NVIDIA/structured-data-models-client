@@ -11,7 +11,14 @@ union. Here an explanation is an output field like any other:
 >>> result = client.predict(request, model=KumoRelational(),
 ...                         outputs=['prediction', 'explanation'])
 >>> result.to_pandas()       # always a frame
->>> result.explanation       # None unless you asked for it
+>>> result.explanations      # {} unless you asked for them
+>>> result.explanations['user_5']          # one row's explanation
+>>> result.explanations[('user_5', 3)]     # a forecast's, at step 3
+>>> result.explanations.to_pandas()        # every gradient, one per line
+
+Each explained row is under the key that names it in ``to_pandas()``: its
+``id``, ``(id, forecast_step)`` for a forecast, and its ``row_index`` when the
+request has no entity key.
 
 The frame's shape depends on the **task**, not the model. Classification and
 multiclass both give one row per entity. Multiclass carries a probability per
@@ -29,7 +36,7 @@ it is there, otherwise on** ``row_index``, **and never on row order.**
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from typing import Any
 
 import pandas as pd
@@ -54,6 +61,170 @@ _ITEM_FIELDS = (
     'rankings',
     'embeddings',
 )
+
+# The columns of `Explanations.to_pandas()` after the ones naming the row.
+_GRADIENT_COLUMNS = (
+    'table',
+    'hop',
+    'key',
+    'row',
+    'output',
+    'column',
+    'gradient',
+)
+
+
+class Explanations(dict[Any, dict[str, Any]]):
+    r"""Each explained row's explanation, under the key naming it in the frame.
+
+    The key is the row's ``id``, ``(id, forecast_step)`` for a forecast, and
+    its ``row_index`` when the request has no entity key. An entry is a plain
+    dict::
+
+        {'outputs': [...],                       # the explained scores
+         'instance': {'columns': [...],
+                      'gradients': [...]},       # [output][column]
+         'related': {table: {'keys': [...],      # absent for a keyless table
+                             'rows': [{...}],    # each row's values as sent
+                             'columns': [...],
+                             'gradients': [...]}}}   # [output][row][column]
+
+    ``related`` is there for ``kumo-relational`` only. ``columns`` are the
+    model's preprocessed numerical columns, as the endpoint names them.
+
+    Empty when no explanation was asked for, or none came back.
+    """
+
+    def __init__(
+        self,
+        entries: Mapping[Any, dict[str, Any]] | None = None,
+        *,
+        keyed_by: tuple[str, ...] = ('id',),
+        hops: Mapping[Any, Mapping[str, Sequence[int | None]]] | None = None,
+    ) -> None:
+        super().__init__(entries or {})
+        # What each part of a key is, which names the frame's first columns.
+        self._keyed_by = keyed_by
+        # How many links each related row is from the entity, per entry and
+        # table, aligned with that table's `rows`. Kept beside the entries
+        # rather than in them, because an entry is the endpoint's shape.
+        self._hops = {key: dict(tables) for key, tables in (hops or {}).items()}
+
+    def to_pandas(self) -> pd.DataFrame:
+        r"""Every gradient, one line each, across all explained rows.
+
+        One line per (row, table, related row, output, column). ``table`` is
+        ``'instance'`` for the row's own block and the table's name for a
+        related one. ``hop`` is how many links the row is from the entity: 0
+        for the entity itself, and ``None`` where the rows sent do not link
+        it. ``key`` is the related row's primary key, ``None`` for a keyless
+        table, and the row's own ``id`` for its instance block. ``row`` is the
+        position in that entry's ``related[table]['rows']``. ``output`` names
+        the score as the column of ``result.to_pandas()`` that holds it.
+        """
+        lines: list[tuple[Any, ...]] = []
+        for key, entry in self.items():
+            named = key if len(self._keyed_by) > 1 else (key,)
+            outputs = [_output_named(output) for output in entry['outputs']]
+            instance = entry['instance']
+            own = named[0] if self._keyed_by[0] == 'id' else None
+            for output, by_column in zip(
+                outputs, instance['gradients'], strict=True
+            ):
+                for column, gradient in zip(
+                    instance['columns'], by_column, strict=True
+                ):
+                    lines.append(
+                        (
+                            *named,
+                            'instance',
+                            0,
+                            own,
+                            0,
+                            output,
+                            column,
+                            gradient,
+                        )
+                    )
+            hops = self._hops.get(key, {})
+            for table, block in entry.get('related', {}).items():
+                keys = block.get('keys') or [None] * len(block['rows'])
+                at = hops.get(table) or [None] * len(block['rows'])
+                for output, by_row in zip(
+                    outputs, block['gradients'], strict=True
+                ):
+                    for row, by_column in enumerate(by_row):
+                        for column, gradient in zip(
+                            block['columns'], by_column, strict=True
+                        ):
+                            lines.append(
+                                (
+                                    *named,
+                                    table,
+                                    at[row],
+                                    keys[row],
+                                    row,
+                                    output,
+                                    column,
+                                    gradient,
+                                )
+                            )
+        # Built as objects so a key keeps its own type: an integer key beside a
+        # keyless table's `None` would otherwise come back a float.
+        return pd.DataFrame(
+            lines, columns=[*self._keyed_by, *_GRADIENT_COLUMNS], dtype=object
+        ).astype({'hop': 'Int64', 'row': 'int64', 'gradient': 'float64'})
+
+    def _renumbered(self, start: int) -> Explanations:
+        r"""These, with each ``row_index`` key ``start`` places further on.
+
+        A key that is an ``id`` is not a position and is left alone.
+        """
+        if not start or self._keyed_by != ('row_index',):
+            return self
+        return Explanations(
+            {key + start: entry for key, entry in self.items()},
+            keyed_by=self._keyed_by,
+            hops={key + start: hops for key, hops in self._hops.items()},
+        )
+
+    def _at_step(self, step: Any) -> Explanations:
+        r"""These, as the explanations of one forecast step."""
+        return Explanations(
+            {(key, step): entry for key, entry in self.items()},
+            keyed_by=(*self._keyed_by, 'forecast_step'),
+            hops={(key, step): hops for key, hops in self._hops.items()},
+        )
+
+    @classmethod
+    def _merged(cls, parts: Sequence[Explanations]) -> Explanations:
+        r"""The explanations of several calls, as one.
+
+        Each call answers about its own rows, so no key is in two parts.
+        """
+        explained = [part for part in parts if part]
+        if not explained:
+            return cls()
+        merged = cls(keyed_by=explained[0]._keyed_by)
+        for part in explained:
+            merged.update(part)
+            merged._hops.update(part._hops)
+        return merged
+
+
+def _output_named(output: Mapping[str, Any]) -> str:
+    r"""The column of ``to_pandas()`` that holds this explained score.
+
+    A probability is ``probability_<class>`` and a quantile
+    ``quantile_<level>``, as the frame spreads them, so a gradient can be read
+    beside the score it moves.
+    """
+    kind = output.get('kind')
+    if kind == 'probability':
+        return f'probability_{output.get("class")}'
+    if kind == 'quantile':
+        return f'quantile_{output.get("level")}'
+    return str(kind)
 
 
 class PredictionResult:
@@ -80,7 +251,7 @@ class PredictionResult:
         request_id: str,
         items: Sequence[PredictionItem],
         metadata: dict[str, Any] | None = None,
-        explanation: dict[str, Any] | None = None,
+        explanations: Mapping[Any, dict[str, Any]] | None = None,
         outputs: Sequence[str] = (),
         unscored_candidates: Sequence[Any] = (),
     ) -> None:
@@ -96,7 +267,11 @@ class PredictionResult:
         # about. Set where a forecast is assembled, for the same reason.
         self._names_its_step = False
         self.metadata = dict(metadata or {})
-        self._explanation = explanation
+        self._explanations = (
+            explanations
+            if isinstance(explanations, Explanations)
+            else Explanations(explanations)
+        )
         self._unscored_candidates = tuple(unscored_candidates)
 
     def absent(self, requested: Sequence[str]) -> tuple[str, ...]:
@@ -128,7 +303,7 @@ class PredictionResult:
         was refused before the request was sent.
         """
         if name == 'explanation':
-            return self._explanation is not None
+            return bool(self._explanations)
         if name not in _ITEM_FIELDS:
             return True
         return any(
@@ -137,12 +312,18 @@ class PredictionResult:
         )
 
     @property
-    def explanation(self) -> dict[str, Any] | None:
-        r"""The explanation, when asked for and the model produced one.
+    def explanations(self) -> Explanations:
+        r"""Each explained row's explanation, under the key naming that row.
 
-        ``None`` otherwise, rather than a different return type.
+        The key is the one ``to_pandas()`` names the row by: its ``id``,
+        ``(id, forecast_step)`` for a forecast, and ``row_index`` when the
+        request has no entity key. Kept out of the frame, because an entry is
+        nested and the frame is flat. ``explanations.to_pandas()`` flattens
+        them.
+
+        Empty when not asked for, rather than a different return type.
         """
-        return self._explanation
+        return self._explanations
 
     @property
     def unscored_candidates(self) -> tuple[Any, ...]:
@@ -272,8 +453,8 @@ class PredictionResult:
         # would otherwise survive. That is the one you do not have when a
         # later batch is the one that misbehaved.
         metadata['batch_request_ids'] = [part.request_id for part in parts]
-        explanation = next(
-            (part.explanation for part in parts if part.explanation), None
+        explanations = Explanations._merged(
+            [part.explanations for part in parts]
         )
         # Every part answers one slice of the same request, so they were asked
         # for the same fields. If they were not, the merged result cannot
@@ -300,7 +481,7 @@ class PredictionResult:
             request_id=first.request_id,
             items=items,
             metadata=metadata,
-            explanation=explanation,
+            explanations=explanations,
             outputs=first.outputs,
             unscored_candidates=unscored,
         )
@@ -315,7 +496,7 @@ class PredictionResult:
         return iter(self.items)
 
     def __repr__(self) -> str:
-        explained = ', explained' if self._explanation is not None else ''
+        explained = ', explained' if self._explanations else ''
         left_out = len(self._unscored_candidates)
         unscored = (
             f', {left_out} candidate{"s" if left_out > 1 else ""} unscored'

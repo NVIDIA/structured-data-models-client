@@ -244,7 +244,7 @@ def test_the_entity_key_is_carried_when_the_model_has_one():
 
 def test_an_explanation_is_absent_rather_than_a_different_return_type():
     result = result_with({'row_index': 0, 'prediction': 1})
-    assert result.explanation is None
+    assert result.explanations == {}
     assert isinstance(result.to_pandas(), pd.DataFrame)
 
 
@@ -325,7 +325,7 @@ def forecast_through_the_client(explanations, requested):
                 PredictionItem(row_index=0, prediction=1.0, forecast_step=None)
             ],
             outputs=tuple(requested),
-            explanation=held,
+            explanations=held,
         )
         for held in explanations
     ]
@@ -346,7 +346,7 @@ def test_a_forecast_step_that_carries_no_explanation_is_named():
     answer carries an explanation sees the step that did and says nothing
     about the one that did not."""
     said = forecast_through_the_client(
-        [{'cohorts': ['a']}, None], ['prediction', 'explanation']
+        [{0: {'outputs': []}}, None], ['prediction', 'explanation']
     )
 
     assert any('step 2 carries none' in message for message in said)
@@ -354,7 +354,8 @@ def test_a_forecast_step_that_carries_no_explanation_is_named():
 
 def test_a_forecast_whose_steps_all_explain_is_not_reported():
     said = forecast_through_the_client(
-        [{'cohorts': ['a']}, {'cohorts': ['b']}], ['prediction', 'explanation']
+        [{0: {'outputs': []}}, {0: {'outputs': []}}],
+        ['prediction', 'explanation'],
     )
 
     assert not any('carries none' in message for message in said)
@@ -362,7 +363,7 @@ def test_a_forecast_whose_steps_all_explain_is_not_reported():
 
 def test_a_forecast_that_was_not_asked_for_an_explanation_is_not_reported():
     said = forecast_through_the_client(
-        [{'cohorts': ['a']}, None], ['prediction']
+        [{0: {'outputs': []}}, None], ['prediction']
     )
 
     assert said == []
