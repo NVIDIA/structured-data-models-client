@@ -17,7 +17,7 @@ fn population() -> Value {
 fn source() -> Value {
     json!({"source":"source-1","identity":"source-meaning-1","owner":10,
         "target":{"source":{"source":["buys"]},"column":"item_id"},
-        "tables":[{"source":{"source":["buys"]},"columns":["buy_id","user_id","item_id","ts"]}]})
+        "tables":[{"source":{"source":["buys"]},"read":{"source":["buys"]},"columns":["buy_id","user_id","item_id","ts"]}]})
 }
 
 #[test]
@@ -90,7 +90,7 @@ fn source_conversion_facts_are_closed_data_and_keep_full_original_decimal_metada
 fn actual_target_completion_declares_the_source_owner_values_and_full_presence_fact() {
     let value = json!({"stage":"target_column","inputs":{
         "population":"population-1","range":{"start":0,"stop":10000},"owner":21,
-        "target":{"source":{"source":["buys"]},"column":"item_id"},"form":"plain"
+        "target":{"source":{"source":["buys"]},"column":"item_id"},"form":"plain","condition_columns":[]
     },"converted":{"rows":22,"presence":23,"encoding":null}});
     let input: FramePreparation = serde_json::from_value(value.clone()).unwrap();
     assert_eq!(
@@ -112,8 +112,8 @@ fn actual_target_completion_declares_the_source_owner_values_and_full_presence_f
 fn selected_target_completion_keeps_the_actual_predecessor_and_never_walks_row_counts_as_ids() {
     let value = json!({"stage":"windowed_target","column":{
         "input":{"population":"population-1","range":{"start":0,"stop":10000},"owner":21,
-            "target":{"source":{"source":["buys"]},"column":"item_id"},"form":"filtered"},
-        "owner":24,"derivation":"filtered","rows":137
+            "target":{"source":{"source":["buys"]},"column":"item_id"},"form":"filtered","condition_columns":[]},
+        "owner":24,"derivation":"filtered","rows":137,"condition_values":[]
     },"converted":{"rows":25,"presence":26,"encoding":"utf8_surrogatepass"}});
     let input: FramePreparation = serde_json::from_value(value.clone()).unwrap();
     assert_eq!(

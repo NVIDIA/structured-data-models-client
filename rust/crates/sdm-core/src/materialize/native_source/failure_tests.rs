@@ -22,6 +22,7 @@ fn reported_native_source_io_reuses_the_same_provider_policy_and_request_locatio
     let source = sdm_contract::data::Relation::named("events");
     let tables = vec![MaterializeSourceTable {
         source: source.clone(),
+        read: source.clone(),
         columns: vec!["id".into(), "time".into()],
     }];
     for (kind, name) in [
@@ -49,6 +50,7 @@ fn a_terminal_source_diagnostic_does_not_authorize_foreign_or_partial_source_mea
     let source = sdm_contract::data::Relation::named("events");
     let tables = vec![MaterializeSourceTable {
         source: source.clone(),
+        read: source.clone(),
         columns: vec!["id".into()],
     }];
     for read in [
@@ -73,4 +75,35 @@ fn a_terminal_source_diagnostic_does_not_authorize_foreign_or_partial_source_mea
             sdm_contract::ErrorCode::InvalidMessage
         );
     }
+}
+
+#[test]
+fn an_actual_derived_read_is_distinct_from_its_logical_source_relation() {
+    let source = sdm_contract::data::Relation::named("events");
+    let mut actual = source.clone();
+    actual.found = true;
+    actual.columns.push(sdm_contract::data::RelationColumn {
+        name: "id".into(),
+        column: Some("id".into()),
+        expression: None,
+    });
+    let tables = vec![MaterializeSourceTable {
+        source: source.clone(),
+        read: actual.clone(),
+        columns: vec!["id".into()],
+    }];
+    let mut read = MaterializeSourceRead {
+        kind: SourceReadKind::Lookup,
+        source: actual,
+        columns: vec!["id".into()],
+    };
+    assert_eq!(
+        reported_failure(&tables, &read, error()).unwrap_err(),
+        crate::describe::provider_error(error(), "lookup")
+    );
+    read.source = source;
+    assert_eq!(
+        reported_failure(&tables, &read, error()).unwrap_err().code,
+        sdm_contract::ErrorCode::InvalidMessage
+    );
 }

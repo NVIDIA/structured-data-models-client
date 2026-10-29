@@ -172,7 +172,7 @@ fn result_metadata_has_its_own_purpose_and_does_not_claim_the_future_data_owner(
     };
     assert_eq!(requests.len(), 1);
     let data = &requests[0];
-    assert_eq!(data.purpose, None);
+    assert_eq!(data.purpose, Some(FetchPurpose::SourceRows));
     assert_ne!(data.id, metadata.id);
     assert_eq!(data.partition.as_ref().unwrap().first, data.id);
     assert_eq!(
