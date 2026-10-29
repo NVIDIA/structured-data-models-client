@@ -23,6 +23,8 @@ Process the training target set before the prediction target set.
 A first-slice native failure prevents future slice reads, later target sets, masks, context construction, payload publication and transport.
 An early satisfied quota stops later slices as the original does.
 Do not fetch the whole candidate pool and replay smaller conversions afterward.
+The currently admitted explicit-indices path sets the original test-example count to zero.
+It performs no prediction-role label batches; do not invent an empty native conversion or an automatic-evaluation feature for this repair.
 
 Within each reached slice, preserve entity eligibility before target aggregation, native target restoration before what-if evaluation, and combined-mask application afterward.
 Keep already-fetched immutable data required by later conditions; do not reread caller schema or source rows after a native callback.
@@ -75,6 +77,30 @@ Factor existing preparation and finalization kernels so raw Materialize and the 
 Raw/Host consumers can complete actual typed semantic labels without pretending to have observed a Python conversion.
 Every host uses the same bound products and malformed-input rules; Rust selects no policy from host or native library identity.
 Existing Java feature scope remains unchanged, and its current operations retain their regression coverage.
+
+## Concrete source and task interfaces
+
+The common owned `PreparedTask` retains the original graph/query, sampled entity data, generated candidate population, cast prediction keys, selected options, anchors and reached `Times`/memo facts.
+Its borrowed fetch descriptions and label draw are reconstructed from that owned meaning, without replaying schema/PQL checks or source reads.
+Both the original opaque operation and finite preparation operations use this factory and the same finalization implementation.
+
+The finite SQL preparation interface produces a task population, evaluated groups, completed batch data or an actual request.
+Each message names the exact previous useful product and its actual source/provider binding.
+The ordinary non-list and decomposed operations keep their existing policy through the shared opaque implementation.
+The harness observes these real preparation inputs/results and attributes the final actual request to materialization; it must never fabricate a legacy operation to satisfy a route assertion.
+
+A provider's scoped `source_rows` I/O primitive executes and reads once while retaining the actual Arrow table or actual scalar rows and original description within the existing cursor/transaction lifetime.
+The ordinary Arrow consumer remains pandas-free and uses its current concrete encoding, including full Postgres type-registry/precision/scale/array metadata and Snowflake's existing scalar text fallback.
+The native consumer constructs its actual source array inside this scope, before eligibility or target aggregation, and retains no cursor after scope exit.
+Names alone are insufficient scalar metadata; preserve the original description objects and their reached name-access timing.
+Scope exit still occurs on native conversion, native warning-handler, ordinary boxing and cancellation failures.
+An actual native conversion failure is presented through the existing Rust-owned engine error assessment outside the provider-error handler, preserving the original object and cause graph.
+
+Rust selects the bounded scalar source recipe from resolved column declarations and actual fetched physical facts.
+Python performs the selected nullable scalar construction or native Decimal cast, retaining its actual successful result or original fallback observation.
+Do not add a second provider-specific dtype table or recreate the entire sanitizer as a new engine.
+Existing shared time/list readers retain their owning policy and observations; any additional required observation must be explicit in its useful source product.
+The source result and later group result are separate completed-data boundaries, with actual source identity retained between them.
 
 ## Ownership and verification
 
