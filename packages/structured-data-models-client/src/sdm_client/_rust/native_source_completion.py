@@ -312,7 +312,11 @@ class SourceCompletion:
                 if (
                     temporal
                     and timestamp is None
-                    and pd.api.types.is_object_dtype(values.dtype)
+                    and (
+                        pd.api.types.is_object_dtype(values.dtype)
+                        or isinstance(values.dtype, pd.ArrowDtype)
+                        and pa.types.is_date(values.dtype.pyarrow_dtype)
+                    )
                 ):
                     inferred = pd.api.types.infer_dtype(values, skipna=True)
                     content = {
