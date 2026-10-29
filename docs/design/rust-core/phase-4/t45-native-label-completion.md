@@ -224,3 +224,12 @@ Apply the existing poison recovery helper to the concrete mutex value type so ac
 Remove the reported unused import and unnecessary mutability, and retain the entity-key validation at its existing position even though its returned key is no longer consumed there.
 These are integration and quality repairs with no new product, policy, stage, attachment or schema shape.
 The existing failing compiler consumers are the reproduction; preserve their complete behavioral assertions and obtain a fresh exact whole-code pair before successor execution.
+
+### Reached contract-inventory reconciliation
+
+The exact R43 execution passed workspace compilation, strict all-target Clippy and the complete Core unit/materialization suites, then stopped on two schema-lock consumers with one shared classification mismatch.
+The actual generated schema represents the adjacent-tag lookup-row payload attachment as PreparedMaterializeValue.positions; the inventory currently names the outer-tag spelling that the established traversal does not emit.
+Replace only that stale inventory path with the actual discovered field, retaining its UInt64 Arrow meaning and every missing/extra attachment refusal.
+The complete discovered-field inventory must reconcile, and the existing seeded unknown-field/extra-lock/lost-lock controls remain unchanged.
+Preserve the failed main receipt and collect remaining diagnostics on the same unchanged approved source without a handoff stamp before grouping further reached repairs.
+Any changed canonical producer input requires its existing writer and an honest new source receipt, followed by fresh exact whole reviews and the full normal acceptance sequence.
