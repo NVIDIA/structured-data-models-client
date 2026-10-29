@@ -457,7 +457,11 @@ def assert_native_inference_profile(actual, historical):
     'changed', ['other-token', 'source-row', 'result', 'warning', 'call-count']
 )
 def test_native_inference_profile_keeps_every_other_recorded_field(changed):
-    frozen = reference('profile')['future-infer-false']
+    frozen = reference('profile')[
+        'future-infer-true'
+        if int(pd.__version__.split('.')[0]) == 2
+        else 'future-infer-false'
+    ]
     pinned = {
         key: copy.deepcopy(frozen[key])
         for key in ('requests', 'sent', 'warnings')
