@@ -38,6 +38,7 @@ fn initial_flags_follow_the_actual_initial_time_assignment_not_physical_dtype() 
     source.tables[0].columns.push(extra.clone());
     extra.name = "ts".into();
     source.tables[1].columns.push(extra);
+    source.tables[0].time_column_inferred = Some("ts".into());
     source.tables[0].time_column = Some("other_time".into());
     let owner = SchemaOwner::new(source);
     assert_eq!(flag(owner.held(), "orders", "ts"), (false, true));

@@ -171,16 +171,19 @@ def test_base_regression_completes_a_model_request_and_its_result_on_the_core(
     # The two core hosts agree, against the pin rust-host is held to.
     pinned = json.loads(PINNED.read_text())
     assert_corrected_inputs(core['core']['inputs'], pinned['inputs'])
-    # Current capture observes this actual Done supplement; the historical
-    # writer did not record it. Every other pinned prediction field stays.
+    # The actual per-Run Done journal observes outputs; the unchanged
+    # legacy summary and historical writer do not carry that supplement.
+    [completed] = core['core']['legacy_predictions']
+    assert completed['completion'] == 'done'
     assert (
-        predicted['outputs']
+        completed['result']['outputs']
         == predicted['body']['output']['fields']
         == ['prediction']
     )
-    assert 'outputs' not in pinned['predicted']
-    predicted = copy.deepcopy(predicted)
-    predicted.pop('outputs')
+    assert 'outputs' not in predicted and 'outputs' not in pinned['predicted']
+    journal = copy.deepcopy(completed['result'])
+    journal.pop('outputs')
+    assert journal == predicted
     assert {
         **predicted,
         'body': capture_check.masked(predicted['body']),

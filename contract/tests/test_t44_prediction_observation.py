@@ -213,7 +213,7 @@ def actual_observation(call_id=CALL_ID, endpoint_id='endpoint-r1'):
             'provider': provider,
             'indices': [{'t': 'i64', 'v': '7'}, {'t': 'i64', 'v': '8'}],
             'anchor_time': None,
-            'seed': 7,
+            'seed': '7',
             'schema': {'held': 'must be rebuilt'},
             'query': query,
         },

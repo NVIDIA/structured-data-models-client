@@ -225,6 +225,7 @@ def test_present_sdk_hook_groups_keep_every_hook_and_exact_cleanup(monkeypatch):
         zip(
             sorted(FUTURE_MODULES),
             [frame_native, native_sql, relational_predict],
+            strict=True,
         )
     )
     original_import = RUNNER.importlib.import_module
@@ -254,11 +255,11 @@ def test_present_sdk_hook_groups_keep_every_hook_and_exact_cleanup(monkeypatch):
     try:
         assert all(
             getattr(owner, name) is not previous
-            for (owner, name), previous in zip(owners, before)
+            for (owner, name), previous in zip(owners, before, strict=True)
         )
     finally:
         boundary.close()
     assert all(
         getattr(owner, name) is previous
-        for (owner, name), previous in zip(owners, before)
+        for (owner, name), previous in zip(owners, before, strict=True)
     )

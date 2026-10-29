@@ -2920,9 +2920,9 @@ class _Boundary:
                 )
             )
         self._hook_bindings = hooks
-        for target, name, before, hook in hooks:
+        for target, name, before, _hook in hooks:
             assert getattr(target, name) is before
-        for target, name, before, hook in hooks:
+        for target, name, _before, hook in hooks:
             setattr(target, name, hook)
 
     def reset(self) -> _Capture:

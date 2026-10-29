@@ -495,6 +495,8 @@ def observe(
     tmp_path: Path,
     runner: str,
     change: Callable[[dict[str, dict[str, Any]]], None] | None = None,
+    *,
+    baseline_databases: tuple[str, ...] = (),
 ) -> Path:
     r"""A runner's observations, made from the reference's: relabelled,
     and for rust-host with what it cannot observe left null; where the
@@ -503,10 +505,11 @@ def observe(
     files the checkpoint holds), so the unseeded observation is
     what that runner is held to wherever an admission has moved it from
     the reference (an approved transition, or python-old's recorded crash),
-    whichever cases are admitted. Only the reference's DuckDB lines (the
-    bare case IDs) are replayed: a runner's file is one database's run, and
-    the reference's ``<case>@sqlite`` and ``<case>@postgres`` lines
-    (T2.1a) are other runs', which a scenario about them adds itself."""
+    whichever cases are admitted. By default only the reference's DuckDB
+    lines (bare case IDs) are replayed. Aggregate scenarios explicitly name
+    ``baseline_databases`` to include those databases' reference lines
+    already held by this runner's immutable source baselines. A scenario's
+    new database observations are still authored separately."""
     # This checkout's, which the temporary repository's checkpoint copied:
     # a seed that edits or breaks the candidate's baseline files changes
     # nothing here.
@@ -523,7 +526,9 @@ def observe(
     }
     lines = {}
     for case, line in reference(repo).items():
-        if '@' in case:
+        if '@' in case and (
+            case.partition('@')[2] not in baseline_databases or case not in held
+        ):
             continue
         line = copy.deepcopy(line)
         line['identity']['runner'] = runner

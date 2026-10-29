@@ -345,9 +345,8 @@ def _on_databases(
 def _observe(
     tree: Path, tmp_path: Path, keep: tuple[str, ...]
 ) -> tuple[Path, ...]:
-    r"""python-core's and python-old's observations, made from the
-    reference's (``test_contract_ratchet.observe``), keeping of X's lines
-    only ``keep``."""
+    r"""The requested X lines plus existing baselined observations on
+    those databases, authored from their own reference/baseline records."""
     on = tuple(key for key in (SQLITE, POSTGRES) if key in keep)
 
     def drop(lines: dict[str, Any]) -> None:
@@ -355,7 +354,13 @@ def _observe(
             lines.pop(X)
 
     return tuple(
-        helpers.observe(tree, tmp_path, runner, _on_databases(on, drop))
+        helpers.observe(
+            tree,
+            tmp_path,
+            runner,
+            _on_databases(on, drop),
+            baseline_databases=tuple(key.partition('@')[2] for key in on),
+        )
         for runner in ('python-core', 'python-old')
     )
 
@@ -396,6 +401,20 @@ def test_aggregate_fixture_must_explicitly_request_all_database_scopes(
         'not a duckdb observation' in problem for problem in scoped
     )
     assert _naming(scoped, SQLITE) and _naming(scoped, POSTGRES)
+    # These unrelated, already-baselined lines must remain observed too.
+    existing = {
+        'target.aggregation.list-distinct@sqlite',
+        'target.aggregation.list-distinct@postgres',
+    }
+    assert existing <= _observed(files)['python-core'].keys()
+    omitted = 'target.aggregation.list-distinct@sqlite'
+    seeded = tmp_path / 'python-core-missing-existing.jsonl'
+    _write_jsonl(
+        seeded, [line for line in _jsonl(files[0]) if line['case'] != omitted]
+    )
+    found = helpers.check(held, checkpoint, (seeded, files[1]), database=None)
+    assert found and _naming(found, omitted) == found
+    assert all('baselined, and not observed' in problem for problem in found)
 
 
 def test_a_database_recording_with_no_core_observation_needs_no_baseline(

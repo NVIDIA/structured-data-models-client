@@ -195,6 +195,7 @@ def prediction(*, serving=False, retries=1, names=NAMES):
         }
         for _ in range(retries)
     ]
+    RUNNER.validator('observation').validate(raw)
     return raw
 
 
