@@ -2475,21 +2475,44 @@ def test_the_relational_endpoint_serves_the_matrix_the_skill_gives(
     reason='set SDM_RELATIONAL_URL to a kumo-relational NIM',
 )
 @pytest.mark.parametrize('target', sorted(SERVED), ids=lambda v: v[:30])
-def test_the_relational_endpoint_refuses_an_explanation(target, schema):
-    """The gap the skill leads with: the client sends it, the endpoint will
-    not serve it. If a deployment starts serving one, this fails and the
-    skill is the thing to change."""
+def test_the_relational_endpoint_explains_every_entity(target, schema):
+    """What the skill shows of an explanation: one per entity asked about,
+    under its id, with the entity's own table among its related ones and no
+    block for the engine's question row. If a deployment stops serving one,
+    this fails and the skill is the thing to change."""
     from sdm_client import KumoRelational, SDMClient
-    from sdm_client.errors import StructuredDataError
 
     request = resolve(f'PREDICT {target} FOR EACH users.user_id', schema)
     with SDMClient(url=RELATIONAL_URL, timeout=600) as client:
-        with pytest.raises(StructuredDataError, match='explanation'):
-            client.predict(
-                request,
-                model=KumoRelational(),
-                outputs=['prediction', 'explanation'],
+        result = client.predict(
+            request,
+            model=KumoRelational(),
+            outputs=['prediction', 'explanation'],
+        )
+    # `resolve` asks about users 1 and 2.
+    asked = [1, 2]
+    assert sorted(int(one) for one in result.to_pandas()['id']) == asked
+    assert sorted(int(key) for key in result.explanations) == asked, (
+        f'{target} explained {sorted(result.explanations)}, asked {asked}'
+    )
+    for key, entry in result.explanations.items():
+        assert set(entry) == {'outputs', 'related'}, (
+            f'{target} gave {key} the blocks {sorted(entry)}'
+        )
+        assert entry['outputs'], f'{target} explained no output of {key}'
+        own = entry['related'].get('users')
+        assert own is not None, f'{target} gave {key} no block of its own'
+        assert [int(one) for one in own['keys']] == [int(key)]
+        for name, block in entry['related'].items():
+            # Every table of `schema` has a primary key.
+            assert len(block.get('keys', ())) == len(block['rows']), (
+                f'{name} has a key and came back without one per row'
             )
+            assert len(block['gradients']) == len(entry['outputs'])
+            for by_row in block['gradients']:
+                assert len(by_row) == len(block['rows']), (
+                    f'{name} gradients do not line up with its rows'
+                )
 
 
 @pytest.mark.live_nim
