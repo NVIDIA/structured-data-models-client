@@ -204,3 +204,25 @@ fn decimal256_projection_is_lossless_without_admitting_a_new_label_family() {
     assert_eq!(exact.null_count(), 2);
     assert!(group_value_type(&exact, None).is_err());
 }
+
+#[test]
+fn scaled_decimal_classes_stay_distinct_after_native_float_collision() {
+    let original: ArrayRef = Arc::new(
+        arrow_array::Decimal128Array::from(vec![
+            9_007_199_254_740_992_001_i128,
+            9_007_199_254_740_992_002,
+        ])
+        .with_precision_and_scale(38, 3)
+        .unwrap(),
+    );
+    let actual: ArrayRef = Arc::new(arrow_array::Float32Array::from(vec![1.0, 1.0]));
+    let exact = mathematical_values(&original, &[0, 1], &actual).unwrap();
+    let target = labels::Target::Column(native_condition_column(&exact, &[0, 1], None).unwrap());
+    assert_eq!(
+        labels::label_classes(&target).unwrap().labels,
+        labels::Labels::Text(vec![
+            "9007199254740992.001".into(),
+            "9007199254740992.002".into()
+        ])
+    );
+}

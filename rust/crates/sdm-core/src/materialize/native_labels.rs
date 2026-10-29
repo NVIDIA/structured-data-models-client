@@ -356,4 +356,23 @@ mod tests {
             .is_err()
         );
     }
+
+    #[test]
+    fn no_groups_and_all_empty_groups_keep_the_bound_decimal_scalar() {
+        for count in [0, 2] {
+            let before = task::LabelledContext {
+                keys: Arc::new(arrow_array::Int64Array::from(vec![1; count])),
+                anchors: vec![0; count],
+                labels: labels::Labels::Lists(vec![vec![]; count]),
+            };
+            let expected = group_rows(&before, Some(&DataType::Decimal128(38, 3))).unwrap();
+            let list = expected.column(2).as_list::<i32>();
+            assert_eq!(list.value_type(), DataType::Decimal128(38, 3));
+            assert_eq!(list.len(), count);
+            assert_eq!(
+                restored(&before, &expected, &expected, None, None).unwrap(),
+                before.labels
+            );
+        }
+    }
 }
