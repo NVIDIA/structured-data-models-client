@@ -285,3 +285,14 @@ Scan is a standard request and has no OptionalRequest capability, so retain the 
 Preserve its sampling/max-seed facts and all later metadata-purpose, distinct-ID, future-owner and completed-Run assertions.
 Do not change the contract enum, routing guard, result metadata policy or provider selection.
 Collect remaining behavioral feedback on unchanged approved R46 before freezing the grouped successor; no diagnostic handoff stamp or package acceptance follows from that collection.
+
+### Reached native refusal lifetime and observer units
+
+The unchanged approved R46 continuation passes all 822 capture/replay cases and the complete Rust/Host groups, while its public suite exposes one native refusal helper lifetime defect and five fixture assertions.
+Retain the selected native exception and traceback in the ownership consumer: the helper's own handle parameter must be cleared in a finalizer around its existing cancellation and native presentation branches, after preserving the outer Run's memo publication authority.
+Do not clear caller tracebacks, discard the caught exception, add garbage collection, or alter cancellation/process-control selection to conceal that reference.
+Add the same owned-Run/memo/exception retention consumer for the actual source-batch refusal path before the helper repair.
+The four presentation controls must distinguish the existing coded public string from the bare message and ValueError text, retaining every identity/details/chain assertion.
+The sparse range observer must bind both native retry faults to the actual failed candidate and count completed candidate ranges after the real preparation returns successfully.
+Keep all frozen cast populations, both retry failures, full error/warning outcomes, exact committed prefix and final assembly assertions unchanged.
+These bounded fixes do not change label math, sampling, quota, schema, native callback populations or approved comparison rules.
