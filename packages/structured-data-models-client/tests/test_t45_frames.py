@@ -37,6 +37,15 @@ REFERENCE = json.loads(
 )
 
 
+def _request_identifiers(kind, shape, expected):
+    recorded = [call['metadata']['request_id'] for call in expected['sent']]
+    if (kind, shape) == ('category', 'ordinary') and not recorded:
+        # This exact historical refusal can now reach its one paid request.
+        # A second request must still exhaust the finite script.
+        return ['t45-category-ordinary-profile']
+    return recorded
+
+
 def test_only_newly_reached_category_ordinary_has_one_finite_authored_id():
     empty = {'sent': []}
     identifiers = iter(_request_identifiers('category', 'ordinary', empty))
@@ -217,12 +226,13 @@ class Scripted:
 
     def __init__(self):
         self.calls = []
+        self.replies = []
 
     def predict(self, payload):
         self.calls.append(copy.deepcopy(payload))
         frame = payload['predict']['instance_table']
         at = frame['columns'].index('instance_id')
-        return {
+        reply = {
             'id': 'frozen-full-link',
             'model': 'kumo-relational',
             'metadata': {},
@@ -236,6 +246,8 @@ class Scripted:
                 for i, row in enumerate(frame['rows'])
             ],
         }
+        self.replies.append(copy.deepcopy(reply))
+        return reply
 
     def close(self):
         pass
@@ -278,9 +290,7 @@ def observe(kind, shape, expected):
             stage = 'predict'
             # Request identifiers are host randomness, replayed from the
             # actual frozen call without masking any transmitted body field.
-            identifiers = [
-                call['metadata']['request_id'] for call in expected['sent']
-            ]
+            identifiers = _request_identifiers(kind, shape, expected)
             with patch(
                 'sdm_client.adapters.relational._request_id',
                 side_effect=identifiers,
@@ -288,9 +298,34 @@ def observe(kind, shape, expected):
                 with SDMClient('http://localhost:1', max_retries=0) as client:
                     client._transport.close()
                     client._transport = script
-                    answer = client.predict(
-                        request, model=KumoRelational()
-                    ).to_pandas()
+                    product = client.predict(request, model=KumoRelational())
+                    answer = product.to_pandas()
+            if (kind, shape) == ('category', 'ordinary') and not expected[
+                'sent'
+            ]:
+                record['decoded'] = {
+                    'model': product.model,
+                    'request_id': product.request_id,
+                    'metadata': copy.deepcopy(product.metadata),
+                    'outputs': list(product.outputs),
+                    'dtypes': [str(dtype) for dtype in answer.dtypes],
+                    'items': [
+                        {
+                            'row_index': item.row_index,
+                            'id': int(item.id),
+                            'id_type': [
+                                type(item.id).__module__,
+                                type(item.id).__name__,
+                            ],
+                            'prediction': item.prediction,
+                            'rankings': [
+                                dict(entry) for entry in item.rankings
+                            ],
+                        }
+                        for item in product.items
+                    ],
+                }
+                record['replies'] = copy.deepcopy(script.replies)
             record['result'] = json.loads(answer.to_json(orient='split'))
             if 'merged' in expected:
                 record['merged'] = json.loads(
@@ -327,18 +362,28 @@ def observe(kind, shape, expected):
 def test_public_link_frame_journey_matches_frozen_client(
     monkeypatch, core, case
 ):
-    monkeypatch.setenv('SDM_CORE_ROUTES', FRAME_ROUTES if core else '')
-    if core:
+    bounded = (case['kind'], case['shape']) == (
+        'category',
+        'ordinary',
+    ) and not case['expected']['sent']
 
-        def old_engine_was_called(*args, **kwargs):
-            raise AssertionError(
-                'core LINK materialization called the Python relational engine'
-            )
+    def observed_route(core_route):
+        with monkeypatch.context() as leg:
+            leg.setenv('SDM_CORE_ROUTES', FRAME_ROUTES if core_route else '')
+            if core_route:
 
-        monkeypatch.setattr(
-            RelationalMaterializer, '_get_model', old_engine_was_called
-        )
-    observed = observe(case['kind'], case['shape'], case['expected'])
+                def old_engine_was_called(*args, **kwargs):
+                    raise AssertionError(
+                        'core LINK materialization called the Python relational engine'
+                    )
+
+                leg.setattr(
+                    RelationalMaterializer, '_get_model', old_engine_was_called
+                )
+            return observe(case['kind'], case['shape'], case['expected'])
+
+    original = observed_route(False) if bounded else None
+    observed = observed_route(core) if core or not bounded else original
     expected = copy.deepcopy(case['expected'])
     if core:
         # P3E-2 changes only a leading warning code, using the same pinned
@@ -354,4 +399,56 @@ def test_public_link_frame_journey_matches_frozen_client(
             expected['error']['message'] = message.replace(
                 captured, 'a value', 1
             )
-    assert observed == expected
+    if bounded and original['outcome'] == 'success':
+        paired = copy.deepcopy(original)
+        if core:
+            for warning in paired['warnings']:
+                warning['message'] = bare(warning['message'])
+        assert observed == paired
+        assert observed['outcome'] == 'success'
+        assert observed['inspect'] == {
+            'context_rows': 6,
+            'predict_rows': 2,
+            'nothing_to_score': False,
+        }
+        assert (
+            len(observed['payloads'])
+            == len(observed['sent'])
+            == len(observed['replies'])
+            == 1
+        )
+        assert observed['warnings'] == expected['warnings']
+        assert (
+            observed['sent'][0]['metadata']['request_id']
+            == 't45-category-ordinary-profile'
+        )
+        assert (
+            observed['decoded']['request_id']
+            == observed['replies'][0]['id']
+            == 'frozen-full-link'
+        )
+        assert (
+            observed['decoded']['model']
+            == observed['replies'][0]['model']
+            == 'kumo-relational'
+        )
+        assert (
+            observed['decoded']['metadata']
+            == observed['replies'][0]['metadata']
+            == {}
+        )
+        rankings = [{'item': 'display-rhs', 'score': 0.9}]
+        assert observed['result'] == {
+            'columns': ['row_index', 'id', 'rankings'],
+            'index': [0, 1],
+            'data': [[0, 0, rankings], [1, 1, rankings]],
+        }
+        assert [item['id'] for item in observed['decoded']['items']] == [0, 1]
+        assert [item['rankings'] for item in observed['decoded']['items']] == [
+            rankings,
+            rankings,
+        ]
+    else:
+        if bounded:
+            assert original == case['expected']
+        assert observed == expected
