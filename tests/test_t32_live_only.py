@@ -44,6 +44,8 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 COMPARE = ROOT / 'scripts/rust_core/compare.py'
 RATCHET = ROOT / 'scripts/rust_core/ratchet.py'
@@ -191,6 +193,51 @@ def test_t32_the_fixture_is_valid_on_duckdb(tmp_path: Path) -> None:
     fewer['driver']['query_log']['statements'] -= 1
     rules = [rule for rule, _ in pair.judge(fewer).failures]
     assert rules == ['sql.count']
+
+
+def test_t32_model_call_fixture_has_complete_sparse_observations(
+    tmp_path: Path,
+) -> None:
+    pair = Pair(tmp_path, 'duckdb')
+    line = pair.answered(None)
+    untouched = copy.deepcopy(line)
+    view = compare_module()._prediction_view(line)
+    [received] = line['public']['payloads']
+    assert view['operations'] == ['predict']
+    assert view['inputs'] == [
+        {'op': 'predict', 'model': received['parsed']['model']}
+    ]
+    assert view['calls'] == [received['parsed']]
+    [attempt] = view['attempts']
+    assert attempt['run'] == 0
+    assert attempt['body_sha256'] == received['sha256']
+    assert attempt['reply'] is None
+    assert view['events'][0]['result'] is None
+    assert line['core']['predicted'] is None
+    assert 'answered' not in line['core']
+    assert line == untouched
+
+
+@pytest.mark.parametrize('changed', ['missing', 'owner', 'body', 'hash'])
+def test_t32_model_call_fixture_still_refuses_invalid_evidence(
+    tmp_path: Path, changed: str
+) -> None:
+    pair = Pair(tmp_path, 'duckdb')
+    line = pair.answered(None)
+    assert len(line['core']['model_calls']) == 1
+    [call] = line['core']['model_calls']
+    if changed == 'missing':
+        line['core']['model_calls'].clear()
+    elif changed == 'owner':
+        call['run'] = len(line['identity']['operations'])
+    elif changed == 'body':
+        call['body']['metadata']['source_query'] += ' '
+    else:
+        call['body_sha256'] = '0' * 64
+    untouched = copy.deepcopy(line)
+    report = pair.judge(line)
+    assert 'payload' in [rule for rule, _ in report.failures]
+    assert line == untouched
 
 
 @pending
