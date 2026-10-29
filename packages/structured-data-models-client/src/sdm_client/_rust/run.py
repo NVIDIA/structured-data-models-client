@@ -24,6 +24,11 @@ core asks again with the same request and the page's ``continuation`` in
 the step (``step['continuation']``), until the provider returns its last
 page as an answer; the core reads the pages as one answer.
 
+A host adapter that reached a native conversion failure returns
+:class:`FetchRefused`, holding that actual exception. The loop cancels the
+run and propagates it before constructing a fetch reply or attaching Arrow.
+It does not inspect that failure as a database diagnostic.
+
 A model call (from T1.11d, ``predict``'s) is answered by the caller's
 ``model``: given the body's bytes, it returns the answer's bytes, which the
 core reads as the endpoint's 200; it raises :class:`TransportFailed` when
@@ -42,27 +47,22 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from types import ModuleType
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    # Named for annotations only: the warehouse package is an optional
-    # dependency, and a core route over frames needs none of it.
-    from sdm_connectors.providers import Provider
+from typing import Any, Protocol
 
 from sdm_client._routing import RouteError
 from sdm_client._rust import codec, errors, facts
 from sdm_client.core.transport import EndpointFailed
 from sdm_client.errors import StructuredDataError
 
-# A provider (``sdm_connectors.providers.Provider``) answers one fetch, the
-# ``FetchStep`` as the contract writes it, with an object that exports Arrow
-# through ``__arrow_c_stream__``, or with a :class:`Page` of it; the key
-# sets its plan names are handed over with it, by attachment id, each an
-# object exporting Arrow the same way.
-
 #: A model: answers one call, given its body's bytes, with the bytes of the
 #: endpoint's answer.
 Model = Callable[[bytes], bytes]
+
+
+class ArrowData(Protocol):
+    """A provider's data product, exported through Arrow's stream protocol."""
+
+    def __arrow_c_stream__(self, requested_schema: Any = None) -> Any: ...
 
 
 class Page:
@@ -76,6 +76,34 @@ class Page:
     def __init__(self, data: Any, continuation: str) -> None:
         self.data = data
         self.continuation = continuation
+
+
+class FetchRefused:
+    """A reached native fetch conversion failed, holding its actual owner.
+
+    Returned by a host adapter, never raised as a provider I/O failure.
+    This handover carries no model response, retry policy or classification.
+    """
+
+    __slots__ = ('raised',)
+
+    def __init__(self, raised: Exception) -> None:
+        if not isinstance(raised, Exception):
+            raise TypeError('a fetch refusal holds an Exception')
+        self.raised = raised
+
+
+class FetchProvider(Protocol):
+    """Answer one core fetch with Arrow, a page, or a native failure owner.
+
+    The request is the contract's FetchStep; keys are its attachment owners.
+    I/O exceptions are raised normally for the existing provider error path.
+    No optional connector package is imported to express this host boundary.
+    """
+
+    def __call__(
+        self, step: dict[str, Any], keys: Mapping[int, Any] | None = None
+    ) -> ArrowData | Page | FetchRefused: ...
 
 
 class TransportFailed(Exception):
@@ -182,7 +210,7 @@ def run(
     operation: dict[str, Any],
     attachments: Mapping[int, Any],
     *,
-    provider: Provider | None = None,
+    provider: FetchProvider | None = None,
     model: Model | None = None,
     quiet: frozenset[str] = frozenset(),
     given: set[str] | None = None,
@@ -343,7 +371,7 @@ def _keep(core: Any, handle: Any, state: dict[str, Any]) -> None:
 def _steps(
     core: Any,
     handle: Any,
-    provider: Provider | None,
+    provider: FetchProvider | None,
     model: Model | None,
     quiet: frozenset[str],
     given: set[str] | None,
@@ -432,12 +460,6 @@ def _steps(
                         else _key_sets(handle, request)
                     )
                     answer = provider(request, keys)
-                    outcome: dict[str, Any] = {'outcome': 'data', 'data': 1}
-                    if isinstance(answer, Page):
-                        attached[1] = answer.data
-                        outcome['continuation'] = answer.continuation
-                    else:
-                        attached[1] = answer
                 except RouteError:
                     # The route itself failed (an import of the old engine on
                     # it, say), which is no provider's error to hand the core.
@@ -445,7 +467,25 @@ def _steps(
                     raise
                 except Exception as failure:  # noqa: BLE001 - the provider's
                     provided, driver_class = _driver(failure, provider)
-                    outcome = {'outcome': 'error', 'error': provided}
+                    outcome: dict[str, Any] = {
+                        'outcome': 'error',
+                        'error': provided,
+                    }
+                else:
+                    # Native conversion is a host boundary, not an I/O
+                    # diagnostic or a core/model refusal. In particular this
+                    # handover must be outside the provider's error handler.
+                    if isinstance(answer, FetchRefused):
+                        try:
+                            handle.cancel()
+                        finally:
+                            errors.raise_native(answer.raised)
+                    outcome = {'outcome': 'data', 'data': 1}
+                    if isinstance(answer, Page):
+                        attached[1] = answer.data
+                        outcome['continuation'] = answer.continuation
+                    else:
+                        attached[1] = answer
                 reply = codec.encode(
                     {
                         'message': 'fetch_reply',
