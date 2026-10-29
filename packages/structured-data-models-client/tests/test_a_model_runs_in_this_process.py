@@ -431,6 +431,41 @@ def test_an_output_option_is_refused_before_the_model_runs(
     assert ran == []
 
 
+@pytest.mark.parametrize('model', ['tabular', 'relational'])
+def test_an_explanation_is_refused_in_this_process(request, model):
+    """A model in this process produces no explanation, so asking for one is
+    refused as an output it does not give, rather than answered without it.
+
+    Assumptions:
+    - The client sends ``'explanation'``, since both models declare it; only
+      a NIM serves it.
+    - Small random-weight models stand in for the published ones.
+    """
+    served = request.getfixturevalue(model)
+    if model == 'tabular':
+        frame = people()[['person_id', 'age', 'visits', 'churn']]
+        asked = Request(
+            context=frame.iloc[:45],
+            predict=frame.iloc[45:].drop(columns=['churn']),
+            target='churn',
+            task='classification',
+        )
+        handle = KumoTabular()
+    else:
+        asked = PredictiveQuery(BINARY, graph()).materialize(indices=[0, 1])
+        handle = KumoRelational()
+
+    with SDMClient.in_process(served) as client:
+        error = refused(
+            lambda: client.predict(
+                asked, model=handle, outputs=['prediction', 'explanation']
+            )
+        )
+
+    assert error.code == 'UNSUPPORTED_OUTPUT'
+    assert 'explanation' in str(error)
+
+
 def test_releasing_a_session_does_not_wait_for_a_model_to_finish(
     tabular, monkeypatch
 ):
