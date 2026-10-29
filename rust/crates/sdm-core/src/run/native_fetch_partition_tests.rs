@@ -181,6 +181,15 @@ fn one_part_is_explicit_only_when_its_consumer_requests_partition_data() {
 
 #[test]
 fn result_metadata_has_its_own_purpose_and_does_not_claim_the_future_data_owner() {
+    projected_source_read(None);
+}
+
+#[test]
+fn projected_spelling_probe_keeps_metadata_separate_and_marks_its_actual_read() {
+    projected_source_read(Some(sdm_contract::run::FetchPurpose::Locate));
+}
+
+fn projected_source_read(purpose: Option<sdm_contract::run::FetchPurpose>) {
     use arrow_array::{ArrayRef, Int64Array, StringArray};
     use sdm_contract::data::ProviderChoice;
     use sdm_contract::run::FetchPurpose;
@@ -229,12 +238,15 @@ fn result_metadata_has_its_own_purpose_and_does_not_claim_the_future_data_owner(
         root.data_access(&provider).unwrap(),
         move |asker| async move {
             asker.describe_fetch_partitions();
-            let pending = asker.fetch(DataRequest::Scan {
+            let mut pending = asker.fetch(DataRequest::Scan {
                 table: Relation::named("events"),
                 columns: vec!["id".into(), "ts".into()],
                 filters: vec![],
                 limit: None,
             })?;
+            if let Some(purpose) = purpose {
+                pending.set_purpose(purpose);
+            }
             let read = pending.source_read().expect("real future data identity");
             assert_eq!(read.first(), None);
             *returned.lock().unwrap() = Some(read);
@@ -270,7 +282,7 @@ fn result_metadata_has_its_own_purpose_and_does_not_claim_the_future_data_owner(
     };
     assert_eq!(requests.len(), 1);
     let data = &requests[0];
-    assert_eq!(data.purpose, Some(FetchPurpose::SourceRows));
+    assert_eq!(data.purpose, purpose.or(Some(FetchPurpose::SourceRows)));
     assert_ne!(data.id, metadata.id);
     assert_eq!(data.partition.as_ref().unwrap().first, data.id);
     assert_eq!(
