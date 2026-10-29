@@ -869,8 +869,8 @@ def test_boxed_source_content_is_observed_after_scalar_construction(kind):
 def test_actual_boxed_time_coercion_notice_precedes_finishing_and_keeps_native_failure(
     monkeypatch, handler_error
 ):
-    from datetime import datetime
     import warnings
+    from datetime import datetime
 
     failure = ValueError('actual native time notice handler failed')
     service = Service(
@@ -951,7 +951,9 @@ def test_public_scalar_row_source_uses_actual_core_selected_boxed_time_recipe(
     monkeypatch, native_failure
 ):
     from contextlib import contextmanager
+
     from test_t45_native_sql_labels import _observe
+
     from sdm_client._rust import native_sql
     from sdm_client._rust.providers.duckdb import DuckDBProvider
 
