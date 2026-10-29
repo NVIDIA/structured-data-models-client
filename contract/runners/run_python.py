@@ -1229,10 +1229,9 @@ class _Capture:
         # including when the checkpoint SDK predates native SQL products.
         # Malformed output still belongs to the SDK's normal refusal path;
         # observation must not replace that failure or probe an opaque owner.
+        owner_ids = _sibling('prediction_observation').materialization_owner_ids
         try:
-            return _sibling('prediction_observation').materialization_owner_ids(
-                kind, data
-            )
+            return owner_ids(kind, data)
         except Exception:  # noqa: BLE001 - observation never changes admission
             return []
 
@@ -2607,6 +2606,10 @@ class _Boundary:
         relational_predict = _optional_sdk_module(
             'sdm_client._rust.relational_predict'
         )
+        if (native_sql is None) != (frame_native is None):
+            raise RunnerFailure(
+                'incomplete native materialization capture hook group'
+            )
 
         self.capture = _Capture(native_cancellations_observed=True)
         self._closed = False
@@ -2870,7 +2873,6 @@ class _Boundary:
                 presentation,
             ),
             (run, '_carried', self._carried_before, carried),
-            (run, '_steps', self._steps_before, steps),
         ]
         if relational_predict is not None:
             hooks.extend(
@@ -2899,6 +2901,7 @@ class _Boundary:
             hooks.extend(
                 [
                     (native_sql, 'gather', self._gather_before, gather),
+                    (run, '_steps', self._steps_before, steps),
                     (
                         native_sql._Preparation,
                         'read_failure',

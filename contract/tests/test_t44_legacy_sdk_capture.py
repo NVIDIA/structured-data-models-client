@@ -64,11 +64,19 @@ def test_other_import_failures_keep_the_actual_owner(monkeypatch):
 def test_native_materialization_hook_group_cannot_be_half_present(
     monkeypatch, absent
 ):
+    from types import SimpleNamespace
+
     original = RUNNER.importlib.import_module
 
     def incomplete(name, *args, **kwargs):
-        if name == 'sdm_client._rust.' + absent:
-            raise ModuleNotFoundError('authored incomplete cohort', name=name)
+        if name in FUTURE_MODULES:
+            if name.endswith('.' + absent) or name.endswith(
+                '.relational_predict'
+            ):
+                raise ModuleNotFoundError(
+                    'authored incomplete cohort', name=name
+                )
+            return SimpleNamespace()
         return original(name, *args, **kwargs)
 
     monkeypatch.setattr(RUNNER.importlib, 'import_module', incomplete)
