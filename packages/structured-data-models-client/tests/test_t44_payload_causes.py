@@ -9,6 +9,8 @@ import json
 import pytest
 
 from sdm_client._rust import errors
+from sdm_client._rust.codec import CodecError
+from sdm_client.errors import StructuredDataError
 
 
 @pytest.mark.parametrize('marked', [False, True])
@@ -66,3 +68,78 @@ def test_only_reached_frame_payload_range_has_native_nested_causes(
     )
     assert str(cause) == f"Column 'buys.part' row 0: {bare}"
     assert 'forecast' not in str(cause)
+
+
+@pytest.mark.parametrize('marked', [False, True])
+@pytest.mark.parametrize('value', ['inf', '-inf'])
+@pytest.mark.parametrize('ambient', [False, True])
+def test_only_reached_frame_nonfinite_payload_retains_the_native_value_error(
+    marked, value, ambient
+):
+    fields = {
+        'column': {'t': 'utf8', 'v': 'item_id'},
+        'field': {'t': 'utf8', 'v': 'request'},
+        'reason': {'t': 'utf8', 'v': 'not_finite'},
+        'value': {'t': 'utf8', 'v': value},
+    }
+    if marked:
+        fields['native_key_reason'] = {
+            't': 'utf8',
+            'v': 'payload_validation',
+        }
+    sent = {
+        'kind': 'invalid_request',
+        'code': 'INVALID_REQUEST',
+        'sentence': 'not_finite',
+        'fields': fields,
+        'message': 'a request value is not finite',
+    }
+    caller = LookupError('active caller context') if ambient else None
+    bridge = RuntimeError('private core bridge')
+    bridge.__context__ = caller
+    made = errors.error_from_core(
+        json.dumps({'message': 'error', 'error': sent}).encode(),
+        {},
+        internal_context=bridge,
+    )
+    assert 'native_key_reason' not in made.details
+    assert made.details['column'] == 'item_id'
+    assert made.details['value'] == value
+    with pytest.raises(StructuredDataError) as raised:
+        if caller is not None:
+            try:
+                raise caller
+            except LookupError:
+                errors.raise_error(made, internal_context=bridge)
+        errors.raise_error(made, internal_context=bridge)
+    assert raised.value is made
+    assert made.__suppress_context__
+    if not marked:
+        assert made.__cause__ is None
+        return
+    cause = made.__cause__
+    assert type(cause) is ValueError
+    assert str(cause) == (
+        f'encountered a non-finite value ({value}); NIM requests '
+        'must contain finite numbers or nulls'
+    )
+    assert cause.__cause__ is None
+    assert cause.__context__ is caller
+    assert not cause.__suppress_context__
+    assert made.__context__ is cause
+
+
+def test_frame_payload_cause_cannot_be_borrowed_by_another_refusal():
+    sent = {
+        'kind': 'invalid_request',
+        'code': 'INVALID_REQUEST',
+        'sentence': 'past_int64',
+        'fields': {
+            'native_key_reason': {'t': 'utf8', 'v': 'payload_validation'},
+        },
+        'message': 'another refusal',
+    }
+    with pytest.raises(CodecError, match='invalid native payload validation sentence'):
+        errors.error_from_core(
+            json.dumps({'message': 'error', 'error': sent}).encode(), {}
+        )
