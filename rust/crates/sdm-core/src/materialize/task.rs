@@ -451,7 +451,7 @@ pub(super) struct EvaluatedLabelGroups {
     strings: std::collections::BTreeMap<String, sdm_contract::data::strings::StringEncoding>,
     fetched: std::collections::BTreeMap<String, super::Fetched>,
     labelled: labels::Labelled,
-    entity_filtered: bool,
+    entity_selection: Option<Vec<bool>>,
     scalar_selection: Option<Vec<bool>>,
 }
 
@@ -608,8 +608,9 @@ pub(super) async fn evaluate_label_groups(
         Some(frames) => super::frame_values::label_rows(&labelling, frames, labelled_fetches)?,
         None => labelling.read(labelled_fetches).await?,
     };
-    // The entity filter is reached before target restoration. Its groups
-    // must not be exported to the native pointwise converter.
+    // The entity condition is observed first, but execute() applies its
+    // mask only after target restoration and what-if evaluation. A group
+    // excluded by that condition still reaches the native converter.
     let entity_filtered = asked.task == Task::TemporalLink && entity_filter.is_some();
     let eligibility = if entity_filtered {
         let filter = asked
@@ -637,15 +638,12 @@ pub(super) async fn evaluate_label_groups(
             });
         }
     }
-    let mut labelled = if matches!(asked.task, Task::Multiclass) {
+    let labelled = if matches!(asked.task, Task::Multiclass) {
         labels::label_classes(&target)?
     } else {
         labels::label(&target)?
     };
     null_compared(&asked.target, &labelled.mask)?;
-    if let Some(eligibility) = eligibility {
-        labelled = select_labelled(labelled, &eligibility)?;
-    }
     let strings = labelling.strings;
     Ok(EvaluatedLabelGroups {
         population,
@@ -654,7 +652,7 @@ pub(super) async fn evaluate_label_groups(
         strings,
         fetched,
         labelled,
-        entity_filtered,
+        entity_selection: eligibility,
         scalar_selection,
     })
 }
@@ -672,7 +670,7 @@ pub(super) fn complete_label_groups(
         strings,
         fetched,
         labelled,
-        entity_filtered,
+        entity_selection,
         scalar_selection,
     } = groups;
     let mut labelled = labelled.clone();
@@ -694,11 +692,14 @@ pub(super) fn complete_label_groups(
     // What-if conditions consume the retained rows only after a successful
     // native restoration. No source or later candidate slice is reread.
     if draw.asked.task == Task::TemporalLink {
+        if let Some(selected) = entity_selection {
+            labelled = select_labelled(labelled, selected)?;
+        }
         for shape in draw
             .asked
             .choosing
             .iter()
-            .skip(usize::from(*entity_filtered))
+            .skip(usize::from(entity_selection.is_some()))
         {
             let selected = labels::truth(&labelling.build(shape, fetched, false)?)?.values;
             labelled = select_labelled(labelled, &selected)?;
