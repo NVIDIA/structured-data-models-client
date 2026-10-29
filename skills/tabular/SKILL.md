@@ -220,12 +220,6 @@ per unit change in that column: a diagnostic, not a causal effect or a
 feature-importance ranking. The whole shape is under Explanations in
 [`docs/reference/prediction-output.md`](../../docs/reference/prediction-output.md).
 
-The deployment has to be started with one estimator, `SDM_NUM_ESTIMATORS=1`,
-and CUDA graph replay off, `SDM_TABULAR_CUDA_GRAPHS` unset. Both are server
-settings this client cannot see. A deployment started otherwise answers
-`422 UNSUPPORTED_OUTPUT` to a request for `explanation`, and ordinary
-predictions are unaffected.
-
 ## When it refuses
 
 Every refusal is a `StructuredDataError` or one of its subclasses, and each
@@ -235,7 +229,6 @@ names what to change.
 |---|---|
 | a task the model does not serve | `forecasting`, `temporal_link_prediction` and the rest are relational |
 | an output it does not produce | `rankings`, `embeddings`, `scores` |
-| `422 UNSUPPORTED_OUTPUT` on `explanation` | the deployment runs more than one estimator or CUDA graph replay; see [Explanations](#explanations) |
 | a context above the cap | more than 10,000 labelled rows in a direct `Request` |
 | relationships | this model reads one table; use `kumo-relational` |
 

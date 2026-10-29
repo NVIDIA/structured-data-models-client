@@ -137,6 +137,4 @@ output, column), with `hop`, how many links the row is from the entity. The
 entity's own table is hop 0.
 
 A ranking refuses an explanation locally, and the shipping endpoint refuses it
-everywhere else, so treat `result.explanations` as possibly empty. A deployment
-that serves explanations has to run one estimator, `SDM_NUM_ESTIMATORS=1`, and
-answers `422 UNSUPPORTED_OUTPUT` otherwise.
+everywhere else, so treat `result.explanations` as possibly empty.

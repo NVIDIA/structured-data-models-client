@@ -37,15 +37,7 @@ distinct values a column may have. Those protect a shared server, and are
 not applied when the model runs in your own process.
 
 **An explanation has no row limit of its own.** Every scored row is
-explained, on either model. It does depend on two server settings, which a
-deployment chooses when its container starts and this client cannot see:
-
-- one estimator, `SDM_NUM_ESTIMATORS=1`, the default;
-- on `kumo-tabular`, CUDA graph replay off: `SDM_TABULAR_CUDA_GRAPHS` unset,
-  not `1`.
-
-A deployment set otherwise answers a request for `explanation` with
-`422 UNSUPPORTED_OUTPUT`. Ordinary predictions are unaffected.
+explained, on either model.
 
 A relational request for more entities than one call scores is not refused.
 `materialize()` gathers it in batches of at most that many, each with a
