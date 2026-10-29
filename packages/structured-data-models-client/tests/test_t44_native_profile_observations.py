@@ -9,6 +9,7 @@ from __future__ import annotations
 import copy
 import warnings
 from contextlib import contextmanager
+from unittest.mock import patch
 
 import pytest
 
@@ -39,21 +40,65 @@ class OptionEffects:
         finally:
             self.phase = previous
 
-    def warning(self, message, category, filename, event=None):
+    def warning(self, message, category, filename, event=None, occurrence=None):
         if self.phase is not None:
             self.notices.append(
-                (message, category, filename, self.phase, event)
+                (message, category, filename, self.phase, event, occurrence)
             )
+
+    def context(self, manager, caught):
+        effects = self
+
+        class ObservedContext:
+            def invoke(self, phase, function, *args):
+                prior = warnings.showwarning
+
+                def forwarding(
+                    message, category, filename, lineno, file=None, line=None
+                ):
+                    effects.warning(
+                        message, category, filename, occurrence=len(caught)
+                    )
+                    return prior(
+                        message,
+                        category,
+                        filename,
+                        lineno,
+                        file=file,
+                        line=line,
+                    )
+
+                with (
+                    effects.at(phase),
+                    patch.object(warnings, 'showwarning', forwarding),
+                ):
+                    return function(*args)
+
+            def __enter__(self):
+                return self.invoke('option-entry', manager.__enter__)
+
+            def __exit__(self, *exception):
+                return self.invoke('option-exit', manager.__exit__, *exception)
+
+        return ObservedContext()
 
     def snapshot(self, caught):
         remaining = set(range(len(caught)))
         records = []
-        for message, category, filename, phase, event in self.notices:
+        for (
+            message,
+            category,
+            filename,
+            phase,
+            event,
+            occurrence,
+        ) in self.notices:
             matches = [
                 at
                 for at in sorted(remaining)
                 if caught[at].message is message
                 and caught[at].category is category
+                and (occurrence is None or occurrence == at)
             ]
             assert matches, 'an attributed warning was not forwarded to capture'
             at = matches[0]
@@ -146,3 +191,39 @@ def test_option_effect_attribution_keeps_complete_raw_records():
     changed['events'][1] = 'missing callback'
     with pytest.raises(AssertionError):
         semantic_events(changed)
+
+
+def test_option_context_attributes_occurrences_without_hiding_body_or_exit():
+    effects = OptionEffects()
+    owner = UserWarning('the same actual warning object')
+    reached = []
+    retained = RuntimeError('body failure')
+
+    class NativeContext:
+        def __enter__(self):
+            reached.append('enter')
+            warnings.warn(owner)
+            return self
+
+        def __exit__(self, *exception):
+            reached.append(exception)
+            warnings.warn(owner)
+            return False
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        with pytest.raises(RuntimeError) as raised:
+            with effects.context(NativeContext(), caught):
+                warnings.warn(owner)
+                reached.append('body')
+                raise retained
+    assert raised.value is retained
+    assert reached[:2] == ['enter', 'body']
+    assert reached[2][0] is RuntimeError and reached[2][1] is retained
+    records = effects.snapshot(caught)
+    assert [(record['warning'], record['phase']) for record in records] == [
+        (0, 'option-entry'),
+        (2, 'option-exit'),
+    ]
+    assert len(caught) == 3
+    assert all(item.message is owner for item in caught)
