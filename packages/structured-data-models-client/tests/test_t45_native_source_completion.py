@@ -896,7 +896,10 @@ def test_actual_boxed_time_coercion_notice_precedes_finishing_and_keeps_native_f
                 'storage': 'time_conversion',
                 'rows': 2,
                 'unread': 1,
-                'examples': '[datetime.datetime(3000, 1, 1, 0, 0)]',
+                'examples': [
+                    ord(point)
+                    for point in '[datetime.datetime(3000, 1, 1, 0, 0)]'
+                ],
             }
             result['scalar'] = {'meaning': 'original'}
             result['notice'] = {
@@ -907,19 +910,23 @@ def test_actual_boxed_time_coercion_notice_precedes_finishing_and_keeps_native_f
                     'column': {'t': 'utf8', 'v': 'value'},
                     'unread': {'t': 'u64', 'v': '1'},
                     'rows': {'t': 'u64', 'v': '2'},
-                    'examples': {'t': 'utf8', 'v': facts['examples']},
+                    'examples_points': [
+                        {'t': 'u32', 'v': str(point)}
+                        for point in facts['examples']
+                    ],
                 },
             }
         return result
 
     service.column = column
     calls = []
+    present = completion.errors.warn_held
 
     def warn_held(notices):
         calls.append(notices)
         if handler_error:
             raise failure
-        warnings.warn('actual completed native time notice', UserWarning)
+        present(notices)
 
     monkeypatch.setattr(completion.errors, 'warn_held', warn_held)
     provider = Provider(
@@ -941,7 +948,7 @@ def test_actual_boxed_time_coercion_notice_precedes_finishing_and_keeps_native_f
         assert isinstance(result, dict)
         assert result[7]['value'].null_count == 2
         assert [str(item.message) for item in caught] == [
-            'actual completed native time notice'
+            "[TIME_VALUES_UNREAD] Could not parse 1 of 2 value(s) of time column 'value' (for example [datetime.datetime(3000, 1, 1, 0, 0)]); they were dropped as 'NaT'"
         ]
         assert adapter.native_error is None
 
@@ -1067,3 +1074,92 @@ def test_unrelated_object_source_has_no_new_native_time_content_reads(
         {'storage': 'cell_rows'}
     ]
     assert actual[7]['value'].to_pylist() == ['ordinary', 'unread']
+
+
+@pytest.mark.parametrize('repr_failure', [False, True])
+def test_public_boxed_time_native_repr_keeps_surrogates_and_actual_failure(
+    monkeypatch, repr_failure
+):
+    from contextlib import contextmanager
+    from datetime import datetime
+
+    from test_t45_native_sql_labels import _observe
+
+    from sdm_client._rust import errors, native_sql
+    from sdm_client._rust.providers.duckdb import DuckDBProvider
+
+    failure = RuntimeError('actual native date example repr failed')
+    renders, notices = [], []
+
+    class NativeDatetime(datetime):
+        def __repr__(self):
+            renders.append('repr')
+            if repr_failure:
+                raise failure
+            return '\ud800'
+
+    source_rows = DuckDBProvider.source_rows
+    column = native_sql._Preparation.column
+
+    @contextmanager
+    def scalar_rows(self, step, keys=None):
+        with source_rows(self, step, keys) as table:
+            if step.get('purpose') != 'source_rows':
+                yield table
+            else:
+                names = table.column_names
+                rows = [
+                    [row[name] for name in names] for row in table.to_pylist()
+                ]
+                if rows and 'ts' in names:
+                    rows[0][names.index('ts')] = NativeDatetime(3000, 1, 1)
+                yield _scalars(rows, names)
+
+    def observed(self, binding, facts):
+        value = column(self, binding, facts)
+        if facts['storage'] == 'time_conversion':
+            assert facts['examples'] == [91, 0xD800, 93]
+            assert (
+                errors.decoded(value['notice']['fields'])['examples_points']
+                == facts['examples']
+            )
+            notices.append(value['notice'])
+        return value
+
+    monkeypatch.setattr(DuckDBProvider, 'source_rows', scalar_rows)
+    monkeypatch.setattr(native_sql._Preparation, 'column', observed)
+    outcome = _observe(monkeypatch, 'ordinary', True)
+    assert renders
+    assert all(event == 'repr' for event in renders)
+    if repr_failure:
+        assert notices == []
+        assert outcome['outcome'] == 'error'
+        assert outcome['stage'] == 'materialize'
+        assert outcome['error']['cause']['type'] == 'builtins.RuntimeError'
+        assert outcome['error']['cause']['text'] == str(failure)
+    else:
+        assert len(notices) == len(renders)
+        actual = [
+            notice
+            for notice in outcome['warnings']
+            if '[TIME_VALUES_UNREAD]' in notice['message']
+        ]
+        assert len(actual) == len(notices)
+        assert all(
+            '(for example [\ud800])' in notice['message']
+            and notice['category'] == 'builtins.UserWarning'
+            and notice['stage'] == 'materialize'
+            for notice in actual
+        )
+        if outcome['outcome'] == 'error':
+            assert (
+                outcome['error']['cause']['type']
+                == 'pyarrow.lib.ArrowNotImplementedError'
+            )
+            assert (
+                outcome['error']['cause']['text']
+                == 'Unsupported cast from list<item: int64> to int64 using function cast_int64'
+            )
+        else:
+            assert outcome['request']['predict_rows'] == 2
+            assert outcome['request']['context_rows'] > 0

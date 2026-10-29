@@ -279,8 +279,13 @@ fn native_time_conversion_notice_is_completed_data_with_existing_warning_policy(
     assert_eq!(notice.code, "TIME_VALUES_UNREAD");
     assert_eq!(notice.sentence, Sentence::NativeTimeValuesUnread);
     assert_eq!(
-        notice.fields["examples"],
-        Detail::text("[datetime.datetime(3000, 1, 1, 0, 0)]")
+        notice.fields["examples_points"],
+        Detail::List(
+            "[datetime.datetime(3000, 1, 1, 0, 0)]"
+                .chars()
+                .map(|point| Scalar::UInt32(u32::from(point)))
+                .collect()
+        )
     );
     assert!(time_notice(Some(Dtype::String), Stype::Categorical, "ts", &input).is_err());
     for (rows, unread, examples) in [(0, 1, "[x]"), (1, 2, "[x]"), (2, 0, "[x]"), (2, 1, "")] {
@@ -308,4 +313,26 @@ fn native_time_conversion_notice_is_completed_data_with_existing_warning_policy(
         .unwrap(),
         None
     );
+}
+
+#[test]
+fn native_time_notice_preserves_surrogate_units_separately_from_unicode_scalars() {
+    use sdm_contract::scalar::unicode::UnicodeText;
+    for points in [vec![91, 0xd800, 0xdc00, 93], vec![91, 0x10000, 93]] {
+        let input = Facts::TimeConversion {
+            rows: 2,
+            unread: 1,
+            examples: UnicodeText::from_points(points.clone()).unwrap(),
+        };
+        let wire = serde_json::to_value(&input).unwrap();
+        assert_eq!(wire["examples"], serde_json::json!(points));
+        let decoded = serde_json::from_value::<Facts>(wire).unwrap();
+        let notice = time_notice(Some(Dtype::Time), Stype::Timestamp, "ts", &decoded)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            notice.fields["examples_points"],
+            Detail::List(points.into_iter().map(Scalar::UInt32).collect())
+        );
+    }
 }

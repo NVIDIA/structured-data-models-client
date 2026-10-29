@@ -104,7 +104,7 @@ fn completed_scalar_content_and_time_outcomes_are_closed_facts() {
     for input in [
         json!({"storage":"column_values","inferred":"temporal","inferred_empty":false}),
         json!({"storage":"column_values","inferred":"other","inferred_empty":true}),
-        json!({"storage":"time_conversion","rows":2,"unread":1,"examples":"[native example]"}),
+        json!({"storage":"time_conversion","rows":2,"unread":1,"examples":[91,55296,56320,93]}),
     ] {
         let facts = serde_json::from_value::<MaterializeSourceFacts>(input.clone()).unwrap();
         assert_eq!(serde_json::to_value(facts).unwrap(), input);
@@ -114,6 +114,8 @@ fn completed_scalar_content_and_time_outcomes_are_closed_facts() {
         json!({"storage":"column_values","inferred":"temporal"}),
         json!({"storage":"column_values","inferred":"other","inferred_empty":null}),
         json!({"storage":"time_conversion","rows":2,"unread":1}),
+        json!({"storage":"time_conversion","rows":2,"unread":1,"examples":[1114112]}),
+        json!({"storage":"time_conversion","rows":2,"unread":1,"examples":"UTF8 is not lossless native text"}),
         json!({"storage":"time_conversion","rows":2,"unread":1,"examples":"[]","policy":true}),
     ] {
         assert!(serde_json::from_value::<MaterializeSourceFacts>(input).is_err());
