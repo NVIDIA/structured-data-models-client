@@ -186,6 +186,10 @@
       "type": ["object", "null"],
       "additionalProperties": false,
       "required": ["inputs", "fetches", "accepted", "described", "materialized", "predicted", "error"],
+      "dependentRequired": {
+        "materialization_preparations": ["materialization_capture_capabilities"],
+        "materialization_capture_capabilities": ["materialization_preparations"]
+      },
       "properties": {
         "inputs": {
           "type": "array",
@@ -255,6 +259,18 @@
           "description": "Actual gathered Python prediction invocations, their independently observed native Runs/calls/results and exact presentation relationships; never synthetic Predict operations or public-result reconstruction.",
           "type": "array",
           "items": {"$ref": "#/$defs/predictionEntry"}
+        },
+        "materialization_preparations": {
+          "description": "Actual materialization preparation Runs in start order, their JSON boundaries and lifecycle events. This raw journal supplies no common materialize role or opaque-resource identity claim.",
+          "type": "array",
+          "items": {"$ref": "#/$defs/materializationPreparationObservation"}
+        },
+        "materialization_capture_capabilities": {
+          "description": "Availability of the installed cancellation interceptor, independent of native failure classification or logical projection.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["cancellation"],
+          "properties": {"cancellation": {"type": "boolean"}}
         },
         "fetches": {
           "type": "array",
@@ -487,6 +503,87 @@
         "code": {
           "type": "string",
           "pattern": "^[A-Z][A-Z0-9_]*$"
+        }
+      }
+    },
+    "materializationBytesObservation": {
+      "description": "One actually received JSON bytes attachment; parsed data remains raw and is not reclassified as a domain product by this wrapper.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["attachment", "base64", "sha256", "parsed"],
+      "properties": {
+        "attachment": {"type": "integer", "minimum": 0},
+        "base64": {"type": "string"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "parsed": {}
+      }
+    },
+    "materializationResultEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "value"],
+      "properties": {
+        "op": {"const": "prepare_materialize"},
+        "value": {"type": "integer", "minimum": 0}
+      }
+    },
+    "materializationLifecycleEvent": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["event"],
+          "properties": {
+            "event": {"enum": ["done", "core_error", "cancelled", "cancel_failed"]}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["event", "attachment"],
+          "properties": {
+            "event": {"const": "value_taken"},
+            "attachment": {"type": "integer", "minimum": 0}
+          }
+        }
+      ]
+    },
+    "materializationPreparationObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run", "operation", "input", "completion", "result", "value_reads", "error", "events"],
+      "properties": {
+        "run": {"type": "integer", "minimum": 0},
+        "operation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["op", "input"],
+          "properties": {
+            "op": {"const": "prepare_materialize"},
+            "input": {"type": "integer", "minimum": 0}
+          }
+        },
+        "input": {"$ref": "#/$defs/materializationBytesObservation"},
+        "completion": {"enum": ["active", "done", "error", "cancelled", "cancel_failed"]},
+        "result": {
+          "anyOf": [
+            {"$ref": "#/$defs/materializationResultEnvelope"},
+            {"type": "null"}
+          ]
+        },
+        "value_reads": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/materializationBytesObservation"}
+        },
+        "error": {
+          "anyOf": [
+            {"$ref": "#/$defs/predictionCoreError"},
+            {"type": "null"}
+          ]
+        },
+        "events": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/materializationLifecycleEvent"}
         }
       }
     },

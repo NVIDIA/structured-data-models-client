@@ -908,6 +908,16 @@ class _Guard:
 # --- the core's boundary, for python-core --------------------------------------------
 
 
+def _materialization_bytes(attachment: int, value: bytes) -> dict[str, Any]:
+    """Actual JSON bytes at this attachment boundary, with no opaque reads."""
+    return {
+        'attachment': attachment,
+        'base64': base64.b64encode(value).decode('ascii'),
+        'sha256': digest(value),
+        'parsed': json.loads(value),
+    }
+
+
 class _CapturedRun:
     """Attachment state belongs to this actual Run, never the next start."""
 
@@ -929,6 +939,7 @@ class _CapturedRun:
         self.prepared: int | None = None
         self.preparation: dict[str, Any] | None = None
         self.input_record: dict[str, Any] | None = None
+        self.materialization_record: dict[str, Any] | None = None
         self.call_record: dict[str, Any] | None = None
         self.result_record: dict[str, Any] | None = None
         self.error: dict[str, str] | None = None
@@ -974,9 +985,12 @@ class _Capture:
         *,
         model_replies_observed: bool = True,
         native_error_control_observed: bool = True,
+        native_cancellations_observed: bool = False,
     ) -> None:
         self.model_replies_observed = model_replies_observed
         self.native_error_control_observed = native_error_control_observed
+        self.native_cancellations_observed = native_cancellations_observed
+        self.materialization_preparations: list[dict[str, Any]] = []
         self.operations: list[str] = []
         self.inputs: list[dict[str, Any]] = []
         #: What the host passed ``edit_schema`` and ``materialize``'s held
@@ -1261,6 +1275,26 @@ class _Capture:
         self.operations.append(operation['op'])
         if entry is not None:
             self.predictions[entry]['runs'].append(ordinal)
+        if operation['op'] == 'prepare_materialize':
+            attachment = operation['input']
+            raw = attachments[attachment]
+            if not isinstance(raw, bytes):
+                raise RunnerFailure(
+                    'an actual materialization input has no JSON bytes'
+                )
+            owner.materialization_record = {
+                'run': ordinal,
+                'operation': operation,
+                'input': _materialization_bytes(attachment, raw),
+                'completion': 'active',
+                'result': None,
+                'value_reads': [],
+                'error': None,
+                'events': [],
+            }
+            self.materialization_preparations.append(
+                owner.materialization_record
+            )
         if operation['op'] == 'prepare_request':
             value = json.loads(attachments[operation['input']])
             owner.preparation = value
@@ -1536,6 +1570,11 @@ class _Capture:
         owner = self._run(run)
         owner.completion = 'error'
         owner.error = {'kind': str(error.kind), 'code': str(error.code)}
+        if owner.materialization_record is not None:
+            record = owner.materialization_record
+            record['completion'] = 'error'
+            record['error'] = dict(owner.error)
+            record['events'].append({'event': 'core_error'})
         owner.error_owner = (
             error if owner.entry is not None and self._entries else None
         )
@@ -1551,6 +1590,11 @@ class _Capture:
     ) -> None:
         owner = self._run(run)
         owner.completion = 'done'
+        if owner.materialization_record is not None:
+            record = owner.materialization_record
+            record['completion'] = 'done'
+            record['result'] = dict(result)
+            record['events'].append({'event': 'done'})
         if result.get('op') == 'prepare_request':
             owner.prepared = result['value']
         if 'accepted' in result:
@@ -1582,6 +1626,19 @@ class _Capture:
         self, attachment: int, value: Any, *, run: _CapturedRun | None = None
     ) -> None:
         owner = self._run(run)
+        record = owner.materialization_record
+        if (
+            record is not None
+            and record['result'] is not None
+            and attachment == record['result'].get('value')
+            and isinstance(value, bytes)
+        ):
+            record['value_reads'].append(
+                _materialization_bytes(attachment, value)
+            )
+            record['events'].append(
+                {'event': 'value_taken', 'attachment': attachment}
+            )
         if attachment == owner.call and isinstance(value, bytes):
             owner.body = json.loads(
                 value, parse_int=_number, parse_float=_number
@@ -1717,6 +1774,15 @@ class _Capture:
         if attachment == state['query'] and isinstance(value, bytes):
             self.materialized['query'] = json.loads(value)
 
+    def cancelled(self, succeeded: bool, *, run: _CapturedRun) -> None:
+        """Observe only whether the actual cancel returned or raised."""
+        record = run.materialization_record
+        if record is not None:
+            event = 'cancelled' if succeeded else 'cancel_failed'
+            run.completion = event
+            record['completion'] = event
+            record['events'].append({'event': event})
+
     def _passed_over(
         self, owner: _CapturedRun, carried: str | None = None
     ) -> None:
@@ -1771,6 +1837,13 @@ class _Capture:
         }
         if self.edits:
             core['edits'] = self.edits
+        if self.materialization_preparations:
+            core['materialization_preparations'] = (
+                self.materialization_preparations
+            )
+            core['materialization_capture_capabilities'] = {
+                'cancellation': self.native_cancellations_observed
+            }
         if self.predictions or any(
             item['op'] == 'prepare_request' for item in self.inputs
         ):
@@ -2051,6 +2124,17 @@ class _Handle:
             self._capture.failed(error, run=self._owner)
             raise
 
+    def cancel(self) -> Any:
+        try:
+            value = self._handle.cancel()
+        except BaseException:
+            # Observation only: no classification or attribute/message read
+            # of a native, driver or process-control exception.
+            self._capture.cancelled(False, run=self._owner)
+            raise
+        self._capture.cancelled(True, run=self._owner)
+        return value
+
     def __getattr__(self, name: str) -> Any:
         return getattr(self._handle, name)
 
@@ -2088,7 +2172,7 @@ class _Boundary:
     def __init__(self) -> None:
         from sdm_client._rust import errors, relational_predict, run
 
-        self.capture = _Capture()
+        self.capture = _Capture(native_cancellations_observed=True)
         self._closed = False
         self._native_before = run.native
         self._predict_before = relational_predict.predict
@@ -2198,7 +2282,7 @@ class _Boundary:
             raise RunnerFailure(
                 'cannot reset an active or closed prediction capture'
             )
-        self.capture = _Capture()
+        self.capture = _Capture(native_cancellations_observed=True)
         return self.capture
 
     def close(self) -> None:
