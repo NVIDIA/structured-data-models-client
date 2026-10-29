@@ -129,6 +129,20 @@ impl TaskValue {
     }
 }
 
+/// A reached task display and, for an overridden native string protocol,
+/// its actual containment result. Builtin storage uses shared text policy.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "representation", rename_all = "snake_case", deny_unknown_fields)]
+pub enum DirectTaskMeaning {
+    Builtin {
+        value: UnicodeText,
+    },
+    Native {
+        value: UnicodeText,
+        classification: bool,
+    },
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct NativeConstructorTask {
@@ -500,7 +514,7 @@ pub enum Preparation {
         attributed: AttachmentId,
         decimal_limit: u32,
         #[serde(default)]
-        native_task: Option<UnicodeText>,
+        native_task: Option<DirectTaskMeaning>,
     },
     Overlap {
         input: DirectPrelude,

@@ -129,9 +129,8 @@ class TabularEnvelopeColumns:
 @final
 class TabularEnvelopeDeclaration:
     def text(self) -> bool: ...
-    def target(self) -> bool: ...
     def meaning(
-        self, classification: bool | None = None
+        self, non_target: bool | None = None, classification: bool | None = None
     ) -> TabularEnvelopeMeaning: ...
 
 @final

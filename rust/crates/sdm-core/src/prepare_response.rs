@@ -58,7 +58,7 @@ pub(crate) fn layout(
     data: DirectResponseData,
     attributed: AttachmentId,
     decimal_limit: u32,
-    native_task: Option<sdm_contract::scalar::unicode::UnicodeText>,
+    native_task: Option<sdm_contract::prepare::DirectTaskMeaning>,
     mut attached: Attachments,
 ) -> Result<OperationResult, CoreError> {
     let payload = json::read(&bytes(&mut attached, data.payload)?)

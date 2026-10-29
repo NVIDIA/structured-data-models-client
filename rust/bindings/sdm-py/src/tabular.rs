@@ -368,19 +368,17 @@ impl TabularEnvelopeDeclaration {
     fn text(&self, py: Python<'_>) -> PyResult<bool> {
         crate::core_call(py, || self.state.text())
     }
-    fn target(&self, py: Python<'_>) -> PyResult<bool> {
-        crate::core_call(py, || self.state.target())
-    }
-    #[pyo3(signature = (classification=None))]
+    #[pyo3(signature = (non_target=None, classification=None))]
     fn meaning(
         &self,
         py: Python<'_>,
+        non_target: Option<bool>,
         classification: Option<bool>,
     ) -> PyResult<TabularEnvelopeMeaning> {
         Ok(TabularEnvelopeMeaning {
             state: checked(
                 py,
-                crate::core_call(py, || self.state.meaning(classification))?,
+                crate::core_call(py, || self.state.meaning(non_target, classification))?,
             )?,
         })
     }

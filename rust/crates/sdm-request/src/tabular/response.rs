@@ -521,11 +521,15 @@ pub fn complete_rows(
         if replay != *accepted {
             return Err(protocol("attributed ID differs from source facts"));
         }
-        seen.insert(
+        if !seen.insert(
             row.row_index
                 .parse::<usize>()
                 .map_err(|_| protocol("attributed index is not a row"))?,
-        );
+        ) {
+            return Err(protocol(
+                "complete attribution repeats a scoring index without its prior occurrence",
+            ));
+        }
     }
     let missing: Vec<_> = (0..scope.scoring_rows)
         .filter(|n| !seen.contains(n))
@@ -551,7 +555,7 @@ pub fn layout(
     attributed: Vec<AttributedDirectRow>,
     decimal_limit: u32,
     float_text: fn(f64) -> String,
-    native_task: Option<&sdm_contract::scalar::unicode::UnicodeText>,
+    native_task: Option<&sdm_contract::prepare::DirectTaskMeaning>,
 ) -> Result<Part, CoreError> {
     let (actual, rows) = decode(payload, response, float_text)?;
     if actual != *scope || attributed.len() != rows.len() {

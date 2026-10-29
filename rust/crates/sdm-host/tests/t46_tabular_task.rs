@@ -269,14 +269,13 @@ fn complete_native_column_meaning_is_bound_to_actual_order_and_owner() {
     let target = columns
         .declaration("answer".into(), Stype::Numerical)
         .unwrap();
-    assert!(target.target());
     assert!(!target.text());
-    assert!(target.meaning(None).is_err());
-    let actual = target.meaning(Some(true)).unwrap();
+    assert!(target.meaning(None, None).is_err());
+    let actual = target.meaning(Some(false), Some(true)).unwrap();
     let other = foreign
         .declaration("answer".into(), Stype::Numerical)
         .unwrap()
-        .meaning(Some(true))
+        .meaning(Some(false), Some(true))
         .unwrap();
     assert!(columns.complete(&other, None).is_err());
     assert!(columns.complete(&actual, Some(false)).is_err());
@@ -286,10 +285,9 @@ fn complete_native_column_meaning_is_bound_to_actual_order_and_owner() {
     // widths were captured. Its reached Text shortcut does not read task.
     let later = columns.declaration("later".into(), Stype::Text).unwrap();
     assert!(later.text());
-    assert!(!later.target());
-    assert!(later.meaning(Some(true)).is_err());
+    assert!(later.meaning(None, Some(true)).is_err());
     columns
-        .complete(&later.meaning(None).unwrap(), None)
+        .complete(&later.meaning(None, None).unwrap(), None)
         .unwrap();
     let (finished, notices) = columns.finish().unwrap();
     assert_eq!(finished.columns.columns[0].stype, Stype::Categorical);
@@ -319,9 +317,9 @@ fn text_target_has_no_task_fact_and_incoherent_widths_are_not_accepted() {
     let mut columns =
         sdm_host::tabular_envelope::columns(&serde_json::to_vec(&data).unwrap()).unwrap();
     let target = columns.declaration("answer".into(), Stype::Text).unwrap();
-    assert!(target.meaning(Some(false)).is_err());
+    assert!(target.meaning(None, Some(false)).is_err());
     columns
-        .complete(&target.meaning(None).unwrap(), None)
+        .complete(&target.meaning(None, None).unwrap(), None)
         .unwrap();
     assert_eq!(
         columns.finish().unwrap().0.columns.columns[0].stype,

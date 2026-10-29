@@ -1248,7 +1248,6 @@ pub(crate) async fn predict(
     let outputs = bound.outputs.to_vec();
     let named = bound.named;
     let model = bound.model.to_owned();
-    let kind = bound.kind.to_owned();
     let payload = match input {
         DirectPredict::Empty {
             schema,
@@ -1270,16 +1269,9 @@ pub(crate) async fn predict(
                 !t.primary_key.is_empty()
                     && t.primary_key.iter().all(|key| scoring_names.contains(key))
             });
-            let payload = sdm_wire::json::Value::Object(vec![(
-                "task".into(),
-                sdm_wire::json::Value::Object(vec![(
-                    "kind".into(),
-                    sdm_wire::json::Value::Text(kind.text()?),
-                )]),
-            )]);
             return crate::predict::finish_direct(
                 &asker,
-                policy::empty(&model, &payload),
+                policy::empty_direct(&model),
                 outputs,
                 Some(names_rows),
             );

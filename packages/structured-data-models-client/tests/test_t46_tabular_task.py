@@ -1194,7 +1194,7 @@ def test_runtime_task_membership_releases_its_replaced_owner_before_frame_reads(
     old, current = observe(False), observe(True)
     assert current == old
     assert current[2].index('released task') < current[2].index('transport')
-    assert current[1][0]['predict']['rows'][0] == [91]
+    assert current[1][0]['predict']['instance_table']['rows'][0] == [91]
 
 
 def test_empty_prediction_admits_a_native_nonstring_task_without_wire_storage(

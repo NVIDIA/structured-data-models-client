@@ -284,6 +284,20 @@ def _response(finished: Finished, task_owner: Any) -> Finished:
     # The original payload captured this owner before encoding/transport.
     # Complete row admission precedes its one reached native str conversion.
     task_text = str(task_owner)
+    native_task: dict[str, Any] = {
+        'representation': 'builtin',
+        'value': [ord(character) for character in str.__iter__(task_text)],
+    }
+    if type(task_text) is not str:
+        from sdm_client._rust.relational_native import vocabulary
+
+        native_task['representation'] = 'native'
+        native_task['classification'] = (
+            sys.intern(vocabulary()['classification']) in task_text
+        )
+    # The source containment expression owns its displayed string only until
+    # that expression completes, before target restoration reads later data.
+    del task_text
     attached = {
         n: buffers[name]
         for n, name in enumerate(('payload', 'response', 'rows'), 2)
@@ -293,9 +307,7 @@ def _response(finished: Finished, task_owner: Any) -> Finished:
     return _prepared_run(
         {
             'stage': 'layout_response',
-            'native_task': [
-                ord(character) for character in str.__iter__(task_text)
-            ],
+            'native_task': native_task,
             'data': data,
             'attributed': 5,
             'decimal_limit': getter() if getter else 0,
@@ -821,7 +833,11 @@ def predict(
         }
     )
     kind = request.task.kind
+    task_storage = _task_value(kind)
     admitted = kind in frozenset(sys.intern(word) for word in words['tasks'])
+    # Membership may replace request.task. Keep detached storage, not the
+    # consumed operand whose finalizer can affect the following frame reads.
+    del kind
 
     def refused_task(fields: dict[str, Any]) -> tuple[str, Any]:
         internal = sys.exception()
@@ -837,7 +853,7 @@ def predict(
             {
                 'stage': 'task',
                 'call': call,
-                'kind': _task_value(kind),
+                'kind': task_storage,
                 'admitted': admitted,
             }
         )
@@ -946,12 +962,17 @@ def predict(
         for name in context.columns:
             declared = table[name].stype
             declaration = columns.declaration(name, declared)
+            non_target = (
+                None
+                if declaration.text()
+                else bool(name != request.task.target.column_name)
+            )
             classification = (
                 bool(request.task.is_classification)
-                if not declaration.text() and declaration.target()
+                if non_target is False
                 else None
             )
-            meaning = declaration.meaning(classification)
+            meaning = declaration.meaning(non_target, classification)
             column = table[name]
             stated = (
                 None if meaning.supported() else bool(column.stype_declared)

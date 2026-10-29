@@ -503,18 +503,21 @@ impl EnvelopeDeclaration {
     pub fn text(&self) -> bool {
         self.declared == Stype::Text
     }
-    pub fn target(&self) -> bool {
-        self.name == self.source.widths.target
-    }
-    pub fn meaning(&self, classification: Option<bool>) -> Result<EnvelopeMeaning, CoreError> {
+    pub fn meaning(
+        &self,
+        non_target: Option<bool>,
+        classification: Option<bool>,
+    ) -> Result<EnvelopeMeaning, CoreError> {
         let proposed = if self.text() {
-            if classification.is_some() {
+            if non_target.is_some() || classification.is_some() {
                 return Err(envelope_invalid(
                     "text shortcut observed an unreached task comparison",
                 ));
             }
             Stype::Categorical
-        } else if self.target() {
+        } else if !non_target
+            .ok_or_else(|| envelope_invalid("native column lacks its reached target comparison"))?
+        {
             if classification
                 .ok_or_else(|| envelope_invalid("native target lacks its reached task meaning"))?
             {

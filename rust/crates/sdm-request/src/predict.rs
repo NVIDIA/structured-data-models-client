@@ -1262,13 +1262,26 @@ fn holds(mapping: &Value) -> bool {
 /// The answer to a request with no rows, made without a call
 /// (`_empty_answer`): no rows, no request id, empty metadata.
 pub fn empty(model: &str, payload: &Value) -> Part {
+    empty_part(
+        model,
+        answer_type(payload).unwrap_or(AnswerType::Float),
+        entity_dtype(payload).as_deref() == Some("string"),
+    )
+}
+
+/// A direct no-op has no payload or reached task storage to interpret.
+pub fn empty_direct(model: &str) -> Part {
+    empty_part(model, AnswerType::Float, false)
+}
+
+fn empty_part(model: &str, answers: AnswerType, text_ids: bool) -> Part {
     Part {
         model: model.to_owned(),
         request_id: String::new(),
         metadata: Value::Object(vec![]),
         rows: vec![],
-        answers: answer_type(payload).unwrap_or(AnswerType::Float),
-        text_ids: entity_dtype(payload).as_deref() == Some("string"),
+        answers,
+        text_ids,
         explanation: None,
     }
 }
@@ -1597,12 +1610,20 @@ pub(crate) fn layout_tabular_task(
     response: &PredictionResponse,
     decimal_limit: u32,
     float_text: fn(f64) -> String,
-    native_task: Option<&sdm_contract::scalar::unicode::UnicodeText>,
+    native_task: Option<&sdm_contract::prepare::DirectTaskMeaning>,
 ) -> Result<Part, CoreError> {
     let answers = if let Some(task) = native_task {
-        let points: Vec<_> = task.points().collect();
-        let word: Vec<_> = "classification".chars().map(u32::from).collect();
-        declared_answer_meaning(payload, points.windows(word.len()).any(|part| part == word))
+        let classification = match task {
+            sdm_contract::prepare::DirectTaskMeaning::Builtin { value } => {
+                let points: Vec<_> = value.points().collect();
+                let word: Vec<_> = "classification".chars().map(u32::from).collect();
+                points.windows(word.len()).any(|part| part == word)
+            }
+            sdm_contract::prepare::DirectTaskMeaning::Native { classification, .. } => {
+                *classification
+            }
+        };
+        declared_answer_meaning(payload, classification)
     } else {
         declared_answers(payload, kind_of(payload)?)
     };
