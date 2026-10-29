@@ -311,6 +311,32 @@ def test_current_actual_materialization_input_is_checked_against_the_complete_he
     assert observed == before
 
 
+def test_raw_description_is_an_alternate_only_for_a_real_legacy_input():
+    schema = description()
+    legacy = legacy_materialization_observation(schema)
+    current = materialization_observation(schema)
+    before = (copy.deepcopy(legacy), copy.deepcopy(current))
+    assert case_input_failures(legacy) == []
+    assert [rule for rule, _ in case_input_failures(current)] == ['inputs']
+    assert (legacy, current) == before
+
+
+def test_a_legacy_raw_description_cannot_rescue_the_same_value_at_a_task_position():
+    mixed = materialization_observation(description())
+    mixed['identity']['operations'].insert(0, 'materialize')
+    core = mixed['core']
+    core['inputs'] = legacy_materialization_observation(description())['core'][
+        'inputs'
+    ]
+    [entry] = core['materialization_entries']
+    entry['runs'] = [1]
+    entry['terminal']['run'] = 1
+    core['materialization_preparations'][0]['run'] = 1
+    before = copy.deepcopy(mixed)
+    assert [rule for rule, _ in case_input_failures(mixed)] == ['inputs']
+    assert mixed == before
+
+
 def legacy_materialization_observation(schema):
     return {
         'identity': {'operations': ['materialize']},
