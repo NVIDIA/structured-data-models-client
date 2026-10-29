@@ -894,6 +894,60 @@ def ordered_numbers(text):
     )
 
 
+def test_logical_serving_json_ignores_only_nested_json_spelling():
+    pretty = '{\n "key": "\\u00e9", "number": -0.0\n}'
+    compact = '{"key":"é","number":-0.0}'
+    first = {'dataframe_records': [{'request_json': pretty}]}
+    second = {'dataframe_records': [{'request_json': compact}]}
+    value = {'calls': [first], 'ordinary': pretty, 'tuple': (first, True)}
+    before = copy.deepcopy(value)
+    expected = {
+        'calls': [second],
+        'ordinary': pretty,
+        'tuple': (second, True),
+    }
+    assert logical_serving_json(value) == logical_serving_json(expected)
+    assert logical_serving_json(value)['ordinary'] == pretty
+    assert type(logical_serving_json(value)['tuple']) is tuple
+    assert value == before
+
+
+@pytest.mark.parametrize(
+    ('first', 'second'),
+    [
+        ('{"n":1}', '{"n":1.0}'),
+        ('{"n":-0.0}', '{"n":0.0}'),
+        ('{"n":1e+0}', '{"n":1e0}'),
+        ('{"n":1,"n":2}', '{"n":2,"n":1}'),
+        ('{"a":1,"b":2}', '{"b":2,"a":1}'),
+        ('{"n":{"number":"1"}}', '{"n":1}'),
+    ],
+)
+def test_logical_serving_json_keeps_number_tokens_and_ordered_members(
+    first, second
+):
+    left = {'dataframe_records': [{'request_json': first}]}
+    right = {'dataframe_records': [{'request_json': second}]}
+    assert logical_serving_json(left) != logical_serving_json(right)
+
+
+@pytest.mark.parametrize(
+    'value',
+    [
+        '{"dataframe_records":[{"request_json":"not JSON"}]}',
+        {'request_json': 'not JSON'},
+        {'dataframe_records': [{'request_json': 'not JSON'}], 'extra': 1},
+        {'dataframe_records': [{'request_json': 'not JSON', 'extra': 1}]},
+        {'dataframe_records': [{'request_json': 'not JSON'}] * 2},
+        {'dataframe_records': [{'request_json': True}]},
+    ],
+)
+def test_logical_serving_json_leaves_other_shapes_and_text_exact(value):
+    before = copy.deepcopy(value)
+    assert logical_serving_json(value) == before
+    assert value == before
+
+
 def test_serving_member_collision_is_detected_before_literal_name_replacement():
     held = RUNNER.Placeheld(NAMES, ())
     private = NAMES['catalog']
