@@ -7,7 +7,7 @@
 
 pub mod task;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 
@@ -25,7 +25,7 @@ impl IndexSelection {
     /// Integer keys preserve Python dictionary equality, including repetitions.
     /// An absent requested integer is outside the admitted signed-64 domain.
     pub fn new(keys: &[i64], requested: &[Option<i64>]) -> Self {
-        let mut positions: HashMap<i64, Vec<usize>> = HashMap::new();
+        let mut positions: BTreeMap<i64, Vec<usize>> = BTreeMap::new();
         for (row, &key) in keys.iter().enumerate() {
             positions.entry(key).or_default().push(row);
         }
@@ -65,7 +65,7 @@ fn invalid(message: &str) -> CoreError {
 /// Owned primitive scoring identities, before the source membership read.
 #[derive(Debug, Clone)]
 pub struct ScoringKeys {
-    values: HashSet<i64>,
+    values: BTreeSet<i64>,
 }
 
 impl ScoringKeys {
@@ -188,7 +188,7 @@ impl ContextSelection {
                 "tabular index label extent differs from its captured candidates",
             ));
         }
-        let mut unique = HashSet::with_capacity(labels.len());
+        let mut unique = BTreeSet::new();
         if labels.iter().any(|label| !unique.insert(*label)) {
             return Err(crate::not_yet("tabular_duplicate_index_ordering"));
         }
