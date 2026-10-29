@@ -42,6 +42,7 @@ none of, its differences); these tests gate the claims above in CI.
 
 from __future__ import annotations
 
+import copy
 import importlib.util
 import json
 import subprocess
@@ -174,9 +175,65 @@ def test_base_regression_reaches_the_reference_s_payload_on_the_core(
     assert_corrected_inputs(
         logical['inputs'], pinned['inputs'], materialized=materialized
     )
-    assert_pinned_fetch_shapes(logical['fetches'], pinned['fetches'])
+    before = copy.deepcopy(core)
+    assert_pinned_fetch_shapes(
+        logical['fetches'], pinned['fetches'], observation=core
+    )
+    assert core == before
     assert core['core']['described'] == pinned['described']
     assert materialized == pinned['materialized']
+
+
+def test_historical_plan_comparison_checks_actual_binding_evidence(tmp_path):
+    observation = _core(tmp_path)
+    logical = checked_view(observation)
+    pinned = json.loads(PINNED.read_text())['fetches']
+    assert_pinned_fetch_shapes(
+        logical['fetches'], pinned, observation=observation
+    )
+    if not any('bindings' in fetch for fetch in logical['fetches']):
+        return  # The production build has no test-only binding observer.
+    with pytest.raises(AssertionError, match='complete actual observation'):
+        assert_pinned_fetch_shapes(logical['fetches'], pinned)
+    position = next(
+        i
+        for i, fetch in enumerate(observation['core']['fetches'])
+        if fetch.get('bindings', {}).get('owners')
+    )
+    for fault in (
+        'run',
+        'missing',
+        'foreign',
+        'schema',
+        'digest',
+        'unknown',
+        'null',
+    ):
+        changed = copy.deepcopy(observation)
+        fetch = changed['core']['fetches'][position]
+        facts = fetch['bindings']
+        if fault == 'run':
+            facts['run'] += len(changed['identity']['operations'])
+        elif fault == 'missing':
+            facts['owners'] = []
+        elif fault == 'foreign':
+            facts['owners'][0]['attachment'] += 900_000
+        elif fault == 'schema':
+            facts['owners'][0]['fields'][0]['nullable'] = not facts['owners'][
+                0
+            ]['fields'][0]['nullable']
+        elif fault == 'digest':
+            facts['owners'][0]['values']['ordered'] = 'not a digest'
+        elif fault == 'unknown':
+            facts['unobserved'] = True
+        else:
+            fetch['bindings'] = None
+        supplied = copy.deepcopy(logical['fetches'])
+        supplied[position]['bindings'] = copy.deepcopy(fetch['bindings'])
+        before = copy.deepcopy((changed, supplied))
+        with pytest.raises(AssertionError):
+            assert_pinned_fetch_shapes(supplied, pinned, observation=changed)
+        assert (changed, supplied) == before, fault
 
 
 # --- the core's SQL against the reference's ---------------------------------

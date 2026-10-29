@@ -98,7 +98,9 @@ def test_base_regression_s_schema_on_the_core_is_the_reference_s(
         pinned['inputs'],
         materialized=logical['materialized'],
     )
-    assert_pinned_fetch_shapes(logical['fetches'], pinned['fetches'])
+    assert_pinned_fetch_shapes(
+        logical['fetches'], pinned['fetches'], observation=core
+    )
     assert core['core']['described'] == pinned['described']
     for observed in (core, old):
         assert observed['public']['schema'] == reference['public']['schema']
