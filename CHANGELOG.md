@@ -29,9 +29,15 @@ these packages. All five distributions share one version and one entry.
   installs on a laptop rather than on Linux only. The engine ships no source
   distribution, so those wheels remain the full set of platforms it supports:
   `structured-data-models-client` itself is pure Python and stays broader.
-- `kumo-tabular` accepts `explanation` in `outputs`, over one scored row at a
-  time, and returns it on `result.explanation`. Asking for one over more rows
-  is refused before sending.
+- `kumo-tabular` accepts `explanation` in `outputs`.
+- `result.explanations` maps each explained row's key to its explanation: the
+  row's `id`, `(id, forecast_step)` on a forecast, or `row_index` when the
+  request has no entity id. Each entry is a plain dict of `outputs`, the
+  entity's own row under `instance`, and, on `kumo-relational`, each related
+  table under `related`, whose rows carry their primary key when the table
+  has one and always their values as sent. It is kept out of
+  `result.to_pandas()`; `result.explanations.to_pandas()` flattens it into one
+  line per row, output and column, with each row's `hop` from the entity.
 
 ### Changed
 
@@ -48,6 +54,15 @@ these packages. All five distributions share one version and one entry.
 - A `kumo-relational` explanation is no longer refused above the 1,000-row
   context budget. That limit belonged to an earlier deployment; the Kumo
   Relational SDM NIM explains under either budget.
+- An explanation covers every scored row, on both models. A `kumo-tabular`
+  explanation over more than one row and a `kumo-relational` one over more
+  than one entity are no longer refused before sending.
+
+### Removed
+
+- `result.explanation`, which held the first record's explanation only, and
+  the `{'by_forecast_step': ...}` it held for a forecast. Read
+  `result.explanations` instead.
 
 ### Fixed
 

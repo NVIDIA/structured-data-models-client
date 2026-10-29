@@ -113,6 +113,28 @@ labels come from, so a ranking and a forecast are asked with `predict()` and
 `fit()` refuses them.
 
 An explanation is asked for as an output, `outputs=[..., 'explanation']`, never
-an `explain=` argument, and read from `result.explanation`. It covers one
-scored row at a time. A ranking refuses it locally, and the shipping endpoint
-refuses it everywhere else, so treat `result.explanation` as possibly `None`.
+an `explain=` argument, and read from `result.explanations`. It covers every
+scored row, with no row limit. `result.explanations` maps each row's key to its
+explanation, the same key that identifies the row in `to_pandas()`: the
+entity's `id`, or `(id, forecast_step)` on a forecast, since a forecast is
+keyed by the pair. It is kept out of `to_pandas()` itself.
+
+An entry holds `outputs`, the explained scores in order; `instance`, the
+entity's own row, with `columns` and `gradients` as `[output][column]`; and
+`related`, one block per related table the client gathered for that entity.
+A block carries `keys`, each row's primary key, when the table has one, and
+always `rows`, each row's values as sent, with `columns` and `gradients` as
+`[output][row][column]`, aligned with those rows. A keyless table's rows are
+identified by their values alone, and get gradients the same way.
+
+`columns` are the model's preprocessed numerical columns: categoricals and
+datetimes may appear as derived columns, and a table without numerical
+features gives an empty list. The context rows get no gradients. A row reached
+through several paths appears once, with its total effect through all of them.
+`result.explanations.to_pandas()` flattens every entry into one line per (row,
+output, column), with `hop`, how many links the row is from the entity.
+
+A ranking refuses an explanation locally, and the shipping endpoint refuses it
+everywhere else, so treat `result.explanations` as possibly empty. A deployment
+that serves explanations has to run one estimator, `SDM_NUM_ESTIMATORS=1`, and
+answers `422 UNSUPPORTED_OUTPUT` otherwise.
