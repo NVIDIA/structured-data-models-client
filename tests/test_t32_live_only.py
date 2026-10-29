@@ -275,7 +275,8 @@ def test_t32_model_call_fixture_still_refuses_invalid_evidence(
         call['body_sha256'] = '0' * 64
     untouched = copy.deepcopy(line)
     report = pair.judge(line)
-    assert 'payload' in [rule for rule, _ in report.failures]
+    expected = 'core' if changed == 'owner' else 'payload'
+    assert expected in [rule for rule, _ in report.failures]
     assert line == untouched
 
 
