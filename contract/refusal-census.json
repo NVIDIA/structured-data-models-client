@@ -927,6 +927,38 @@
         }
       },
       "until": "materialize"
+    },
+    {
+      "site": "rule:tabular_duplicate_index_ordering",
+      "why": "Complete builtin int64 candidate labels with duplicates are an unfinished native tabular sorting family. The SQL shop materialization probe does not reach this native site. Actual target-getter mutation and original-success/Core-RouteError consumer: packages/structured-data-models-client/tests/test_t46_tabular_selection.py::test_reduced_duplicate_candidate_index_is_an_unfinished_family. Exact H17 code, sentence and rule metadata: rust/crates/sdm-host/tests/t46_tabular_selection.rs::actual_candidate_labels_order_the_sample_before_mapping_original_rows. Complete-label and out-of-sample duplicate guard: rust/crates/sdm-engine/tests/t46_tabular_selection.rs::labels_are_complete_unique_signed_facts_not_source_positions.",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize"
+    },
+    {
+      "site": "packages/structured-data-models-client/src/sdm_client/_rust/tabular_materialize.py::materialize#1",
+      "why": "Missing native tabular requested entity values retain the original INVALID_REQUEST count and original-value presentation. The SQL shop materialization probe does not reach this native site. Actual original/Core public missing-index consumer: packages/structured-data-models-client/tests/test_t46_tabular_selection.py::test_public_missing_indices_keep_the_original_count_and_values. Repeated source/request keys and missing request ordinals: rust/crates/sdm-engine/tests/t46_tabular_selection.rs::repeated_indices_keep_all_matching_rows_and_missing_request_ordinals. The same typed selection reaches the Host in rust/crates/sdm-host/tests/t46_tabular_selection.rs::typed_host_filters_before_sampling_and_applies_candidate_positions; native-site reachability is not claimed from this SQL probe.",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize"
     }
   ]
 }
