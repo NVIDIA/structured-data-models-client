@@ -168,6 +168,16 @@ Reuse the existing Rust comparison, aggregation and combined-mask kernels; neith
 Retain successful operand values and completed subtree masks as useful condition data, and make each left-side refusal observable before the following native operand read.
 The pure/raw host path keeps its existing mathematical conversion kernel.
 
+Retain this observed condition history inside the existing label-input and group owners.
+The condition description contains ordered core-created column views and the actual completed column owners, rather than a next-action instruction.
+Each view is a projection of the same retained source data with its own validated Shape; it is not another query parse or a host-selected expression.
+Row conditions use the fixed full-column conversion without a target time window.
+Aggregated condition operands reuse the same native column/filter/window handover and the existing selected-row numeric aggregation kernel.
+Entity eligibility includes the reached entity-key missingness observation even when no entity WHERE condition is present.
+Only a successfully bound restored-label product may reveal or consume what-if observations.
+Validate exact expected child-view and predecessor ownership, complete occurrence order and finished subtree masks before final batch acceptance.
+All required source-frame companions survive through their own entity or windowed read scope; equal reply integers from different Runs are not source identity.
+
 A scored entity Lookup validates duplicate source keys before native business-column sanitation.
 Its source-row product binds the actual owned task batch, prediction range, scored keys and issued read; host-supplied scored/unique/refuse flags cannot replace that data.
 Extract the existing duplicate-score kernel once and share it between this native boundary and the raw request completion.
