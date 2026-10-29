@@ -759,3 +759,11 @@ Publish a distinctly labelled safe derivative linked to the actual private sourc
 Preserve raw replay inputs and all frozen references, and cover actual byte roles, lineage, serving/retry receipts, non-name differences, tamper rejection and immutable source files through API and CLI consumers.
 This is a tooling publication/comparison repair, with no SDK wire, mathematical, source-policy or gate-integrity exception.
 The checkpoint collection dependency remains governed by H2 and the documented coupled landing order; neither a new collector flag nor this private comparison mode earns checkpoint acceptance.
+
+The R54 byte-edge diagnostic distinguishes the materialization payload from the later native encoded call.
+Its three existing calibration inputs produced payload byte counts 29,960, 30,016 and 29,961, while the corresponding actual posted calls contained 33,619, 33,787 and 33,620 bytes.
+The reached native JSON encoder escapes the emoji, so calibrating a payload limit from the posted-call increments no longer measures the payload's edge.
+The public control therefore measures each existing boundary independently: the actual payload remains UTF-8 and has its own exact limit and one-byte-over refusal; the actual native call has its own exact taken/received byte identity, limit and refusal before sending.
+This retains PD-2's admission on actual bytes without claiming that the historical E76(c) public Rust-call byte identity still describes a call that now reaches the final native encoder.
+The encoder, the limits, the immutable byte recordings and the independently approved serving envelope rules are unchanged.
+These are source-authored controls awaiting the successor's exact reviews and execution, not a new validation result.
