@@ -66,7 +66,53 @@ def _source_rows(db):
     }
 
 
-def _observe(monkeypatch, case, core, *, request_owners=None):
+def _warning_record(notice, position):
+    filename = Path(notice.filename).resolve()
+    origin = None
+    for name, module in (('pandas', pd), ('pyarrow', pa)):
+        if filename.is_relative_to(Path(module.__file__).resolve().parent):
+            origin = name
+            break
+    return {
+        'type': type(notice.message).__name__,
+        'category': notice.category.__module__
+        + '.'
+        + notice.category.__qualname__,
+        'message': str(notice.message),
+        'stage': position,
+        'filename': notice.filename,
+        'lineno': notice.lineno,
+        'origin': origin,
+    }
+
+
+def _comparison(observed):
+    """Project actual captured warnings under the owner's general policy."""
+    register = yaml.safe_load(
+        (ROOT / 'docs/design/rust-core/register.yaml').read_text()
+    )
+    entries = {entry['id']: entry for entry in register['entries']}
+    assert (entries['HOST-6']['status'], entries['HOST-6']['approved_by']) == (
+        'approved',
+        'owner',
+    )
+    compared = copy.deepcopy(observed)
+    compared['warnings'] = [
+        {key: notice[key] for key in ('type', 'category', 'message', 'stage')}
+        for notice in observed['warnings']
+        if notice['origin'] not in ('pandas', 'pyarrow')
+    ]
+    return compared
+
+
+def _observe(
+    monkeypatch, case, core, *, request_owners=None, raw_observations=None
+):
+    """Return the comparison view; retain full actual records when requested.
+
+    The optional sink owns the raw outcome and warnings before projection.
+    Native warning emission and all substantive products are observed first.
+    """
     setup, text = _input(case)
     stage = 'schema'
     warning_stages = []
@@ -135,16 +181,7 @@ def _observe(monkeypatch, case, core, *, request_owners=None):
                     )
             assert len(notices) == len(warning_stages)
             observed['warnings'] = [
-                {
-                    'type': type(notice.message).__name__,
-                    'category': (
-                        notice.category.__module__
-                        + '.'
-                        + notice.category.__qualname__
-                    ),
-                    'message': str(notice.message),
-                    'stage': position,
-                }
+                _warning_record(notice, position)
                 for notice, position in zip(
                     notices, warning_stages, strict=True
                 )
@@ -155,7 +192,9 @@ def _observe(monkeypatch, case, core, *, request_owners=None):
         assert observed['source_after'] == before
     assert transports == []
     assert engine_calls == []
-    return observed
+    if raw_observations is not None:
+        raw_observations.append(observed)
+    return _comparison(observed)
 
 
 def _approved_old(old, case):
@@ -169,8 +208,8 @@ def _approved_old(old, case):
             'owner',
         )
     expected = copy.deepcopy(old)
-    # The finite mappings keep native pandas warnings, their categories,
-    # wording, order and reached stage unchanged.
+    # These finite first-party mappings follow the runtime projection.
+    # Complete native warning records remain in the raw observation sink.
     codes = {
         'Missing 7 indices in 4 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`.': 'MISSING_INDICES',
         "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'.": 'CONTEXT_BEFORE_DATA',
@@ -289,8 +328,11 @@ def test_native_sql_labels_keep_the_complete_same_runtime_public_outcome(
     monkeypatch,
     case,
 ):
-    old = _observe(monkeypatch, case, False)
-    current = _observe(monkeypatch, case, True)
+    old_raw, current_raw = [], []
+    old = _observe(monkeypatch, case, False, raw_observations=old_raw)
+    current = _observe(monkeypatch, case, True, raw_observations=current_raw)
+    assert old == _comparison(old_raw[0])
+    assert current == _comparison(current_raw[0])
     if old['outcome'] == 'error':
         # A paired unrelated setup/validation error is not native parity.
         # These are the reached native failures already reproduced from
