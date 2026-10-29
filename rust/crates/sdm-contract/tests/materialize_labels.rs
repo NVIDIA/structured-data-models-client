@@ -140,6 +140,33 @@ fn condition_history_names_actual_column_views_and_completed_value_owners() {
 }
 
 #[test]
+fn restored_group_data_and_late_condition_prefix_keep_distinct_typed_owners() {
+    let groups = json!({"population":"population-1","range":{"start":0,"stop":10000},"owner":12,
+        "native_target":{"source":{"source":["buys"]},"column":"item_id"},"target_encoding":null});
+    let input:MaterializePreparation=serde_json::from_value(json!({"stage":"restore_label_groups","groups":groups,"restored":{"rows":13,"encoding":null}})).unwrap();
+    assert_eq!(
+        input.attachments(),
+        vec![
+            (AttachmentId(12), AttachmentKind::MaterializeGroups),
+            (AttachmentId(13), AttachmentKind::Arrow)
+        ]
+    );
+    let input:MaterializePreparation=serde_json::from_value(json!({"stage":"complete_label_batch","population":population(),
+        "groups":{"restored":{"rows":14,"encoding":null},"what_if":{"columns":[],"values":[]},
+            "population":"population-1","range":{"start":0,"stop":10000},"owner":12,
+            "native_target":{"source":{"source":["buys"]},"column":"item_id"},"target_encoding":null},
+        "restored":null})).unwrap();
+    assert_eq!(
+        input.attachments(),
+        vec![
+            (AttachmentId(11), AttachmentKind::MaterializePopulation),
+            (AttachmentId(12), AttachmentKind::MaterializeGroups),
+            (AttachmentId(14), AttachmentKind::Arrow)
+        ]
+    );
+}
+
+#[test]
 fn selected_target_completion_keeps_the_actual_predecessor_and_never_walks_row_counts_as_ids() {
     let value = json!({"stage":"windowed_target","column":{
         "input":{"population":"population-1","range":{"start":0,"stop":10000},"owner":21,
