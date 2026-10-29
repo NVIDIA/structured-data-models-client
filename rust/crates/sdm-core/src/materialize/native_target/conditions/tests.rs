@@ -146,3 +146,32 @@ fn completed_aggregated_left_is_evaluated_before_a_later_operand_can_complete() 
             .is_err()
     );
 }
+
+#[test]
+fn already_selected_native_numeric_values_use_existing_aggregate_kernels() {
+    let batch = [0, 0, 1, 1];
+    let values = labels::Values::Float(vec![Some(4.0), Some(-1.0), Some(9.0), None]);
+    for (aggregation, expected) in [
+        (labels::Aggregation::Sum, vec![3.0, 9.0, 0.0]),
+        (labels::Aggregation::Count, vec![2.0, 1.0, 0.0]),
+        (labels::Aggregation::Avg, vec![1.5, 9.0, 0.0]),
+        (labels::Aggregation::Min, vec![-1.0, 9.0, 0.0]),
+        (labels::Aggregation::Max, vec![4.0, 9.0, 0.0]),
+    ] {
+        let actual = labels::aggregate_selected(aggregation, 3, &batch, &values).unwrap();
+        assert_eq!(actual.values, expected);
+        assert_eq!(
+            actual.present,
+            if matches!(
+                aggregation,
+                labels::Aggregation::Sum | labels::Aggregation::Count
+            ) {
+                vec![true; 3]
+            } else {
+                vec![true, true, false]
+            }
+        );
+    }
+    assert!(labels::aggregate_selected(labels::Aggregation::Sum, 1, &batch, &values).is_err());
+    assert!(labels::aggregate_selected(labels::Aggregation::Sum, 3, &[0], &values).is_err());
+}
