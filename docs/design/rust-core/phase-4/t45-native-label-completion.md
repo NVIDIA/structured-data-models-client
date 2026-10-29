@@ -233,3 +233,26 @@ Replace only that stale inventory path with the actual discovered field, retaini
 The complete discovered-field inventory must reconcile, and the existing seeded unknown-field/extra-lock/lost-lock controls remain unchanged.
 Preserve the failed main receipt and collect remaining diagnostics on the same unchanged approved source without a handoff stamp before grouping further reached repairs.
 Any changed canonical producer input requires its existing writer and an honest new source receipt, followed by fresh exact whole reviews and the full normal acceptance sequence.
+
+### Complete R43 feedback repair
+
+The unchanged approved-source diagnostic collected the complete Host, contract, capture, public, binding, quality and Java feedback before this successor is frozen.
+Keep every actual failed log, full nine condition-pair records and hidden helper-error receipt under its R43 identity.
+Correct test consumers at their actual boundaries: checked logical inputs for ranking, complete authored legacy capture objects for replay, actual candidate and commit stages for range ownership, the owned terminal Run rather than append order, the explicit-table route tuple and the real sampler-state envelope.
+Restore the actual UInt64 helper service double by explicit Arrow conversion, retaining helper order and all malformed/value oracles.
+The established LINK wire target is a string list; correct only the two newly added numeric-list expectations, preserving the completed native values and full Request assertions.
+Apply P3E-2 only to the two additionally reached warning codes with exact old text and class prerequisites, keeping every body, position and count.
+Preserve the actual unaggregated timestamp-assumption refusal as its own full control and add an admitted aggregated timestamp-condition journey so that what-if native reads are actually exercised.
+Native empty-context refusals keep the existing Core sentence and mathematical diagnostic, but their reached native materialization boundary reconstructs the original ValueError cause and empty public details through the existing scoped validation recipe.
+Raw errors, global privacy behavior, native failure objects and unrelated sentences remain unchanged.
+
+P2B-1 and E72 require exact Decimal mathematical source data throughout keys, features, conditions, classes, sums, averages and lists.
+Retain original typed Decimal input before the actual native cast, retain the actual completed native companion and all reached effects or failures, and select the protected exact mathematical projection in shared Rust readers.
+Complete that projection through source replies, target/filter/window positions, condition operands and restored group lists rather than repairing only key formatting after digits are lost.
+Non-Decimal completed native values remain authoritative; no provider, equality, origin or host acceptance flag selects policy.
+Source-first exact key/class, feature, sum/average, condition/list, native effect and malformed lineage consumers precede that implementation.
+
+Resolve all reached quality findings without changing a guard: explicit closure binding and optional cleanup types, accurate positional structural source-provider calls, ordinary test-module discovery, and a neutral source-value module and owner name for dialect-free Core data.
+Exercise metadata-purpose identity with a declared neutral DataLayer fixture; provider projection behavior remains independently covered in the data integration suite.
+The optional-loader negative control raises and catches the same skip exception directly, preserving BaseException cleanup without actually skipping any test.
+Retain normal whole source reviews, canonical authoring, all acceptance gates and zero stamp credit for the failed diagnostic.
