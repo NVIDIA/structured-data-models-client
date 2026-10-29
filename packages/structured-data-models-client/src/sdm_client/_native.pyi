@@ -77,6 +77,27 @@ class _ArrowStreamExportable(Protocol):
         self, requested_schema: object | None = None
     ) -> object: ...
 
+def tabular_indices(
+    keys: list[int], requested: list[int | None]
+) -> tuple[list[int], list[int]]: ...
+def tabular_matched_rows(
+    keys: list[int], requested: list[int]
+) -> list[int]: ...
+def tabular_labelled_rows(
+    known: list[bool], excluded: list[int]
+) -> list[int]: ...
+
+@final
+class TabularContext:
+    """A core-owned context population, before optional cap advice and take."""
+
+    def __init__(
+        self, candidates: list[int], requested: int | None = None
+    ) -> None: ...
+    def notice_rows(self) -> int | None: ...
+    def wanted(self) -> int: ...
+    def positions(self) -> list[int] | None: ...
+
 @final
 class ArrowStream:
     """Arrow data the core gave, exported through the PyCapsule interface."""
