@@ -110,7 +110,7 @@ def test_actual_captured_time_owner_remains_authoritative_until_window_selection
 
 
 @pytest.mark.parametrize('role', ['entity', 'target', 'what_if'])
-@pytest.mark.parametrize('kind', ['TIMESTAMP', 'TIMESTAMPTZ'])
+@pytest.mark.parametrize('kind', ['TIMESTAMP', 'TIMESTAMPTZ', 'DATE'])
 def test_native_timestamp_condition_family_matches_its_complete_original_journey(
     monkeypatch, role, kind
 ):
@@ -167,7 +167,7 @@ def test_native_timestamp_condition_family_matches_its_complete_original_journey
     assert current == public._approved_old(original, 'ordinary')
 
 
-@pytest.mark.parametrize('kind', ['TIMESTAMP', 'TIMESTAMPTZ'])
+@pytest.mark.parametrize('kind', ['TIMESTAMP', 'TIMESTAMPTZ', 'DATE'])
 def test_admitted_aggregated_timestamp_what_if_consumes_its_actual_operand(
     monkeypatch, kind
 ):
@@ -195,4 +195,19 @@ def test_admitted_aggregated_timestamp_what_if_consumes_its_actual_operand(
     assert original['request']['context_rows'] > 0
     assert original['request']['predict_rows'] == 2
     assert columns == ['user_id', 'item_id', '*', 'recorded_at']
+    assert current == public._approved_old(original, 'ordinary')
+
+
+def test_native_date_time_column_matches_the_complete_original_window_journey(
+    monkeypatch,
+):
+    setup = [
+        'ALTER TABLE buys ALTER COLUMN ts TYPE DATE USING CAST(ts AS DATE)'
+    ]
+    monkeypatch.setattr(public, '_input', lambda case: (setup, public.QUERY))
+    original = public._observe(monkeypatch, 'ordinary', False)
+    current = public._observe(monkeypatch, 'ordinary', True)
+    assert original['outcome'] == 'success'
+    assert original['request']['predict_rows'] == 2
+    assert original['request']['context_rows'] > 0
     assert current == public._approved_old(original, 'ordinary')

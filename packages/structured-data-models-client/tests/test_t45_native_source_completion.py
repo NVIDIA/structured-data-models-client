@@ -779,7 +779,7 @@ def test_typed_timestamp_is_assigned_in_physical_order_before_time_capture(
         provider, _source(raw.column_names, temporal_columns=['ts']), service
     )
     steps = _steps(lookup=False)
-    result = adapter(steps, {})
+    result = adapter(steps, {step['id']: {} for step in steps})
     assert isinstance(result, dict)
     assert converted == ['before', 'ts', 'after']
     assert adapter.tables[7].frame['ts'].dtype == 'datetime64[ns]'
@@ -840,7 +840,8 @@ def test_boxed_source_content_is_observed_after_scalar_construction(kind):
     adapter = completion.SourceCompletion(
         provider, _source(temporal_columns=['value']), service
     )
-    result = adapter(_steps(lookup=False), {})
+    steps = _steps(lookup=False)
+    result = adapter(steps, {step['id']: {} for step in steps})
     assert isinstance(result, dict)
     facts = [call[2] for call in service.calls if call[0] == 'column']
     assert facts == [
@@ -873,6 +874,15 @@ def test_actual_boxed_time_coercion_notice_precedes_finishing_and_keeps_native_f
     from datetime import datetime
 
     failure = ValueError('actual native time notice handler failed')
+    to_datetime = pd.to_datetime
+
+    def native_coercion(values, *args, **kwargs):
+        parsed = to_datetime(values, *args, **kwargs)
+        if isinstance(values, pd.Series) and values.name == 'value':
+            parsed.iloc[0] = pd.NaT
+        return parsed
+
+    monkeypatch.setattr(pd, 'to_datetime', native_coercion)
     service = Service(
         recipes={
             'value': {
@@ -937,7 +947,8 @@ def test_actual_boxed_time_coercion_notice_precedes_finishing_and_keeps_native_f
     )
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter('always')
-        result = adapter(_steps(lookup=False), {})
+        steps = _steps(lookup=False)
+        result = adapter(steps, {step['id']: {} for step in steps})
     assert len(calls) == 1
     if handler_error:
         assert isinstance(result, FetchRefused)
@@ -1067,7 +1078,8 @@ def test_unrelated_object_source_has_no_new_native_time_content_reads(
     )
     service = Service()
     adapter = completion.SourceCompletion(provider, _source(), service)
-    actual = adapter(_steps(lookup=False), {})
+    steps = _steps(lookup=False)
+    actual = adapter(steps, {step['id']: {} for step in steps})
     assert isinstance(actual, dict)
     assert observed == []
     assert [call[2] for call in service.calls if call[0] == 'column'] == [
@@ -1090,6 +1102,8 @@ def test_public_boxed_time_native_repr_keeps_surrogates_and_actual_failure(
 
     failure = RuntimeError('actual native date example repr failed')
     renders, notices = [], []
+    to_datetime = pd.to_datetime
+    conversions = []
 
     class NativeDatetime(datetime):
         def __repr__(self):
@@ -1100,6 +1114,19 @@ def test_public_boxed_time_native_repr_keeps_surrogates_and_actual_failure(
 
     source_rows = DuckDBProvider.source_rows
     column = native_sql._Preparation.column
+
+    def native_coercion(values, *args, **kwargs):
+        parsed = to_datetime(values, *args, **kwargs)
+        if isinstance(values, pd.Series) and values.name == 'ts':
+            positions = [
+                index
+                for index, value in enumerate(values)
+                if type(value) is NativeDatetime
+            ]
+            if positions:
+                conversions.append(positions)
+                parsed.iloc[positions] = pd.NaT
+        return parsed
 
     @contextmanager
     def scalar_rows(self, step, keys=None):
@@ -1126,10 +1153,12 @@ def test_public_boxed_time_native_repr_keeps_surrogates_and_actual_failure(
             notices.append(value['notice'])
         return value
 
+    monkeypatch.setattr(pd, 'to_datetime', native_coercion)
     monkeypatch.setattr(DuckDBProvider, 'source_rows', scalar_rows)
     monkeypatch.setattr(native_sql._Preparation, 'column', observed)
     outcome = _observe(monkeypatch, 'ordinary', True)
     assert renders
+    assert len(conversions) == len(renders)
     assert all(event == 'repr' for event in renders)
     if repr_failure:
         assert notices == []
@@ -1163,3 +1192,69 @@ def test_public_boxed_time_native_repr_keeps_surrogates_and_actual_failure(
         else:
             assert outcome['request']['predict_rows'] == 2
             assert outcome['request']['context_rows'] > 0
+
+
+@pytest.mark.parametrize('dtype', [pa.date32(), pa.date64()])
+@pytest.mark.parametrize('missing', [False, True])
+@pytest.mark.parametrize('native_failure', [False, True])
+def test_typed_date_storage_reaches_native_time_conversion_with_actual_nulls_and_failure(
+    monkeypatch, dtype, missing, native_failure
+):
+    from datetime import date
+
+    values = [None, None] if missing else [date(2023, 1, 2), None]
+    raw = pa.table({'value': pa.array(values, type=dtype)})
+    provider = Provider({7: raw}, [])
+    service = Service(
+        recipes={
+            'value': {
+                'meaning': 'nullable',
+                'physical': {
+                    'type': 'timestamp',
+                    'unit': 'ns',
+                    'zone': None,
+                },
+            }
+        }
+    )
+    failure = ValueError('actual native DATE boxing failed')
+    box = completion.box_timestamp
+    reached = []
+
+    def observed(series):
+        reached.append(series.dtype)
+        if native_failure:
+            raise failure
+        return box(series)
+
+    monkeypatch.setattr(completion, 'box_timestamp', observed)
+    adapter = completion.SourceCompletion(
+        provider, _source(temporal_columns=['value']), service
+    )
+    steps = _steps(lookup=False)
+    result = adapter(steps, {step['id']: {} for step in steps})
+    assert reached == [pd.ArrowDtype(dtype)]
+    assert len(service.calls) == 1
+    assert service.calls[0][0] == 'column'
+    assert service.calls[0][2]['storage'] == 'column_values'
+    assert service.calls[0][2]['inferred'] == 'temporal'
+    if native_failure:
+        assert isinstance(result, FetchRefused)
+        assert result.raised is failure
+        assert adapter.native_error is failure
+        assert adapter.tables == {}
+    else:
+        assert isinstance(result, dict)
+        expected = pd.Series(
+            [pd.NaT, pd.NaT]
+            if missing
+            else [pd.Timestamp('2023-01-02'), pd.NaT],
+            dtype='datetime64[ns]',
+            name='value',
+        )
+        pd.testing.assert_series_equal(
+            adapter.tables[7].frame['value'], expected
+        )
+        assert result[7]['value'].type == pa.timestamp('ns')
+        assert result[7]['value'].null_count == (2 if missing else 1)
+    assert raw['value'].type == dtype
