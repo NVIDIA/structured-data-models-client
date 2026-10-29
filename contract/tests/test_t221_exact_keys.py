@@ -587,6 +587,17 @@ def public_differs(
     )
 
 
+def _core_operations(line: dict[str, Any]) -> list[str]:
+    """Actual native evidence, checked before reading its logical roles."""
+    identity = line['identity']
+    assert identity['native_loaded'] and line['core'] is not None
+    observed = _module(
+        't221_prediction_observation',
+        ROOT / 'contract/runners/prediction_observation.py',
+    ).view(line['core'], identity['operations'])
+    return observed['operations']
+
+
 @pytest.mark.parametrize(
     'producer', ['current-predict', 'current-materialize', 'legacy']
 )
@@ -709,7 +720,7 @@ def test_python_core_answers_each_case_as_the_reference_does(
         case, _ = cases()[case_key.split('@')[0]]
         identity = line['identity']
         assert identity['native_loaded'] and line['core'] is not None
-        missing = sorted(set(case['core']) - set(identity['operations']))
+        missing = sorted(set(case['core']) - set(_core_operations(line)))
         assert not missing, f'{case_key}: core operations not run: {missing}'
         want = reference_lines()[case_key]
         assert _outcome(line) == _outcome(want), (
