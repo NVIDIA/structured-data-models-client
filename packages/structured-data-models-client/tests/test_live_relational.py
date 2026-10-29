@@ -400,7 +400,7 @@ def assert_explained_as_sent(result, asked):
         assert outputs == 2
         related = entry['related']
         assert 'users' in related, 'the entity has no block of its own'
-        assert set(related) <= set(KEYS) | KEYLESS
+        assert set(related) <= set(KEYS) | set(KEYLESS)
         for name, block in related.items():
             assert len(block['gradients']) == outputs
             for by_row in block['gradients']:
