@@ -1782,3 +1782,247 @@ def test_native_normalization_releases_captured_task_before_held_dtype(
     ]
     frame = current[0]
     assert frame['data'][0][frame['columns'].index('prediction')] == 3
+
+
+@pytest.mark.parametrize(
+    'effect',
+    [
+        'display',
+        'later-row',
+        'later-error',
+        'post-return',
+        'probability-copy',
+        'shallow-aliases',
+    ],
+)
+def test_actual_generated_response_owners_survive_native_effects_and_return(
+    monkeypatch, effect
+):
+    from sdm_client import Request
+
+    def observe(core):
+        holder, events = {}, []
+        held = ArithmeticError('later actual native owner conversion')
+        count = [0]
+
+        class Dtype:
+            def startswith(self, prefix):
+                if isinstance(prefix, tuple):
+                    return True
+                events.append(('prefix', prefix))
+                if prefix == 'bool':
+                    count[0] += 1
+                    if count[0] == 2:
+                        holder['prediction'].append(2)
+                        events.append('changed earlier owner')
+                        if effect == 'later-error':
+                            raise held
+                return prefix == 'int'
+
+        class Choice(str):
+            def __str__(self):
+                events.append('display')
+                if effect == 'display':
+                    holder['prediction'].append(2)
+                if effect == 'probability-copy':
+                    holder['reply']['predictions'][0]['probabilities'].clear()
+                    holder['reply']['predictions'][0]['probabilities']['9'] = (
+                        1.0
+                    )
+                if effect == 'shallow-aliases':
+                    holder['nested'].append(2)
+                    holder['reply']['metadata']['nested'] = [
+                        'replaced raw top level'
+                    ]
+                    holder['reply']['predictions'][0]['metadata']['nested'] = [
+                        'replaced raw item level'
+                    ]
+                return 'classification'
+
+        class Answer(Scripted):
+            def predict(self, payload):
+                answer = super().predict(payload)
+                holder['prediction'] = [1]
+                holder['nested'] = [1]
+                holder['reply'] = answer
+                answer['metadata']['nested'] = holder['nested']
+                for ordinal, item in enumerate(answer['predictions']):
+                    item['prediction'] = (
+                        holder['prediction'] if ordinal == 0 else '3'
+                    )
+                    item['metadata'] = {'nested': holder['nested']}
+                    item['explanation'] = {'nested': holder['nested']}
+                    item['probabilities'] = (
+                        None if effect != 'probability-copy' else {'03': 1.0}
+                    )
+                if effect in ('later-row', 'later-error'):
+                    payload['task']['target']['dtype'] = Dtype()
+                return answer
+
+        scripted = Answer()
+        with monkeypatch.context() as patch:
+            patch.setenv(
+                _routing.ENVIRONMENT,
+                ','.join(_routing.DIRECT_CONSUMERS) if core else '',
+            )
+            scoring = pd.DataFrame(
+                {
+                    'feature': [5, 6]
+                    if effect in ('later-row', 'later-error')
+                    else [5]
+                }
+            )
+            request = Request(
+                pd.DataFrame({'answer': [0, 1, 0], 'feature': [2, 3, 4]}),
+                scoring,
+                target='answer',
+                task=Choice('classification'),
+            )
+            with warnings.catch_warnings(record=True):
+                warnings.simplefilter('always')
+                with SDMClient('http://localhost:1', max_retries=0) as client:
+                    client._transport.close()
+                    client._transport = scripted
+                    try:
+                        result = client.predict(request, model='kumo-tabular')
+                        same_prediction = (
+                            result.items[0].prediction is holder['prediction']
+                        )
+                        same_metadata = (
+                            result.metadata['nested'] is holder['nested']
+                        )
+                        same_item_metadata = (
+                            result.items[0].metadata['nested']
+                            is holder['nested']
+                        )
+                        same_explanation = (
+                            result.items[0].explanation['nested']
+                            is holder['nested']
+                        )
+                        if effect == 'post-return':
+                            holder['prediction'].append(7)
+                            holder['nested'].append(7)
+                        outcome = (
+                            'ok',
+                            result.items[0].prediction,
+                            result.items[0].probabilities,
+                            result.metadata,
+                            result.items[0].metadata,
+                            result.items[0].explanation,
+                            same_prediction,
+                            same_metadata,
+                            same_item_metadata,
+                            same_explanation,
+                        )
+                    except Exception as error:
+                        outcome = (
+                            'error',
+                            _error_graph(error),
+                            error is held,
+                            list(holder['prediction']),
+                        )
+            for body in scripted.calls:
+                body['metadata']['request_id'] = '<drawn>'
+            return outcome, scripted.calls, events
+
+    old, current = observe(False), observe(True)
+    assert current == old
+    if effect == 'later-error':
+        assert current[0][2] is True
+        assert current[0][3] == [1, 2]
+    else:
+        assert current[0][-4:] == (True, True, True, True)
+        if effect in ('display', 'later-row'):
+            assert current[0][1] == [1, 2]
+        elif effect == 'post-return':
+            assert current[0][1] == [1, 7]
+            assert current[0][3]['nested'] == [1, 7]
+        elif effect == 'probability-copy':
+            assert current[0][2] == {'3': 1.0}
+        elif effect == 'shallow-aliases':
+            assert current[0][3]['nested'] == [1, 2]
+            assert current[0][4]['nested'] == [1, 2]
+
+
+@pytest.mark.parametrize('effect', ['clear', 'fill', 'raw-cleanup'])
+def test_native_output_presence_follows_owner_cleanup_and_advice_mutation(
+    monkeypatch, effect
+):
+    from sdm_client import Request
+    from sdm_client.core.warnings import SDMWarning
+
+    def observe(core):
+        holder, events = {}, []
+
+        class Unused(list):
+            def __del__(self):
+                events.append('released raw unused owner')
+                holder['prediction'].clear()
+
+        class Choice(str):
+            def __str__(self):
+                if effect == 'clear':
+                    holder['prediction'].clear()
+                elif effect == 'fill':
+                    holder['prediction'].append(4)
+                return 'classification'
+
+        class Answer(Scripted):
+            def predict(self, payload):
+                answer = super().predict(payload)
+                holder['prediction'] = [] if effect == 'fill' else [1]
+                answer['predictions'][0]['prediction'] = holder['prediction']
+                answer['predictions'][0]['probabilities'] = None
+                if effect == 'raw-cleanup':
+                    answer['unused'] = Unused([1])
+                return answer
+
+        def showwarning(message, category, *args, **kwargs):
+            if issubclass(category, SDMWarning) and 'answered without' in str(
+                message
+            ):
+                events.append('absence advice')
+                holder['prediction'].append(7)
+
+        scripted = Answer()
+        with monkeypatch.context() as patch:
+            patch.setenv(
+                _routing.ENVIRONMENT,
+                ','.join(_routing.DIRECT_CONSUMERS) if core else '',
+            )
+            patch.setattr(warnings, 'showwarning', showwarning)
+            request = Request(
+                pd.DataFrame({'answer': [0, 1, 0], 'feature': [2, 3, 4]}),
+                pd.DataFrame({'feature': [5]}),
+                target='answer',
+                task=Choice('classification'),
+            )
+            with warnings.catch_warnings():
+                warnings.simplefilter('always')
+                with SDMClient('http://localhost:1', max_retries=0) as client:
+                    client._transport.close()
+                    client._transport = scripted
+                    result = client.predict(
+                        request, model='kumo-tabular', outputs=['prediction']
+                    )
+                    events.append('returned')
+            for body in scripted.calls:
+                body['metadata']['request_id'] = '<drawn>'
+            return (
+                result.items[0].prediction,
+                result.items[0].prediction is holder['prediction'],
+                scripted.calls,
+                events,
+            )
+
+    old, current = observe(False), observe(True)
+    assert current == old
+    assert current[1] is True
+    if effect == 'fill':
+        assert current[0] == [4]
+        assert current[3] == ['returned']
+    else:
+        assert current[0] == [7]
+        assert current[3][-2:] == ['absence advice', 'returned']
+        if effect == 'raw-cleanup':
+            assert current[3][0] == 'released raw unused owner'

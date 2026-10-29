@@ -3015,3 +3015,67 @@ fn native_key_conversions_conserve_probabilities_and_keep_original_keys_on_colli
         );
     }
 }
+
+#[test]
+fn actual_native_value_kernel_selects_source_conversion_and_native_protocol() {
+    let scope = json!({"version":1,"model":"kumo-tabular","request_id":"direct-fixture","call_request_id":"sdm-fixed","response_rows":2,"scoring_rows":2});
+    let target =
+        json!({"kind":"builtin","dtype":"int64".chars().map(u32::from).collect::<Vec<_>>()});
+    let source = json!({"scope":scope,"ordinal":0,"member":null,"target":target,"storage":{"kind":"builtin","value":{"kind":"unicode","points":[51]}},"decimal_limit":4300});
+    let read = prepare(
+        json!({"stage":"response_value","input":source}),
+        Attachments::new(),
+    )
+    .unwrap();
+    assert_eq!(
+        read["selection"],
+        json!({"kind":"converted","value":{"kind":"integer","digits":"3"}})
+    );
+    let mut retained = source.clone();
+    retained["storage"] = json!({"kind":"retained"});
+    assert_eq!(
+        prepare(
+            json!({"stage":"response_value","input":retained}),
+            Attachments::new()
+        )
+        .unwrap()["selection"],
+        json!({"kind":"native"})
+    );
+    let mut unchanged = source.clone();
+    unchanged["storage"] = json!({"kind":"builtin","value":{"kind":"integer","digits":"3"}});
+    assert_eq!(
+        prepare(
+            json!({"stage":"response_value","input":unchanged}),
+            Attachments::new()
+        )
+        .unwrap()["selection"],
+        json!({"kind":"source"})
+    );
+    for axis in ["scope", "ordinal", "member"] {
+        let mut changed = source.clone();
+        match axis {
+            "scope" => changed["scope"]["version"] = json!(99),
+            "ordinal" => changed["ordinal"] = json!(2),
+            _ => changed["member"] = json!({"ordinal":2,"population":2}),
+        }
+        assert_eq!(
+            prepare(
+                json!({"stage":"response_value","input":changed}),
+                Attachments::new()
+            )
+            .unwrap_err()
+            .sentence,
+            sdm_contract::Sentence::InvalidMessage
+        );
+    }
+}
+
+#[test]
+fn actual_native_probability_population_selects_collision_without_serialized_key_equality() {
+    let scope = json!({"version":1,"model":"kumo-tabular","request_id":"direct-fixture","call_request_id":"sdm-fixed","response_rows":2,"scoring_rows":2});
+    for (inserted, expected) in [(1, true), (2, false)] {
+        let plan = prepare(json!({"stage":"response_probability_shape","scope":scope,"ordinal":0,"population":2,"inserted":inserted}),Attachments::new()).unwrap();
+        assert_eq!(plan["original"], expected);
+    }
+    assert_eq!(prepare(json!({"stage":"response_probability_shape","scope":scope,"ordinal":0,"population":2,"inserted":3}),Attachments::new()).unwrap_err().sentence,sdm_contract::Sentence::InvalidMessage);
+}

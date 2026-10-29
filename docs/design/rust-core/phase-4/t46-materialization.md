@@ -176,3 +176,74 @@ Representation-only native value codecs are shared by direct and relational resp
 The original task local is released when the genuine native payload takes ownership, and temporary dtype/task-container locals are released at native normalization completion before final layout.
 This does not authorize a blanket conversion-timing exception or complete the broader entity, index, sorter, default-route, session or full Phase4 obligations.
 The public old/Core controls and Host malformed/ordered controls are source-first controls until the canonical generation, whole-source review and execution gates complete.
+
+
+### R74 official connected response-owner plan
+
+R73 remains frozen at 6239e2e80331cbb96c2b883972ad964ecc48a592.
+This successor closes the actual decoded-response owner boundary, rather than treating an equal serialized value as an ownership substitute.
+The plan extends existing direct response scope, native target-row, native output and presentation-lineage products.
+It introduces no process-global registry, serialized Python handle, reusable native callback dispatcher, generic effect interpreter or native emulator.
+
+#### Actual generated ownership and decode boundary
+
+One call-local native owner retains the actual decoded fallback response and constructs its actual generated PredictionResponse exactly once after transport succeeds and before any native ID attribution effect.
+The byte-capable transport continues receiving original request bytes, and immutable response bytes remain independent admission and attribution authority.
+The parsed owner is never serialized into a replacement response.
+PredictionItem.prediction retains its actual source object; probabilities and quantiles are new generated normalized maps, scores and embeddings are generated numeric tuples, and metadata/explanation/ranking entries are generated shallow copies whose nested owners stay shared.
+Response metadata is a generated shallow copy and the public PredictionResult constructor makes its existing additional shallow copy.
+Native construction reuses that existing generated codec instead of copying its field-conversion, copy, key-string and finite-number rules into another host table.
+
+Generated construction belongs to normalization, outside the shared transport exception mapping.
+A successful decode is never replayed during restoration or error presentation.
+A Core-selected malformed response associates the once-only actual generated exception and native context with the existing response-contract error boundary, rather than constructing a replacement cause or reporting a transport failure.
+If actual native generated conversion fails after an immutable-byte admission, a closed response-failure observation selects the same Core response-contract wording while retaining the actual cause; uncaught native exceptions preserve their original propagation.
+No row ID effect, target display or target conversion runs before this decode boundary completes.
+
+#### Scope, per-item facts and Core policy
+
+All native sources and results bind to the existing complete ResponseScope and consecutive response ordinal, with field roles from the existing native output vocabulary.
+These ordinals describe one already admitted response population, not reusable object identities or object handles.
+The immutable response buffers, complete attribution rows and Core entity/row layout are never edited to represent a later mutation.
+Missing, duplicate, reordered, wrong-scope and unsolicited source/restoration/field facts remain protocol refusals.
+Legitimate later mutations are described by later facts and are not rejected by comparing mutable values to an earlier byte snapshot.
+
+The native loop reads each actual generated item's prediction immediately before its reached conversion, then its probabilities at the original later point.
+An earlier item keeps its selected actual source or conversion-result owner, allowing a later row or probability callback to mutate that same owner.
+A closed prediction-source product distinguishes lossless builtin storage from a retained native owner whose storage is absent; it never invents a JSON value or serializes an opaque owner.
+Core selects passthrough, its existing builtin dtype kernel or a specifically reached native conversion, and returns closed source-versus-converted field selection facts over the same ordinal.
+Ordinary builtin dtype policy and conversion stay Rust-owned; custom dtype/value protocols use the existing actual native as_declared operations at the reached point.
+Native completed results remain actual retained owners even when they have no builtin storage, with Core-selected field association carrying no Python object across the contract.
+
+The existing probability rebuild, collision fallback, keyed != given and dataclasses.replace sequence remains in its original native order.
+The native host observes actual key conversion/display/hash/equality effects and retains the original generated probability map whenever the original rule leaves it unchanged or collision fallback selects it.
+Core owns probability conservation, collision/admission policy and field selection over closed observations; the host retains and presents the selected owners.
+Sharing the existing loop must preserve its task/dtype/per-item local lifetime as well as its operations, rather than releasing loop locals at a newly extracted helper return.
+Final value facts are captured after the complete loop and its source-equivalent cleanup, while selected actual owners remain retained for presentation.
+
+#### Presentation, cleanup and absence advice
+
+Core first validates and lays out the normalized row/field plan with explicit ownership lineage, without issuing final absence advice from the earlier byte snapshot.
+The host constructs the public result once using Core-selected row identities and field roles, retaining the actually selected prediction, probability, quantile, tuple and shallow-copy products.
+Core-computed ordinary conversions use their completed builtin products; passthrough and native conversion selections reuse actual owners, preserving shared aliases and post-return mutation.
+No legacy adapter normalization result is returned wholesale and no business admission or row-layout rule moves back into Python.
+
+Raw transport response, parsed response and other normalization-only owners remain alive through the original normalization-result construction, then are explicitly released at that source-equivalent exit before numbering, merge and absence advice.
+Task, dtype and per-item locals are released in original order, and the payload-plan owner ends at its corresponding native plan boundary.
+Only selected public result owners survive those cleanup points.
+This permits unused/detached owner finalizers to mutate selected aliases before absence is observed without retaining an extra owner until predict returns.
+
+The host next observes actual normalized output presence using the existing Core-owned field vocabulary and native comparison order, bound to the same final response/row associations.
+A closed final output-policy stage validates those observations and Core selects absence notices.
+Advice handlers may mutate retained public owners again; the same already constructed result is returned afterward, preserving those changes and later external mutations.
+The final stage does not serialize or reconstruct those owners after advice.
+
+#### Required controls and acceptance
+
+Source-first public old/Core controls cover mutable prediction identity, task/dtype mutation before conversion, later-row/key mutation of an earlier owner, and mutation after client.predict returns.
+They cover generated probability/quantile copies, tuple conversions, response/item metadata and explanation/ranking shallow aliases, top-level replacement independence, absent/present changes and warning-handler mutation.
+They also cover generated decode errors without duplicate construction or transport reclassification, and raw/parsed/task/dtype/per-item cleanup effects on selected values and advice.
+Host controls reject malformed source/field/ordinal/scope/presence populations independently and prove actual valid late source changes remain admitted.
+All controls keep the all-Core routes selected and require strict results, requests and error parity.
+There is no custom conversion-timing exception or reduction of the original broader Phase4 obligations.
+Root still owns two independent whole handwritten reviews, canonical generation, an actual generated commit, a fresh final whole pair and execution validation after the connected source boundary is complete.
