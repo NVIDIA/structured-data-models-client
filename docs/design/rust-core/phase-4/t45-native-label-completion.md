@@ -112,6 +112,27 @@ The source result and later group result are separate completed-data boundaries,
 
 ## Ownership and verification
 
+### Derived target data before grouping
+
+The native result owner is the actual derived target column, not just the sanitized source array.
+Retain the original selected source-row positions already produced by the frame snapshot; do not construct a second index or sample again.
+Source conversion, derived target conversion, mathematical grouping and grouped result restoration are separate useful data products.
+The completed target carries actual exported values, their original fetched-row positions and the actual native Series/array owner.
+Rust consumes those actual values and validates complete source, range and row-map coherence.
+
+For a plain target, preserve native reset, float32 conversion, name clearing, notna observation, present-row selection/reset and then integer int64 or Boolean primitive conversion in that order.
+For a filtered target, preserve the same initial column read and float conversion without the plain target's integer/Boolean conversion.
+Rust evaluates the existing condition kernel; the native owner applies that actual selection/reset before the later time selection.
+Window selection and the second native notna selection precede grouped restoration.
+In particular, a float cast or failure on a later-discarded row remains observable before time exclusion.
+The native owner of a plain Arrow integer may therefore be NumPy-backed, while a filtered Arrow integer can retain extension storage.
+Do not choose restoration from the source dtype or provider identity, and do not duplicate the raw-host overflow warning after a completed native float cast.
+
+Keep the target's current source and time data live through the reached fixed native operations rather than precomputing later time selections before an earlier native callback.
+The completed native group result remains authoritative within its admitted logical family, including losslessly encoded text whose exported physical storage changes.
+No target conversion performs groupby, distinct, temporal arithmetic, condition truth, quota or task policy in Python.
+Source-first consumers distinguish plain/filtered integer and Boolean storage, pre-selection float conversion, actual changed values, empty/null rows, exact positions, native failures and original dtype ownership.
+
 Release evaluation/source/native result owners after their completion is consumed, on native failure, cancellation and explicit close.
 Retain the original graph/current-owner cache rules and already-completed sampler state on failure.
 Do not advance later reads, masks, draws or decomposition children after the selected native failure.
