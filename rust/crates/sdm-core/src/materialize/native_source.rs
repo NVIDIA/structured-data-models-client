@@ -121,8 +121,8 @@ pub(super) fn timestamp_meaning(
     match input {
         MaterializeSourceFacts::ColumnValues {
             inferred,
-            all_missing,
-        } if *all_missing
+            inferred_empty,
+        } if *inferred_empty
             || *inferred == sdm_contract::frames::materialize::FrameObservedContent::Temporal =>
         {
             Some(MaterializeScalarMeaning::Nullable {

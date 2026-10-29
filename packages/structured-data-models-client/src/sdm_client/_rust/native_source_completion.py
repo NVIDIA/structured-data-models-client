@@ -314,12 +314,11 @@ class SourceCompletion:
                     and timestamp is None
                     and pd.api.types.is_object_dtype(values.dtype)
                 ):
+                    inferred = pd.api.types.infer_dtype(values, skipna=True)
                     content = {
                         'storage': 'column_values',
-                        'inferred': observed_content(
-                            pd.api.types.infer_dtype(values, skipna=True)
-                        ),
-                        'all_missing': bool(values.isna().all()),
+                        'inferred': observed_content(inferred),
+                        'inferred_empty': inferred == 'empty',
                     }
             except Exception as error:
                 self.native_error = error

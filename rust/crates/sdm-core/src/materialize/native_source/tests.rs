@@ -236,7 +236,7 @@ fn typed_timestamp_requires_both_reached_semantics_and_actual_storage() {
 #[test]
 fn boxed_temporal_content_and_missingness_keep_present_text_outside_native_time() {
     use sdm_contract::frames::materialize::FrameObservedContent as Content;
-    for (inferred, all_missing, temporal) in [
+    for (inferred, inferred_empty, temporal) in [
         (Content::Temporal, false, true),
         (Content::Other, true, true),
         (Content::Text, false, false),
@@ -245,7 +245,7 @@ fn boxed_temporal_content_and_missingness_keep_present_text_outside_native_time(
     ] {
         let facts = Facts::ColumnValues {
             inferred,
-            all_missing,
+            inferred_empty,
         };
         assert_eq!(
             scalar_meaning(Some(Dtype::Time), &facts).unwrap(),

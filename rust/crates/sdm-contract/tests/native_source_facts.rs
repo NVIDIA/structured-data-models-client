@@ -102,17 +102,17 @@ fn logical_text_alternatives_reject_unknown_or_mixed_storage_vocabulary() {
 fn completed_scalar_content_and_time_outcomes_are_closed_facts() {
     use sdm_contract::materialize::MaterializeSourceFacts;
     for input in [
-        json!({"storage":"column_values","inferred":"temporal","all_missing":false}),
-        json!({"storage":"column_values","inferred":"other","all_missing":true}),
+        json!({"storage":"column_values","inferred":"temporal","inferred_empty":false}),
+        json!({"storage":"column_values","inferred":"other","inferred_empty":true}),
         json!({"storage":"time_conversion","rows":2,"unread":1,"examples":"[native example]"}),
     ] {
         let facts = serde_json::from_value::<MaterializeSourceFacts>(input.clone()).unwrap();
         assert_eq!(serde_json::to_value(facts).unwrap(), input);
     }
     for input in [
-        json!({"storage":"column_values","inferred":"datetime","all_missing":false}),
+        json!({"storage":"column_values","inferred":"datetime","inferred_empty":false}),
         json!({"storage":"column_values","inferred":"temporal"}),
-        json!({"storage":"column_values","inferred":"other","all_missing":null}),
+        json!({"storage":"column_values","inferred":"other","inferred_empty":null}),
         json!({"storage":"time_conversion","rows":2,"unread":1}),
         json!({"storage":"time_conversion","rows":2,"unread":1,"examples":"[]","policy":true}),
     ] {
