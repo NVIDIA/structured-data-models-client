@@ -353,12 +353,15 @@ def test_run_mode_is_refused_as_an_option(query):
 
 EXPLAIN = ['prediction', 'probabilities', 'explanation']
 BINARY_QUERY = 'PREDICT COUNT(orders.*, 0, 30, days) > 2 FOR EACH users.user_id'
-#: Each keyed table of ``tables()`` and its primary key: its related blocks
-#: are expected to carry ``keys``.
-KEYS = {'users': 'user_id', 'orders': 'order_id'}
-#: The tables of ``tables()`` with no primary key: their related blocks carry
-#: ``rows`` and no ``keys``.
-KEYLESS = {'events'}
+#: The table whose related blocks carry ``keys``, and its key. The engine
+#: sends a related table's primary key only when a relationship joins on it:
+#: ``user_id`` is the join column, so only ``users`` is keyed.
+KEYS = {'users': 'user_id'}
+#: The tables whose related blocks carry ``rows`` and no ``keys``, each with a
+#: column whose sent values the returned rows are checked against: ``orders``,
+#: whose ``order_id`` no relationship joins on, and ``events``, which has no
+#: primary key.
+KEYLESS = {'orders': 'price', 'events': 'value'}
 
 
 @pytest.fixture(scope='module')
@@ -373,9 +376,10 @@ def assert_explained_as_sent(result, asked):
     among the related ones. Each block's ``keys`` are the primary keys of its
     ``rows``, whose values are the caller's for that key and belong to that
     entity, and its gradients are ``[output][row][column]``, aligned with
-    ``rows``. A keyless table's block has ``rows`` and no ``keys``, each row
-    the caller's columns of one of that entity's rows. In ``to_pandas()`` the
-    entity's own table is at hop 0, the others at 1 or more, and a keyless
+    ``rows``. Keys come back only for a join column, so only ``users`` has
+    them; every other block has ``rows`` and no ``keys``, each row the
+    caller's columns of one of that entity's rows. In ``to_pandas()`` the
+    entity's own table is at hop 0, the others at 1 or more, and an unkeyed
     table's lines have no ``key``.
     """
     sent_tables = tables()
@@ -404,13 +408,14 @@ def assert_explained_as_sent(result, asked):
                 for by_column in by_row:
                     assert len(by_column) == len(block['columns'])
             if name in KEYLESS:
-                assert 'keys' not in block, f'{name} has no key and got keys'
+                assert 'keys' not in block, f'{name} is not joined on its key'
                 own_rows = keyless[name][keyless[name]['user_id'] == entity]
+                column = KEYLESS[name]
                 for row in block['rows']:
                     # The caller's columns only: no instance_id, no __node_id.
                     assert set(row) <= set(keyless[name].columns)
                     assert int(row['user_id']) == entity
-                    assert row['value'] in set(own_rows['value'])
+                    assert row[column] in set(own_rows[column])
                 continue
             assert 'keys' in block, f'{name} has a key and came back without'
             assert len(block['keys']) == len(block['rows'])
@@ -420,10 +425,7 @@ def assert_explained_as_sent(result, asked):
                 assert int(row[KEYS[name]]) == int(row_key)
                 assert int(row['user_id']) == entity
                 sent = graph[name].loc[int(row_key)]
-                if name == 'orders':
-                    assert row['price'] == sent['price']
-                else:
-                    assert row['segment'] == sent['segment']
+                assert row['segment'] == sent['segment']
         assert [int(one) for one in related['users']['keys']] == [entity]
 
     flat = result.explanations.to_pandas()
@@ -461,8 +463,10 @@ def test_every_entity_is_explained_with_its_own_related_rows(
     Assumptions:
     - The NIM explains every predict row, both probabilities of a binary
       target.
-    - ``users`` and ``orders`` have a primary key and ``events`` has none,
-      so both kinds of related block are read back.
+    - Keys come back only for a join column: ``users`` (joined on
+      ``user_id``) carries ``keys``; ``orders`` (``order_id`` joins nothing)
+      and ``events`` (no primary key) carry ``rows`` and no ``keys``, so
+      both kinds of related block are read back.
     """
     asked = [0, 1, 2, 3]
     request = binary_query.materialize(indices=asked)
@@ -479,11 +483,12 @@ def test_a_request_sent_in_several_calls_explains_every_entity(
 ):
     """A request over the per-call cap is sent in calls that each number
     their rows from 0, and every entity still gets one entry, with its own
-    related rows and keys.
+    related rows, keyed only where the key is a join column.
 
     Assumptions:
-    - ``events`` has no primary key, so its rows are checked by entity and
-      value rather than by key.
+    - Keys come back only for a join column, so only ``users`` has them;
+      ``orders`` and ``events`` rows are checked by entity and value rather
+      than by key.
     - ``rows_per_call=2`` stands in for the cap, as in the batching test
       above, and splits eight entities into four calls.
     """

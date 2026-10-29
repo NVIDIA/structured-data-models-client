@@ -2414,15 +2414,15 @@ def test_the_tabular_outputs_narrow_by_task_as_the_skill_says():
 #: fails here rather than making the skill quietly wrong.
 SERVED = {
     'COUNT(orders.*, 0, 30, days)': (
-        ('prediction', 'quantiles'),
+        ('prediction', 'quantiles', 'explanation'),
         tuple(f'quantile_0.{one}' for one in range(1, 10)),
     ),
     'COUNT(orders.*, 0, 30, days) > 2': (
-        ('prediction', 'probabilities'),
+        ('prediction', 'probabilities', 'explanation'),
         ('probability_False', 'probability_True'),
     ),
     'users.segment': (
-        ('prediction', 'probabilities'),
+        ('prediction', 'probabilities', 'explanation'),
         ('probability_a', 'probability_b', 'probability_c'),
     ),
 }
@@ -2478,7 +2478,8 @@ def test_the_relational_endpoint_serves_the_matrix_the_skill_gives(
 def test_the_relational_endpoint_explains_every_entity(target, schema):
     """What the skill shows of an explanation: one per entity asked about,
     under its id, with the entity's own table among its related ones and no
-    block for the engine's question row. If a deployment stops serving one,
+    block for the engine's question row. Keys come back only for a join
+    column, so only ``users`` is keyed; other blocks carry rows alone. If a deployment stops serving one,
     this fails and the skill is the thing to change."""
     from sdm_client import KumoRelational, SDMClient
 
@@ -2504,10 +2505,8 @@ def test_the_relational_endpoint_explains_every_entity(target, schema):
         assert own is not None, f'{target} gave {key} no block of its own'
         assert [int(one) for one in own['keys']] == [int(key)]
         for name, block in entry['related'].items():
-            # Every table of `schema` has a primary key.
-            assert len(block.get('keys', ())) == len(block['rows']), (
-                f'{name} has a key and came back without one per row'
-            )
+            # Only `users` is joined on its key; other blocks need no keys.
+            assert block['rows'], f'{name} came back with no rows'
             assert len(block['gradients']) == len(entry['outputs'])
             for by_row in block['gradients']:
                 assert len(by_row) == len(block['rows']), (
