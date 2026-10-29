@@ -90,7 +90,10 @@ def test_serving_roundtrip_keeps_ordered_actual_inner_json(tamper):
     call = core['predictions'][0]['calls'][0]
     text = call['body']['dataframe_records'][0]['request_json']
     if tamper == 'member-order':
-        text = json.dumps(json.loads(text), sort_keys=True)
+        text = text.replace(
+            '"actual_object":{"number":"1"},"actual_number":1',
+            '"actual_number":1,"actual_object":{"number":"1"}',
+        )
     elif tamper == 'duplicate-order':
         text = text.replace(
             '"duplicate":1,"duplicate":2', '"duplicate":2,"duplicate":1'
