@@ -730,3 +730,12 @@ Exact R54 passes the normal unscoped local handoff and matched Python 3.10 profi
 Retarget both existing swallowing-try and aliased-suppress mutations to the unique actual provider-selection statement in the covered gather function, preserving each intended fault and both baseline and rewritten-baseline refusal oracles.
 Require exactly one source mutation site and preserve unchanged-tree and declared-refactor controls; do not change the bridge scanner, production source, declarations or real baseline.
 Collect the remaining actual CI and provider feedback before freezing the grouped successor, and require fresh whole reviews before executing changed source.
+
+
+### Reconnect test-ops consumers to existing completed data
+
+The actual R54 native-test-ops CI cell reaches ten label checks that intercept a removed bridge import and an all-code fixture that omits the selected direct-response sentence's required fields.
+Intercept the existing source-backed gather delegation with its actual operation, attachments, provider and state, invoke the existing Core Labels test operation, and retain every label row, type, order, Decimal and fail-closed oracle with an exact reached-call count.
+Complete the direct-response error fixture with the existing typed model and diagnostic fields while preserving every code/kind/class/refusal/count and private-message assertion.
+Keep the actual malformed-response canary inputs and all privacy sinks meaningful, and reconcile deliberately displayed endpoint operands separately through exact native diagnostic parity rather than broadening privacy policy or changing product presentation.
+These are test-consumer corrections; hold the successor unexecuted until grouped actual feedback and fresh whole approvals are complete.
