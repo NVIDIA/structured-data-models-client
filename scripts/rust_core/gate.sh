@@ -614,6 +614,8 @@ step() {
 # on the candidate (H2).
 overlay=(
   contract/runners/run_python.py
+  contract/runners/prediction_observation.py
+  contract/runners/observation_publication.py
   rust/crates/sdm-testkit/src/case.rs
   rust/crates/sdm-testkit/src/observation.rs
 )
