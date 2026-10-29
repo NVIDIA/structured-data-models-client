@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 
 import pytest
+from _actual_core import checked_fetch_bindings
 
 PIN = Path(__file__).parents[1] / 'pinned/base.regression.core.json'
 FLAGS = {
@@ -116,15 +117,26 @@ def assert_corrected_inputs(actual, historical, *, materialized=None):
     assert shown == compared
 
 
-def assert_pinned_fetch_shapes(actual, historical):
+def assert_pinned_fetch_shapes(actual, historical, *, observation=None):
     """Compare the old plan-only pin with an explicit typed owner bijection.
 
     This pin never recorded seed values. Their separate driver/result and
     full request assertions remain mandatory in the route consumers.
+    Actual binding facts require their complete observation and validation
+    before projecting the property that this historical pin never recorded.
     Every SQL byte and non-owner field remains in this exact comparison.
     This helper is never used for replay or general cross-host acceptance.
     """
+    assert type(actual) is list and all(type(fetch) is dict for fetch in actual)
+    if observation is None:
+        assert not any('bindings' in fetch for fetch in actual), (
+            'binding facts require a complete actual observation'
+        )
+    else:
+        checked_fetch_bindings(observation, actual)
     shown = copy.deepcopy(actual)
+    for fetch in shown:
+        fetch.pop('bindings', None)
     assert historical == json.loads(PIN.read_text())['fetches']
     forward, reverse = {}, {}
     for current, prior in zip(shown, historical, strict=True):
