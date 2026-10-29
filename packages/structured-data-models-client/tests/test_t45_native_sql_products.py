@@ -138,8 +138,9 @@ def test_condition_history_rebinds_only_explicit_owners_and_keeps_arrow_distinct
     data = _data(kind)
     if kind == 'target_column':
         data['input']['eligibility'] = history
+        data['condition_values'][0]['converted']['times'] = 8
         expected = [4, 20, 21, 5]
-        ids = expected + [6, 7]
+        ids = expected + [6, 7, 8]
     elif kind == 'label_inputs':
         data['eligibility'] = history
         expected = [4, 20, 21]
