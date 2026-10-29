@@ -175,7 +175,10 @@ pub(super) fn time_notice(
             ("column".to_owned(), Detail::text(column)),
             ("unread".to_owned(), Detail::Scalar(Scalar::UInt64(*unread))),
             ("rows".to_owned(), Detail::Scalar(Scalar::UInt64(*rows))),
-            ("examples".to_owned(), Detail::text(examples)),
+            (
+                "examples_points".to_owned(),
+                Detail::List(examples.points().map(Scalar::UInt32).collect()),
+            ),
         ]
         .into(),
         ..CoreWarning::new(

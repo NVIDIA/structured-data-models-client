@@ -462,7 +462,7 @@ class SourceCompletion:
                         'storage': 'time_conversion',
                         'rows': rows,
                         'unread': unread,
-                        'examples': shown,
+                        'examples': [ord(point) for point in shown],
                     }
         except Exception as error:
             self.native_error = error
@@ -474,8 +474,14 @@ class SourceCompletion:
             notice = completed.get('notice')
             if notice is None:
                 raise CodecError('native time outcome has no completed notice')
+            if (
+                errors.decoded(notice.get('fields', {})).get('examples_points')
+                != outcome['examples']
+            ):
+                raise CodecError('native time notice changes its observed text')
             try:
-                errors.warn_held([notice])
+                with errors.holding(native_time_examples=lambda fields: shown):
+                    errors.warn_held([notice])
             except Exception as error:
                 self.native_error = error
                 raise

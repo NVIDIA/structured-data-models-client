@@ -520,7 +520,7 @@ pub fn template(sentence: Sentence) -> Template {
             r#"Could not parse {unread:,} of {rows:,} value(s) of time column '{column}' (for example {examples!T}); they were dropped as {advice:missing_time()}"#,
         ),
         S::NativeTimeValuesUnread => said(
-            r#"Could not parse {unread:,} of {rows:,} value(s) of time column '{column}' (for example {examples}); they were dropped as {advice:missing_time()}"#,
+            r#"Could not parse {unread:,} of {rows:,} value(s) of time column '{column}' (for example {host.native_time_examples}); they were dropped as {advice:missing_time()}"#,
         ),
         S::DatesReadDayFirst => owned(
             r#"text in {table}.{column} was read as dates in {format} format, which puts the day first"#,

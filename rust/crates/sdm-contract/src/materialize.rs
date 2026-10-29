@@ -261,7 +261,7 @@ pub enum MaterializeSourceFacts {
     TimeConversion {
         rows: u64,
         unread: u64,
-        examples: String,
+        examples: crate::scalar::unicode::UnicodeText,
     },
     TypedColumns {
         declaration: Option<FramePhysicalDeclaration>,
