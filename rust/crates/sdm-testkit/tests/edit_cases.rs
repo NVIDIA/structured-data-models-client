@@ -197,3 +197,29 @@ fn the_cli_observation_keeps_actual_complete_edit_starts() {
     assert_eq!(written["core"]["edits"], json!(observed.edits));
     assert_eq!(written["core"]["inputs"], json!(observed.inputs));
 }
+
+#[test]
+fn native_declaration_flags_are_checked_before_the_historical_digest() {
+    let bases = bases::load(&contract().join("bases.yaml")).unwrap();
+    let loaded = case::load(&[contract().join("cases/s1/edit.accepted-meaning-key-links.json")])
+        .unwrap()
+        .remove(0);
+    let ran = host::run(&loaded.case, &bases).unwrap();
+    let name = loaded.case.id.as_str();
+    assert!(historical_starts(name, &ran.edits, true).is_ok());
+    for changed in ["missing", "false", "unexpected", "type", "later"] {
+        let mut edits = ran.edits.clone();
+        let time = &mut edits[0]["schema"]["tables"][0]["columns"][3];
+        match changed {
+            "missing" => { time.as_object_mut().unwrap().remove("stype_declared"); }
+            "false" => time["stype_declared"] = json!(false),
+            "type" => time["stype_declared"] = json!(1),
+            "unexpected" => edits[0]["schema"]["tables"][0]["columns"][0]["untyped"] = json!(true),
+            "later" => edits[1]["schema"]["tables"][1]["columns"][1]["stype_declared"] = json!(false),
+            _ => unreachable!(),
+        }
+        let before = edits.clone();
+        assert!(historical_starts(name, &edits, true).is_err(), "{changed}");
+        assert_eq!(edits, before);
+    }
+}
