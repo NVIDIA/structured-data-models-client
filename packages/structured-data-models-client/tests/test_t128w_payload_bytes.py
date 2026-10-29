@@ -24,10 +24,10 @@ from typing import Any
 import duckdb
 import pandas as pd
 import pytest
+from payload_attachment_observer import record_payload_bytes
 from sdm_connectors import DuckDBSource
 
 from sdm_client import PredictiveQuery, Schema, _routing
-from sdm_client._rust import run as _rust_run
 from sdm_client.errors import UnsupportedRequestError
 
 CORE = ','.join(_routing.FROM_SOURCE_DUCKDB + _routing.MATERIALIZE_DUCKDB)
@@ -48,16 +48,7 @@ def _core_bytes(
 ) -> bytes:
     r"""The payload attachment's bytes, as the core's run gave them."""
     taken: list[Any] = []
-    take = _rust_run.Finished.take
-
-    def recording(self: Any, attachment: int) -> Any:
-        got = take(self, attachment)
-        state = self.result.get('state')
-        if isinstance(state, dict) and attachment == state.get('payload'):
-            taken.append(got)
-        return got
-
-    monkeypatch.setattr(_rust_run.Finished, 'take', recording)
+    record_payload_bytes(monkeypatch, taken)
     connection = duckdb.connect()
     for statement in sample['statements']:
         connection.execute(statement)
