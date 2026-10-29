@@ -45,7 +45,7 @@ def test_actual_builtin_result_storage_is_observed_without_custom_hooks():
             {
                 'row_index': 0,
                 'forecast_step': None,
-                'id': {'i64': str(10**25)},
+                'id': {'integer': str(10**25)},
                 'rankings': [
                     {'candidate': {'i64': '9'}, 'score': '3fe0000000000000'}
                 ],
@@ -65,6 +65,22 @@ def test_actual_builtin_result_storage_is_observed_without_custom_hooks():
             raise AssertionError(name)
 
     assert RUNNER.native_result_snapshot(object.__new__(CustomResult)) is None
+
+
+@pytest.mark.parametrize('field', ['prediction', 'rankings'])
+def test_ranking_candidate_companion_uses_the_actual_requested_native_field(field):
+    from sdm_api.generated.tfm_api import PredictionItem
+    from sdm_client.result import PredictionResult
+
+    item = PredictionItem(row_index=0, id=7, **{field: [9, 8] if field == 'prediction' else ({'candidate': 9, 'score': .5}, {'candidate': 8, 'score': .25})})
+    result = PredictionResult(model='kumo-relational', request_id='actual', items=[item])
+    shown = RUNNER.native_result_snapshot(result, ranking=True)['rows'][0]
+    if field == 'prediction':
+        assert shown['prediction_candidates'] == [{'i64': '9'}, {'i64': '8'}]
+        assert shown['rankings'] is None
+    else:
+        assert 'prediction_candidates' not in shown
+        assert [row['candidate'] for row in shown['rankings']] == [{'i64': '9'}, {'i64': '8'}]
 
 
 def test_native_semantic_projection_keeps_the_raw_ordinal_result():

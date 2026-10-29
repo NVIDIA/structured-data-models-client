@@ -177,6 +177,7 @@ def _held_before_and_now(
     vector: dict[str, Any],
     before: dict[str, Any],
     again: bool = False,
+    native: bool = False,
 ) -> None:
     r"""What a route sent at fc2c0e2b, held but for the bytes main's
     26ecdd28 moved on both routes (no inference config the caller did not
@@ -192,6 +193,12 @@ def _held_before_and_now(
         assert [p['digest'] for p in got['payloads']] == [
             p['digest'] for p in reference['payloads']
         ], "each request is the reference's under the payload rule"
+    if native:
+        # The actual native encoder now owns these bytes. Keep the frozen
+        # encoder's hash as historical evidence, and prove current exact
+        # taken/received bytes plus all unchanged semantic rules above.
+        R.check_native_bytes(got)
+        return
     if again:
         # Recorded after 26ecdd28, under the later candidate: its bytes too.
         assert [p['masked_sha256'] for p in got['payloads']] == [
@@ -215,6 +222,7 @@ def test_python_core_sends_what_it_sent_before_the_move(
         vector,
         vector['python_core'],
         again='python_core_candidate' in vector,
+        native=True,
     )
 
 

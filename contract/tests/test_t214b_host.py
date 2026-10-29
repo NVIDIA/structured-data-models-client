@@ -168,9 +168,11 @@ class _Spy:
     host imports the native module (``sdm_client._rust.run.native``), as
     ``run_python.py``'s boundary does."""
 
-    def __init__(self, edit: Any = None) -> None:
+    def __init__(self, edit: Any = None, edit_bound: Any = None) -> None:
         self.answers: list[bytes] = []
         self.edit = edit
+        self.edit_bound = edit_bound
+        self.started: list[dict[str, Any]] = []
 
     def install(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from sdm_client._rust import codec, run
@@ -181,10 +183,14 @@ class _Spy:
         class Handle:
             def __init__(self, handle: Any) -> None:
                 self._handle = handle
+                self._prepared: tuple[str, int] | None = None
 
             def next(self) -> Any:
                 control, sent = self._handle.next()
                 message = codec.read(control, sent)
+                result = message.get('result') or {}
+                if message.get('step') == 'done' and result.get('op') in ('prepare_materialize', 'prepare_request'):
+                    self._prepared = (result['op'], result['value'])
                 if (
                     spy.edit is not None
                     and message.get('message') == 'step'
@@ -194,6 +200,21 @@ class _Spy:
                     if edited is not None:
                         return codec.encode(edited), sent
                 return control, sent
+
+            def take_attachment(self, attachment: int) -> Any:
+                value = self._handle.take_attachment(attachment)
+                if self._prepared is None or attachment != self._prepared[1] or not isinstance(value, bytes):
+                    return value
+                product = json.loads(value)
+                if self._prepared[0] == 'prepare_materialize' and product.get('value') == 'request' and spy.edit is not None:
+                    envelope = {'result': product['data']}
+                    edited = spy.edit(envelope)
+                    if edited is not None:
+                        product['data'] = edited['result']
+                        return codec.encode(product)
+                if self._prepared[0] == 'prepare_request' and product.get('phase') == 'bound' and spy.edit_bound is not None:
+                    return codec.encode(spy.edit_bound(product))
+                return value
 
             def reply(self, message: bytes, attachments: Any) -> None:
                 read = json.loads(message)
@@ -212,6 +233,7 @@ class _Spy:
                 self._native = native
 
             def start(self, message: bytes, attachments: Any) -> Handle:
+                spy.started.append(json.loads(message)['operation'])
                 return Handle(self._native.Run.start(message, attachments))
 
         class Native:
@@ -467,25 +489,18 @@ def test_another_request_state_version_is_refused_by_name() -> None:
     one the core accepts."""
     from sdm_client import StructuredDataError
 
-    with on_the_core():
-        request = recorder()._materialize(
-            _schema(), recorder().QUERIES['windowed']
-        )
-        import dataclasses
+    from sdm_client._rust import run
 
-        assert isinstance(request._core.version, int)
-        request._core = dataclasses.replace(
-            request._core, version=request._core.version + 40
-        )
-        state = {'version': request._core.version}
-        with endpoint().serve() as (url, received):
-            with pytest.raises(StructuredDataError) as refused:
-                _predict(request, url)
-    assert received.requests == []
+    # A genuine raw legacy RequestState control retains H23's exact format.
+    # Public gathered calls now consume a distinct versioned bound product.
+    state = {'version': 42, 'payload': 1, 'query': 2}
+    with pytest.raises(StructuredDataError) as refused:
+        run.run({'op': 'predict', 'state': state, 'model': 'kumo-relational', 'request_id': 'h23-raw', 'outputs': ['prediction']}, {1: b'{}', 2: b'"query"'})
     error = refused.value
     assert error.code == 'INVALID_REQUEST'
     assert (error.details or {}).get('field') == 'state.version'
     assert (error.details or {}).get('version') == state['version']
+    assert (error.details or {}).get('reads') == 2
 
     def check() -> None:
         text = str(error)
@@ -493,6 +508,37 @@ def test_another_request_state_version_is_refused_by_name() -> None:
         assert 'version' in text and str(state['version']) in text, text
 
     held(f'{PREFIX}state-version-named', check)
+
+
+def test_the_public_call_refuses_the_actual_unknown_bound_version_before_sending(monkeypatch: pytest.MonkeyPatch) -> None:
+    from sdm_client import StructuredDataError
+
+    altered = []
+    def edit_bound(product):
+        product['version'] += 40
+        altered.append(dict(product))
+        return product
+
+    spy = _Spy(edit_bound=edit_bound)
+    with on_the_core():
+        request = recorder()._materialize(_schema(), recorder().QUERIES['windowed'])
+        spy.install(monkeypatch)
+        with endpoint().serve() as (url, received):
+            with pytest.raises(StructuredDataError) as refused:
+                _predict(request, url)
+    assert len(altered) == 1
+    assert received.requests == []
+    assert refused.value.code == 'INVALID_MESSAGE'
+    assert 'unsupported version' in str(refused.value)
+
+    def contains(value):
+        if isinstance(value, dict):
+            return value == altered[0] or any(contains(child) for child in value.values())
+        if isinstance(value, list):
+            return any(contains(child) for child in value)
+        return False
+
+    assert any(contains(operation) for operation in spy.started), 'the altered bound must be the actual subsequent native input'
 
 
 # --- the repeats case on python-core ---------------------------------------------------
