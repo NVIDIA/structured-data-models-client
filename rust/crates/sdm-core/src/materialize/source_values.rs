@@ -462,13 +462,13 @@ fn column_meaning(
     input: MaterializeSourceFacts,
 ) -> Result<MaterializeColumnMeaning, CoreError> {
     let declared = owner.column(&column)?;
+    let dtype = (!declared.untyped).then_some(declared.dtype);
+    let scalar = native_source::scalar_meaning(dtype, &input)?;
+    let scalar = native_source::timestamp_meaning(dtype, declared.stype, &input).unwrap_or(scalar);
     Ok(MaterializeColumnMeaning {
         source: owner.0.meaning.identity.clone(),
         column,
-        scalar: native_source::scalar_meaning(
-            (!declared.untyped).then_some(declared.dtype),
-            &input,
-        )?,
+        scalar,
         input,
     })
 }

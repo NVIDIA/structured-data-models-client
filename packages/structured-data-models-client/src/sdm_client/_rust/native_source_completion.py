@@ -71,6 +71,35 @@ def _helpers(columns: Sequence[str]) -> dict[str, str]:
     return names
 
 
+def _timestamp_declaration(dtype: object) -> dict[str, Any] | None:
+    """Describe actual typed storage without inferring an object/text column."""
+    declaration = native_declaration(dtype)
+    if declaration is not None:
+        if declaration['declaration'] == 'physical':
+            physical = declaration['physical']
+            if physical['type'] == 'timestamp':
+                return {'declaration': 'physical', 'physical': physical}
+        return None
+    zone: str | None
+    if isinstance(dtype, pd.DatetimeTZDtype):
+        unit, zone = dtype.unit, str(dtype.tz)
+    elif isinstance(dtype, np.dtype) and dtype.kind == 'M':
+        unit, _ = np.datetime_data(dtype)
+        zone = None
+    else:
+        return None
+    if unit not in ('s', 'ms', 'us', 'ns'):
+        return None
+    return {
+        'declaration': 'physical',
+        'physical': {
+            'type': 'timestamp',
+            'unit': unit,
+            'zone': zone,
+        },
+    }
+
+
 class SourceCompletion:
     def __init__(
         self,
@@ -266,6 +295,20 @@ class SourceCompletion:
                         )
                     exact_columns[name] = exact
                 self._scalar(frame, name, meaning, decimal=True)
+            # Common sanitation assigns this column before advancing to the
+            # next physical column or capturing the native time Series.
+            try:
+                timestamp = _timestamp_declaration(frame[name].dtype)
+            except Exception as error:
+                self.native_error = error
+                raise
+            if timestamp is not None:
+                meaning = self.service.column(
+                    {'source': binding['source'], 'column': name},
+                    {'storage': 'typed_columns', 'declaration': timestamp},
+                )
+                if meaning['scalar']['meaning'] != 'original':
+                    self._scalar(frame, name, meaning, decimal=False)
         try:
             exported = pa.Table.from_pandas(frame, preserve_index=False)
             for name, exact in exact_columns.items():

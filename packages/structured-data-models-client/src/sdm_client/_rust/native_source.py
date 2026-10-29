@@ -48,6 +48,12 @@ def scalar_column(
     if not isinstance(scalar, str):
         raise CodecError('native source scalar type is not text')
     if kind == 'nullable':
+        if scalar == 'timestamp' and physical == {
+            'type': 'timestamp',
+            'unit': 'ns',
+            'zone': None,
+        }:
+            return typed_timestamp(values)
         if scalar == 'utf8':
             return pd.array(values.map(_string), dtype='string')
         dtype = {'int64': 'Int64', 'float64': 'Float64', 'bool': 'boolean'}.get(
@@ -68,3 +74,24 @@ def scalar_column(
             raise CodecError('native Decimal source meaning has no fixed cast')
         return values.astype(pd.ArrowDtype(target))
     raise CodecError('unknown native source scalar meaning')
+
+
+def typed_timestamp(values: pd.Series) -> pd.Series:
+    """Actual whole native boxing, timezone and unit casts at sanitization.
+
+    The core selected this for an actual typed timestamp source. String
+    source formats use the fixed Reader at a different boundary.
+    """
+    if isinstance(values.dtype, pd.ArrowDtype):
+        values = pd.Series(
+            values.to_numpy(), index=values.index, name=values.name
+        )
+    if not pd.api.types.is_datetime64_any_dtype(values):
+        # A native typed timestamp can box to real datetime objects. This
+        # is their original native unit conversion, not string admission.
+        values = pd.to_datetime(values, unit='ns', errors='coerce')
+    if isinstance(values.dtype, pd.DatetimeTZDtype):
+        values = values.dt.tz_convert('UTC').dt.tz_localize(None)
+    if values.dtype != 'datetime64[ns]':
+        values = values.astype('datetime64[ns]')
+    return values

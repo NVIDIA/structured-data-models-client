@@ -18,6 +18,7 @@ import pandas as pd
 from sdm_client._rust import codec
 from sdm_client._rust.frame_decimals import native_decimal_type
 from sdm_client._rust.frame_facts import native_declaration, observed_content
+from sdm_client._rust.native_source import typed_timestamp as _typed_timestamp
 from sdm_client._rust.spec import held_column
 
 
@@ -326,27 +327,6 @@ def typed_table(table: Any, state: dict[str, Any]) -> pd.DataFrame:
         elif kind == 'native_time':
             cast[name] = pd.to_datetime(values, utc=True)
     return frame.assign(**cast) if cast else frame
-
-
-def _typed_timestamp(values: pd.Series) -> pd.Series:
-    """Actual whole native boxing, timezone and unit casts at sanitization.
-
-    The core selected this for an actual typed timestamp source. String
-    source formats use the fixed Reader at a different boundary.
-    """
-    if isinstance(values.dtype, pd.ArrowDtype):
-        values = pd.Series(
-            values.to_numpy(), index=values.index, name=values.name
-        )
-    if not pd.api.types.is_datetime64_any_dtype(values):
-        # A native typed timestamp can box to real datetime objects. This
-        # is their original native unit conversion, not string admission.
-        values = pd.to_datetime(values, unit='ns', errors='coerce')
-    if isinstance(values.dtype, pd.DatetimeTZDtype):
-        values = values.dt.tz_convert('UTC').dt.tz_localize(None)
-    if values.dtype != 'datetime64[ns]':
-        values = values.astype('datetime64[ns]')
-    return values
 
 
 def time_feature(

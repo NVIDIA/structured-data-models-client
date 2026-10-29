@@ -105,3 +105,29 @@ pub(super) fn scalar_meaning(
         }
     }
 }
+
+/// Fixed native timestamp construction requires both resolved meaning and
+/// observed typed storage; unknown scalar/text sources retain their Reader.
+pub(super) fn timestamp_meaning(
+    declared: Option<Dtype>,
+    stype: Stype,
+    input: &MaterializeSourceFacts,
+) -> Option<MaterializeScalarMeaning> {
+    if declared != Some(Dtype::Time) && stype != Stype::Timestamp {
+        return None;
+    }
+    match input {
+        MaterializeSourceFacts::TypedColumns {
+            declaration:
+                Some(FramePhysicalDeclaration::Physical {
+                    physical: ColumnType::Timestamp { .. },
+                }),
+        } => Some(MaterializeScalarMeaning::Nullable {
+            physical: ColumnType::Timestamp {
+                unit: sdm_contract::types::TimestampUnit::Ns,
+                zone: None,
+            },
+        }),
+        _ => None,
+    }
+}
