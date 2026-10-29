@@ -76,8 +76,8 @@ def test_another_origin_is_not_a_pandas_runtime_warning(origin):
 def test_missing_or_inconsistent_origin_cannot_classify_a_warning(
     which, broken
 ):
-    mine = _observation(host(NOTICE))
-    theirs = _observation(host(('Pandas4Warning', 'pandas'), NOTICE))
+    mine = _observation(host(('Pandas4Warning', 'pandas'), NOTICE))
+    theirs = _observation(host(('Pandas4Warning', 'pyarrow'), NOTICE))
     target = (mine if which == 'mine' else theirs)['host']
     if broken == 'missing':
         del target['origins']
@@ -87,6 +87,21 @@ def test_missing_or_inconsistent_origin_cannot_classify_a_warning(
         target['origins'][0]['class'] = 'another-class'
     report = compared(mine, theirs)
     assert {rule for rule, _ in report.failures} == {'warnings'}
+
+
+@pytest.mark.parametrize('which', ['mine', 'theirs'])
+def test_unobserved_historical_origins_keep_their_warning_classes(which):
+    # Historical python-ref deliberately omitted origins. Its retained
+    # notice needs no invented origin to match the other route's notice.
+    historical = _observation(host(NOTICE))
+    del historical['host']['origins']
+    observed = _observation(host(('Pandas4Warning', 'pyarrow'), NOTICE))
+    mine, theirs = (
+        (historical, observed) if which == 'mine' else (observed, historical)
+    )
+    before = copy.deepcopy((mine, theirs))
+    assert not compared(mine, theirs, against='python-ref').failures
+    assert (mine, theirs) == before
 
 
 def test_nonruntime_warnings_keep_their_order_and_occurrences():
