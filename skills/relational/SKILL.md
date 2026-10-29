@@ -288,5 +288,5 @@ change. The ones worth knowing:
 | more than 100 calls at once | a context is gathered per call; ask about fewer entities, or raise `rows_per_call` if you lowered it |
 | more entities than one call scores, on a ranking or a forecast | each candidate or step is already a call, and batching one would send that many times as many; ask about fewer at a time |
 | an output this question cannot give | `rankings` on a regression, `explanation` on a ranking |
-| `422 UNSUPPORTED_OUTPUT` | the client sent an output the deployment does not serve, such as `explanation`, or asked for `explanation` of a deployment not started with one estimator, `SDM_NUM_ESTIMATORS=1` |
+| `422 UNSUPPORTED_OUTPUT` | the client sent an output the deployment does not serve, such as `explanation` |
 | an aggregation the model does not answer | `COUNT_DISTINCT`, `FIRST`, `LAST`, or any aggregation of a category |

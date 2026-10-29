@@ -128,10 +128,6 @@ result = client.predict(request, model=KumoRelational(),
                         outputs=['prediction', 'probabilities', 'explanation'])
 ```
 
-The deployment must run with one estimator, and `kumo-tabular` with CUDA graph
-replay off, or it answers `422 UNSUPPORTED_OUTPUT`; see
-[Limits](limits.md).
-
 ### Keys
 
 `result.explanations` maps a row's key to that row's explanation. It is kept
