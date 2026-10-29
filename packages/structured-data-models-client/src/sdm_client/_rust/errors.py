@@ -948,6 +948,13 @@ def error_from_core(
         if sentence not in (
             'iterations_below_one',
             'anchor_entity_not_shared',
+            'context_too_restrictive',
+            'no_entity_at_anchor',
+            'no_entity_at_anchor_later',
+            'no_entity_passed',
+            'no_entity_passed_several',
+            'anchor_too_late',
+            'anchor_too_late_several',
             'incompatible_semantic_type',
             'edge_key_types',
         ):

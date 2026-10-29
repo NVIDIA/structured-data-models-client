@@ -19,6 +19,30 @@ use std::sync::Weak;
 
 pub(super) const BATCH_ROWS: usize = 10_000;
 
+#[cfg(test)]
+mod tests;
+
+/// Native materialization wraps an empty-context ValueError at this reached boundary.
+/// Keep the shared sentence/private facts and the existing native presentation recipe.
+fn native_context_diagnostic(mut error: CoreError) -> CoreError {
+    if matches!(
+        error.sentence,
+        Sentence::ContextTooRestrictive
+            | Sentence::NoEntityAtAnchor
+            | Sentence::NoEntityAtAnchorLater
+            | Sentence::NoEntityPassed
+            | Sentence::NoEntityPassedSeveral
+            | Sentence::AnchorTooLate
+            | Sentence::AnchorTooLateSeveral
+    ) {
+        error
+            .fields
+            .insert("native_key_reason".into(), Detail::text("task_validation"));
+        error.public_details = Some(Box::default());
+    }
+    error
+}
+
 fn invalid(message: &str) -> CoreError {
     CoreError::protocol(Sentence::InvalidMessage, message)
 }
@@ -898,6 +922,16 @@ async fn request(
 }
 
 pub(crate) async fn run(
+    asker: Asker,
+    input: MaterializePreparation,
+    attachments: Attachments,
+) -> Result<OperationResult, CoreError> {
+    run_inner(asker, input, attachments)
+        .await
+        .map_err(native_context_diagnostic)
+}
+
+async fn run_inner(
     asker: Asker,
     input: MaterializePreparation,
     mut attachments: Attachments,
