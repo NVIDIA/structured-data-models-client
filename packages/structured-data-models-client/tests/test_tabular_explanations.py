@@ -13,6 +13,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
+from sdm_client import Request
 from sdm_client.adapters.tabular import TabularAdapter
 from sdm_client.base import check_request_against_model
 from sdm_client.models import KUMO_TABULAR
@@ -205,6 +206,30 @@ def test_rows_without_a_key_are_explained_under_their_row_index(
 
     assert sorted(result.explanations) == [0, 1, 2]
     assert result.explanations[2]['instance']['gradients'] == [[-3.0], [3.0]]
+
+
+def test_rows_whose_ids_repeat_are_explained_under_their_row_index(
+    tabular_request, gradient_explanation
+):
+    """Two rows sharing an id are both explained, each under its row_index.
+
+    Assumptions:
+    - The request's two rows both carry ``row_id`` 90.
+    - The NIM answers each row under ``'[90]'`` with its own explanation.
+    """
+    built = tabular_request(rows=2)
+    request = Request(
+        context=built.context.instance_table,
+        predict=built.predict.instance_table.assign(row_id=[90, 90]),
+        target='churn',
+        task='classification',
+    )
+
+    result = answered(request, gradient_explanation)
+
+    assert sorted(result.explanations) == [0, 1]
+    assert result.explanations[1]['instance']['gradients'] == [[-2.0], [2.0]]
+    assert list(result.explanations.to_pandas().columns)[0] == 'row_index'
 
 
 def test_a_tabular_entry_has_no_related_tables(

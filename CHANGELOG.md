@@ -58,7 +58,10 @@ these packages. All five distributions share one version and one entry.
   Relational SDM NIM explains under either budget.
 - An explanation covers every scored row, on both models. A `kumo-tabular`
   explanation over more than one row and a `kumo-relational` one over more
-  than one entity are no longer refused before sending.
+  than one entity are no longer refused before sending. This needs a NIM built
+  from structured-data-nims `0a8230d` or later; the shipping releases
+  (Relational 1.1.0, Tabular 1.0.0) refuse `explanation`. The first release
+  that serves it will be named here when it is cut.
 
 ### Deprecated
 

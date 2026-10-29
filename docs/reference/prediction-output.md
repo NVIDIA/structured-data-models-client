@@ -139,9 +139,9 @@ both models:
 
 | Request | Key | Example |
 |---|---|---|
-| has an entity id | the row's `id`, the same value as in `to_pandas()['id']` | `result.explanations['user_5']` |
-| forecast | `(id, forecast_step)` | `result.explanations[('user_5', 3)]` |
-| no entity id (single-table tabular) | `row_index` | `result.explanations[0]` |
+| has an entity id, none repeated | the row's `id`, the same value as in `to_pandas()['id']` | `result.explanations['user_5']` |
+| forecast | `(id, forecast_step)`, or `(row_index, forecast_step)` when ids repeat | `result.explanations[('user_5', 3)]` |
+| no id column, or its ids repeat | `row_index` | `result.explanations[0]` |
 
 ### One entry
 
