@@ -23,6 +23,8 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 CASE = ROOT / 'contract/cases/s1/decimal.sum-10-2.json'
 
@@ -55,6 +57,31 @@ def _route(case: dict[str, Any], operations: list[str]) -> list[str]:
     report = c.Report()
     c._route(report, case, 'python-core', _observation(operations))
     return [text for _, text in report.failures]
+
+
+@pytest.mark.parametrize(
+    'operations', [[], ['describe_source'], ['describe_source', 'materialize']]
+)
+def test_stop_fixture_has_exact_inputs_and_no_invented_prediction(
+    operations: list[str],
+) -> None:
+    line = _observation(operations)
+    view = _compare()._prediction_view(line)
+    assert view['operations'] == operations
+    assert [record['op'] for record in view['inputs']] == operations
+    assert view['events'] == []
+    assert line['core']['predicted'] is None
+    assert line['core']['model_calls'] == []
+
+
+def test_stop_fixture_missing_required_trace_is_refused() -> None:
+    line = _observation(['describe_source'])
+    assert _compare()._prediction_view(line)['operations'] == [
+        'describe_source'
+    ]
+    line['core'].pop('fetches')
+    with pytest.raises(_compare()._prediction_reader().ObservationError):
+        _compare()._prediction_view(line)
 
 
 def test_a_database_line_is_held_to_the_calls_up_to_its_stop() -> None:
