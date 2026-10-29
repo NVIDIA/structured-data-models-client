@@ -171,7 +171,26 @@ def _approved_old(old, case):
         'Missing 7 indices in 4 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`.': 'MISSING_INDICES',
         "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2022-12-31 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'.": 'CONTEXT_BEFORE_DATA',
     }
+    native_codes = {}
+    for condition in ('users.age > 22', 'users.created_at IS NOT NULL'):
+        native_codes[
+            f"the entity filter '{condition}' selects the labelled examples the model learns from, "
+            'and does not narrow the 2 rows named for scoring. Those are scored as given, whether '
+            'or not they satisfy it. Pass only indices that satisfy the condition if that is what you meant.'
+        ] = 'FILTER_CHOSE_EXAMPLES'
+    for instant in ('2023-01-01 00:00:00', '2023-01-01 00:00:00+00:00'):
+        native_codes[
+            'Some time columns were inferred, or refused, on a guess about what a column holds:\n'
+            '- users.created_at was not taken as the time column because every row holds '
+            + instant
+            + ". If it does say when a row became true, name it: time_columns={'users': 'created_at'}."
+        ] = 'TIME_COLUMNS_GUESSED'
     for notice in expected['warnings']:
+        native_code = native_codes.get(notice['message'])
+        if native_code is not None:
+            assert notice['category'] == 'sdm_client.core.warnings.SDMWarning'
+            assert notice['type'] == 'SDMWarning'
+            notice['message'] = f'[{native_code}] {notice["message"]}'
         code = codes.get(notice['message'])
         if code is not None:
             assert notice['category'] == 'builtins.UserWarning'

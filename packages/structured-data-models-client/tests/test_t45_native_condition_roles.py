@@ -127,7 +127,18 @@ def test_native_timestamp_condition_family_matches_its_complete_original_journey
     monkeypatch.setattr(public, '_input', lambda case: (setup, query))
     original = public._observe(monkeypatch, 'ordinary', False)
     current = public._observe(monkeypatch, 'ordinary', True)
-    if original['outcome'] == 'error':
+    if role == 'what_if':
+        # The original refuses an unaggregated assumption before native labels.
+        assert original['outcome'] == 'error'
+        assert original['stage'] == 'materialize'
+        error = original['error']
+        assert error['code'] == 'INVALID_REQUEST'
+        assert error['cause'] is None
+        assert (
+            'ASSUMPTION condition users.created_at IS NOT NULL has no time range but a temporal aggregation is required.'
+            in error['text']
+        )
+    elif original['outcome'] == 'error':
         assert original['stage'] == 'materialize'
         assert (
             original['error']['type'] == 'sdm_client.errors.StructuredDataError'
@@ -145,4 +156,35 @@ def test_native_timestamp_condition_family_matches_its_complete_original_journey
         assert original['request']['task']['kind'] == 'temporal_link_prediction'
         assert original['request']['predict_rows'] == 2
         assert original['request']['context_rows'] > 0
+    assert current == public._approved_old(original, 'ordinary')
+
+
+@pytest.mark.parametrize('kind', ['TIMESTAMP', 'TIMESTAMPTZ'])
+def test_admitted_aggregated_timestamp_what_if_consumes_its_actual_operand(
+    monkeypatch, kind
+):
+    from sdm_client._rust import native_sql
+
+    setup = [
+        f"ALTER TABLE buys ADD COLUMN recorded_at {kind} DEFAULT TIMESTAMP '2023-01-01'"
+    ]
+    query = (
+        'PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) FOR EACH users.user_id '
+        'ASSUMING COUNT(buys.* WHERE buys.recorded_at != NULL, 0, 30, days) > 0'
+    )
+    monkeypatch.setattr(public, '_input', lambda case: (setup, query))
+    original = public._observe(monkeypatch, 'ordinary', False)
+    actual = native_sql._FetchedColumns.target_series
+    columns = []
+
+    def observed(self, binding, rows):
+        columns.append(binding['column'])
+        return actual(self, binding, rows)
+
+    monkeypatch.setattr(native_sql._FetchedColumns, 'target_series', observed)
+    current = public._observe(monkeypatch, 'ordinary', True)
+    assert original['outcome'] == 'success'
+    assert original['request']['context_rows'] > 0
+    assert original['request']['predict_rows'] == 2
+    assert columns == ['user_id', 'item_id', '*', 'recorded_at']
     assert current == public._approved_old(original, 'ordinary')
