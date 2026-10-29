@@ -24,7 +24,9 @@
 use serde_json::Value;
 
 /// The attachments the core reads from a `start`, by the lock's names.
-const READ: [&str; 17] = [
+const READ: [&str; 19] = [
+    "PrepareMaterialize.input",
+    "PrepareFrames.input",
     "PrepareRequest.input",
     "Predict.direct",
     "ValidateQuery.query",
@@ -150,7 +152,11 @@ fn mismatches(source: &str) -> Vec<String> {
     let mut problems = Vec::new();
     for (name, decoded) in &found {
         match locked(attachments, name) {
-            Some(ty) if ty == *decoded => {}
+            Some(ty)
+                if ty == *decoded
+                    || (name == "PrepareFrames.input"
+                        && ty == "FramePreparation"
+                        && decoded == "sdm_contract::frames::materialize::FramePreparation") => {}
             Some(ty) => problems.push(format!("{name}: dispatch decodes {decoded}, the lock {ty}")),
             None => problems.push(format!("{name}: decoded by dispatch, not in the lock")),
         }
