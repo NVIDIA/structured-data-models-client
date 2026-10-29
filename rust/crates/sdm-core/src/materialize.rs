@@ -950,6 +950,28 @@ fn times_ns(array: &ArrayRef, column: &str) -> Result<Vec<Option<i64>>, CoreErro
     times_ns_from(array, column, false)
 }
 
+/// Arrow zoned timestamps already store UTC-instant counts. Share their
+/// existing canonical read without changing units, values or missingness.
+fn timestamp_without_zone(array: &ArrayRef) -> Option<ArrayRef> {
+    macro_rules! unzoned {
+        ($kind:ty) => {
+            Some(Arc::new(
+                array
+                    .as_primitive::<$kind>()
+                    .clone()
+                    .with_timezone_opt::<Arc<str>>(None),
+            ) as ArrayRef)
+        };
+    }
+    match array.data_type() {
+        DataType::Timestamp(ArrowUnit::Second, Some(_)) => unzoned!(TimestampSecondType),
+        DataType::Timestamp(ArrowUnit::Millisecond, Some(_)) => unzoned!(TimestampMillisecondType),
+        DataType::Timestamp(ArrowUnit::Microsecond, Some(_)) => unzoned!(TimestampMicrosecondType),
+        DataType::Timestamp(ArrowUnit::Nanosecond, Some(_)) => unzoned!(TimestampNanosecondType),
+        _ => None,
+    }
+}
+
 /// DuckDB's `'-infinity'` in a timestamp of any unit: `-(2^63 - 1)`.
 const NEGATIVE_INFINITY: i64 = -i64::MAX;
 
@@ -1337,6 +1359,9 @@ impl Times {
         name: &str,
         array: &ArrayRef,
     ) -> Result<Option<ArrayRef>, CoreError> {
+        if let Some(canonical) = timestamp_without_zone(array) {
+            return Ok(Some(canonical));
+        }
         let client = if self.text == Some(TextTimes::ClientRules)
             && matches!(array.data_type(), DataType::Utf8 | DataType::LargeUtf8)
         {
@@ -1344,30 +1369,8 @@ impl Times {
         } else {
             None
         };
-        macro_rules! unzoned {
-            ($t:ty) => {
-                Arc::new(
-                    array
-                        .as_primitive::<$t>()
-                        .clone()
-                        .with_timezone_opt::<Arc<str>>(None),
-                ) as ArrayRef
-            };
-        }
         Ok(Some(match array.data_type() {
             DataType::Timestamp(_, None) => return Ok(None),
-            // A zoned column keeps its unit, empty or not, so each of a
-            // table's answers reads it alike.
-            DataType::Timestamp(ArrowUnit::Second, Some(_)) => unzoned!(TimestampSecondType),
-            DataType::Timestamp(ArrowUnit::Millisecond, Some(_)) => {
-                unzoned!(TimestampMillisecondType)
-            }
-            DataType::Timestamp(ArrowUnit::Microsecond, Some(_)) => {
-                unzoned!(TimestampMicrosecondType)
-            }
-            DataType::Timestamp(ArrowUnit::Nanosecond, Some(_)) => {
-                unzoned!(TimestampNanosecondType)
-            }
             // A column holding no value says nothing of its type: a source
             // whose driver types a column by its values (SQLite's) gives an
             // empty answer's columns as integers. It holds no time.

@@ -807,7 +807,7 @@ def _materializations(
                 'materialization fetches have no lifecycle events',
             )
         terminal, failure = entry['terminal'], entry['failure']
-        materialized, error = None, None
+        materialized, complete_product, error = None, None, None
         if entry['completion'] == 'returned':
             require(
                 failure is None
@@ -849,17 +849,52 @@ def _materializations(
                 'query': taken[state['query']][1],
                 'payload': payload,
             }
+
+            def resolved(part: dict[str, Any]) -> dict[str, Any]:
+                out = dict(part)
+                out['payload'] = json.loads(
+                    taken[part['payload']][0],
+                    parse_int=lambda token: {'number': token},
+                    parse_float=lambda token: {'number': token},
+                )
+                if 'query' in part:
+                    out['query'] = taken[part['query']][1]
+                return out
+
+            completed_state = resolved(state)
+            for field in ('batches', 'forecast'):
+                if state.get(field) is not None:
+                    completed_state[field] = [
+                        resolved(part) for part in state[field]
+                    ]
+            if state.get('ranking') is not None:
+                completed_state['ranking'] = {
+                    **state['ranking'],
+                    'parts': [
+                        resolved(part) for part in state['ranking']['parts']
+                    ],
+                }
+            complete_product = {**product['data'], 'state': completed_state}
         else:
             require(
                 entry['completion'] == 'raised'
                 and terminal is None
-                and isinstance(failure, dict)
-                and set(failure) == {'run', 'relation'}
-                and failure['run'] in owned,
+                and (
+                    failure is None
+                    or isinstance(failure, dict)
+                    and set(failure) == {'run', 'relation'}
+                    and failure['run'] in owned
+                ),
                 'materialization error has no selected actual terminal association',
             )
-            record = owned[failure['run']]
-            if failure['relation'] == 'native':
+            record = None if failure is None else owned[failure['run']]
+            if failure is None:
+                # Actual Task, input, resource and lifecycle observations
+                # above still prove the work reached. An escaping host
+                # failure need not be a successfully presented Core error.
+                # Its independent public outcome remains authoritative.
+                pass
+            elif failure['relation'] == 'native':
                 product = record['_value']
                 require(
                     failure['run'] in guards
@@ -885,6 +920,7 @@ def _materializations(
                 'through': None,
                 '_task': tasks[0],
                 '_materialized': materialized,
+                '_product': complete_product,
                 '_error': error,
             }
         )
@@ -2114,6 +2150,7 @@ def _view(core: dict[str, Any], operations: list[str]) -> dict[str, Any]:
             )
             del entry['_task']
             entry['materialized'] = entry.pop('_materialized')
+            entry['product'] = entry.pop('_product')
             entry['error'] = entry.pop('_error')
     return {
         'operations': logical_operations,

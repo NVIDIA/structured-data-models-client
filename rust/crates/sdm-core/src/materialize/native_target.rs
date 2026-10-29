@@ -681,7 +681,7 @@ impl TargetColumn {
                 return Err(invalid_target("row condition carries a target window"));
             }
             let every = (0..self.values.len()).collect::<Vec<_>>();
-            condition_column(&self.values, &every, self.encoding).map(labels::Target::Column)
+            native_condition_column(&self.values, &every, self.encoding).map(labels::Target::Column)
         } else {
             self.groups()
         }
@@ -826,7 +826,7 @@ impl TargetColumn {
             &converted.values,
             converted.encoding,
         )?;
-        let values = condition_column(&converted.values, &expected, converted.encoding)?;
+        let values = native_condition_column(&converted.values, &expected, converted.encoding)?;
         let condition = previous.condition.complete(filter, values)?;
         let (derivation, selection) = match condition.truth() {
             Some(truth) => {
@@ -1008,19 +1008,12 @@ fn window_selection(
             "captured native time values omit or add source rows",
         ));
     }
-    let unzoned = match times.data_type() {
-        DataType::Timestamp(unit, Some(_)) => Some(
-            arrow_cast::cast(times, &DataType::Timestamp(*unit, None)).map_err(|_| {
-                invalid_target("native time values have an invalid timestamp representation")
-            })?,
-        ),
-        DataType::Timestamp(_, None) => None,
-        _ => {
-            return Err(invalid_target(
-                "native time completion is not a timestamp column",
-            ));
-        }
-    };
+    if !matches!(times.data_type(), DataType::Timestamp(_, _)) {
+        return Err(invalid_target(
+            "native time completion is not a timestamp column",
+        ));
+    }
+    let unzoned = timestamp_without_zone(times);
     let times = times_ns(unzoned.as_ref().unwrap_or(times), &source.time_column)?;
     Ok(positions
         .iter()
@@ -1086,10 +1079,20 @@ fn validate_condition_values(
                 "native condition changes its temporal scalar family",
             ));
         }
-        times_ns(values, "condition")?;
+        let every = (0..values.len()).collect::<Vec<_>>();
+        native_condition_column(values, &every, encoding)?;
         return Ok(());
     }
     validate_values(before, before_encoding, values, encoding)
+}
+
+fn native_condition_column(
+    values: &ArrayRef,
+    rows: &[usize],
+    encoding: Option<StringEncoding>,
+) -> Result<labels::Column, CoreError> {
+    let canonical = timestamp_without_zone(values);
+    condition_column(canonical.as_ref().unwrap_or(values), rows, encoding)
 }
 
 fn group_value_type(

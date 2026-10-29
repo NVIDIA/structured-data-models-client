@@ -1335,6 +1335,9 @@ def _core_agree(
             shared,
         )
         _prediction_events_agree(report, where, python_view, rust_view, shared)
+        _materialization_events_agree(
+            report, where, python_view, rust_view, shared
+        )
         _same_contract(report, where, python, rust)
         return
     if python_view['operations'] != rust_view['operations']:
@@ -1351,6 +1354,7 @@ def _core_agree(
     if mine is None or theirs is None:
         return
     _prediction_events_agree(report, where, python_view, rust_view)
+    _materialization_events_agree(report, where, python_view, rust_view)
     for field in ('inputs', 'fetches', 'described', 'materialized'):
         if _core_field(field, mine[field]) != _core_field(field, theirs[field]):
             _differ(
@@ -1373,6 +1377,67 @@ def _core_agree(
                 rule='core',
             )
     _same_contract(report, where, python, rust)
+
+
+def _materialization_events_agree(
+    report: Report,
+    where: str,
+    mine: dict[str, Any],
+    theirs: dict[str, Any],
+    shared: list[str] | None = None,
+) -> None:
+    """Every actually observed native request in the common logical scope.
+
+    Historical hosts have no such per-entry evidence; their common summary
+    remains compared separately without inventing earlier native products.
+    """
+    entries = [
+        {
+            entry['position']: entry
+            for entry in view.get('materializations', [])
+            if entry['native']
+            and (shared is None or entry['through'] < len(shared))
+        }
+        for view in (mine, theirs)
+    ]
+    if not mine.get('materializations') or not theirs.get('materializations'):
+        return
+    if entries[0].keys() != entries[1].keys():
+        _differ(
+            report,
+            where,
+            'core.materializations positions',
+            sorted(entries[0]),
+            sorted(entries[1]),
+            rule='core',
+        )
+    for position in sorted(entries[0].keys() & entries[1].keys()):
+        left, right = entries[0][position], entries[1][position]
+        for field in ('completion', 'error', 'materialized', 'product'):
+            a, b = left[field], right[field]
+            if field == 'materialized':
+                a, b = _state_payloads(a), _state_payloads(b)
+            elif field == 'product':
+                a = (
+                    None
+                    if a is None
+                    else {**a, 'state': _state_payloads(a['state'])}
+                )
+                b = (
+                    None
+                    if b is None
+                    else {**b, 'state': _state_payloads(b['state'])}
+                )
+            if a != b:
+                _differ(
+                    report,
+                    where,
+                    f'core.materializations/{position}/{field}',
+                    None,
+                    None,
+                    show=False,
+                    rule='core',
+                )
 
 
 def _same_contract(
