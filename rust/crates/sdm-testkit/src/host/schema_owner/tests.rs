@@ -78,6 +78,7 @@ fn adoption_keeps_host_flags_and_the_actual_core_fields_and_declared_reference()
 fn invalid_adoption_never_replaces_half_the_owned_schema() {
     let mut owner = SchemaOwner::new(description());
     let before = owner.held().clone();
+    let description = serde_json::to_value(owner.description()).unwrap();
     let answer = before.clone();
     assert!(
         owner
@@ -91,14 +92,26 @@ fn invalid_adoption_never_replaces_half_the_owned_schema() {
             .is_err()
     );
     assert_eq!(owner.held(), &before);
+    assert_eq!(
+        serde_json::to_value(owner.description()).unwrap(),
+        description
+    );
     let mut answer = before.clone();
     answer.tables[0].columns[0].source = None;
     assert!(owner.adopt(answer, None).is_err());
     assert_eq!(owner.held(), &before);
+    assert_eq!(
+        serde_json::to_value(owner.description()).unwrap(),
+        description
+    );
     let mut answer = before.clone();
     answer.tables[0].columns[0].name = "unexpected_new_column".into();
     assert!(owner.adopt(answer, None).is_err());
     assert_eq!(owner.held(), &before);
+    assert_eq!(
+        serde_json::to_value(owner.description()).unwrap(),
+        description
+    );
 }
 
 #[test]

@@ -19,6 +19,8 @@
 //! answered, with the case's edits made ([`crate::edits`]): the case names
 //! no schema for it, and its loader refuses one (decision E50).
 
+mod schema_owner;
+
 #[cfg(test)]
 #[path = "host_replay_validation_tests.rs"]
 mod replay_validation_tests;
@@ -57,7 +59,7 @@ use crate::case::{
     ValidateQueryInput,
 };
 use crate::driver::{self, DriverLog};
-use crate::edits::{self, SchemaEdit};
+use crate::edits::SchemaEdit;
 use crate::memory::Memory;
 use crate::replay::{Recording, Replay, Replayed};
 use crate::sqlite::Sqlite;
@@ -1158,11 +1160,12 @@ fn describe_on(
     // The user's edits, each checked and made by the core's edit_schema
     // (decision E67), finish describing the schema: a refusal of one is the
     // case's outcome, as the Python runner records it at from_source.
-    let mut schema: SourceDescription = serde_json::from_value(described)
+    let description: SourceDescription = serde_json::from_value(described)
         .map_err(|_| anyhow!("{}: the description is not a SourceDescription", case.id))?;
+    let mut schema = schema_owner::SchemaOwner::new(description);
     for edit in edits {
-        match edit_schema(case, &schema, edit, source, &mut observed, log)? {
-            Ok(edited) => schema = edited,
+        match edit_schema(case, &mut schema, edit, source, &mut observed, log)? {
+            Ok(()) => {}
             Err(answer) => {
                 observed.answer = answer;
                 return Ok(observed);
@@ -1199,7 +1202,7 @@ fn describe_on(
     {
         Some(ValidateQueryInput {
             profile: json!({"name": "RELATIONAL", "model": null}),
-            schema: serde_json::to_value(query_schema(&schema))?,
+            schema: serde_json::to_value(query_schema(schema.description()))?,
         })
     } else {
         None
@@ -1209,7 +1212,7 @@ fn describe_on(
         let given = if off_duckdb {
             described = ValidateQueryInput {
                 profile: validating.profile.clone(),
-                schema: serde_json::to_value(query_schema(&schema))?,
+                schema: serde_json::to_value(query_schema(schema.description()))?,
             };
             &described
         } else {
@@ -1232,7 +1235,8 @@ fn describe_on(
     };
     // The schema materialize samples is this host's own description, with
     // the user's edits made: never one the case carries (decision E50).
-    let Some(state) = materialize(case, spec, &schema, source, &mut observed, log, None)? else {
+    let Some(state) = materialize(case, spec, schema.held(), source, &mut observed, log, None)?
+    else {
         return Ok(observed);
     };
     if let Some(spec) = case.core.as_ref().and_then(|c| c.predict.as_ref()) {
@@ -1244,18 +1248,18 @@ fn describe_on(
 
 /// One edit made to `schema`, the description the core last answered, by
 /// the core's `edit_schema` over the schema as this host holds it
-/// ([`edits::held`]): the schema it answered, or the core's refusal, the
+/// with its retained host flags: the schema it answered, or the core's refusal, the
 /// case's answer.
 fn edit_schema(
     case: &Case,
-    schema: &SourceDescription,
+    schema: &mut schema_owner::SchemaOwner,
     edit: &SchemaEdit,
     source: Source<'_>,
     observed: &mut Observed,
     log: &mut DriverLog,
-) -> Result<std::result::Result<SourceDescription, Answer>> {
+) -> Result<std::result::Result<(), Answer>> {
     // What this host sends, as it encodes it, is what it records.
-    let held_bytes = serde_json::to_vec(&edits::held(schema))?;
+    let held_bytes = schema_owner::encode(schema.held())?;
     let edit_bytes = serde_json::to_vec(&edit.to_contract())?;
     observed.operations.push("edit_schema".into());
     observed.edits.push(json!({
@@ -1288,12 +1292,8 @@ fn edit_schema(
             };
             let held: HeldSchema = serde_json::from_slice(&bytes)
                 .map_err(|_| anyhow!("{}: the schema edited is not a HeldSchema", case.id))?;
-            Ok(Ok(edits::described(&held).ok_or_else(|| {
-                anyhow!(
-                    "{}: the schema edited holds a column with no facts",
-                    case.id
-                )
-            })?))
+            schema.adopt(held, edited.declared.as_ref())?;
+            Ok(Ok(()))
         }
         Ok(_) => bail!("{}: edit_schema answered another operation", case.id),
     }
@@ -1524,7 +1524,7 @@ pub type HeldSampler = (u32, Vec<u8>);
 fn materialize(
     case: &Case,
     spec: &MaterializeInput,
-    schema: &SourceDescription,
+    schema: &HeldSchema,
     source: Source<'_>,
     observed: &mut Observed,
     log: &mut DriverLog,
@@ -1622,7 +1622,7 @@ type Driven = (HostRun, std::result::Result<OperationResult, Answer>);
 fn start_materialize(
     case: &Case,
     spec: &MaterializeInput,
-    schema: &SourceDescription,
+    schema: &HeldSchema,
     source: Source<'_>,
     observed: &mut Observed,
     log: &mut DriverLog,
@@ -1654,7 +1654,7 @@ fn start_materialize(
     // What this host sends, as it encodes it, is what it records: the
     // description the core last answered, and the schema as this host
     // holds it (decision E67).
-    let schema_bytes = serde_json::to_vec(&edits::held(schema))?;
+    let schema_bytes = schema_owner::encode(schema)?;
     // Off DuckDB the call is the Python host's on the core route (T2.1d):
     // it sends the validated query as the PQL library writes it back
     // (`to_string()`), which `sdm-pql` writes the same way; a query it does
@@ -1882,10 +1882,11 @@ pub fn materialize_as(
     };
     let schema: SourceDescription = serde_json::from_value(described.clone())
         .map_err(|_| anyhow!("{}: the description is not a SourceDescription", case.id))?;
+    let schema = schema_owner::SchemaOwner::new(schema);
     let driven = start_materialize(
         case,
         materialize_spec,
-        &schema,
+        schema.held(),
         Source::Duck(&connection),
         &mut observed,
         &mut log,
@@ -1960,6 +1961,7 @@ pub fn materialize_repeatedly_holding(
             .take()
             .ok_or_else(|| anyhow!("{}: nothing was described", case.id))?,
     )?;
+    let schema = schema_owner::SchemaOwner::new(described);
     let mut held = held;
     let mut seen = Vec::with_capacity(calls);
     for _ in 0..calls {
@@ -1980,7 +1982,7 @@ pub fn materialize_repeatedly_holding(
         materialize(
             case,
             spec,
-            &described,
+            schema.held(),
             Source::Duck(&connection),
             &mut observed,
             &mut log,
