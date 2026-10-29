@@ -835,3 +835,79 @@ def test_serving_unicode_escapes_are_projected_only_in_decoded_publication():
         prepared.raw_view['attempts'],
         raw['public']['payloads'],
     )
+
+
+def test_each_private_input_file_uses_its_own_hash_bound_map(tmp_path):
+    pair = T32.Pair(tmp_path, DATABASE)
+    core = pair.answered(None)
+    source = pair.write(core)
+    old = json.loads(pair.reference.read_text())
+    old['identity'].update(
+        runner='python-old',
+        reference=None,
+        native=None,
+        native_loaded=False,
+        operations=[],
+        contract=None,
+    )
+    old['core'] = None
+    second = tmp_path / 'python-old.private.jsonl'
+    second.write_text(json.dumps(old) + '\n')
+    first_map = name_map(tmp_path, source)
+    other_map = tmp_path / 'old-names.private.json'
+    other_map.write_text(
+        json.dumps(
+            {
+                'format': 'sdm-private-name-map/1',
+                'database': DATABASE,
+                'names': NAMES,
+                'source_sha256': hashlib.sha256(
+                    second.read_bytes()
+                ).hexdigest(),
+            }
+        )
+    )
+    originals = {
+        path: path.read_bytes() for path in (source, second, pair.reference)
+    }
+    report = COMPARE.compare(
+        [pair.cases],
+        pair.reference,
+        [source, second],
+        database=DATABASE,
+        private_name_map=[first_map, other_map],
+    )
+    assert report.failures == [], report.texts
+    command = [
+        sys.executable,
+        '-I',
+        str(ROOT / 'scripts/rust_core/compare.py'),
+        '--cases',
+        str(pair.cases),
+        '--reference',
+        str(pair.reference),
+        '--database',
+        DATABASE,
+        '--private-name-map',
+        str(first_map),
+        '--private-name-map',
+        str(other_map),
+        str(source),
+        str(second),
+    ]
+    done = subprocess.run(command, capture_output=True, text=True, timeout=60)
+    assert done.returncode == 0, done.stdout + done.stderr
+    for maps in (
+        [first_map],
+        [first_map, first_map],
+        [first_map, other_map, other_map],
+    ):
+        refused = COMPARE.compare(
+            [pair.cases],
+            pair.reference,
+            [source, second],
+            database=DATABASE,
+            private_name_map=maps,
+        )
+        assert refused.failures
+    assert all(path.read_bytes() == data for path, data in originals.items())
