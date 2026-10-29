@@ -29,6 +29,35 @@ def arrays(bits, precision, scale):
     return dtype, [base.slice(1, 3), base.slice(0, 1), base.slice(0, 0)]
 
 
+def test_capsule_reader_retains_sliced_decimal_buffers_after_producer_release():
+    dtype, chunks = arrays(128, 1, 0)
+    table = pa.table({'value': pa.chunked_array(chunks, type=dtype)})
+    value_address = chunks[0].buffers()[1].address
+    bitmap_address = chunks[0].buffers()[0].address
+    capsule = table.__arrow_c_stream__()
+    reader = pa.RecordBatchReader._import_from_c_capsule(capsule)
+    del table, chunks, capsule
+    gc.collect()
+    batch = reader.read_next_batch()
+    column = batch.column(0)
+    assert column.type == dtype
+    assert len(column) == 3 and column.offset == 1
+    assert column.null_count == 1
+    assert column.buffers()[1].address == value_address
+    assert column.buffers()[0].address == bitmap_address
+    del batch, reader
+    gc.collect()
+    assert column.is_valid().to_pylist() == [True, False, True]
+    assert [
+        str(value) if value is not None else None
+        for value in column.to_pylist()
+    ] == [
+        '1',
+        None,
+        '2',
+    ]
+
+
 @pytest.mark.parametrize(
     'bits',
     [bits for bits in (32, 64, 128, 256) if hasattr(pa, f'decimal{bits}')],
