@@ -125,6 +125,32 @@ fn text(points: &[u32]) -> Result<UnicodeText, CoreError> {
         .map_err(|_| protocol("native response text has an invalid Unicode point"))
 }
 
+/// Permanent gathered grammar beside an actually completed native cast.
+/// A selected source text is still owned by the host; None retains its
+/// completed native value. Direct-native conversion does not use this rule.
+pub fn gathered_entity_text(
+    source: &NativeValue,
+    observed: &NativeValue,
+    dtype: &UnicodeText,
+) -> Result<Option<UnicodeText>, CoreError> {
+    let original = logical(source)?;
+    let _ = logical(observed)?;
+    let Some(dtype) = dtype.utf8() else {
+        return Ok(None);
+    };
+    if !matches!(source, NativeValue::Unicode { .. })
+        || !matches!(observed, NativeValue::Integer { .. } | NativeValue::Float { .. })
+        || !(dtype.starts_with("int") || dtype.starts_with("float"))
+    {
+        return Ok(None);
+    }
+    Ok(match super::entity(&original, Some(dtype)) {
+        Entity::Text(value) => Some(value.into()),
+        Entity::Written(Value::Text(value)) => Some(value),
+        _ => None,
+    })
+}
+
 pub fn logical(value: &NativeValue) -> Result<Value, CoreError> {
     Ok(match value {
         NativeValue::Null => Value::Null,

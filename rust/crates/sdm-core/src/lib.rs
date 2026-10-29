@@ -76,6 +76,7 @@ pub use sdm_schema::frames::object_infer::{
 };
 /// Owned logical payload data, before JSON escaping or native presentation.
 pub use sdm_wire::json::Value as LogicalValue;
+pub use sdm_request::predict::relational_response::gathered_entity_text;
 
 /// Finite native sample facts complete one useful physical column meaning.
 pub use sdm_schema::frames::native_column::{

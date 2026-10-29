@@ -15,6 +15,7 @@ pub mod codec;
 mod extensions;
 pub mod frame_constructors;
 mod frames;
+mod gathered_entities;
 pub mod local_zone;
 pub mod runs;
 pub mod zones;
@@ -22,6 +23,8 @@ pub mod zones;
 pub use admission::{OFFSET_CAPACITY, admit, admit_from, admit_with_capacity, admitted_type};
 pub use codec::{CONTROL_CAP, Outgoing, decode, encode, read, write, write_error};
 pub use frames::detach as detach_frame;
+pub use gathered_entities::gathered_entity_bytes;
+pub use sdm_core::gathered_entity_text;
 pub use local_zone::{LOCALTIME, ZoneFiles, local_zone};
 pub use runs::{Failure, HostRun, Unreadable, Unreadables, contain, is_posix_zone};
 /// The types a binding hands across, so a binding depends on `sdm-host`

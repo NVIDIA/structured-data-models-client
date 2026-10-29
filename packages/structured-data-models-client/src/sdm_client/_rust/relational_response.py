@@ -90,6 +90,29 @@ def _encoded_native(value: Any) -> dict[str, Any]:
     )
 
 
+def _gathered_entity(source: Any, dtype: Any) -> Any:
+    """Keep actual cast effects before Core's permanent gathered grammar."""
+    observed = as_declared(source, dtype)
+    if (
+        type(source) is not str
+        or type(dtype) is not str
+        or type(observed) not in (int, float)
+    ):
+        return observed
+    from sdm_client import _native
+
+    selected = _native.gathered_entity_text(
+        codec.attachment(_encoded_native(source)),
+        codec.attachment(_encoded_native(observed)),
+        _points(dtype),
+    )
+    if selected is None:
+        return observed
+    if selected != _points(source):
+        raise codec.CodecError('gathered fallback names another source value')
+    return source
+
+
 def _encoded_native_tree(value: Any) -> dict[str, Any]:
     """Encode complete builtin containers as local postorder value data."""
     pending = [('value', value)]
@@ -306,7 +329,7 @@ def present(finished: Finished, envelope: dict[str, Any]) -> CompletedResponse:
         # The dtype expression is deliberately inside this comprehension.
         # Each actual cast can mutate the schema seen by the following row.
         entities = [
-            as_declared(
+            _gathered_entity(
                 row[columns.index(reference)], _key_dtype(envelope, reference)
             )
             for row in source
