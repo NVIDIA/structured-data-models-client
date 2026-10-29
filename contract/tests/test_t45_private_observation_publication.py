@@ -837,6 +837,115 @@ def test_serving_unicode_escapes_are_projected_only_in_decoded_publication():
     )
 
 
+def precise_serving(token='1.0000000000000001', *, old=False):
+    raw = prediction(serving=True)
+    call = raw['core']['predictions'][0]['calls'][0]
+    private = NAMES['catalog']
+    logical = (
+        '{"model":"kumo-relational","metadata":{"request_id":'
+        + json.dumps(call['request_id'])
+        + ',"source_catalog":'
+        + json.dumps(private)
+        + '},"precise":'
+        + token
+        + ',"integer":1,"float":1.0,"zero":-0.0,'
+        '"duplicate":1,"duplicate":2,"object":{"number":"1"},'
+        '"text":"1.0000000000000001"}'
+    )
+    escaped = ''.join(f'\\u{ord(character):04x}' for character in private)
+    posted = json.dumps(
+        {
+            'dataframe_records': [
+                {'request_json': logical.replace(private, escaped)}
+            ]
+        }
+    ).encode()
+    receipt = RUNNER._payload(posted)
+    encoded = logical.encode()
+    call.update(
+        input_body_base64=base64.b64encode(encoded).decode('ascii'),
+        input_body_sha256=hashlib.sha256(encoded).hexdigest(),
+        body=copy.deepcopy(receipt['parsed']),
+        body_sha256=receipt['sha256'],
+    )
+    raw['core']['predicted']['body'] = copy.deepcopy(call['body'])
+    raw['public']['payloads'] = [
+        {
+            'method': 'POST',
+            'path': '/serving-endpoints/fixture/invocations',
+            **receipt,
+        }
+    ]
+    if old:
+        raw['core'] = None
+        raw['identity'].update(
+            runner='python-old', native=None, native_loaded=False, operations=[]
+        )
+    return raw, logical.replace(private, '{catalog}')
+
+
+def ordered_numbers(text):
+    return json.loads(
+        text,
+        parse_int=lambda token: ('integer', token),
+        parse_float=lambda token: ('float', token),
+        object_pairs_hook=lambda pairs: ('members', pairs),
+    )
+
+
+@pytest.mark.parametrize(
+    'old', [False, True], ids=['gathered', 'old-without-core']
+)
+def test_escaped_serving_name_projection_preserves_all_number_tokens_and_members(
+    old,
+):
+    raw, expected = precise_serving(old=old)
+    original = copy.deepcopy(raw)
+    prepared = prepare(raw)
+    shown = prepared['public']['payloads'][0]['parsed']['dataframe_records'][0][
+        'request_json'
+    ]
+    assert ordered_numbers(shown) == ordered_numbers(expected)
+    derivative = publication().public_derivative(
+        prepared, source_sha256='d' * 64, line=1
+    )
+    published = derivative['observation']['public']['payloads'][0]['parsed'][
+        'dataframe_records'
+    ][0]['request_json']
+    assert ordered_numbers(published) == ordered_numbers(expected)
+    assert prepared.raw == raw == original
+    if not old:
+        reader().check_receipts(
+            prepared.raw_view['attempts'], raw['public']['payloads']
+        )
+
+
+@pytest.mark.parametrize(
+    'old', [False, True], ids=['gathered', 'old-without-core']
+)
+@pytest.mark.parametrize(
+    'token', ['1.0000000000000002', '1', '1.0', '-0.0', '0.0']
+)
+def test_names_only_projection_cannot_hide_a_non_name_serving_number_difference(
+    old, token
+):
+    first, _ = precise_serving(old=old)
+    other, _ = precise_serving(token, old=old)
+    before = (copy.deepcopy(first), copy.deepcopy(other))
+    left, right = prepare(first), prepare(other)
+    report = COMPARE.Report()
+    COMPARE._host_fields(
+        report,
+        {'id': first['case']},
+        'python-core',
+        left,
+        right,
+        against='python-old',
+    )
+    assert [rule for rule, _ in report.failures] == ['payload']
+    assert (first, other) == before
+
+
 def test_each_private_input_file_uses_its_own_hash_bound_map(tmp_path):
     pair = T32.Pair(tmp_path, DATABASE)
     core = pair.answered(None)
