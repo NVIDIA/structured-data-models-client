@@ -86,7 +86,12 @@ def test_explains_large_context():
     assert plans[0]['output']['fields'] == ['prediction', 'explanation']
 
 
-def test_an_explanation_within_both_limits_is_allowed():
+def test_an_explanation_over_a_small_context_is_sent():
+    """An explanation over a 500-row context is sent in one call.
+
+    Assumptions:
+    - The payload scores one entity.
+    """
     request = _Gathered(payload(predict_rows=1, context_rows=500))
     plans = list(
         RelationalAdapter().prediction_plan(
@@ -97,8 +102,13 @@ def test_an_explanation_within_both_limits_is_allowed():
     assert plans[0]['output']['fields'] == ['prediction', 'explanation']
 
 
-def test_a_prediction_without_an_explanation_is_not_held_to_those_limits():
-    """Both caps are explanation-only; an ordinary batch is unaffected."""
+def test_a_prediction_of_many_rows_over_a_large_context_is_one_call():
+    """An ordinary batch of 500 rows over a 5,000-row context is sent as it
+    was gathered, in one call.
+
+    Assumptions:
+    - The request was gathered as one payload, within every per-call cap.
+    """
     request = _Gathered(payload(predict_rows=500, context_rows=5_000))
     plans = list(RelationalAdapter().prediction_plan(request, ('prediction',)))
     assert len(plans) == 1
