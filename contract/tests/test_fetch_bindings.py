@@ -76,3 +76,52 @@ def test_legacy_exact_ids_still_match_and_different_ids_still_fail():
     right = authored_fetch(3,4)
     del right['bindings']
     assert not bindings.agree([left],[right])
+
+
+def test_real_public_journey_records_only_actual_native_bound_owners(monkeypatch):
+    from sdm_client import _native
+    from test_t136_forecast_capture import _ask
+
+    observed = _ask(monkeypatch, (), capture=True)
+    assert observed['error'] is None
+    capture = observed['capture']
+    fetches = capture.core()['fetches']
+    assert fetches and bindings.agree(fetches, copy.deepcopy(fetches))
+    if not _native.TEST_OPS:
+        assert all(not fetch['bindings']['available'] for fetch in fetches)
+        return
+    owned = [fetch for fetch in fetches if fetch['bindings']['owners']]
+    assert owned, 'the real materialization must bind actual source seeds'
+    assert any(fetch['bindings']['witness'] is not None for fetch in owned)
+    for fetch in owned:
+        facts = fetch['bindings']
+        assert facts['available']
+        run = capture._runs[facts['run']]
+        for owner in facts['owners']:
+            assert type(run.bound_seed_owners[owner['attachment']]) is _native.ArrowStream
+            assert owner['values']['unencodable'] == []
+            assert owner['values']['columns'] == [field['name'] for field in owner['fields']]
+    corrupted = copy.deepcopy(fetches)
+    one = next(fetch for fetch in corrupted if fetch['bindings']['owners'])
+    one['bindings']['owners'][0]['values']['ordered'] = '0' * 64
+    assert not bindings.agree(fetches, corrupted)
+
+
+@pytest.mark.parametrize('changed', ['duplicate-fetch', 'missing-field-metadata', 'unknown-field'])
+def test_binding_identity_and_closed_schema_are_independent(changed):
+    left = authored_fetch(3, 41)
+    right = copy.deepcopy(left)
+    if changed == 'duplicate-fetch':
+        with pytest.raises(bindings.BindingError):
+            bindings.agree([left, left], [right, right])
+        return
+    field = right['bindings']['owners'][0]['fields'][0]
+    if changed == 'missing-field-metadata':
+        field['metadata'] = {'required': 'actual-field-metadata'}
+    else:
+        field['unobserved'] = True
+    try:
+        same = bindings.agree([left], [right])
+    except bindings.BindingError:
+        same = False
+    assert not same
