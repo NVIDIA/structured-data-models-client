@@ -72,7 +72,7 @@ def test_base_regression_s_schema_on_the_core_is_the_reference_s(
     old = _run('python-old', tmp_path / 'python-old.jsonl')
     # From T1.11c the call's materialize runs on the core too
     # (test_materialize_route.py).
-    assert core['identity']['operations'] == [
+    assert checked_operations(core) == [
         'describe_source',
         'materialize',
         'predict',
@@ -217,6 +217,7 @@ def test_the_runners_hold_each_core_schema_to_its_description() -> None:
     import os
 
     import pytest
+from _actual_core import checked_operations
 
     runner = _runner()
     spec = importlib_module('refusal_map')

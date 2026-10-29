@@ -68,6 +68,7 @@ from types import ModuleType
 from typing import Any
 
 import pytest
+from _actual_core import checked_operations
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / 'contract/runners/run_python.py'
@@ -572,7 +573,7 @@ def test_python_core_answers_each_case_as_the_reference_does(
         named = set(case['core']) - (
             {'predict'} if native_limit_refusal else set()
         )
-        missing = sorted(named - set(identity['operations']))
+        missing = sorted(named - set(checked_operations(line)))
         assert not missing, f'{case_key}: core operations not run: {missing}'
         want = reference_lines()[case_key]
         expected = _outcome(want)

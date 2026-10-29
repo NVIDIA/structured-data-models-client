@@ -43,6 +43,8 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
+from _actual_core import checked_operations
+
 ROOT = Path(__file__).resolve().parents[2]
 RUNNERS = ROOT / 'contract/runners'
 RUN_PYTHON = RUNNERS / 'run_python.py'
@@ -301,7 +303,7 @@ def test_a_forced_float64_key_conversion_on_the_product_path_fails(
     old = _in_another_cell(tmp_path / 'python-old.jsonl')
     # The control: the unforced core route is the old route's.
     [core] = _run('python-core', tmp_path / 'python-core.jsonl', cases)
-    assert core['identity']['operations'] == [
+    assert checked_operations(core) == [
         'describe_source',
         'materialize',
         'predict',

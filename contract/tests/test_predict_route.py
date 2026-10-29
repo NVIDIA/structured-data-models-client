@@ -52,6 +52,8 @@ from typing import Any
 
 from test_t44_legacy_pin_inputs import assert_corrected_inputs
 
+from _actual_core import checked_operations
+
 ROOT = Path(__file__).resolve().parents[2]
 RUNNERS = ROOT / 'contract/runners'
 CASE = ROOT / 'contract/cases/s1/base.regression.json'
@@ -138,7 +140,7 @@ def test_base_regression_completes_a_model_request_and_its_result_on_the_core(
 ) -> None:
     reference = _reference()
     core = _core(tmp_path)
-    assert core['identity']['operations'] == [
+    assert checked_operations(core) == [
         'describe_source',
         'materialize',
         'predict',

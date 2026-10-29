@@ -53,6 +53,7 @@ from typing import Any
 import duckdb
 import pyarrow as pa
 import pytest
+from _actual_core import checked_operations
 from test_t44_legacy_pin_inputs import assert_corrected_inputs
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -138,7 +139,7 @@ def test_base_regression_reaches_the_reference_s_payload_on_the_core(
 ) -> None:
     reference = _reference()
     core = _core(tmp_path)
-    assert core['identity']['operations'] == [
+    assert checked_operations(core) == [
         'describe_source',
         'materialize',
         'predict',

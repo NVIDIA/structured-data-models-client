@@ -67,6 +67,7 @@ from types import ModuleType
 from typing import Any
 
 import pytest
+from _actual_core import checked_operations
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -446,7 +447,7 @@ def test_python_core_starts_the_case_s_core_operations(
     # boundary, include each the case says its call starts (the edits'
     # edit_schema besides).
     def check() -> None:
-        operations = set(runs['python-core'][case]['identity']['operations'])
+        operations = set(checked_operations(runs['python-core'][case]))
         missing = sorted(set(case_file(case)['core']) - operations)
         assert missing == [], f'not started on the core: {missing}'
 

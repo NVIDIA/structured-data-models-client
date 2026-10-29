@@ -62,6 +62,7 @@ from types import ModuleType
 from typing import Any
 
 import pytest
+from _actual_core import checked_operations
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / 'contract/runners/run_python.py'
@@ -600,7 +601,7 @@ def test_python_core_asks_the_repeats_case_as_the_reference(
         line = run.get(case_key)
         assert line is not None, f'{case_key}: not observed'
         assert line['identity']['native_loaded']
-        assert 'materialize' in line['identity']['operations']
+        assert 'materialize' in checked_operations(line)
         want = reference_lines()[case_key]
         assert line['outcome'] == want['outcome']
         assert _payloads(line) == _payloads(want)

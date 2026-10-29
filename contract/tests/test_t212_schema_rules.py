@@ -91,6 +91,7 @@ from types import ModuleType
 from typing import Any
 
 import pytest
+from _actual_core import checked_operations
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -773,7 +774,7 @@ def test_python_core_answers_each_case_as_the_reference_does(
         assert identity['native_loaded'] and line['core'] is not None
         want = reference_lines()[case_key]
         missing = sorted(
-            held_operations(case, want) - set(identity['operations'])
+            held_operations(case, want) - set(checked_operations(line))
         )
         assert not missing, f'{case_key}: core operations not run: {missing}'
         if _outcome(line) != _outcome(want):

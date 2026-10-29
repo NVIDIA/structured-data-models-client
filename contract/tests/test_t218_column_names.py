@@ -77,6 +77,7 @@ from types import ModuleType
 from typing import Any
 
 import pytest
+from _actual_core import checked_operations
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -522,7 +523,7 @@ def test_each_case_answers_through_predict_and_its_difference_is_registered(
                 continue
             identity = line['identity']
             if not identity['native_loaded'] or not set(case['core']) <= set(
-                identity['operations']
+                checked_operations(line)
             ):
                 problems.append(f'{key}: not on the core route')
             if outcome != reference[key]['outcome'] and not registered_key(key):

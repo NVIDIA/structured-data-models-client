@@ -49,6 +49,7 @@ from types import ModuleType
 from typing import Any
 
 import pytest
+from _actual_core import checked_operations
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / 'contract/runners/run_python.py'
@@ -241,7 +242,7 @@ def test_python_core_draws_an_unseeded_sample_with_the_reference_s_properties(
         line = run.get(case_key)
         assert line is not None, f'{case_key}: not observed'
         assert line['identity']['native_loaded'] and line['core'] is not None
-        assert 'materialize' in line['identity']['operations']
+        assert 'materialize' in checked_operations(line)
         found = problems(
             case_key.split('@')[0], line, vectors()['keys'][case_key]
         )

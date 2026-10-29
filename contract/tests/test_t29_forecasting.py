@@ -78,6 +78,7 @@ from types import ModuleType
 from typing import Any
 
 import pytest
+from _actual_core import checked_operations
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / 'contract/runners/run_python.py'
@@ -507,7 +508,7 @@ def as_the_reference(
         identity = mine['identity']
         if not identity['native_loaded'] or not set(
             cases[case_id]['core']
-        ) <= set(identity['operations']):
+        ) <= set(checked_operations(mine)):
             problems.append(f'{key}: not on the core route')
         if requests(mine) != requests(theirs):
             problems.append(
@@ -781,9 +782,7 @@ def test_lagged_average_on_its_own_rows(database: str) -> None:
         theirs = reference_lines()[key]
         assert _outcome(mine) == _outcome(theirs), _outcome(mine)
         assert mine['identity']['native_loaded']
-        assert {'describe_source', 'materialize', 'predict'} <= set(
-            mine['identity']['operations']
-        )
+        assert {'describe_source', 'materialize', 'predict'} <= set(checked_operations(mine))
         problems = on_their_own_rows(requests(theirs), requests(mine))
         assert not problems, '\n'.join(problems)
 
@@ -848,9 +847,7 @@ def test_lag_dtype_per_call_as_the_reference(database: str) -> None:
         theirs = reference_lines()[key]
         assert _outcome(mine) == _outcome(theirs), _outcome(mine)
         assert mine['identity']['native_loaded']
-        assert {'describe_source', 'materialize', 'predict'} <= set(
-            mine['identity']['operations']
-        )
+        assert {'describe_source', 'materialize', 'predict'} <= set(checked_operations(mine))
         assert lag_dtypes(requests(mine)) == lag_dtypes(requests(theirs))
 
     held(f'test_lag_dtype_per_call_as_the_reference[{database}]', check)

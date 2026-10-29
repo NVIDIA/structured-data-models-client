@@ -50,6 +50,8 @@ from typing import Any
 
 import yaml
 
+from _actual_core import checked_operations
+
 ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / 'contract/runners/run_python.py'
 PENDING = Path(__file__).with_name('t22-pending.json')
@@ -266,7 +268,7 @@ def test_python_core_runs_every_s1_case_on_sqlite_as_the_reference_does() -> (
             ):
                 stop = calls[0]
             held_ops = COMPARE.core_held(case, line, stop)['core']
-            missing = sorted(set(held_ops) - set(identity['operations']))
+            missing = sorted(set(held_ops) - set(checked_operations(line)))
             if (
                 not identity['native_loaded']
                 or missing

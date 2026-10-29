@@ -49,6 +49,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from _actual_core import checked_operations
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / 'contract/runners/run_python.py'
@@ -159,7 +160,7 @@ def test_each_edit_case_ends_as_the_reference_ends_it(
         assert mine['outcome']['code'] == expect.get('code'), case['id']
         # Each edit the case makes is the core's, up to a refused one.
         # identity.operations: every core run started, in order.
-        ops = mine['identity']['operations']
+        ops = checked_operations(mine)
         made = ops.count('edit_schema')
         if expect['outcome'] == 'refusal':
             assert made == len(case['input']['edits']), case['id']
