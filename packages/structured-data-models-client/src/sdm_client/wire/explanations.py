@@ -37,8 +37,11 @@ def explanations_of(
 
     ``items`` have their ``id`` restored already, so the key is the one the
     frame shows: the ``id``, or the ``row_index`` when the rows carry none.
-    ``related`` is given for a model that reads related tables; without it an
-    entry has no ``related`` at all, rather than an empty one.
+    ``related`` is given for a model that reads related tables. Then an entry
+    has ``related`` and no ``instance``: that model's ``instance_table`` is the
+    question row its engine sends, not the caller's, and the entity's own table
+    is among the related ones. Without it an entry has ``instance`` and no
+    ``related`` at all, rather than an empty one.
     """
     explained = [item for item in items if item.explanation]
     if not explained:
@@ -49,18 +52,17 @@ def explanations_of(
     for item in explained:
         key = item.id if by_id else item.row_index
         details = item.explanation.get('details') or {}
-        instance = details.get('instance_table') or {}
-        entry: dict[str, Any] = {
-            'outputs': list(details.get('outputs') or []),
-            'instance': {
+        entry: dict[str, Any] = {'outputs': list(details.get('outputs') or [])}
+        if related is None:
+            instance = details.get('instance_table') or {}
+            entry['instance'] = {
                 'columns': list(instance.get('columns') or []),
                 # One row, the record's own, so the row axis says nothing.
                 'gradients': [
                     by_row[0] for by_row in instance.get('gradients') or []
                 ],
-            },
-        }
-        if related is not None:
+            }
+        else:
             entry['related'], hops[key] = related(
                 details.get('related_tables') or {}
             )
@@ -70,4 +72,3 @@ def explanations_of(
         keyed_by=('id',) if by_id else ('row_index',),
         hops=hops,
     )
-
