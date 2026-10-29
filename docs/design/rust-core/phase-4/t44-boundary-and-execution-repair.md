@@ -739,3 +739,11 @@ Intercept the existing source-backed gather delegation with its actual operation
 Complete the direct-response error fixture with the existing typed model and diagnostic fields while preserving every code/kind/class/refusal/count and private-message assertion.
 Keep the actual malformed-response canary inputs and all privacy sinks meaningful, and reconcile deliberately displayed endpoint operands separately through exact native diagnostic parity rather than broadening privacy policy or changing product presentation.
 These are test-consumer corrections; hold the successor unexecuted until grouped actual feedback and fresh whole approvals are complete.
+
+
+### Preserve complete parametrized wheel-test identities
+
+Both actual R54 ARM smoke jobs pass all 59 production tests before the collection reader falsely removes the filename and test name from temporal parameters containing America/Los_Angeles.
+Normalize only the file component before the first pytest node separator, retaining the full test and parameter suffix for exact expected-inventory comparison.
+Add complete temporal-inventory positive, replaced-ID and missing-ID controls while preserving the existing counts, deselection, origin, file-registration and negative-library checks.
+The three missing L4 artifacts are an upstream test-ops failure cascade, so retain their required downloads and golden checks without changing expected SQL or accepting stale evidence.
