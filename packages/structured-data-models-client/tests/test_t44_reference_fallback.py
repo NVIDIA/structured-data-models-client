@@ -304,7 +304,9 @@ def test_native_label_ranges_stop_at_actual_context_completeness(
         assert len(committed_ranges) == len(label_resources) - len(
             failed_candidates
         )
-        for previous, current in zip(committed_ranges, committed_ranges[1:]):
+        for previous, current in zip(
+            committed_ranges, committed_ranges[1:], strict=False
+        ):
             assert previous['stop'] == current['start']
         if expected['outcome']['kind'] == 'error':
             assert final_batches == []
