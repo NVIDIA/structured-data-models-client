@@ -127,7 +127,7 @@ fn ordinary_typed_scalar_storage_keeps_its_actual_source_array() {
     for physical in [
         ColumnType::Int8,
         ColumnType::Int64,
-        ColumnType::UInt64,
+        ColumnType::Uint64,
         ColumnType::Float32,
         ColumnType::Float64,
         ColumnType::Utf8,
