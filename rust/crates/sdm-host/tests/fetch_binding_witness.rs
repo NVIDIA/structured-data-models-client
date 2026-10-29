@@ -60,6 +60,15 @@ fn only_an_independently_rendered_plan_can_change_local_seed_names() {
     let actual = BTreeMap::from([(AttachmentId(41), schema.clone())]);
     let captured = sdm_host::fetch_binding_schemas(&plan, &actual).unwrap();
     assert_eq!(captured[0]["metadata"]["actual"], "owner schema");
+    let request_bytes = serde_json::to_vec(&request).unwrap();
+    let plan_bytes = serde_json::to_vec(&plan).unwrap();
+    let encoded = sdm_host::fetch_binding_bytes(&request_bytes, &plan_bytes, &actual).unwrap();
+    let decoded: serde_json::Value = serde_json::from_slice(&encoded).unwrap();
+    assert_eq!(decoded["owners"], captured);
+    assert_eq!(decoded["witness"], witness);
+    assert!(sdm_host::fetch_binding_bytes(b"not a request", &plan_bytes, &actual).is_err());
+    assert!(sdm_host::fetch_binding_bytes(&request_bytes, b"not a plan", &actual).is_err());
+    assert!(sdm_host::fetch_binding_bytes(&request_bytes, &plan_bytes, &BTreeMap::new()).is_err());
     assert!(sdm_host::fetch_binding_schemas(&plan, &BTreeMap::new()).is_err());
     assert!(
         sdm_host::fetch_binding_schemas(&plan, &BTreeMap::from([(AttachmentId(42), schema)]))
