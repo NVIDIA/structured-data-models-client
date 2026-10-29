@@ -190,7 +190,7 @@ fn finish_response_task(
     value: AttachmentId,
     native_member: Option<(&str, bool)>,
     decimal_limit: u32,
-    native_task: Option<&str>,
+    native_task: Option<Value>,
 ) -> Result<HostRun, sdm_contract::CoreError> {
     let mut data: Value = serde_json::from_slice(&response_bytes(run, value)).unwrap();
     let mut buffers = Attachments::new();
@@ -267,7 +267,7 @@ fn finish_response_task(
     buffers.insert(AttachmentId(5), bytes(json!(accepted)));
     buffers.insert(
         AttachmentId(1),
-        bytes(json!({"stage":"layout_response","data":data,"attributed":5,"decimal_limit":decimal_limit,"native_task":native_task.map(|text|text.chars().map(u32::from).collect::<Vec<_>>())})),
+        bytes(json!({"stage":"layout_response","data":data,"attributed":5,"decimal_limit":decimal_limit,"native_task":native_task})),
     );
     let layout = start(json!({"op":"prepare_request","input":1}), buffers);
     Ok(layout)
@@ -1787,6 +1787,19 @@ fn classified_result_with_native_task(
     decimal_limit: u32,
     native_task: Option<&str>,
 ) -> ArrowData {
+    classified_result_with_task_fact(
+        target, label, probabilities, decimal_limit,
+        native_task.map(|text| json!({"representation":"builtin", "value":text.chars().map(u32::from).collect::<Vec<_>>()})),
+    )
+}
+
+fn classified_result_with_task_fact(
+    target: ArrayRef,
+    label: Value,
+    probabilities: serde_json::Map<String, Value>,
+    decimal_limit: u32,
+    native_task: Option<Value>,
+) -> ArrowData {
     let feature = Arc::new(arrow_array::Int64Array::from(vec![1, 2, 3])) as ArrayRef;
     let context = [RecordBatch::try_from_iter([("0", feature), ("1", target)]).unwrap()];
     let scoring = [RecordBatch::try_from_iter([(
@@ -2608,4 +2621,74 @@ fn complete_response_rows_refuses_missing_repeated_and_reordered_facts_before_di
         .sentence,
         sdm_contract::Sentence::TabularRowsUnanswered
     );
+    let mut duplicate = ready.clone();
+    duplicate[1]["row"]["row_index"] = json!("0");
+    let mut one_scored = scope;
+    one_scored["scoring_rows"] = json!(1);
+    assert_eq!(
+        prepare(
+            json!({"stage":"complete_response_rows","scope":one_scored,"rows":duplicate}),
+            Attachments::new(),
+        )
+        .unwrap_err()
+        .sentence,
+        sdm_contract::Sentence::InvalidMessage
+    );
+}
+
+#[test]
+fn native_response_containment_fact_selects_restoration_and_is_closed() {
+    use arrow_array::cast::AsArray;
+    use arrow_array::types::Int64Type;
+    for classification in [false, true] {
+        let fact = json!({"representation":"native", "value":"classification".chars().map(u32::from).collect::<Vec<_>>(), "classification":classification});
+        let result = classified_result_with_task_fact(
+            Arc::new(arrow_array::Int64Array::from(vec![0, 1, 0])) as ArrayRef,
+            json!("3"),
+            serde_json::Map::new(),
+            4300,
+            Some(fact),
+        );
+        let prediction = result.batches[0].column_by_name("prediction").unwrap();
+        if classification {
+            assert_eq!(prediction.as_primitive::<Int64Type>().value(0), 3);
+        } else {
+            assert_eq!(prediction.as_string::<i32>().value(0), "3");
+        }
+    }
+    for malformed in [
+        json!({"representation":"native","value":[],"classification":null}),
+        json!({"representation":"native","value":[]}),
+        json!({"representation":"builtin","value":[],"classification":false}),
+    ] {
+        assert!(
+            serde_json::from_value::<sdm_contract::prepare::DirectTaskMeaning>(malformed).is_err()
+        );
+    }
+}
+
+#[test]
+fn empty_native_nontext_task_needs_no_wire_task_storage_or_model_call() {
+    let schema = prepare(json!({"stage":"schema","headers":headers(),"context":2,"predict":3,"entity_table":"instance"}), halves()).unwrap();
+    let mut bound = bound_as(3, "classification");
+    bound["kind"] = json!({"non_text":null});
+    bound["admitted"] = json!(true);
+    let operation = json!({"op":"predict","direct":1,"model":"kumo-tabular","request_id":"unused","outputs":bound["outputs"],"default_outputs":true});
+    let input = json!({"stage":"empty","bound":bound,"schema":schema["schema"],"entity_table":"instance","predict_header":header(&["feature"],0)});
+    let run = start(
+        operation,
+        Attachments::from([(AttachmentId(1), bytes(input))]),
+    );
+    let ControlMessage::Step(Step::Done {
+        result: OperationResult::Predict(answer),
+        ..
+    }) = next(&run)
+    else {
+        panic!("empty scoring must finish without a model or native task read")
+    };
+    assert!(answer.request_id.is_empty());
+    let Attachment::Arrow(rows) = run.take_attachment(answer.result).unwrap().unwrap() else {
+        panic!("empty result")
+    };
+    assert!(rows.batches.iter().all(|batch| batch.num_rows() == 0));
 }

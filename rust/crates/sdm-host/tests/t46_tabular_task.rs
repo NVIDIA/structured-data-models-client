@@ -332,3 +332,34 @@ fn text_target_has_no_task_fact_and_incoherent_widths_are_not_accepted() {
     data.names = vec!["answer".into(), "absent".into()];
     assert!(sdm_host::tabular_envelope::columns(&serde_json::to_vec(&data).unwrap()).is_err());
 }
+
+#[test]
+fn native_target_identity_can_change_between_ordered_column_meanings() {
+    use sdm_contract::ops::Stype;
+    let bytes = serde_json::to_vec(&envelope_widths()).unwrap();
+    let mut columns = sdm_host::tabular_envelope::columns(&bytes).unwrap();
+    for name in ["answer", "later"] {
+        let declared = columns.declaration(name.into(), Stype::Numerical).unwrap();
+        assert!(declared.meaning(None, Some(true)).is_err());
+        assert!(declared.meaning(Some(true), Some(true)).is_err());
+        let meaning = declared.meaning(Some(false), Some(true)).unwrap();
+        columns.complete(&meaning, None).unwrap();
+    }
+    let envelope = columns.finish().unwrap().0;
+    assert_eq!(envelope.columns.target, "answer");
+    assert!(
+        envelope
+            .columns
+            .columns
+            .iter()
+            .all(|column| column.stype == Stype::Categorical)
+    );
+
+    let text = sdm_host::tabular_envelope::columns(&bytes)
+        .unwrap()
+        .declaration("answer".into(), Stype::Text)
+        .unwrap();
+    assert!(text.meaning(Some(false), None).is_err());
+    assert!(text.meaning(None, Some(true)).is_err());
+    assert!(text.meaning(None, None).is_ok());
+}

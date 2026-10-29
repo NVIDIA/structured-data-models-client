@@ -757,6 +757,8 @@ def test_native_stated_object_keeps_constructor_and_per_call_protocol(
 
 
 def _envelope_task_journey(monkeypatch, *, core, effect):
+    from dataclasses import replace
+
     from sdm_client import Request
     from sdm_client.request import Task
 
@@ -790,6 +792,14 @@ def _envelope_task_journey(monkeypatch, *, core, effect):
                 later.stype = 'text'
             elif effect == 'failure':
                 raise LookupError('actual task meaning read')
+            elif effect in ('target-replacement', 'target-failure'):
+                if events.count('actual classification') == 1:
+                    request.task = replace(
+                        task,
+                        target=replace(task.target, column_name='later'),
+                    )
+                elif effect == 'target-failure':
+                    raise LookupError('actual later target meaning read')
             return native_classification(task)
 
         patch.setattr(Task, 'is_classification', property(classification))
@@ -816,7 +826,17 @@ def _envelope_task_journey(monkeypatch, *, core, effect):
         )
 
 
-@pytest.mark.parametrize('effect', ['ordinary', 'text', 'later', 'failure'])
+@pytest.mark.parametrize(
+    'effect',
+    [
+        'ordinary',
+        'text',
+        'later',
+        'failure',
+        'target-replacement',
+        'target-failure',
+    ],
+)
 def test_task_column_meaning_uses_reached_native_property_and_later_metadata(
     monkeypatch, effect
 ):
@@ -835,6 +855,20 @@ def test_task_column_meaning_uses_reached_native_property_and_later_metadata(
         assert current[1] == []
         assert type(current[4]) is LookupError
         assert str(current[4]) == 'actual task meaning read'
+    elif effect in ('target-replacement', 'target-failure'):
+        assert current[2] == ['actual classification', 'actual classification']
+        if effect == 'target-failure':
+            assert current[1] == []
+            assert type(current[4]) is LookupError
+            assert str(current[4]) == 'actual later target meaning read'
+        else:
+            assert current[0][0] == 'ok'
+            payload = current[1][0]
+            assert payload['task']['target']['column_name'] == 'answer'
+            assert (
+                payload['schema']['instance_table']['columns']['later']['stype']
+                == 'categorical'
+            )
     else:
         assert current[2] == ['actual classification']
         assert current[0][0] == 'ok'
@@ -959,7 +993,15 @@ def test_fresh_call_task_observations_preserve_truth_and_selected_refusal(
 
 @pytest.mark.parametrize(
     'effect',
-    ['changed-display', 'second-call-failure', 'invalid-response', 'empty'],
+    [
+        'changed-display',
+        'second-call-failure',
+        'invalid-response',
+        'empty',
+        'contains-false',
+        'contains-failure',
+        'contains-truth-failure',
+    ],
 )
 def test_response_task_display_uses_captured_payload_owner_after_row_admission(
     monkeypatch, effect
@@ -979,12 +1021,28 @@ def test_response_task_display_uses_captured_payload_owner_after_row_admission(
         calls = [0]
         native_failure = LookupError('actual second task display')
 
+        class ContainmentTruth:
+            def __bool__(self):
+                events.append('containment truth')
+                raise native_failure
+
+        class Display(str):
+            def __contains__(self, word):
+                events.append(('contains', word))
+                if effect == 'contains-failure':
+                    raise native_failure
+                if effect == 'contains-truth-failure':
+                    return ContainmentTruth()
+                return False
+
         class Choice(str):
             def __str__(self):
                 calls[0] += 1
                 events.append(('task display', calls[0]))
                 if effect == 'second-call-failure' and calls[0] == 2:
                     raise native_failure
+                if effect.startswith('contains-'):
+                    return Display('classification')
                 return (
                     'regression'
                     if effect == 'changed-display'
@@ -1058,6 +1116,20 @@ def test_response_task_display_uses_captured_payload_owner_after_row_admission(
         assert current[0][0][0] == 'ok'
         assert current[0][1][-1] is True
         assert len(current[1]) == 2
+    elif effect.startswith('contains-'):
+        assert current[3] == 1
+        assert current[2][:3] == [
+            'transport',
+            ('task display', 1),
+            ('contains', 'classification'),
+        ]
+        if effect == 'contains-false':
+            frame = current[0][0][1]
+            assert frame['data'][0][frame['columns'].index('prediction')] == '3'
+        else:
+            assert current[0][0][-1] is True
+            if effect == 'contains-truth-failure':
+                assert current[2][-1] == 'containment truth'
     else:
         assert current[3] == 0
         assert current[0][0][0] == (
@@ -1065,3 +1137,112 @@ def test_response_task_display_uses_captured_payload_owner_after_row_admission(
         )
         if effect == 'empty':
             assert current[1] == []
+
+
+def test_runtime_task_membership_releases_its_replaced_owner_before_frame_reads(
+    monkeypatch,
+):
+    from dataclasses import replace
+
+    from sdm_client import Request
+
+    def observe(core):
+        events = []
+        context = pd.DataFrame({'answer': [0, 1, 0], 'feature': [2, 3, 4]})
+        scoring = pd.DataFrame({'feature': [5]})
+        scripted = Scripted()
+        hashes = [0]
+        with monkeypatch.context() as patch:
+            patch.setenv(
+                _routing.ENVIRONMENT,
+                ','.join(_routing.DIRECT_CONSUMERS) if core else '',
+            )
+            request = Request(
+                context, scoring, target='answer', task='classification'
+            )
+
+            class Choice(str):
+                def __hash__(self):
+                    hashes[0] += 1
+                    events.append(('hash', hashes[0]))
+                    if hashes[0] == 3:
+                        request.task = replace(request.task, kind='regression')
+                    return str.__hash__(self)
+
+                def __del__(self):
+                    events.append('released task')
+                    scoring.iloc[0, 0] = 91
+
+            request.task = replace(request.task, kind=Choice('classification'))
+
+            class Answer(Scripted):
+                def predict(self, payload):
+                    events.append('transport')
+                    return super().predict(payload)
+
+            scripted = Answer()
+            with warnings.catch_warnings(record=True):
+                warnings.simplefilter('always')
+                with SDMClient('http://localhost:1', max_retries=0) as client:
+                    client._transport.close()
+                    client._transport = scripted
+                    result = client.predict(request, model='kumo-tabular')
+            for body in scripted.calls:
+                body['metadata']['request_id'] = '<drawn>'
+            return result.to_pandas().to_dict('split'), scripted.calls, events
+
+    old, current = observe(False), observe(True)
+    assert current == old
+    assert current[2].index('released task') < current[2].index('transport')
+    assert current[1][0]['predict']['rows'][0] == [91]
+
+
+def test_empty_prediction_admits_a_native_nonstring_task_without_wire_storage(
+    monkeypatch,
+):
+    from sdm_client import Request
+
+    def observe(core):
+        events = []
+
+        class Choice:
+            def __hash__(self):
+                events.append('hash')
+                return hash('classification')
+
+            def __eq__(self, other):
+                events.append(('equal', other))
+                return other == 'classification'
+
+            def __str__(self):
+                raise AssertionError('empty prediction displayed task')
+
+            def __repr__(self):
+                raise AssertionError('empty prediction represented task')
+
+        owner = Choice()
+        context = pd.DataFrame({'answer': [0, 1, 0], 'feature': [2, 3, 4]})
+        scoring = pd.DataFrame({'feature': pd.Series([], dtype='int64')})
+        scripted = Scripted()
+        with monkeypatch.context() as patch:
+            patch.setenv(
+                _routing.ENVIRONMENT,
+                ','.join(_routing.DIRECT_CONSUMERS) if core else '',
+            )
+            request = Request(context, scoring, target='answer', task=owner)
+            with SDMClient('http://localhost:1', max_retries=0) as client:
+                client._transport.close()
+                client._transport = scripted
+                result = client.predict(request, model='kumo-tabular')
+            return (
+                result.to_pandas().to_dict('split'),
+                scripted.calls,
+                events,
+                request.task.kind is owner,
+            )
+
+    old, current = observe(False), observe(True)
+    assert current == old
+    assert current[0]['data'] == []
+    assert current[1] == []
+    assert current[3] is True
