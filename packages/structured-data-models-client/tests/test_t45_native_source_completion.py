@@ -26,24 +26,49 @@ from sdm_client.errors import StructuredDataError
 
 
 LOGICAL = {'source': ['logical']}
-READ = {'source': ['catalog', 'schema', 'actual'], 'found': True, 'columns': [{'name': 'value', 'column': 'value'}]}
+READ = {
+    'source': ['catalog', 'schema', 'actual'],
+    'found': True,
+    'columns': [{'name': 'value', 'column': 'value'}],
+}
 
 
 def _source(columns=('value',)):
-    return Product('source', {'tables': [{'source': LOGICAL, 'read': READ, 'columns': list(columns)}]}, {})
+    return Product(
+        'source',
+        {
+            'tables': [
+                {'source': LOGICAL, 'read': READ, 'columns': list(columns)}
+            ]
+        },
+        {},
+    )
 
 
 def _steps(parts=1, *, lookup=True, conversions=()):
     value = {
-        'owner': 91, 'read': 7, 'source': READ, 'key': 'id',
-        'range': {'start': 0, 'stop': 1}, 'context_rows': 1, 'scored_rows': 1,
+        'owner': 91,
+        'read': 7,
+        'source': READ,
+        'key': 'id',
+        'range': {'start': 0, 'stop': 1},
+        'context_rows': 1,
+        'scored_rows': 1,
     }
     return [
         {
-            'id': 7 + part, 'purpose': 'source_rows',
+            'id': 7 + part,
+            'purpose': 'source_rows',
             'partition': {'first': 7, 'ordinal': part, 'parts': parts},
-            'request': {'request': 'lookup' if lookup else 'neighbors', 'table': READ},
-            'plan': {'plan': 'sql', 'statements': [], 'result_conversions': list(conversions)},
+            'request': {
+                'request': 'lookup' if lookup else 'neighbors',
+                'table': READ,
+            },
+            'plan': {
+                'plan': 'sql',
+                'statements': [],
+                'result_conversions': list(conversions),
+            },
             **({'lookup': copy.deepcopy(value)} if lookup else {}),
         }
         for part in range(parts)
@@ -61,12 +86,23 @@ class Service:
         self.calls.append(('lookup', lookup, helpers, owner))
         if self.refusal is not None:
             raise self.refusal
-        values = self.positions if self.positions is not None else helpers['__kumo_batch__']
+        values = (
+            self.positions
+            if self.positions is not None
+            else helpers['__kumo_batch__']
+        )
         return pa.table({'position': pa.array(values, type=pa.int64())})
 
     def column(self, binding, facts):
         self.calls.append(('column', binding, facts))
-        return {'source': 'source identity', 'column': binding, 'input': facts, 'scalar': self.recipes.get(binding['column'], {'meaning': 'original'})}
+        return {
+            'source': 'source identity',
+            'column': binding,
+            'input': facts,
+            'scalar': self.recipes.get(
+                binding['column'], {'meaning': 'original'}
+            ),
+        }
 
     def fallback(self, meaning, failure):
         self.calls.append(('fallback', meaning, failure))
@@ -84,20 +120,35 @@ def _keys(steps, owner):
 def test_completed_lookup_precedes_native_nullable_conversion_and_keeps_full_width_values():
     events = []
     owner = object()
-    raw = _scalars([[2**53 + 1, 1, 0], [None, 1, 1]], ['value', '__kumo_matches__', '__kumo_batch__'])
+    raw = _scalars(
+        [[2**53 + 1, 1, 0], [None, 1, 1]],
+        ['value', '__kumo_matches__', '__kumo_batch__'],
+    )
     provider = Provider({7: raw}, events)
-    service = Service(recipes={'value': {'meaning': 'nullable', 'physical': {'type': 'int64'}}}, positions=[8, 3])
+    service = Service(
+        recipes={
+            'value': {'meaning': 'nullable', 'physical': {'type': 'int64'}}
+        },
+        positions=[0, 1],
+    )
     adapter = completion.SourceCompletion(provider, _source(), service)
     steps = _steps()
     answer = adapter(steps, _keys(steps, owner))
     assert isinstance(answer, dict)
     assert answer[7].column_names == ['value', '__kumo_batch__']
     assert answer[7]['value'].to_pylist() == [2**53 + 1, None]
-    assert answer[7]['__kumo_batch__'].to_pylist() == [8, 3]
+    assert answer[7]['__kumo_batch__'].to_pylist() == [0, 1]
     assert service.calls[0][0] == 'lookup'
     assert service.calls[0][3] is owner
-    assert service.calls[0][2].to_pydict() == {'__kumo_batch__': [0, 1], '__kumo_matches__': [1, 1]}
-    assert service.calls[1] == ('column', {'source': LOGICAL, 'column': 'value'}, {'storage': 'cell_rows'})
+    assert service.calls[0][2].to_pydict() == {
+        '__kumo_batch__': [0, 1],
+        '__kumo_matches__': [1, 1],
+    }
+    assert service.calls[1] == (
+        'column',
+        {'source': LOGICAL, 'column': 'value'},
+        {'storage': 'cell_rows'},
+    )
     assert adapter.native_error is None
     retained = adapter.tables[7]
     assert retained.source == LOGICAL
@@ -110,15 +161,27 @@ def test_completed_lookup_precedes_native_nullable_conversion_and_keeps_full_wid
 def test_core_lookup_refusal_cancels_pending_run_before_reply_or_native_conversion():
     events = []
     owner = object()
-    refusal = StructuredDataError('selected duplicate refusal', code='INVALID_REQUEST')
+    refusal = StructuredDataError(
+        'selected duplicate refusal', code='INVALID_REQUEST'
+    )
     service = Service(refusal=refusal)
-    provider = Provider({7: _scalars([[object(), 2, 1]], ['value', '__kumo_matches__', '__kumo_batch__'])}, events)
+    provider = Provider(
+        {
+            7: _scalars(
+                [[object(), 2, 1]],
+                ['value', '__kumo_matches__', '__kumo_batch__'],
+            )
+        },
+        events,
+    )
     adapter = completion.SourceCompletion(provider, _source(), service)
     requests = _steps()
 
     class Handle(_Handle):
         def next(self):
-            return json.dumps({'message': 'step', 'step': 'fetch', 'requests': requests}).encode(), {}
+            return json.dumps(
+                {'message': 'step', 'step': 'fetch', 'requests': requests}
+            ).encode(), {}
 
         def take_attachment(self, attachment):
             assert attachment == 91
@@ -126,7 +189,15 @@ def test_core_lookup_refusal_cancels_pending_run_before_reply_or_native_conversi
 
     handle = Handle(events)
     with pytest.raises(StructuredDataError) as caught:
-        run_module._steps(SimpleNamespace(CoreError=_CoreError), handle, provider, None, frozenset(), None, source_provider=adapter)
+        run_module._steps(
+            SimpleNamespace(CoreError=_CoreError),
+            handle,
+            provider,
+            None,
+            frozenset(),
+            None,
+            source_provider=adapter,
+        )
     assert caught.value is refusal
     assert adapter.native_error is None
     assert [call[0] for call in service.calls] == ['lookup']
@@ -139,7 +210,9 @@ def test_core_lookup_refusal_cancels_pending_run_before_reply_or_native_conversi
 def test_real_io_failure_uses_actual_service_diagnostic_without_native_attribution():
     events = []
     original = OSError('real I/O')
-    selected = StructuredDataError('core-selected diagnostic', code='INVALID_REQUEST')
+    selected = StructuredDataError(
+        'core-selected diagnostic', code='INVALID_REQUEST'
+    )
     provider = Provider({}, events, failed={7: original})
     service = Service(refusal=selected)
     adapter = completion.SourceCompletion(provider, _source(), service)
@@ -163,12 +236,24 @@ def test_nullable_casts_follow_original_declaration_order_and_actual_changed_str
             events.append('actual stringify')
             return 'changed value'
 
-    provider = Provider({7: _scalars([[2**53 + 1, Changed(), 0]], ['number', 'text', '__kumo_batch__'])}, events)
-    service = Service(recipes={
-        'number': {'meaning': 'nullable', 'physical': {'type': 'int64'}},
-        'text': {'meaning': 'nullable', 'physical': {'type': 'utf8'}},
-    })
-    adapter = completion.SourceCompletion(provider, _source(('text', 'absent', 'number')), service)
+    provider = Provider(
+        {
+            7: _scalars(
+                [[2**53 + 1, Changed(), 0]],
+                ['number', 'text', '__kumo_batch__'],
+            )
+        },
+        events,
+    )
+    service = Service(
+        recipes={
+            'number': {'meaning': 'nullable', 'physical': {'type': 'int64'}},
+            'text': {'meaning': 'nullable', 'physical': {'type': 'utf8'}},
+        }
+    )
+    adapter = completion.SourceCompletion(
+        provider, _source(('text', 'absent', 'number')), service
+    )
     steps = _steps(lookup=False)
     answer = adapter(steps, _keys(steps, object()))
     assert isinstance(answer, dict)
@@ -182,21 +267,53 @@ def test_nullable_casts_follow_original_declaration_order_and_actual_changed_str
 
 
 def test_arrow_decimal_recipe_changes_actual_retained_values_and_native_declaration():
-    raw = pa.table({'value': pa.array([Decimal('3'), None], type=pa.decimal128(20, 0)), '__KUMO_BATCH__': [0, 1]})
-    service = Service(recipes={'value': {'meaning': 'decimal', 'physical': {'type': 'utf8'}}})
-    adapter = completion.SourceCompletion(Provider({7: raw}, []), _source(), service)
+    raw = pa.table(
+        {
+            'value': pa.array([Decimal('3'), None], type=pa.decimal128(20, 0)),
+            '__KUMO_BATCH__': [0, 1],
+        }
+    )
+    service = Service(
+        recipes={'value': {'meaning': 'decimal', 'physical': {'type': 'utf8'}}}
+    )
+    adapter = completion.SourceCompletion(
+        Provider({7: raw}, []), _source(), service
+    )
     steps = _steps(lookup=False)
     answer = adapter(steps, _keys(steps, object()))
     assert isinstance(answer, dict)
     assert answer[7]['value'].to_pylist() == ['3', None]
     assert adapter.tables[7].frame['value'].dtype == pd.ArrowDtype(pa.string())
-    assert service.calls == [('column', {'source': LOGICAL, 'column': 'value'}, {'storage': 'typed_columns', 'declaration': {'declaration': 'decimal', 'native': {'type': 'decimal128', 'precision': 20, 'scale': 0}}})]
+    assert service.calls == [
+        (
+            'column',
+            {'source': LOGICAL, 'column': 'value'},
+            {
+                'storage': 'typed_columns',
+                'declaration': {
+                    'declaration': 'decimal',
+                    'native': {
+                        'type': 'decimal128',
+                        'precision': 20,
+                        'scale': 0,
+                    },
+                },
+            },
+        )
+    ]
 
 
 @pytest.mark.parametrize('error_type', [TypeError, ValueError, ArithmeticError])
-def test_actual_decimal_failure_is_assessed_once_and_core_fallback_retains_original(monkeypatch, error_type):
+def test_actual_decimal_failure_is_assessed_once_and_core_fallback_retains_original(
+    monkeypatch, error_type
+):
     original = error_type('actual Decimal cast')
-    raw = pa.table({'value': pa.array([Decimal('3')], type=pa.decimal128(20, 0)), '__kumo_batch__': [0]})
+    raw = pa.table(
+        {
+            'value': pa.array([Decimal('3')], type=pa.decimal128(20, 0)),
+            '__kumo_batch__': [0],
+        }
+    )
     scalar_column = completion.scalar_column
     calls = []
 
@@ -207,8 +324,12 @@ def test_actual_decimal_failure_is_assessed_once_and_core_fallback_retains_origi
         return scalar_column(values, meaning)
 
     monkeypatch.setattr(completion, 'scalar_column', cast)
-    service = Service(recipes={'value': {'meaning': 'decimal', 'physical': {'type': 'int64'}}})
-    adapter = completion.SourceCompletion(Provider({7: raw}, []), _source(), service)
+    service = Service(
+        recipes={'value': {'meaning': 'decimal', 'physical': {'type': 'int64'}}}
+    )
+    adapter = completion.SourceCompletion(
+        Provider({7: raw}, []), _source(), service
+    )
     steps = _steps(lookup=False)
     answer = adapter(steps, _keys(steps, object()))
     assert isinstance(answer, dict)
@@ -217,13 +338,21 @@ def test_actual_decimal_failure_is_assessed_once_and_core_fallback_retains_origi
     assert fallback[2].error is original
     assert calls == ['decimal', 'original']
     assert adapter.native_error is None
-    assert adapter.tables[7].frame['value'].dtype == pd.ArrowDtype(pa.decimal128(20, 0))
+    assert adapter.tables[7].frame['value'].dtype == pd.ArrowDtype(
+        pa.decimal128(20, 0)
+    )
 
 
-def test_nullable_failure_is_native_and_never_uses_decimal_fallback(monkeypatch):
+def test_nullable_failure_is_native_and_never_uses_decimal_fallback(
+    monkeypatch,
+):
     original = TypeError('actual nullable failure')
     provider = Provider({7: _scalars([[1, 0]])}, [])
-    service = Service(recipes={'value': {'meaning': 'nullable', 'physical': {'type': 'int64'}}})
+    service = Service(
+        recipes={
+            'value': {'meaning': 'nullable', 'physical': {'type': 'int64'}}
+        }
+    )
 
     def failed(*args):
         raise original
@@ -240,10 +369,28 @@ def test_nullable_failure_is_native_and_never_uses_decimal_fallback(monkeypatch)
 
 
 def test_timestamp_transport_keeps_raw_ordinals_then_removes_only_helpers():
-    raw = pa.table({'__KUMO_BATCH__': [0, 1], 'value': [2**53 + 1, None], '__KUMO_ROW__': [9, 4]})
+    raw = pa.table(
+        {
+            '__KUMO_BATCH__': [0, 1],
+            'value': [2**53 + 1, None],
+            '__KUMO_ROW__': [9, 4],
+        }
+    )
     service = Service()
-    adapter = completion.SourceCompletion(Provider({7: raw}, []), _source(), service)
-    steps = _steps(lookup=False, conversions=[{'conversion': 'timestamp_micros', 'column': 1, 'name': 'value', 'source_kind': 'wall_time'}])
+    adapter = completion.SourceCompletion(
+        Provider({7: raw}, []), _source(), service
+    )
+    steps = _steps(
+        lookup=False,
+        conversions=[
+            {
+                'conversion': 'timestamp_micros',
+                'column': 1,
+                'name': 'value',
+                'source_kind': 'wall_time',
+            }
+        ],
+    )
     answer = adapter(steps, _keys(steps, object()))
     assert isinstance(answer, dict)
     assert answer[7]['value'].type == pa.timestamp('us')
@@ -254,8 +401,20 @@ def test_timestamp_transport_keeps_raw_ordinals_then_removes_only_helpers():
 
 def test_malformed_timestamp_descriptor_is_a_boundary_failure_without_native_owner():
     raw = pa.table({'value': [1], '__kumo_batch__': [0]})
-    adapter = completion.SourceCompletion(Provider({7: raw}, []), _source(), Service())
-    steps = _steps(lookup=False, conversions=[{'conversion': 'timestamp_micros', 'column': 1, 'name': 'value', 'source_kind': 'wall_time'}])
+    adapter = completion.SourceCompletion(
+        Provider({7: raw}, []), _source(), Service()
+    )
+    steps = _steps(
+        lookup=False,
+        conversions=[
+            {
+                'conversion': 'timestamp_micros',
+                'column': 1,
+                'name': 'value',
+                'source_kind': 'wall_time',
+            }
+        ],
+    )
     answer = adapter(steps, _keys(steps, object()))
     assert isinstance(answer, FetchRefused)
     assert isinstance(answer.raised, ValueError)
@@ -264,7 +423,13 @@ def test_malformed_timestamp_descriptor_is_a_boundary_failure_without_native_own
 
 
 def test_complete_replies_split_by_actual_part_rows_and_keep_one_reached_native_frame():
-    provider = Provider({7: pa.table({'value': [7, 8], '__kumo_batch__': [0, 1]}), 8: pa.table({'value': [9], '__kumo_batch__': [2]})}, [])
+    provider = Provider(
+        {
+            7: pa.table({'value': [7, 8], '__kumo_batch__': [0, 1]}),
+            8: pa.table({'value': [9], '__kumo_batch__': [2]}),
+        },
+        [],
+    )
     adapter = completion.SourceCompletion(provider, _source(), Service())
     steps = _steps(parts=2, lookup=False)
     answer = adapter(steps, _keys(steps, object()))
@@ -276,7 +441,9 @@ def test_complete_replies_split_by_actual_part_rows_and_keep_one_reached_native_
 
 def test_exact_read_binding_rejects_same_name_other_relation_before_io():
     events = []
-    adapter = completion.SourceCompletion(Provider({}, events), _source(), Service())
+    adapter = completion.SourceCompletion(
+        Provider({}, events), _source(), Service()
+    )
     steps = _steps()
     steps[0]['request']['table'] = {'source': ['actual']}
     answer = adapter(steps, _keys(steps, object()))
@@ -287,7 +454,16 @@ def test_exact_read_binding_rejects_same_name_other_relation_before_io():
 
 
 def test_first_reply_ids_are_local_to_their_actual_completion_instance():
-    adapters = [completion.SourceCompletion(Provider({7: pa.table({'value': [value], '__kumo_batch__': [0]})}, []), _source(), Service()) for value in (1, 2)]
+    adapters = [
+        completion.SourceCompletion(
+            Provider(
+                {7: pa.table({'value': [value], '__kumo_batch__': [0]})}, []
+            ),
+            _source(),
+            Service(),
+        )
+        for value in (1, 2)
+    ]
     steps = _steps(lookup=False)
     for adapter in adapters:
         assert isinstance(adapter(steps, _keys(steps, object())), dict)
@@ -297,3 +473,89 @@ def test_first_reply_ids_are_local_to_their_actual_completion_instance():
     assert isinstance(repeated, FetchRefused)
     assert isinstance(repeated.raised, CodecError)
     assert adapters[0].tables[7].frame['value'].tolist() == [1]
+
+
+def test_scalar_helper_pops_keep_matches_before_lookup_and_batch_row_after(
+    monkeypatch,
+):
+    from sdm_client._rust.native_source_rows import SourceRowsBatch
+
+    events = []
+
+    class Frame(pd.DataFrame):
+        def pop(self, item):
+            events.append(('pop', item))
+            return super().pop(item)
+
+    class OrderedService(Service):
+        def lookup(self, *args):
+            events.append('lookup')
+            return super().lookup(*args)
+
+    frame = Frame(
+        {
+            'value': [3],
+            '__KUMO_BATCH__': [0],
+            '__KUMO_MATCHES__': [1],
+            '__KUMO_ROW__': [9],
+        },
+        dtype=object,
+    )
+    monkeypatch.setattr(
+        completion,
+        'read_source_rows',
+        lambda *args: SourceRowsBatch(frame, (1,)),
+    )
+    adapter = completion.SourceCompletion(
+        Provider({}, []), _source(), OrderedService()
+    )
+    steps = _steps()
+    assert isinstance(adapter(steps, _keys(steps, object())), dict)
+    assert events == [
+        ('pop', '__KUMO_MATCHES__'),
+        'lookup',
+        ('pop', '__KUMO_BATCH__'),
+        ('pop', '__KUMO_ROW__'),
+    ]
+
+
+def test_core_column_refusal_remains_distinct_from_native_construction():
+    selected = StructuredDataError(
+        'core column refusal', code='INVALID_REQUEST'
+    )
+
+    class FailedService(Service):
+        def column(self, *args):
+            raise selected
+
+    adapter = completion.SourceCompletion(
+        Provider({7: _scalars([[1, 0]])}, []), _source(), FailedService()
+    )
+    steps = _steps(lookup=False)
+    answer = adapter(steps, _keys(steps, object()))
+    assert isinstance(answer, FetchRefused)
+    assert answer.raised is selected
+    assert adapter.native_error is None
+    assert adapter.tables == {}
+
+
+def test_reached_arrow_transport_cast_error_retains_exact_native_owner(
+    monkeypatch,
+):
+    selected = pa.ArrowInvalid('actual Arrow cast')
+
+    def failed(*args):
+        raise selected
+
+    monkeypatch.setattr(completion, 'result_columns', failed)
+    adapter = completion.SourceCompletion(
+        Provider({7: pa.table({'value': [1], '__kumo_batch__': [0]})}, []),
+        _source(),
+        Service(),
+    )
+    steps = _steps(lookup=False)
+    answer = adapter(steps, _keys(steps, object()))
+    assert isinstance(answer, FetchRefused)
+    assert answer.raised is selected
+    assert adapter.native_error is selected
+    assert adapter.tables == {}
