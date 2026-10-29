@@ -123,6 +123,72 @@ class Handle:
         return self.attachments.pop(attachment)
 
 
+@pytest.mark.parametrize(
+    'kind', ['label_inputs', 'target_column', 'label_groups']
+)
+def test_condition_history_rebinds_only_explicit_owners_and_keeps_arrow_distinct(
+    kind,
+):
+    child = _data('label_inputs')
+    child.update(owner=20, source_role='entity', eligibility=None)
+    history = {
+        'columns': [child],
+        'values': [{'column': COLUMN, 'owner': 21}],
+    }
+    data = _data(kind)
+    if kind == 'target_column':
+        data['input']['eligibility'] = history
+        expected = [4, 20, 21, 5]
+        ids = expected + [6, 7]
+    elif kind == 'label_inputs':
+        data['eligibility'] = history
+        expected = [4, 20, 21]
+        ids = expected
+    else:
+        data.update(what_if=history, restored={'rows': 22, 'encoding': None})
+        expected = [4, 20, 21]
+        ids = expected + [22]
+    original = copy.deepcopy(data)
+    assert products.owner_ids(kind, data) == expected
+    owners = {number: object() for number in ids}
+    finished, handle = _finished(kind, data, owners)
+    value = products.adopt(finished, kind)
+    assert set(value.owners) == set(ids)
+    assert handle.takes == [17, *dict.fromkeys(ids)]
+    bindings = Bindings()
+    bound = products.bind(value, bindings)
+    assert [
+        bindings.attachments[key] for key in products.owner_ids(kind, bound)
+    ] == [owners[key] for key in expected]
+    assert data == original
+    assert value.owners == owners
+
+
+@pytest.mark.parametrize('slot', ['column', 'value', 'restored'])
+def test_bad_nested_history_attachment_is_rejected_before_any_native_owner_take(
+    slot,
+):
+    data = _data('label_groups')
+    child = _data('label_inputs')
+    data.update(
+        what_if={
+            'columns': [child],
+            'values': [{'column': COLUMN, 'owner': 21}],
+        },
+        restored={'rows': 22, 'encoding': None},
+    )
+    if slot == 'column':
+        child['owner'] = True
+    elif slot == 'value':
+        data['what_if']['values'][0]['owner'] = 2**32
+    else:
+        data['restored']['rows'] = -1
+    finished, handle = _finished('label_groups', data)
+    with pytest.raises(CodecError):
+        products.adopt(finished, 'label_groups')
+    assert handle.takes == [17]
+
+
 def _finished(kind, data=None, owners=None):
     raw = json.dumps(
         {'value': kind, 'data': _data(kind) if data is None else data}
