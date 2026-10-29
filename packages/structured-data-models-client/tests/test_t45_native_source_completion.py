@@ -135,9 +135,12 @@ def test_completed_lookup_precedes_native_nullable_conversion_and_keeps_full_wid
     steps = _steps()
     answer = adapter(steps, _keys(steps, owner))
     assert isinstance(answer, dict)
-    assert answer[7].column_names == ['value', '__kumo_batch__']
+    assert answer[7].column_names == [
+        'value', '__kumo_matches__', '__kumo_batch__'
+    ]
     assert answer[7]['value'].to_pylist() == [2**53 + 1, None]
     assert answer[7]['__kumo_batch__'].to_pylist() == [0, 1]
+    assert answer[7]['__kumo_matches__'].to_pylist() == [1, 1]
     assert service.calls[0][0] == 'lookup'
     assert service.calls[0][3] is owner
     assert service.calls[0][2].to_pydict() == {
@@ -396,7 +399,10 @@ def test_timestamp_transport_keeps_raw_ordinals_then_removes_only_helpers():
     assert answer[7]['value'].type == pa.timestamp('us')
     assert answer[7]['value'].cast(pa.int64()).to_pylist() == [2**53 + 1, None]
     assert adapter.tables[7].frame.columns.tolist() == ['value']
-    assert answer[7].column_names == ['value', '__kumo_batch__']
+    assert answer[7].column_names == [
+        '__kumo_batch__', 'value', '__kumo_row__'
+    ]
+    assert answer[7]['__kumo_row__'].to_pylist() == [9, 4]
 
 
 def test_malformed_timestamp_descriptor_is_a_boundary_failure_without_native_owner():
@@ -559,3 +565,83 @@ def test_reached_arrow_transport_cast_error_retains_exact_native_owner(
     assert answer.raised is selected
     assert adapter.native_error is selected
     assert adapter.tables == {}
+
+
+def test_replies_preserve_all_actual_helpers_in_original_slots_after_business_conversion():
+    raw = pa.table({
+        '__KUMO_BATCH__': [1, 0],
+        'value': [3, 4],
+        '__KUMO_MATCHES__': [1, 1],
+        '__KUMO_ROW__': [8, 5],
+        '__KUMO_ID__': [12, 9],
+    })
+    adapter = completion.SourceCompletion(Provider({7: raw}, []), _source(), Service())
+    steps = _steps()
+    reply = adapter(steps, _keys(steps, object()))
+    assert isinstance(reply, dict)
+    assert reply[7].column_names == ['__kumo_batch__', 'value', '__kumo_matches__', '__kumo_row__', '__kumo_id__']
+    assert reply[7].to_pydict() == {
+        '__kumo_batch__': [1, 0], 'value': [3, 4],
+        '__kumo_matches__': [1, 1], '__kumo_row__': [8, 5], '__kumo_id__': [12, 9],
+    }
+    assert adapter.tables[7].frame.columns.tolist() == ['value']
+
+
+def test_public_request_reuses_actual_early_lookup_and_late_shared_helper_reader(monkeypatch):
+    """Controlled native group completion reaches both real Rust lookup sites.
+
+    Passing through Rust's already computed group values avoids coupling this
+    helper-retention control to extension-dtype restoration behavior.
+    This control makes no frozen-client native-restoration parity claim.
+    """
+    import warnings
+
+    import numpy as np
+    from sdm_connectors import DuckDBSource
+    from test_t45_sql_link import QUERY, connection, route
+
+    from sdm_client import PredictiveQuery, Schema
+    from sdm_client._rust import native_sql
+    from sdm_client._rust.native_target import NativeTargetColumn
+    from sdm_client.materializers.relational import RelationalMaterializer
+
+    route(monkeypatch, True)
+    stages, early = [], []
+    prepare = native_sql._Preparation.prepare
+    lookup = native_sql._Preparation.lookup
+
+    def prepared(self, value, *args, **kwargs):
+        stages.append(value['stage'])
+        return prepare(self, value, *args, **kwargs)
+
+    def counted(self, value, helpers, owner):
+        actual = lookup(self, value, helpers, owner)
+        early.append((helpers, actual))
+        return actual
+
+    def completed_groups(self, groups):
+        actual = np.empty(len(groups), dtype=object)
+        for ordinal, group in enumerate(groups):
+            actual[ordinal] = group
+        return actual
+
+    def forbidden(*args, **kwargs):
+        pytest.fail('the public core request entered the old engine')
+
+    monkeypatch.setattr(native_sql._Preparation, 'prepare', prepared)
+    monkeypatch.setattr(native_sql._Preparation, 'lookup', counted)
+    monkeypatch.setattr(NativeTargetColumn, 'group_result', completed_groups)
+    monkeypatch.setattr(RelationalMaterializer, '_get_model', forbidden)
+    with connection() as db, warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_source(DuckDBSource(db))
+        actual = PredictiveQuery(QUERY, schema).materialize(
+            anchor_time=pd.Timestamp('2023-03-01'), indices=[0, 1]
+        )
+        assert actual.payloads
+        assert actual.predict_rows == 2
+    assert 'lookup_rows' in stages
+    assert stages[-1] == 'request'
+    assert early
+    assert any('__kumo_matches__' in helpers.column_names for helpers, _ in early)
+    assert all(answer.column_names == ['position'] for _, answer in early)
