@@ -232,3 +232,80 @@ fn typed_timestamp_requires_both_reached_semantics_and_actual_storage() {
         );
     }
 }
+
+#[test]
+fn boxed_temporal_content_and_missingness_keep_present_text_outside_native_time() {
+    use sdm_contract::frames::materialize::FrameObservedContent as Content;
+    for (inferred, all_missing, temporal) in [
+        (Content::Temporal, false, true),
+        (Content::Other, true, true),
+        (Content::Text, false, false),
+        (Content::Other, false, false),
+        (Content::Decimal, false, false),
+    ] {
+        let facts = Facts::ColumnValues {
+            inferred,
+            all_missing,
+        };
+        assert_eq!(
+            scalar_meaning(Some(Dtype::Time), &facts).unwrap(),
+            Meaning::Original {}
+        );
+        assert_eq!(
+            timestamp_meaning(Some(Dtype::Time), Stype::Categorical, &facts).is_some(),
+            temporal
+        );
+        assert_eq!(
+            timestamp_meaning(Some(Dtype::String), Stype::Timestamp, &facts).is_some(),
+            temporal
+        );
+        assert_eq!(
+            timestamp_meaning(Some(Dtype::String), Stype::Categorical, &facts),
+            None
+        );
+    }
+}
+
+#[test]
+fn native_time_conversion_notice_is_completed_data_with_existing_warning_policy() {
+    let input = Facts::TimeConversion {
+        rows: 4,
+        unread: 2,
+        examples: "[datetime.datetime(3000, 1, 1, 0, 0)]".into(),
+    };
+    let notice = time_notice(Some(Dtype::Time), Stype::Timestamp, "ts", &input)
+        .unwrap()
+        .unwrap();
+    assert_eq!(notice.code, "TIME_VALUES_UNREAD");
+    assert_eq!(notice.sentence, Sentence::NativeTimeValuesUnread);
+    assert_eq!(
+        notice.fields["examples"],
+        Detail::text("[datetime.datetime(3000, 1, 1, 0, 0)]")
+    );
+    assert!(time_notice(Some(Dtype::String), Stype::Categorical, "ts", &input).is_err());
+    for (rows, unread, examples) in [(0, 1, "[x]"), (1, 2, "[x]"), (2, 0, "[x]"), (2, 1, "")] {
+        assert!(
+            time_notice(
+                Some(Dtype::Time),
+                Stype::Timestamp,
+                "ts",
+                &Facts::TimeConversion {
+                    rows,
+                    unread,
+                    examples: examples.into()
+                }
+            )
+            .is_err()
+        );
+    }
+    assert_eq!(
+        time_notice(
+            Some(Dtype::Time),
+            Stype::Timestamp,
+            "ts",
+            &Facts::CellRows {}
+        )
+        .unwrap(),
+        None
+    );
+}

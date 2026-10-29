@@ -780,3 +780,154 @@ def test_typed_timestamp_is_assigned_in_physical_order_before_time_capture(
     }
     assert result[7]['before'].type == raw['before'].type
     assert result[7]['after'].type == raw['after'].type
+
+
+@pytest.mark.parametrize('kind', ['datetime', 'date', 'null', 'empty', 'text'])
+def test_boxed_source_content_is_observed_after_scalar_construction(kind):
+    from datetime import date, datetime, timezone
+
+    values = {
+        'datetime': [datetime(2023, 1, 2, tzinfo=timezone.utc), None],
+        'date': [date(2023, 1, 2), None],
+        'null': [None, None],
+        'empty': [],
+        'text': ['not a native datetime', None],
+    }[kind]
+    events = []
+    provider = Provider(
+        {7: _scalars([[value] for value in values], ['value'])}, events
+    )
+    service = Service(
+        recipes={
+            'value': {
+                'meaning': 'nullable',
+                'physical': {
+                    'type': 'timestamp',
+                    'unit': 'ns',
+                    'zone': None,
+                },
+            }
+        }
+        if kind != 'text'
+        else {}
+    )
+    # The scalar constructor is deliberately Original; only the later
+    # content completion carries the time meaning chosen by Core.
+    original = service.column
+
+    def column(binding, facts):
+        result = original(binding, facts)
+        if facts['storage'] == 'cell_rows':
+            result['scalar'] = {'meaning': 'original'}
+        return result
+
+    service.column = column
+    adapter = completion.SourceCompletion(provider, _source(), service)
+    result = adapter(_steps(lookup=False), {})
+    assert isinstance(result, dict)
+    facts = [call[2] for call in service.calls if call[0] == 'column']
+    assert facts == [
+        {'storage': 'cell_rows'},
+        {
+            'storage': 'column_values',
+            'inferred': 'temporal'
+            if kind in ('datetime', 'date')
+            else 'text'
+            if kind == 'text'
+            else 'other',
+            'all_missing': kind in ('null', 'empty'),
+        },
+    ]
+    if kind == 'text':
+        assert adapter.tables[7].frame['value'].tolist() == values
+        assert adapter.tables[7].frame['value'].dtype == object
+    else:
+        assert adapter.tables[7].frame['value'].dtype == 'datetime64[ns]'
+        assert result[7]['value'].null_count == (
+            len(values) if kind in ('null', 'empty') else 1
+        )
+
+
+@pytest.mark.parametrize('handler_error', [False, True])
+def test_actual_boxed_time_coercion_notice_precedes_finishing_and_keeps_native_failure(
+    monkeypatch, handler_error
+):
+    from datetime import datetime
+    import warnings
+
+    failure = ValueError('actual native time notice handler failed')
+    service = Service(
+        recipes={
+            'value': {
+                'meaning': 'nullable',
+                'physical': {
+                    'type': 'timestamp',
+                    'unit': 'ns',
+                    'zone': None,
+                },
+            }
+        }
+    )
+    original = service.column
+
+    def column(binding, facts):
+        result = original(binding, facts)
+        if facts['storage'] == 'cell_rows':
+            result['scalar'] = {'meaning': 'original'}
+        elif facts['storage'] == 'time_conversion':
+            assert facts == {
+                'storage': 'time_conversion',
+                'rows': 2,
+                'unread': 1,
+                'examples': '[datetime.datetime(3000, 1, 1, 0, 0)]',
+            }
+            result['scalar'] = {'meaning': 'original'}
+            result['notice'] = {
+                'code': 'TIME_VALUES_UNREAD',
+                'sentence': 'native_time_values_unread',
+                'message': 'native time conversion',
+                'fields': {
+                    'column': {'kind': 'text', 'text': 'value'},
+                    'unread': {
+                        'kind': 'scalar',
+                        'value': {'type': 'u64', 'value': '1'},
+                    },
+                    'rows': {
+                        'kind': 'scalar',
+                        'value': {'type': 'u64', 'value': '2'},
+                    },
+                    'examples': {'kind': 'text', 'text': facts['examples']},
+                },
+            }
+        return result
+
+    service.column = column
+    calls = []
+
+    def warn_held(notices):
+        calls.append(notices)
+        if handler_error:
+            raise failure
+        warnings.warn('actual completed native time notice', UserWarning)
+
+    monkeypatch.setattr(completion.errors, 'warn_held', warn_held)
+    provider = Provider(
+        {7: _scalars([[datetime(3000, 1, 1)], [None]], ['value'])}, []
+    )
+    adapter = completion.SourceCompletion(provider, _source(), service)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        result = adapter(_steps(lookup=False), {})
+    assert len(calls) == 1
+    if handler_error:
+        assert isinstance(result, FetchRefused)
+        assert result.raised is failure
+        assert adapter.native_error is failure
+        assert adapter.tables == {}
+    else:
+        assert isinstance(result, dict)
+        assert result[7]['value'].null_count == 2
+        assert [str(item.message) for item in caught] == [
+            'actual completed native time notice'
+        ]
+        assert adapter.native_error is None
