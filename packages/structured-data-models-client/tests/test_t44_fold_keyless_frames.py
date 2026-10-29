@@ -25,6 +25,59 @@ from sdm_client.materializers.relational import RelationalMaterializer
 ROUTES = FRAME_ROUTES
 
 
+def _frozen_fold_product(expected):
+    product = copy.deepcopy(expected)
+    caller_warning = {
+        'type': 'Pandas4Warning',
+        'message': "The default 'epoch' date format is deprecated and will be removed in a future version, please use 'iso' date format instead.",
+    }
+    if product['case'] == 'fold-entity' and product['warnings'][-1:] == [
+        caller_warning
+    ]:
+        product['warnings'].pop()
+    return product
+
+
+def _assert_fold_profile(actual, original, expected, *, core):
+    paired = copy.deepcopy(original)
+    pinned = _frozen_fold_product(expected)
+    if core:
+        paired['warnings'] = p3e2_warning_codes(paired['warnings'])
+        pinned['warnings'] = p3e2_warning_codes(pinned['warnings'])
+    assert actual == paired
+    assert [part['phase'] for part in actual['serialization']] == [
+        'result.to_json',
+        'merged.to_json',
+    ]
+    product = copy.deepcopy(actual)
+    product.pop('serialization')
+    assert product == pinned
+
+
+def _serialized(frame, phase, record):
+    # Capture only the caller's actual default-format serialization, while
+    # retaining its complete native warnings in the same-runtime observation.
+    with warnings.catch_warnings(record=True) as native:
+        try:
+            encoded = frame.to_json(orient='split')
+        finally:
+            record['serialization'].append(
+                {
+                    'phase': phase,
+                    'warnings': [
+                        {
+                            'type': type(item.message).__name__,
+                            'module': item.category.__module__,
+                            'message': str(item.message),
+                            'filename': item.filename,
+                        }
+                        for item in native
+                    ],
+                }
+            )
+    return json.loads(encoded)
+
+
 @pytest.mark.parametrize(
     'changed', ['warning', 'phase', 'input', 'body', 'result']
 )
@@ -65,6 +118,9 @@ def test_fold_profile_pair_keeps_caller_warning_and_every_pinned_product(
         actual['sent'][0]['metadata']['source_query'] += ' '
     else:
         actual['result']['data'][0][-1] += 1
+    if changed in ('input', 'body', 'result'):
+        # Matching twins must still satisfy every unchanged pinned product.
+        original = copy.deepcopy(actual)
     with pytest.raises(AssertionError):
         _assert_fold_profile(actual, original, expected, core=False)
 
@@ -183,7 +239,7 @@ class Scripted:
 
 def observe(case, expected=None):
     script = Scripted()
-    record = {'case': case}
+    record = {'case': case, 'serialization': []}
     stage = 'schema'
     with warnings.catch_warnings(record=True) as notices:
         warnings.simplefilter('always')
@@ -227,11 +283,11 @@ def observe(case, expected=None):
                     client._transport = script
                     answer = client.predict(request, model=KumoRelational())
             result = answer.to_pandas()
-            record['result'] = json.loads(result.to_json(orient='split'))
-            record['merged'] = json.loads(
-                result.merge(
-                    data['users'], left_on='id', right_on='user_id'
-                ).to_json(orient='split')
+            record['result'] = _serialized(result, 'result.to_json', record)
+            record['merged'] = _serialized(
+                result.merge(data['users'], left_on='id', right_on='user_id'),
+                'merged.to_json',
+                record,
             )
             record['outcome'] = 'success'
         except Exception as error:
@@ -266,15 +322,20 @@ def test_public_frame_fold_and_keyless_neighbors_keep_complete_frozen_journeys(
         )['records'][case]
     )
     assert expected['outcome'] == 'success'
-    monkeypatch.setenv('SDM_CORE_ROUTES', ROUTES if core else '')
-    if core:
 
-        def old_engine(*args, **kwargs):
-            raise AssertionError(
-                'core fold/keyless journey called the old engine'
-            )
+    def observed_route(core_route):
+        with monkeypatch.context() as leg:
+            leg.setenv('SDM_CORE_ROUTES', ROUTES if core_route else '')
+            if core_route:
 
-        monkeypatch.setattr(RelationalMaterializer, '_get_model', old_engine)
-        expected['warnings'] = p3e2_warning_codes(expected['warnings'])
-    observed = observe(case, expected)
-    assert observed == expected
+                def old_engine(*args, **kwargs):
+                    raise AssertionError(
+                        'core fold/keyless journey called the old engine'
+                    )
+
+                leg.setattr(RelationalMaterializer, '_get_model', old_engine)
+            return observe(case, expected)
+
+    original = observed_route(False)
+    actual = observed_route(True) if core else original
+    _assert_fold_profile(actual, original, expected, core=core)
