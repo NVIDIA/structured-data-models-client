@@ -852,7 +852,7 @@ def test_boxed_source_content_is_observed_after_scalar_construction(kind):
             else 'text'
             if kind == 'text'
             else 'other',
-            'all_missing': kind in ('null', 'empty'),
+            'inferred_empty': kind in ('null', 'empty'),
         },
     ]
     if kind == 'text':
@@ -1009,7 +1009,7 @@ def test_public_scalar_row_source_uses_actual_core_selected_boxed_time_recipe(
         == {
             'storage': 'column_values',
             'inferred': 'temporal',
-            'all_missing': False,
+            'inferred_empty': False,
         }
         and recipe
         == {

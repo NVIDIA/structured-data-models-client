@@ -254,6 +254,7 @@ pub enum MaterializeSourceFacts {
     /// Actual content of a reached post-construction native scalar column.
     ColumnValues {
         inferred: FrameObservedContent,
+        /// The same native skip-null inference reported no scalar content.
         inferred_empty: bool,
     },
     /// Reached native datetime conversion before timezone/unit finishing.

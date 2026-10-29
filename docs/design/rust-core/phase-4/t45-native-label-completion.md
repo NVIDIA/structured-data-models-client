@@ -336,3 +336,6 @@ Regenerate the working canonical schema and any applicable bridge artifact throu
 The retained source table also carries Core's readonly temporal-column names, so content/missingness is observed only for columns whose resolved meaning the old sanitizer reads as time.
 This schema meaning avoids introducing inference or missingness callbacks on unrelated object columns and is validated by the existing exact source owner.
 The completed notice uses the established unread-time category and code-prefix presenter; it grants no new warning exception.
+
+The empty-content fact comes from that same skip-null inference result, avoiding an extra native missingness read before datetime conversion.
+Actual temporal content short-circuits the need to infer missingness, and the later native conversion retains its original coercion-mask reads.
