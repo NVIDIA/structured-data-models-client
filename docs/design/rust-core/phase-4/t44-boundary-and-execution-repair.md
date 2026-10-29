@@ -747,3 +747,15 @@ Both actual R54 ARM smoke jobs pass all 59 production tests before the collectio
 Normalize only the file component before the first pytest node separator, retaining the full test and parameter suffix for exact expected-inventory comparison.
 Add complete temporal-inventory positive, replaced-ID and missing-ID controls while preserving the existing counts, deselection, origin, file-registration and negative-library checks.
 The three missing L4 artifacts are an upstream test-ops failure cascade, so retain their required downloads and golden checks without changing expected SQL or accepting stale evidence.
+
+
+### Keep private native evidence separate from publication
+
+Actual R54 Databricks journeys produce both observations and clear their owned fixtures, but the publication substitution changes parsed namespace facts while leaving their authenticated encoded originals unchanged.
+Persist the complete private observation before substitution and validate it through the existing strict byte, resource, completion and receipt readers.
+Own that raw data together with a separately derived checked comparison view, applying only the existing explicit warehouse placeholder mapping after validation and original call/receipt conservation.
+Bind an opt-in comparison name map to the actual source file digest and declared warehouse leg; never accept a stored semantic view, derivative or validation flag as evidence.
+Publish a distinctly labelled safe derivative linked to the actual private source digest and line, omitting raw journals and encoded originals rather than inventing redacted wire bytes.
+Preserve raw replay inputs and all frozen references, and cover actual byte roles, lineage, serving/retry receipts, non-name differences, tamper rejection and immutable source files through API and CLI consumers.
+This is a tooling publication/comparison repair, with no SDK wire, mathematical, source-policy or gate-integrity exception.
+The checkpoint collection dependency remains governed by H2 and the documented coupled landing order; neither a new collector flag nor this private comparison mode earns checkpoint acceptance.
