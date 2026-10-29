@@ -60,6 +60,40 @@ def test_other_import_failures_keep_the_actual_owner(monkeypatch):
     assert caught.value is retained
 
 
+@pytest.mark.parametrize('absent', ['frame_native', 'native_sql'])
+def test_native_materialization_hook_group_cannot_be_half_present(
+    monkeypatch, absent
+):
+    original = RUNNER.importlib.import_module
+
+    def incomplete(name, *args, **kwargs):
+        if name == 'sdm_client._rust.' + absent:
+            raise ModuleNotFoundError('authored incomplete cohort', name=name)
+        return original(name, *args, **kwargs)
+
+    monkeypatch.setattr(RUNNER.importlib, 'import_module', incomplete)
+    from sdm_client._rust import run
+
+    previous = run.native
+    with pytest.raises(
+        RUNNER.RunnerFailure, match='incomplete native materialization'
+    ):
+        RUNNER._Boundary()
+    assert run.native is previous
+
+
+def test_missing_tooling_owner_reader_is_not_a_malformed_product(monkeypatch):
+    retained = ImportError('reader installation failed')
+
+    def missing(*args, **kwargs):
+        raise retained
+
+    monkeypatch.setattr(RUNNER, '_sibling', missing)
+    with pytest.raises(ImportError) as caught:
+        RUNNER._Capture._materialization_ids('source', {'owner': 1})
+    assert caught.value is retained
+
+
 def test_checkpoint_common_hooks_keep_actual_legacy_start_and_capabilities(
     monkeypatch,
 ):
