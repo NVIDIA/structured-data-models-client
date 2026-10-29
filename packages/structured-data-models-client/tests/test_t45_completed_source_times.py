@@ -249,3 +249,44 @@ def test_actual_typed_construction_failure_keeps_native_owner_and_stops(
     assert raised.value is selected
     assert preparation.failures == [selected]
     assert table.frame['ts'].tolist() == ['raw']
+
+
+def test_retained_native_failure_releases_extra_read_views_but_not_caller_product(
+    monkeypatch,
+):
+    import weakref
+    from sdm_client._rust import native_sql_sources
+
+    source_rows = []
+
+    class FreshOwner:
+        def temporal_sources(self):
+            descriptor, rows = view(ENTITY, 7, [1], role='entity')
+            source_rows.append(weakref.ref(rows))
+            return ((descriptor, rows),)
+
+    owner = FreshOwner()
+    product = Product('label_inputs', {'owner': 5}, {5: owner})
+    table = NativeSourceTable(
+        ENTITY, pd.DataFrame({'ts': pd.Series(['raw'], dtype='string')}), 'ts'
+    )
+    selected = ValueError('native timestamp finishing')
+
+    def fail(values):
+        assert str(values.dtype) == 'datetime64[ns]'
+        raise selected
+
+    monkeypatch.setattr(native_sql_sources, 'finish_timestamp', fail)
+    preparation = Preparation()
+    with pytest.raises(ValueError) as raised:
+        native_sql.complete_source_times(
+            product,
+            SimpleNamespace(tables={7: table}),
+            SimpleNamespace(tables={}),
+            preparation,
+        )
+    assert raised.value is selected
+    assert selected.__traceback__ is not None
+    assert len(source_rows) == 1 and source_rows[0]() is None
+    assert product.owners == {5: owner}
+    assert table.frame['ts'].tolist() == ['raw']
