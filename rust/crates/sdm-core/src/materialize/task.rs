@@ -498,7 +498,8 @@ impl EvaluatedLabelGroups {
     ) -> Result<LabelledContext, CoreError> {
         let labelled = labels::label(&target)?;
         if !matches!(labelled.labels, labels::Labels::Lists(_)) {
-            return Err(invalid(
+            return Err(CoreError::protocol(
+                Sentence::InvalidMessage,
                 "native group projection is not a complete list target",
             ));
         }
@@ -509,7 +510,8 @@ impl EvaluatedLabelGroups {
         if labelled.mask.len() != self.inputs.population.examples.index.len()
             || labelled.mask.iter().filter(|&&v| v).count() != labelled.labels.len()
         {
-            return Err(invalid(
+            return Err(CoreError::protocol(
+                Sentence::InvalidMessage,
                 "group mask does not cover its actual complete population",
             ));
         }

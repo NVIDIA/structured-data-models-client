@@ -6,6 +6,7 @@
 
 use super::*;
 use arrow_array::UInt64Array;
+use sdm_contract::data::strings::StringEncoding;
 
 fn protocol(message: &str) -> CoreError {
     CoreError::protocol(Sentence::InvalidMessage, message)
