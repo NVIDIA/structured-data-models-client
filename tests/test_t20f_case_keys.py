@@ -414,7 +414,12 @@ def test_aggregate_fixture_must_explicitly_request_all_database_scopes(
     )
     found = helpers.check(held, checkpoint, (seeded, files[1]), database=None)
     assert found and _naming(found, omitted) == found
-    assert all('baselined, and not observed' in problem for problem in found)
+    # Omission violates both observation completeness and baseline equality.
+    assert found == [
+        f'baselines: {omitted}: python-core: baselined, and not observed',
+        f'baselines: {omitted}: python-core: the proposed baseline is not '
+        'the observation (ratchet.py accept writes it)',
+    ]
 
 
 def test_a_database_recording_with_no_core_observation_needs_no_baseline(
