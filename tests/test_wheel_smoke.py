@@ -270,6 +270,36 @@ def test_a_collection_of_every_expected_test_passed_is_taken(
     smoke.collection_verdict(_collection(tmp_path, _record(home)), COUNTS, home)
 
 
+@pytest.mark.parametrize('fault', [None, 'replaced', 'missing'])
+def test_complete_temporal_collection_keeps_parameter_slashes(
+    tmp_path: pathlib.Path, fault: str | None
+) -> None:
+    home = tmp_path / 'env'
+    filename = 'test_t42_temporal_ownership.py'
+    test = 'test_temporal_table_owns_exact_unit_zone_counts_and_validity_after_run_drop'
+    prefix = f'outside/tree/rust/bindings/sdm-py/tests/{filename}::{test}'
+    items = [
+        f'{prefix}[{wide}-{zone}-{unit}]'
+        for wide in (False, True)
+        for zone in ('None', 'America/Los_Angeles')
+        for unit in ('s', 'ms', 'us', 'ns')
+    ]
+    assert len(items) == 16
+    named_zone = f'{prefix}[False-America/Los_Angeles-s]'
+    if fault == 'replaced':
+        items[items.index(named_zone)] = f'{prefix}[False-America/New_York-s]'
+    elif fault == 'missing':
+        items.remove(named_zone)
+        items.append(items[0])
+    counts = {filename: {'passed': 16}}
+    collection = _collection(tmp_path, _record(home, items=items))
+    if fault is None:
+        smoke.collection_verdict(collection, counts, home)
+    else:
+        with pytest.raises(smoke.SmokeFailed, match='not run:'):
+            smoke.collection_verdict(collection, counts, home)
+
+
 def _faults(home: pathlib.Path) -> list[tuple[Any, str]]:
     checkout = smoke.REPO / 'packages/structured-data-models-client/src'
     return [
