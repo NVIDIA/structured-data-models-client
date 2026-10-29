@@ -10522,6 +10522,12 @@
           "items": {
             "type": "string"
           }
+        },
+        "time_column": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "additionalProperties": false,
@@ -10994,6 +11000,16 @@
         "target": {
           "$ref": "#/$defs/FrameNativeColumnRef"
         },
+        "time": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FrameNativeColumnRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "form": {
           "$ref": "#/$defs/TargetColumnForm"
         },
@@ -11113,6 +11129,17 @@
           "anyOf": [
             {
               "$ref": "#/$defs/StringEncoding"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "times": {
+          "description": "Full current values of the source's captured time owner at the\nreached pre-window boundary, independently of target row selection.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AttachmentId"
             },
             {
               "type": "null"
