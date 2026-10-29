@@ -172,3 +172,87 @@ def test_public_selected_context_reaches_the_existing_prediction_wire(
         answers.append((body, frame))
     assert answers[0][0] == answers[1][0]
     pd.testing.assert_frame_equal(answers[0][1], answers[1][1])
+
+
+@pytest.mark.parametrize('scoring_ids', [[11], [500], []])
+def test_supplied_holdout_precedes_the_actual_native_target_read(
+    monkeypatch, scoring_ids
+):
+    observations = []
+    for core in (False, True):
+        source = _table()
+        query = PredictiveQuery(
+            'PREDICT things.answer FOR EACH things.entity_id',
+            {'things': source},
+        )
+        scoring = pd.DataFrame(
+            {
+                'entity_id': pd.Series(scoring_ids, dtype='int64'),
+                'feature': pd.Series([0.5] * len(scoring_ids), dtype='float64'),
+            }
+        )
+        target_reads = []
+        original_get = pd.DataFrame.__getitem__
+
+        def observed_get(frame, key):
+            if isinstance(key, str) and key == 'answer':
+                target_reads.append((frame is source, tuple(frame.index)))
+            return original_get(frame, key)
+
+        with monkeypatch.context() as patch:
+            patch.setenv(
+                _routing.ENVIRONMENT,
+                ','.join(
+                    _routing.MATERIALIZE['frames']
+                    + _routing.TABULAR_PREDICT_FRAME
+                )
+                if core
+                else '',
+            )
+            patch.setattr(pd.DataFrame, '__getitem__', observed_get)
+            request = query.materialize(predict=scoring, task='regression')
+        observations.append((target_reads[0], request.context.instance_table))
+    assert observations[0][0] == observations[1][0]
+    assert observations[1][0][0] == (not scoring_ids)
+    expected = tuple(row for row in range(43) if row not in scoring_ids)
+    assert observations[1][0][1] == expected
+    pd.testing.assert_frame_equal(observations[0][1], observations[1][1])
+
+
+def test_supplied_entity_read_effects_precede_source_membership(monkeypatch):
+    results = []
+    for core in (False, True):
+        source = _table()
+        scoring = pd.DataFrame({'entity_id': [11], 'feature': [0.5]})
+        query = PredictiveQuery(
+            'PREDICT things.answer FOR EACH things.entity_id',
+            {'things': source},
+        )
+        events = []
+        original_get = pd.DataFrame.__getitem__
+
+        def observed_get(frame, key):
+            if isinstance(key, str) and key == 'entity_id':
+                if frame is scoring:
+                    events.append('scoring')
+                    source.loc[11, 'entity_id'] = 99
+                elif frame is source:
+                    events.append('source')
+            return original_get(frame, key)
+
+        with monkeypatch.context() as patch:
+            patch.setenv(
+                _routing.ENVIRONMENT,
+                ','.join(
+                    _routing.MATERIALIZE['frames']
+                    + _routing.TABULAR_PREDICT_FRAME
+                )
+                if core
+                else '',
+            )
+            patch.setattr(pd.DataFrame, '__getitem__', observed_get)
+            request = query.materialize(predict=scoring, task='regression')
+        results.append((events[:2], request.context.instance_table))
+    assert results[0][0] == results[1][0] == ['scoring', 'source']
+    pd.testing.assert_frame_equal(results[0][1], results[1][1])
+    assert 99 in set(results[1][1].entity_id)

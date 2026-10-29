@@ -4,12 +4,14 @@
 
 //! Selection over original native row ordinals, before final frame encoding.
 
-use sdm_engine::tabular::{ContextSelection, IndexSelection, labelled_rows, matched_rows};
+use sdm_engine::tabular::{ContextSelection, IndexSelection, ScoringKeys, labelled_rows};
 
 #[test]
 fn supplied_new_entities_do_not_cancel_the_existing_entity_holdout() {
-    assert_eq!(matched_rows(&[2, 5, 2, 8], &[2, 500]), [0, 2]);
-    assert!(matched_rows(&[2, 5, 8], &[]).is_empty());
+    let keys = ScoringKeys::new(vec![2, 500]);
+    assert!(keys.needs_source());
+    assert_eq!(keys.retain(&[2, 5, 2, 8]), [1, 3]);
+    assert!(!ScoringKeys::new(vec![]).needs_source());
 }
 
 #[test]
