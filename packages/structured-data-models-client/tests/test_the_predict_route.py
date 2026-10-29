@@ -773,7 +773,11 @@ def test_a_payload_json_cannot_hold_is_refused_as_the_transport_refuses_it(
         core, old = _both(monkeypatch, request, url)
     assert (type(core), core.code) == (type(old), old.code)
     assert core.code == 'INVALID_REQUEST'
-    assert core.__cause__ is None and core.__context__ is None
+    from test_t42_arrow_decimal_frames import _decimal_error_graph
+
+    assert type(core.__cause__) is type(old.__cause__) is ValueError
+    assert _decimal_error_graph(core) == _decimal_error_graph(old)
+    assert core.details == old.details
     assert received.requests == []
 
 
