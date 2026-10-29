@@ -45,7 +45,7 @@
       "moved": "T3.17 fix 1: imports the decimal spelling a candidate's sentence names as a host value"
     },
     "packages/structured-data-models-client/src/sdm_client/query.py::PredictiveQuery.materialize": {
-      "moved": "T2.8: on the core route the question goes to the core whole: the ranking's decomposition and refusals, and the forecast's top_k and MOST_PARTS refusals, are the core's (parts_of is not run there), task= refused first as for any relational query"
+      "moved": "T2.8: on the core route the question goes to the core whole: the ranking's decomposition and refusals, and the forecast's top_k and MOST_PARTS refusals, are the core's (parts_of is not run there), task= refused first as for any relational query; T4.6: explicitly selected primitive single-table materialization supplies native frame facts to shared Rust entity lookup, holdout, labelled context selection and RangeIndex sampling, retaining existing task derivation and constructor boundaries."
     },
     "packages/structured-data-models-client/src/sdm_client/decompose.py::<module>": {
       "gone": "T2.14c: the file leaves the freeze, the core route entering none of its ledgered functions (measured: python-core on every case and database under coverage)"
