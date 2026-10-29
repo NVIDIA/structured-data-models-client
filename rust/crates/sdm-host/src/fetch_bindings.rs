@@ -19,6 +19,23 @@ fn invalid() -> CoreError {
     )
 }
 
+/// Test-only bytes adapter, keeping JSON serialization in the host codec
+/// layer while language bindings supply only actual Arrow schemas.
+pub fn fetch_binding_bytes(
+    request: &[u8],
+    plan: &[u8],
+    schemas: &BTreeMap<AttachmentId, SchemaRef>,
+) -> Result<Vec<u8>, CoreError> {
+    let request: DataRequest = serde_json::from_slice(request).map_err(|_| invalid())?;
+    let plan: FetchPlan = serde_json::from_slice(plan).map_err(|_| invalid())?;
+    let value = json!({
+        "owners": fetch_binding_schemas(&plan, schemas)?,
+        "witness": fetch_plan_witness(&request, &plan)?,
+    });
+    serde_json::to_vec(&value)
+        .map_err(|_| CoreError::new(Sentence::Internal, "fetch binding witness does not encode"))
+}
+
 /// Actual Arrow schemas are read from retained bound owners, not inferred
 /// from the request. The plan must name every owner, with the same schema.
 pub fn fetch_binding_schemas(

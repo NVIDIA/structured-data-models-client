@@ -25,7 +25,7 @@ pub mod zones;
 pub use admission::{OFFSET_CAPACITY, admit, admit_from, admit_with_capacity, admitted_type};
 pub use codec::{CONTROL_CAP, Outgoing, decode, encode, read, write, write_error};
 #[cfg(feature = "test-ops")]
-pub use fetch_bindings::{fetch_binding_schemas, fetch_plan_witness};
+pub use fetch_bindings::{fetch_binding_bytes, fetch_binding_schemas, fetch_plan_witness};
 pub use frames::detach as detach_frame;
 pub use gathered_entities::gathered_entity_bytes;
 pub use local_zone::{LOCALTIME, ZoneFiles, local_zone};
