@@ -1314,6 +1314,11 @@ fn declared_answer_meaning(payload: &Value, classification: bool) -> AnswerType 
     declared_class_answers(target_dtype(payload).map(str::as_bytes))
 }
 
+/// Native startswith vocabulary shared by direct and gathered restoration.
+pub fn numeric_target_prefixes() -> Vec<String> {
+    ["int", "float", "bool"].map(str::to_owned).to_vec()
+}
+
 /// Shared class-family selection over neutral declaration text.
 fn declared_class_answers(dtype: Option<&[u8]>) -> AnswerType {
     match dtype {
@@ -1603,6 +1608,58 @@ pub fn layout(
     )
 }
 
+/// Shared classification meaning of a reached task display. Custom native
+/// containment supplies its observed truth rather than a textual alias.
+pub fn direct_task_classification(task: &sdm_contract::prepare::DirectTaskMeaning) -> bool {
+    match task {
+        sdm_contract::prepare::DirectTaskMeaning::Builtin { value } => {
+            let points: Vec<_> = value.points().collect();
+            let word: Vec<_> = "classification".chars().map(u32::from).collect();
+            points.windows(word.len()).any(|part| part == word)
+        }
+        sdm_contract::prepare::DirectTaskMeaning::Native { classification, .. } => *classification,
+    }
+}
+
+/// A later native declaration is required exactly when classification reaches
+/// its dtype read. It never replaces the immutable transmitted payload.
+pub fn direct_target_declaration(
+    task: Option<&sdm_contract::prepare::DirectTaskMeaning>,
+    target: Option<&sdm_contract::prepare::DirectTargetDeclaration>,
+) -> Result<Option<AnswerType>, CoreError> {
+    match (task, target) {
+        (None, None) => Ok(None),
+        (Some(task), Some(target)) if direct_task_classification(task) => {
+            let dtype = match target {
+                sdm_contract::prepare::DirectTargetDeclaration::Missing => None,
+                sdm_contract::prepare::DirectTargetDeclaration::Text { value } => {
+                    Some(value.as_bytes())
+                }
+                sdm_contract::prepare::DirectTargetDeclaration::Unrestored {
+                    truth,
+                    numeric_prefix,
+                } if (!*truth && numeric_prefix.is_none())
+                    || (*truth && *numeric_prefix == Some(false)) =>
+                {
+                    None
+                }
+                _ => {
+                    return Err(CoreError::protocol(
+                        Sentence::InvalidMessage,
+                        "native dtype shortcut has missing or unsolicited prefix facts",
+                    ));
+                }
+            };
+            Ok(Some(declared_class_answers(dtype)))
+        }
+        (Some(task), None) if !direct_task_classification(task) => Ok(Some(AnswerType::Float)),
+        _ => Err(CoreError::protocol(
+            Sentence::InvalidMessage,
+            "native target declaration is missing or unsolicited for the reached task meaning",
+        )),
+    }
+}
+
 /// Direct tabular answers follow the later wire task, without rerunning
 /// gathered admission after a source warning changed that task.
 pub(crate) fn layout_tabular_task(
@@ -1611,21 +1668,11 @@ pub(crate) fn layout_tabular_task(
     decimal_limit: u32,
     float_text: fn(f64) -> String,
     native_task: Option<&sdm_contract::prepare::DirectTaskMeaning>,
+    native_target: Option<&sdm_contract::prepare::DirectTargetDeclaration>,
 ) -> Result<Part, CoreError> {
-    let answers = if let Some(task) = native_task {
-        let classification = match task {
-            sdm_contract::prepare::DirectTaskMeaning::Builtin { value } => {
-                let points: Vec<_> = value.points().collect();
-                let word: Vec<_> = "classification".chars().map(u32::from).collect();
-                points.windows(word.len()).any(|part| part == word)
-            }
-            sdm_contract::prepare::DirectTaskMeaning::Native { classification, .. } => {
-                *classification
-            }
-        };
-        declared_answer_meaning(payload, classification)
-    } else {
-        declared_answers(payload, kind_of(payload)?)
+    let answers = match direct_target_declaration(native_task, native_target)? {
+        Some(answers) => answers,
+        None => declared_answers(payload, kind_of(payload)?),
     };
     layout_as(
         payload,

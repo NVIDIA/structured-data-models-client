@@ -214,8 +214,8 @@ fn finish_response_declaration(
             json!({"stage":"response_task_meaning","task":task}),
             Attachments::new(),
         )?;
-        if classification == json!(true) {
-            Some(target_override.unwrap_or_else(|| json!({"dtype":original_payload["task"]["target"]["dtype"].as_str().map(|text|text.chars().map(u32::from).collect::<Vec<_>>())})))
+        if classification["classification"] == json!(true) {
+            Some(target_override.unwrap_or_else(|| original_payload["task"]["target"]["dtype"].as_str().map_or_else(||json!({"storage":"missing"}), |text|json!({"storage":"text", "value":text.chars().map(u32::from).collect::<Vec<_>>()}))))
         } else {
             target_override
         }
@@ -935,7 +935,11 @@ fn direct_prelude_must_agree_with_the_legitimately_checked_bound_call() {
         let error = prepare(json!({"stage":"overlap","input":input}), attached).unwrap_err();
         assert_eq!(
             error.sentence,
-            sdm_contract::Sentence::InvalidMessage,
+            if axis == "rows-10001" {
+                sdm_contract::Sentence::ContextPastModel
+            } else {
+                sdm_contract::Sentence::InvalidMessage
+            },
             "{axis}"
         );
     }
@@ -1842,6 +1846,36 @@ fn classified_result_with_task_declaration(
     native_task: Option<Value>,
     native_target: Option<Value>,
 ) -> ArrowData {
+    let laid = classified_response_declaration_run(
+        target,
+        label,
+        probabilities,
+        decimal_limit,
+        native_task,
+        native_target,
+    );
+    let message = next(&laid);
+    let ControlMessage::Step(Step::Done {
+        result: OperationResult::Predict(result),
+        ..
+    }) = message
+    else {
+        panic!("layout: {message:?}")
+    };
+    let Attachment::Arrow(result) = laid.take_attachment(result.result).unwrap().unwrap() else {
+        panic!("result")
+    };
+    result
+}
+
+fn classified_response_declaration_run(
+    target: ArrayRef,
+    label: Value,
+    probabilities: serde_json::Map<String, Value>,
+    decimal_limit: u32,
+    native_task: Option<Value>,
+    native_target: Option<Value>,
+) -> HostRun {
     let feature = Arc::new(arrow_array::Int64Array::from(vec![1, 2, 3])) as ArrayRef;
     let context = [RecordBatch::try_from_iter([("0", feature), ("1", target)]).unwrap()];
     let scoring = [RecordBatch::try_from_iter([(
@@ -1885,7 +1919,7 @@ fn classified_result_with_task_declaration(
     else {
         panic!("decoded")
     };
-    let laid = finish_response_declaration(
+    finish_response_declaration(
         &run,
         decoded.value,
         None,
@@ -1893,19 +1927,7 @@ fn classified_result_with_task_declaration(
         native_task,
         native_target,
     )
-    .unwrap();
-    let message = next(&laid);
-    let ControlMessage::Step(Step::Done {
-        result: OperationResult::Predict(result),
-        ..
-    }) = message
-    else {
-        panic!("layout: {message:?}")
-    };
-    let Attachment::Arrow(result) = laid.take_attachment(result.result).unwrap().unwrap() else {
-        panic!("result")
-    };
-    result
+    .unwrap()
 }
 
 #[test]
@@ -2761,15 +2783,15 @@ fn late_native_target_declaration_is_independent_of_sent_dtype_and_closed() {
             Attachments::new()
         )
         .unwrap(),
-        true
+        json!({"classification":true,"numeric_prefixes":["int","float","bool"]})
     );
     let result = classified_result_with_task_declaration(
         Arc::new(arrow_array::Int64Array::from(vec![0, 1, 0])) as ArrayRef,
         json!("3"),
         serde_json::Map::new(),
         4300,
-        Some(task),
-        Some(json!({"dtype":"string".chars().map(u32::from).collect::<Vec<_>>()})),
+        Some(task.clone()),
+        Some(json!({"storage":"text","value":"string".chars().map(u32::from).collect::<Vec<_>>()})),
     );
     assert_eq!(
         result.batches[0]
@@ -2781,8 +2803,10 @@ fn late_native_target_declaration_is_independent_of_sent_dtype_and_closed() {
     );
     for malformed in [
         json!({}),
-        json!({"dtype":17}),
-        json!({"dtype":[],"extra":true}),
+        json!({"storage":"text","value":17}),
+        json!({"storage":"text","value":[],"extra":true}),
+        json!({"storage":"text"}),
+        json!({"storage":"missing","value":[]}),
     ] {
         assert!(
             serde_json::from_value::<sdm_contract::prepare::DirectTargetDeclaration>(malformed)
@@ -2796,13 +2820,53 @@ fn late_native_target_declaration_is_independent_of_sent_dtype_and_closed() {
             Attachments::new()
         )
         .unwrap(),
-        false
+        json!({"classification":false,"numeric_prefixes":["int","float","bool"]})
     );
     // The domain product rejects missing/unsolicited target facts before any result layout.
     let yes: sdm_contract::prepare::DirectTaskMeaning = serde_json::from_value(task).unwrap();
     let no: sdm_contract::prepare::DirectTaskMeaning = serde_json::from_value(false_task).unwrap();
-    let target = sdm_contract::prepare::DirectTargetDeclaration { dtype: None };
+    let target = sdm_contract::prepare::DirectTargetDeclaration::Missing;
     assert!(sdm_request::predict::direct_target_declaration(Some(&yes), None).is_err());
     assert!(sdm_request::predict::direct_target_declaration(Some(&no), Some(&target)).is_err());
     assert!(sdm_request::predict::direct_target_declaration(None, Some(&target)).is_err());
+    for (truth, numeric_prefix, valid) in [
+        (false, None, true),
+        (true, Some(false), true),
+        (false, Some(false), false),
+        (true, None, false),
+        (true, Some(true), false),
+    ] {
+        let observed = sdm_contract::prepare::DirectTargetDeclaration::Unrestored {
+            truth,
+            numeric_prefix,
+        };
+        assert_eq!(
+            sdm_request::predict::direct_target_declaration(Some(&yes), Some(&observed)).is_ok(),
+            valid
+        );
+    }
+}
+
+#[test]
+fn host_layout_refuses_missing_and_unsolicited_late_declarations() {
+    let yes = json!({"representation":"builtin","value":"classification".chars().map(u32::from).collect::<Vec<_>>()});
+    let no = json!({"representation":"native","value":[],"classification":false});
+    for (task, target) in [
+        (Some(yes), Some(Value::Null)),
+        (Some(no), Some(json!({"storage":"missing"}))),
+        (None, Some(json!({"storage":"missing"}))),
+    ] {
+        let run = classified_response_declaration_run(
+            Arc::new(arrow_array::Int64Array::from(vec![0, 1, 0])) as ArrayRef,
+            json!("3"),
+            serde_json::Map::new(),
+            4300,
+            task,
+            target,
+        );
+        let ControlMessage::Error { error } = next(&run) else {
+            panic!("malformed late declaration must fail actual Host layout")
+        };
+        assert_eq!(error.sentence, sdm_contract::Sentence::InvalidMessage);
+    }
 }

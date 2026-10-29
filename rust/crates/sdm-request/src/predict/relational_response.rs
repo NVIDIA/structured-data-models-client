@@ -523,7 +523,7 @@ pub fn target_meaning(
     text(kind)?;
     Ok(RelationalTargetMeaning {
         classification,
-        numeric_prefixes: ["int", "float", "bool"].map(str::to_owned).to_vec(),
+        numeric_prefixes: super::numeric_target_prefixes(),
     })
 }
 

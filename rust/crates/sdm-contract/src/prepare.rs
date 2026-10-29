@@ -143,6 +143,30 @@ pub enum DirectTaskMeaning {
     },
 }
 
+/// Shared meaning consumed before a reached native target declaration read.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct DirectTaskClassification {
+    pub classification: bool,
+    pub numeric_prefixes: Vec<String>,
+}
+
+/// The declaration reached on the actual native normalization task owner,
+/// after task display/containment and release of the temporary display.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "storage", rename_all = "snake_case", deny_unknown_fields)]
+pub enum DirectTargetDeclaration {
+    Missing,
+    Text {
+        value: UnicodeText,
+    },
+    /// Native truth/startswith short circuits that leave answers as written.
+    Unrestored {
+        truth: bool,
+        numeric_prefix: Option<bool>,
+    },
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct NativeConstructorTask {
@@ -509,12 +533,17 @@ pub enum Preparation {
         scope: ResponseScope,
         rows: Vec<AttributedDirectRow>,
     },
+    ResponseTaskMeaning {
+        task: DirectTaskMeaning,
+    },
     LayoutResponse {
         data: DirectResponseData,
         attributed: AttachmentId,
         decimal_limit: u32,
         #[serde(default)]
         native_task: Option<DirectTaskMeaning>,
+        #[serde(default)]
+        native_target: Option<DirectTargetDeclaration>,
     },
     Overlap {
         input: DirectPrelude,

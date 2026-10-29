@@ -243,7 +243,7 @@ def _attribute_native(checked: dict[str, Any]) -> dict[str, Any]:
     )
 
 
-def _response(finished: Finished, task_owner: Any) -> Finished:
+def _response(finished: Finished, payload_owner: dict[str, Any]) -> Finished:
     """Use immutable owned buffers once and bounded slices after native effects."""
     answer = results.expect(finished.result, results.DecodedDirectResponse)
     data = json.loads(finished.take(answer.value))
@@ -281,9 +281,10 @@ def _response(finished: Finished, task_owner: Any) -> Finished:
     )
     completion = results.expect(completed.result, results.Prepared)
     accepted = json.loads(completed.take(completion.value))
-    # The original payload captured this owner before encoding/transport.
-    # Complete row admission precedes its one reached native str conversion.
-    task_text = str(task_owner)
+    # Keep the actual call-local task container, including decoded-transport
+    # replacements. Display can mutate data read later from this same owner.
+    task_owner = (payload_owner or {}).get('task', {})
+    task_text = str(task_owner.get('kind', ''))
     native_task: dict[str, Any] = {
         'representation': 'builtin',
         'value': [ord(character) for character in str.__iter__(task_text)],
@@ -298,6 +299,33 @@ def _response(finished: Finished, task_owner: Any) -> Finished:
     # The source containment expression owns its displayed string only until
     # that expression completes, before target restoration reads later data.
     del task_text
+    meaning = _call({'stage': 'response_task_meaning', 'task': native_task})
+    native_target = None
+    if meaning['classification']:
+        dtype = task_owner.get('target', {}).get('dtype')
+        if dtype is None:
+            native_target = {'storage': 'missing'}
+        elif type(dtype) is str:
+            native_target = {
+                'storage': 'text',
+                'value': [ord(character) for character in dtype],
+            }
+        else:
+            truth = bool(dtype)
+            prefix = (
+                bool(dtype.startswith(tuple(meaning['numeric_prefixes'])))
+                if truth
+                else None
+            )
+            if prefix:
+                raise RouteError(
+                    'direct response restoration with native dtype conversion overrides remains unfinished'
+                )
+            native_target = {
+                'storage': 'unrestored',
+                'truth': truth,
+                'numeric_prefix': prefix,
+            }
     attached = {
         n: buffers[name]
         for n, name in enumerate(('payload', 'response', 'rows'), 2)
@@ -308,6 +336,7 @@ def _response(finished: Finished, task_owner: Any) -> Finished:
         {
             'stage': 'layout_response',
             'native_task': native_task,
+            'native_target': native_target,
             'data': data,
             'attributed': 5,
             'decimal_limit': getter() if getter else 0,
@@ -857,9 +886,6 @@ def predict(
                 'admitted': admitted,
             }
         )
-    # The reference's required-capabilities owner leaves with preflight,
-    # after model/task admission and before capacity and adapter data reads.
-    del required
     call = _call(
         {
             'stage': 'capacity',
@@ -867,6 +893,9 @@ def predict(
             'rows': request._context_rows_per_call(),
         }
     )
+    # Successful preflight releases its actual comparison truth owners only
+    # after capacity admission. A refusal keeps them in the native traceback.
+    del required
     empty = request.nothing_to_score
     attached: dict[int, Any] = {}
     value: dict[str, Any]
@@ -1000,6 +1029,7 @@ def predict(
             2: _buffers(context, context_header),
             3: _buffers(scored, predict_header),
         }
+    normalization_owner: dict[str, Any] | None
     if not empty:
         encoded = _prepared_run(
             {'stage': 'encode_body', 'input': value}, attached
@@ -1007,6 +1037,10 @@ def predict(
         body_result = results.expect(encoded.result, results.Prepared)
         body = json.loads(encoded.take(body_result.value))
         attached = {2: encoded.take(body['payload'])}
+        # Capture the genuine encoded task container before inference is
+        # added. Byte transports need no additional native body decoding.
+        normalization_owner = json.loads(attached[2])
+        normalization_owner['task']['kind'] = task
         body['payload'] = 2
         # Both encoders have finished before native ID/inference observations.
         request_id = _request_id()
@@ -1035,6 +1069,7 @@ def predict(
         }
     else:
         request_id = ''
+        normalization_owner = None
     operation = {
         'op': 'predict',
         'direct': 1,
@@ -1046,10 +1081,16 @@ def predict(
     endpoint = getattr(client._transport, 'model_endpoint', None)
     if endpoint is not None:
         operation['model_endpoint'] = endpoint
+
+    def send(body: bytes) -> bytes:
+        return prediction._send(
+            client, call['model'], body, _payload=normalization_owner
+        )
+
     finished = run(
         operation,
         {1: codec.attachment(value), **attached},
-        model=lambda body: prediction._send(client, call['model'], body),
+        model=send,
     )
     if not empty:
         with errors.holding(
@@ -1057,7 +1098,8 @@ def predict(
                 int(decimal.Decimal(fields['index']))
             )
         ):
-            finished = _response(finished, task)
+            assert normalization_owner is not None
+            finished = _response(finished, normalization_owner)
     answered = results.expect(finished.result, results.Predicted)
     table = prediction._table(finished.take(answered.result))
     result = prediction._result(

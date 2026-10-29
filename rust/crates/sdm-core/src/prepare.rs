@@ -438,8 +438,9 @@ pub(crate) async fn run(
             sdm_request::tabular::response::attribute(selected, string, crate::pql::float_text)?,
         ),
         Preparation::CompleteResponseRows { scope, rows } => serde_json::to_value(sdm_request::tabular::response::complete_rows(&scope, rows, crate::pql::float_text)?),
-        Preparation::LayoutResponse { data, attributed, decimal_limit, native_task } => {
-            return crate::prepare_response::layout(&asker, data, attributed, decimal_limit, native_task, attached);
+        Preparation::ResponseTaskMeaning { task } => serde_json::to_value(DirectTaskClassification { classification: policy::direct_task_classification(&task), numeric_prefixes: policy::numeric_target_prefixes() }),
+        Preparation::LayoutResponse { data, attributed, decimal_limit, native_task, native_target } => {
+            return crate::prepare_response::layout(&asker, data, attributed, decimal_limit, native_task, native_target, attached);
         }
         Preparation::Overlap { input } => {
             serde_json::to_value(overlap(&asker, input, &mut attached).await?)
@@ -934,7 +935,6 @@ struct Bound<'a> {
     kind: &'a TaskValue,
     native_task: bool,
     shape: &'a CallShape,
-    context_rows: usize,
 }
 fn checked_bound(call: &CallPreparation) -> Result<Bound<'_>, CoreError> {
     let CallPreparation::Bound {
@@ -981,7 +981,6 @@ fn checked_bound(call: &CallPreparation) -> Result<Bound<'_>, CoreError> {
         kind,
         native_task: admitted.is_some(),
         shape,
-        context_rows: *context_rows,
     })
 }
 fn arriving(rows: &ArrowData) -> Result<Vec<(String, sdm_contract::ops::Dtype)>, CoreError> {
@@ -1005,15 +1004,15 @@ async fn overlap(
     attached: &mut Attachments,
 ) -> Result<DirectOverlap, CoreError> {
     let bound = checked_bound(&input.bound)?;
-    // These are the observations consumed before any one-shot advice can
-    // mutate native values or replace the references the adapter later takes.
+    // The earlier bound count records capacity admission, not a snapshot of
+    // later live adapter data. Preflight-owner release may mutate those rows.
+    // The later headers are independently checked against attached buffers.
     if (!bound.native_task && &input.task != bound.kind)
-        || input.context_header.rows != bound.context_rows
         || input.schema.tables.len() != bound.shape.tables
         || (!input.schema.links.is_empty()) != bound.shape.relationships
     {
         return Err(invalid(
-            "direct prelude task, capacity or schema shape disagrees with its bound call",
+            "direct prelude task or schema shape disagrees with its bound call",
         ));
     }
     if bound.model != policy::TABULAR {

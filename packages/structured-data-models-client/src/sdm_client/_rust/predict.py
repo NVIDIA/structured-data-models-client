@@ -172,7 +172,13 @@ def _adapter(client: SDMClient, model_id: str) -> Any:
     return adapter
 
 
-def _send(client: SDMClient, model_id: str, body: bytes) -> bytes:
+def _send(
+    client: SDMClient,
+    model_id: str,
+    body: bytes,
+    *,
+    _payload: dict[str, Any] | None = None,
+) -> bytes:
     # What failed is noted inside the handlers and raised after them, so
     # the transport's exception, whose text the endpoint wrote, is not
     # even the context of what is raised. The part a refusal is said of,
@@ -188,7 +194,10 @@ def _send(client: SDMClient, model_id: str, body: bytes) -> bytes:
         # through the adapter that explains the endpoint's refusals; the
         # answer, the bytes the endpoint sent, is the core's to read
         # (T2.14b).
-        return client._send_body(_adapter(client, model_id), body)
+        adapter = _adapter(client, model_id)
+        if _payload is None:
+            return client._send_body(adapter, body)
+        return client._send_body(adapter, body, _payload=_payload)
     except EndpointFailed:
         # A serving endpoint's failure, which the core names (T3.13).
         raise

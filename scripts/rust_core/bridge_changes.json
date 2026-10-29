@@ -333,7 +333,7 @@
       "moved": "T2.14b (with T2.14d, MID2 P2-3): the key set's spelling past Arrow's text (a time without a zone as pandas' isoformat, binary as \\x and hex) is sdm-data's Postgres value rule (pg_values::bound_keys), applied by the core before the host takes the key set; the provider writes Arrow's text of each cell (_bound_text)"
     },
     "packages/structured-data-models-client/src/sdm_client/client.py::SDMClient._send_body": {
-      "moved": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added; T2.14b: response bytes untouched (Phase 1 ledger, design scope item 5): the answer handed to the core as the endpoint sent it"
+      "moved": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added; T2.14b: response bytes untouched (Phase 1 ledger, design scope item 5): the answer handed to the core as the endpoint sent it; T4.6: an optional call-local native payload owner is refreshed from actual sent bytes before decoded transport and retained by identity for later restoration; byte transports still receive original Core bytes and the existing adapter error path is shared"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_context_anchor": {
       "moved": "T2.11: context_anchor_time written for the core as anchor_time is (a ts scalar), the literal 'entity' and none as they are, any other value as the text 'unreadable', which the core refuses where the engine refuses it (sdm-request options); no type check here"
@@ -588,7 +588,7 @@
       "refactor": "T4.6: restore already decoded integer carriers after native ID effects without repeating text admission; fresh declared-text integer conversion remains a core-owned current-limit rule"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_send": {
-      "refactor": "T4.6: extract the unchanged native transport exchange so gathered and direct callers share one I/O and transport-exception boundary; no model, answer or admission policy is selected here"
+      "refactor": "T4.6: extract the unchanged native transport exchange so gathered and direct callers share one I/O and transport-exception boundary; no model, answer or admission policy is selected here; retain the optional direct normalization owner through the same shared transport/error boundary"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::raise_native": {
       "refactor": "T4.6: propagate the selected actual exception instance and its native cause/context/suppression graph, removing only the explicitly identified internal CoreError; no admission or refusal classification"

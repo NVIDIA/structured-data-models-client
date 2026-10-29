@@ -648,7 +648,13 @@ class SDMClient:
                 raise
             raise explained from error
 
-    def _send_body(self, adapter: Any, body: bytes) -> bytes:
+    def _send_body(
+        self,
+        adapter: Any,
+        body: bytes,
+        *,
+        _payload: dict[str, Any] | None = None,
+    ) -> bytes:
         r"""Post one call already written (the core's, on its route), its
         bytes unchanged where the transport sends bytes as they are, as the
         HTTP transport does, so the bytes the core's size limit counted are
@@ -657,17 +663,33 @@ class SDMClient:
         Databricks serving endpoint's transport posts the envelope the core
         wrote and gives back the endpoint's reply as it came, which the
         core reads too (T3.13). A transport with no ``predict_body`` answers decoded, which is
-        written back as JSON text. A refusal the adapter explains as
+        written back as JSON text. The optional private payload retains the
+        direct call's native task owner and dictionary across this decoded
+        exchange and later normalization. A refusal the adapter explains as
         :meth:`_send` does."""
         send = getattr(self._transport, 'predict_body', None)
+        payload = None
         try:
             if send is not None:
                 return bytes(send(body))
-            return json.dumps(
-                self._transport.predict(json.loads(body))
-            ).encode()
+            payload = json.loads(body)
+            if _payload is not None:
+                # Retain the native task owner and the same dictionary that
+                # normalization will later read. Refresh only before transport.
+                kind = _payload['task']['kind']
+                _payload.clear()
+                _payload.update(payload)
+                _payload['task']['kind'] = kind
+                del kind
+                payload = _payload
+            return json.dumps(self._transport.predict(payload)).encode()
         except StructuredDataError as error:
-            explained = adapter.explain_error(error, json.loads(body))
+            explained = adapter.explain_error(
+                error,
+                _payload
+                if _payload is not None and send is None and payload is not None
+                else json.loads(body),
+            )
             if explained is error:
                 raise
             raise explained from error

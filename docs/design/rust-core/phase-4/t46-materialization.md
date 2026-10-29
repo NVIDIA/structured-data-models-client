@@ -144,3 +144,30 @@ Rust Host controls consume the same typed column, constant-task, completed-row a
 
 All of this source remains unexecuted pending the exact source-authoring review pair, genuine canonical contract36/schema and bridge generation, fresh completed-source reviews and required validation.
 No generated schema or prior runtime is claimed to represent these new inputs.
+
+
+### Native preflight lifetime and late direct restoration
+
+The native required-capabilities value retains actual task-comparison truth owners through the context row read and shared capacity admission.
+A capacity refusal retains that owner in its native traceback; successful preflight releases it before the later live adapter reads.
+The bound count remains an earlier capacity observation, while the overlap product checks its later headers against actual attachments independently.
+An in-place frame edit at successful preflight release therefore remains visible without being mistaken for a forged earlier count.
+
+A direct call retains its genuine native payload task container and captured kind owner independently of immutable Core bytes.
+The optional private payload argument follows the existing shared transport and adapter-error boundary.
+Byte-capable transports receive the exact original bytes without an added decode of the final inference body.
+Decoded transports receive the actual retained dictionary, refreshed from those final bytes before transport while preserving the original native kind owner.
+Transport replacements and edits to that dictionary remain visible at normalization.
+No current Request task is substituted for that normalization owner.
+
+Complete row attribution and its population checks still precede task display and native containment.
+The temporary display owner is released before the lazy actual target dtype read.
+The closed response-task meaning returns Core-owned classification meaning and numeric-prefix vocabulary.
+A separate closed target declaration records missing/builtin text or actually reached native false-truth/false-prefix shortcuts.
+Rust validates required versus unsolicited facts and owns builtin dtype restoration, prediction conversion and probability key policy.
+Sent bytes and completed row facts are never replaced by this later declaration.
+
+Native dtype truth and startswith failures remain native, and false native shortcuts leave answers unchanged.
+Positive custom dtype conversion overrides remain an explicit unfinished native-conversion family after their reached truth and prefix observations.
+This does not authorize a blanket conversion-timing exception or complete the broader entity, index, sorter, default-route, session or full Phase4 obligations.
+The public old/Core controls and Host malformed/ordered controls are source-first controls until the canonical generation, whole-source review and execution gates complete.

@@ -59,6 +59,7 @@ pub(crate) fn layout(
     attributed: AttachmentId,
     decimal_limit: u32,
     native_task: Option<sdm_contract::prepare::DirectTaskMeaning>,
+    native_target: Option<sdm_contract::prepare::DirectTargetDeclaration>,
     mut attached: Attachments,
 ) -> Result<OperationResult, CoreError> {
     let payload = json::read(&bytes(&mut attached, data.payload)?)
@@ -90,6 +91,7 @@ pub(crate) fn layout(
         decimal_limit,
         crate::pql::float_text,
         native_task.as_ref(),
+        native_target.as_ref(),
     )?;
     if data.named {
         let absent = policy::absent(&part, &data.outputs);

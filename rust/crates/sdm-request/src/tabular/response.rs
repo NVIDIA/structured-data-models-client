@@ -556,6 +556,7 @@ pub fn layout(
     decimal_limit: u32,
     float_text: fn(f64) -> String,
     native_task: Option<&sdm_contract::prepare::DirectTaskMeaning>,
+    native_target: Option<&sdm_contract::prepare::DirectTargetDeclaration>,
 ) -> Result<Part, CoreError> {
     let (actual, rows) = decode(payload, response, float_text)?;
     if actual != *scope || attributed.len() != rows.len() {
@@ -571,8 +572,14 @@ pub fn layout(
         return Err(protocol("attribution source differs from decoded response"));
     }
     let attributed = complete_rows(scope, attributed, float_text)?;
-    let mut part =
-        predict::layout_tabular_task(payload, response, decimal_limit, float_text, native_task)?;
+    let mut part = predict::layout_tabular_task(
+        payload,
+        response,
+        decimal_limit,
+        float_text,
+        native_task,
+        native_target,
+    )?;
     for (row, accepted) in part.rows.iter_mut().zip(attributed) {
         row.id = entity(&accepted.id)?;
     }

@@ -1314,7 +1314,11 @@ def test_required_capability_truth_owner_survives_capacity_then_releases(
                         )
             for body in scripted.calls:
                 body['metadata']['request_id'] = '<drawn>'
-            return outcome, scripted.calls, events
+            return (
+                outcome,
+                scripted.calls,
+                outcome[4] if rows > 10000 else events,
+            )
 
     old, current = observe(False), observe(True)
     assert current == old
@@ -1462,3 +1466,76 @@ def test_direct_byte_transport_receives_exact_core_bytes(monkeypatch):
     assert len(received) == 1
     assert received == offered
     assert type(received[0]) is bytes
+
+
+@pytest.mark.parametrize(
+    'effect', ['false-truth', 'false-prefix', 'truth-error', 'prefix-error']
+)
+def test_late_native_dtype_shortcuts_and_failures_follow_actual_protocol(
+    monkeypatch, effect
+):
+    from sdm_client import Request
+
+    def observe(core):
+        events = []
+        held = LookupError('actual late dtype observation')
+
+        class Dtype:
+            def __bool__(self):
+                events.append('dtype truth')
+                if effect == 'truth-error':
+                    raise held
+                return effect != 'false-truth'
+
+            def startswith(self, prefixes):
+                events.append(('dtype prefix', prefixes))
+                if effect == 'prefix-error':
+                    raise held
+                return False
+
+        class Answer(Scripted):
+            def predict(self, payload):
+                answer = super().predict(payload)
+                payload['task']['target']['dtype'] = Dtype()
+                for item in answer['predictions']:
+                    item['prediction'] = '3'
+                return answer
+
+        scripted = Answer()
+        with monkeypatch.context() as patch:
+            patch.setenv(
+                _routing.ENVIRONMENT,
+                ','.join(_routing.DIRECT_CONSUMERS) if core else '',
+            )
+            request = Request(
+                pd.DataFrame({'answer': [0, 1, 0], 'feature': [2, 3, 4]}),
+                pd.DataFrame({'feature': [5]}),
+                target='answer',
+                task='classification',
+            )
+            with warnings.catch_warnings(record=True):
+                warnings.simplefilter('always')
+                with SDMClient('http://localhost:1', max_retries=0) as client:
+                    client._transport.close()
+                    client._transport = scripted
+                    try:
+                        result = client.predict(request, model='kumo-tabular')
+                        outcome = ('ok', result.to_pandas().to_dict('split'))
+                    except Exception as error:
+                        outcome = ('error', _error_graph(error), error is held)
+            for body in scripted.calls:
+                body['metadata']['request_id'] = '<drawn>'
+            return outcome, scripted.calls, events
+
+    old, current = observe(False), observe(True)
+    assert current == old
+    if effect.endswith('error'):
+        assert current[0][-1] is True
+    else:
+        frame = current[0][1]
+        assert frame['data'][0][frame['columns'].index('prediction')] == '3'
+    assert current[2][0] == 'dtype truth'
+    if effect in ('false-truth', 'truth-error'):
+        assert current[2] == ['dtype truth']
+    else:
+        assert current[2][-1] == ('dtype prefix', ('int', 'float', 'bool'))
