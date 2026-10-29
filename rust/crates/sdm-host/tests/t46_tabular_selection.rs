@@ -73,3 +73,28 @@ fn typed_host_preserves_the_existing_context_capacity_refusal() {
         sdm_contract::Sentence::NumContextSamplesPastMost
     );
 }
+
+#[test]
+fn actual_candidate_labels_order_the_sample_before_mapping_original_rows() {
+    let context = TabularContext::new(vec![2, 5, 9, 12, 20, 31], Some(3)).unwrap();
+    let labels = [70, -9, 200, 3, 1, -50];
+    assert!(context.reduced());
+    // Seed42's six-row sample prefix is [0, 1, 5]; only that subset is sorted.
+    assert_eq!(
+        context.positions(Some(&labels)).unwrap(),
+        Some(vec![5, 1, 0])
+    );
+    assert_eq!(context.select(Some(&labels)).unwrap(), [31, 5, 2]);
+    assert!(context.positions(None).is_err());
+    assert!(context.positions(Some(&labels[..5])).is_err());
+    assert!(context.positions(Some(&[70, -9, 200, 3, 1, 70])).is_err());
+}
+
+#[test]
+fn uncapped_context_needs_no_native_index_and_rejects_unsolicited_labels() {
+    let context = TabularContext::new(vec![1, 4, 8], None).unwrap();
+    assert!(!context.reduced());
+    assert!(context.positions(None).unwrap().is_none());
+    assert_eq!(context.select(None).unwrap(), [1, 4, 8]);
+    assert!(context.positions(Some(&[3, 2, 1])).is_err());
+}

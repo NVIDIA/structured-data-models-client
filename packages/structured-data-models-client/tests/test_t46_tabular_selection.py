@@ -256,3 +256,106 @@ def test_supplied_entity_read_effects_precede_source_membership(monkeypatch):
     assert results[0][0] == results[1][0] == ['scoring', 'source']
     pd.testing.assert_frame_equal(results[0][1], results[1][1])
     assert 99 in set(results[1][1].entity_id)
+
+
+@pytest.mark.parametrize('changed', ['empty-scoring-entity', 'held-out-target'])
+def test_sampled_context_uses_actual_candidate_index_after_native_getters(
+    monkeypatch, changed
+):
+    observed = []
+    for core in (False, True):
+        with monkeypatch.context() as route:
+            route.setenv(
+                _routing.ENVIRONMENT,
+                ','.join(
+                    _routing.MATERIALIZE['frames']
+                    + _routing.TABULAR_PREDICT_FRAME
+                    + _routing.DIRECT_CONSUMERS
+                )
+                if core
+                else '',
+            )
+            source = _table(12_019)
+            scoring_ids = [] if changed == 'empty-scoring-entity' else [11]
+            scoring = pd.DataFrame(
+                {
+                    'entity_id': pd.Series(scoring_ids, dtype='int64'),
+                    'feature': pd.Series(
+                        [0.5] * len(scoring_ids), dtype='float64'
+                    ),
+                }
+            )
+            query = PredictiveQuery(
+                'PREDICT things.answer FOR EACH things.entity_id',
+                {'things': source},
+            )
+            events = []
+            original_get = pd.DataFrame.__getitem__
+
+            def observed_get(frame, key):
+                if isinstance(key, str) and not events:
+                    if changed == 'empty-scoring-entity' and (
+                        frame is scoring and key == 'entity_id'
+                    ):
+                        source.index = pd.RangeIndex(len(source) - 1, -1, -1)
+                        events.append(('scoring', len(frame)))
+                    elif changed == 'held-out-target' and (
+                        key == 'answer' and frame is not source
+                    ):
+                        frame.index = pd.Index(
+                            7 - 3 * np.arange(len(frame), dtype='int64')
+                        )
+                        events.append(
+                            ('target', len(frame), tuple(frame.index))
+                        )
+                return original_get(frame, key)
+
+            route.setattr(pd.DataFrame, '__getitem__', observed_get)
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore')
+                request = query.materialize(predict=scoring, task='regression')
+            assert len(events) == 1
+            assert request.context_rows == 10_000
+            context = request.context.instance_table.copy()
+            predict = request.predict.instance_table.copy()
+            scripted = Scripted()
+            with SDMClient('http://localhost:1', max_retries=0) as client:
+                client._transport.close()
+                client._transport = scripted
+                result = client.predict(request, model='kumo-tabular')
+                answered = result.to_pandas()
+            for body in scripted.calls:
+                body['metadata']['request_id'] = '<drawn>'
+            observed.append(
+                (
+                    events,
+                    context,
+                    predict,
+                    request.task,
+                    request.query,
+                    scripted.calls,
+                    answered,
+                )
+            )
+    old, current = observed
+    assert old[0] == current[0]
+    pd.testing.assert_frame_equal(old[1], current[1])
+    pd.testing.assert_frame_equal(old[2], current[2])
+    assert old[3:6] == current[3:6]
+    pd.testing.assert_frame_equal(old[6], current[6])
+    assert current[1].entity_id.is_monotonic_decreasing
+    assert (len(current[5]) == 0) == (changed == 'empty-scoring-entity')
+
+
+def test_unsampled_context_does_not_observe_candidate_index_labels(monkeypatch):
+    from sdm_client._rust import tabular_materialize
+
+    def unexpected(frame):
+        raise AssertionError('uncapped context observed native index labels')
+
+    monkeypatch.setattr(tabular_materialize, '_index_labels', unexpected)
+    old, _ = _materialize(monkeypatch, _table(), False, indices=[11])
+    current, _ = _materialize(monkeypatch, _table(), True, indices=[11])
+    pd.testing.assert_frame_equal(
+        old.context.instance_table, current.context.instance_table
+    )
