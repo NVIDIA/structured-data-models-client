@@ -188,7 +188,7 @@ impl ContextSelection {
         }
         let mut unique = HashSet::with_capacity(labels.len());
         if labels.iter().any(|label| !unique.insert(*label)) {
-            return Err(invalid("tabular candidate index labels must be unique"));
+            return Err(crate::not_yet("tabular duplicate index ordering"));
         }
         let mut selected = Mt19937::seeded(42).permutation(self.candidates.len());
         selected.truncate(self.wanted);
