@@ -12,6 +12,7 @@ import copy
 import json
 from types import SimpleNamespace
 
+import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
@@ -158,7 +159,9 @@ def test_already_typed_native_backing_survives_without_canonical_overwrite():
     table = NativeSourceTable(ENTITY, frame, 'ts')
     captured = frame['ts']
     complete([view(ENTITY, 7, [100, 200], role='entity')], {7: table}, {})
-    assert frame['ts'] is captured
+    assert np.shares_memory(
+        frame['ts'].to_numpy(copy=False), captured.to_numpy(copy=False)
+    )
     assert captured.astype('int64').tolist() == [7, 8]
 
 
