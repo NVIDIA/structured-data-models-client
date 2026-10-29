@@ -94,6 +94,12 @@ run_python = _module('run_python')
 refusal_map = _module('refusal_map')
 
 
+def _actual_inputs(capture: Any) -> list[dict[str, Any]]:
+    return run_python._sibling('prediction_observation').view(
+        capture.core(), list(capture.operations)
+    )['inputs']
+
+
 def _case() -> dict[str, Any]:
     [(case, _)] = run_python.load_cases([CASE])
     return case
@@ -325,7 +331,7 @@ def test_the_python_core_run_is_held_to_the_map() -> None:
             if not _the_gap_probe(rust):
                 agreed['warnings'] = refusal_map.digest(capture.warnings)
             # The schema materialize samples, where both hosts start it.
-            for each in capture.inputs:
+            for each in _actual_inputs(capture):
                 if (
                     each['op'] == 'materialize'
                     and 'materialize' in rust['core']
@@ -342,7 +348,7 @@ def test_the_python_core_run_is_held_to_the_map() -> None:
         # which a rust-host probe makes from its edits, not its core.
         started = {
             each['op']: each
-            for each in capture.inputs
+            for each in _actual_inputs(capture)
             if each['op'] != 'edit_schema'
         }
         assert set(started) <= set(rust['core']), probe['id']
@@ -1057,7 +1063,7 @@ def _python_core_run(
         # rust-host probe starts, with the same inputs; past them only where
         # the map lists a gap of the case (from T1.28a the empty indices,
         # which python-core hands the core and the case format cannot).
-        started = {each['op']: each for each in capture.inputs}
+        started = {each['op']: each for each in _actual_inputs(capture)}
         gapped = any(
             gap['input'].endswith(f'({probe["case"]})')
             for gap in document.get('gaps', [])
