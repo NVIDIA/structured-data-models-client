@@ -1,0 +1,167 @@
+// SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+// All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+
+//! Single-table row selection over admitted primitive entity and validity facts.
+//! Increasing RangeIndex labels are order-isomorphic to original row ordinals.
+
+use std::collections::{HashMap, HashSet};
+
+use sdm_contract::{CoreError, Detail, Scalar, Sentence};
+
+use crate::random::Mt19937;
+
+/// Scored source rows, or missing ordinals in the original requested sequence.
+/// Missing values remain request ordinals so the host presents original values.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IndexSelection {
+    pub scored: Vec<usize>,
+    pub missing: Vec<usize>,
+}
+
+impl IndexSelection {
+    /// Integer keys preserve Python dictionary equality, including repetitions.
+    /// An absent requested integer is outside the admitted signed-64 domain.
+    pub fn new(keys: &[i64], requested: &[Option<i64>]) -> Self {
+        let mut positions: HashMap<i64, Vec<usize>> = HashMap::new();
+        for (row, &key) in keys.iter().enumerate() {
+            positions.entry(key).or_default().push(row);
+        }
+        let missing: Vec<usize> = requested
+            .iter()
+            .enumerate()
+            .filter_map(|(ordinal, key)| {
+                key.and_then(|key| positions.get(&key))
+                    .is_none()
+                    .then_some(ordinal)
+            })
+            .collect();
+        if !missing.is_empty() {
+            return Self {
+                scored: Vec::new(),
+                missing,
+            };
+        }
+        let mut selected = Self {
+            scored: Vec::new(),
+            missing,
+        };
+        for (ordinal, key) in requested.iter().enumerate() {
+            match key.and_then(|key| positions.get(&key)) {
+                Some(rows) => selected.scored.extend_from_slice(rows),
+                None => selected.missing.push(ordinal),
+            }
+        }
+        selected
+    }
+}
+
+fn invalid(message: &str) -> CoreError {
+    CoreError::protocol(Sentence::InvalidMessage, message)
+}
+
+/// Supplied scoring rows may include new entities; only present values hold out
+/// source rows. This is membership, not the indices route's missing-key guard.
+pub fn matched_rows(keys: &[i64], requested: &[i64]) -> Vec<usize> {
+    let requested: HashSet<i64> = requested.iter().copied().collect();
+    keys.iter()
+        .enumerate()
+        .filter_map(|(row, key)| requested.contains(key).then_some(row))
+        .collect()
+}
+
+/// Exclude every held-out row before collecting labelled candidates.
+pub fn labelled_rows(known: &[bool], excluded: &[usize]) -> Result<Vec<usize>, CoreError> {
+    let mut held_out = vec![false; known.len()];
+    for &row in excluded {
+        let held = held_out
+            .get_mut(row)
+            .ok_or_else(|| invalid("tabular holdout row is outside the source population"))?;
+        *held = true;
+    }
+    Ok(known
+        .iter()
+        .zip(held_out)
+        .enumerate()
+        .filter_map(|(row, (&known, held))| (known && !held).then_some(row))
+        .collect())
+}
+
+/// A useful context population, captured before its optional cap advice.
+/// It contains source ordinals only, never a native handle or sorted answer.
+#[derive(Debug, Clone)]
+pub struct ContextSelection {
+    candidates: Vec<usize>,
+    wanted: usize,
+    automatic: bool,
+}
+
+impl ContextSelection {
+    /// The composition root supplies the model's established context limit.
+    pub fn new(
+        candidates: Vec<usize>,
+        requested: Option<usize>,
+        maximum: usize,
+    ) -> Result<Self, CoreError> {
+        if candidates.windows(2).any(|pair| pair[0] >= pair[1]) {
+            return Err(invalid(
+                "tabular RangeIndex candidates must retain original row order",
+            ));
+        }
+        let wanted = requested.unwrap_or(maximum);
+        if wanted == 0 {
+            return Err(CoreError::new(
+                Sentence::NumContextSamplesBelowOne,
+                "tabular context size is below one",
+            )
+            .with_field("given", Detail::text("0")));
+        }
+        if wanted > maximum {
+            return Err(CoreError::new(
+                Sentence::NumContextSamplesPastMost,
+                "tabular context size exceeds the model limit",
+            )
+            .with_field("given", Detail::text(wanted.to_string()))
+            .with_field("limit", Detail::Scalar(Scalar::UInt64(maximum as u64))));
+        }
+        Ok(Self {
+            candidates,
+            wanted,
+            automatic: requested.is_none(),
+        })
+    }
+
+    /// The filtered population named by automatic-cap advice, before any draw.
+    pub fn notice_rows(&self) -> Option<usize> {
+        (self.automatic && self.candidates.len() > self.wanted).then_some(self.candidates.len())
+    }
+
+    pub fn wanted(&self) -> usize {
+        self.wanted
+    }
+
+    pub fn reduced(&self) -> bool {
+        self.candidates.len() > self.wanted
+    }
+
+    /// Seed-42 RandomState sampling without replacement followed by index sort.
+    /// Strictly increasing RangeIndex labels have no unstable ties: their sort
+    /// is exactly sorting the selected original ordinals, on every profile.
+    pub fn select(&self) -> Vec<usize> {
+        self.positions()
+            .into_iter()
+            .map(|row| self.candidates[row])
+            .collect()
+    }
+
+    /// Positions within the already captured candidate frame, for native take.
+    pub fn positions(&self) -> Vec<usize> {
+        if self.candidates.len() <= self.wanted {
+            return (0..self.candidates.len()).collect();
+        }
+        let mut selected = Mt19937::seeded(42).permutation(self.candidates.len());
+        selected.truncate(self.wanted);
+        selected.sort_unstable_by_key(|&row| self.candidates[row]);
+        selected
+    }
+}

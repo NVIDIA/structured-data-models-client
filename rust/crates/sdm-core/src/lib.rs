@@ -30,6 +30,7 @@ pub mod profiles;
 mod ranking;
 pub mod run;
 mod subgraph;
+mod tabular;
 #[cfg(feature = "test-ops")]
 mod test_ops;
 pub mod view;
@@ -76,6 +77,9 @@ pub use sdm_schema::frames::object_infer::{
 };
 /// Owned logical payload data, before JSON escaping or native presentation.
 pub use sdm_wire::json::Value as LogicalValue;
+pub use tabular::{
+    TabularContext, TabularIndexSelection, tabular_labelled_rows, tabular_matched_rows,
+};
 
 /// Finite native sample facts complete one useful physical column meaning.
 pub use sdm_schema::frames::native_column::{

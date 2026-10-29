@@ -471,7 +471,10 @@ FRAME_CONSTRUCTORS = (
 
 # The complete frame consumer inventory is available for explicit opt-in.
 # Default-route publication follows the whole-candidate package gates.
-FRAME_CONSUMERS = MATERIALIZE['frames'] + PREDICT['frames']
+TABULAR_PREDICT_FRAME = ('query.materialize/predict-frame/frames',)
+FRAME_CONSUMERS = (
+    MATERIALIZE['frames'] + PREDICT['frames'] + TABULAR_PREDICT_FRAME
+)
 
 
 # The bounded direct constructor/predict journey remains opt-in.

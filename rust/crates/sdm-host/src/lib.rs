@@ -39,6 +39,9 @@ pub use sdm_core::{
     RetainedMaterializeSource, RetainedTargetColumn, check_frame_cell, dtype_names, meanings,
     native_constructed_dtype, wire_names,
 };
+pub use sdm_core::{
+    TabularContext, TabularIndexSelection, tabular_labelled_rows, tabular_matched_rows,
+};
 pub use zones::{ZoneError, ZoneResolver, ZoneRoot, ZoneSource, session_zone_offset};
 
 /// A Postgres `json` or `jsonb` value, given as the server's text, as the

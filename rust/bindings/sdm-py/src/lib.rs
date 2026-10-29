@@ -47,6 +47,7 @@ mod frame_advice;
 mod frame_keys;
 mod frame_objects;
 mod native_values;
+mod tabular;
 
 create_exception!(
     sdm_client._native,
@@ -1033,6 +1034,10 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(frame_advice::frame_sample_facts, module)?)?;
     module.add_function(wrap_pyfunction!(frame_keys::check_frame_cell, module)?)?;
     module.add_class::<Run>()?;
+    module.add_class::<tabular::TabularContext>()?;
+    module.add_function(wrap_pyfunction!(tabular::tabular_indices, module)?)?;
+    module.add_function(wrap_pyfunction!(tabular::tabular_matched_rows, module)?)?;
+    module.add_function(wrap_pyfunction!(tabular::tabular_labelled_rows, module)?)?;
     module.add_function(wrap_pyfunction!(reset_log_cache, module)?)?;
     module.add_function(wrap_pyfunction!(templates, module)?)?;
     module.add_function(wrap_pyfunction!(is_posix_zone, module)?)?;
