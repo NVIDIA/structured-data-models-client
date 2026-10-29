@@ -441,17 +441,42 @@ pub(super) async fn label_population(
     finish_context(asker, memo, draw, labelled, kept).await
 }
 
-/// Source rows and actual target groups at the native restoration boundary.
-/// Conditions after the target retain their immutable fetched input here.
-/// This owns data only, with no asker, future or instruction cursor.
-pub(super) struct EvaluatedLabelGroups {
-    population: ExamplePopulation,
+/// The actual reached source rows and earlier entity eligibility.
+/// This is shared immutable task data, not a suspended label evaluation.
+pub(super) struct LabelInputs {
+    pub(super) population: ExamplePopulation,
     native_rows: Option<RecordBatch>,
     entity_rows: Vec<usize>,
     strings: std::collections::BTreeMap<String, sdm_contract::data::strings::StringEncoding>,
-    fetched: std::collections::BTreeMap<String, super::Fetched>,
-    labelled: labels::Labelled,
+    pub(super) fetched: std::collections::BTreeMap<String, super::Fetched>,
     entity_selection: Option<Vec<bool>>,
+}
+
+impl LabelInputs {
+    fn labelling<'a>(&'a self, asker: &'a Asker, times: &'a Times, key: &str) -> Labelling<'a> {
+        Labelling {
+            asker,
+            times,
+            sampled: self
+                .native_rows
+                .as_ref()
+                .unwrap_or(&self.population.sampled),
+            entity_rows: &self.entity_rows,
+            entity_key: &self.population.entity_key,
+            native_keys: self
+                .native_rows
+                .as_ref()
+                .and_then(|rows| rows.column_by_name(key)),
+            examples: &self.population.examples,
+            strings: self.strings.clone(),
+        }
+    }
+}
+
+/// Actual target groups retain the same reached input owner for later masks.
+pub(super) struct EvaluatedLabelGroups {
+    pub(super) inputs: Arc<LabelInputs>,
+    labelled: labels::Labelled,
     scalar_selection: Option<Vec<bool>>,
 }
 
@@ -469,15 +494,15 @@ impl EvaluatedLabelGroups {
             .collect::<Vec<_>>();
         Ok(Some(LabelledContext {
             keys: take(
-                &self.population.entity_key,
+                &self.inputs.population.entity_key,
                 &selected
                     .iter()
-                    .map(|&row| self.population.examples.index[row])
+                    .map(|&row| self.inputs.population.examples.index[row])
                     .collect::<Vec<_>>(),
             )?,
             anchors: selected
                 .iter()
-                .map(|&row| self.population.examples.anchors[row])
+                .map(|&row| self.inputs.population.examples.anchors[row])
                 .collect(),
             labels: self.labelled.labels.clone(),
         }))
@@ -530,13 +555,13 @@ fn select_labelled(
     Ok(labelled)
 }
 
-pub(super) async fn evaluate_label_groups(
+pub(super) async fn read_label_inputs(
     asker: &Asker,
     memo: &mut Memo<'_>,
     draw: LabelDraw<'_>,
     population: ExamplePopulation,
     native_rows: Option<RecordBatch>,
-) -> Result<EvaluatedLabelGroups, CoreError> {
+) -> Result<Arc<LabelInputs>, CoreError> {
     let LabelDraw {
         entity,
         key,
@@ -621,13 +646,47 @@ pub(super) async fn evaluate_label_groups(
     } else {
         None
     };
-    let target = labelling.build(&asked.target, &fetched, true)?;
+    let strings = labelling.strings;
+    Ok(Arc::new(LabelInputs {
+        population,
+        native_rows,
+        entity_rows,
+        strings,
+        fetched,
+        entity_selection: eligibility,
+    }))
+}
+
+pub(super) async fn evaluate_label_groups(
+    asker: &Asker,
+    memo: &mut Memo<'_>,
+    draw: LabelDraw<'_>,
+    population: ExamplePopulation,
+    native_rows: Option<RecordBatch>,
+) -> Result<EvaluatedLabelGroups, CoreError> {
+    let inputs = read_label_inputs(asker, memo, draw, population, native_rows).await?;
+    let labelling = inputs.labelling(asker, draw.read_times, draw.key);
+    let target = labelling.build(&draw.asked.target, &inputs.fetched, true)?;
+    evaluate_target_groups(asker, draw, inputs, target)
+}
+
+/// The same label/mask kernel consumes either the raw mathematical target or
+/// the actual completed native target values. It performs no native cast.
+pub(super) fn evaluate_target_groups(
+    asker: &Asker,
+    draw: LabelDraw<'_>,
+    inputs: Arc<LabelInputs>,
+    target: labels::Target,
+) -> Result<EvaluatedLabelGroups, CoreError> {
+    let asked = draw.asked;
+    let labelling = inputs.labelling(asker, draw.read_times, draw.key);
+    let fetched = &inputs.fetched;
     // Scalar operations keep their existing condition-before-label admission
     // order. Only actual list groups cross a native completion boundary.
     let mut scalar_selection: Option<Vec<bool>> = None;
     if asked.task != Task::TemporalLink {
         for shape in &asked.choosing {
-            let selected = labels::truth(&labelling.build(shape, &fetched, false)?)?.values;
+            let selected = labels::truth(&labelling.build(shape, fetched, false)?)?.values;
             scalar_selection = Some(match scalar_selection {
                 None => selected,
                 Some(before) => before
@@ -644,15 +703,9 @@ pub(super) async fn evaluate_label_groups(
         labels::label(&target)?
     };
     null_compared(&asked.target, &labelled.mask)?;
-    let strings = labelling.strings;
     Ok(EvaluatedLabelGroups {
-        population,
-        native_rows,
-        entity_rows,
-        strings,
-        fetched,
+        inputs,
         labelled,
-        entity_selection: eligibility,
         scalar_selection,
     })
 }
@@ -664,31 +717,18 @@ pub(super) fn complete_label_groups(
     restored: Option<labels::Labels>,
 ) -> Result<LabelledContext, CoreError> {
     let EvaluatedLabelGroups {
-        population,
-        native_rows,
-        entity_rows,
-        strings,
-        fetched,
+        inputs,
         labelled,
-        entity_selection,
         scalar_selection,
     } = groups;
+    let population = &inputs.population;
+    let fetched = &inputs.fetched;
+    let entity_selection = &inputs.entity_selection;
     let mut labelled = labelled.clone();
     if let Some(restored) = restored {
         labelled = restore_group_labels(labelled, restored)?;
     }
-    let labelling = Labelling {
-        asker,
-        times: draw.read_times,
-        sampled: native_rows.as_ref().unwrap_or(&population.sampled),
-        entity_rows,
-        entity_key: &population.entity_key,
-        native_keys: native_rows
-            .as_ref()
-            .and_then(|rows| rows.column_by_name(draw.key)),
-        examples: &population.examples,
-        strings: strings.clone(),
-    };
+    let labelling = inputs.labelling(asker, draw.read_times, draw.key);
     // What-if conditions consume the retained rows only after a successful
     // native restoration. No source or later candidate slice is reread.
     let selection = if draw.asked.task == Task::TemporalLink {
