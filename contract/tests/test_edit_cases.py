@@ -40,6 +40,7 @@ core hosts (decision E67). What holds them:
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import os
@@ -218,3 +219,41 @@ def test_the_pin_check_fails_closed() -> None:
         'cases': {**pin['cases'], name: {**pin['cases'][name], 'inputs': 'x'}},
     }
     assert problems(short, seen) == [f'{name}: inputs is not a digest']
+
+
+@pytest.mark.parametrize('changed', ['missing', 'false', 'unexpected', 'type'])
+def test_native_flags_are_checked_before_the_historical_pin(
+    observed: dict[str, Any], changed: str,
+) -> None:
+    name = 'edit.accepted-meaning-key-links'
+    original = observed[name]
+    assert agreed(original) == json.loads(PINNED.read_text())['cases'][name]
+    altered = copy.deepcopy(original)
+    columns = altered['core']['edits'][0]['schema']['tables'][0]['columns']
+    if changed == 'missing':
+        columns[3].pop('stype_declared')
+    elif changed == 'false':
+        columns[3]['stype_declared'] = False
+    elif changed == 'unexpected':
+        columns[0]['untyped'] = True
+    else:
+        columns[3]['stype_declared'] = 1
+    before = copy.deepcopy(altered)
+    with pytest.raises(AssertionError, match='held-column flags'):
+        agreed(altered)
+    assert altered == before
+    assert original == observed[name]
+
+
+def test_the_historical_projection_keeps_later_native_edit_flags(
+    observed: dict[str, Any],
+) -> None:
+    name = 'edit.accepted-meaning-key-links'
+    altered = copy.deepcopy(observed[name])
+    # The first edit really declares age's meaning. Its subsequent starts
+    # must retain true even though the older pin never observed that bit.
+    age = altered['core']['edits'][1]['schema']['tables'][1]['columns'][1]
+    assert age['stype_declared'] is True
+    age['stype_declared'] = False
+    with pytest.raises(AssertionError, match='held-column flags'):
+        agreed(altered)
