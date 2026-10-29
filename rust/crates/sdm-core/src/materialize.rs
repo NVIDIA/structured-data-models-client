@@ -59,6 +59,7 @@
 
 pub(crate) mod frame_values;
 mod prepared;
+mod native_source;
 mod task;
 
 use task::{BatchLayout, EntityDraw, LabelDraw, TaskRows, entity_sample};
