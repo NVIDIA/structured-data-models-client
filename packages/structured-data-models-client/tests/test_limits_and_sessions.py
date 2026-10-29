@@ -510,7 +510,7 @@ def test_a_session_refuses_a_request_asked_as_several_questions():
 
 def test_a_session_scoring_call_carries_the_inference_block():
     """The contract's SessionPredictionRequest lists `inference`; dropping it
-    made explanations unreachable through a session, because the endpoint only
+    made explanations unreachable through a session on a deployment that only
     explains when inference.run_mode is 'fast'."""
     pytest.importorskip('sdm_relational_engine')
     from sdm_client.adapters.relational import _SESSION_SCORING
