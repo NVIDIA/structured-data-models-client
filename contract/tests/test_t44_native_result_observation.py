@@ -1,0 +1,83 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+"""Semantic native owners supplement, and never overwrite, ordinal carriers."""
+
+import copy
+
+import pytest
+from test_t44_prediction_observation import actual_observation, reader
+from test_t136_forecast_capture import RUNNER
+
+
+def presentation():
+    return {
+        'rows': [
+            {'row_index': i, 'forecast_step': None, 'id': {'i64': str(i + 7)}, 'rankings': None}
+            for i in range(2)
+        ]
+    }
+
+
+def test_actual_builtin_result_storage_is_observed_without_custom_hooks():
+    from sdm_api.generated.tfm_api import PredictionItem
+    from sdm_client.result import PredictionResult
+
+    result = PredictionResult(
+        model='kumo-relational', request_id='actual',
+        items=[PredictionItem(row_index=0, id=10**25, rankings=({'candidate': 9, 'score': .5},))],
+    )
+    assert RUNNER.native_result_snapshot(result) == {'rows': [{
+        'row_index': 0, 'forecast_step': None, 'id': {'i64': str(10**25)},
+        'rankings': [{'candidate': {'i64': '9'}, 'score': '3fe0000000000000'}],
+    }]}
+
+    class Custom:
+        def __getattribute__(self, name):
+            raise AssertionError(name)
+
+    result.items[0].id = Custom()
+    assert RUNNER.native_result_snapshot(result) is None
+
+    class CustomResult(PredictionResult):
+        def __getattribute__(self, name):
+            raise AssertionError(name)
+
+    assert RUNNER.native_result_snapshot(object.__new__(CustomResult)) is None
+
+
+def test_native_semantic_projection_keeps_the_raw_ordinal_result():
+    core, operations = actual_observation()
+    final = core['predictions'][0]['results'][0]
+    final['presentation'] = presentation()
+    core['predicted']['presentation'] = copy.deepcopy(final['presentation'])
+    for row in final['result']['rows']:
+        row[1] = copy.deepcopy(row[0])
+    core['predicted']['result'] = copy.deepcopy(final['result'])
+    before = copy.deepcopy(core)
+    value = reader().view(core, operations)['events'][0]['result']
+    semantic = reader().semantic_result(value)
+    assert [row[1] for row in semantic['result']['rows']] == [{'i64': '7'}, {'i64': '8'}]
+    assert core == before
+    assert final['result']['rows'][0][1] == {'i64': '0'}
+    semantic['result']['rows'][1][1] = {'i64': '7'}
+    assert semantic['result'] != reader().semantic_result(value)['result']
+
+
+@pytest.mark.parametrize('fault', ['short', 'row', 'extra', 'scalar'])
+def test_native_semantic_companion_is_complete_and_bound_to_actual_rows(fault):
+    core, operations = actual_observation()
+    shown = presentation()
+    if fault == 'short':
+        shown['rows'].pop()
+    elif fault == 'row':
+        shown['rows'][0]['row_index'] = 9
+    elif fault == 'extra':
+        shown['rows'][0]['guessed'] = True
+    else:
+        shown['rows'][0]['id'] = {'i64': 'not an integer'}
+    core['predictions'][0]['results'][0]['presentation'] = shown
+    core['predicted']['presentation'] = copy.deepcopy(shown)
+    with pytest.raises(reader().ObservationError):
+        reader().view(core, operations)
