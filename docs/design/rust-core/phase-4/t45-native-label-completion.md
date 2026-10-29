@@ -256,3 +256,16 @@ Resolve all reached quality findings without changing a guard: explicit closure 
 Exercise metadata-purpose identity with a declared neutral DataLayer fixture; provider projection behavior remains independently covered in the data integration suite.
 The optional-loader negative control raises and catches the same skip exception directly, preserving BaseException cleanup without actually skipping any test.
 Retain normal whole source reviews, canonical authoring, all acceptance gates and zero stamp credit for the failed diagnostic.
+
+### Actual native restoration operands
+
+The R44 whole reviews identify that retaining native target values alone is insufficient if group publication still supplies mathematical Decimal groups to the native callback.
+Retain the actual native grouping and scalar meaning directly on the existing frame/source group owner, computed by the same Rust stable grouping kernel over completed native values.
+Keep the exact mathematical grouping as its independent existing task product for final labels, masks and quotas.
+Publish the native grouping to the actual restoration call, validate its complete native entity/anchor row mapping, and retain its actual restored values independently from protected exact labels.
+Do not assume mathematical and native masks or deduplicated list lengths coincide.
+Use the shared population to map either mask to its own ordered keys and anchors, and use the retained mathematical scalar to select exact final Decimal labels.
+Non-Decimal actual restored values remain authoritative, and no host grouping, provider flag, callback workflow or new opaque resource is needed.
+Add a real SQL collision producer-to-native-restoration control, independent-mask and malformed-identity tests before implementation.
+Correct the ambient presentation control by entering the actual caller and private bridge handlers, leaving a genuinely handler-free control and the shared presenter unchanged.
+The exact successor requires fresh whole reviews before execution; R44 receives no validation or acceptance credit.
