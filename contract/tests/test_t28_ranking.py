@@ -675,14 +675,15 @@ def test_python_core_answers_each_case_as_the_reference_does(
             )
         # Common roles require the complete checked native observation;
         # physical prepare_request Runs stay unchanged in the artifact.
-        ran = (
+        checked = (
             runner()
             ._sibling('prediction_observation')
-            .view(line['core'], line['identity']['operations'])['operations']
+            .view(line['core'], line['identity']['operations'])
         )
+        ran = checked['operations']
         asked = [
             each
-            for each in line['core']['inputs']
+            for each in checked['inputs']
             if each.get('op') == 'materialize'
         ]
         assert len(asked) == 1, (

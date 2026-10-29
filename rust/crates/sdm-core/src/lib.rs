@@ -45,11 +45,11 @@ pub use materialize::frame_values::{
     RetainedFramePopulation, RetainedFrameQuestion, RetainedFrameReferences, RetainedFrameTask,
 };
 pub use materialize::native_lookup::RetainedLookupRows;
-pub use materialize::native_sql::{
+pub use materialize::native_target::{RetainedLabelInputs, RetainedTargetColumn};
+pub use materialize::source_values::{
     RetainedMaterializeBatch, RetainedMaterializeGroups, RetainedMaterializePopulation,
     RetainedMaterializeSource,
 };
-pub use materialize::native_target::{RetainedLabelInputs, RetainedTargetColumn};
 /// The text a float is spelled in, as the reference's language writes it
 /// (Python's `repr`): for a host that hands the data layer a value to
 /// write as the reference does (T3.12 fix 1).

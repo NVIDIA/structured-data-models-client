@@ -144,7 +144,7 @@ pub fn start(
                     )?
                 }
                 input => Run::new(move |asker| {
-                    crate::materialize::native_sql::run(asker, input, attachments)
+                    crate::materialize::source_values::run(asker, input, attachments)
                 }),
             }
         }
@@ -568,7 +568,7 @@ pub(crate) fn materialize(
                     read.types,
                 );
                 if native_preparation {
-                    crate::materialize::native_sql::task(asker, inputs).await
+                    crate::materialize::source_values::task(asker, inputs).await
                 } else {
                     crate::materialize::run(asker, inputs).await
                 }

@@ -547,7 +547,7 @@ async fn label_inputs(
         source_role: Default::default(),
         eligibility: None,
     };
-    let root = LabelRoot::Sql {
+    let root = LabelRoot::Source {
         population: population.clone(),
         previous,
         memo: memo.memo.clone(),
@@ -566,7 +566,7 @@ fn native_groups(
 ) -> Result<OperationResult, CoreError> {
     use native_target::{LabelRoot, RetainedTargetColumn};
     let column = RetainedTargetColumn::bind(value, attachments)?;
-    let LabelRoot::Sql {
+    let LabelRoot::Source {
         population,
         previous,
         memo,

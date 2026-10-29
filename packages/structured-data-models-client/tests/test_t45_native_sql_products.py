@@ -19,7 +19,6 @@ from sdm_client._rust.native_products import Bindings, Product
 from sdm_client._rust.run import Finished
 from sdm_client.errors import StructuredDataError
 
-
 RELATION = {'source': ['events'], 'found': False, 'columns': []}
 COLUMN = {'source': RELATION, 'column': 'value'}
 RANGE = {'start': 0, 'stop': 2}

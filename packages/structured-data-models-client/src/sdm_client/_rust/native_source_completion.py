@@ -267,15 +267,15 @@ class SourceCompletion:
             arrays, fields = [], []
             business_index = 0
             for original_index, name in enumerate(columns):
-                canonical = helper_names.get(name)
-                if canonical is not None:
-                    array = helper_columns[canonical]
+                helper_name = helper_names.get(name)
+                if helper_name is not None:
+                    array = helper_columns[helper_name]
                     field = (
                         rows.schema.field(original_index)
-                        .with_name(canonical)
+                        .with_name(helper_name)
                         .with_type(array.type)
                         if isinstance(rows, pa.Table)
-                        else pa.field(canonical, array.type)
+                        else pa.field(helper_name, array.type)
                     )
                 else:
                     array = exported.column(business_index)

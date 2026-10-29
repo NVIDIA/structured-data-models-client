@@ -9,6 +9,7 @@ from __future__ import annotations
 import sys
 
 import pytest
+from _pytest.outcomes import Skipped
 from test_t136_forecast_capture import _module
 
 
@@ -20,15 +21,15 @@ def test_repeated_optional_setup_preserves_its_actual_failure(
     monkeypatch.delitem(sys.modules, name, raising=False)
     path = tmp_path / 'optional.py'
     path.write_text(
-        'import pytest\n'
+        'from _pytest.outcomes import Skipped\n'
         + (
-            'pytest.skip("optional serving dependency absent")\n'
+            'raise Skipped("optional serving dependency absent")\n'
             if failure == 'skip'
             else 'raise RuntimeError("optional setup failed")\n'
         )
         + 'ready = True\n'
     )
-    error = pytest.skip.Exception if failure == 'skip' else RuntimeError
+    error = Skipped if failure == 'skip' else RuntimeError
     for _ in range(2):
         with pytest.raises(error):
             # The second consumer must see the same actual setup outcome,

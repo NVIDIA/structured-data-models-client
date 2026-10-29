@@ -22,9 +22,9 @@ pub(super) enum LabelRoot {
         previous: Option<super::frame_values::RetainedFrameLabelBatch>,
         graph: crate::RetainedFrameGraph,
     },
-    Sql {
-        population: super::native_sql::RetainedMaterializePopulation,
-        previous: Option<super::native_sql::RetainedMaterializeBatch>,
+    Source {
+        population: super::source_values::RetainedMaterializePopulation,
+        previous: Option<super::source_values::RetainedMaterializeBatch>,
         memo: SamplerMemo,
     },
 }
@@ -33,7 +33,7 @@ impl LabelRoot {
     pub(super) fn condition_context(&self) -> Result<super::native_conditions::Context, CoreError> {
         match self {
             Self::Frame { population, .. } => population.condition_context(),
-            Self::Sql { population, .. } => population.condition_context(),
+            Self::Source { population, .. } => population.condition_context(),
         }
     }
 
@@ -58,7 +58,7 @@ impl LabelRoot {
                     column: column.into(),
                 })
             }
-            Self::Sql { population, .. } => population.column_binding(table, column),
+            Self::Source { population, .. } => population.column_binding(table, column),
         }
     }
 }
@@ -213,7 +213,7 @@ impl RetainedLabelInputs {
     pub(crate) fn carry(&self, asker: &Asker) {
         match &self.data.root {
             LabelRoot::Frame { graph, .. } => asker.keep_retained_frame(graph.clone()),
-            LabelRoot::Sql { memo, .. } => asker.keep(memo.clone()),
+            LabelRoot::Source { memo, .. } => asker.keep(memo.clone()),
         }
     }
 

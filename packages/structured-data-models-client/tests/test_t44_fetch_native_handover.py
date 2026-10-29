@@ -77,7 +77,7 @@ def test_public_schema_propagates_the_actual_fetch_failure(monkeypatch):
             raise AssertionError('native failure reached provider diagnostics')
 
     monkeypatch.setenv(
-        _routing.ENVIRONMENT, ','.join(_routing.FROM_SOURCE_DUCKDB)
+        _routing.ENVIRONMENT, ','.join(_routing.FROM_SOURCE_DUCKDB_TABLES)
     )
     monkeypatch.setattr(providers, 'DuckDBProvider', NativeProvider)
     with duckdb.connect() as connection:
@@ -143,7 +143,9 @@ class _Handle:
         self.events.append('memo')
         if not self.memo:
             return None
-        return json.dumps({'state': {'version': 7, 'memo': 9}}).encode(), {}
+        return json.dumps(
+            {'message': 'sampler_state', 'state': {'version': 7, 'memo': 9}}
+        ).encode(), {}
 
     def take_attachment(self, attachment):
         assert attachment == 9
@@ -194,7 +196,11 @@ def test_native_failure_cancels_before_reply_or_another_request(
                 with warnings.catch_warnings():
                     warnings.simplefilter('always')
                     try:
-                        warnings.warn('native conversion warning', UserWarning)
+                        warnings.warn(
+                            'native conversion warning',
+                            UserWarning,
+                            stacklevel=2,
+                        )
                     except Exception as actual:
                         return run_module.FetchRefused(actual)
                 raise AssertionError('warning handler did not fail')

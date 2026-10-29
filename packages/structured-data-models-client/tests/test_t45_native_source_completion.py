@@ -24,7 +24,6 @@ from sdm_client._rust.native_products import Product
 from sdm_client._rust.run import FetchRefused
 from sdm_client.errors import StructuredDataError
 
-
 LOGICAL = {'source': ['logical']}
 READ = {
     'source': ['catalog', 'schema', 'actual'],
@@ -91,7 +90,12 @@ class Service:
             if self.positions is not None
             else helpers['__kumo_batch__']
         )
-        return pa.table({'position': pa.array(values, type=pa.uint64())})
+        positions = (
+            values.cast(pa.uint64())
+            if isinstance(values, (pa.Array, pa.ChunkedArray))
+            else pa.array(values, type=pa.uint64())
+        )
+        return pa.table({'position': positions})
 
     def column(self, binding, facts):
         self.calls.append(('column', binding, facts))

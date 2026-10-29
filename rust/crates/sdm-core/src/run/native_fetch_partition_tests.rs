@@ -184,12 +184,45 @@ fn result_metadata_has_its_own_purpose_and_does_not_claim_the_future_data_owner(
     use arrow_array::{ArrayRef, Int64Array, StringArray};
     use sdm_contract::data::ProviderChoice;
     use sdm_contract::run::FetchPurpose;
+    // The core consumes a declared metadata port, independently of rendering.
+    // Provider-specific projection remains covered by the data integration tests.
+    struct ProjectedInput;
+    impl sdm_contract::data::DataLayer for ProjectedInput {
+        fn capabilities(
+            &self,
+            provider: &ProviderChoice,
+        ) -> Result<sdm_contract::data::ProviderCapabilities, CoreError> {
+            let ProviderChoice::Host { capabilities } = provider else {
+                panic!("declared fixture")
+            };
+            Ok(capabilities.clone())
+        }
+        fn plan(&self, _: &DataRequest, _: &ProviderChoice) -> Result<FetchPlan, CoreError> {
+            Ok(FetchPlan::Host {
+                expect: ExpectedSchema::Discover {},
+            })
+        }
+        fn result_metadata(
+            &self,
+            _: &ProviderChoice,
+            _: &DataRequest,
+            plan: &FetchPlan,
+        ) -> Result<Option<FetchPlan>, CoreError> {
+            Ok(Some(plan.clone()))
+        }
+        fn read(
+            &self,
+            _: &DataRequest,
+            _: &ProviderChoice,
+            _: &[RecordBatch],
+        ) -> Result<sdm_contract::catalog::CatalogAnswer, CoreError> {
+            Err(internal("fixture never reads a catalog"))
+        }
+    }
     let provider: ProviderChoice = serde_json::from_value(serde_json::json!({
-        "provider":"sql","dialect":"databricks","namespace":["catalog","schema"],
-        "timestamp_encoding":"microseconds"
-    }))
-    .unwrap();
-    let root = crate::CompositionRoot::new(Arc::new(sdm_data::Data::new()));
+        "provider":"host","capabilities":{"optional":["scan"],"sampling":"seeded_stable","max_seed":u64::MAX}
+    })).unwrap();
+    let root = crate::CompositionRoot::new(Arc::new(ProjectedInput));
     let observed = Arc::new(Mutex::new(None));
     let returned = Arc::clone(&observed);
     let mut run = Run::with_data(

@@ -894,7 +894,7 @@ fn sql_native_target_and_changed_group_completion_reach_the_actual_request() {
             .as_array()
             .unwrap()
             .iter()
-            .all(|row| row[target] == json!([1]))
+            .all(|row| row[target] == json!(["1"]))
     );
     assert_eq!(
         payload["predict"]["instance_table"]["rows"]

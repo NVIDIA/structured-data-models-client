@@ -52,6 +52,7 @@ def export_column(
     presence: object | None,
     times: pd.Series | None = None,
 ) -> ColumnExport:
+    encoding: str | None
     values, encoding = NativeColumn(column.values).arrow()
     target = values.column(0)
     if not (
@@ -217,6 +218,7 @@ def complete_target(
         return column, native
     try:
         if inputs.data['form'] == 'filtered':
+            operand: NativeTargetColumn | None = None
             for occurrence in inputs.data['condition_columns']:
                 try:
                     # Repeated occurrences read their actual native source

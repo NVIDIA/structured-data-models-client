@@ -120,6 +120,7 @@ class SourceBatchProvider(Protocol):
         self,
         requests: Sequence[dict[str, Any]],
         keys: Mapping[int, Mapping[int, Any]],
+        /,
     ) -> Mapping[int, ArrowData] | FetchRefused: ...
 
 

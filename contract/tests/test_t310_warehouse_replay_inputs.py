@@ -9,7 +9,6 @@ from __future__ import annotations
 import importlib.util
 import sys
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -21,6 +20,14 @@ assert _SPEC is not None and _SPEC.loader is not None
 run_python = importlib.util.module_from_spec(_SPEC)
 sys.modules[_SPEC.name] = run_python
 _SPEC.loader.exec_module(run_python)
+
+
+def legacy_capture(inputs):
+    """Complete capture storage for explicitly authored historical starts."""
+    capture = run_python._Capture()
+    capture.inputs = inputs
+    capture.operations = [started['op'] for started in inputs]
+    return capture
 
 
 def test_replay_keeps_provider_namespace_and_view_without_copying_answers() -> (
@@ -59,7 +66,7 @@ def test_replay_keeps_provider_namespace_and_view_without_copying_answers() -> (
             'state': {'must_not_replay': 'request state'},
         },
     ]
-    core = run_python._replay_core(SimpleNamespace(inputs=inputs))
+    core = run_python._replay_core(legacy_capture(inputs))
     assert core == {
         'describe_source': {
             'provider': provider,
@@ -78,12 +85,12 @@ def test_replay_keeps_provider_namespace_and_view_without_copying_answers() -> (
 
 def test_missing_describe_start_cannot_become_an_empty_source() -> None:
     with pytest.raises(run_python.RunnerFailure, match='describe_source'):
-        run_python._replay_core(SimpleNamespace(inputs=[]))
+        run_python._replay_core(legacy_capture([]))
 
 
 def test_a_started_warehouse_case_with_no_fetch_is_still_recorded() -> None:
-    capture = SimpleNamespace(
-        inputs=[
+    capture = legacy_capture(
+        [
             {
                 'op': 'describe_source',
                 'provider': {'provider': 'sql', 'dialect': 'databricks'},
@@ -94,8 +101,7 @@ def test_a_started_warehouse_case_with_no_fetch_is_still_recorded() -> None:
                 },
                 'check_keys': True,
             }
-        ],
-        answered=[],
+        ]
     )
     line = run_python._replay_line(
         {'id': 'no-fetch'},
@@ -118,7 +124,7 @@ def test_multiple_starts_are_not_silently_collapsed() -> None:
         'check_keys': True,
     }
     with pytest.raises(run_python.RunnerFailure, match='more than one'):
-        run_python._replay_core(SimpleNamespace(inputs=[start, start]))
+        run_python._replay_core(legacy_capture([start, start]))
 
 
 def observed_capture(core, operations):

@@ -34,17 +34,17 @@ from sdm_client._rust.frame_native import (
 from sdm_client._rust.native_label_stage import (
     ColumnExport,
     complete_eligibility,
-    complete_what_if,
     complete_target,
-)
-from sdm_client._rust.native_products import (
-    bound_label_input,
-    bound_groups,
-    group_ids,
-    label_input_ids,
+    complete_what_if,
 )
 from sdm_client._rust.native_products import Bindings as _Bindings
 from sdm_client._rust.native_products import Product as _Product
+from sdm_client._rust.native_products import (
+    bound_groups,
+    bound_label_input,
+    group_ids,
+    label_input_ids,
+)
 from sdm_client._rust.native_target import NativeTargetColumn, export_groups
 from sdm_client._rust.run import Finished, run
 from sdm_client.errors import StructuredDataError

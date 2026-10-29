@@ -724,7 +724,7 @@ fn completed_native_target_rows_and_occurrences_reach_the_real_link_payload() {
                 .as_array()
                 .unwrap()
                 .iter()
-                .all(|row| row[target] == json!([3]))
+                .all(|row| row[target] == json!(["3"]))
         );
     }
 }

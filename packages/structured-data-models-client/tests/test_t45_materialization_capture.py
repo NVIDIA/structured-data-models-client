@@ -81,7 +81,7 @@ def test_public_source_and_native_label_products_have_actual_entry_and_late_read
                 if record['run'] == entry['terminal']['run']
             )
             assert terminal['output_reads']
-            assert stages[-1] == 'request'
+            assert terminal['input']['parsed']['stage'] == 'request'
         else:
             assert result['stage'] == 'materialize'
             assert entry['completion'] == 'raised'

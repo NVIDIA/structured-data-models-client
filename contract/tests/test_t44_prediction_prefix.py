@@ -276,7 +276,6 @@ def actual_legacy_capture():
     """Run the real legacy Predict producer, then a native version refusal."""
     import duckdb
     import pandas as pd
-
     from sdm_client import (
         PredictiveQuery,
         Schema,

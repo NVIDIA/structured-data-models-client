@@ -170,7 +170,7 @@ def test_keyed_scalar_frame_constructs_inside_scope_then_concats_even_one_part(
     assert result.rows.iloc[0, 0] == 2**53 + 1
     assert result.rows.iloc[0, 1] is None
     assert result.rows.iloc[0, 2:].tolist() == [17, 8, 2]
-    assert all(dtype == object for dtype in result.rows.dtypes)
+    assert all(dtype.name == 'object' for dtype in result.rows.dtypes)
     assert events == [('enter', 7), 'frame', ('exit', 7), 'pandas_concat']
 
 

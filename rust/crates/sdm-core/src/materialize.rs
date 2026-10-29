@@ -63,9 +63,9 @@ mod native_conditions;
 mod native_labels;
 pub(crate) mod native_lookup;
 mod native_source;
-pub(crate) mod native_sql;
 pub(crate) mod native_target;
 mod prepared;
+pub(crate) mod source_values;
 mod task;
 
 use task::{BatchLayout, EntityDraw, LabelDraw, TaskRows, entity_sample};

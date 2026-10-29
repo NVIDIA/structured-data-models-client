@@ -850,15 +850,15 @@ def _materializations(
                 'payload': payload,
             }
 
-            def resolved(part: dict[str, Any]) -> dict[str, Any]:
+            def resolved(part: dict[str, Any], outputs=taken) -> dict[str, Any]:
                 out = dict(part)
                 out['payload'] = json.loads(
-                    taken[part['payload']][0],
+                    outputs[part['payload']][0],
                     parse_int=lambda token: {'number': token},
                     parse_float=lambda token: {'number': token},
                 )
                 if 'query' in part:
-                    out['query'] = taken[part['query']][1]
+                    out['query'] = outputs[part['query']][1]
                 return out
 
             completed_state = resolved(state)

@@ -208,6 +208,7 @@ def test_native_label_ranges_stop_at_actual_context_completeness(
             dt3_no_time_body(payload)
         expected['warnings'] = p3e2_warning_codes(expected['warnings'])
     label_resources = []
+    committed_ranges = []
     final_batches = []
     if core:
         from sdm_client._rust import frame_facade
@@ -215,18 +216,20 @@ def test_native_label_ranges_stop_at_actual_context_completeness(
         prepare = frame_facade._prepare
 
         def observe_resources(value, bindings, state):
-            if value['stage'] == 'label_batch':
+            if value['stage'] in ('label_inputs', 'label_groups'):
                 previous = value['previous']
                 assert previous is None or type(previous) is dict
                 assert (previous is None) == (value['range']['start'] == 0)
                 if previous is not None:
                     assert previous['range']['stop'] == value['range']['start']
-                # A reached batch binds graph, population, optional converted
-                # keys and at most one previous real labelled-row resource.
+                # A reached candidate binds graph, population, optional keys
+                # and at most one previous completed batch.
                 label_resources.append(len(bindings.attachments))
                 assert len(bindings.attachments) <= 4
                 assert 'batches' not in value['population']
                 assert value['population']['rows'] == count
+            elif value['stage'] == 'complete_label_batch':
+                committed_ranges.append(value['groups']['range'])
             elif value['stage'] == 'labels':
                 final_batches.append(len(value['batches']))
             return prepare(value, bindings, state)
@@ -281,11 +284,14 @@ def test_native_label_ranges_stop_at_actual_context_completeness(
     assert len(faults) == expected['native_faults']
     if core:
         assert len(label_resources) == len(expected['label_cast_rows'])
+        assert len(committed_ranges) == len(label_resources) - len(faults)
+        for previous, current in zip(committed_ranges, committed_ranges[1:]):
+            assert previous['stop'] == current['start']
         if expected['outcome']['kind'] == 'error':
             assert final_batches == []
         else:
             # The complete actual prefix is bound exactly once, at assembly.
-            assert final_batches == [len(label_resources)]
+            assert final_batches == [len(committed_ranges)]
     assert [
         {'type': type(item.message).__name__, 'message': str(item.message)}
         for item in caught
