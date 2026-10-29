@@ -311,6 +311,72 @@ def test_current_actual_materialization_input_is_checked_against_the_complete_he
     assert observed == before
 
 
+def legacy_materialization_observation(schema):
+    return {
+        'identity': {'operations': ['materialize']},
+        'core': {
+            'inputs': [
+                {
+                    'op': 'materialize',
+                    'schema': copy.deepcopy(schema),
+                    'query': QUERY,
+                    'provider': {'provider': 'sql', 'dialect': 'duckdb'},
+                    'indices': [{'t': 'i64', 'v': '7'}],
+                    'anchor_time': None,
+                    'seed': None,
+                }
+            ],
+            'fetches': [],
+            'accepted': None,
+            'described': description(),
+            'materialized': None,
+            'predicted': None,
+            'error': None,
+        },
+    }
+
+
+def test_legacy_materialize_keeps_omitted_flag_availability_separate_from_task():
+    schema = expected()
+    for column in schema['tables'][0]['columns']:
+        column.pop('untyped')
+        column.pop('stype_declared')
+    legacy = legacy_materialization_observation(schema)
+    before = copy.deepcopy(legacy)
+    assert case_input_failures(legacy) == []
+    assert legacy == before
+    assert case_input_failures(materialization_observation(schema))
+
+
+@pytest.mark.parametrize(
+    'changed', ['declared', 'untyped', 'flag-type', 'dtype', 'order', 'source']
+)
+def test_legacy_availability_does_not_excuse_any_present_flag_or_other_field(
+    changed,
+):
+    schema = expected()
+    columns = schema['tables'][0]['columns']
+    for column in columns:
+        column.pop('untyped')
+        column.pop('stype_declared')
+    if changed == 'declared':
+        columns[2]['stype_declared'] = False
+    elif changed == 'untyped':
+        columns[1]['untyped'] = False
+    elif changed == 'flag-type':
+        columns[2]['stype_declared'] = 1
+    elif changed == 'dtype':
+        columns[0]['dtype'] = 'float64'
+    elif changed == 'order':
+        columns.reverse()
+    else:
+        columns[0]['source']['relation'] = {'source': ['foreign']}
+    observed = legacy_materialization_observation(schema)
+    before = copy.deepcopy(observed)
+    assert [rule for rule, _ in case_input_failures(observed)] == ['inputs']
+    assert observed == before
+
+
 @pytest.mark.parametrize(
     'changed',
     [
