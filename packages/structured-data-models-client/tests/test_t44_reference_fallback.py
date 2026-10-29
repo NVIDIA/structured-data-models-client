@@ -208,6 +208,8 @@ def test_native_label_ranges_stop_at_actual_context_completeness(
             dt3_no_time_body(payload)
         expected['warnings'] = p3e2_warning_codes(expected['warnings'])
     label_resources = []
+    candidate_ranges = []
+    failed_candidates = set()
     committed_ranges = []
     final_batches = []
     if core:
@@ -224,15 +226,19 @@ def test_native_label_ranges_stop_at_actual_context_completeness(
                     assert previous['range']['stop'] == value['range']['start']
                 # A reached candidate binds graph, population, optional keys
                 # and at most one previous completed batch.
+                candidate_ranges.append(
+                    (value['range']['start'], value['range']['stop'])
+                )
                 label_resources.append(len(bindings.attachments))
                 assert len(bindings.attachments) <= 4
                 assert 'batches' not in value['population']
                 assert value['population']['rows'] == count
-            elif value['stage'] == 'complete_label_batch':
-                committed_ranges.append(value['groups']['range'])
             elif value['stage'] == 'labels':
                 final_batches.append(len(value['batches']))
-            return prepare(value, bindings, state)
+            result = prepare(value, bindings, state)
+            if value['stage'] == 'complete_label_batch':
+                committed_ranges.append(value['groups']['range'])
+            return result
 
         monkeypatch.setattr(frame_facade, '_prepare', observe_resources)
     original = pd.Series.astype
@@ -251,6 +257,9 @@ def test_native_label_ranges_stop_at_actual_context_completeness(
             observed.append(len(series))
         if len(observed) == 2 and case['second_label_fault']:
             faults.append(len(series))
+            if core:
+                assert candidate_ranges
+                failed_candidates.add(candidate_ranges[-1])
             raise TypeError('explicit second label chunk witness')
         return original(series, dtype, *args, **kwargs)
 
@@ -284,7 +293,17 @@ def test_native_label_ranges_stop_at_actual_context_completeness(
     assert len(faults) == expected['native_faults']
     if core:
         assert len(label_resources) == len(expected['label_cast_rows'])
-        assert len(committed_ranges) == len(label_resources) - len(faults)
+        expected_commits = [
+            candidate
+            for candidate in candidate_ranges
+            if candidate not in failed_candidates
+        ]
+        assert [
+            (value['start'], value['stop']) for value in committed_ranges
+        ] == expected_commits
+        assert len(committed_ranges) == len(label_resources) - len(
+            failed_candidates
+        )
         for previous, current in zip(committed_ranges, committed_ranges[1:]):
             assert previous['stop'] == current['start']
         if expected['outcome']['kind'] == 'error':

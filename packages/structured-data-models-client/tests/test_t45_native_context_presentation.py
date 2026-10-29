@@ -57,7 +57,8 @@ def test_native_context_value_error_uses_existing_scoped_validation_recipe(
             errors.raise_error(made, internal_context=bridge)
     assert caught.value is made
     expected = 'Failed to collect any context examples. Is your predictive query too restrictive?'
-    assert str(made) == expected
+    assert made.message == expected
+    assert str(made) == f'[INVALID_REQUEST] {expected}'
     assert made.code == 'INVALID_REQUEST'
     if marked:
         assert made.details == {}

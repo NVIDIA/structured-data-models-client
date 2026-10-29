@@ -579,12 +579,16 @@ def _steps(
 
 def _raise_fetch_refused(handle: Any, refused: FetchRefused) -> NoReturn:
     try:
-        handle.cancel()
-    except Exception:
-        # Preserve the selected actual owner across ordinary cleanup errors;
-        # process-control exceptions retain their normal propagation.
+        try:
+            handle.cancel()
+        except Exception:
+            # Preserve the selected actual owner across ordinary cleanup errors;
+            # process-control exceptions retain their normal propagation.
+            errors.raise_native(refused.raised)
         errors.raise_native(refused.raised)
-    errors.raise_native(refused.raised)
+    finally:
+        # Native tracebacks belong to callers; the cancelled Run does not.
+        handle = None
 
 
 def _source_partition(
