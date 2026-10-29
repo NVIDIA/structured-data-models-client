@@ -249,6 +249,43 @@ pub fn seeded_faults(database: &str, goldens: Goldens) {
     let run = run_of(database, &goldens);
     assert_eq!(unpinned(database, &run, &goldens), Ok(Vec::new()));
 
+    // Run-local seed handles may differ, but their complete typed request
+    // and every byte of independently rendered SQL remain obligations.
+    let mut renamed: DataRequest = goldens.iter().find_map(|(request, _)| {
+        let parsed: DataRequest = serde_json::from_str(request).unwrap();
+        matches!(parsed, DataRequest::Lookup { .. } | DataRequest::Neighbors { .. })
+            .then_some(parsed)
+    }).expect("a real seeded lookup or neighborhood golden");
+    match &mut renamed {
+        DataRequest::Lookup { seeds, .. } | DataRequest::Neighbors { seeds, .. } => {
+            seeds.attachment = sdm_contract::data::AttachmentId(60_000);
+        }
+        _ => unreachable!(),
+    }
+    let choice = ProviderChoice::Sql {
+        timestamp_encoding: None,
+        dialect: Dialect::new(database),
+        namespace: settled(database, &renamed),
+        view: None,
+    };
+    let FetchPlan::Sql { statements, .. } = Data::new().plan(&renamed, &choice).unwrap() else {
+        panic!("actual SQL plan")
+    };
+    let mut observed = vec![(serde_json::to_string(&renamed).unwrap(),
+        statements.into_iter().map(|statement| statement.text).collect::<Vec<_>>())];
+    assert_eq!(unpinned(database, &run_of(database, &observed), &goldens), Ok(Vec::new()));
+    observed[0].1[0].push(' ');
+    assert_eq!(unpinned(database, &run_of(database, &observed), &goldens).map(|p| p.len()), Ok(1));
+    observed[0].1[0].pop();
+    match &mut renamed {
+        DataRequest::Lookup { columns, .. } | DataRequest::Neighbors { columns, .. } => {
+            columns.push("unobserved_business_column".into());
+        }
+        _ => unreachable!(),
+    }
+    observed[0].0 = serde_json::to_string(&renamed).unwrap();
+    assert_eq!(unpinned(database, &run_of(database, &observed), &goldens).map(|p| p.len()), Ok(1));
+
     // A seeded SQL change without a golden update: the golden's text no
     // longer what the dialect renders, and a run of the changed SQL no
     // golden.
