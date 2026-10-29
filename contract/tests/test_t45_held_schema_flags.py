@@ -377,6 +377,30 @@ def test_legacy_availability_does_not_excuse_any_present_flag_or_other_field(
     assert observed == before
 
 
+def test_mixed_trace_binds_flag_availability_to_each_checked_logical_position():
+    schema = expected()
+    for column in schema['tables'][0]['columns']:
+        column.pop('untyped')
+        column.pop('stype_declared')
+    mixed = materialization_observation(expected())
+    mixed['identity']['operations'].insert(0, 'materialize')
+    core = mixed['core']
+    core['inputs'] = legacy_materialization_observation(schema)['core'][
+        'inputs'
+    ]
+    [entry] = core['materialization_entries']
+    entry['runs'] = [1]
+    entry['terminal']['run'] = 1
+    [record] = core['materialization_preparations']
+    record['run'] = 1
+    assert case_input_failures(mixed) == []
+    # Equal schema values cannot lend a legacy availability claim to Task.
+    record['input_reads'][0] = _bytes(1, json.dumps(schema).encode())
+    before = copy.deepcopy(mixed)
+    assert [rule for rule, _ in case_input_failures(mixed)] == ['inputs']
+    assert mixed == before
+
+
 @pytest.mark.parametrize(
     'changed',
     [
