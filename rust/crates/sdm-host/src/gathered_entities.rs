@@ -9,11 +9,16 @@ use sdm_contract::scalar::unicode::UnicodeText;
 use sdm_contract::{CoreError, Sentence};
 
 pub fn gathered_entity_bytes(
-    source: &[u8], observed: &[u8], dtype: &[u32],
+    source: &[u8],
+    observed: &[u8],
+    dtype: &[u32],
 ) -> Result<Option<Vec<u32>>, CoreError> {
-    let invalid = || CoreError::protocol(
-        Sentence::InvalidMessage, "gathered entity conversion facts are malformed",
-    );
+    let invalid = || {
+        CoreError::protocol(
+            Sentence::InvalidMessage,
+            "gathered entity conversion facts are malformed",
+        )
+    };
     let source: NativeValue = serde_json::from_slice(source).map_err(|_| invalid())?;
     let observed: NativeValue = serde_json::from_slice(observed).map_err(|_| invalid())?;
     let dtype = UnicodeText::from_points(dtype.iter().copied()).map_err(|_| invalid())?;

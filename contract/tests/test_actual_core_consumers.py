@@ -17,7 +17,9 @@ def test_consumer_roles_require_the_real_complete_native_journal():
     observation = {'identity': {'operations': actual}, 'core': core}
     before = copy.deepcopy(observation)
     assert checked_operations(observation) == [
-        'describe_source', 'materialize', 'predict'
+        'describe_source',
+        'materialize',
+        'predict',
     ]
     assert observation == before
     broken = copy.deepcopy(observation)

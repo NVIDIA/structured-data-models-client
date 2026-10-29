@@ -42,7 +42,9 @@ def test_native_cast_failure_and_custom_result_owner_are_untouched(monkeypatch):
 
 
 @pytest.mark.parametrize('text', ['5', '\u0665', ' +0_05 '])
-def test_admitted_gathered_number_keeps_the_actual_native_result(monkeypatch, text):
+def test_admitted_gathered_number_keeps_the_actual_native_result(
+    monkeypatch, text
+):
     converted = int(text)
     monkeypatch.setattr(
         relational_response, 'as_declared', lambda value, dtype: converted

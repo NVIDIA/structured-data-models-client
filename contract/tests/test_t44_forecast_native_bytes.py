@@ -18,15 +18,27 @@ def sample():
     call = core['predictions'][0]['calls'][0]
     raw = base64.b64decode(call['input_body_base64'])
     return {
-        'payloads': [{
-            'method': 'POST', 'path': '/predict',
-            'masked_sha256': hashlib.sha256(R.masked_bytes(raw)).hexdigest(),
-            'digest': R.EN.digest(call['body']),
-            'tables': R.EN.tables_with_rows(call['body']),
-        }],
+        'payloads': [
+            {
+                'method': 'POST',
+                'path': '/predict',
+                'masked_sha256': hashlib.sha256(
+                    R.masked_bytes(raw)
+                ).hexdigest(),
+                'digest': R.EN.digest(call['body']),
+                'tables': R.EN.tables_with_rows(call['body']),
+            }
+        ],
         'native_evidence': {
-            'core': core, 'operations': operations,
-            'receipts': [{'method': 'POST', 'path': '/predict', 'body_base64': call['input_body_base64']}],
+            'core': core,
+            'operations': operations,
+            'receipts': [
+                {
+                    'method': 'POST',
+                    'path': '/predict',
+                    'body_base64': call['input_body_base64'],
+                }
+            ],
         },
     }
 
@@ -48,6 +60,8 @@ def test_native_forecast_bytes_cannot_be_assumed_from_the_public_digest(fault):
     elif fault == 'hash':
         got['payloads'][0]['masked_sha256'] = '0' * 64
     else:
-        got['native_evidence']['receipts'][0]['body_base64'] = base64.b64encode(b'{}').decode()
+        got['native_evidence']['receipts'][0]['body_base64'] = base64.b64encode(
+            b'{}'
+        ).decode()
     with pytest.raises(ValueError):
         R.check_native_bytes(got)

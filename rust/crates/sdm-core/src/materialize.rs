@@ -1191,13 +1191,13 @@ impl Times {
             Some(stored) => stored,
             None => {
                 let mut probe = asker.fetch(DataRequest::Scan {
-                        table: table.source.clone(),
-                        columns: vec![window.column.clone()],
-                        filters: vec![Filter::NotNull {
-                            column: window.column.clone(),
-                        }],
-                        limit: Some(1),
-                    })?;
+                    table: table.source.clone(),
+                    columns: vec![window.column.clone()],
+                    filters: vec![Filter::NotNull {
+                        column: window.column.clone(),
+                    }],
+                    limit: Some(1),
+                })?;
                 // This reads the source spelling, not native business rows.
                 // Keep it out of the completed retained-source population.
                 probe.set_purpose(sdm_contract::run::FetchPurpose::Locate);

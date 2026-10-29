@@ -139,7 +139,10 @@ pub fn gathered_entity_text(
         return Ok(None);
     };
     if !matches!(source, NativeValue::Unicode { .. })
-        || !matches!(observed, NativeValue::Integer { .. } | NativeValue::Float { .. })
+        || !matches!(
+            observed,
+            NativeValue::Integer { .. } | NativeValue::Float { .. }
+        )
         || !(dtype.starts_with("int") || dtype.starts_with("float"))
     {
         return Ok(None);

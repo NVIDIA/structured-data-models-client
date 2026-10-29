@@ -62,6 +62,7 @@ pub use run::{
 /// so a host reaches it through the core, never through an edge to
 /// `sdm-engine` (decision E30).
 pub use sdm_engine::time::{UnknownZone, Zones};
+pub use sdm_request::predict::relational_response::gathered_entity_text;
 /// What each model supports, as the client describes it to a caller
 /// (`capabilities()`), re-exported so a host reaches the request crate's
 /// table through the core (decision E30).
@@ -76,7 +77,6 @@ pub use sdm_schema::frames::object_infer::{
 };
 /// Owned logical payload data, before JSON escaping or native presentation.
 pub use sdm_wire::json::Value as LogicalValue;
-pub use sdm_request::predict::relational_response::gathered_entity_text;
 
 /// Finite native sample facts complete one useful physical column meaning.
 pub use sdm_schema::frames::native_column::{

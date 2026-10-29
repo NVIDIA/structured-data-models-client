@@ -19,11 +19,17 @@ fn checked<T>(py: Python<'_>, value: Result<T, sdm_contract::CoreError>) -> PyRe
 
 #[pyfunction]
 pub(crate) fn gathered_entity_text(
-    py: Python<'_>, source: &[u8], observed: &[u8], dtype: Vec<u32>,
+    py: Python<'_>,
+    source: &[u8],
+    observed: &[u8],
+    dtype: Vec<u32>,
 ) -> PyResult<Option<Vec<u32>>> {
-    checked(py, crate::core_call(py, || {
-        sdm_host::gathered_entity_bytes(source, observed, &dtype)
-    })?)
+    checked(
+        py,
+        crate::core_call(py, || {
+            sdm_host::gathered_entity_bytes(source, observed, &dtype)
+        })?,
+    )
 }
 
 #[pyfunction]

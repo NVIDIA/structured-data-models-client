@@ -646,9 +646,11 @@ fn stored_time_spelling_probe_is_not_a_retained_native_source_read() {
     else {
         panic!("actual label inputs")
     };
-    let probe = stages.issued.iter().find(|step| {
-        step["request"]["request"] == "scan" && step["request"]["limit"] == 1
-    }).expect("the actual SQLite stored-time spelling probe");
+    let probe = stages
+        .issued
+        .iter()
+        .find(|step| step["request"]["request"] == "scan" && step["request"]["limit"] == 1)
+        .expect("the actual SQLite stored-time spelling probe");
     assert_eq!(probe["purpose"], "locate");
     let Attachment::LabelInputs(owner) = &stages.held[&inputs.owner] else {
         panic!("actual retained input owner")
