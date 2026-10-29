@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 from test_t44_prediction_observation import actual_observation, reader
-from test_t136_forecast_capture import RUNNER, _module
+from test_t136_forecast_capture import _module
 
 ROOT = Path(__file__).parents[2]
 CHECK = _module(
