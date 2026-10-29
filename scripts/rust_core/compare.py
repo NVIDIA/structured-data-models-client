@@ -1703,7 +1703,7 @@ def held_schema(described: Any) -> Any:
 
 
 def _held_input_matches(actual: Any, described: Any, *, legacy: bool) -> bool:
-    """Keep legacy omitted flags unavailable; actual Tasks carry full flags.
+    """Keep legacy omitted false defaults; actual Tasks carry full flags.
 
     Every present flag and every other field stays exact.
     The observation itself is never filled or projected in place.
@@ -1722,7 +1722,7 @@ def _held_input_matches(actual: Any, described: Any, *, legacy: bool) -> bool:
                     if flag in column:
                         if type(column[flag]) is not bool:
                             return False
-                    elif legacy:
+                    elif legacy and reference.get(flag) is False:
                         reference.pop(flag, None)
     except (KeyError, TypeError, ValueError):
         return False
