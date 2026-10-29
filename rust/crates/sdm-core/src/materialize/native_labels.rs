@@ -16,12 +16,19 @@ pub(super) fn group_rows(
     scalar: Option<&DataType>,
 ) -> Result<RecordBatch, CoreError> {
     let rows = labelled_rows(&labels.keys, &labels.anchors, &labels.labels)?;
-    if rows.num_rows() == 0
-        && let Some(scalar) = scalar
+    if let Some(scalar) = scalar
+        && let Some(list) = rows.column(2).as_list_opt::<i32>()
+        && list.values().is_empty()
     {
-        let target = arrow_array::new_empty_array(&DataType::List(Arc::new(
-            arrow_schema::Field::new("item", scalar.clone(), false),
-        )));
+        let target: ArrayRef = Arc::new(
+            arrow_array::ListArray::try_new(
+                Arc::new(arrow_schema::Field::new("item", scalar.clone(), false)),
+                list.offsets().clone(),
+                arrow_array::new_empty_array(scalar),
+                list.nulls().cloned(),
+            )
+            .map_err(|_| protocol("empty native groups do not retain their scalar meaning"))?,
+        );
         return RecordBatch::try_from_iter([
             ("entity", Arc::clone(rows.column(0))),
             ("anchor", Arc::clone(rows.column(1))),
@@ -60,8 +67,20 @@ pub(super) fn restored(
             "restored native groups do not retain their complete ordered entity and anchor identities",
         ));
     }
+    let exact_decimal = expected_encoding.is_none()
+        && encoding.is_none()
+        && expected
+            .column(2)
+            .as_list_opt::<i32>()
+            .is_some_and(|list| matches!(list.value_type(), DataType::Decimal128(_, _)));
+    let numeric_completion = rows.column(2).as_list_opt::<i32>().is_some_and(|list| {
+        matches!(
+            list.value_type(),
+            DataType::Int64 | DataType::UInt64 | DataType::Float32 | DataType::Decimal128(_, _)
+        )
+    });
     let logical_text = encoding.is_some() && expected_encoding.is_some();
-    if !logical_text
+    if !(logical_text || exact_decimal && numeric_completion)
         && (encoding != expected_encoding
             || rows.column(2).data_type() != expected.column(2).data_type())
     {
@@ -69,7 +88,14 @@ pub(super) fn restored(
             "restored native groups do not retain their actual source scalar family and encoding",
         ));
     }
-    read_link_labels(rows.column(2), encoding)
+    let actual = read_link_labels(rows.column(2), encoding)?;
+    // P2B-1 keeps exact class/key digits through the actual native restoration.
+    // Its completed rows remain retained by the group owner for later reads.
+    Ok(if exact_decimal {
+        before.labels.clone()
+    } else {
+        actual
+    })
 }
 
 pub(super) fn labelled_rows(

@@ -58,7 +58,7 @@ def scalar_column(
                 'native nullable source meaning has no fixed constructor'
             )
         return pd.array(values, dtype=dtype)
-    if kind == 'decimal':
+    if kind in ('decimal', 'exact_decimal'):
         target = {
             'int64': pa.int64(),
             'float64': pa.float64(),

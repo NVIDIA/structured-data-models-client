@@ -235,6 +235,9 @@ class SourceCompletion:
                 )
                 if meaning['scalar']['meaning'] != 'original':
                     self._scalar(frame, name, meaning, decimal=False)
+        # The native frame and exact mathematical source are separate products.
+        # Core selects this meaning; native casts still run at their old position.
+        exact_columns: dict[str, pa.ChunkedArray] = {}
         # Only actual native Decimal storage reaches the common Decimal pass.
         for name in frame.columns:
             try:
@@ -251,9 +254,24 @@ class SourceCompletion:
                     {'source': binding['source'], 'column': name},
                     {'storage': 'typed_columns', 'declaration': declaration},
                 )
+                if meaning['scalar']['meaning'] == 'exact_decimal':
+                    if not isinstance(rows, pa.Table):
+                        raise CodecError(
+                            'exact Decimal meaning requires typed source data'
+                        )
+                    exact = rows.column(name)
+                    if not pa.types.is_decimal(exact.type):
+                        raise CodecError(
+                            'exact Decimal meaning lacks its typed source column'
+                        )
+                    exact_columns[name] = exact
                 self._scalar(frame, name, meaning, decimal=True)
         try:
             exported = pa.Table.from_pandas(frame, preserve_index=False)
+            for name, exact in exact_columns.items():
+                index = exported.schema.get_field_index(name)
+                field = exported.schema.field(index).with_type(exact.type)
+                exported = exported.set_column(index, field, exact)
             if positions is not None:
                 # Core positions are UInt64 row data. The issued SQL batch
                 # helper remains the established signed int64 transport.

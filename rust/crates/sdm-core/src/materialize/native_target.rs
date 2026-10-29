@@ -340,7 +340,7 @@ impl RetainedTargetColumn {
         ));
         let batch = RecordBatch::try_from_iter([
             ("position", positions),
-            ("target", Arc::clone(&self.data.values)),
+            ("target", Arc::clone(&self.data.native_values)),
         ])
         .map_err(|_| invalid_target("completed native target values do not align"))?;
         Ok(ArrowData::new(batch.schema(), vec![batch]))
@@ -661,6 +661,8 @@ pub(super) struct TargetColumn {
     pub(super) derivation: Derivation,
     pub(super) positions: Vec<usize>,
     pub(super) values: ArrayRef,
+    /// Actual native completion, retained independently from exact mathematical values.
+    native_values: ArrayRef,
     pub(super) encoding: Option<StringEncoding>,
     /// Complete condition/time selection over the actual predecessor values.
     pub(super) selection: Vec<bool>,
@@ -727,6 +729,8 @@ impl TargetColumn {
                 &values,
                 encoding,
             )?;
+            let native_values = Arc::clone(&values);
+            let values = mathematical_values(&before, &positions, &values)?;
             return Ok(Arc::new(Self {
                 inputs,
                 target,
@@ -734,6 +738,7 @@ impl TargetColumn {
                 derivation: Derivation::Column,
                 positions,
                 values,
+                native_values,
                 encoding,
                 selection: Vec::new(),
                 first_presence: present.to_vec(),
@@ -772,6 +777,8 @@ impl TargetColumn {
         } else {
             window_selection(&inputs, window, &positions, times.as_ref())?
         };
+        let native_values = Arc::clone(&values);
+        let values = mathematical_values(&before, &positions, &values)?;
         Ok(Arc::new(Self {
             inputs,
             target,
@@ -779,6 +786,7 @@ impl TargetColumn {
             derivation: Derivation::Column,
             positions,
             values,
+            native_values,
             encoding,
             selection,
             first_presence: present.to_vec(),
@@ -826,7 +834,9 @@ impl TargetColumn {
             &converted.values,
             converted.encoding,
         )?;
-        let values = native_condition_column(&converted.values, &expected, converted.encoding)?;
+        let semantic =
+            mathematical_values(named(&source.rows, name)?, &expected, &converted.values)?;
+        let values = native_condition_column(&semantic, &expected, converted.encoding)?;
         let condition = previous.condition.complete(filter, values)?;
         let (derivation, selection) = match condition.truth() {
             Some(truth) => {
@@ -854,6 +864,7 @@ impl TargetColumn {
             target: previous.target.clone(),
             positions: previous.positions.clone(),
             values: Arc::clone(&previous.values),
+            native_values: Arc::clone(&previous.native_values),
             encoding: previous.encoding,
             first_presence: previous.first_presence.clone(),
             times: previous.times.clone(),
@@ -882,6 +893,12 @@ impl TargetColumn {
         validate_positions(&expected, &positions, values.len())?;
         validate_values(&previous.values, previous.encoding, &values, encoding)?;
         let selection = window_selection(&previous.inputs, window, &positions, times.as_ref())?;
+        let offsets = selected_positions(
+            &(0..previous.values.len()).collect::<Vec<_>>(),
+            &previous.selection,
+        )?;
+        let native_values = Arc::clone(&values);
+        let values = mathematical_values(&previous.values, &offsets, &values)?;
         Ok(Arc::new(Self {
             inputs: Arc::clone(&previous.inputs),
             target: previous.target.clone(),
@@ -893,6 +910,7 @@ impl TargetColumn {
             derivation: Derivation::Filtered,
             positions,
             values,
+            native_values,
             encoding,
             selection,
         }))
@@ -921,6 +939,13 @@ impl TargetColumn {
         let expected = selected_positions(&in_window, present)?;
         validate_positions(&expected, &positions, values.len())?;
         validate_values(&previous.values, previous.encoding, &values, encoding)?;
+        let offsets = selected_positions(
+            &(0..previous.values.len()).collect::<Vec<_>>(),
+            &previous.selection,
+        )?;
+        let offsets = selected_positions(&offsets, present)?;
+        let native_values = Arc::clone(&values);
+        let values = mathematical_values(&previous.values, &offsets, &values)?;
         Ok(Arc::new(Self {
             inputs: Arc::clone(&previous.inputs),
             target: previous.target.clone(),
@@ -932,6 +957,7 @@ impl TargetColumn {
             derivation: Derivation::Windowed,
             positions,
             values,
+            native_values,
             encoding,
             selection: Vec::new(),
         }))
@@ -1024,6 +1050,28 @@ fn window_selection(
         .collect())
 }
 
+/// Select mathematical values using the actual retained type and exact row map.
+/// Native completions remain authoritative for every unprotected scalar family.
+fn mathematical_values(
+    before: &ArrayRef,
+    offsets: &[usize],
+    completed: &ArrayRef,
+) -> Result<ArrayRef, CoreError> {
+    if offsets.len() != completed.len() || offsets.iter().any(|&row| row >= before.len()) {
+        return Err(invalid_target(
+            "native mathematical projection lacks its complete ordered row map",
+        ));
+    }
+    if matches!(
+        before.data_type(),
+        DataType::Decimal128(_, _) | DataType::Decimal256(_, _)
+    ) {
+        take(before, offsets)
+    } else {
+        Ok(Arc::clone(completed))
+    }
+}
+
 fn validate_values(
     before: &ArrayRef,
     before_encoding: Option<StringEncoding>,
@@ -1050,8 +1098,12 @@ fn validate_values(
             _ => return None,
         })
     };
+    let exact_decimal = matches!(before.data_type(), DataType::Decimal128(_, _))
+        && before_encoding.is_none()
+        && encoding.is_none()
+        && matches!(family(values, None), Some(1 | 2 | 4));
     if family(before, before_encoding).is_none()
-        || family(before, before_encoding) != family(values, encoding)
+        || (!exact_decimal && family(before, before_encoding) != family(values, encoding))
     {
         return Err(invalid_target(
             "native target completion changes its admitted scalar family",

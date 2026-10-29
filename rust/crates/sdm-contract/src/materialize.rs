@@ -258,8 +258,16 @@ pub enum MaterializeSourceFacts {
 #[serde(tag = "meaning", rename_all = "snake_case", deny_unknown_fields)]
 pub enum MaterializeScalarMeaning {
     Original {},
-    Nullable { physical: ColumnType },
-    Decimal { physical: ColumnType },
+    Nullable {
+        physical: ColumnType,
+    },
+    Decimal {
+        physical: ColumnType,
+    },
+    /// Execute the native cast while preserving the exact typed mathematical input.
+    ExactDecimal {
+        physical: ColumnType,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

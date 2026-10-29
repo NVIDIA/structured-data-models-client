@@ -993,7 +993,11 @@ pub(crate) async fn run(
             let source = RetainedMaterializeSource::bind(source, &mut attachments)?;
             let expected = column_meaning(&source, meaning.column.clone(), meaning.input.clone())?;
             if expected != meaning
-                || !matches!(meaning.scalar, MaterializeScalarMeaning::Decimal { .. })
+                || !matches!(
+                    meaning.scalar,
+                    MaterializeScalarMeaning::Decimal { .. }
+                        | MaterializeScalarMeaning::ExactDecimal { .. }
+                )
                 || !(failure.arithmetic
                     || failure.builtin.ancestry.iter().any(|class| {
                         matches!(

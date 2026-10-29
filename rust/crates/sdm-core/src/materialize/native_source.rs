@@ -88,11 +88,11 @@ pub(super) fn scalar_meaning(
                 | NativeDecimal::Decimal256 { scale, .. } => *scale,
             };
             Ok(if integer || declared.is_none() && scale == 0 {
-                M::Decimal {
+                M::ExactDecimal {
                     physical: ColumnType::Int64,
                 }
             } else if floating || declared.is_none() {
-                M::Decimal {
+                M::ExactDecimal {
                     physical: ColumnType::Float64,
                 }
             } else if declared == Some(Dtype::String) {
