@@ -382,6 +382,7 @@ fn answer(
 struct Stages {
     held: Attachments,
     issued: Vec<Value>,
+    returned: Vec<(FetchStep, ArrowData)>,
 }
 
 impl Stages {
@@ -403,6 +404,7 @@ impl Stages {
                     for request in requests {
                         self.issued.push(serde_json::to_value(&request).unwrap());
                         let rows = answer(&request, &run, &mut seeds);
+                        self.returned.push((request.clone(), rows.clone()));
                         let reply = ControlMessage::FetchReply(FetchReply {
                             id: request.id,
                             outcome: FetchOutcome::Data {
@@ -618,6 +620,7 @@ fn fixture() -> (Stages, Value) {
         Stages {
             held,
             issued: vec![],
+            returned: vec![],
         },
         json!({"stage":"task","request":{"provider":{"provider":"sql","dialect":"duckdb"},"schema":1,"query":2,"indices":3,"seed":"0x7","values":5,"options":[],"anchor_time":{"t":"ts","unit":"ns","v":"1677628800000000000"}}}),
     )
@@ -661,6 +664,129 @@ fn native_times(stages: &mut Stages, values: ArrayRef) -> AttachmentId {
     let rows = RecordBatch::try_from_iter([("time", values)]).unwrap();
     stages.held.insert(id, Attachment::Arrow(data(rows)));
     id
+}
+
+#[test]
+fn sql_temporal_sources_retain_whole_issued_reads_before_native_completion() {
+    let (mut stages, task) = fixture();
+    let PreparedMaterializeValue::Source(source) = stages.stage(task).unwrap() else {
+        panic!("actual source")
+    };
+    let tables = source.tables.clone();
+    let PreparedMaterializeValue::Population(population) = stages
+        .stage(json!({"stage":"population","source":source}))
+        .unwrap()
+    else {
+        panic!("actual population")
+    };
+    let PreparedMaterializeValue::LabelInputs(inputs) = stages
+        .stage(json!({"stage":"label_inputs","population":population,
+            "range":{"start":0,"stop":population.rows},"previous":null}))
+        .unwrap()
+    else {
+        panic!("actual inputs before native completion")
+    };
+    assert!(inputs.eligibility.as_ref().unwrap().values.is_empty());
+    let Attachment::LabelInputs(owner) = &stages.held[&inputs.owner] else {
+        panic!("actual retained inputs")
+    };
+    let fetched_before = stages.issued.len();
+    let views = owner.temporal_sources().unwrap();
+    let repeated = owner.temporal_sources().unwrap();
+    assert_eq!(stages.issued.len(), fetched_before);
+    assert_eq!(views.len(), 2);
+    assert_eq!(repeated.len(), views.len());
+    let mut seen = Vec::new();
+    for ((descriptor, rows), (again, repeated_rows)) in views.iter().zip(&repeated) {
+        assert_eq!(descriptor, again);
+        let descriptor: Value = serde_json::from_slice(descriptor).unwrap();
+        let role = descriptor["source_role"].as_str().unwrap();
+        let read = u32::try_from(descriptor["source_read"].as_u64().unwrap()).unwrap();
+        let (name, request) = match role {
+            "entity" => ("users", "sample_entities"),
+            "windowed" => ("buys", "neighbors"),
+            other => panic!("unexpected source role {other}"),
+        };
+        let logical = json!({"source":["main",name]});
+        assert_eq!(descriptor["source"], logical);
+        assert!(!seen.contains(&role.to_owned()));
+        seen.push(role.to_owned());
+        let batches = stages
+            .returned
+            .iter()
+            .filter(|(fetch, _)| {
+                let asked = serde_json::to_value(&fetch.request).unwrap();
+                fetch
+                    .partition
+                    .as_ref()
+                    .is_some_and(|part| part.first.0 == read)
+                    && asked["request"] == request
+                    && asked["table"] == logical
+            })
+            .flat_map(|(_, rows)| rows.batches.iter())
+            .collect::<Vec<_>>();
+        assert!(!batches.is_empty(), "view must name a real issued read");
+        let fetched = arrow_select::concat::concat_batches(&batches[0].schema(), batches).unwrap();
+        let table = tables
+            .iter()
+            .find(|table| json!(table.source) == logical)
+            .unwrap();
+        let columns = fetched
+            .schema()
+            .fields()
+            .iter()
+            .filter(|field| {
+                table.temporal_columns.contains(field.name())
+                    && matches!(field.data_type(), arrow_schema::DataType::Timestamp(_, _))
+            })
+            .map(|field| field.name().clone())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            descriptor,
+            json!({"source_role":role,"source_read":read,
+            "source":logical,"columns":columns,"rows":fetched.num_rows()})
+        );
+        let view = arrow_select::concat::concat_batches(&rows.schema, &rows.batches).unwrap();
+        let again =
+            arrow_select::concat::concat_batches(&repeated_rows.schema, &repeated_rows.batches)
+                .unwrap();
+        assert_eq!(view, again);
+        assert_eq!(view.num_rows(), fetched.num_rows());
+        assert_eq!(
+            view.schema()
+                .fields()
+                .iter()
+                .map(|field| field.name().clone())
+                .collect::<Vec<_>>(),
+            [vec!["source_row".to_owned()], columns.clone()].concat()
+        );
+        assert_eq!(
+            view.column(0)
+                .as_primitive::<UInt64Type>()
+                .iter()
+                .collect::<Vec<_>>(),
+            (0..fetched.num_rows())
+                .map(|row| Some(row as u64))
+                .collect::<Vec<_>>()
+        );
+        for column in &columns {
+            assert_eq!(
+                view.column_by_name(column).unwrap().to_data(),
+                fetched.column_by_name(column).unwrap().to_data()
+            );
+        }
+        if role == "entity" {
+            // All eight fetched rows precede candidate selection and the
+            // requested three-context limit. No time column was requested.
+            assert_eq!(fetched.num_rows(), 8);
+            assert!(columns.is_empty());
+        } else {
+            assert_eq!(Some(read), inputs.source_read.map(|id| id.0));
+            assert_eq!(columns, ["ts"]);
+        }
+    }
+    seen.sort();
+    assert_eq!(seen, ["entity", "windowed"]);
 }
 
 #[test]
