@@ -223,6 +223,8 @@ def test_native_semantic_companion_is_complete_and_bound_to_actual_rows(fault):
         (True, False),
         (1, 'one'),
         (10**25, -(10**25)),
+        (None, 1.5),
+        (None, None),
     ],
 )
 def test_observed_native_ids_agree_with_complete_rust_written_ids(values):
@@ -256,10 +258,12 @@ def test_observed_native_ids_agree_with_complete_rust_written_ids(values):
     table['columns'].append({'name': 'id_as_written', 'type': 'utf8'})
     for row, value in zip(table['rows'], values, strict=True):
         written = json.dumps(value, ensure_ascii=False, separators=(',', ':'))
-        row[names.index('id')] = {
-            'utf8': value if type(value) is str else written
-        }
-        row.append({'utf8': written})
+        row[names.index('id')] = (
+            None
+            if value is None
+            else {'utf8': value if type(value) is str else written}
+        )
+        row.append(None if value is None else {'utf8': written})
     before = copy.deepcopy((native, rust))
     assert reader().semantic_result(native) == reader().semantic_result(rust)
     assert (native, rust) == before
@@ -283,3 +287,18 @@ def test_written_identity_owner_cannot_disagree_with_its_actual_carrier(
         row.append({'utf8': written})
     with pytest.raises(reader().ObservationError, match='written identity'):
         reader().semantic_result(actual)
+
+
+def test_nonprimitive_written_owners_and_absent_results_keep_their_exact_layout():
+    for value in ({'result': None}, {'model': 'unobserved'}):
+        assert reader().semantic_result(value) == value
+    core, operations = actual_observation()
+    actual = reader().view(core, operations)['events'][0]['result']
+    table = actual['result']
+    names = [column['name'] for column in table['columns']]
+    table['columns'][names.index('id')]['type'] = 'utf8'
+    table['columns'].append({'name': 'id_as_written', 'type': 'utf8'})
+    for row in table['rows']:
+        row[names.index('id')] = {'utf8': '[1]'}
+        row.append({'utf8': '[1]'})
+    assert reader().semantic_result(actual) == actual

@@ -1406,6 +1406,72 @@ def _presentation(
                 )
 
 
+def _written_identities(table: dict[str, Any]) -> list[Any] | None:
+    """Read the actual Rust written-value owner, checking its redundant id.
+
+    Nonprimitive written identities retain their complete original layout.
+    No request input or expected answer supplies any part of this reading.
+    """
+    names = [column['name'] for column in table['columns']]
+    if 'id_as_written' not in names:
+        return None
+    require(
+        names.count('id') == names.count('id_as_written') == 1,
+        'written identity has no unique actual carrier',
+    )
+    at, written = names.index('id'), names.index('id_as_written')
+    require(
+        table['columns'][at]['type'] == 'utf8'
+        and table['columns'][written]['type'] == 'utf8',
+        'written identity has another carrier type',
+    )
+    identities, primitive = [], True
+    for row in table['rows']:
+        raw = row[written]
+        if raw is None:
+            require(
+                row[at] is None, 'written identity differs from its carrier'
+            )
+            identities.append(None)
+            continue
+        require(
+            type(raw) is dict
+            and set(raw) == {'utf8'}
+            and type(raw['utf8']) is str,
+            'written identity has no actual JSON text',
+        )
+        try:
+            decoded = json.loads(raw['utf8'])
+        except (ValueError, OverflowError) as error:
+            raise ObservationError(
+                'written identity has invalid JSON text'
+            ) from error
+        require(
+            row[at]
+            == {'utf8': decoded if type(decoded) is str else raw['utf8']},
+            'written identity differs from its carrier',
+        )
+        if decoded is None:
+            identities.append(None)
+        elif type(decoded) is bool:
+            identities.append({'bool': decoded})
+        elif type(decoded) is int:
+            kind = 'i64' if -(2**63) <= decoded < 2**63 else 'integer'
+            identities.append({kind: str(decoded)})
+        elif type(decoded) is float:
+            identities.append({'f64_bits': struct.pack('>d', decoded).hex()})
+        elif type(decoded) is str:
+            identities.append({'utf8': decoded})
+        else:
+            primitive = False
+    if not primitive:
+        return None
+    for row in table['rows']:
+        del row[written]
+    del table['columns'][written]
+    return identities
+
+
 def semantic_result(value: dict[str, Any]) -> dict[str, Any]:
     """Project actual presented identities while retaining every other raw field.
 
@@ -1414,18 +1480,32 @@ def semantic_result(value: dict[str, Any]) -> dict[str, Any]:
     """
     result = copy.deepcopy(value)
     shown = result.pop('presentation', None)
+    table = result.get('result')
     if shown is None:
-        return result
-    table = result['result']
-    _presentation(shown, table)
+        if not isinstance(table, dict):
+            return result
+        identities = _written_identities(table)
+        if identities is None:
+            return result
+    else:
+        _presentation(shown, table)
+        answer = [column['name'] for column in table['columns']].index(
+            'answer_index'
+        )
+        identities = [
+            shown['rows'][int(row[answer]['i64'])]['id']
+            for row in table['rows']
+        ]
     names = [column['name'] for column in table['columns']]
     kinds = set()
-    for row in table['rows']:
-        native = shown['rows'][int(row[names.index('answer_index')]['i64'])]
+    for row, identity in zip(table['rows'], identities, strict=True):
         if 'id' in names:
-            row[names.index('id')] = native['id']
-            if native['id'] is not None:
-                kinds.add(next(iter(native['id'])))
+            row[names.index('id')] = identity
+            if identity is not None:
+                kinds.add(next(iter(identity)))
+        if shown is None:
+            continue
+        native = shown['rows'][int(row[names.index('answer_index')]['i64'])]
         if native['rankings'] is not None or 'prediction_candidates' in native:
 
             def literal(cell: Any) -> Any:
@@ -1458,7 +1538,7 @@ def semantic_result(value: dict[str, Any]) -> dict[str, Any]:
                     for candidate in candidates
                 ]
             }
-    if 'id' in names and kinds:
+    if 'id' in names:
         table['columns'][names.index('id')]['type'] = (
             {
                 'i64': 'int64',
@@ -1469,6 +1549,8 @@ def semantic_result(value: dict[str, Any]) -> dict[str, Any]:
             }.get(next(iter(kinds)), 'other')
             if len(kinds) == 1
             else 'native'
+            if kinds
+            else 'null'
         )
     return result
 
