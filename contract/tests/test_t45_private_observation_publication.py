@@ -850,7 +850,7 @@ def precise_serving(token='1.0000000000000001', *, old=False):
         + token
         + ',"integer":1,"float":1.0,"zero":-0.0,'
         '"duplicate":1,"duplicate":2,"object":{"number":"1"},'
-        '"text":"1.0000000000000001"}'
+        '"text":"1.0000000000000001","values":[true,false,null,1,1.0,-0.0,"😺"]}'
     )
     escaped = ''.join(f'\\u{ord(character):04x}' for character in private)
     posted = json.dumps(
@@ -891,6 +891,17 @@ def ordered_numbers(text):
         parse_float=lambda token: ('float', token),
         object_pairs_hook=lambda pairs: ('members', pairs),
     )
+
+
+def test_serving_member_collision_is_detected_before_literal_name_replacement():
+    held = RUNNER.Placeheld(NAMES, ())
+    private = NAMES['catalog']
+    text = '{' + json.dumps(private) + ':1,"{catalog}":2}'
+    original = {'dataframe_records': [{'request_json': text}]}
+    before = copy.deepcopy(original)
+    with pytest.raises(publication().PublicationError, match='collide'):
+        publication()._project(held, original)
+    assert original == before
 
 
 @pytest.mark.parametrize(
