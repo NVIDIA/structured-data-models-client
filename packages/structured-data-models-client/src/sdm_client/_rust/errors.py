@@ -961,6 +961,14 @@ def error_from_core(
             raise codec.CodecError('invalid native frame validation sentence')
         said = _said(sentence, fields)
         native_key_cause = ValueError(said)
+    if key_reason == 'payload_validation':
+        if sentence != 'not_finite':
+            raise codec.CodecError('invalid native payload validation sentence')
+        # The reached frame payload boundary wrapped the engine's finite-value
+        # validation error. Rust still selects admission and the sentence.
+        said = _said(sentence, fields)
+        native_key_cause = ValueError(said)
+        details.pop('native_key_reason', None)
     if sentence == 'frame_no_valid_rows':
         said = _said(sentence, fields)
         native_key_cause = ValueError(said)

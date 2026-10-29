@@ -2555,6 +2555,8 @@ pub(crate) fn payload_part(
     .map_err(|error| {
         if error.sentence == Sentence::PastInt64 {
             error.with_field("frame_payload_range", Detail::Scalar(Scalar::Bool(true)))
+        } else if error.sentence == Sentence::NotFinite {
+            error.with_field("native_key_reason", Detail::text("payload_validation"))
         } else {
             error
         }
