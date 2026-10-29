@@ -94,6 +94,43 @@ def leg(tmp_path: Path) -> Leg:
     return Leg(tmp_path)
 
 
+def test_warehouse_fixture_observes_only_its_recorded_call(leg: Leg) -> None:
+    line = copy.deepcopy(leg.core)
+    before = copy.deepcopy(line)
+    view = _compare()._prediction_view(line)
+    [received] = line['public']['payloads']
+    assert view['operations'] == ['predict']
+    assert view['calls'] == [received['parsed']]
+    [attempt] = view['attempts']
+    assert attempt['run'] == 0
+    assert attempt['body_sha256'] == received['sha256']
+    assert attempt['reply'] is None and attempt['model_endpoint'] is None
+    assert view['events'][0]['result'] is None
+    assert line['core']['predicted'] is None
+    assert line == before
+
+
+@pytest.mark.parametrize('changed', ['missing', 'owner', 'body', 'hash'])
+def test_warehouse_fixture_keeps_model_call_evidence_strict(
+    leg: Leg, changed: str
+) -> None:
+    line = copy.deepcopy(leg.core)
+    assert leg.judge(copy.deepcopy(line)).failures == []
+    [call] = line['core']['model_calls']
+    if changed == 'missing':
+        line['core']['model_calls'].clear()
+    elif changed == 'owner':
+        call['run'] = 1
+    elif changed == 'body':
+        call['body']['metadata']['source_query'] += ' '
+    else:
+        call['body_sha256'] = '0' * 64
+    report = leg.judge(line)
+    assert ('core' if changed == 'owner' else 'payload') in [
+        rule for rule, _ in report.failures
+    ], report.texts
+
+
 def test_t33_an_equal_warehouse_line_passes_with_no_stand_in_verdict(
     leg: Leg,
 ) -> None:

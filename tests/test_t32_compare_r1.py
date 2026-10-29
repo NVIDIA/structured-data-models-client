@@ -60,6 +60,55 @@ REFUSED = {
 }
 
 
+def test_sparse_numeric_fixture_has_owned_products_without_mutating_it():
+    line = _legacy_observation({'number': '3e-06'}, calls=True)
+    before = copy.deepcopy(line)
+    view = COMPARE._prediction_view(line)
+    assert view['operations'] == ['predict']
+    assert view['inputs'] == [{'op': 'predict', 'model': 'kumo-relational'}]
+    [event] = view['events']
+    assert event['position'] == 0
+    assert event['result'] == line['core']['legacy_predictions'][0]['result']
+    assert event['calls'] == line['core']['predicted']['calls']
+    assert all(attempt['reply'] is None for attempt in view['attempts'])
+    assert all(
+        attempt['model_endpoint'] is None for attempt in view['attempts']
+    )
+    assert line == before
+
+
+@pytest.mark.parametrize('changed', ['input', 'owner', 'journal', 'product'])
+def test_sparse_numeric_fixture_refuses_incomplete_or_foreign_run_evidence(
+    changed: str,
+):
+    line = _legacy_observation({'number': '3e-06'})
+    assert len(COMPARE._prediction_view(line)['events']) == 1
+    if changed == 'input':
+        line['core']['inputs'][0].pop('model')
+    elif changed == 'owner':
+        line['core']['model_calls'][0]['run'] = 1
+    elif changed == 'journal':
+        line['core']['legacy_predictions'].clear()
+    else:
+        line['core']['legacy_predictions'][0]['result'].pop('request_id')
+    with pytest.raises(COMPARE._prediction_reader().ObservationError):
+        COMPARE._prediction_view(line)
+
+
+def test_shared_numeric_fixture_keeps_its_first_product_separate_from_the_last():
+    line = _legacy_observation({'number': '3e-06'})
+    first = copy.deepcopy(line['core']['legacy_predictions'][0]['result'])
+    _append_legacy_prediction(line, {'number': '99.0'})
+    view = COMPARE._prediction_view(line)
+    assert [event['position'] for event in view['events']] == [0, 1]
+    assert view['events'][0]['result'] == first
+    assert view['events'][1]['result'] == line['core']['predicted']
+    assert view['events'][0]['result'] != view['events'][1]['result']
+    line['core'].pop('legacy_predictions')
+    with pytest.raises(COMPARE._prediction_reader().ObservationError):
+        COMPARE._prediction_view(line)
+
+
 # --- 4: a refusal on a warehouse leg fails as anywhere -----------------------------
 
 
