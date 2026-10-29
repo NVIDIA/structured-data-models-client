@@ -478,8 +478,12 @@ def _steps(
                     if isinstance(answer, FetchRefused):
                         try:
                             handle.cancel()
-                        finally:
+                        except Exception:
+                            # An ordinary cancellation failure must not
+                            # replace the native owner. Process-control
+                            # exceptions retain their normal propagation.
                             errors.raise_native(answer.raised)
+                        errors.raise_native(answer.raised)
                     outcome = {'outcome': 'data', 'data': 1}
                     if isinstance(answer, Page):
                         attached[1] = answer.data
