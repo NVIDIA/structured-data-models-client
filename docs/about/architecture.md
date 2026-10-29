@@ -537,7 +537,7 @@ It is not what any one deployment answers; see below.
 | `scores` | ✅ | ❌ |
 | `rankings` | ✅ | ❌ |
 | `embeddings` | ✅ | ❌ |
-| `explanation` | ✅ | ❌ |
+| `explanation` | ✅ | ✅ |
 
 Asking a model for a field it does not declare fails client-side, naming what
 it does declare.
