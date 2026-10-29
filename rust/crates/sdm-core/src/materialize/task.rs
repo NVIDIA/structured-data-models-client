@@ -427,16 +427,6 @@ pub(super) fn example_population(
     })
 }
 
-pub(super) async fn label_context(
-    asker: &Asker,
-    memo: &mut Memo<'_>,
-    draw: LabelDraw<'_>,
-    sampled: EntitySample,
-) -> Result<LabelledContext, CoreError> {
-    let population = example_population(&draw, sampled)?;
-    label_population(asker, memo, draw, population, None).await
-}
-
 pub(super) async fn label_population(
     asker: &Asker,
     memo: &mut Memo<'_>,
