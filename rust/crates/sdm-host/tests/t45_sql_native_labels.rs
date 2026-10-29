@@ -530,7 +530,12 @@ fn fixture() -> (Stages, Value) {
     )
 }
 
-fn native(stages: &mut Stages, positions: Vec<u64>, values: Vec<i64>) -> NativeTargetValues {
+fn native(
+    stages: &mut Stages,
+    positions: Vec<u64>,
+    values: Vec<i64>,
+    presence: Vec<bool>,
+) -> NativeTargetValues {
     let id = AttachmentId(stages.held.keys().map(|id| id.0).max().unwrap() + 1);
     let rows = RecordBatch::try_from_iter([
         (
@@ -541,9 +546,18 @@ fn native(stages: &mut Stages, positions: Vec<u64>, values: Vec<i64>) -> NativeT
     ])
     .unwrap();
     stages.held.insert(id, Attachment::Arrow(data(rows)));
+    let presence_id = AttachmentId(id.0 + 1);
+    let present = RecordBatch::try_from_iter([(
+        "present",
+        Arc::new(BooleanArray::from(presence)) as ArrayRef,
+    )])
+    .unwrap();
+    stages
+        .held
+        .insert(presence_id, Attachment::Arrow(data(present)));
     NativeTargetValues {
         rows: id,
-        presence: None,
+        presence: Some(presence_id),
         encoding: None,
     }
 }
@@ -589,6 +603,7 @@ fn sql_native_target_and_changed_group_completion_reach_the_actual_request() {
         &mut stages,
         positions[1..].to_vec(),
         vec![3; positions.len() - 1],
+        vec![true; positions.len()],
     );
     assert_eq!(
         stages
@@ -596,7 +611,12 @@ fn sql_native_target_and_changed_group_completion_reach_the_actual_request() {
             .unwrap_err()["error"]["code"],
         "INVALID_MESSAGE"
     );
-    let converted = native(&mut stages, positions.clone(), vec![3; positions.len()]);
+    let converted = native(
+        &mut stages,
+        positions.clone(),
+        vec![3; positions.len()],
+        vec![true; positions.len()],
+    );
     let PreparedMaterializeValue::TargetColumn(column) = stages
         .stage(json!({"stage":"target_column","inputs":inputs,"converted":converted}))
         .unwrap()
@@ -625,7 +645,12 @@ fn sql_native_target_and_changed_group_completion_reach_the_actual_request() {
         .filter_map(|(i, selected)| (selected == Some(true)).then_some(i as u64))
         .collect::<Vec<_>>();
     assert!(!selected.is_empty());
-    let converted = native(&mut stages, selected.clone(), vec![3; selected.len()]);
+    let converted = native(
+        &mut stages,
+        selected.clone(),
+        vec![3; selected.len()],
+        vec![true; selected.len()],
+    );
     let PreparedMaterializeValue::TargetColumn(column) = stages
         .stage(json!({"stage":"windowed_target","column":column,"converted":converted}))
         .unwrap()
@@ -642,7 +667,10 @@ fn sql_native_target_and_changed_group_completion_reach_the_actual_request() {
         panic!("group owner")
     };
     let rows = owner.rows().unwrap().batches[0].clone();
-    let mut labels = ListBuilder::new(Int64Builder::new());
+    let arrow_schema::DataType::List(field) = rows.column(2).data_type() else {
+        panic!("actual groups must retain their scalar list type")
+    };
+    let mut labels = ListBuilder::new(Int64Builder::new()).with_field(Arc::clone(field));
     for _ in 0..rows.num_rows() {
         labels.values().append_value(1);
         labels.append(true);
@@ -653,6 +681,7 @@ fn sql_native_target_and_changed_group_completion_reach_the_actual_request() {
         ("target", Arc::new(labels.finish()) as ArrayRef),
     ])
     .unwrap();
+    assert_eq!(changed.column(2).data_type(), rows.column(2).data_type());
     assert_ne!(changed.column(2).to_data(), rows.column(2).to_data());
     stages.held.insert(
         AttachmentId(50_000),
