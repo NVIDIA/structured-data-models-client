@@ -144,6 +144,7 @@ pub fn write(
         "outcome": {"result": result, "stage": null, "error": null, "code": code},
         "host": null,
         "core": {
+            "edits": observed.edits,
             "inputs": observed.inputs,
             "fetches": observed.fetches,
             "accepted": accepted,
