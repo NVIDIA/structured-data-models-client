@@ -10667,7 +10667,7 @@
               "minimum": 0
             },
             "examples": {
-              "type": "string"
+              "$ref": "#/$defs/UnicodeText"
             },
             "storage": {
               "type": "string",
