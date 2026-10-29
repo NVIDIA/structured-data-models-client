@@ -701,3 +701,13 @@ Record the result completion and model reply as unobserved with the existing spa
 Retain every existing exact equal-result, changed-digest, SQL statement-count and warehouse-leg oracle.
 Add malformed call ownership, missing call, changed body and corrupt-hash controls before completing the fixture.
 Preserve the frozen observations and actual R51 failure receipts, collect the matched dependency-profile feedback, and obtain fresh whole reviews before any successor SDK or check execution.
+
+
+### Complete attachment-owner test inventory
+
+Exact R53 passes the full contract, client and root tooling suites, including the corrected warehouse comparator, before the normal handoff reaches two binding annotation failures.
+The independently authored binding test inventory still names seven frame owners, while the existing runtime classes, attachment conversions and stubs consistently support fifteen retained attachment owners.
+Expand that independent inventory to all fifteen existing classes and use it for exact attachment-union equality, runtime member consistency and all four constructor/subclass refusal checks.
+Keep construction and observation helper classes outside the attachment inventory and preserve the existing exact module-name and union assertions.
+The existing real-wheel failures precede this test-only correction; no runtime owner, stub, alias, registration or resource policy changes.
+Collect remaining unexecuted Rust own-suite feedback on unchanged approved R53, then freeze the grouped successor for fresh whole reviews before executing it.
