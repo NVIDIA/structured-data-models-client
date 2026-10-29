@@ -412,7 +412,7 @@ def test_the_gate_fixture_keeps_real_coverage_inputs_across_capture_layouts(
     assert {
         path.relative_to(ROOT / 'contract/captures').parts[0]
         for path in originals
-    } == {'r2', 'snowflake', 'lakebase', 's2', 'databricks-sql'}
+    } == {'r2', 'snowflake', 'lakebase', 's2', 'databricks-sql', 't45-link-r1'}
     for path in originals:
         relative = path.relative_to(ROOT)
         assert (source / relative).read_bytes() == path.read_bytes()
@@ -559,13 +559,16 @@ def check(
     checkpoint: str,
     observations: tuple[Path, ...] = (),
     protected: str | None = None,
+    *,
+    database: str | None = 'duckdb',
 ) -> list[str]:
+    """Authored DuckDB evidence by default; aggregate callers select None."""
     return ratchet.check(
         repo,
         checkpoint,
         list(observations),
         protected,
-        database='duckdb' if observations else None,
+        database=database if observations else None,
     ).problems
 
 
