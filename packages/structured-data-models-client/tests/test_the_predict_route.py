@@ -362,17 +362,56 @@ def test_the_result_on_the_core_is_the_old_route_s(
 def test_another_request_state_version_is_refused_by_name(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from sdm_client._rust import codec
+    from sdm_client._rust.run import run
+
     request = _materialized(monkeypatch)
-    # Version 1, the state contract v25 wrote: not the current version.
-    request._core = CoreRequest(version=1)
-    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
-    with _endpoint().serve() as (url, received):
-        with pytest.raises(StructuredDataError) as refused:
-            _predict(url, request)
+    calls = []
+    reached = ValueError('the accepted state reached its model call')
+
+    def model(body):
+        calls.append(body)
+        raise reached
+
+    operation = {
+        'op': 'predict',
+        'state': {'version': 1, 'payload': 1, 'query': 2},
+        'model': 'kumo-relational',
+        'request_id': 'sdm-state-version-control',
+        'outputs': ['prediction'],
+        'default_outputs': False,
+        'inference_asked': [],
+    }
+    attachments = {
+        1: codec.attachment(request.payloads[0]),
+        2: codec.attachment(request.query),
+    }
+    # This is the RequestState actually consumed by the existing native Run,
+    # rather than an unused cached field on the mutable public Request.
+    with pytest.raises(StructuredDataError) as refused:
+        run(operation, attachments, model=model)
     assert refused.value.code == 'INVALID_REQUEST'
     assert refused.value.details['field'] == 'state.version'
     assert refused.value.details['version'] == 1
-    assert received.requests == []
+    assert calls == []
+    operation['state']['version'] = 2
+    with pytest.raises(ValueError) as accepted:
+        run(operation, attachments, model=model)
+    assert accepted.value is reached
+    assert len(calls) == 1 and isinstance(calls[0], bytes)
+
+
+def test_unused_cached_request_state_does_not_override_current_public_inputs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request = _materialized(monkeypatch)
+    request._core = CoreRequest(version=1)
+    with _endpoint().serve() as (url, received):
+        core, old = _both(monkeypatch, request, url)
+    assert not isinstance(core, Exception), core
+    pd.testing.assert_frame_equal(core.to_pandas(), old.to_pandas())
+    assert core.items == old.items
+    assert len(received.requests) == 2
 
 
 def test_a_request_the_core_did_not_materialize_predicts_as_on_the_old_route(
