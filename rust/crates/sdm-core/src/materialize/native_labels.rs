@@ -375,4 +375,47 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn native_and_mathematical_group_masks_have_independent_ordered_identities() {
+        let mathematical = task::LabelledContext {
+            keys: Arc::new(arrow_array::Int64Array::from(vec![1])),
+            anchors: vec![3],
+            labels: labels::Labels::Lists(vec![vec![labels::LinkValue::Decimal(1001, 3)]]),
+        };
+        let native = task::LabelledContext {
+            keys: Arc::new(arrow_array::Int64Array::from(vec![2])),
+            anchors: vec![4],
+            labels: labels::Labels::Lists(vec![vec![labels::LinkValue::Float(1.0)]]),
+        };
+        let expected = group_rows(&native, Some(&DataType::Float32)).unwrap();
+        assert_eq!(
+            restored_with_meaning(
+                &mathematical,
+                &expected,
+                &expected,
+                None,
+                None,
+                Some(&DataType::Decimal128(38, 3))
+            )
+            .unwrap(),
+            mathematical.labels
+        );
+        let wrong = task::LabelledContext {
+            keys: Arc::new(arrow_array::Int64Array::from(vec![3])),
+            ..native
+        };
+        let wrong = group_rows(&wrong, Some(&DataType::Float32)).unwrap();
+        assert!(
+            restored_with_meaning(
+                &mathematical,
+                &expected,
+                &wrong,
+                None,
+                None,
+                Some(&DataType::Decimal128(38, 3))
+            )
+            .is_err()
+        );
+    }
 }

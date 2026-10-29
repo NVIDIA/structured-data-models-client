@@ -31,11 +31,31 @@ def test_native_context_value_error_uses_existing_scoped_validation_recipe(
     caller = LookupError('ambient caller') if ambient else None
     bridge = RuntimeError('private core bridge')
     bridge.__context__ = caller
-    made = errors.error_from_core(
-        json.dumps({'message': 'error', 'error': diagnostic}).encode(),
-        {},
-        internal_context=bridge,
-    )
+
+    def construct():
+        return errors.error_from_core(
+            json.dumps({'message': 'error', 'error': diagnostic}).encode(),
+            {},
+            internal_context=bridge,
+        )
+
+    if ambient:
+        try:
+            raise caller
+        except LookupError:
+            try:
+                raise bridge
+            except RuntimeError:
+                made = construct()
+            # The real handover has left its internal handler, while the
+            # caller's handler still owns the active exception context.
+            with pytest.raises(type(made)) as caught:
+                errors.raise_error(made, internal_context=bridge)
+    else:
+        made = construct()
+        with pytest.raises(type(made)) as caught:
+            errors.raise_error(made, internal_context=bridge)
+    assert caught.value is made
     expected = 'Failed to collect any context examples. Is your predictive query too restrictive?'
     assert str(made) == expected
     assert made.code == 'INVALID_REQUEST'
@@ -48,9 +68,6 @@ def test_native_context_value_error_uses_existing_scoped_validation_recipe(
     else:
         assert made.__cause__ is None
         assert made.details['condition'] == 'users.age > 22'
-    with pytest.raises(type(made)) as caught:
-        errors.raise_error(made, internal_context=bridge)
-    assert caught.value is made
     if marked:
         assert made.__context__ is made.__cause__
         assert made.__cause__.__context__ is caller

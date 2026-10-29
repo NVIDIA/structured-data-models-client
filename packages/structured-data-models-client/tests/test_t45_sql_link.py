@@ -548,3 +548,41 @@ def test_link_task_and_base_config_are_closed_typed_payload_variants(
             target = target[part]
         target[key] = value
         assert list(validator.iter_errors(corrupted)), (path, key)
+
+
+def test_colliding_decimal_native_groups_and_exact_request_labels_are_separate(
+    monkeypatch,
+):
+    from sdm_client._rust.native_target import NativeTargetColumn
+
+    route(monkeypatch, True)
+    actual = NativeTargetColumn.group_result
+    observed = []
+
+    def restore(self, groups):
+        observed.append((self.values.dtype, copy.deepcopy(groups)))
+        return actual(self, groups)
+
+    monkeypatch.setattr(NativeTargetColumn, 'group_result', restore)
+    expression = 'CAST(9007199254740993.25 AS DECIMAL(38,2)) + CAST(item_id AS DECIMAL(38,2))'
+    setup = [
+        "UPDATE buys SET item_id = (buy_id // 8) % 4, ts = TIMESTAMP '2023-01-01' + to_days(CAST(buy_id AS INTEGER))",
+        *[
+            f'ALTER TABLE {table} ALTER COLUMN item_id TYPE DECIMAL(38,2) USING {expression}'
+            for table in ('items', 'buys')
+        ],
+    ]
+    with connection(setup) as db:
+        request = materialize(db)
+    assert observed
+    assert all(str(dtype) == 'float32' for dtype, _ in observed)
+    groups = [group for _, batch in observed for group in batch]
+    assert groups and all(len(group) == 1 for group in groups)
+    assert all(isinstance(value, float) for group in groups for value in group)
+    assert len({value for group in groups for value in group}) == 1
+    table = request.payloads[0]['context']['instance_table']
+    target = table['columns'].index('TARGET')
+    labels = [row[target] for row in table['rows']]
+    expected = {f'900719925474099{i}.25' for i in range(3, 7)}
+    assert any(len(group) > 1 for group in labels)
+    assert all(set(group) <= expected for group in labels)
