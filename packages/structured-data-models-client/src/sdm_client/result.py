@@ -92,6 +92,8 @@ class GradientExplanations(dict[Any, dict[str, Any]]):
         # table, aligned with that table's `rows`. Kept beside the entries
         # rather than in them, because an entry is the endpoint's shape.
         self._hops = {key: dict(tables) for key, tables in (hops or {}).items()}
+        # Each entry's key as it would be under `row_index`, to re-key by.
+        self._rows: dict[Any, Any] = {}
 
     def to_pandas(self) -> pd.DataFrame:
         r"""Every gradient, one line each, across all explained rows.
@@ -163,16 +165,28 @@ class GradientExplanations(dict[Any, dict[str, Any]]):
         ).astype({'hop': 'Int64', 'row': 'int64', 'gradient': 'float64'})
 
     def _renumbered(self, start: int) -> GradientExplanations:
-        r"""These, with each ``row_index`` key ``start`` places further on.
+        r"""These, with each ``row_index`` ``start`` places further on.
 
         A key that is an ``id`` is not a position and is left alone.
         """
-        if not start or self._keyed_by != ('row_index',):
+        if not start:
             return self
+        moved = self._keyed_by == ('row_index',)
         return GradientExplanations(
-            {key + start: entry for key, entry in self.items()},
+            {
+                key + start if moved else key: entry
+                for key, entry in self.items()
+            },
             keyed_by=self._keyed_by,
-            hops={key + start: hops for key, hops in self._hops.items()},
+            hops={
+                key + start if moved else key: hops
+                for key, hops in self._hops.items()
+            },
+        )._with_rows(
+            {
+                key + start if moved else key: row + start
+                for key, row in self._rows.items()
+            }
         )
 
     def _at_step(self, step: Any) -> GradientExplanations:
@@ -181,23 +195,42 @@ class GradientExplanations(dict[Any, dict[str, Any]]):
             {(key, step): entry for key, entry in self.items()},
             keyed_by=(*self._keyed_by, 'forecast_step'),
             hops={(key, step): hops for key, hops in self._hops.items()},
+        )._with_rows(
+            {(key, step): (row, step) for key, row in self._rows.items()}
         )
+
+    def _with_rows(self, rows: Mapping[Any, Any]) -> GradientExplanations:
+        r"""These, recording each key's ``row_index`` key."""
+        self._rows = dict(rows)
+        return self
+
+    def _by_row(self) -> GradientExplanations:
+        r"""These, keyed by ``row_index`` in place of ``id``."""
+        if self._keyed_by[0] == 'row_index':
+            return self
+        return GradientExplanations(
+            {self._rows[key]: entry for key, entry in self.items()},
+            keyed_by=('row_index', *self._keyed_by[1:]),
+            hops={self._rows[key]: hops for key, hops in self._hops.items()},
+        )._with_rows({row: row for row in self._rows.values()})
 
     @classmethod
     def _merged(
         cls, parts: Sequence[GradientExplanations]
     ) -> GradientExplanations:
-        r"""The explanations of several calls, as one.
-
-        Each call answers about its own rows, so no key is in two parts.
-        """
+        r"""The explanations of several calls, as one; by ``row_index`` if ids repeat."""
         explained = [part for part in parts if part]
         if not explained:
             return cls()
+        keys = [key for part in explained for key in part]
+        mixed = len({part._keyed_by for part in explained}) > 1
+        if mixed or len(set(keys)) < len(keys):
+            explained = [part._by_row() for part in explained]
         merged = cls(keyed_by=explained[0]._keyed_by)
         for part in explained:
             merged.update(part)
             merged._hops.update(part._hops)
+            merged._rows.update(part._rows)
         return merged
 
 

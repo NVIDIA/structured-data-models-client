@@ -447,6 +447,30 @@ def test_a_split_request_reads_each_call_against_its_own_rows(
     assert result.explanations[5]['related']['orders']['keys'] == [9003, 9004]
 
 
+def test_a_split_request_whose_calls_repeat_an_id_keys_by_row_index(
+    gradient_explanation,
+):
+    """When two calls each explain the same id, both entries are kept, each
+    under its row_index across the whole request.
+
+    Assumptions:
+    - The request is gathered as two calls, each scoring user 5, so each
+      call's ids are unique but repeat across the calls.
+    - The client numbers the second call's row after the first call's one.
+    """
+    client, _ = client_answering(gradient_explanation)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        result = client.predict(
+            split((5,), (5,)), model=KumoRelational(), outputs=list(EXPLAIN)
+        )
+
+    assert sorted(result.explanations) == [0, 1]
+    assert result.explanations[1]['related']['users']['keys'] == [5]
+    assert list(result.explanations.to_pandas().columns)[0] == 'row_index'
+
+
 def test_a_split_request_keeps_row_index_keys_apart(gradient_explanation):
     """Explanations kept under ``row_index`` move with their rows when a later
     call's rows are numbered after the earlier ones.

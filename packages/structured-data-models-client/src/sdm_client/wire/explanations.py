@@ -30,11 +30,13 @@ class GradientDecoder:
         self._hops: dict[str, list[int | None]] | None = None
 
     def decode(self, items: Sequence[Any]) -> GradientExplanations:
-        r"""Each explained item's entry, keyed by ``id``, else ``row_index``."""
+        r"""Each explained item's entry, by ``id`` if those are unique, else ``row_index``."""
         explained = [item for item in items if item.explanation]
         if not explained:
             return GradientExplanations()
-        by_id = any(item.id is not None for item in explained)
+        ids = [item.id for item in explained]
+        unique = len(set(ids)) == len(ids)
+        by_id = unique and any(key is not None for key in ids)
         entries: dict[Any, dict[str, Any]] = {}
         hops: dict[Any, dict[str, list[int | None]]] = {}
         for item in explained:
@@ -62,6 +64,11 @@ class GradientDecoder:
             entries,
             keyed_by=('id',) if by_id else ('row_index',),
             hops=hops,
+        )._with_rows(
+            {
+                item.id if by_id else item.row_index: item.row_index
+                for item in explained
+            }
         )
 
     def _read_related(
