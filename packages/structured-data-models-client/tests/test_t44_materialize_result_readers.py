@@ -54,8 +54,8 @@ def _materialized(kind='ordinary'):
     state = {'version': 2, 'payload': 11, 'query': 12}
     if kind == 'forecast':
         state['forecast'] = [
-            {'step': 3, 'payload': 31, 'query': 32, 'request_id': 'later-3'},
             {'step': 2, 'payload': 21, 'query': 22},
+            {'step': 3, 'payload': 31, 'query': 32, 'request_id': 'later-3'},
         ]
     elif kind == 'batches':
         state['batches'] = [
@@ -68,6 +68,7 @@ def _materialized(kind='ordinary'):
             'candidate': 1,
             'value': '"first"',
             'parts': [
+                {'candidate': 3, 'value': 'null', 'payload': 53, 'query': 54},
                 {
                     'candidate': 5,
                     'value': '"last"',
@@ -75,16 +76,17 @@ def _materialized(kind='ordinary'):
                     'query': 52,
                     'request_id': 'last-question',
                 },
-                {'candidate': 3, 'value': 'null', 'payload': 53, 'query': 54},
             ],
         }
     return {
         'state': state,
         'query': {
             'entity_table': 'items',
-            'problem_type': 'regression',
-            'windowed': False,
-            'num_forecasts': 1,
+            'problem_type': {'forecast': 'forecast', 'ranking': 'rank'}.get(
+                kind
+            ),
+            'windowed': kind == 'forecast',
+            'num_forecasts': 3 if kind == 'forecast' else 1,
             'text': 'resolved query',
         },
     }
@@ -99,16 +101,16 @@ def test_nested_materialized_reuses_complete_existing_state_validation(kind):
     assert type(gathered) is results.Gathered
     assert gathered.query == results.QueryFacts(
         entity_table='items',
-        problem_type='regression',
-        windowed=False,
-        num_forecasts=1,
+        problem_type={'forecast': 'forecast', 'ranking': 'rank'}.get(kind),
+        windowed=kind == 'forecast',
+        num_forecasts=3 if kind == 'forecast' else 1,
         text='resolved query',
     )
     assert gathered.state == results.GatheredState(
         version=2,
         payload=11,
         query=12,
-        forecast=(results.Step(3, 31, 32), results.Step(2, 21, 22))
+        forecast=(results.Step(2, 21, 22), results.Step(3, 31, 32))
         if kind == 'forecast'
         else None,
         batches=(results.Batch(41, 200), results.Batch(42, 7))
@@ -119,8 +121,8 @@ def test_nested_materialized_reuses_complete_existing_state_validation(kind):
             candidate=1,
             value='"first"',
             parts=(
-                results.Part(5, '"last"', 51, 52),
                 results.Part(3, 'null', 53, 54),
+                results.Part(5, '"last"', 51, 52),
             ),
         )
         if kind == 'ranking'
