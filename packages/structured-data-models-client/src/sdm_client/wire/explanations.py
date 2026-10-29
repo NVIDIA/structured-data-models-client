@@ -2,18 +2,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""Reading the explanation each prediction record carries.
-
-Both models answer an explanation in one format, ``sdm_gradient_v1``, one per
-record, about that record's own row. Its blocks name rows by their position in
-the tables of the call that produced it, and a request sent in several calls
-starts those positions at 0 in each. So each record is read here, beside the
-payload of its own call, into an entry that needs no payload to be read: the
-row it is about becomes its key, and a related row its key and its values.
-
-The format is the endpoint's: ``gradients`` is ``[output][row][column]``, and
-``columns`` are the model's preprocessed numerical columns, passed through.
-"""
+r"""Decode ``sdm_gradient_v1`` explanation records against their own call."""
 
 from __future__ import annotations
 
@@ -25,37 +14,23 @@ from sdm_client.wire.dtypes import as_declared
 
 
 class GradientDecoder:
-    r"""Reads one call's explanations, beside that call's own payload.
+    r"""Decodes one call's explanation records into GradientExplanations.
 
-    Constructed once per call: with the payload for ``kumo-relational``, whose
-    explanations name rows of the related tables it sent, and with none for
-    ``kumo-tabular``, whose explanations are about the record's own row only.
+    Takes the call's payload for kumo-relational, to map related-row positions
+    back to keys and values; kumo-tabular needs none, its explanation is about
+    the record's own row.
     """
 
-    #: The engine's own transport columns on a related table: the instance a
-    #: row was sampled for, and the key it numbers a keyless table's rows by
-    #: (`rfm/inference/payload.py`). Neither is a value the caller sent, so a
-    #: related row is given back without them.
+    #: Engine transport columns, not the caller's; stripped from related rows.
     INSTANCE_ID = 'instance_id'
     SYNTHETIC_KEY = '__node_id'
 
     def __init__(self, payload: Mapping[str, Any] | None = None) -> None:
         self._payload = payload
-        # How far each related row is from the entity, worked out once per
-        # call, and only if some record is explained.
         self._hops: dict[str, list[int | None]] | None = None
 
     def decode(self, items: Sequence[Any]) -> GradientExplanations:
-        r"""Each answered row's explanation, under the key naming that row.
-
-        ``items`` have their ``id`` restored already, so the key is the one the
-        frame shows: the ``id``, or the ``row_index`` when the rows carry none.
-        A payload is given for a model that reads related tables. Then an entry
-        has ``related`` and no ``instance``: that model's ``instance_table`` is
-        the question row its engine sends, not the caller's, and the entity's
-        own table is among the related ones. Without it an entry has
-        ``instance`` and no ``related`` at all, rather than an empty one.
-        """
+        r"""Each explained item's entry, keyed by ``id``, else ``row_index``."""
         explained = [item for item in items if item.explanation]
         if not explained:
             return GradientExplanations()
@@ -78,6 +53,7 @@ class GradientDecoder:
                     ],
                 }
             else:
+                # Its instance_table is the engine's question row, not the caller's.
                 entry['related'], hops[key] = self._read_related(
                     self._payload, details.get('related_tables') or {}
                 )
@@ -91,17 +67,7 @@ class GradientDecoder:
     def _read_related(
         self, payload: Mapping[str, Any], blocks: Mapping[str, Any]
     ) -> tuple[dict[str, Any], dict[str, list[int | None]]]:
-        r"""Read a record's related blocks as rows of this call, not positions.
-
-        The endpoint names each related row by its position in the table as
-        this call sent it, which the caller never saw and which a split request
-        restarts at 0 in every call. Each is given back as its primary key,
-        when the table has one of the caller's, and always as its values as
-        sent.
-
-        How far each row is from the entity is worked out once per call, and
-        only if some record is explained.
-        """
+        r"""A record's related blocks as keys and row values, with each row's hops."""
         schema = payload.get('schema') or {}
         sent = (payload.get('predict') or {}).get('related_tables') or {}
         if self._hops is None:
@@ -166,18 +132,7 @@ class GradientDecoder:
     def _hops_from_entity(
         cls, payload: Mapping[str, Any]
     ) -> dict[str, list[int | None]]:
-        r"""How many links each related row of this call is from its entity.
-
-        Read from the relationships and key values sent, the same ones the
-        model joins on. A relationship with no ``source_table`` starts at the
-        instance table, and the rows it reaches are the entity's own: 0. Every
-        other one is followed either way, and a row is as far as its nearest
-        path. Joins stay within one instance, as the engine scopes them, so two
-        entities sharing a product never meet through it.
-
-        Positions are this call's, one list per related table of its predict
-        half. ``None`` for a row no relationship reaches from an entity.
-        """
+        r"""Links from the entity per related row of this call; ``None`` if unreached."""
         schema = payload.get('schema') or {}
         predict = payload.get('predict') or {}
         instance = predict.get('instance_table') or {}
@@ -236,12 +191,7 @@ class GradientDecoder:
     def _joined_on(
         cls, table: Mapping[str, Any], columns: Sequence[str]
     ) -> list[Any]:
-        r"""What each row of ``table`` joins on through ``columns``.
-
-        The instance a row belongs to, and its values in ``columns``; ``None``
-        for a row holding a null there, which joins nothing. Empty when the
-        table does not carry every one of ``columns``.
-        """
+        r"""Per row, ``(instance, values)`` in ``columns``; ``None`` on a null."""
         names = list(table.get('columns') or [])
         if not columns or any(column not in names for column in columns):
             return []

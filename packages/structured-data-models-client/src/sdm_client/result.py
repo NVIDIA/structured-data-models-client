@@ -75,27 +75,7 @@ _GRADIENT_COLUMNS = (
 
 
 class GradientExplanations(dict[Any, dict[str, Any]]):
-    r"""Each explained row's explanation, under the key naming it in the frame.
-
-    The key is the row's ``id``, ``(id, forecast_step)`` for a forecast, and
-    its ``row_index`` when the request has no entity key. An entry is a plain
-    dict::
-
-        {'outputs': [...],                       # the explained scores
-         'instance': {'columns': [...],          # kumo-tabular only
-                      'gradients': [...]},       # [output][column]
-         'related': {table: {'keys': [...],      # absent for a keyless table
-                             'rows': [{...}],    # each row's values as sent
-                             'columns': [...],
-                             'gradients': [...]}}}   # [output][row][column]
-
-    ``instance`` is there for ``kumo-tabular`` only, and ``related`` for
-    ``kumo-relational`` only, where it holds every table, the entity's own
-    among them. ``columns`` are the model's preprocessed numerical columns, as
-    the endpoint names them.
-
-    Empty when no explanation was asked for, or none came back.
-    """
+    r"""Each explained row's gradient explanation, keyed as the row is in the frame."""
 
     def __init__(
         self,
