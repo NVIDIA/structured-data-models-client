@@ -8,7 +8,6 @@ import json
 
 import pytest
 
-from sdm_client._rust import results
 from sdm_client._rust.run import Finished
 
 
@@ -46,9 +45,9 @@ def test_actual_payload_bytes_are_observed_once_in_their_producing_run(
         }
     )
     terminal = Finished(
-        results.MaterializePrepared(1)
+        {'op': 'prepare_materialize', 'value': 1}
         if prepared
-        else results.Gathered.from_contract(data),
+        else {'op': 'materialize', **data},
         handle,
     )
     taken = []
@@ -79,8 +78,8 @@ def test_attachment_numbers_from_another_run_do_not_supply_payload_authority(
         }
     )
     second_run = Run({3: b'unrelated'})
-    first = Finished(results.MaterializePrepared(1), first_run)
-    second = Finished(results.MaterializePrepared(1), second_run)
+    first = Finished({'op': 'prepare_materialize', 'value': 1}, first_run)
+    second = Finished({'op': 'prepare_materialize', 'value': 1}, second_run)
     first.take(1)
     assert second.take(3) == b'unrelated'
     assert taken == []
@@ -95,7 +94,7 @@ def test_nonrequest_preparation_values_never_name_payload_bytes(monkeypatch):
     record_payload_bytes(monkeypatch, taken)
     raw = json.dumps({'value': 'source', 'data': {'payload': 3}}).encode()
     handle = Run({1: raw, 3: b'not a payload'})
-    terminal = Finished(results.MaterializePrepared(1), handle)
+    terminal = Finished({'op': 'prepare_materialize', 'value': 1}, handle)
     assert terminal.take(1) is raw
     assert terminal.take(3) == b'not a payload'
     assert taken == [] and handle.takes == [1, 3]
