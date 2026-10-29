@@ -338,6 +338,17 @@ fn rebind_frame_product(value: &mut PreparedFrameValue, keep: &mut impl FnMut(&m
         }
         PreparedFrameValue::LabelBatch(value) => keep(&mut value.owner),
         PreparedFrameValue::LabelGroups(value) => keep(&mut value.owner),
+        PreparedFrameValue::LabelInputs(value) => keep(&mut value.owner),
+        PreparedFrameValue::TargetColumn(value) => {
+            keep(&mut value.input.owner);
+            keep(&mut value.owner);
+            for condition in &mut value.condition_values {
+                keep(&mut condition.converted.rows);
+                if let Some(id) = &mut condition.converted.presence {
+                    keep(id);
+                }
+            }
+        }
         PreparedFrameValue::Labels(value) => labels(value, keep),
         PreparedFrameValue::Task(value) => task(value, keep),
         PreparedFrameValue::Plan(value) => plan(value, keep),
@@ -358,6 +369,239 @@ fn rebind_frame_product(value: &mut PreparedFrameValue, keep: &mut impl FnMut(&m
         }
         PreparedFrameValue::Part(value) => keep(&mut value.payload),
         other => panic!("unexpected frame fixture product: {other:?}"),
+    }
+}
+
+fn native_target_values(
+    stages: &mut FrameStages,
+    positions: &[u64],
+    values: Vec<i64>,
+    presence: Option<Vec<bool>>,
+) -> sdm_contract::materialize::NativeTargetValues {
+    let next = stages.held.keys().map(|id| id.0).max().unwrap() + 1;
+    let rows = RecordBatch::try_from_iter([
+        (
+            "position",
+            Arc::new(UInt64Array::from(positions.to_vec())) as ArrayRef,
+        ),
+        ("target", ints(values)),
+    ])
+    .unwrap();
+    stages.held.insert(
+        AttachmentId(next),
+        Attachment::Arrow(ArrowData::new(rows.schema(), vec![rows])),
+    );
+    let presence = presence.map(|values| {
+        let rows = RecordBatch::try_from_iter([(
+            "present",
+            Arc::new(arrow_array::BooleanArray::from(values)) as ArrayRef,
+        )])
+        .unwrap();
+        stages.held.insert(
+            AttachmentId(next + 1),
+            Attachment::Arrow(ArrowData::new(rows.schema(), vec![rows])),
+        );
+        AttachmentId(next + 1)
+    });
+    sdm_contract::materialize::NativeTargetValues {
+        rows: AttachmentId(next),
+        presence,
+        encoding: None,
+    }
+}
+
+#[test]
+fn completed_native_target_rows_and_occurrences_reach_the_real_link_payload() {
+    use sdm_contract::materialize::TargetDerivation;
+    for filtered in [false, true] {
+        let mut stages = FrameStages {
+            held: inputs("ordinary", false),
+        };
+        if filtered {
+            stages.held.insert(AttachmentId(2), bytes(json!("PREDICT LIST_DISTINCT(buys.item_id WHERE buys.user_id != 0 OR buys.user_id != 0, 0, 30, days) FOR EACH users.user_id")));
+        }
+        stages.held.insert(
+            AttachmentId(20),
+            bytes(json!({"num_context_samples":3,"num_neighbors":[3,3]})),
+        );
+        let native = [("users", vec!["user_id", "age"]), ("items", vec!["item_id", "amount"]), ("buys", vec!["buy_id", "user_id", "item_id", "ts"])].map(|(name, columns)| json!({"source":{"source":[name]},"columns":columns.into_iter().map(|column| json!({"name":column,"declared":null,"logical_text":null,"strings":null})).collect::<Vec<_>>()}));
+        let PreparedFrameValue::Graph(graph) = stages.stage(json!({"stage":"graph","schema":1,"frames":7,"checkpoint":null,"retained":null,"native_tables":native,"values":5,"options":[],"prediction_rows":2,"limits":{}})).unwrap() else { panic!("graph") };
+        let PreparedFrameValue::Population(population) = stages.stage(json!({"stage":"population","graph":graph,"query":2,"values":20,"seed":"0x7","entropy":7,"anchor_time":{"t":"ts","unit":"ns","v":"1677628800000000000"},"anchor_entity":false,"num_context_samples":null,"limits":{}})).unwrap() else { panic!("population") };
+        let input = json!({"stage":"label_inputs","population":population,"range":{"start":0,"stop":population.rows},"previous":null,"converted":{"kind":"core_keys","values":null}});
+        let PreparedFrameValue::LabelInputs(inputs) = stages.stage(input.clone()).unwrap() else {
+            panic!("label inputs")
+        };
+        let Attachment::LabelInputs(owner) = &stages.held[&inputs.owner] else {
+            panic!("source owner")
+        };
+        let source = owner.rows().unwrap().batches[0].clone();
+        assert!(source.num_rows() > 0);
+        let positions = (0..source.num_rows() as u64).collect::<Vec<_>>();
+        for malformed in [0, 1, 2, 3] {
+            let mut selected = positions.clone();
+            let mut present = vec![true; positions.len()];
+            match malformed {
+                0 => {
+                    selected.pop();
+                }
+                1 => selected.reverse(),
+                2 => selected[0] = positions[1],
+                _ => {
+                    present.pop();
+                }
+            }
+            let converted = native_target_values(
+                &mut stages,
+                &selected,
+                vec![3; selected.len()],
+                Some(present),
+            );
+            let error = stages
+                .stage(json!({"stage":"target_column","inputs":inputs,"converted":converted}))
+                .expect_err("incomplete native column accepted");
+            assert_eq!(error["error"]["code"], "INVALID_MESSAGE");
+        }
+        let converted = native_target_values(
+            &mut stages,
+            &positions,
+            vec![3; positions.len()],
+            Some(vec![true; positions.len()]),
+        );
+        let PreparedFrameValue::TargetColumn(mut column) = stages
+            .stage(json!({"stage":"target_column","inputs":inputs,"converted":converted}))
+            .unwrap()
+        else {
+            panic!("completed column")
+        };
+        let PreparedFrameValue::LabelInputs(foreign) = stages.stage(input).unwrap() else {
+            panic!("foreign inputs")
+        };
+        let mut wrong = column.clone();
+        wrong.input = foreign;
+        let error = stages
+            .stage(json!({"stage":"native_label_groups","column":wrong}))
+            .expect_err("foreign same-valued owner accepted");
+        assert_eq!(error["error"]["code"], "INVALID_MESSAGE");
+        if filtered {
+            assert_eq!(inputs.condition_columns.len(), 2);
+            assert_eq!(inputs.condition_columns[0], inputs.condition_columns[1]);
+            for (ordinal, binding) in inputs.condition_columns.iter().enumerate() {
+                assert_eq!(column.derivation, TargetDerivation::Column);
+                let converted = native_target_values(
+                    &mut stages,
+                    &positions,
+                    vec![1; positions.len()],
+                    Some(vec![true; positions.len()]),
+                );
+                let PreparedFrameValue::TargetColumn(next) = stages.stage(json!({"stage":"condition_column","column":column,"operand":{"column":binding,"converted":converted}})).unwrap() else { panic!("condition values") };
+                assert_eq!(next.condition_values.len(), ordinal + 1);
+                column = next;
+            }
+            assert_eq!(column.derivation, TargetDerivation::Conditioned);
+            let Attachment::TargetColumn(owner) = &stages.held[&column.owner] else {
+                panic!("condition owner")
+            };
+            let selection = owner.selection().unwrap().batches[0]
+                .column(0)
+                .as_boolean()
+                .values()
+                .iter()
+                .collect::<Vec<_>>();
+            assert!(selection.iter().all(|selected| *selected));
+            let converted =
+                native_target_values(&mut stages, &positions, vec![3; positions.len()], None);
+            let PreparedFrameValue::TargetColumn(next) = stages
+                .stage(json!({"stage":"filtered_target","column":column,"converted":converted}))
+                .unwrap()
+            else {
+                panic!("filtered values")
+            };
+            column = next;
+        }
+        let Attachment::TargetColumn(owner) = &stages.held[&column.owner] else {
+            panic!("target owner")
+        };
+        let selection = owner.selection().unwrap().batches[0]
+            .column(0)
+            .as_boolean()
+            .values()
+            .iter()
+            .collect::<Vec<_>>();
+        let selected = positions
+            .iter()
+            .zip(&selection)
+            .filter_map(|(&row, &selected)| selected.then_some(row))
+            .collect::<Vec<_>>();
+        assert!(!selected.is_empty());
+        let mut short = vec![true; selected.len()];
+        short.pop();
+        let converted =
+            native_target_values(&mut stages, &selected, vec![3; selected.len()], Some(short));
+        let error = stages
+            .stage(json!({"stage":"windowed_target","column":column,"converted":converted}))
+            .expect_err("short second missingness accepted");
+        assert_eq!(error["error"]["code"], "INVALID_MESSAGE");
+        let converted = native_target_values(
+            &mut stages,
+            &selected,
+            vec![3; selected.len()],
+            Some(vec![true; selected.len()]),
+        );
+        let PreparedFrameValue::TargetColumn(column) = stages
+            .stage(json!({"stage":"windowed_target","column":column,"converted":converted}))
+            .unwrap()
+        else {
+            panic!("window values")
+        };
+        let PreparedFrameValue::LabelGroups(groups) = stages
+            .stage(json!({"stage":"native_label_groups","column":column}))
+            .unwrap()
+        else {
+            panic!("actual groups")
+        };
+        let Attachment::FrameLabelGroups(owner) = &stages.held[&groups.owner] else {
+            panic!("group owner")
+        };
+        let rows = owner.rows().unwrap();
+        assert!(rows.batches[0].num_rows() > 0);
+        let id = AttachmentId(stages.held.keys().map(|id| id.0).max().unwrap() + 1);
+        stages.held.insert(id, Attachment::Arrow(rows));
+        let PreparedFrameValue::LabelBatch(batch) = stages.stage(json!({"stage":"complete_label_batch","population":population,"groups":groups,"restored":{"rows":id,"encoding":null}})).unwrap() else { panic!("batch") };
+        let PreparedFrameValue::Labels(labelled) = stages
+            .stage(json!({"stage":"labels","population":population,"batches":[batch]}))
+            .unwrap()
+        else {
+            panic!("labels")
+        };
+        let PreparedFrameValue::Task(task) = stages.stage(json!({"stage":"task","labelled":labelled,"prediction":{"kind":"core_keys","values":3},"values":20})).unwrap() else { panic!("task") };
+        let PreparedFrameValue::Plan(plan) = stages
+            .stage(json!({"stage":"plan","task":task,"values":20}))
+            .unwrap()
+        else {
+            panic!("plan")
+        };
+        let PreparedFrameValue::References(references) = stages.stage(json!({"stage":"references","plan":plan,"converted":{"kind":"core_keys","values":null}})).unwrap() else { panic!("references") };
+        let PreparedFrameValue::Context(context) = stages.stage(json!({"stage":"context","references":references,"range":{"start":0,"stop":2},"converted":{"kind":"core_keys","values":null}})).unwrap() else { panic!("context") };
+        let PreparedFrameValue::Part(part) = stages.stage(json!({"stage":"payload","context":context,"text":{"outcome":"converted","columns":[]},"values":null})).unwrap() else { panic!("payload") };
+        let Attachment::FramePayload(owner) = &stages.held[&part.payload] else {
+            panic!("payload owner")
+        };
+        let payload: Value = serde_json::from_slice(&owner.wire().unwrap()).unwrap();
+        let context = &payload["context"]["instance_table"];
+        let target = context["columns"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .position(|name| name == "TARGET")
+            .unwrap();
+        assert_eq!(context["rows"].as_array().unwrap().len(), 3);
+        assert!(
+            context["rows"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|row| row[target] == json!([3]))
+        );
     }
 }
 
