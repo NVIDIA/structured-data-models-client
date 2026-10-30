@@ -91,7 +91,7 @@ pub fn layout(input: sdm_contract::direct::native_response::NativeLayoutInput) -
         I::Complete { indices, rows } => {
             let seen: BTreeSet<usize> = indices.into_iter().filter_map(|index| index.parse().ok()).collect();
             let missing: Vec<_> = (0..rows).filter(|index| !seen.contains(index)).map(|index| Scalar::UInt64(index as u64)).collect();
-            if !missing.is_empty() {
+            if seen.len() != rows || !missing.is_empty() {
                 return Err(CoreError::new(Sentence::TabularRowsUnanswered, "native response left rows unanswered").with_field("missing", Detail::List(missing)));
             }
             R::Complete

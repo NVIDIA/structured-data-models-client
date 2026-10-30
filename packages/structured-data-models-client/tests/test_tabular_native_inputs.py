@@ -370,3 +370,40 @@ def test_native_transport_payload_mutations_reach_layout_and_restoration(monkeyp
         assert result.items[0].prediction is False
         outcomes.append(result.items)
     assert outcomes[0] == outcomes[1]
+
+
+def test_native_id_mutation_cannot_hide_extra_answered_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    outcomes = []
+
+    class ShrinkingId(str):
+        rows: list[Any]
+
+        def __new__(cls, rows: list[Any]) -> ShrinkingId:
+            value = super().__new__(cls, '[3]')
+            value.rows = rows
+            return value
+
+        def __str__(self) -> str:
+            self.rows.clear()
+            return '[3]'
+
+    class NativeEndpoint:
+        url = 'http://localhost'
+
+        def predict(self, payload: dict[str, Any]) -> dict[str, Any]:
+            identifier = ShrinkingId(payload['predict']['instance_table']['rows'])
+            return {'model': 'kumo-tabular', 'id': 'answer', 'metadata': {},
+                    'predictions': [{'row_index': 0, 'id': identifier, 'prediction': 1}]}
+
+        def close(self) -> None:
+            pass
+
+    for route in ('', DIRECT):
+        monkeypatch.setenv('SDM_CORE_ROUTES', route)
+        request = Request(pd.DataFrame({'row_id': [1, 2], 'target': [0, 1]}),
+                          pd.DataFrame({'row_id': [3]}), target='target', task='classification')
+        with pytest.raises(StructuredDataError) as caught:
+            client(NativeEndpoint()).predict(request, model=KumoTabular())
+        outcomes.append((caught.value.code, str(caught.value)))
+    assert outcomes[0] == outcomes[1]
+    assert '[] unanswered' in outcomes[0][1]
