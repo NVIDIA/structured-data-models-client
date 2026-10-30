@@ -245,7 +245,11 @@ def _array(values: Any, missing: list[bool], profile: str) -> dict[str, Any]:
                 'mixed Decimal/float index comparison effects are not yet '
                 'represented by the core'
             )
-        if kinds & {'numpy_integer', 'numpy_floating'}:
+        has_numpy_missing = any(
+            absent and type(value) in (np.float16, np.float32, np.float64)
+            for value, absent in zip(values, missing, strict=True)
+        )
+        if kinds & {'numpy_integer', 'numpy_floating'} or has_numpy_missing:
             if not kinds <= {
                 'integer',
                 'floating',

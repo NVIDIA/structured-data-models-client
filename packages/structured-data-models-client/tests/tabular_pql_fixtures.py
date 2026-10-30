@@ -35,6 +35,7 @@ NUMPY_MIXTURES = (
     'missing_pandas_na',
     'missing_pandas_nat',
     'missing_nan_huge_integer',
+    'only_missing_numpy_owner',
     'longlong_unsigned_63',
 )
 NUMPY_PROMOTION_PAIRS = tuple(
@@ -146,6 +147,7 @@ def label_frame(family: str) -> pd.DataFrame:
             np.float64(1),
             None,
         ],
+        'only_missing_numpy_owner': [np.float64(float('nan')), 10**400],
     }
     for name, pair in mixtures.items():
         patterns['numpy_' + name + '_forward'] = pair
