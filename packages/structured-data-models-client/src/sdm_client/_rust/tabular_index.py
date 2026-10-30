@@ -118,10 +118,12 @@ def _scalar(value: Any) -> dict[str, Any]:
         np.int16,
         np.int32,
         np.int64,
+        np.longlong,
         np.uint8,
         np.uint16,
         np.uint32,
         np.uint64,
+        np.ulonglong,
     ):
         return {
             'kind': 'numpy_integer',
@@ -254,6 +256,23 @@ def _array(values: Any, missing: list[bool], profile: str) -> dict[str, Any]:
                 raise RouteError(
                     'this mixed NumPy object comparison family is not yet represented by the core'
                 )
+            for position, (value, absent) in enumerate(
+                zip(values, missing, strict=True)
+            ):
+                if absent:
+                    if value is None or value is pd.NA or value is pd.NaT:
+                        atoms[position] = {'kind': 'native_missing'}
+                    elif type(value) in (
+                        float,
+                        np.float16,
+                        np.float32,
+                        np.float64,
+                    ):
+                        atoms[position] = _scalar(value)
+                    else:
+                        raise RouteError(
+                            'this missing NumPy companion owner is not yet represented by the core'
+                        )
             result = {
                 'kind': 'numpy_object',
                 'values': atoms,

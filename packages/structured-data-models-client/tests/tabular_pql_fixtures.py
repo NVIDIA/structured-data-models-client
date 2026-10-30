@@ -32,6 +32,10 @@ NUMPY_MIXTURES = (
     'int64_huge_pythonint',
     'mixed_precision_triplet',
     'missing_numeric_owners',
+    'missing_pandas_na',
+    'missing_pandas_nat',
+    'missing_nan_huge_integer',
+    'longlong_unsigned_63',
 )
 NUMPY_PROMOTION_PAIRS = tuple(
     (integer, floating)
@@ -54,6 +58,7 @@ LABEL_FAMILIES = (
         'datetime_integer',
     )
     + tuple('numpy_' + name for name in NUMPY_WIDTHS)
+    + ('numpy_longlong', 'numpy_ulonglong')
     + tuple(
         'numpy_' + name + '_' + direction
         for name in NUMPY_MIXTURES
@@ -112,11 +117,12 @@ def label_frame(family: str) -> pd.DataFrame:
         'decimal_text': [Decimal('1.1'), 'x'],
         'datetime_integer': [datetime(2020, 1, 1), 1],
     }
-    for name in NUMPY_WIDTHS:
+    for name in (*NUMPY_WIDTHS, 'longlong', 'ulonglong'):
         scalar = getattr(np, name)
         patterns['numpy_' + name] = [scalar(2), scalar(0), scalar(1), scalar(2)]
     mixtures = {
         'signed_unsigned_63': [np.int64(2**63 - 1), np.uint64(2**63)],
+        'longlong_unsigned_63': [np.longlong(2**63 - 1), np.ulonglong(2**63)],
         'int64_float64_53': [np.int64(2**53 + 1), np.float64(2**53)],
         'float32_pythonfloat_24': [np.float32(2**24), float(2**24 + 1)],
         'float64_huge_pythonint': [np.float64(1), 10**400],
@@ -131,6 +137,14 @@ def label_frame(family: str) -> pd.DataFrame:
             None,
             np.int16(-1),
             np.float64(float('nan')),
+        ],
+        'missing_pandas_na': [np.float32(2), pd.NA, np.int16(-1)],
+        'missing_pandas_nat': [np.float32(2), pd.NaT, np.int16(-1)],
+        'missing_nan_huge_integer': [
+            np.float64(float('nan')),
+            10**400,
+            np.float64(1),
+            None,
         ],
     }
     for name, pair in mixtures.items():
