@@ -39,9 +39,9 @@ pub fn check(input: DirectCellInput) -> Result<CheckedDirectCell, CoreError> {
         }
         CellObservation::IntegerCoercion { digits, fractional } if integer => {
             if fractional { return Err(error(Sentence::DirectNativeFraction)); }
-            let digits = digits.ok_or_else(|| error(Sentence::DirectNativeRange))?;
+            let digits = digits.ok_or_else(|| error(Sentence::DirectNativeIntegerRange))?;
             if !canonical_integer(&digits) { return Err(protocol()); }
-            let number = digits.parse::<i64>().map_err(|_| error(Sentence::DirectNativeRange))?;
+            let number = digits.parse::<i64>().map_err(|_| error(Sentence::DirectNativeIntegerRange))?;
             Some(if number.unsigned_abs() > 9_007_199_254_740_991 {
                 Scalar::Utf8(digits)
             } else { Scalar::Int64(number) })
@@ -61,10 +61,11 @@ pub fn check(input: DirectCellInput) -> Result<CheckedDirectCell, CoreError> {
             if !number.is_finite() {
                 return Err(protocol());
             }
-            if integral_matches == Some(false)
-                || (integral_matches.is_none() && large_fraction)
-            {
-                return Err(error(Sentence::DirectNativePrecision));
+            if integral_matches.is_none() && large_fraction {
+                return Err(error(Sentence::DirectNativeDecimalMagnitude));
+            }
+            if integral_matches == Some(false) {
+                return Err(error(Sentence::DirectNativeIntegralPrecision));
             }
             Some(Scalar::Float64(number))
         }

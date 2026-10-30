@@ -212,6 +212,62 @@ def test_invalid_task_precedes_target_cell_inspection(monkeypatch: pytest.Monkey
     assert outcomes[0] == outcomes[1]
 
 
+def test_custom_nullable_producer_never_takes_arrow_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
+    class NativeFloatArray(pd.arrays.FloatingArray):
+        def __arrow_array__(self, type: Any = None) -> Any:
+            raise AssertionError('custom Arrow snapshot is not a native scalar read')
+
+    outcomes = []
+    for route in ('', DIRECT):
+        monkeypatch.setenv('SDM_CORE_ROUTES', route)
+        values = NativeFloatArray(np.array([1.5, 2.5, 3.5, 4.5]), np.zeros(4, dtype=bool))
+        context = pd.DataFrame({'feature': pd.Series(values), 'target': [0, 1, 0, 1]})
+        assert type(context['feature'].array) is NativeFloatArray
+        request = Request(context, pd.DataFrame({'feature': [5.5]}), target='target', task='classification')
+        endpoint = Endpoint({'model': 'kumo-tabular', 'id': 'answer', 'metadata': {}, 'predictions': [{'row_index': 0, 'prediction': 1}]})
+        result = client(endpoint).predict(request, model=KumoTabular())
+        payload = endpoint.calls[0]
+        payload['metadata'].pop('request_id')
+        outcomes.append((payload, result.items))
+    assert outcomes[0] == outcomes[1]
+
+
+@pytest.mark.parametrize('value', [2**53 + 1, Decimal('9007199254740991.5')])
+def test_native_float_refusal_keeps_specific_diagnostic(value: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    outcomes = []
+    for route in ('', DIRECT):
+        monkeypatch.setenv('SDM_CORE_ROUTES', route)
+        context = pd.DataFrame({'feature': pd.Series([value, value], dtype=object), 'target': [0, 1]})
+        request = Request(context, pd.DataFrame({'feature': [0.5]}), target='target', task='classification')
+        endpoint = Endpoint()
+        with pytest.raises(StructuredDataError) as caught:
+            client(endpoint).predict(request, model=KumoTabular())
+        assert endpoint.calls == []
+        outcomes.append((caught.value.code, str(caught.value)))
+    assert outcomes[0] == outcomes[1]
+
+
+def test_native_integer_range_after_earlier_column_mutation(monkeypatch: pytest.MonkeyPatch) -> None:
+    outcomes = []
+    for route in ('', DIRECT):
+        monkeypatch.setenv('SDM_CORE_ROUTES', route)
+        context = pd.DataFrame({'first': pd.Series(['a', 'b'], dtype=object), 'feature': [1, 2], 'target': [0, 1]})
+
+        class MutatingText:
+            def __str__(self) -> str:
+                context['feature'] = pd.Series([2**70, 2], dtype=object)
+                return 'a'
+
+        context['first'] = pd.Series([MutatingText(), 'b'], dtype=object)
+        request = Request(context, pd.DataFrame({'first': ['c'], 'feature': [3]}), target='target', task='classification')
+        endpoint = Endpoint()
+        with pytest.raises(StructuredDataError) as caught:
+            client(endpoint).predict(request, model=KumoTabular())
+        assert endpoint.calls == []
+        outcomes.append((caught.value.code, str(caught.value)))
+    assert outcomes[0] == outcomes[1]
+
+
 @pytest.mark.parametrize('fail', [False, True])
 def test_native_conversion_order_and_nested_options(
     fail: bool, monkeypatch: pytest.MonkeyPatch,

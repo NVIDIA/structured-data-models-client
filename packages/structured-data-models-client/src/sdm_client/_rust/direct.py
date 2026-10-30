@@ -177,6 +177,8 @@ def _flags(schema: Any, entity: str) -> list[dict[str, Any]]:
 def _native_encoding(frame: pd.DataFrame) -> bool:
     """Whether this frame needs reached scalar conversions during encoding."""
     for at, dtype in enumerate(frame.dtypes):
+        if not DirectOperations.passive_owner(frame.iloc[:, at]):
+            return True
         if type(dtype) is pd.StringDtype:
             if not DirectOperations.passive(frame.iloc[:, at]):
                 return True

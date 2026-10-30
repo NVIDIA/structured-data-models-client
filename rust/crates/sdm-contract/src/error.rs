@@ -795,6 +795,9 @@ sentences! {
     DirectNativeFraction = "direct_native_fraction", E::InvalidRequest;
     DirectNativeNonFinite = "direct_native_non_finite", E::InvalidRequest;
     DirectNativeRange = "direct_native_range", E::InvalidRequest;
+    DirectNativeIntegerRange = "direct_native_integer_range", E::InvalidRequest;
+    DirectNativeIntegralPrecision = "direct_native_integral_precision", E::InvalidRequest;
+    DirectNativeDecimalMagnitude = "direct_native_decimal_magnitude", E::InvalidRequest;
     DirectNativePrecision = "direct_native_precision", E::InvalidRequest;
     DirectNativeBytes = "direct_native_bytes", E::UnsupportedRequest;
     DirectNativeContainer = "direct_native_container", E::UnsupportedRequest;

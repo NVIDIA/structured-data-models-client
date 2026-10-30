@@ -27,19 +27,21 @@ class DirectOperations:
         return self._call(operation, value)
 
     @staticmethod
-    def passive(series: pd.Series, wire_dtype: str | None = None) -> bool:
-        if wire_dtype not in (None, 'bool', 'int32', 'int64', 'float32', 'float64', 'string'):
-            return False
-        if type(series) is not pd.Series:
-            return False
-        array = series.array
-        if type(array) not in (
+    def passive_owner(series: pd.Series) -> bool:
+        return type(series) is pd.Series and type(series.array) in (
             pd.arrays.NumpyExtensionArray, pd.arrays.IntegerArray,
             pd.arrays.FloatingArray, pd.arrays.BooleanArray,
             pd.arrays.StringArray, pd.arrays.ArrowStringArray,
-            pd.arrays.ArrowExtensionArray,
-        ):
+            pd.arrays.ArrowExtensionArray, pd.arrays.DatetimeArray,
+        )
+
+    @staticmethod
+    def passive(series: pd.Series, wire_dtype: str | None = None) -> bool:
+        if wire_dtype not in (None, 'bool', 'int32', 'int64', 'float32', 'float64', 'string'):
             return False
+        if not DirectOperations.passive_owner(series):
+            return False
+        array = series.array
         dtype = series.dtype
         if type(dtype) is pd.StringDtype:
             return wire_dtype in (None, 'string') and all(

@@ -172,6 +172,8 @@ def requires(frame: pd.DataFrame) -> bool:
     import pyarrow as pa
 
     for at, dtype in enumerate(frame.dtypes):
+        if not DirectOperations.passive_owner(frame.iloc[:, at]):
+            return True
         if type(dtype) is pd.StringDtype:
             if not DirectOperations.passive(frame.iloc[:, at]):
                 return True
