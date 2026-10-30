@@ -11,7 +11,13 @@ from typing import Any
 
 import pandas as pd
 
-from sdm_client._rust import direct_admission, direct_cells, direct_dtypes, errors, spec
+from sdm_client._rust import (
+    direct_admission,
+    direct_cells,
+    direct_dtypes,
+    errors,
+    spec,
+)
 
 
 def raw_dtype(
@@ -146,16 +152,20 @@ def resolve(
     table = schema[request.entity_table]
     context = request.context.instance_table
     scoring = request.predict.instance_table
-    dtypes = {}
+    declared_dtypes: dict[str, str | None] = {}
     for name, column in table.columns.items():
         declared = None if column.untyped else column.dtype
-        dtypes[name] = declared
+        declared_dtypes[name] = declared
     for name in scoring.columns:
-        if name in dtypes:
-            dtypes[name] = widen(
-                dtypes[name], raw_dtype(scoring[name], dtypes[name], call), call
+        if name in declared_dtypes:
+            declared_dtypes[name] = widen(
+                declared_dtypes[name],
+                raw_dtype(scoring[name], declared_dtypes[name], call),
+                call,
             )
-    dtypes = {name: dtype or 'string' for name, dtype in dtypes.items()}
+    dtypes = {
+        name: dtype or 'string' for name, dtype in declared_dtypes.items()
+    }
     target = request.task.target.column_name
     missing = [name for name in context.columns if name not in dtypes]
     with errors.holding(direct_columns=lambda fields: missing):
@@ -167,29 +177,52 @@ def resolve(
         if declared == 'text':
             as_text.append(name)
         wire_dtype = dtypes[name]
-        different = None if declared == 'text' else bool(name != request.task.target.column_name)
-        classification = request.task.is_classification if different is False else None
-        selected = call('check_direct_preparation', {
-            'kind': 'tabular_meaning', 'inferred': declared,
-            'different': different, 'classification': classification,
-        })['stype']
+        different = (
+            None
+            if declared == 'text'
+            else bool(name != request.task.target.column_name)
+        )
+        classification = (
+            request.task.is_classification if different is False else None
+        )
+        selected = call(
+            'check_direct_preparation',
+            {
+                'kind': 'tabular_meaning',
+                'inferred': declared,
+                'different': different,
+                'classification': classification,
+            },
+        )['stype']
         actual_dtype = dtypes[name]
         column = table[name]
-        coherent = call('check_direct_preparation', {
-            'kind': 'coherent_meaning', 'inferred': selected,
-            'dtype': actual_dtype, 'declared': None,
-        })['stype']
+        coherent = call(
+            'check_direct_preparation',
+            {
+                'kind': 'coherent_meaning',
+                'inferred': selected,
+                'dtype': actual_dtype,
+                'declared': None,
+            },
+        )['stype']
         if coherent is None:
-            coherent = call('check_direct_preparation', {
-                'kind': 'coherent_meaning', 'inferred': selected,
-                'dtype': actual_dtype, 'declared': bool(column.stype_declared),
-            })['stype']
+            coherent = call(
+                'check_direct_preparation',
+                {
+                    'kind': 'coherent_meaning',
+                    'inferred': selected,
+                    'dtype': actual_dtype,
+                    'declared': bool(column.stype_declared),
+                },
+            )['stype']
         columns[name] = {'name': name, 'dtype': wire_dtype, 'stype': coherent}
     resolved = call(
         'resolve_observed_tabular',
         {
-            'bound': bound, 'target': target,
-            'columns': list(columns.values()), 'text_columns': as_text,
+            'bound': bound,
+            'target': target,
+            'columns': list(columns.values()),
+            'text_columns': as_text,
             'dtypes': list(dtypes.items()),
         },
     )

@@ -303,34 +303,73 @@ pub(crate) fn check_preparation(
 ) -> Result<OperationResult, CoreError> {
     use sdm_contract::direct::schema::PreparationObservation as P;
     match input {
-        P::TabularMeaning { inferred, different, classification } => {
-            return value(asker, &sdm_contract::direct::schema::MeaningResult {
-                stype: Some(tabular::observed_meaning(inferred, different, classification)?),
-            });
+        P::TabularMeaning {
+            inferred,
+            different,
+            classification,
+        } => {
+            return value(
+                asker,
+                &sdm_contract::direct::schema::MeaningResult {
+                    stype: Some(tabular::observed_meaning(
+                        inferred,
+                        different,
+                        classification,
+                    )?),
+                },
+            );
         }
-        P::CoherentMeaning { inferred, dtype, declared } => {
-            return value(asker, &sdm_contract::direct::schema::MeaningResult {
-                stype: tabular::coherent_meaning(inferred, dtype, declared, crate::edit::supports),
-            });
+        P::CoherentMeaning {
+            inferred,
+            dtype,
+            declared,
+        } => {
+            return value(
+                asker,
+                &sdm_contract::direct::schema::MeaningResult {
+                    stype: tabular::coherent_meaning(
+                        inferred,
+                        dtype,
+                        declared,
+                        crate::edit::supports,
+                    ),
+                },
+            );
         }
         P::ConstancyPopulation { empty, diverse } => {
             let reached = match (empty, diverse) {
                 (Some(empty), None) => !empty,
                 (None, Some(diverse)) => !diverse,
-                _ => return Err(CoreError::protocol(Sentence::InvalidMessage, "one reached constancy observation is required")),
+                _ => {
+                    return Err(CoreError::protocol(
+                        Sentence::InvalidMessage,
+                        "one reached constancy observation is required",
+                    ));
+                }
             };
             return value(asker, &reached);
         }
-        P::ConstancyKind { classification, regression } => {
+        P::ConstancyKind {
+            classification,
+            regression,
+        } => {
             if classification == regression.is_some() {
-                return Err(CoreError::protocol(Sentence::InvalidMessage, "regression comparison must follow rejected classification membership"));
+                return Err(CoreError::protocol(
+                    Sentence::InvalidMessage,
+                    "regression comparison must follow rejected classification membership",
+                ));
             }
             return value(asker, &(classification || regression.unwrap_or(false)));
         }
         P::ConstancyNotice { classification } => {
-            asker.warn(CoreWarning::new(if classification {
-                Sentence::DirectNativeConstantClass
-            } else { Sentence::DirectNativeConstantRegression }, "every context row has the same target"));
+            asker.warn(CoreWarning::new(
+                if classification {
+                    Sentence::DirectNativeConstantClass
+                } else {
+                    Sentence::DirectNativeConstantRegression
+                },
+                "every context row has the same target",
+            ));
         }
         P::Admission { observation } => sdm_request::direct::admission(observation)?,
         P::Arguments { shape } => {
@@ -502,10 +541,19 @@ pub(crate) fn resolve_observed(
         return Err(invalid(Sentence::DirectRelationalFrames)
             .with_field("model", Detail::text(&input.bound.model)));
     }
-    let columns = TabularColumns { dtypes: input.dtypes, columns: input.columns, target: input.target };
+    let columns = TabularColumns {
+        dtypes: input.dtypes,
+        columns: input.columns,
+        target: input.target,
+    };
     if !input.text_columns.is_empty() {
-        asker.warn(CoreWarning::new(Sentence::DirectTextCategorical, "tabular text is categorical")
-            .with_field("columns", texts(input.text_columns)));
+        asker.warn(
+            CoreWarning::new(
+                Sentence::DirectTextCategorical,
+                "tabular text is categorical",
+            )
+            .with_field("columns", texts(input.text_columns)),
+        );
     }
     value(
         asker,

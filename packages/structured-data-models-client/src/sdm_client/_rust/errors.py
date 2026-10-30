@@ -664,12 +664,21 @@ def error_from_core(
     if sentence == 'direct_native_related':
         details = {'related_tables': _held()['direct_tables'](fields)}
     elif sentence in {
-        'direct_frame', 'direct_task', 'direct_empty', 'direct_known_target',
-        'direct_native_multilabel', 'direct_native_target_missing',
-        'direct_native_target_scored', 'direct_native_extra',
-        'direct_native_duplicate_columns', 'direct_native_column_names',
-        'direct_native_missing', 'direct_native_schema_columns', 'direct_native_table_entry_name',
-        'direct_native_name_empty', 'direct_native_name_characters',
+        'direct_frame',
+        'direct_task',
+        'direct_empty',
+        'direct_known_target',
+        'direct_native_multilabel',
+        'direct_native_target_missing',
+        'direct_native_target_scored',
+        'direct_native_extra',
+        'direct_native_duplicate_columns',
+        'direct_native_column_names',
+        'direct_native_missing',
+        'direct_native_schema_columns',
+        'direct_native_table_entry_name',
+        'direct_native_name_empty',
+        'direct_native_name_characters',
     }:
         details = {}
     if sentence == 'direct_native_multilabel':

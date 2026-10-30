@@ -241,20 +241,48 @@ pub struct DatabaseNames {
 pub fn template(sentence: Sentence) -> Template {
     use Sentence as S;
     match sentence {
-        S::DirectNativeSchemaColumns => said(r#"schema does not describe context column(s) {host.direct_columns!r}"#),
-        S::DirectNativeTableEntryName => said(r#"table names must be non-empty strings; got {host.direct_name!r}"#),
-        S::DirectNativeNameEmpty => said(r#"The name {host.direct_name!r} must be a non-empty string."#),
-        S::DirectNativeNameCharacters => said(r#"The name {host.direct_name!r} contains one or more invalid characters: {host.direct_characters!r}."#),
-        S::DirectNativeConstantRegression => said(r#"every context row has the same {host.direct_target}, so nothing in the context distinguishes one answer from another, so the answer cannot say much. If the rows being scored are the ones that differ, score fewer of them; if {host.direct_target} is constant in the whole table, there is no context that answers this question."#),
-        S::DirectNativeConstantClass => said(r#"every context row has the same {host.direct_target}, so a classification needs at least two classes to learn from, and the answer will be that one class at probability 1.0. If the rows being scored are the ones that differ, score fewer of them; if {host.direct_target} is constant in the whole table, there is no context that answers this question."#),
-        S::DirectNativeRelated => said(r#"related_tables {host.direct_tables!r} makes this a relational request, and no model can be sent one built from frames: the relational model is sent tables gathered around each entity, and the tabular model reads a single table. Gather it with PredictiveQuery(...).materialize(indices=[...], model='kumo-relational'), whose schema holds the related tables and the relationships that reach them."#),
-        S::DirectNativeMultilabel => said(r#"{host.direct_target!r} holds a list per row, which is a multi-label target. These models predict one value per row, and the contract has no form for a set of labels, so this cannot be asked or answered"#),
-        S::DirectNativeTargetMissing => said(r#"context has no target column {host.direct_target!r}; it has {host.direct_columns!r}"#),
-        S::DirectNativeTargetScored => said(r#"predict carries the target column {host.direct_target!r}. Those are the rows whose answer is being asked for, so the column has to be absent; drop it with predict.drop(columns=[{host.direct_target!r}])"#),
-        S::DirectNativeExtra => said(r#"predict has column(s) {host.direct_columns!r} that context does not; the model is shown context first, so it cannot score a feature it has never been given"#),
-        S::DirectNativeDuplicateColumns => said(r#"table {host.direct_table!r} has duplicate column name(s) {host.direct_columns!r}"#),
-        S::DirectNativeColumnNames => said(r#"table {host.direct_table!r} column names must be strings; got {host.direct_columns!r}"#),
-        S::DirectNativeMissing => said(r#"predict is missing column(s) {host.direct_columns!r} that context carries. Every feature the model is shown has to be supplied for the rows being scored; drop them from context, or supply them"#),
+        S::DirectNativeSchemaColumns => {
+            said(r#"schema does not describe context column(s) {host.direct_columns!r}"#)
+        }
+        S::DirectNativeTableEntryName => {
+            said(r#"table names must be non-empty strings; got {host.direct_name!r}"#)
+        }
+        S::DirectNativeNameEmpty => {
+            said(r#"The name {host.direct_name!r} must be a non-empty string."#)
+        }
+        S::DirectNativeNameCharacters => said(
+            r#"The name {host.direct_name!r} contains one or more invalid characters: {host.direct_characters!r}."#,
+        ),
+        S::DirectNativeConstantRegression => said(
+            r#"every context row has the same {host.direct_target}, so nothing in the context distinguishes one answer from another, so the answer cannot say much. If the rows being scored are the ones that differ, score fewer of them; if {host.direct_target} is constant in the whole table, there is no context that answers this question."#,
+        ),
+        S::DirectNativeConstantClass => said(
+            r#"every context row has the same {host.direct_target}, so a classification needs at least two classes to learn from, and the answer will be that one class at probability 1.0. If the rows being scored are the ones that differ, score fewer of them; if {host.direct_target} is constant in the whole table, there is no context that answers this question."#,
+        ),
+        S::DirectNativeRelated => said(
+            r#"related_tables {host.direct_tables!r} makes this a relational request, and no model can be sent one built from frames: the relational model is sent tables gathered around each entity, and the tabular model reads a single table. Gather it with PredictiveQuery(...).materialize(indices=[...], model='kumo-relational'), whose schema holds the related tables and the relationships that reach them."#,
+        ),
+        S::DirectNativeMultilabel => said(
+            r#"{host.direct_target!r} holds a list per row, which is a multi-label target. These models predict one value per row, and the contract has no form for a set of labels, so this cannot be asked or answered"#,
+        ),
+        S::DirectNativeTargetMissing => said(
+            r#"context has no target column {host.direct_target!r}; it has {host.direct_columns!r}"#,
+        ),
+        S::DirectNativeTargetScored => said(
+            r#"predict carries the target column {host.direct_target!r}. Those are the rows whose answer is being asked for, so the column has to be absent; drop it with predict.drop(columns=[{host.direct_target!r}])"#,
+        ),
+        S::DirectNativeExtra => said(
+            r#"predict has column(s) {host.direct_columns!r} that context does not; the model is shown context first, so it cannot score a feature it has never been given"#,
+        ),
+        S::DirectNativeDuplicateColumns => said(
+            r#"table {host.direct_table!r} has duplicate column name(s) {host.direct_columns!r}"#,
+        ),
+        S::DirectNativeColumnNames => said(
+            r#"table {host.direct_table!r} column names must be strings; got {host.direct_columns!r}"#,
+        ),
+        S::DirectNativeMissing => said(
+            r#"predict is missing column(s) {host.direct_columns!r} that context carries. Every feature the model is shown has to be supplied for the rows being scored; drop them from context, or supply them"#,
+        ),
         S::DirectColumnNames => {
             said(r#"table {table!r} column names must be strings; got {columns!r}"#)
         }

@@ -13,7 +13,13 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from sdm_client._rust import direct_admission, direct_cells, direct_dtypes, errors, spec
+from sdm_client._rust import (
+    direct_admission,
+    direct_cells,
+    direct_dtypes,
+    errors,
+    spec,
+)
 from sdm_client._rust.direct_io import DirectOperations
 
 
@@ -31,7 +37,9 @@ def time_column(
             'primary_key': key,
         },
     )['names']
-    native_names = {str.__str__(column['name']): column['name'] for column in columns}
+    native_names = {
+        str.__str__(column['name']): column['name'] for column in columns
+    }
     populations = []
     for selected in names:
         name = native_names[selected]
@@ -117,7 +125,9 @@ def date_advice(
             'empty': frame.empty,
         },
     )
-    native_names = {str.__str__(column['name']): column['name'] for column in columns}
+    native_names = {
+        str.__str__(column['name']): column['name'] for column in columns
+    }
     for selected in candidates['names']:
         name = native_names[selected]
         present = frame[name].dropna()
@@ -240,7 +250,9 @@ def preparation_requires(frame: pd.DataFrame) -> bool:
 
 
 def requires(frame: pd.DataFrame) -> bool:
-    if type(frame) is not pd.DataFrame or any(type(name) is not str for name in frame.columns):
+    if type(frame) is not pd.DataFrame or any(
+        type(name) is not str for name in frame.columns
+    ):
         return True
     import pyarrow as pa
 
@@ -326,19 +338,30 @@ def prepare(
             facts = observed['column']
             column = Column.__new__(Column)
             for field, value in (
-                ('name', name), ('dtype', facts['dtype']), ('stype', facts['stype']),
-                ('untyped', facts['untyped']), ('stype_declared', False),
-                ('_stype_before_key', None), ('_source', None),
+                ('name', name),
+                ('dtype', facts['dtype']),
+                ('stype', facts['stype']),
+                ('untyped', facts['untyped']),
+                ('stype_declared', False),
+                ('_stype_before_key', None),
+                ('_source', None),
             ):
                 object.__setattr__(column, field, value)
             # The reference inserts each inferred column before reading the next.
             native_columns[name] = column
         columns = [
-            {'name': column.name, 'dtype': column.dtype, 'stype': column.stype,
-             'untyped': column.untyped}
+            {
+                'name': column.name,
+                'dtype': column.dtype,
+                'stype': column.stype,
+                'untyped': column.untyped,
+            }
             for column in native_columns.values()
         ]
-        native_names = {str.__str__(column.name): column.name for column in native_columns.values()}
+        native_names = {
+            str.__str__(column.name): column.name
+            for column in native_columns.values()
+        }
         direct_admission.name(entity, call)
         for name in context.columns:
             direct_admission.name(name, call)
@@ -417,8 +440,12 @@ def prepare(
                 'time_column': selected_time,
             },
         )
-        schema = build(described['schema'], context, described['flags'],
-                       native_columns=native_columns)
+        schema = build(
+            described['schema'],
+            context,
+            described['flags'],
+            native_columns=native_columns,
+        )
         date_advice(context, entity, columns, key, selected_time, call)
         categorical_advice(schema, call)
     table = schema[entity]
@@ -438,6 +465,8 @@ def prepare(
                 'finding': finding,
             },
         )
-    direct_admission.missing_features(context, scoring, target, table.primary_key, call)
+    direct_admission.missing_features(
+        context, scoring, target, table.primary_key, call
+    )
     direct_admission.constancy(context, target, shape['task'], call)
     return schema

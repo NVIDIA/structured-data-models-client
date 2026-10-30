@@ -16,7 +16,7 @@ import numpy as np
 import pandas as pd
 
 from sdm_client._routing import RouteError
-from sdm_client._rust import codec, errors, results, spec
+from sdm_client._rust import codec, results, spec
 from sdm_client._rust import predict as prediction
 from sdm_client._rust.direct_io import DirectOperations
 from sdm_client._rust.run import Finished, run
@@ -190,7 +190,9 @@ def _flags(schema: Any, entity: str) -> list[dict[str, Any]]:
 
 def _native_encoding(frame: pd.DataFrame) -> bool:
     """Whether this frame needs reached scalar conversions during encoding."""
-    if type(frame) is not pd.DataFrame or any(type(name) is not str for name in frame.columns):
+    if type(frame) is not pd.DataFrame or any(
+        type(name) is not str for name in frame.columns
+    ):
         return True
     for at, dtype in enumerate(frame.dtypes):
         if not DirectOperations.passive_owner(frame.iloc[:, at]):
@@ -225,17 +227,23 @@ def _schema(
     for definition in held['tables']:
         table = Table.__new__(Table)
         columns = {} if native_columns is None else native_columns
-        owners = None if native_columns is None else list(native_columns.values())
+        owners = (
+            None if native_columns is None else list(native_columns.values())
+        )
         for at, definition_column in enumerate(definition['columns']):
             column = Column.__new__(Column) if owners is None else owners[at]
-            native_name = definition_column['name'] if owners is None else column.name
+            native_name = (
+                definition_column['name'] if owners is None else column.name
+            )
             for name, value in (
                 ('name', native_name),
                 ('dtype', definition_column['dtype']),
                 ('stype', definition_column['stype']),
                 (
                     'untyped',
-                    column.untyped if owners is not None else any(
+                    column.untyped
+                    if owners is not None
+                    else any(
                         flag['name'] == definition_column['name']
                         and flag['untyped']
                         for flag in flags
@@ -256,8 +264,14 @@ def _schema(
                 object.__setattr__(column, name, value)
             if owners is None:
                 columns[column.name] = column
-        native_names = {} if owners is None else {str.__str__(column.name): column.name for column in owners}
-        key = [native_names.get(name, name) for name in definition['primary_key']]
+        native_names = (
+            {}
+            if owners is None
+            else {str.__str__(column.name): column.name for column in owners}
+        )
+        key = [
+            native_names.get(name, name) for name in definition['primary_key']
+        ]
         for name, value in (
             ('name', definition['name']),
             ('data', context),
@@ -266,7 +280,12 @@ def _schema(
                 'primary_key',
                 None if not key else key[0] if len(key) == 1 else tuple(key),
             ),
-            ('time_column', native_names.get(definition['time_column'], definition['time_column'])),
+            (
+                'time_column',
+                native_names.get(
+                    definition['time_column'], definition['time_column']
+                ),
+            ),
             (
                 'duplicate_keys',
                 0
@@ -301,34 +320,57 @@ def construct(
     inference: Mapping[str, Any] | None,
     task_options: Mapping[str, Any] | None,
 ) -> None:
-    from sdm_client.request import Split, Target, Task
     from sdm_client._rust import direct_admission, direct_schema
+    from sdm_client.request import Split, Target, Task
 
-    related = direct_admission.arguments(context, predict, related_tables, task, _call)
+    related = direct_admission.arguments(
+        context, predict, related_tables, task, _call
+    )
     direct_admission.population(context, predict, target, _call)
     # Custom producers enter the ordered path without a header or dtype probe.
-    native = type(context) is not pd.DataFrame or type(predict) is not pd.DataFrame
+    native = (
+        type(context) is not pd.DataFrame or type(predict) is not pd.DataFrame
+    )
     if schema is None:
         direct_admission.table_entry_name(entity_table, _call)
         direct_admission.names(context, entity_table, _call)
     if not native:
-        native = any(type(name) is not str for name in context.columns) or any(
-            type(name) is not str for name in predict.columns
-        ) or type(task) is not str
+        native = (
+            any(type(name) is not str for name in context.columns)
+            or any(type(name) is not str for name in predict.columns)
+            or type(task) is not str
+        )
     if not native:
-        native = direct_schema.preparation_requires(context) or direct_schema.preparation_requires(predict)
-    shape: dict[str, Any] = {'task': task, 'target': target, 'entity_table': entity_table}
+        native = direct_schema.preparation_requires(
+            context
+        ) or direct_schema.preparation_requires(predict)
+    shape: dict[str, Any] = {
+        'task': task,
+        'target': target,
+        'entity_table': entity_table,
+    }
     if native:
         schema = direct_schema.prepare(
-            context, predict, shape, schema, _native_calls, _schema, _flags,
+            context,
+            predict,
+            shape,
+            schema,
+            _native_calls,
+            _schema,
+            _flags,
             admission_complete=True,
         )
     else:
-        shape.update({
-            'target_containers': False, 'context_kind': {'kind': 'frame'},
-            'predict_kind': {'kind': 'frame'}, 'related': [],
-            'context': _header(context), 'predict': _header(predict),
-        })
+        shape.update(
+            {
+                'target_containers': False,
+                'context_kind': {'kind': 'frame'},
+                'predict_kind': {'kind': 'frame'},
+                'related': [],
+                'context': _header(context),
+                'predict': _header(predict),
+            }
+        )
         converted_context = _table(context)
         converted_predict = _table(predict)
         prepared = _run(
@@ -428,11 +470,13 @@ def predict(
         if direct_schema.requires(
             request.context.instance_table
         ) or direct_schema.requires(request.predict.instance_table):
-            table, context, scoring, resolved, native_dtypes = direct_prediction.resolve(
-                request,
-                bound,
-                _native_calls,
-                _flags,
+            table, context, scoring, resolved, native_dtypes = (
+                direct_prediction.resolve(
+                    request,
+                    bound,
+                    _native_calls,
+                    _flags,
+                )
             )
         else:
             native_dtypes = None
@@ -472,17 +516,31 @@ def predict(
         if native_encoding:
             from sdm_client._rust.direct_cells import table as native_table
 
-            dtypes = native_dtypes if native_dtypes is not None else dict(resolved['columns']['dtypes'])
+            dtypes = (
+                native_dtypes
+                if native_dtypes is not None
+                else dict(resolved['columns']['dtypes'])
+            )
             # Finish context before observing scoring values. In particular,
             # a failing context conversion prevents later native side effects.
             context_values = native_table(
                 context, 'context', dtypes, _native_calls
             )
-            context_header = {'rows': context_values.num_rows if context_values.column_names else len(context), 'columns': context_values.column_names}
+            context_header = {
+                'rows': context_values.num_rows
+                if context_values.column_names
+                else len(context),
+                'columns': context_values.column_names,
+            }
             scoring_values = native_table(
                 scoring, 'predict', dtypes, _native_calls
             )
-            scoring_header = {'rows': scoring_values.num_rows if scoring_values.column_names else len(scoring), 'columns': scoring_values.column_names}
+            scoring_header = {
+                'rows': scoring_values.num_rows
+                if scoring_values.column_names
+                else len(scoring),
+                'columns': scoring_values.column_names,
+            }
         else:
             context_header = _header(context)
             context_values = _table(context)

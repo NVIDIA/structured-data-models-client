@@ -1112,26 +1112,54 @@ pub fn observed_overlap(
 }
 
 /// Tabular target meaning after the reached native label/task comparisons.
-pub fn observed_meaning(inferred: Stype, different: Option<bool>, classification: Option<bool>) -> Result<Stype, CoreError> {
+pub fn observed_meaning(
+    inferred: Stype,
+    different: Option<bool>,
+    classification: Option<bool>,
+) -> Result<Stype, CoreError> {
     if inferred == Stype::Text {
         if different.is_some() || classification.is_some() {
-            return Err(CoreError::protocol(Sentence::InvalidMessage, "text meaning short-circuits target comparisons"));
+            return Err(CoreError::protocol(
+                Sentence::InvalidMessage,
+                "text meaning short-circuits target comparisons",
+            ));
         }
         return Ok(Stype::Categorical);
     }
     match (different, classification) {
         (Some(true), None) => Ok(inferred),
         (Some(false), Some(true)) => Ok(Stype::Categorical),
-        (Some(false), Some(false)) => Ok(if inferred == Stype::Categorical { Stype::Numerical } else { inferred }),
-        _ => Err(CoreError::protocol(Sentence::InvalidMessage, "target meaning lacks its reached native comparison")),
+        (Some(false), Some(false)) => Ok(if inferred == Stype::Categorical {
+            Stype::Numerical
+        } else {
+            inferred
+        }),
+        _ => Err(CoreError::protocol(
+            Sentence::InvalidMessage,
+            "target meaning lacks its reached native comparison",
+        )),
     }
 }
 
-pub fn coherent_meaning(inferred: Stype, dtype: Dtype, declared: Option<bool>, supports: fn(Stype, Dtype) -> bool) -> Option<Stype> {
-    if supports(inferred, dtype) || declared == Some(true) { return Some(inferred); }
-    declared.map(|_| if matches!(dtype, Dtype::Date | Dtype::Time) {
-        Stype::Timestamp
-    } else if matches!(dtype, Dtype::Int32 | Dtype::Int64 | Dtype::Float32 | Dtype::Float64) {
-        Stype::Numerical
-    } else { Stype::Categorical })
+pub fn coherent_meaning(
+    inferred: Stype,
+    dtype: Dtype,
+    declared: Option<bool>,
+    supports: fn(Stype, Dtype) -> bool,
+) -> Option<Stype> {
+    if supports(inferred, dtype) || declared == Some(true) {
+        return Some(inferred);
+    }
+    declared.map(|_| {
+        if matches!(dtype, Dtype::Date | Dtype::Time) {
+            Stype::Timestamp
+        } else if matches!(
+            dtype,
+            Dtype::Int32 | Dtype::Int64 | Dtype::Float32 | Dtype::Float64
+        ) {
+            Stype::Numerical
+        } else {
+            Stype::Categorical
+        }
+    })
 }

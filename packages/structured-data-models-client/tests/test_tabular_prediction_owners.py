@@ -27,21 +27,31 @@ def test_scoring_length_is_not_read_after_dtype_resolution(
 
         def __len__(self) -> int:
             if self.__dict__.get('_length_forbidden', False):
-                raise AssertionError('extra scoring length read after dtype resolution')
+                raise AssertionError(
+                    'extra scoring length read after dtype resolution'
+                )
             return super().__len__()
 
     outcomes = []
     for route in ('', DIRECT):
         monkeypatch.setenv('SDM_CORE_ROUTES', route)
-        context = pd.DataFrame({'feature': [1, 1, 2, 2], 'target': [0, 1, 0, 1]})
+        context = pd.DataFrame(
+            {'feature': [1, 1, 2, 2], 'target': [0, 1, 0, 1]}
+        )
         scoring = ScoringFrame({'feature': [3]})
-        request = Request(context, scoring, target='target', task='classification')
+        request = Request(
+            context, scoring, target='target', task='classification'
+        )
         assert request.schema[request.entity_table].primary_key is None
         object.__setattr__(scoring, '_arm_on_read', True)
-        endpoint = Endpoint({
-            'model': 'kumo-tabular', 'id': 'answer', 'metadata': {},
-            'predictions': [{'row_index': 0, 'prediction': 1}],
-        })
+        endpoint = Endpoint(
+            {
+                'model': 'kumo-tabular',
+                'id': 'answer',
+                'metadata': {},
+                'predictions': [{'row_index': 0, 'prediction': 1}],
+            }
+        )
         result = client(endpoint).predict(request, model=KumoTabular())
         assert scoring.__dict__['_length_forbidden']
         payload = endpoint.calls[0]
@@ -67,22 +77,33 @@ def test_label_native_target_comparison_selects_wire_semantic_type(
         label = TargetLikeLabel('feature')
         label.active = False
         label.comparisons = 0
-        context = pd.DataFrame({'feature': [1.5, 1.5, 2.5, 2.5], 'target': [0, 1, 0, 1]})
+        context = pd.DataFrame(
+            {'feature': [1.5, 1.5, 2.5, 2.5], 'target': [0, 1, 0, 1]}
+        )
         scoring = pd.DataFrame({'feature': [3.5]})
         context.columns = pd.Index([label, 'target'], dtype=object)
         scoring.columns = pd.Index([label], dtype=object)
         assert context.columns[0] is label
-        request = Request(context, scoring, target='target', task='classification')
+        request = Request(
+            context, scoring, target='target', task='classification'
+        )
         assert request.schema[request.entity_table][label].stype == 'numerical'
         label.active = True
-        endpoint = Endpoint({
-            'model': 'kumo-tabular', 'id': 'answer', 'metadata': {},
-            'predictions': [{'row_index': 0, 'prediction': 1}],
-        })
+        endpoint = Endpoint(
+            {
+                'model': 'kumo-tabular',
+                'id': 'answer',
+                'metadata': {},
+                'predictions': [{'row_index': 0, 'prediction': 1}],
+            }
+        )
         result = client(endpoint).predict(request, model=KumoTabular())
         payload = endpoint.calls[0]
         payload['metadata'].pop('request_id')
         assert label.comparisons > 0
-        assert payload['schema']['instance_table']['columns']['feature']['stype'] == 'categorical'
+        assert (
+            payload['schema']['instance_table']['columns']['feature']['stype']
+            == 'categorical'
+        )
         outcomes.append((payload, result.items))
     assert outcomes[0] == outcomes[1]

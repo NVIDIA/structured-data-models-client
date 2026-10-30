@@ -40,7 +40,9 @@ class RelatedProbe(Mapping[str, Any]):
         return 1
 
     def __getitem__(self, key: str) -> Any:
-        raise AssertionError('related mapping copied before per-item validation')
+        raise AssertionError(
+            'related mapping copied before per-item validation'
+        )
 
     def __iter__(self) -> Iterator[str]:
         raise AssertionError('related keys consumed instead of reached items')
@@ -53,17 +55,27 @@ class RelatedProbe(Mapping[str, Any]):
 
 @pytest.mark.parametrize('invalid', ['context', 'predict'])
 def test_frame_refusal_precedes_headers_and_related(
-    invalid: str, monkeypatch: pytest.MonkeyPatch,
+    invalid: str,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     outcomes = []
     for route in ('', DIRECT):
         monkeypatch.setenv('SDM_CORE_ROUTES', route)
         events: list[str] = []
-        context = object() if invalid == 'context' else guarded({'target': [0, 1]})
-        scoring = object() if invalid == 'predict' else guarded({'feature': [2]})
+        context = (
+            object() if invalid == 'context' else guarded({'target': [0, 1]})
+        )
+        scoring = (
+            object() if invalid == 'predict' else guarded({'feature': [2]})
+        )
         with pytest.raises(StructuredDataError) as caught:
-            Request(context, scoring, target='target', task='classification',
-                    related_tables=RelatedProbe(events))
+            Request(
+                context,
+                scoring,
+                target='target',
+                task='classification',
+                related_tables=RelatedProbe(events),
+            )
         assert events == []
         assert invalid in str(caught.value)
         outcomes.append((type(caught.value), caught.value.code))
@@ -78,21 +90,32 @@ def test_related_frames_are_validated_before_next_item(
         monkeypatch.setenv('SDM_CORE_ROUTES', route)
         events: list[str] = []
         with pytest.raises(StructuredDataError) as caught:
-            Request(guarded({'target': [0, 1]}), guarded({'feature': [2]}),
-                    target='target', task='not-a-task', related_tables=RelatedProbe(events))
+            Request(
+                guarded({'target': [0, 1]}),
+                guarded({'feature': [2]}),
+                target='target',
+                task='not-a-task',
+                related_tables=RelatedProbe(events),
+            )
         assert events == ['related truth', 'first related item']
         assert "related_tables['bad']" in str(caught.value)
         outcomes.append((type(caught.value), caught.value.code))
     assert outcomes[0] == outcomes[1]
 
 
-def test_invalid_task_precedes_first_header(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_invalid_task_precedes_first_header(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     outcomes = []
     for route in ('', DIRECT):
         monkeypatch.setenv('SDM_CORE_ROUTES', route)
         with pytest.raises(StructuredDataError) as caught:
-            Request(guarded({'target': [0, 1]}), guarded({'feature': [2]}),
-                    target='target', task='not-a-task')
+            Request(
+                guarded({'target': [0, 1]}),
+                guarded({'feature': [2]}),
+                target='target',
+                task='not-a-task',
+            )
         assert 'task must be' in str(caught.value)
         outcomes.append((type(caught.value), caught.value.code))
     assert outcomes[0] == outcomes[1]
@@ -120,8 +143,9 @@ def test_task_membership_precedes_header_and_retains_owner(
         monkeypatch.setenv('SDM_CORE_ROUTES', route)
         context = guarded({'feature': [1, 2], 'target': [0, 1]})
         task = NativeTask(context)
-        request = Request(context, pd.DataFrame({'feature': [3]}),
-                          target='target', task=task)
+        request = Request(
+            context, pd.DataFrame({'feature': [3]}), target='target', task=task
+        )
         assert task.comparisons[0] == 'classification'
         assert request.task.kind is task
         assert request.context.instance_table is context
@@ -140,12 +164,20 @@ def test_plain_frame_subclasses_keep_owners_through_prediction(
         monkeypatch.setenv('SDM_CORE_ROUTES', route)
         context = NativeFrame({'feature': [1, 2], 'target': [0, 1]})
         scoring = NativeFrame({'feature': [3]})
-        request = Request(context, scoring, target='target', task='classification')
+        request = Request(
+            context, scoring, target='target', task='classification'
+        )
         assert request.context.instance_table is context
         assert request.predict.instance_table is scoring
         assert request.schema[request.entity_table].data is context
-        endpoint = Endpoint({'model': 'kumo-tabular', 'id': 'answer', 'metadata': {},
-                             'predictions': [{'row_index': 0, 'prediction': 1}]})
+        endpoint = Endpoint(
+            {
+                'model': 'kumo-tabular',
+                'id': 'answer',
+                'metadata': {},
+                'predictions': [{'row_index': 0, 'prediction': 1}],
+            }
+        )
         result = client(endpoint).predict(request, model=KumoTabular())
         payload = endpoint.calls[0]
         payload['metadata'].pop('request_id')
@@ -153,15 +185,20 @@ def test_plain_frame_subclasses_keep_owners_through_prediction(
     assert outcomes[0] == outcomes[1]
 
 
-@pytest.mark.parametrize(('case', 'message'), [
-    ('task', 'task must be'),
-    ('empty', 'context has no rows'),
-    ('target', 'context has no target column'),
-    ('duplicate', 'duplicate column name'),
-    ('nonstring', 'column names must be strings'),
-])
+@pytest.mark.parametrize(
+    ('case', 'message'),
+    [
+        ('task', 'task must be'),
+        ('empty', 'context has no rows'),
+        ('target', 'context has no target column'),
+        ('duplicate', 'duplicate column name'),
+        ('nonstring', 'column names must be strings'),
+    ],
+)
 def test_label_refusal_is_reached_after_earlier_constructor_checks(
-    case: str, message: str, monkeypatch: pytest.MonkeyPatch,
+    case: str,
+    message: str,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     outcomes = []
     for route in ('', DIRECT):
@@ -198,7 +235,9 @@ def test_string_subclass_column_label_retains_schema_owner(
         scoring.columns = pd.Index([label], dtype=object)
         assert context.columns[0] is label
         assert scoring.columns[0] is label
-        request = Request(context, scoring, target='target', task='classification')
+        request = Request(
+            context, scoring, target='target', task='classification'
+        )
         column = request.schema[request.entity_table][label]
         assert column.name is label
         assert request.context.instance_table is context
@@ -214,8 +253,13 @@ def test_empty_entity_name_precedes_duplicate_column_refusal(
         context = pd.DataFrame([[1, 2, 0], [3, 4, 1]], columns=[7, 7, 'target'])
         scoring = pd.DataFrame([[5]], columns=[7])
         with pytest.raises(StructuredDataError) as caught:
-            Request(context, scoring, target='target', task='classification',
-                    entity_table='')
+            Request(
+                context,
+                scoring,
+                target='target',
+                task='classification',
+                entity_table='',
+            )
         assert 'table names must be non-empty strings' in str(caught.value)
         outcomes.append((type(caught.value), caught.value.code))
     assert outcomes[0] == outcomes[1]
@@ -236,9 +280,15 @@ def test_string_subclass_label_keeps_native_name_truthiness(
         context.columns = pd.Index([label, 'target'], dtype=object)
         assert context.columns[0] is label
         with pytest.raises(StructuredDataError) as caught:
-            Request(context, pd.DataFrame({'feature': [3]}), target='target',
-                    task='classification')
-        assert "The name 'feature' must be a non-empty string" in str(caught.value)
+            Request(
+                context,
+                pd.DataFrame({'feature': [3]}),
+                target='target',
+                task='classification',
+            )
+        assert "The name 'feature' must be a non-empty string" in str(
+            caught.value
+        )
         outcomes.append((type(caught.value), caught.value.code))
     assert outcomes[0] == outcomes[1]
 
@@ -252,25 +302,39 @@ def test_date_advice_reads_original_string_subclass_label(
     class LabelFrame(pd.DataFrame):
         def __getitem__(self, key: Any) -> Any:
             label = self.__dict__.get('_native_label')
-            if label is not None and isinstance(key, str) and str.__eq__(key, label):
+            if (
+                label is not None
+                and isinstance(key, str)
+                and str.__eq__(key, label)
+            ):
                 if key is not label:
-                    raise AssertionError('native frame read with reconstructed label')
+                    raise AssertionError(
+                        'native frame read with reconstructed label'
+                    )
             return super().__getitem__(key)
 
     outcomes = []
     for route in ('', DIRECT):
         monkeypatch.setenv('SDM_CORE_ROUTES', route)
         label = NativeLabel('event')
-        context = LabelFrame({
-            'event': pd.Series(['2020-01-01', '2020-02-01', '2020-03-01'], dtype=object),
-            'target': [0, 1, 0],
-        })
+        context = LabelFrame(
+            {
+                'event': pd.Series(
+                    ['2020-01-01', '2020-02-01', '2020-03-01'], dtype=object
+                ),
+                'target': [0, 1, 0],
+            }
+        )
         context.columns = pd.Index([label, 'target'], dtype=object)
         object.__setattr__(context, '_native_label', label)
         scoring = pd.DataFrame({'event': ['2020-04-01']})
         scoring.columns = pd.Index([label], dtype=object)
-        with pytest.warns(UserWarning, match='holds dates but is stored as text'):
-            request = Request(context, scoring, target='target', task='classification')
+        with pytest.warns(
+            UserWarning, match='holds dates but is stored as text'
+        ):
+            request = Request(
+                context, scoring, target='target', task='classification'
+            )
         assert request.schema[request.entity_table][label].name is label
         outcomes.append(request.schema[request.entity_table].time_column)
     assert outcomes[0] == outcomes[1]

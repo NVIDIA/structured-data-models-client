@@ -212,24 +212,46 @@ pub fn stype_name(value: Stype) -> &'static str {
 }
 
 /// Decide each guard only after the host reaches its native producer.
-pub fn admission(input: sdm_contract::direct::schema::AdmissionObservation) -> Result<(), CoreError> {
+pub fn admission(
+    input: sdm_contract::direct::schema::AdmissionObservation,
+) -> Result<(), CoreError> {
     use sdm_contract::direct::schema::AdmissionObservation as A;
     let refusal = match input {
         A::SchemaColumns { missing } => missing.then_some(Sentence::DirectNativeSchemaColumns),
         A::TableEntryName { valid } => (!valid).then_some(Sentence::DirectNativeTableEntryName),
         A::NameKind { valid } => (!valid).then_some(Sentence::DirectNativeNameEmpty),
         A::NameCharacters { present } => {
-            if present.len() != 4 { return Err(CoreError::protocol(Sentence::InvalidMessage, "four native invalid-name membership observations are required")); }
-            present.iter().any(|value| *value).then_some(Sentence::DirectNativeNameCharacters)
-        },
-        A::Frame { valid, row_hint, parameter, native_type } => {
-            if valid { return Ok(()); }
+            if present.len() != 4 {
+                return Err(CoreError::protocol(
+                    Sentence::InvalidMessage,
+                    "four native invalid-name membership observations are required",
+                ));
+            }
+            present
+                .iter()
+                .any(|value| *value)
+                .then_some(Sentence::DirectNativeNameCharacters)
+        }
+        A::Frame {
+            valid,
+            row_hint,
+            parameter,
+            native_type,
+        } => {
+            if valid {
+                return Ok(());
+            }
             return Err(invalid(Sentence::DirectFrame)
                 .with_field("parameter", Detail::text(parameter))
                 .with_field("native_type", Detail::text(native_type))
-                .with_field("hint", Detail::text(if row_hint {
-                    "; wrap a single row with pd.DataFrame([row])"
-                } else { "; build one with pd.DataFrame(...)" })));
+                .with_field(
+                    "hint",
+                    Detail::text(if row_hint {
+                        "; wrap a single row with pd.DataFrame([row])"
+                    } else {
+                        "; build one with pd.DataFrame(...)"
+                    }),
+                ));
         }
         A::Related { present } => present.then_some(Sentence::DirectNativeRelated),
         A::Task { accepted } => (!accepted).then_some(Sentence::DirectTask),
@@ -239,9 +261,14 @@ pub fn admission(input: sdm_contract::direct::schema::AdmissionObservation) -> R
         A::PredictTarget { present } => present.then_some(Sentence::DirectNativeTargetScored),
         A::KnownTarget { present } => (!present).then_some(Sentence::DirectKnownTarget),
         A::ExtraColumns { present } => present.then_some(Sentence::DirectNativeExtra),
-        A::DuplicateColumns { present } => present.then_some(Sentence::DirectNativeDuplicateColumns),
+        A::DuplicateColumns { present } => {
+            present.then_some(Sentence::DirectNativeDuplicateColumns)
+        }
         A::ColumnTypes { non_strings } => non_strings.then_some(Sentence::DirectNativeColumnNames),
         A::MissingFeatures { present } => present.then_some(Sentence::DirectNativeMissing),
     };
-    match refusal { Some(sentence) => Err(invalid(sentence)), None => Ok(()) }
+    match refusal {
+        Some(sentence) => Err(invalid(sentence)),
+        None => Ok(()),
+    }
 }
