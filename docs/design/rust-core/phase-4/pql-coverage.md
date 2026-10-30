@@ -97,3 +97,9 @@ This single failure-presentation operation does not provide a sorting callback o
 Two independent source reviews and handoff passed before verified landing.
 Installed-wheel parity passed 394 cases each on current x86, Python 3.14 x86, Arm floor and Arm newest; both native Arm lanes ran on the exact candidate `fa9b13d25`.
 The targeted Arm run is PQL evidence and does not replace full CI.
+
+The count/task increment landed at `447498a66` with 11 canonical frozen public journeys and 44 installed-client checks.
+It covers the actual 10,000-row cap and cap plus one with default/explicit counts, both empty selected-context causes, binary task inference after scoring exclusion on both entrypoints, an integer-subclass count and reduction-warning handlers that record or raise.
+The dedicated frozen acceptance compares context and encoded row order, results, errors and event sequences in the matching current runtime.
+The ordinary semantic checks also run without runtime-specific receipts; neither path silently substitutes a different runtime oracle.
+No product change was needed for these cases.
