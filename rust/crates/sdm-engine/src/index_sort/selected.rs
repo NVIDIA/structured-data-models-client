@@ -15,7 +15,7 @@ use std::cell::Cell;
 use std::cmp::Ordering;
 
 mod atoms;
-use atoms::{compare_atom, failure_reason, validate_atom};
+use atoms::{compare_atom, failure_reason, pure_total_family, validate_atom};
 
 fn invalid() -> CoreError {
     CoreError::protocol(
@@ -76,6 +76,7 @@ fn numeric<T: SimdKey>(values: &[T], profile: Profile) -> Vec<usize> {
         return scalar(&ordered, profile);
     }
     match profile {
+        Profile::Unbound => unreachable!("unbound ordering resolves before kernel dispatch"),
         Profile::Scalar => scalar(values, profile),
         Profile::Stable => {
             let mut positions: Vec<_> = (0..values.len()).collect();
@@ -96,13 +97,17 @@ fn numeric<T: SimdKey>(values: &[T], profile: Profile) -> Vec<usize> {
 fn order<T: PartialOrd + Clone>(
     values: &[T],
     missing: &[bool],
+    profile: Profile,
     sorter: impl FnOnce(&[T]) -> Vec<usize>,
-) -> Result<(Vec<usize>, bool), CoreError> {
+) -> Result<ResultOrder, CoreError> {
     if values.len() != missing.len() {
         return Err(invalid());
     }
-    if !missing.iter().any(|v| *v) && values.windows(2).all(|w| w[0] <= w[1]) {
-        return Ok(((0..values.len()).collect(), true));
+    if !missing.iter().any(|v| *v)
+        && values.iter().all(|v| v.partial_cmp(v).is_some())
+        && values.windows(2).all(|w| w[0] <= w[1])
+    {
+        return Ok(sorted((0..values.len()).collect(), true));
     }
     let present: Vec<_> = missing
         .iter()
@@ -110,14 +115,34 @@ fn order<T: PartialOrd + Clone>(
         .filter_map(|(i, m)| (!m).then_some(i))
         .collect();
     let keys: Vec<_> = present.iter().map(|i| values[*i].clone()).collect();
-    let mut positions: Vec<_> = sorter(&keys).into_iter().map(|i| present[i]).collect();
+    let ordered = if profile == Profile::Unbound {
+        // A provisional stable ordering is observable only when every retained
+        // key is distinct under this admitted pure, total comparator.
+        let keys: Vec<_> = keys.iter().map(MissingLast).collect();
+        let mut positions: Vec<_> = (0..keys.len()).collect();
+        positions.sort_by(|a, b| {
+            keys[*a]
+                .partial_cmp(&keys[*b])
+                .expect("pure total comparator")
+        });
+        if positions
+            .windows(2)
+            .any(|pair| keys[pair[0]] == keys[pair[1]])
+        {
+            return Ok(ResultOrder::NeedsProfile);
+        }
+        positions
+    } else {
+        sorter(&keys)
+    };
+    let mut positions: Vec<_> = ordered.into_iter().map(|i| present[i]).collect();
     positions.extend(
         missing
             .iter()
             .enumerate()
             .filter_map(|(i, m)| m.then_some(i)),
     );
-    Ok((positions, false))
+    Ok(sorted(positions, false))
 }
 
 #[derive(Clone)]
@@ -147,12 +172,18 @@ fn multi(levels: &[Facts], codes: &[Vec<i64>], missing: &[bool]) -> Result<Resul
     }
     let mut ranks = Vec::new();
     let mut incomparable_levels = Vec::new();
+    let mut needs_profile = false;
     for (level, code) in levels.iter().zip(codes) {
         let n = level.missing.len();
         let permutation = match order_sampled(level)? {
             ResultOrder::Sorted { positions, .. } => {
                 incomparable_levels.push(false);
                 positions
+            }
+            ResultOrder::NeedsProfile => {
+                needs_profile = true;
+                incomparable_levels.push(false);
+                (0..n).collect()
             }
             ResultOrder::Refused { .. } => {
                 incomparable_levels.push(true);
@@ -174,6 +205,9 @@ fn multi(levels: &[Facts], codes: &[Vec<i64>], missing: &[bool]) -> Result<Resul
             });
         }
         ranks.push(row_ranks);
+    }
+    if needs_profile {
+        return Ok(ResultOrder::NeedsProfile);
     }
     let mut positions: Vec<_> = (0..missing.len()).collect();
     positions.sort_by(|a, b| {
@@ -234,27 +268,27 @@ pub fn order_sampled(facts: &Facts) -> Result<ResultOrder, CoreError> {
             codes: values,
             width,
         } => match width {
-            1 | 2 => order(values, mask, |v| scalar(v, profile))?,
+            1 | 2 => order(values, mask, profile, |v| scalar(v, profile))?,
             4 => {
                 let v: Vec<_> = values
                     .iter()
                     .map(|v| i32::try_from(*v).map_err(|_| invalid()))
                     .collect::<Result<_, _>>()?;
-                order(&v, mask, |v| numeric(v, profile))?
+                order(&v, mask, profile, |v| numeric(v, profile))?
             }
-            8 => order(values, mask, |v| numeric(v, profile))?,
+            8 => order(values, mask, profile, |v| numeric(v, profile))?,
             _ => return Err(invalid()),
         },
         Values::Unsigned { values, width } => match width {
-            1 | 2 => order(values, mask, |v| scalar(v, profile))?,
+            1 | 2 => order(values, mask, profile, |v| scalar(v, profile))?,
             4 => {
                 let v: Vec<_> = values
                     .iter()
                     .map(|v| u32::try_from(*v).map_err(|_| invalid()))
                     .collect::<Result<_, _>>()?;
-                order(&v, mask, |v| numeric(v, profile))?
+                order(&v, mask, profile, |v| numeric(v, profile))?
             }
-            8 => order(values, mask, |v| numeric(v, profile))?,
+            8 => order(values, mask, profile, |v| numeric(v, profile))?,
             _ => return Err(invalid()),
         },
         Values::Floating { bits, width } => {
@@ -264,7 +298,7 @@ pub fn order_sampled(facts: &Facts) -> Result<ResultOrder, CoreError> {
                     .iter()
                     .map(|b| u32::try_from(*b).map(f32::from_bits).map_err(|_| invalid()))
                     .collect::<Result<_, _>>()?;
-                order(&v, mask, |v| {
+                order(&v, mask, profile, |v| {
                     if *width == 2 {
                         scalar(
                             &v.iter().copied().map(MissingLast).collect::<Vec<_>>(),
@@ -276,7 +310,7 @@ pub fn order_sampled(facts: &Facts) -> Result<ResultOrder, CoreError> {
                 })?
             } else if *width == 8 {
                 let v: Vec<_> = bits.iter().map(|b| f64::from_bits(*b)).collect();
-                order(&v, mask, |v| numeric(v, profile))?
+                order(&v, mask, profile, |v| numeric(v, profile))?
             } else {
                 return Err(invalid());
             }
@@ -286,7 +320,10 @@ pub fn order_sampled(facts: &Facts) -> Result<ResultOrder, CoreError> {
             imag_bits,
             width,
         } => {
-            if real_bits.len() != mask.len() || imag_bits.len() != mask.len() {
+            if !matches!(width, 4 | 8)
+                || real_bits.len() != mask.len()
+                || imag_bits.len() != mask.len()
+            {
                 return Err(invalid());
             }
             let component = |bits: u64| -> Result<f64, CoreError> {
@@ -313,14 +350,14 @@ pub fn order_sampled(facts: &Facts) -> Result<ResultOrder, CoreError> {
                     Ok(value)
                 })
                 .collect::<Result<Vec<_>, CoreError>>()?;
-            order(&values, mask, |v| scalar(v, profile))?
+            order(&values, mask, profile, |v| scalar(v, profile))?
         }
-        Values::Temporal { values } => order(values, mask, |v| scalar(v, profile))?,
+        Values::Temporal { values } => order(values, mask, profile, |v| scalar(v, profile))?,
         Values::Unicode { values } => {
             if values.iter().flatten().any(|point| *point > 0x10ffff) {
                 return Err(invalid());
             }
-            order(values, mask, |v| scalar(v, profile))?
+            order(values, mask, profile, |v| scalar(v, profile))?
         }
         Values::Multi { levels, codes } => return multi(levels, codes, mask),
         Values::Object { values } => {
@@ -345,6 +382,16 @@ pub fn order_sampled(facts: &Facts) -> Result<ResultOrder, CoreError> {
             {
                 return Err(invalid());
             }
+            if profile == Profile::Unbound
+                && !pure_total_family(
+                    values
+                        .iter()
+                        .zip(mask)
+                        .filter_map(|(v, m)| (!m).then_some(v)),
+                )
+            {
+                return Ok(ResultOrder::NeedsProfile);
+            }
             let failed = Cell::new(None);
             let v: Vec<_> = values
                 .iter()
@@ -355,6 +402,11 @@ pub fn order_sampled(facts: &Facts) -> Result<ResultOrder, CoreError> {
                     failure: &failed,
                 })
                 .collect();
+            if profile == Profile::Unbound {
+                return order(&v, mask, profile, |_| {
+                    unreachable!("unbound order never invokes a kernel")
+                });
+            }
             // Monotonic probing suppresses incomparable errors in the native index.
             let monotonic = !mask.iter().any(|v| *v) && v.windows(2).all(|w| w[0] <= w[1]);
             failed.set(None);
@@ -384,5 +436,5 @@ pub fn order_sampled(facts: &Facts) -> Result<ResultOrder, CoreError> {
             return Ok(sorted(positions, monotonic));
         }
     };
-    Ok(sorted(result.0, result.1))
+    Ok(result)
 }

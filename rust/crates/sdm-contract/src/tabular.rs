@@ -147,6 +147,8 @@ pub enum TabularTaskDecision {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum TabularSortProfile {
+    /// Resolve only ordering outcomes independent of producer tie policy.
+    Unbound,
     Scalar,
     Avx2Gnu14,
     Avx512Gnu14,
@@ -250,6 +252,8 @@ pub struct OrderSampledTabularRows {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum OrderedSampledTabularRows {
+    /// Reuse the same facts after binding their remaining producer profiles.
+    NeedsProfile,
     Sorted {
         positions: Vec<usize>,
         /// Native sort_index may copy/finalize without taking a permutation.

@@ -215,3 +215,39 @@ pub(super) fn failure_reason(a: &Atom, b: &Atom) -> TabularOrderError {
         _ => TabularOrderError::Incomparable,
     }
 }
+
+/// Admission is structural: no ordering probe runs on incomparable families.
+pub(super) fn pure_total_family<'a>(values: impl Iterator<Item = &'a Atom>) -> bool {
+    let mut family = None;
+    let mut decimal = false;
+    let mut floating = false;
+    for value in values {
+        let current = match value {
+            Atom::Integer { .. } | Atom::Boolean { .. } => 0,
+            Atom::Floating { .. } => {
+                floating = true;
+                0
+            }
+            Atom::Decimal { .. } => {
+                decimal = true;
+                0
+            }
+            Atom::Text { .. } => 1,
+            Atom::Date { .. } => 2,
+            Atom::DateTime {
+                offset_micros: None,
+                ..
+            } => 3,
+            Atom::DateTime {
+                offset_micros: Some(_),
+                ..
+            } => 4,
+            Atom::Complex { .. } => return false,
+        };
+        if family.is_some_and(|previous| previous != current) || decimal && floating {
+            return false;
+        }
+        family = Some(current);
+    }
+    true
+}

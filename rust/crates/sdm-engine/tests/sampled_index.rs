@@ -308,3 +308,200 @@ fn malformed_civil_and_decimal_facts_are_protocol_errors() {
         assert!(order_sampled(&objects(vec![value])).is_err());
     }
 }
+
+fn unbound(mut facts: TabularIndexFacts) -> TabularIndexFacts {
+    facts.profile = TabularSortProfile::Unbound;
+    facts
+}
+#[test]
+fn unbound_unique_keys_finish_but_unsorted_ties_require_binding() {
+    check(
+        unbound(facts(
+            TabularIndexValues::Signed {
+                values: vec![3, 1, 2],
+                width: 8,
+            },
+            vec![false; 3],
+        )),
+        vec![1, 2, 0],
+        false,
+    );
+    check(
+        unbound(facts(
+            TabularIndexValues::Signed {
+                values: vec![1, 1, 2],
+                width: 8,
+            },
+            vec![false; 3],
+        )),
+        vec![0, 1, 2],
+        true,
+    );
+    assert_eq!(
+        order_sampled(&unbound(facts(
+            TabularIndexValues::Signed {
+                values: vec![2, 1, 1],
+                width: 8
+            },
+            vec![false; 3]
+        )))
+        .unwrap(),
+        OrderedSampledTabularRows::NeedsProfile
+    );
+}
+#[test]
+fn unbound_missing_suffix_needs_no_profile_but_present_nan_ties_do() {
+    check(
+        unbound(facts(
+            TabularIndexValues::Floating {
+                bits: vec![f64::NAN.to_bits()],
+                width: 8,
+            },
+            vec![false],
+        )),
+        vec![0],
+        false,
+    );
+
+    check(
+        unbound(facts(
+            TabularIndexValues::Floating {
+                bits: vec![0, 2_f64.to_bits(), 0, 1_f64.to_bits()],
+                width: 8,
+            },
+            vec![true, false, true, false],
+        )),
+        vec![3, 1, 0, 2],
+        false,
+    );
+    check(
+        unbound(facts(
+            TabularIndexValues::Floating {
+                bits: vec![f64::NAN.to_bits(), 1_f64.to_bits()],
+                width: 8,
+            },
+            vec![false; 2],
+        )),
+        vec![1, 0],
+        false,
+    );
+    assert_eq!(
+        order_sampled(&unbound(facts(
+            TabularIndexValues::Floating {
+                bits: vec![f64::NAN.to_bits(); 2],
+                width: 8
+            },
+            vec![false; 2]
+        )))
+        .unwrap(),
+        OrderedSampledTabularRows::NeedsProfile
+    );
+}
+#[test]
+fn unbound_objects_admit_only_structurally_pure_total_families() {
+    check(
+        unbound(objects(vec![
+            decimal(false, "2", 0),
+            TabularIndexScalar::Integer { value: "1".into() },
+        ])),
+        vec![1, 0],
+        false,
+    );
+    for values in [
+        vec![
+            TabularIndexScalar::Text { points: vec![97] },
+            TabularIndexScalar::Integer { value: "1".into() },
+        ],
+        vec![TabularIndexScalar::Complex {
+            real_bits: 0,
+            imag_bits: 0,
+        }],
+        vec![
+            TabularIndexScalar::DateTime {
+                ordinal: 1,
+                micros: 0,
+                offset_micros: None,
+            },
+            TabularIndexScalar::DateTime {
+                ordinal: 1,
+                micros: 0,
+                offset_micros: Some(0),
+            },
+        ],
+    ] {
+        assert_eq!(
+            order_sampled(&unbound(objects(values))).unwrap(),
+            OrderedSampledTabularRows::NeedsProfile
+        );
+    }
+}
+#[test]
+fn stable_ties_and_multiindex_children_preserve_their_existing_profiles() {
+    let mut stable = facts(
+        TabularIndexValues::Signed {
+            values: vec![2, 1, 1],
+            width: 8,
+        },
+        vec![false; 3],
+    );
+    stable.profile = TabularSortProfile::Stable;
+    check(stable, vec![1, 2, 0], false);
+    let level = unbound(facts(
+        TabularIndexValues::Signed {
+            values: vec![2, 1],
+            width: 8,
+        },
+        vec![false; 2],
+    ));
+    check(
+        facts(
+            TabularIndexValues::Multi {
+                levels: vec![level],
+                codes: vec![vec![0, 1, 1]],
+            },
+            vec![false; 3],
+        ),
+        vec![1, 2, 0],
+        false,
+    );
+    let level = unbound(objects(vec![
+        TabularIndexScalar::Text { points: vec![97] },
+        TabularIndexScalar::Integer { value: "1".into() },
+    ]));
+    assert_eq!(
+        order_sampled(&facts(
+            TabularIndexValues::Multi {
+                levels: vec![level],
+                codes: vec![vec![0, 1]]
+            },
+            vec![false; 2]
+        ))
+        .unwrap(),
+        OrderedSampledTabularRows::NeedsProfile
+    );
+}
+
+#[test]
+fn unbound_validation_precedes_monotonic_shortcuts() {
+    assert!(
+        order_sampled(&unbound(facts(
+            TabularIndexValues::Complex {
+                real_bits: vec![],
+                imag_bits: vec![],
+                width: 3
+            },
+            vec![]
+        )))
+        .is_err()
+    );
+    assert!(
+        order_sampled(&unbound(facts(
+            TabularIndexValues::Signed {
+                values: vec![1],
+                width: 8
+            },
+            vec![]
+        )))
+        .is_err()
+    );
+}
