@@ -192,6 +192,12 @@ def test_string_subclass_column_label_retains_schema_owner(
         label = NativeLabel('feature')
         context = pd.DataFrame({label: [1, 2], 'target': [0, 1]})
         scoring = pd.DataFrame({label: [3]})
+        # Pandas 3 normalizes inferred string indexes to built-in strings.
+        # An explicit object Index retains the public label owner.
+        context.columns = pd.Index([label, 'target'], dtype=object)
+        scoring.columns = pd.Index([label], dtype=object)
+        assert context.columns[0] is label
+        assert scoring.columns[0] is label
         request = Request(context, scoring, target='target', task='classification')
         column = request.schema[request.entity_table][label]
         assert column.name is label

@@ -54,12 +54,6 @@ def _kind(value: Any) -> dict[str, Any]:
 def _header(frame: Any) -> dict[str, Any]:
     if not isinstance(frame, pd.DataFrame):
         return {'rows': 0, 'columns': []}
-    if type(frame) is not pd.DataFrame or any(
-        type(name) is not str for name in frame.columns
-    ):
-        raise RouteError(
-            'the direct pilot requires built-in DataFrames and string column labels'
-        )
     return {'rows': len(frame), 'columns': list(frame.columns)}
 
 
@@ -206,6 +200,8 @@ def _flags(schema: Any, entity: str) -> list[dict[str, Any]]:
 
 def _native_encoding(frame: pd.DataFrame) -> bool:
     """Whether this frame needs reached scalar conversions during encoding."""
+    if type(frame) is not pd.DataFrame:
+        return True
     for at, dtype in enumerate(frame.dtypes):
         if not DirectOperations.passive_owner(frame.iloc[:, at]):
             return True
@@ -229,6 +225,8 @@ def _schema(
     held: dict[str, Any],
     context: pd.DataFrame,
     flags: Sequence[Mapping[str, Any]] = (),
+    *,
+    native_columns: dict[Any, Any] | None = None,
 ) -> Any:
     from sdm_client.schema import Column, Schema, Table
 
@@ -236,16 +234,18 @@ def _schema(
     tables = {}
     for definition in held['tables']:
         table = Table.__new__(Table)
-        columns = {}
-        for definition_column in definition['columns']:
-            column = Column.__new__(Column)
+        columns = {} if native_columns is None else native_columns
+        owners = None if native_columns is None else list(native_columns.values())
+        for at, definition_column in enumerate(definition['columns']):
+            column = Column.__new__(Column) if owners is None else owners[at]
+            native_name = definition_column['name'] if owners is None else column.name
             for name, value in (
-                ('name', definition_column['name']),
+                ('name', native_name),
                 ('dtype', definition_column['dtype']),
                 ('stype', definition_column['stype']),
                 (
                     'untyped',
-                    any(
+                    column.untyped if owners is not None else any(
                         flag['name'] == definition_column['name']
                         and flag['untyped']
                         for flag in flags
@@ -264,8 +264,10 @@ def _schema(
                 ('_table', table),
             ):
                 object.__setattr__(column, name, value)
-            columns[column.name] = column
-        key = definition['primary_key']
+            if owners is None:
+                columns[column.name] = column
+        native_names = {} if owners is None else {str.__str__(column.name): column.name for column in owners}
+        key = [native_names.get(name, name) for name in definition['primary_key']]
         for name, value in (
             ('name', definition['name']),
             ('data', context),
@@ -274,7 +276,7 @@ def _schema(
                 'primary_key',
                 None if not key else key[0] if len(key) == 1 else tuple(key),
             ),
-            ('time_column', definition['time_column']),
+            ('time_column', native_names.get(definition['time_column'], definition['time_column'])),
             (
                 'duplicate_keys',
                 0
@@ -309,39 +311,33 @@ def construct(
     inference: Mapping[str, Any] | None,
     task_options: Mapping[str, Any] | None,
 ) -> None:
-    from sdm_client.request import Split, Target, Task, _has_container_cells
+    from sdm_client.request import Split, Target, Task
+    from sdm_client._rust import direct_admission, direct_schema
 
-    related = dict(related_tables or {})
-    shape: dict[str, Any] = {
-        'target_containers': False,
-        'context_kind': _kind(context),
-        'predict_kind': _kind(predict),
-        'related': [(name, _kind(frame)) for name, frame in related.items()],
-        'task': task if type(task) is str else None,
-        'target': target,
-        'entity_table': entity_table,
-        'context': _header(context),
-        'predict': _header(predict),
-    }
-    with errors.holding(
-        direct_task=lambda fields: task,
-        direct_frame=lambda fields: 'pandas DataFrame',
-    ):
-        _call('check_direct_preparation', {'kind': 'arguments', 'shape': shape})
-        shape['target_containers'] = (
-            target in context.columns and _has_container_cells(context[target])
-        )
-        _call('check_direct_shape', shape)
-    from sdm_client._rust import direct_schema
-
-    if direct_schema.preparation_requires(
-        context
-    ) or direct_schema.preparation_requires(predict):
+    related = direct_admission.arguments(context, predict, related_tables, task, _call)
+    direct_admission.population(context, predict, target, _call)
+    # Custom producers enter the ordered path without a header or dtype probe.
+    native = type(context) is not pd.DataFrame or type(predict) is not pd.DataFrame
+    if schema is None:
+        direct_admission.names(context, entity_table, _call)
+    if not native:
+        native = any(type(name) is not str for name in context.columns) or any(
+            type(name) is not str for name in predict.columns
+        ) or type(task) is not str
+    if not native:
+        native = direct_schema.preparation_requires(context) or direct_schema.preparation_requires(predict)
+    shape: dict[str, Any] = {'task': task, 'target': target, 'entity_table': entity_table}
+    if native:
         schema = direct_schema.prepare(
-            context, predict, shape, schema, _native_calls, _schema, _flags
+            context, predict, shape, schema, _native_calls, _schema, _flags,
+            admission_complete=True,
         )
-        value = {'task': shape['task'], 'target': target}
     else:
+        shape.update({
+            'target_containers': False, 'context_kind': {'kind': 'frame'},
+            'predict_kind': {'kind': 'frame'}, 'related': [],
+            'context': _header(context), 'predict': _header(predict),
+        })
         converted_context = _table(context)
         converted_predict = _table(predict)
         prepared = _run(
@@ -361,10 +357,10 @@ def construct(
             schema = _schema(value['schema'], context)
     request.schema = schema
     request.task = Task(
-        kind=value['task'],
+        kind=task,
         target=Target(
-            column_name=value['target'],
-            dtype=schema[entity_table][value['target']].dtype,
+            column_name=target,
+            dtype=schema[entity_table][target].dtype,
             table_name=entity_table,
         ),
         entity_table=None,

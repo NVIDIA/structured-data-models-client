@@ -303,6 +303,26 @@ pub(crate) fn check_preparation(
 ) -> Result<OperationResult, CoreError> {
     use sdm_contract::direct::schema::PreparationObservation as P;
     match input {
+        P::ConstancyPopulation { empty, diverse } => {
+            let reached = match (empty, diverse) {
+                (Some(empty), None) => !empty,
+                (None, Some(diverse)) => !diverse,
+                _ => return Err(CoreError::protocol(Sentence::InvalidMessage, "one reached constancy observation is required")),
+            };
+            return value(asker, &reached);
+        }
+        P::ConstancyKind { classification, regression } => {
+            if classification == regression.is_some() {
+                return Err(CoreError::protocol(Sentence::InvalidMessage, "regression comparison must follow rejected classification membership"));
+            }
+            return value(asker, &(classification || regression.unwrap_or(false)));
+        }
+        P::ConstancyNotice { classification } => {
+            asker.warn(CoreWarning::new(if classification {
+                Sentence::DirectNativeConstantClass
+            } else { Sentence::DirectNativeConstantRegression }, "every context row has the same target"));
+        }
+        P::Admission { observation } => sdm_request::direct::admission(observation)?,
         P::Arguments { shape } => {
             sdm_request::direct::arguments(&shape)?;
         }

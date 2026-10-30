@@ -750,12 +750,23 @@ warning_codes! {
 sentences! {
     DirectColumnNames = "direct_column_names", E::InvalidRequest;
     DirectConstantClass = "direct_constant_class", W::FrameSchema;
+    DirectNativeConstantClass = "direct_native_constant_class", W::FrameSchema;
     DirectConstantRegression = "direct_constant_regression", W::FrameSchema;
+    DirectNativeConstantRegression = "direct_native_constant_regression", W::FrameSchema;
     DirectDuplicateColumns = "direct_duplicate_columns", E::InvalidRequest;
     DirectEmpty = "direct_empty", E::InvalidRequest;
     DirectExtra = "direct_extra", E::InvalidRequest;
     DirectFloatPrecision = "direct_float_precision", E::InvalidRequest;
     DirectFrame = "direct_frame", E::InvalidRequest;
+    DirectNativeRelated = "direct_native_related", E::UnsupportedRequest;
+    DirectNativeMultilabel = "direct_native_multilabel", E::UnsupportedRequest;
+    DirectNativeTargetMissing = "direct_native_target_missing", E::InvalidRequest;
+    DirectNativeTargetScored = "direct_native_target_scored", E::InvalidRequest;
+    DirectNativeExtra = "direct_native_extra", E::InvalidRequest;
+    DirectNativeDuplicateColumns = "direct_native_duplicate_columns", E::InvalidRequest;
+    DirectNativeColumnNames = "direct_native_column_names", E::InvalidRequest;
+    DirectNativeMissing = "direct_native_missing", E::InvalidRequest;
+
     DirectKnownTarget = "direct_known_target", E::InvalidRequest;
     DirectMissing = "direct_missing", E::InvalidRequest;
     DirectNativeIdMismatch = "direct_native_id_mismatch", E::InvalidResponse;

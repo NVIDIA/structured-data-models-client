@@ -40,6 +40,10 @@ Source-backed materialization -> existing Phase 3 path (unchanged)
   Prediction consumes current public frames/task/schema, not a stale constructor snapshot.
 - Preflight precedes empty-result handling; oversized direct context is refused, never sampled.
   Encoding produces both model bytes and their exact row/key layout; response attribution uses that layout.
+- Constructor admission observes context, predict, each related frame, related refusal and native task membership before reading any header.
+  Reached target/population/name checks use closed facts; Rust selects refusals and Python retains lazy native diagnostic values.
+  Subclass frames use ordered schema and encoding observations, retaining original task, target and column owners.
+  Insert each inferred column into the retained native dictionary before consuming the next column; schema assembly reuses those owners.
 - Native observations occur only where the old client consumes them.
   Preserve conversion failures, owner lifetimes and mutation effects; combine pure Rust steps only when no observable work separates them.
 - Use existing attachments for input-sized columns and response data, explicit tagged alternatives for direct versus gathered requests, and canonical generators for message changes.

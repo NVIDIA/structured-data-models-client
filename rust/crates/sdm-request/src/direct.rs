@@ -210,3 +210,31 @@ pub fn stype_name(value: Stype) -> &'static str {
         Stype::Unsupported => "unsupported",
     }
 }
+
+/// Decide each guard only after the host reaches its native producer.
+pub fn admission(input: sdm_contract::direct::schema::AdmissionObservation) -> Result<(), CoreError> {
+    use sdm_contract::direct::schema::AdmissionObservation as A;
+    let refusal = match input {
+        A::Frame { valid, row_hint, parameter, native_type } => {
+            if valid { return Ok(()); }
+            return Err(invalid(Sentence::DirectFrame)
+                .with_field("parameter", Detail::text(parameter))
+                .with_field("native_type", Detail::text(native_type))
+                .with_field("hint", Detail::text(if row_hint {
+                    "; wrap a single row with pd.DataFrame([row])"
+                } else { "; build one with pd.DataFrame(...)" })));
+        }
+        A::Related { present } => present.then_some(Sentence::DirectNativeRelated),
+        A::Task { accepted } => (!accepted).then_some(Sentence::DirectTask),
+        A::TargetCells { containers } => containers.then_some(Sentence::DirectNativeMultilabel),
+        A::ContextRows { empty } => empty.then_some(Sentence::DirectEmpty),
+        A::ContextTarget { present } => (!present).then_some(Sentence::DirectNativeTargetMissing),
+        A::PredictTarget { present } => present.then_some(Sentence::DirectNativeTargetScored),
+        A::KnownTarget { present } => (!present).then_some(Sentence::DirectKnownTarget),
+        A::ExtraColumns { present } => present.then_some(Sentence::DirectNativeExtra),
+        A::DuplicateColumns { present } => present.then_some(Sentence::DirectNativeDuplicateColumns),
+        A::ColumnTypes { non_strings } => non_strings.then_some(Sentence::DirectNativeColumnNames),
+        A::MissingFeatures { present } => present.then_some(Sentence::DirectNativeMissing),
+    };
+    match refusal { Some(sentence) => Err(invalid(sentence)), None => Ok(()) }
+}

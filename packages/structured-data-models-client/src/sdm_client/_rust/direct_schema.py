@@ -13,7 +13,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from sdm_client._rust import direct_cells, direct_dtypes, errors, spec
+from sdm_client._rust import direct_admission, direct_cells, direct_dtypes, errors, spec
 from sdm_client._rust.direct_io import DirectOperations
 
 
@@ -31,8 +31,10 @@ def time_column(
             'primary_key': key,
         },
     )['names']
+    native_names = {str.__str__(column['name']): column['name'] for column in columns}
     populations = []
-    for name in names:
+    for selected in names:
+        name = native_names[selected]
         present = frame[name].dropna()
         rows, held = len(frame), len(present)
         first = present.iloc[0] if held else None
@@ -53,7 +55,8 @@ def time_column(
     choice = call('observe_direct_schema', observed)
     if choice['earliest']:
         starts = []
-        for name in choice['earliest']:
+        for selected in choice['earliest']:
+            name = native_names[selected]
             values = frame[name]
             if isinstance(values.dtype, pd.ArrowDtype):
                 values = pd.Series(values.to_numpy(), index=values.index)
@@ -67,7 +70,7 @@ def time_column(
                 start = call.time_start(parsed, name)
             starts.append((name, start))
         choice = call('observe_direct_schema', {**observed, 'starts': starts})
-    return choice['column']
+    return native_names.get(choice['column'], choice['column'])
 
 
 def categorical_advice(schema: Any, call: Callable[..., Any]) -> None:
@@ -222,6 +225,8 @@ def repeated_key(
 
 
 def preparation_requires(frame: pd.DataFrame) -> bool:
+    if type(frame) is not pd.DataFrame:
+        return True
     # Retain the landed integer/Boolean constructor batch. Extended families
     # reach additional native schema/time/advice observations before scoring.
     return any(
@@ -233,6 +238,8 @@ def preparation_requires(frame: pd.DataFrame) -> bool:
 
 
 def requires(frame: pd.DataFrame) -> bool:
+    if type(frame) is not pd.DataFrame:
+        return True
     import pyarrow as pa
 
     for at, dtype in enumerate(frame.dtypes):
@@ -284,29 +291,21 @@ def prepare(
     call: DirectOperations,
     build: Callable[..., Any],
     flags: Callable[..., Any],
+    *,
+    admission_complete: bool = False,
 ) -> Any:
     entity = shape['entity_table']
     target = shape['target']
-    call(
-        'check_direct_preparation',
-        {
-            'kind': 'population',
-            'shape': shape,
-            'known': int(context[target].notna().sum()),
-        },
-    )
+    if not admission_complete:
+        direct_admission.population(context, scoring, target, call)
+        if schema is None:
+            direct_admission.names(context, entity, call)
     if schema is None:
-        call(
-            'check_direct_preparation',
-            {
-                'kind': 'names',
-                'table': entity,
-                'columns': list(context.columns),
-            },
-        )
         for name in context.columns:
             direct_cells.admit(context[name], 'context', 'string', call)
-        columns = []
+        from sdm_client.schema import Column
+
+        native_columns = {}
         for name in context.columns:
             series = context[name]
             finding = direct_dtypes.observe(series, call)
@@ -321,7 +320,22 @@ def prepare(
                     else None,
                 },
             )
-            columns.append(observed['column'])
+            facts = observed['column']
+            column = Column.__new__(Column)
+            for field, value in (
+                ('name', name), ('dtype', facts['dtype']), ('stype', facts['stype']),
+                ('untyped', facts['untyped']), ('stype_declared', False),
+                ('_stype_before_key', None), ('_source', None),
+            ):
+                object.__setattr__(column, field, value)
+            # The reference inserts each inferred column before reading the next.
+            native_columns[name] = column
+        columns = [
+            {'name': column.name, 'dtype': column.dtype, 'stype': column.stype,
+             'untyped': column.untyped}
+            for column in native_columns.values()
+        ]
+        native_names = {str.__str__(column.name): column.name for column in native_columns.values()}
         call(
             'observe_direct_schema',
             {'kind': 'table_names', 'table': entity, 'columns': []},
@@ -341,7 +355,8 @@ def prepare(
             },
         )
         key = None
-        for name in candidates['names']:
+        for selected in candidates['names']:
+            name = native_names[selected]
             distinct = int(context[name].nunique(dropna=True))
             counted = call(
                 'observe_direct_schema',
@@ -405,7 +420,8 @@ def prepare(
                 'time_column': selected_time,
             },
         )
-        schema = build(described['schema'], context, described['flags'])
+        schema = build(described['schema'], context, described['flags'],
+                       native_columns=native_columns)
         date_advice(context, entity, columns, key, selected_time, call)
         categorical_advice(schema, call)
     table = schema[entity]
@@ -425,29 +441,6 @@ def prepare(
                 'finding': finding,
             },
         )
-    current_shape = {
-        **shape,
-        'context': {'rows': len(context), 'columns': list(context.columns)},
-        'predict': {'rows': len(scoring), 'columns': list(scoring.columns)},
-    }
-    call(
-        'check_direct_preparation',
-        {
-            'kind': 'scored_complete',
-            'shape': current_shape,
-            'schema': spec.held_schema(schema),
-        },
-    )
-    present = context[target].dropna()
-    distinct = int(present.nunique()) if not present.empty else 0
-    call(
-        'check_direct_preparation',
-        {
-            'kind': 'constancy',
-            'target': target,
-            'task': shape['task'],
-            'known': len(present),
-            'distinct': distinct,
-        },
-    )
+    direct_admission.missing_features(context, scoring, target, table.primary_key, call)
+    direct_admission.constancy(context, target, shape['task'], call)
     return schema

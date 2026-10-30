@@ -661,6 +661,18 @@ def error_from_core(
         if said and said[-1] not in '.!?':
             said += '.'
         said = f'{said} {_said(part, fields)}'
+    if sentence == 'direct_native_related':
+        details = {'related_tables': _held()['direct_tables'](fields)}
+    elif sentence in {
+        'direct_frame', 'direct_task', 'direct_empty', 'direct_known_target',
+        'direct_native_multilabel', 'direct_native_target_missing',
+        'direct_native_target_scored', 'direct_native_extra',
+        'direct_native_duplicate_columns', 'direct_native_column_names',
+        'direct_native_missing',
+    }:
+        details = {}
+    if sentence == 'direct_native_multilabel':
+        cls = StructuredDataError
     made = _instance(cls, said, code, details)
     made._sentence = sentence
     return made

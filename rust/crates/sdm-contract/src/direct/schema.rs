@@ -144,6 +144,10 @@ pub enum ObservedSchema {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum PreparationObservation {
+    ConstancyPopulation { empty: Option<bool>, diverse: Option<bool> },
+    ConstancyKind { classification: bool, regression: Option<bool> },
+    ConstancyNotice { classification: bool },
+    Admission { observation: AdmissionObservation },
     Arguments {
         shape: DirectShape,
     },
@@ -183,4 +187,22 @@ pub enum PreparationObservation {
         column: String,
         count: usize,
     },
+}
+
+/// Reached native constructor facts, before later frame/schema observations.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum AdmissionObservation {
+    Frame { valid: bool, row_hint: bool, parameter: String, native_type: String },
+    Related { present: bool },
+    Task { accepted: bool },
+    TargetCells { containers: bool },
+    ContextRows { empty: bool },
+    ContextTarget { present: bool },
+    PredictTarget { present: bool },
+    KnownTarget { present: bool },
+    ExtraColumns { present: bool },
+    DuplicateColumns { present: bool },
+    ColumnTypes { non_strings: bool },
+    MissingFeatures { present: bool },
 }
