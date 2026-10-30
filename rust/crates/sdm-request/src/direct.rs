@@ -160,20 +160,20 @@ pub fn scored_column(
     arriving: Option<Dtype>,
     supports: fn(Stype, Dtype) -> bool,
 ) -> Result<(), CoreError> {
-    if let Some(dtype) = arriving {
-        if let Some(column) = table.columns.iter().find(|column| &column.name == name) {
-            let flags = flags.iter().find(|flags| &flags.name == name);
-            if flags.is_some_and(|flags| flags.untyped && !flags.stype_declared) {
-                return Ok(());
-            }
-            if !supports(column.stype, dtype) {
-                return Err(invalid(Sentence::DirectScored)
-                    .with_field("arriving", Detail::text(dtype.wire_name()))
-                    .with_field("column", Detail::text(name))
-                    .with_field("dtype", Detail::text(column.dtype.wire_name()))
-                    .with_field("stype", Detail::text(stype_name(column.stype)))
-                    .with_field("table", Detail::text(&table.name)));
-            }
+    if let Some(dtype) = arriving
+        && let Some(column) = table.columns.iter().find(|column| column.name == name)
+    {
+        let flags = flags.iter().find(|flags| flags.name == name);
+        if flags.is_some_and(|flags| flags.untyped && !flags.stype_declared) {
+            return Ok(());
+        }
+        if !supports(column.stype, dtype) {
+            return Err(invalid(Sentence::DirectScored)
+                .with_field("arriving", Detail::text(dtype.wire_name()))
+                .with_field("column", Detail::text(name))
+                .with_field("dtype", Detail::text(column.dtype.wire_name()))
+                .with_field("stype", Detail::text(stype_name(column.stype)))
+                .with_field("table", Detail::text(&table.name)));
         }
     }
     Ok(())
