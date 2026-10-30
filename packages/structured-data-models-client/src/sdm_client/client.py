@@ -41,6 +41,7 @@ from sdm_client.errors import (
     UnknownModelError,
     UnsupportedRequestError,
 )
+from sdm_client.explanations import GradientExplanations
 from sdm_client.models import MODELS, Model, spec_for
 from sdm_client.request import (
     Question,
@@ -48,7 +49,7 @@ from sdm_client.request import (
     _envelope_rows,
     warn_of_rows_scored_from_their_own_answers,
 )
-from sdm_client.result import GradientExplanations, PredictionResult
+from sdm_client.result import PredictionResult
 from sdm_client.schema import _as_key_tuple
 from sdm_client.wire.keys import (
     _named_by,

@@ -45,15 +45,20 @@ def relational(sdm):
 def tabular_request() -> Callable[..., Request]:
     """Build a single-table request: 20 labelled context rows, ``rows`` to score.
 
-    A classification target alternates 0/1; a regression target is a float.
-    ``keyed=False`` drops the ``row_id`` column, so the rows have no key.
+    A classification target alternates between ``classes`` (0/1 unless
+    given); a regression target is a float. ``keyed=False`` drops the
+    ``row_id`` column, so the rows have no key.
     """
 
     def build(
-        rows: int = 1, task: str = 'classification', keyed: bool = True
+        rows: int = 1,
+        task: str = 'classification',
+        keyed: bool = True,
+        classes: Sequence[Any] = (0, 1),
     ) -> Request:
         labels = [
-            i % 2 if task == 'classification' else float(i) for i in range(20)
+            classes[i % 2] if task == 'classification' else float(i)
+            for i in range(20)
         ]
         context = pd.DataFrame(
             {

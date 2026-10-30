@@ -370,6 +370,130 @@ def test_the_flat_table_names_each_output_as_the_frame_does(
     assert set(named) <= set(result.to_pandas().columns)
 
 
+@pytest.mark.parametrize(
+    ('classes', 'spelled', 'columns'),
+    [
+        (
+            (False, True),
+            ('false', 'true'),
+            {'probability_False', 'probability_True'},
+        ),
+        ((0, 1), ('0', '1'), {'probability_0', 'probability_1'}),
+        (('no', 'yes'), ('no', 'yes'), {'probability_no', 'probability_yes'}),
+    ],
+    ids=['boolean', 'integer', 'string'],
+)
+def test_each_class_is_named_by_the_frames_column_for_it(
+    tabular_request, gradient_explanation, classes, spelled, columns
+):
+    """An explained class probability is named exactly as the result frame
+    names that class's column, whatever the target's type.
+
+    Assumptions:
+    - The target holds ``classes``; the NIM spells them ``spelled`` both as
+      the keys of ``probabilities`` and as each explained output's ``class``,
+      as it does live (a boolean as lowercase ``'true'``/``'false'``).
+    """
+    adapter = TabularAdapter()
+    (envelope,) = adapter.prediction_plan(
+        tabular_request(classes=classes), EXPLAIN
+    )
+    outputs = [{'kind': 'probability', 'class': name} for name in spelled]
+    result = adapter.normalize(
+        response(
+            id='[90]',
+            probabilities=dict(zip(spelled, (0.25, 0.75), strict=True)),
+            explanation=gradient_explanation(
+                outputs=outputs,
+                row=0,
+                columns=['age'],
+                gradients=[[0.1], [0.9]],
+            ),
+        ),
+        EXPLAIN,
+        envelope,
+    )
+
+    named = set(result.explanations.to_pandas()['output'])
+
+    assert named == columns
+    assert named <= set(result.to_pandas().columns)
+
+
+def test_a_regressions_outputs_keep_their_names(
+    tabular_request, gradient_explanation
+):
+    """The point prediction and each quantile are named ``prediction`` and
+    ``quantile_<level>``, as the frame names them.
+
+    Assumptions:
+    - A regression explained by its mean and two quantile levels, which the
+      NIM returns keyed by level as text.
+    """
+    adapter = TabularAdapter()
+    (envelope,) = adapter.prediction_plan(
+        tabular_request(task='regression'), EXPLAIN
+    )
+    outputs = [
+        {'kind': 'prediction', 'statistic': 'mean'},
+        {'kind': 'quantile', 'level': 0.1},
+        {'kind': 'quantile', 'level': 0.9},
+    ]
+    result = adapter.normalize(
+        response(
+            id='[90]',
+            quantiles={'0.1': 1.0, '0.9': 3.0},
+            explanation=gradient_explanation(
+                outputs=outputs,
+                row=0,
+                columns=['age'],
+                gradients=[[0.1]] * 3,
+            ),
+        ),
+        EXPLAIN,
+        envelope,
+    )
+
+    named = set(result.explanations.to_pandas()['output'])
+
+    assert named == {'prediction', 'quantile_0.1', 'quantile_0.9'}
+
+
+def test_a_boolean_class_keeps_its_spelling_in_outputs(
+    tabular_request, gradient_explanation
+):
+    """Naming a boolean class as the frame does leaves the entry's
+    ``outputs`` as the NIM returned them.
+
+    Assumptions:
+    - A boolean target, explained under the NIM's lowercase class names.
+    """
+    adapter = TabularAdapter()
+    (envelope,) = adapter.prediction_plan(
+        tabular_request(classes=(False, True)), EXPLAIN
+    )
+    outputs = [
+        {'kind': 'probability', 'class': 'false'},
+        {'kind': 'probability', 'class': 'true'},
+    ]
+    result = adapter.normalize(
+        response(
+            id='[90]',
+            probabilities={'false': 0.25, 'true': 0.75},
+            explanation=gradient_explanation(
+                outputs=outputs,
+                row=0,
+                columns=['age'],
+                gradients=[[0.1], [0.9]],
+            ),
+        ),
+        EXPLAIN,
+        envelope,
+    )
+
+    assert result.explanations[90]['outputs'] == outputs
+
+
 def test_the_flat_table_of_no_explanation_is_empty_with_its_columns(
     tabular_request,
 ):

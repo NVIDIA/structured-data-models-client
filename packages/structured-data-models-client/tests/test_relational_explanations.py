@@ -686,3 +686,33 @@ def test_the_flat_table_names_each_output_as_the_frame_does(explained):
 
     assert named == {'probability_no', 'probability_yes'}
     assert named <= set(explained.to_pandas().columns)
+
+
+def test_a_boolean_class_is_named_by_the_frames_column_for_it(
+    gradient_explanation,
+):
+    """With a boolean target, ``output`` names the frame's
+    ``probability_True``/``probability_False``, not the NIM's lowercase class.
+
+    Assumptions:
+    - The target is declared ``bool``; the NIM keys ``probabilities`` and
+      names each explained ``class`` as ``'false'``/``'true'``, as seen live.
+    """
+    payload = gathered(5, 7)
+    payload['task']['target']['dtype'] = 'bool'
+    answer = nim_answer(payload, gradient_explanation)
+    for record in answer['predictions']:
+        record['prediction'] = 'true'
+        record['probabilities'] = {'false': 0.4, 'true': 0.6}
+        for output, name in zip(
+            record['explanation']['details']['outputs'],
+            ('false', 'true'),
+            strict=True,
+        ):
+            output['class'] = name
+    result = RelationalAdapter().normalize(answer, EXPLAIN, payload)
+
+    named = set(result.explanations.to_pandas()['output'])
+
+    assert named == {'probability_False', 'probability_True'}
+    assert named <= set(result.to_pandas().columns)
