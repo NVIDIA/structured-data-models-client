@@ -521,6 +521,116 @@ def test_a_split_request_keeps_row_index_keys_apart(gradient_explanation):
     assert sorted(merged.explanations) == list(merged.to_pandas()['row_index'])
 
 
+def _entry(gradient: float) -> dict:
+    """A decoded tabular entry: one regression output over ``age``."""
+    return {
+        'outputs': [{'kind': 'regression'}],
+        'instance': {'columns': ['age'], 'gradients': [[gradient]]},
+    }
+
+
+def test_hand_built_parts_with_unique_ids_merge_under_their_ids(
+    hand_built_result,
+):
+    """Hand-built parts whose ids differ merge keyed by id, as before.
+
+    Assumptions:
+    - Each part is built by hand with a plain-dict ``explanations``, so no
+      row positions are recorded.
+    - The parts explain users ``u5`` and ``u7``, at rows 0 and 1.
+    """
+    from sdm_client.result import PredictionResult
+
+    merged = PredictionResult.merge(
+        [
+            hand_built_result([(0, 'u5')], {'u5': _entry(1.0)}),
+            hand_built_result([(1, 'u7')], {'u7': _entry(2.0)}),
+        ]
+    )
+
+    assert sorted(merged.explanations) == ['u5', 'u7']
+    assert list(merged.explanations.to_pandas().columns)[0] == 'id'
+
+
+def test_hand_built_parts_repeating_an_id_merge_by_row_index(
+    hand_built_result,
+):
+    """Hand-built parts that both explain ``u5`` keep both entries, each under
+    the ``row_index`` its row has in the merged frame.
+
+    Assumptions:
+    - Each part is built by hand with a plain-dict ``explanations``, so no
+      row positions are recorded; the items carry them.
+    - The first part's row is 0 and the second's is 1.
+    """
+    from sdm_client.result import PredictionResult
+
+    merged = PredictionResult.merge(
+        [
+            hand_built_result([(0, 'u5')], {'u5': _entry(1.0)}),
+            hand_built_result([(1, 'u5')], {'u5': _entry(2.0)}),
+        ]
+    )
+
+    assert sorted(merged.explanations) == list(merged.to_pandas()['row_index'])
+    assert sorted(merged.explanations) == [0, 1]
+    assert merged.explanations[1]['instance']['gradients'] == [[2.0]]
+    assert list(merged.explanations.to_pandas().columns)[0] == 'row_index'
+
+
+def test_hand_built_forecast_parts_repeating_an_id_merge_by_row_and_step(
+    hand_built_result,
+):
+    """Hand-built forecast parts that both explain ``('u5', 1)`` are keyed by
+    ``(row_index, forecast_step)``, as a forecast from ``predict()`` is.
+
+    Assumptions:
+    - Each part is built by hand, keyed by ``(id, forecast_step)``, and its
+      item carries ``forecast_step``.
+    - The first part's row is 0 and the second's is 1, both at step 1.
+    """
+    from sdm_client.result import PredictionResult
+
+    merged = PredictionResult.merge(
+        [
+            hand_built_result([(0, 'u5', 1)], {('u5', 1): _entry(1.0)}),
+            hand_built_result([(1, 'u5', 1)], {('u5', 1): _entry(2.0)}),
+        ]
+    )
+
+    assert sorted(merged.explanations) == [(0, 1), (1, 1)]
+    flat = merged.explanations.to_pandas()
+    assert list(flat.columns)[:2] == ['row_index', 'forecast_step']
+
+
+@pytest.mark.parametrize('key', ['u9', ('u5', 9)])
+def test_hand_built_parts_whose_rows_cannot_be_found_are_refused(
+    hand_built_result, key
+):
+    """Repeated ids whose rows cannot be found from the items raise a
+    ``StructuredDataError`` naming the remedy, not a ``KeyError``.
+
+    Assumptions:
+    - Both parts explain ``u5``, so the merge must key by row.
+    - The second part's key matches none of its items: an id it does not
+      score, or a step it does not carry.
+    """
+    from sdm_client.errors import StructuredDataError
+    from sdm_client.result import PredictionResult
+
+    parts = [
+        hand_built_result([(0, 'u5')], {'u5': _entry(1.0)}),
+        hand_built_result([(1, 'u5')], {'u5': _entry(2.0), key: _entry(3.0)}),
+    ]
+
+    with pytest.raises(StructuredDataError) as raised:
+        PredictionResult.merge(parts)
+
+    assert raised.value.code == 'INVALID_REQUEST'
+    assert 'predict()' in str(raised.value)
+    assert 'row_index' in str(raised.value)
+
+
 # --- a forecast ---------------------------------------------------------------
 
 
