@@ -104,7 +104,13 @@ The dedicated frozen acceptance compares context and encoded row order, results,
 The ordinary semantic checks also run without runtime-specific receipts; neither path silently substitutes a different runtime oracle.
 No product change was needed for these cases.
 
-The next producer increment addresses NumPy 1.26 AVX512 with a distinct eight-lane profile: unconditional entry, a 64-element recursive network cutoff and zero-filled masked index lanes.
+The increment landed at `7b022ce92` addresses NumPy 1.26 AVX512 with a distinct eight-lane profile: unconditional entry, a 64-element recursive network cutoff and zero-filled masked index lanes.
 Its existing partition and GNU depth fallback remain shared; the host alone selects the audited producer profile.
 Independent vectors are transcribed from the pinned upstream network headers and cover ordinary duplicates, maximum/infinity keys and nonzero-index subranges.
 Those vectors establish network behavior, not native AVX512 public execution; live AVX512 evidence is still absent on this host.
+
+Object-held Timestamp support is the next connected temporal increment.
+Frozen public witnesses distinguish instant comparison from mixed Timestamp/datetime wall-clock comparison, including timezone identity, fold, submicrosecond precision and years outside Python datetime range.
+Native tick values and resolution preserve wide instants without forcing nanoseconds into int64 or eagerly calling range-sensitive timezone methods.
+The core must preserve separate LT/GT/EQ outcomes and reached year-range refusals; a total-order shortcut is not valid for ambiguous mixed temporal owners.
+Standard pandas 2 pytz and pandas 3 ZoneInfo owners are part of the planned coverage; arbitrary custom timezone callbacks remain unresolved.
