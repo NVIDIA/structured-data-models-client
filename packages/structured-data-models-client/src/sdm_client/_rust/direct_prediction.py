@@ -154,7 +154,16 @@ def resolve(
     scoring = request.predict.instance_table
     declared_dtypes: dict[str, str | None] = {}
     for name, column in table.columns.items():
-        declared = None if column.untyped else column.dtype
+        # Normalize each reached declaration in Rust, retaining the native key
+        # and the reference's per-column insertion order.
+        untyped = column.untyped
+        declared = call(
+            'check_direct_preparation',
+            {
+                'kind': 'declarations',
+                'columns': [(name, '' if untyped else column.dtype, untyped)],
+            },
+        )['dtypes'][0][1]
         declared_dtypes[name] = declared
     for name in scoring.columns:
         if name in declared_dtypes:
