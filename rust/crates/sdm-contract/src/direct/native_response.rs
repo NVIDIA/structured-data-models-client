@@ -7,8 +7,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use crate::data::AttachmentId;
-use super::{AttributedDirectRow, BoundDirectCall, DecodedDirectRow, ResponseScope};
-use crate::Scalar;
+use super::BoundDirectCall;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -81,57 +80,40 @@ pub struct CheckedResponseField {
     pub is_null: bool,
 }
 
-/// Identity facts after all native fields were consumed and validated.
+/// A prepared, unsent call. Native response owners never cross this boundary.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct NativeRowIdentity {
-    pub row_index: String,
-    pub id: Option<String>,
-}
+pub struct PreparedDirectCall { pub value: AttachmentId }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct NativeResponseIdentity {
-    pub model: String,
-    pub request_id: String,
-    pub rows: Vec<NativeRowIdentity>,
-}
+pub struct NativeDirectCall { pub bound: BoundDirectCall, pub payload: AttachmentId }
 
-/// A prepared, unsent call. No successful model-call accounting is implied.
+/// Reached facts from the mutable native payload and parsed response.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct PreparedDirectCall {
-    pub value: AttachmentId,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct NativeDirectCall {
-    pub bound: BoundDirectCall,
-    pub payload: AttachmentId,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct NativeLayoutInput {
-    pub call: NativeDirectCall,
-    pub response: NativeResponseIdentity,
-    /// None requests identity decoding; Some validates completed attribution.
-    pub attributed: Option<Vec<AttributedDirectRow>>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct NativeLayoutRequest {
-    pub input: AttachmentId,
-    pub payload: AttachmentId,
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum NativeLayoutInput {
+    Rows { is_list: bool },
+    KeyCount { count: usize },
+    Positions { indices: Vec<String> },
+    Position { index: String, rows: usize, prior: bool },
+    IdLength { length: usize },
+    Parsed { json: bool, value: super::NativeParsedValue },
+    Match { index: usize, different: Option<bool> },
+    Replacement { key_is_null: bool },
+    Complete { indices: Vec<String>, rows: usize },
+    TaskKind { points: Vec<u32> },
+    TargetDtype { numeric: bool },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum NativeLayoutResult {
-    Decoded { scope: ResponseScope, rows: Vec<DecodedDirectRow> },
-    Complete { rows: Vec<(usize, Option<Scalar>)>, restore_dtype: Option<String> },
+    Decision { selected: bool },
+    Positions { prior: Vec<bool> },
+    Position { index: usize },
+    Parsed { literal: bool, stringify: bool },
+    Complete,
 }
 
 /// Native conversion outcomes; policy selects field replacement.

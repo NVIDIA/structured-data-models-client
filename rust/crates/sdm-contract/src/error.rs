@@ -758,6 +758,7 @@ sentences! {
     DirectFrame = "direct_frame", E::InvalidRequest;
     DirectKnownTarget = "direct_known_target", E::InvalidRequest;
     DirectMissing = "direct_missing", E::InvalidRequest;
+    DirectNativeIdMismatch = "direct_native_id_mismatch", E::InvalidResponse;
     DirectNativeFailure = "direct_native_failure", E::InvalidRequest;
     DirectNullableCast = "direct_nullable_cast", E::InvalidRequest;
     DirectOptionInteger = "direct_option_integer", E::InvalidRequest;

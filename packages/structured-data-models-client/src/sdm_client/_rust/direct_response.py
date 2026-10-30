@@ -168,64 +168,33 @@ class Reader:
 
 def finish(
     finished: Any, client: Any, model_id: str, options: Any,
-    call: Callable[..., Any], run_operation: Callable[..., Any],
-    attribute: Callable[..., Any],
+    call: Callable[..., Any],
 ) -> Any:
-    import dataclasses
     import json
 
-    from sdm_client._rust import codec, results
+    from sdm_client._rust import results
     from sdm_client._rust.predict import _adapter
     from sdm_client.result import PredictionResult
 
     prepared = results.expect(finished.result, results.PreparedDirectCall)
     description = json.loads(finished.take(prepared.value))
-    payload_bytes = finished.take(description['payload'])
-    payload = json.loads(payload_bytes)
-    payload['inference'] = options
-    # The native transport owns open checks, serialization and endpoint wrapping.
+    payload = json.loads(finished.take(description['payload']))
+    if 'inference' in payload:
+        payload['inference'] = options
+    # Transport may mutate this payload. The reference consumes that same
+    # object only after parsing the complete native response.
     response = Reader(call).response(client._send(_adapter(client, model_id), payload), model_id)
-    description['payload'] = 2
-    identity = {
-        'model': response.model,
-        'request_id': response.request_id,
-        'rows': [
-            {'row_index': str(item.row_index), 'id': item.id}
-            for item in response.items
-        ],
-    }
-
-    def layout(attributed: Any) -> Any:
-        answer = run_operation(
-            'layout_native_direct',
-            {'call': description, 'response': identity, 'attributed': attributed},
-            {2: payload_bytes}, payload=2,
-        )
-        value = results.expect(answer.result, results.DirectValue)
-        return json.loads(answer.take(value.value))
-
-    decoded = layout(None)
-    if any(item.id is not None and type(item.id) is not str for item in response.items):
-        attributed = []
-        for ordinal, item in enumerate(response.items):
-            row = decoded['rows'][ordinal]
-            required = call('check_native_direct_rows', {'scope': decoded['scope'], 'rows': [row]})[0]
-            if required and type(item.id) is not str:
-                identity['rows'][ordinal]['id'] = str(item.id)
-                # Only effectful identifier subclasses need a refreshed view.
-                decoded = layout(None)
-                row = decoded['rows'][ordinal]
-            attributed.extend(attribute(decoded['scope'], [row]))
-    else:
-        attributed = attribute(decoded['scope'], decoded['rows'])
-    completed = layout(attributed)
-    items = [
-        response.items[ordinal] if replacement is None else dataclasses.replace(
-            response.items[ordinal], id=codec.decode_scalar(replacement)
-        )
-        for ordinal, replacement in completed['rows']
-    ]
-    restored = restore(items, completed['restore_dtype'], call)
+    items = attribute(response.items, payload, call)
+    task = (payload or {}).get('task', {})
+    kind = str(task.get('kind', ''))
+    classified = call('layout_native_direct', {'kind': 'task_kind', 'points': [ord(char) for char in kind]})['selected']
+    dtype = None
+    if classified:
+        candidate = task.get('target', {}).get('dtype')
+        numeric = bool(candidate) and candidate.startswith(('int', 'float', 'bool'))
+        if call('layout_native_direct', {'kind': 'target_dtype', 'numeric': bool(numeric)})['selected']:
+            dtype = candidate
+    restored = restore(items, dtype, call)
     result = PredictionResult(
         model=response.model, request_id=response.request_id, items=restored,
         metadata=response.metadata, outputs=description['bound']['outputs'],
@@ -240,6 +209,77 @@ def finish(
     ]
     call('observe_direct_outputs', {**query, 'present': present})
     return result
+
+
+def named_key(answered: str, call: Callable[..., Any]) -> Any:
+    from sdm_client._rust.direct import (
+        _native_json, _native_literal, _native_value_call, _parsed_value,
+    )
+
+    if not call('layout_native_direct', {'kind': 'id_length', 'length': len(answered)})['selected']:
+        return None
+    native, failure = _native_json(answered)
+    decision = _native_value_call({
+        'op': 'layout_native_direct', 'kind': 'parsed', 'json': True,
+        'value': _parsed_value(native, failure),
+    }, failure)
+    if decision['literal']:
+        assert failure is not None
+        native, failure = _native_literal(answered, failure)
+        decision = _native_value_call({
+            'op': 'layout_native_direct', 'kind': 'parsed', 'json': False,
+            'value': _parsed_value(native, failure),
+        }, failure)
+    return str(native[0]) if decision['stringify'] else None
+
+
+def attribute(items: tuple[PredictionItem, ...], payload: dict[str, Any], call: Callable[..., Any]) -> list[PredictionItem]:
+    import dataclasses
+
+    from sdm_client._rust import errors
+    from sdm_client.wire.dtypes import as_declared
+
+    table = payload.get('predict', {}).get('instance_table', {})
+    rows = table.get('rows')
+    if not call('layout_native_direct', {'kind': 'rows', 'is_list': isinstance(rows, list)})['selected']:
+        return list(items)
+    columns = table.get('columns') or []
+    key = payload.get('schema', {}).get('instance_table', {}).get('primary_key') or []
+    single = call('layout_native_direct', {'kind': 'key_count', 'count': len(key)})['selected']
+    key_name = key[0] if single else None
+    key_dtype = (
+        payload.get('schema', {}).get('instance_table', {}).get('columns', {}).get(key_name, {}).get('dtype')
+        if key_name else None
+    )
+    keys = (
+        [as_declared(row[columns.index(key_name)], key_dtype) for row in rows]
+        if key_name and key_name in columns else None
+    )
+    # Retain the actual native text set: equality/hash overrides are observable.
+    keys_in_batch = {str(value) for value in keys or ()}
+    indices = [str(item.row_index) for item in items]
+    prior = call('layout_native_direct', {'kind': 'positions', 'indices': indices})['prior']
+    attributed = []
+    for ordinal, item in enumerate(items):
+        index = call('layout_native_direct', {
+            'kind': 'position', 'index': indices[ordinal], 'rows': len(rows), 'prior': prior[ordinal],
+        })['index']
+        if keys is not None and item.id is not None:
+            answered = str(item.id)
+            name = named_key(answered, call)
+            if name is None and answered in keys_in_batch:
+                name = answered
+            different = None if name is None else bool(name != str(keys[index]))
+            with errors.holding(
+                direct_response_id=lambda fields, item=item: item.id,
+                direct_response_key=lambda fields, index=index: keys[index],
+            ):
+                call('layout_native_direct', {'kind': 'match', 'index': index, 'different': different})
+        value = None if keys is None else keys[index]
+        replace = call('layout_native_direct', {'kind': 'replacement', 'key_is_null': value is None})['selected']
+        attributed.append(dataclasses.replace(item, id=value) if replace else item)
+    call('layout_native_direct', {'kind': 'complete', 'indices': indices, 'rows': len(rows)})
+    return attributed
 
 
 def restore(items: list[PredictionItem], dtype: str | None, call: Callable[..., Any]) -> list[PredictionItem]:

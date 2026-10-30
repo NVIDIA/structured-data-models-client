@@ -50,7 +50,9 @@ Source-backed materialization -> existing Phase 3 path (unchanged)
   Rust constructs the logical envelope and its fixed inference slot; Python binds the retained native value at send time and calls the existing native transport.
   For this alternative, native transport owns serialization, endpoint wrapping and wrapped-size enforcement, preserving open-check/error order and custom transport behavior.
   Built-in byte calls with ordinary options and warehouse paths remain unchanged; custom transports retain their native `predict` method and decoded response owners.
-  Response attribution still belongs to Rust and uses the encoded row layout.
+  Response attribution still belongs to Rust.
+  Native transports retain the mutable payload object; after response parsing, observe only the layout fields the reference consumes from that object, including transport mutations.
+  Keep presentation identities and actual key owners in Python; unconsumed response text never crosses a UTF-8-only boundary.
   Closed response-field observations preserve native parse order without JSON-serializing opaque result values.
   Rust selects target restoration and probability-key collision policy; Python performs the reached `as_declared` casts, native equality/hash operations and presentation replacements.
   Requested-output presence uses reached native comparisons, with Rust selecting the fields and missing-output notice.

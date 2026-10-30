@@ -8,7 +8,6 @@ use super::{entity_scalar, entity_text, invalid};
 use crate::predict::{self, AnswerType, Entity, Part};
 use indexmap::{IndexMap, IndexSet};
 use sdm_contract::direct::*;
-use sdm_contract::direct::native_response::{NativeResponseIdentity, NativeRowIdentity};
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 use sdm_wire::json::Value;
 use sdm_wire::response::PredictionResponse;
@@ -62,19 +61,6 @@ pub fn decode(
     response: &PredictionResponse,
     float_text: fn(f64) -> String,
 ) -> Result<(ResponseScope, Vec<DecodedDirectRow>), CoreError> {
-    let identity = NativeResponseIdentity {
-        model: response.model.clone(), request_id: response.id.clone(),
-        rows: response.predictions.iter().map(|item| NativeRowIdentity {
-            row_index: item.row_index.to_string(), id: item.id.clone(),
-        }).collect(),
-    };
-    decode_identities(payload, &identity, float_text)
-}
-
-/// Attribute checked native identities without serializing opaque response values.
-pub fn decode_identities(
-    payload: &Value, response: &NativeResponseIdentity, float_text: fn(f64) -> String,
-) -> Result<(ResponseScope, Vec<DecodedDirectRow>), CoreError> {
     let scored = payload
         .get("predict")
         .and_then(|p| p.get("instance_table"))
@@ -116,23 +102,23 @@ pub fn decode_identities(
         .collect();
     let mut first = IndexMap::new();
     let decoded = response
-        .rows
+        .predictions
         .iter()
         .enumerate()
         .map(|(ordinal, item)| {
             let prior_ordinal = first.get(&item.row_index).copied();
-            first.entry(item.row_index.clone()).or_insert(ordinal);
+            first.entry(item.row_index).or_insert(ordinal);
             let key = keys
                 .as_ref()
                 .and_then(|keys| {
-                    item.row_index.parse::<usize>()
+                    usize::try_from(item.row_index)
                         .ok()
                         .and_then(|at| keys.get(at))
                 })
                 .map(entity_scalar);
             DecodedDirectRow {
                 ordinal,
-                row_index: item.row_index.clone(),
+                row_index: item.row_index.to_string(),
                 id: item.id.clone(),
                 key,
                 raw_in_batch: item.id.as_ref().is_some_and(|id| names.contains(id)),
@@ -149,9 +135,9 @@ pub fn decode_identities(
         ResponseScope {
             version: DIRECT_RESPONSE_VERSION,
             model: response.model.clone(),
-            request_id: response.request_id.clone(),
+            request_id: response.id.clone(),
             call_request_id: call_request_id.into(),
-            response_rows: response.rows.len(),
+            response_rows: response.predictions.len(),
             scoring_rows: rows.len(),
         },
         decoded,
@@ -173,26 +159,7 @@ fn row_index(scope: &ResponseScope, row: &DecodedDirectRow) -> Result<usize, Cor
     {
         return Err(protocol("decoded row ordinal is incoherent"));
     }
-    if sdm_wire::response::integer_text(&row.row_index).as_deref() != Some(row.row_index.as_str()) {
-        return Err(protocol("decoded row index is not canonical"));
-    }
-    let at = row
-        .row_index
-        .parse::<usize>()
-        .ok()
-        .filter(|at| *at < scope.scoring_rows)
-        .ok_or_else(|| {
-            invalid(Sentence::TabularRowBounds)
-                .with_field("index", Detail::text(&row.row_index))
-                .with_field(
-                    "rows",
-                    Detail::Scalar(Scalar::UInt64(scope.scoring_rows as u64)),
-                )
-        })?;
-    if row.prior_ordinal.is_some() {
-        return Err(invalid(Sentence::TabularRowRepeated)
-            .with_field("index", Detail::Scalar(Scalar::UInt64(at as u64))));
-    }
+    let at = validate_position(&row.row_index, scope.scoring_rows, row.prior_ordinal.is_some())?;
     if let Some(key) = &row.key {
         entity(key)?;
     }
@@ -334,7 +301,7 @@ fn value(value: &BuiltinValue) -> Result<(), CoreError> {
 fn native_failure(stage: &str) -> CoreError {
     invalid(Sentence::DirectNativeFailure).with_field("stage", Detail::text(stage))
 }
-fn parsed_member(
+pub(crate) fn parsed_member(
     root: &BuiltinValue,
     members: &Option<Vec<BuiltinValue>>,
     json: bool,
@@ -528,25 +495,8 @@ pub fn layout(
             "attributed rows disagree with decoded response scope",
         ));
     }
-    validate_attributed(scope, &rows, &attributed, float_text)?;
-    let mut part =
-        predict::layout_with_answers(payload, response, float_text, answer_type(payload)?)?;
-    for (row, accepted) in part.rows.iter_mut().zip(attributed) {
-        row.id = entity(&accepted.id)?;
-    }
-    Ok(part)
-}
-
-/// Validate completed attribution without touching retained presentation fields.
-pub fn validate_attributed(
-    scope: &ResponseScope, rows: &[DecodedDirectRow], attributed: &[AttributedDirectRow],
-    float_text: fn(f64) -> String,
-) -> Result<(), CoreError> {
-    if rows.len() != attributed.len() {
-        return Err(protocol("native attribution has a different row count"));
-    }
     let mut seen = IndexSet::new();
-    for (row, accepted) in rows.iter().zip(attributed) {
+    for (row, accepted) in rows.iter().zip(&attributed) {
         if *row != accepted.row {
             return Err(protocol("attribution source differs from decoded response"));
         }
@@ -600,7 +550,12 @@ pub fn validate_attributed(
             ),
         ));
     }
-    Ok(())
+    let mut part =
+        predict::layout_with_answers(payload, response, float_text, answer_type(payload)?)?;
+    for (row, accepted) in part.rows.iter_mut().zip(attributed) {
+        row.id = entity(&accepted.id)?;
+    }
+    Ok(part)
 }
 
 #[cfg(test)]
@@ -626,8 +581,25 @@ mod tests {
     }
 }
 
-/// Validate position before reaching a native row identifier's text conversion.
-pub fn native_row_requires_text(scope: &ResponseScope, row: &DecodedDirectRow) -> Result<bool, CoreError> {
-    row_index(scope, row)?;
-    Ok(row.key.is_some() && row.id.is_some())
+pub(crate) fn validate_position(index: &str, rows: usize, prior: bool) -> Result<usize, CoreError> {
+    if sdm_wire::response::integer_text(index).as_deref() != Some(index) {
+        return Err(protocol("decoded row index is not canonical"));
+    }
+    let at = index
+        .parse::<usize>()
+        .ok()
+        .filter(|at| *at < rows)
+        .ok_or_else(|| {
+            invalid(Sentence::TabularRowBounds)
+                .with_field("index", Detail::text(index))
+                .with_field(
+                    "rows",
+                    Detail::Scalar(Scalar::UInt64(rows as u64)),
+                )
+        })?;
+    if prior {
+        return Err(invalid(Sentence::TabularRowRepeated)
+            .with_field("index", Detail::Scalar(Scalar::UInt64(at as u64))));
+    }
+    Ok(at)
 }

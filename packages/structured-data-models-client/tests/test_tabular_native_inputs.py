@@ -291,3 +291,82 @@ def test_native_options_keep_databricks_wrapping_once(monkeypatch: pytest.Monkey
         assert sent['inference'] == {'7': 'native-key'}
         outcomes.append((sent, result.items))
     assert outcomes[0] == outcomes[1]
+
+
+def test_native_transport_observes_absent_inference(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen = []
+
+    class NativeEndpoint:
+        url = 'http://localhost'
+
+        def predict(self, payload: dict[str, Any]) -> dict[str, Any]:
+            seen.append('inference' in payload)
+            return {'model': 'kumo-tabular', 'id': 'answer', 'metadata': {},
+                    'predictions': [{'row_index': 0, 'prediction': 1}]}
+
+        def close(self) -> None:
+            pass
+
+    for route in ('', DIRECT):
+        monkeypatch.setenv('SDM_CORE_ROUTES', route)
+        request = Request(pd.DataFrame({'feature': [1, 2], 'target': [0, 1]}),
+                          pd.DataFrame({'feature': [3]}), target='target', task='classification')
+        client(NativeEndpoint()).predict(request, model=KumoTabular())
+    assert seen == [False, False]
+
+
+def test_native_response_retains_unconsumed_unicode(monkeypatch: pytest.MonkeyPatch) -> None:
+    class UnconsumedId(str):
+        def __str__(self) -> str:
+            raise AssertionError('an unkeyed ID must not be converted')
+
+    model = '\ud800'
+    request_id = '\udfff'
+    identifier = UnconsumedId('\ud900')
+    outcomes = []
+
+    class NativeEndpoint:
+        url = 'http://localhost'
+
+        def predict(self, payload: dict[str, Any]) -> dict[str, Any]:
+            return {'model': model, 'id': request_id, 'metadata': {},
+                    'predictions': [{'row_index': 0, 'id': identifier, 'prediction': 1}]}
+
+        def close(self) -> None:
+            pass
+
+    for route in ('', DIRECT):
+        monkeypatch.setenv('SDM_CORE_ROUTES', route)
+        request = Request(pd.DataFrame({'feature': [1, 2], 'target': [0, 1]}),
+                          pd.DataFrame({'feature': [3]}), target='target', task='classification')
+        result = client(NativeEndpoint()).predict(request, model=KumoTabular())
+        assert result.items[0].id is identifier
+        outcomes.append((result.model, result.request_id, result.items))
+    assert outcomes[0] == outcomes[1]
+
+
+def test_native_transport_payload_mutations_reach_layout_and_restoration(monkeypatch: pytest.MonkeyPatch) -> None:
+    outcomes = []
+
+    class NativeEndpoint:
+        url = 'http://localhost'
+
+        def predict(self, payload: dict[str, Any]) -> dict[str, Any]:
+            payload['predict']['instance_table']['rows'][0][0] = 9
+            payload['task']['target']['dtype'] = 'bool'
+            return {'model': 'kumo-tabular', 'id': 'answer', 'metadata': {},
+                    'predictions': [{'row_index': 0, 'id': '[9]', 'prediction': 'false'}]}
+
+        def close(self) -> None:
+            pass
+
+    for route in ('', DIRECT):
+        monkeypatch.setenv('SDM_CORE_ROUTES', route)
+        request = Request(pd.DataFrame({'row_id': [1, 2], 'target': [0, 1]}),
+                          pd.DataFrame({'row_id': [3]}), target='target', task='classification',
+                          inference={'opaque': object()})
+        result = client(NativeEndpoint()).predict(request, model=KumoTabular())
+        assert result.items[0].id == 9
+        assert result.items[0].prediction is False
+        outcomes.append(result.items)
+    assert outcomes[0] == outcomes[1]
