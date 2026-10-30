@@ -168,3 +168,143 @@ fn present_nan_sorts_before_masked_null() {
         check(index, vec![3, 1, 0, 2], false);
     }
 }
+
+#[test]
+fn complex_components_sort_lexicographically_with_missing_labels_last() {
+    for width in [4, 8] {
+        let bits = |v: f64| {
+            if width == 4 {
+                u64::from((v as f32).to_bits())
+            } else {
+                v.to_bits()
+            }
+        };
+        check(
+            facts(
+                TabularIndexValues::Complex {
+                    real_bits: vec![bits(1.0), bits(0.0), bits(1.0), bits(f64::NAN)],
+                    imag_bits: vec![bits(2.0), bits(-1.0), bits(-2.0), bits(0.0)],
+                    width,
+                },
+                vec![false, false, false, true],
+            ),
+            vec![1, 2, 0, 3],
+            false,
+        );
+    }
+}
+
+fn decimal(negative: bool, digits: &str, exponent: i64) -> TabularIndexScalar {
+    TabularIndexScalar::Decimal {
+        negative,
+        digits: digits.into(),
+        exponent,
+    }
+}
+fn objects(values: Vec<TabularIndexScalar>) -> TabularIndexFacts {
+    let mask = vec![false; values.len()];
+    facts(TabularIndexValues::Object { values }, mask)
+}
+#[test]
+fn decimal_scale_signed_zero_and_extreme_exponents_remain_exact() {
+    check(
+        objects(vec![
+            decimal(false, "1", i64::MAX),
+            decimal(false, "100", -2),
+            TabularIndexScalar::Integer { value: "1".into() },
+            decimal(true, "0", i64::MIN),
+            decimal(false, "0", 0),
+            decimal(true, "1", i64::MAX),
+            decimal(false, "1", i64::MIN),
+        ]),
+        vec![5, 3, 4, 6, 1, 2, 0],
+        false,
+    );
+}
+#[test]
+fn fixed_offsets_compare_adjusted_time_and_naive_values_keep_civil_order() {
+    let datetime = |ordinal, micros, offset_micros| TabularIndexScalar::DateTime {
+        ordinal,
+        micros,
+        offset_micros,
+    };
+    check(
+        objects(vec![
+            datetime(10, 0, Some(0)),
+            datetime(10, 3_600_000_000, Some(7_200_000_000)),
+            datetime(9, 82_800_000_000, Some(0)),
+        ]),
+        vec![1, 2, 0],
+        false,
+    );
+    check(
+        objects(vec![datetime(10, 0, None), datetime(9, 0, None)]),
+        vec![1, 0],
+        false,
+    );
+    check(
+        objects(vec![
+            TabularIndexScalar::Date { ordinal: 10 },
+            TabularIndexScalar::Date { ordinal: 9 },
+        ]),
+        vec![1, 0],
+        false,
+    );
+}
+#[test]
+fn object_failure_reasons_keep_first_reached_comparison_owners() {
+    use sdm_contract::tabular::TabularOrderError;
+    let datetime = |offset_micros| TabularIndexScalar::DateTime {
+        ordinal: 10,
+        micros: 0,
+        offset_micros,
+    };
+    for (values, reason) in [
+        (
+            vec![datetime(None), datetime(Some(0))],
+            TabularOrderError::NaiveAwareDatetime,
+        ),
+        (
+            vec![TabularIndexScalar::Date { ordinal: 10 }, datetime(None)],
+            TabularOrderError::DateTimeMismatch,
+        ),
+        (
+            vec![
+                TabularIndexScalar::Complex {
+                    real_bits: 0,
+                    imag_bits: 0
+                };
+                2
+            ],
+            TabularOrderError::Incomparable,
+        ),
+    ] {
+        assert_eq!(
+            order_sampled(&objects(values)).unwrap(),
+            OrderedSampledTabularRows::Refused {
+                reason,
+                left: 1,
+                right: 0
+            }
+        );
+    }
+}
+#[test]
+fn malformed_civil_and_decimal_facts_are_protocol_errors() {
+    for value in [
+        TabularIndexScalar::Date { ordinal: 0 },
+        TabularIndexScalar::DateTime {
+            ordinal: 1,
+            micros: 86_400_000_000,
+            offset_micros: None,
+        },
+        TabularIndexScalar::DateTime {
+            ordinal: 1,
+            micros: 0,
+            offset_micros: Some(86_400_000_000),
+        },
+        decimal(false, "01", 0),
+    ] {
+        assert!(order_sampled(&objects(vec![value])).is_err());
+    }
+}

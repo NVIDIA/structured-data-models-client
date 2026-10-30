@@ -8,12 +8,14 @@ use super::scalar::scalar_argsort;
 use super::{SimdArgsortProfile, SimdKey, simd_argsort};
 use sdm_contract::tabular::{
     OrderedSampledTabularRows as ResultOrder, TabularIndexFacts as Facts,
-    TabularIndexScalar as Atom, TabularIndexValues as Values, TabularOrderError,
-    TabularSortProfile as Profile,
+    TabularIndexScalar as Atom, TabularIndexValues as Values, TabularSortProfile as Profile,
 };
 use sdm_contract::{CoreError, Sentence};
 use std::cell::Cell;
 use std::cmp::Ordering;
+
+mod atoms;
+use atoms::{compare_atom, failure_reason, validate_atom};
 
 fn invalid() -> CoreError {
     CoreError::protocol(
@@ -118,75 +120,6 @@ fn order<T: PartialOrd + Clone>(
     Ok((positions, false))
 }
 
-fn integer(value: &str) -> Result<(&str, bool), CoreError> {
-    let (digits, negative) = value
-        .strip_prefix('-')
-        .map_or((value, false), |v| (v, true));
-    if digits.is_empty()
-        || !digits.bytes().all(|c| c.is_ascii_digit())
-        || digits.len() > 1 && digits.starts_with('0')
-        || negative && digits == "0"
-    {
-        return Err(invalid());
-    }
-    Ok((digits, negative))
-}
-fn compare_integer(a: &str, b: &str) -> Ordering {
-    let (a, na) = integer(a).expect("validated integer");
-    let (b, nb) = integer(b).expect("validated integer");
-    if na != nb {
-        return if na {
-            Ordering::Less
-        } else {
-            Ordering::Greater
-        };
-    }
-    let result = a.len().cmp(&b.len()).then_with(|| a.cmp(b));
-    if na { result.reverse() } else { result }
-}
-fn integer_float(a: &str, b: f64) -> Ordering {
-    if b == f64::INFINITY {
-        return Ordering::Less;
-    }
-    if b == f64::NEG_INFINITY {
-        return Ordering::Greater;
-    }
-    let whole = if b.trunc() == 0.0 {
-        "0".into()
-    } else {
-        format!("{:.0}", b.trunc())
-    };
-    compare_integer(a, &whole)
-        .then_with(|| 0.0_f64.partial_cmp(&b.fract()).expect("nonmissing number"))
-}
-fn atom_type(a: &Atom) -> u8 {
-    if matches!(a, Atom::Text { .. }) { 1 } else { 0 }
-}
-fn compare_atom(a: &Atom, b: &Atom) -> Option<Ordering> {
-    if atom_type(a) != atom_type(b) {
-        return None;
-    }
-    match (a, b) {
-        (Atom::Text { points: a }, Atom::Text { points: b }) => Some(a.cmp(b)),
-        (Atom::Floating { bits: a }, Atom::Floating { bits: b }) => {
-            f64::from_bits(*a).partial_cmp(&f64::from_bits(*b))
-        }
-        (Atom::Floating { bits }, other) => {
-            compare_atom(other, &Atom::Floating { bits: *bits }).map(Ordering::reverse)
-        }
-        (other, Atom::Floating { bits }) => {
-            Some(integer_float(&integer_atom(other), f64::from_bits(*bits)))
-        }
-        _ => Some(compare_integer(&integer_atom(a), &integer_atom(b))),
-    }
-}
-fn integer_atom(a: &Atom) -> String {
-    match a {
-        Atom::Integer { value } => value.clone(),
-        Atom::Boolean { value } => if *value { "1" } else { "0" }.into(),
-        _ => unreachable!("numeric integer atom"),
-    }
-}
 #[derive(Clone)]
 struct Object<'a> {
     value: &'a Atom,
@@ -275,6 +208,23 @@ fn multi(levels: &[Facts], codes: &[Vec<i64>], missing: &[bool]) -> Result<Resul
     Ok(sorted(positions, already_ordered))
 }
 
+#[derive(Clone, Copy, PartialEq)]
+struct Complex {
+    real: f64,
+    imag: f64,
+}
+impl PartialOrd for Complex {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.real.partial_cmp(&other.real).and_then(|real| {
+            if real == Ordering::Equal {
+                self.imag.partial_cmp(&other.imag)
+            } else {
+                Some(real)
+            }
+        })
+    }
+}
+
 pub fn order_sampled(facts: &Facts) -> Result<ResultOrder, CoreError> {
     let mask = &facts.missing;
     let profile = facts.profile;
@@ -331,6 +281,40 @@ pub fn order_sampled(facts: &Facts) -> Result<ResultOrder, CoreError> {
                 return Err(invalid());
             }
         }
+        Values::Complex {
+            real_bits,
+            imag_bits,
+            width,
+        } => {
+            if real_bits.len() != mask.len() || imag_bits.len() != mask.len() {
+                return Err(invalid());
+            }
+            let component = |bits: u64| -> Result<f64, CoreError> {
+                match width {
+                    4 => Ok(f64::from(f32::from_bits(
+                        u32::try_from(bits).map_err(|_| invalid())?,
+                    ))),
+                    8 => Ok(f64::from_bits(bits)),
+                    _ => Err(invalid()),
+                }
+            };
+            let values = real_bits
+                .iter()
+                .zip(imag_bits)
+                .zip(mask)
+                .map(|((real, imag), missing)| {
+                    let value = Complex {
+                        real: component(*real)?,
+                        imag: component(*imag)?,
+                    };
+                    if !missing && (value.real.is_nan() || value.imag.is_nan()) {
+                        return Err(invalid());
+                    }
+                    Ok(value)
+                })
+                .collect::<Result<Vec<_>, CoreError>>()?;
+            order(&values, mask, |v| scalar(v, profile))?
+        }
         Values::Temporal { values } => order(values, mask, |v| scalar(v, profile))?,
         Values::Unicode { values } => {
             if values.iter().flatten().any(|point| *point > 0x10ffff) {
@@ -345,19 +329,21 @@ pub fn order_sampled(facts: &Facts) -> Result<ResultOrder, CoreError> {
             }
             for (v, m) in values.iter().zip(mask) {
                 if !m {
-                    match v {
-                        Atom::Integer { value } => {
-                            integer(value)?;
-                        }
-                        Atom::Floating { bits } if f64::from_bits(*bits).is_nan() => {
-                            return Err(invalid());
-                        }
-                        Atom::Text { points } if points.iter().any(|p| *p > 0x10ffff) => {
-                            return Err(invalid());
-                        }
-                        _ => {}
-                    }
+                    validate_atom(v)?;
                 }
+            }
+            // Mixed decimal/floating comparisons require native context signals,
+            // which this pure-fact operation does not yet represent.
+            let present = || {
+                values
+                    .iter()
+                    .zip(mask)
+                    .filter_map(|(v, m)| (!m).then_some(v))
+            };
+            if present().any(|v| matches!(v, Atom::Decimal { .. }))
+                && present().any(|v| matches!(v, Atom::Floating { .. }))
+            {
+                return Err(invalid());
             }
             let failed = Cell::new(None);
             let v: Vec<_> = values
@@ -390,7 +376,7 @@ pub fn order_sampled(facts: &Facts) -> Result<ResultOrder, CoreError> {
             };
             if let Some((left, right)) = failed.get() {
                 return Ok(ResultOrder::Refused {
-                    reason: TabularOrderError::Incomparable,
+                    reason: failure_reason(&values[left], &values[right]),
                     left,
                     right,
                 });

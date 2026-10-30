@@ -178,6 +178,12 @@ pub enum TabularIndexValues {
         bits: Vec<u64>,
         width: u8,
     },
+    /// Component widths are four or eight bytes; bits preserve native values.
+    Complex {
+        real_bits: Vec<u64>,
+        imag_bits: Vec<u64>,
+        width: u8,
+    },
     Temporal {
         values: Vec<i64>,
     },
@@ -201,10 +207,38 @@ pub enum TabularIndexValues {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum TabularIndexScalar {
-    Integer { value: String },
-    Floating { bits: u64 },
-    Text { points: Vec<u32> },
-    Boolean { value: bool },
+    Integer {
+        value: String,
+    },
+    Floating {
+        bits: u64,
+    },
+    Text {
+        points: Vec<u32>,
+    },
+    Boolean {
+        value: bool,
+    },
+    /// Finite decimal coefficient and exponent, without floating conversion.
+    Decimal {
+        negative: bool,
+        digits: String,
+        exponent: i64,
+    },
+    Date {
+        ordinal: i32,
+    },
+    /// Exact civil datetime with either no timezone or a fixed UTC offset.
+    DateTime {
+        ordinal: i32,
+        micros: u64,
+        offset_micros: Option<i64>,
+    },
+    /// Object complex labels retain their unordered native comparison behavior.
+    Complex {
+        real_bits: u64,
+        imag_bits: u64,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -233,6 +267,8 @@ pub enum OrderedSampledTabularRows {
 #[serde(rename_all = "snake_case")]
 pub enum TabularOrderError {
     Incomparable,
+    DateTimeMismatch,
+    NaiveAwareDatetime,
 }
 
 /// Reached native comparison against the model cap, before frame length reads.
