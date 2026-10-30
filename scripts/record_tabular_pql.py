@@ -165,7 +165,7 @@ def main() -> None:
                     request = PredictiveQuery(
                         'PREDICT data.target FOR EACH data.id', {'data': frame}
                     ).materialize(**arguments, task='regression')
-                except (TypeError, OverflowError) as error:
+                except (TypeError, OverflowError, ValueError) as error:
                     cases[group][family][entrypoint] = {
                         'error': {
                             'type': type(error).__name__,
