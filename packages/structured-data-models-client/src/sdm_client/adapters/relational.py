@@ -40,7 +40,8 @@ from sdm_client.errors import (
     StructuredDataError,
     UnsupportedRequestError,
 )
-from sdm_client.explanations import GradientDecoder
+from sdm_client.explanations import Explanations, GradientDecoder
+from sdm_client.explanations.column import ColumnAnalysis
 from sdm_client.models import (
     DEFAULT_PREDICTION_STATISTIC,
     KUMO_RELATIONAL,
@@ -284,15 +285,27 @@ class RelationalAdapter:
         metadata: Mapping[str, Any] | None = None,
     ) -> PredictionResult:
         named = as_declared_target(_named_entities(items, payload), payload)
+        # A session's scoring call carries no context, so has nothing to
+        # analyse.
+        analysis = (
+            ColumnAnalysis(payload)
+            if 'explanation' in outputs
+            and payload is not None
+            and 'context' in payload
+            else None
+        )
         return PredictionResult(
             model=model,
             request_id=request_id,
             items=named,
             metadata=dict(metadata or {}),
             outputs=outputs,
-            # Read against this call's own tables, whose positions restart at
-            # 0 in every call of a split request.
-            explanations=GradientDecoder(payload or {}).decode(named),
+            explanations=Explanations(
+                # Read against this call's own tables, whose positions restart
+                # at 0 in every call of a split request.
+                GradientDecoder(payload or {}).decode(named),
+                analysis,
+            ),
         )
 
     def explain_error(

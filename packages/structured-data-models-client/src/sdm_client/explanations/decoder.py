@@ -11,7 +11,7 @@ from typing import Any
 
 from sdm_api.generated.tfm_api import PredictionItem
 
-from sdm_client.explanations.explanations import GradientExplanations
+from sdm_client.explanations.gradient import GradientExplanations
 from sdm_client.wire.answers import class_labels
 from sdm_client.wire.dtypes import as_declared
 

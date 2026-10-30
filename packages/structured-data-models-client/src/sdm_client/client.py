@@ -42,7 +42,7 @@ from sdm_client.errors import (
     UnknownModelError,
     UnsupportedRequestError,
 )
-from sdm_client.explanations import GradientExplanations
+from sdm_client.explanations import Explanations, GradientExplanations
 from sdm_client.models import MODELS, Model, spec_for
 from sdm_client.request import (
     Question,
@@ -953,7 +953,9 @@ def _numbered_from(result: PredictionResult, start: int) -> PredictionResult:
             else item
             for item in result.items
         )
-        result._explanations = result._explanations._renumbered(start)
+        result._explanations.gradients = (
+            result._explanations.gradients._renumbered(start)
+        )
     return result
 
 
@@ -1286,7 +1288,7 @@ def _warn_of_steps_that_carry_no_explanation(
     missing = [
         step
         for (_, step), answer in zip(rewritten.parts, answers, strict=True)
-        if not answer.explanations
+        if not answer.explanations.gradients
     ]
     if not missing or len(missing) == len(answers):
         return
@@ -1320,11 +1322,18 @@ def _by_step(
         for (_, step), answer in zip(rewritten.parts, answers, strict=True)
         for item in answer.items
     ]
-    explanations = GradientExplanations._merged(
-        [
-            answer.explanations._at_step(step)
-            for (_, step), answer in zip(rewritten.parts, answers, strict=True)
-        ]
+    # Each step's analysis reads that step's own context; the first step's
+    # stands for the forecast.
+    explanations = Explanations(
+        GradientExplanations._merged(
+            [
+                answer.explanations.gradients._at_step(step)
+                for (_, step), answer in zip(
+                    rewritten.parts, answers, strict=True
+                )
+            ]
+        ),
+        answers[0].explanations.column_analysis if answers else None,
     )
     built = PredictionResult(
         model=answers[0].model if answers else '',
