@@ -44,6 +44,7 @@ pub enum Operation {
     ObserveTabularMembership(crate::direct::DirectInput),
     DecideTabularTask(crate::direct::DirectInput),
     OrderSampledTabularRows(crate::direct::DirectInput),
+    SelectTabularRows(crate::direct::DirectInput),
     CheckTabularCap(crate::direct::DirectInput),
     CheckDirectShape(crate::direct::DirectInput),
     CheckDirectCell(crate::direct::DirectInput),
@@ -105,6 +106,7 @@ impl Operation {
             Operation::ObserveTabularMembership(_) => "observe_tabular_membership",
             Operation::DecideTabularTask(_) => "decide_tabular_task",
             Operation::OrderSampledTabularRows(_) => "order_sampled_tabular_rows",
+            Operation::SelectTabularRows(_) => "select_tabular_rows",
             Operation::CheckTabularCap(_) => "check_tabular_cap",
             Operation::CheckDirectShape(_) => "check_direct_shape",
             Operation::CheckDirectCell(_) => "check_direct_cell",
@@ -157,6 +159,7 @@ impl Operation {
             | Operation::ObserveTabularMembership(v)
             | Operation::DecideTabularTask(v)
             | Operation::OrderSampledTabularRows(v)
+            | Operation::SelectTabularRows(v)
             | Operation::CheckTabularCap(v)
             | Operation::CheckDirectShape(v)
             | Operation::CheckDirectCell(v)
@@ -1601,6 +1604,10 @@ pub struct Predicted {
 #[derive(JsonSchema)]
 #[schemars(deny_unknown_fields)]
 pub struct Attachments {
+    #[schemars(rename = "SelectTabularRows.input")]
+    pub select_tabular_rows_input: crate::tabular::SelectTabularRows,
+    #[schemars(rename = "DirectValue.select_tabular_rows")]
+    pub select_tabular_rows_output: crate::tabular::SelectedTabularRows,
     #[schemars(rename = "CheckTabularCap.input")]
     pub check_tabular_cap_input: crate::tabular::CheckTabularCap,
     #[schemars(rename = "DirectValue.check_tabular_cap")]

@@ -77,3 +77,44 @@ pub(crate) fn order(
 ) -> Result<OrderedSampledTabularRows, CoreError> {
     sdm_engine::index_sort::order_sampled(&input.index)
 }
+
+/// Fuse ordinary expansion, exclusion, target filtering and capacity policy.
+/// Sampling remains after native warning delivery and uses its reached count.
+pub(crate) fn select(input: SelectTabularRows) -> Result<SelectedTabularRows, CoreError> {
+    let (scored, excluded, population) = match input.mode {
+        TabularSelectionMode::Indices { source, requested } => {
+            let expanded = tabular::expand_keys(&source, &requested);
+            if !expanded.missing.is_empty() {
+                return Ok(SelectedTabularRows::Missing {
+                    ordinals: expanded.missing,
+                });
+            }
+            let excluded = expanded.rows.clone();
+            (expanded.rows, excluded, source.len())
+        }
+        TabularSelectionMode::Supplied { source, scoring } => {
+            let excluded = tabular::matching_rows(&source, &scoring);
+            (Vec::new(), excluded, source.len())
+        }
+    };
+    if input.known.len() != population {
+        return Err(CoreError::protocol(
+            Sentence::InvalidMessage,
+            "tabular target validity differs from the source population",
+        ));
+    }
+    let candidates = filter(FilterTabularRows {
+        known: input.known,
+        excluded,
+    })?
+    .positions;
+    let context = decide(DecideTabularContext {
+        population: candidates.len(),
+        requested: input.requested_context,
+    });
+    Ok(SelectedTabularRows::Selected {
+        scored,
+        candidates,
+        context,
+    })
+}

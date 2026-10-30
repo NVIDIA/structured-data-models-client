@@ -210,6 +210,13 @@ pub fn start(
                 crate::direct::value(&asker, &crate::tabular_selection::order(input)?)
             })
         }
+        Operation::SelectTabularRows(request) => {
+            let input: sdm_contract::tabular::SelectTabularRows =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(&asker, &crate::tabular_selection::select(input)?)
+            })
+        }
         Operation::CheckTabularCap(request) => {
             let input: sdm_contract::tabular::CheckTabularCap =
                 take_json(&mut attachments, request.input)?;

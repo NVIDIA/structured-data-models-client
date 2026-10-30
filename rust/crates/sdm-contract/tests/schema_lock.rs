@@ -447,6 +447,14 @@ fn unaccounted(schema: &Value) -> Result<(), String> {
 /// The fields whose attachment is JSON of the contract's, with the entry of
 /// `$defs/Attachments` that locks it.
 const JSON: &[(&str, &str)] = &[
+    (
+        "Operation/select_tabular_rows.input",
+        "SelectTabularRows.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.select_tabular_rows",
+    ),
     ("Operation/check_tabular_cap.input", "CheckTabularCap.input"),
     (
         "OperationResult/direct_value.value",

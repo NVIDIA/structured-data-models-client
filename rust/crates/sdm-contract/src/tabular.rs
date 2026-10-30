@@ -241,3 +241,41 @@ pub struct CheckTabularCap {
 pub struct CheckedTabularCap {
     pub accepted: bool,
 }
+
+/// One ordinary selection composition. Only proven-passive native producers
+/// may supply the complete population before earlier semantic guards finish.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SelectTabularRows {
+    pub mode: TabularSelectionMode,
+    pub known: Vec<bool>,
+    pub requested_context: Option<usize>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum TabularSelectionMode {
+    Indices {
+        source: Vec<TabularKey>,
+        requested: Vec<TabularKey>,
+    },
+    Supplied {
+        source: Vec<TabularKey>,
+        scoring: Vec<TabularKey>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum SelectedTabularRows {
+    Selected {
+        /// Source positions in requested order; empty for supplied frames.
+        scored: Vec<usize>,
+        /// Source positions before any context draw or sampled-index ordering.
+        candidates: Vec<usize>,
+        context: TabularContextDecision,
+    },
+    Missing {
+        ordinals: Vec<usize>,
+    },
+}
