@@ -103,3 +103,8 @@ It covers the actual 10,000-row cap and cap plus one with default/explicit count
 The dedicated frozen acceptance compares context and encoded row order, results, errors and event sequences in the matching current runtime.
 The ordinary semantic checks also run without runtime-specific receipts; neither path silently substitutes a different runtime oracle.
 No product change was needed for these cases.
+
+The next producer increment addresses NumPy 1.26 AVX512 with a distinct eight-lane profile: unconditional entry, a 64-element recursive network cutoff and zero-filled masked index lanes.
+Its existing partition and GNU depth fallback remain shared; the host alone selects the audited producer profile.
+Independent vectors are transcribed from the pinned upstream network headers and cover ordinary duplicates, maximum/infinity keys and nonzero-index subranges.
+Those vectors establish network behavior, not native AVX512 public execution; live AVX512 evidence is still absent on this host.
