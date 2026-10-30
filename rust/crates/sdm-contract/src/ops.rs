@@ -40,6 +40,11 @@ pub enum Operation {
     CheckDirectShape(crate::direct::DirectInput),
     CheckDirectCell(crate::direct::DirectInput),
     CheckDirectOption(crate::direct::DirectInput),
+    CheckDirectResponseField(crate::direct::DirectInput),
+    RestoreDirectResponse(crate::direct::DirectInput),
+    ObserveDirectOutputs(crate::direct::DirectInput),
+    CheckNativeDirectRows(crate::direct::DirectInput),
+    LayoutNativeDirect(crate::direct::native_response::NativeLayoutRequest),
     ObserveDirectDtype(crate::direct::DirectInput),
     ObserveDirectSchema(crate::direct::DirectInput),
     CheckDirectPreparation(crate::direct::DirectInput),
@@ -89,6 +94,11 @@ impl Operation {
             Operation::CheckDirectShape(_) => "check_direct_shape",
             Operation::CheckDirectCell(_) => "check_direct_cell",
             Operation::CheckDirectOption(_) => "check_direct_option",
+            Operation::CheckDirectResponseField(_) => "check_direct_response_field",
+            Operation::RestoreDirectResponse(_) => "restore_direct_response",
+            Operation::ObserveDirectOutputs(_) => "observe_direct_outputs",
+            Operation::CheckNativeDirectRows(_) => "check_native_direct_rows",
+            Operation::LayoutNativeDirect(_) => "layout_native_direct",
             Operation::ObserveDirectDtype(_) => "observe_direct_dtype",
             Operation::ObserveDirectSchema(_) => "observe_direct_schema",
             Operation::CheckDirectPreparation(_) => "check_direct_preparation",
@@ -129,6 +139,10 @@ impl Operation {
             Operation::CheckDirectShape(v)
             | Operation::CheckDirectCell(v)
             | Operation::CheckDirectOption(v)
+            | Operation::CheckDirectResponseField(v)
+            | Operation::RestoreDirectResponse(v)
+            | Operation::ObserveDirectOutputs(v)
+            | Operation::CheckNativeDirectRows(v)
             | Operation::ObserveDirectDtype(v)
             | Operation::ObserveDirectSchema(v)
             | Operation::CheckDirectPreparation(v)
@@ -146,6 +160,7 @@ impl Operation {
             | Operation::EncodeTabular(v) => {
                 vec![(v.input, Bytes), (v.context, Arrow), (v.predict, Arrow)]
             }
+            Operation::LayoutNativeDirect(v) => vec![(v.input, Bytes), (v.payload, Bytes)],
             Operation::LayoutDirect(v) => {
                 vec![(v.input, Bytes), (v.payload, Bytes), (v.response, Bytes)]
             }
@@ -210,6 +225,7 @@ impl Operation {
 pub enum OperationResult {
     DirectValue(crate::direct::DirectValue),
     DecodedDirectResponse(crate::direct::DecodedDirectResponse),
+    PreparedDirectCall(crate::direct::native_response::PreparedDirectCall),
     ValidateQuery(QueryValidation),
     DescribeSource(DescribedSource),
     EditSchema(SchemaEdited),
@@ -1564,6 +1580,23 @@ pub struct Predicted {
 #[derive(JsonSchema)]
 #[schemars(deny_unknown_fields)]
 pub struct Attachments {
+    #[schemars(rename = "CheckNativeDirectRows.input")]
+    pub checknativedirectrows_input: crate::direct::DirectRowsInput,
+    #[schemars(rename = "ObserveDirectOutputs.input")]
+    pub observedirectoutputs_input: crate::direct::native_response::NativeOutputQuery,
+    #[schemars(rename = "RestoreDirectResponse.input")]
+    pub restoredirectresponse_input: crate::direct::native_response::RestorationObservation,
+    #[schemars(rename = "CheckDirectResponseField.input")]
+    pub checkdirectresponsefield_input: crate::direct::native_response::NativeResponseField,
+    #[schemars(rename = "DirectValue.checked_response_field")]
+    pub directvalue_checked_response_field: crate::direct::native_response::CheckedResponseField,
+    #[schemars(rename = "PreparedDirectCall.value")]
+    pub prepareddirectcall_value: crate::direct::native_response::NativeDirectCall,
+    #[schemars(rename = "LayoutNativeDirect.input")]
+    pub layoutnativedirect_input: crate::direct::native_response::NativeLayoutInput,
+    #[schemars(rename = "DirectValue.native_layout")]
+    pub directvalue_native_layout: crate::direct::native_response::NativeLayoutResult,
+
     #[schemars(rename = "CheckDirectCell.input")]
     pub checkdirectcell_input: crate::direct::cell::DirectCellInput,
     #[schemars(rename = "CheckDirectOption.input")]

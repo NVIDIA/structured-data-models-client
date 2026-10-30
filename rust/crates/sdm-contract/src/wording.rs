@@ -845,7 +845,7 @@ pub fn template(sentence: Sentence) -> Template {
         S::ContextConstantAnswer => said(
             r#"every context row has the same answer, so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ."#,
         ),
-        S::OutputsAbsent => said(
+        S::OutputsAbsent | S::DirectOutputsAbsent => said(
             r#"{model} answered without {absent!r}, which this request asked for, so no column of {advice:result_frame()} will carry it. The answer to the rest of the request is unaffected."#,
         ),
         S::StepsUnexplained => said(

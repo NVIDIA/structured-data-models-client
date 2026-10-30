@@ -12,7 +12,7 @@ use std::sync::Arc;
 use arrow_array::{RecordBatch, RecordBatchOptions};
 use sdm_contract::direct::*;
 use sdm_contract::ops::{HeldSchema, OperationResult, Predict};
-use sdm_contract::{CoreError, CoreWarning, Detail, Sentence};
+use sdm_contract::{CoreError, CoreWarning, Detail, Scalar, Sentence};
 use sdm_request::direct::{invalid, texts};
 use sdm_request::{predict, tabular};
 use sdm_wire::json::Value;
@@ -659,7 +659,7 @@ pub(crate) async fn predict(
         .direct
         .ok_or_else(|| internal("direct input is absent"))?;
     let input: DirectPrediction = take_json(&mut attached, direct.input)?;
-    let (bound, payload) = match input {
+    let (bound, payload, deferred_options) = match input {
         DirectPrediction::Empty {
             bound,
             target_dtype,
@@ -696,6 +696,20 @@ pub(crate) async fn predict(
                 bound.outputs,
             );
         }
+        DirectPrediction::DeferredOptions { body } => {
+            sdm_request::direct::bound(&body.bound)?;
+            if direct.payload != Some(body.payload) {
+                return Err(CoreError::protocol(Sentence::InvalidMessage, "deferred body differs from its attachment"));
+            }
+            let Some(Attachment::Bytes(bytes)) = attached.remove(&body.payload) else {
+                return Err(internal("a deferred direct body is absent"));
+            };
+            let payload = crate::predict::payload(&bytes)?;
+            tabular::check_body(&payload, &body, &body.bound.outputs)?;
+            let mut payload = tabular::complete_body(payload, &request.request_id, DirectInference::default())?;
+            payload.set("inference", Value::Null);
+            (body.bound, payload, true)
+        }
         DirectPrediction::Encoded { body, inference } => {
             sdm_request::direct::bound(&body.bound)?;
             if direct.payload != Some(body.payload) {
@@ -710,7 +724,7 @@ pub(crate) async fn predict(
             let payload = crate::predict::payload(&bytes)?;
             tabular::check_body(&payload, &body, &body.bound.outputs)?;
             let payload = tabular::complete_body(payload, &request.request_id, inference)?;
-            (body.bound, payload)
+            (body.bound, payload, false)
         }
     };
     if request.model != bound.model
@@ -721,6 +735,13 @@ pub(crate) async fn predict(
             Sentence::InvalidMessage,
             "direct call selection differs from its bound outputs",
         ));
+    }
+    if deferred_options {
+        use sdm_contract::direct::native_response::{NativeDirectCall, PreparedDirectCall};
+        let payload = asker.attach(Attachment::Bytes(payload.to_bytes()))?;
+        let call = NativeDirectCall { bound, payload };
+        let value = asker.attach(Attachment::Bytes(serde_json::to_vec(&call).map_err(|_| internal("prepared call does not serialize"))?))?;
+        return Ok(OperationResult::PreparedDirectCall(PreparedDirectCall { value }));
     }
     let answer =
         crate::predict::call_answer(&asker, payload.to_bytes(), request.model_endpoint.as_ref())
@@ -799,4 +820,63 @@ pub(crate) fn layout(
         }
     }
     crate::predict::finish(asker, part, input.data.outputs)
+}
+
+pub(crate) fn layout_native(
+    asker: &Asker,
+    request: sdm_contract::direct::native_response::NativeLayoutRequest,
+    mut attached: Attachments,
+) -> Result<OperationResult, CoreError> {
+    use sdm_contract::direct::native_response::{NativeLayoutInput, NativeLayoutResult};
+    let input: NativeLayoutInput = take_json(&mut attached, request.input)?;
+    sdm_request::direct::bound(&input.call.bound)?;
+    if input.call.payload != request.payload {
+        return Err(CoreError::protocol(Sentence::InvalidMessage, "native response payload binding differs"));
+    }
+    let Some(Attachment::Bytes(bytes)) = attached.remove(&request.payload) else {
+        return Err(internal("native response call payload is absent"));
+    };
+    let payload = crate::predict::payload(&bytes)?;
+    let expected_outputs = Value::Array(input.call.bound.outputs.iter().cloned().map(Value::Text).collect());
+    if payload.get("model").and_then(Value::as_text) != Some(input.call.bound.model.as_str())
+        || payload.get("output").and_then(|v| v.get("fields")) != Some(&expected_outputs)
+    {
+        return Err(CoreError::protocol(Sentence::InvalidMessage, "native response payload disagrees with bound model outputs"));
+    }
+    let (scope, rows) = tabular::response::decode_identities(&payload, &input.response, crate::pql::float_text)?;
+    let Some(attributed) = input.attributed else {
+        return value(asker, &NativeLayoutResult::Decoded { scope, rows });
+    };
+    tabular::response::validate_attributed(&scope, &rows, &attributed, crate::pql::float_text)?;
+    let task = payload.get("task");
+    let classification = task.and_then(|v| v.get("kind")).and_then(Value::as_text).is_some_and(|kind| kind.contains("classification"));
+    let restore_dtype = task.and_then(|v| v.get("target")).and_then(|v| v.get("dtype")).and_then(Value::as_text)
+        .filter(|dtype| classification && ["int", "float", "bool"].iter().any(|prefix| dtype.starts_with(prefix))).map(str::to_owned);
+    value(asker, &NativeLayoutResult::Complete {
+        rows: attributed.into_iter().map(|row| {
+            let replacement = row.row.key.filter(|key| !matches!(key, Scalar::Null));
+            (row.row.ordinal, replacement)
+        }).collect(), restore_dtype,
+    })
+}
+
+
+pub(crate) fn native_outputs(
+    asker: &Asker, input: sdm_contract::direct::native_response::NativeOutputQuery,
+) -> Result<OperationResult, CoreError> {
+    sdm_request::direct::bound(&input.bound)?;
+    let names: Vec<_> = input.bound.outputs.iter().filter(|name| {
+        input.rows > 0 && input.bound.named && predict::LOOKED_FOR.contains(&name.as_str())
+    }).cloned().collect();
+    if let Some(present) = input.present {
+        if present.iter().map(|(name, _)| name).ne(names.iter()) {
+            return Err(CoreError::protocol(Sentence::InvalidMessage, "native output observations differ from requested fields"));
+        }
+        let missing: Vec<_> = present.into_iter().filter_map(|(name, present)| (!present).then_some(name)).collect();
+        if !missing.is_empty() {
+            let notice = predict::absent_notice(&input.bound.model, &missing);
+            asker.warn(CoreWarning::new(Sentence::DirectOutputsAbsent, notice.message).with_fields(notice.fields));
+        }
+    }
+    value(asker, &names)
 }

@@ -975,6 +975,7 @@ sentences! {
     ContextConstantQuestion = "context_constant_question", W::ContextConstant;
     ContextConstantAnswer = "context_constant_answer", W::ContextConstant;
     OutputsAbsent = "outputs_absent", W::OutputsAbsent;
+    DirectOutputsAbsent = "direct_outputs_absent", W::OutputsAbsent;
     StepsUnexplained = "steps_unexplained", W::StepsUnexplained;
     ExplanationOneEntity = "explanation_one_entity", E::UnsupportedRequest;
     ExplanationFastMode = "explanation_fast_mode", E::UnsupportedRequest;

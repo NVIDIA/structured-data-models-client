@@ -38,6 +38,7 @@ __all__ = [
     'Diagnostic',
     'DirectValue',
     'DecodedDirectResponse',
+    'PreparedDirectCall',
     'Edited',
     'Gathered',
     'GatheredState',
@@ -497,6 +498,13 @@ class DirectValue:
 
 
 @dataclasses.dataclass(frozen=True)
+class PreparedDirectCall:
+    """An unsent logical direct call with retained native inference options."""
+
+    value: int
+
+
+@dataclasses.dataclass(frozen=True)
 class DecodedDirectResponse:
     """Decoded model data before reached native ID conversion."""
 
@@ -543,6 +551,10 @@ _RESULTS: dict[str, tuple[tuple[str, ...], tuple[str, ...], Any]] = {
         (),
         lambda read: DirectValue(_int(read['value'], 'value')),
     ),
+    'prepared_direct_call': (
+        ('value',), (),
+        lambda read: PreparedDirectCall(_int(read['value'], 'value')),
+    ),
     'decoded_direct_response': (
         ('value',),
         (),
@@ -565,6 +577,7 @@ def decode(
     | Gathered
     | Predicted
     | DirectValue
+    | PreparedDirectCall
     | DecodedDirectResponse
 ):
     r"""The result a ``done`` step carries, decoded once.
@@ -592,6 +605,7 @@ def decode(
         | Gathered
         | Predicted
         | DirectValue
+        | PreparedDirectCall
         | DecodedDirectResponse
     ) = build(read)
     return built
@@ -606,6 +620,7 @@ _T = TypeVar(
     Predicted,
     DirectValue,
     DecodedDirectResponse,
+    PreparedDirectCall,
 )
 
 

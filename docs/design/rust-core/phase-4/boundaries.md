@@ -46,10 +46,14 @@ Source-backed materialization -> existing Phase 3 path (unchanged)
   Reject mixed alternatives; preserve existing gathered-call behavior.
   Direct Arrow fields carry small native storage observations under the versioned `sdm.direct.storage.v1` metadata key, defined and validated in `sdm-contract`.
   Capture these facts during reached conversion, preserve them across batches, and reject malformed or incompatible metadata; warehouse consumers do not use this contract.
-  The next connected increment will handle direct inference options that require native transport encoding through a closed deferred-options alternative.
+  Direct inference options that require native transport encoding use a closed deferred-options alternative.
   Rust constructs the logical envelope and its fixed inference slot; Python binds the retained native value at send time and calls the existing native transport.
   For this alternative, native transport owns serialization, endpoint wrapping and wrapped-size enforcement, preserving open-check/error order and custom transport behavior.
-  Ordinary byte calls and warehouse paths remain unchanged; response attribution still belongs to Rust and uses the encoded row layout.
+  Built-in byte calls with ordinary options and warehouse paths remain unchanged; custom transports retain their native `predict` method and decoded response owners.
+  Response attribution still belongs to Rust and uses the encoded row layout.
+  Closed response-field observations preserve native parse order without JSON-serializing opaque result values.
+  Rust selects target restoration and probability-key collision policy; Python performs the reached `as_declared` casts, native equality/hash operations and presentation replacements.
+  Requested-output presence uses reached native comparisons, with Rust selecting the fields and missing-output notice.
 - Later PQL selection preserves scoring-key expansion/exclusion and known-target filtering.
   If reduction is needed, sample with fresh seed 42, then sort the sampled index labels; otherwise do not read/sort the index.
   Infer task from selected context, then use the same generic Request construction.

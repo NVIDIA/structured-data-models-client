@@ -8,10 +8,11 @@ This extends the existing [boundaries](boundaries.md) and [restart contracts](re
 The landed numeric/Boolean pilot is the baseline; the rows below are implementation obligations, not completion claims.
 Independent datatype and native-contract review precedes implementation.
 
-The current review increment covers frame datatype, constructor and encoding changes using the existing byte-response path, including nested primitive inference options.
-Native-only inference options and custom decoded-response ownership remain a subsequent connected increment; they are not supported by this increment's forced core route.
-The full direct-input goal remains incomplete until those obligations and the remaining public-input boundaries are implemented, verified and landed.
-The unfinished response expansion is preserved in the external scope-audit snapshot, rather than shipped as disconnected operations.
+The datatype, constructor and encoding increment is landed.
+The current implementation increment connects native-only inference options and custom decoded-response ownership through the existing native transport.
+Its source and executable validation remain pending; this is not a completion claim.
+Remaining public-input boundaries, including subclass owners and ordered native argument/name validation, still follow this connected increment.
+The full direct-input goal remains incomplete until all coverage obligations are implemented, verified and landed.
 
 | Input family | Remaining coverage and decisive parity cases |
 | --- | --- |

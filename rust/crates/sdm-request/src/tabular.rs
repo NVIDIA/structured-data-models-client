@@ -20,6 +20,7 @@ use sdm_wire::json::Value;
 use std::collections::BTreeMap;
 
 pub mod cell;
+pub mod native_response;
 mod decimal;
 pub mod response;
 

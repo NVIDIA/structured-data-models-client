@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 
 pub mod cell;
 pub mod dtype;
+pub mod native_response;
 pub mod schema;
 pub mod storage;
 
@@ -396,6 +397,7 @@ pub struct EncodedDirectBody {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum DirectPrediction {
+    DeferredOptions { body: EncodedDirectBody },
     Empty {
         bound: BoundDirectCall,
         target_dtype: String,

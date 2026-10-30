@@ -526,15 +526,18 @@ def predict(
             if request.inference
             else {}
         )
-        if not direct_options.can_encode(observed_options):
-            raise RouteError(
-                'native inference transport is not enabled in this input-family increment'
-            )
-        data = {
-            'kind': 'encoded',
-            'body': body,
-            'inference': direct_options.encode(observed_options),
-        }
+        from sdm_client.core.databricks_serving import DatabricksServingTransport
+        from sdm_client.core.transport import Transport
+
+        byte_transport = type(client._transport) in (Transport, DatabricksServingTransport)
+        if byte_transport and direct_options.can_encode(observed_options):
+            data = {
+                'kind': 'encoded',
+                'body': body,
+                'inference': direct_options.encode(observed_options),
+            }
+        else:
+            data = {'kind': 'deferred_options', 'body': body}
         direct = {'input': 1, 'payload': 2}
     operation = {
         'op': 'predict',
@@ -552,6 +555,13 @@ def predict(
         {1: codec.attachment(data), **attached},
         model=prediction.sender(client, model_id),
     )
+    if finished.result['op'] == 'prepared_direct_call':
+        from sdm_client._rust import direct_response
+
+        return direct_response.finish(
+            finished, client, model_id, observed_options,
+            _call, _run, _attribute_rows,
+        )
     if finished.result['op'] == 'decoded_direct_response':
         finished = _response(finished)
     answer = results.expect(finished.result, results.Predicted)
@@ -736,18 +746,7 @@ def _response(finished: Finished) -> Finished:
         for name in ('payload', 'response', 'rows')
     }
     rows = json.loads(buffers['rows'])
-    accepted = []
-    at = 0
-    while at < len(rows):
-        checked = _call(
-            'check_direct_rows',
-            {'scope': data['scope'], 'rows': rows[at : at + 256]},
-        )
-        accepted.extend(checked['rows'])
-        at += len(checked['rows'])
-        if checked['row'] is not None:
-            accepted.append(_attribute_native(checked['row']))
-            at += 1
+    accepted = _attribute_rows(data['scope'], rows)
     data.update(payload=2, response=3)
     return _run(
         'layout_direct',
@@ -756,3 +755,19 @@ def _response(finished: Finished) -> Finished:
         payload=2,
         response=3,
     )
+
+
+def _attribute_rows(scope: dict[str, Any], rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    accepted = []
+    at = 0
+    while at < len(rows):
+        checked = _call(
+            'check_direct_rows',
+            {'scope': scope, 'rows': rows[at : at + 256]},
+        )
+        accepted.extend(checked['rows'])
+        at += len(checked['rows'])
+        if checked['row'] is not None:
+            accepted.append(_attribute_native(checked['row']))
+            at += 1
+    return accepted

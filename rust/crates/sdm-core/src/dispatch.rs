@@ -108,6 +108,34 @@ pub fn start(
                 crate::direct::value(&asker, &sdm_schema::direct::dtype::observe(input)?)
             })
         }
+        Operation::CheckNativeDirectRows(request) => {
+            let input: sdm_contract::direct::DirectRowsInput = take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                let required = input.rows.iter().map(|row| {
+                    sdm_request::tabular::response::native_row_requires_text(&input.scope, row)
+                }).collect::<Result<Vec<_>, _>>()?;
+                crate::direct::value(&asker, &required)
+            })
+        }
+        Operation::ObserveDirectOutputs(request) => {
+            let input: sdm_contract::direct::native_response::NativeOutputQuery = take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move { crate::direct::native_outputs(&asker, input) })
+        }
+        Operation::RestoreDirectResponse(request) => {
+            let input: sdm_contract::direct::native_response::RestorationObservation = take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(&asker, &sdm_request::tabular::native_response::restore(input))
+            })
+        }
+        Operation::CheckDirectResponseField(request) => {
+            let input: sdm_contract::direct::native_response::NativeResponseField = take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(&asker, &sdm_request::tabular::native_response::check(input)?)
+            })
+        }
+        Operation::LayoutNativeDirect(request) => Run::new(move |asker| async move {
+            crate::direct::layout_native(&asker, request, attachments)
+        }),
         Operation::CheckDirectOption(request) => {
             let input: sdm_contract::direct::DirectOptionObservation =
                 take_json(&mut attachments, request.input)?;
