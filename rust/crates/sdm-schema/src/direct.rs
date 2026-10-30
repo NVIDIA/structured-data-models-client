@@ -2,21 +2,48 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! Whole-column schema inference for the ordinary numeric direct consumer.
+//! Whole-column schema inference for the ordinary direct consumer.
 //! This has no provider, catalog, graph or sampling dependency.
+
+pub mod dtype;
+pub mod observed;
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use arrow_array::RecordBatch;
+use arrow_array::cast::AsArray;
+use arrow_array::types::{Decimal128Type, Decimal256Type};
 use arrow_schema::{DataType, Schema};
 use sdm_contract::data::Relation;
+use sdm_contract::direct::storage::{self, DirectStorage, StorageOwner};
 use sdm_contract::ops::{Dtype, HeldSchema, Stype};
 use sdm_contract::{ColumnType, CoreError, CoreWarning, Scalar, Sentence};
 
 use crate::assemble::{self, Given};
-use crate::infer::{InferredColumn, InferredTable, TimeChoice};
+use crate::infer::{InferredColumn, InferredTable};
 use crate::keys::KEY_UNIQUENESS;
 use crate::values::{self, Floats, Value};
+
+/// Earliest real native instant, retaining precision before wire encoding.
+pub fn time_start(schema: &Schema, batches: &[RecordBatch]) -> Result<sdm_contract::direct::schema::TimeStart, CoreError> {
+    if schema.fields().len() != 1 {
+        return Err(CoreError::protocol(Sentence::InvalidMessage, "native time observation requires one column"));
+    }
+    let Some(DirectStorage::Timestamp { unit, .. }) = storage::read(schema.field(0))? else {
+        return Err(CoreError::protocol(Sentence::InvalidMessage, "native time observation requires timestamp storage"));
+    };
+    let factor = match unit {
+        storage::TimestampUnit::Seconds => 1_000_000_000,
+        storage::TimestampUnit::Milliseconds => 1_000_000,
+        storage::TimestampUnit::Microseconds => 1_000,
+        storage::TimestampUnit::Nanoseconds => 1,
+    };
+    let values = values::column(batches, 0, Floats::NanValue)?;
+    let nanos = crate::infer::earliest_direct_instant(values.into_iter().flatten().filter_map(|v| match v {
+        Value::Int(count) => Some(count * factor), _ => None,
+    }));
+    Ok(sdm_contract::direct::schema::TimeStart { nanos: nanos.map(|v| v.to_string()) })
+}
 
 /// Wire storage meaning, distinct from Arrow's physical width.
 pub fn storage_dtypes(schema: &Schema, batches: &[RecordBatch]) -> Result<Vec<Dtype>, CoreError> {
@@ -25,6 +52,24 @@ pub fn storage_dtypes(schema: &Schema, batches: &[RecordBatch]) -> Result<Vec<Dt
         .iter()
         .enumerate()
         .map(|(at, field)| {
+            let native = storage::read(field)?;
+            if native == Some(DirectStorage::Categorical) {
+                return Ok(Dtype::String);
+            }
+            if matches!(native, Some(DirectStorage::Timestamp { .. })) {
+                return Ok(Dtype::Time);
+            }
+            if let Some(DirectStorage::Decimal { precision, scale }) = native {
+                if scale > 0 { return Ok(Dtype::Float64); }
+                if precision <= 18 { return Ok(Dtype::Int64); }
+                let values = decimal_values(batches, at)?;
+                let suffix = "0".repeat(usize::from(scale.unsigned_abs()));
+                let fits = values.iter().flatten().all(|value| {
+                    let Value::Text(coefficient) = value else { return false; };
+                    coefficient == "0" || format!("{coefficient}{suffix}").parse::<i64>().is_ok()
+                });
+                return Ok(if fits { Dtype::Int64 } else { Dtype::String });
+            }
             Ok(match field.data_type() {
                 DataType::Boolean => Dtype::Bool,
                 DataType::Int8
@@ -43,6 +88,7 @@ pub fn storage_dtypes(schema: &Schema, batches: &[RecordBatch]) -> Result<Vec<Dt
                 }
                 DataType::Float32 => Dtype::Float32,
                 DataType::Float64 => Dtype::Float64,
+                DataType::Utf8 if native == Some(DirectStorage::String) => Dtype::String,
                 _ => {
                     return Err(CoreError::new(
                         Sentence::DirectUnfinished,
@@ -70,8 +116,8 @@ pub fn infer(
     }
     let rows: usize = batches.iter().map(RecordBatch::num_rows).sum();
     let dtypes = storage_dtypes(schema, batches)?;
-    let values = (0..schema.fields().len())
-        .map(|at| values::column(batches, at, Floats::NanMissing))
+    let values = schema.fields().iter().enumerate()
+        .map(|(at, field)| native_values(batches, at, field))
         .collect::<Result<Vec<_>, _>>()?;
     let columns: Vec<_> = schema
         .fields()
@@ -85,6 +131,7 @@ pub fn infer(
                 stype: match dtype {
                     Dtype::Int64 | Dtype::Float32 | Dtype::Float64 => Stype::Numerical,
                     Dtype::Bool => Stype::Categorical,
+                    Dtype::Date | Dtype::Time => Stype::Timestamp,
                     _ if values::distinct(&values[at]) <= 64 => Stype::Categorical,
                     _ => Stype::Text,
                 },
@@ -113,15 +160,45 @@ pub fn infer(
             .count()
             .saturating_sub(values::distinct(&values[at]))
     });
+    let primary_key = primary.map(|at| vec![schema.field(at).name().clone()]).unwrap_or_default();
+    let mut instants = Vec::with_capacity(columns.len());
+    let mut firsts = Vec::with_capacity(columns.len());
+    for (at, field) in schema.fields().iter().enumerate() {
+        if let Some(DirectStorage::Timestamp { unit, zone }) = storage::read(field)? {
+            let nanos = |count: i128| match unit {
+                storage::TimestampUnit::Seconds => count * 1_000_000_000,
+                storage::TimestampUnit::Milliseconds => count * 1_000_000,
+                storage::TimestampUnit::Microseconds => count * 1_000,
+                storage::TimestampUnit::Nanoseconds => count,
+            };
+            instants.push(Ok(values[at].iter().map(|v| match v {
+                Some(Value::Int(count)) => Some(nanos(*count)),
+                _ => None,
+            }).collect()));
+            firsts.push(values[at].iter().flatten().find_map(|value| {
+                let Value::Int(count) = value else { return None; };
+                let (native_unit, count) = if unit == storage::TimestampUnit::Nanoseconds {
+                    (sdm_contract::Unit::Ns, *count)
+                } else {
+                    (sdm_contract::Unit::Us, nanos(*count).div_euclid(1_000))
+                };
+                i64::try_from(count).ok().map(|value| Scalar::Timestamp {
+                    unit: native_unit, zone: zone.clone(), value,
+                })
+            }));
+        } else {
+            instants.push(Ok(vec![]));
+            firsts.push(None);
+        }
+    }
+    let time = crate::infer::choose_direct(&columns, rows, &primary_key, &instants, &values, &firsts)?;
     let table = InferredTable {
         name: name.into(),
         source: Relation::named(name),
         columns,
-        primary_key: primary
-            .map(|at| vec![schema.field(at).name().clone()])
-            .unwrap_or_default(),
-        time_column: None,
-        time: TimeChoice::default(),
+        primary_key,
+        time_column: time.column.clone(),
+        time,
         left_out: vec![],
         unread_times: vec![],
         day_first: vec![],
@@ -144,11 +221,63 @@ pub fn infer(
 
 /// Present target values, using the same equality as ordinary NumPy inference.
 pub fn distinct(batches: &[RecordBatch], column: usize) -> Result<usize, CoreError> {
-    Ok(values::distinct(&values::column(
-        batches,
-        column,
-        Floats::NanMissing,
-    )?))
+    let Some(batch) = batches.first() else { return Ok(0); };
+    Ok(values::distinct(&native_values(batches, column, batch.schema().field(column))?))
+}
+
+fn native_values(
+    batches: &[RecordBatch], column: usize, field: &arrow_schema::Field,
+) -> Result<Vec<Option<Value>>, CoreError> {
+    let native = storage::read(field)?;
+    if matches!(native, Some(DirectStorage::Decimal { .. })) {
+        return decimal_values(batches, column);
+    }
+    let masked = matches!(native, Some(DirectStorage::Primitive {
+        owner: StorageOwner::Nullable | StorageOwner::Arrow, ..
+    }));
+    let mut values = values::column(batches, column, if masked {
+        Floats::NanValue
+    } else {
+        Floats::NanMissing
+    })?;
+    if matches!(native, Some(DirectStorage::Primitive { owner: StorageOwner::Nullable, .. })) {
+        // Masked native arrays retain present NaNs, but their uniqueness
+        // operation identifies signed zeros and all NaN payloads alike.
+        // This direct-only rule does not change warehouse comparison policy.
+        for value in values.iter_mut().flatten() {
+            if let Value::Float(bits) = value {
+                match field.data_type() {
+                    DataType::Float32 => {
+                        let number = f32::from_bits(*bits as u32);
+                        if number == 0.0 { *bits = 0; }
+                        else if number.is_nan() { *bits = u64::from(f32::NAN.to_bits()); }
+                    }
+                    DataType::Float64 => {
+                        let number = f64::from_bits(*bits);
+                        if number == 0.0 { *bits = 0; }
+                        else if number.is_nan() { *bits = f64::NAN.to_bits(); }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+    Ok(values)
+}
+
+fn decimal_values(batches: &[RecordBatch], column: usize) -> Result<Vec<Option<Value>>, CoreError> {
+    let mut values = Vec::new();
+    for batch in batches {
+        let array = batch.column(column);
+        match array.data_type() {
+            DataType::Decimal128(_, _) => values.extend(array.as_primitive::<Decimal128Type>()
+                .iter().map(|v| v.map(|v| Value::Text(v.to_string())))),
+            DataType::Decimal256(_, _) => values.extend(array.as_primitive::<Decimal256Type>()
+                .iter().map(|v| v.map(|v| Value::Text(v.to_string())))),
+            _ => return Err(CoreError::protocol(Sentence::InvalidMessage, "decimal observation has nondecimal storage")),
+        }
+    }
+    Ok(values)
 }
 
 fn check_name(name: &str) -> Result<(), CoreError> {

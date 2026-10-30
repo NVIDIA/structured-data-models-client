@@ -42,7 +42,7 @@ fn frame(kind: &FrameKind, parameter: &str) -> Result<(), CoreError> {
 }
 
 /// Runs before any column data or schema is converted.
-pub fn shape(input: &DirectShape) -> Result<(), CoreError> {
+pub fn arguments(input: &DirectShape) -> Result<(), CoreError> {
     frame(&input.context_kind, "context")?;
     frame(&input.predict_kind, "predict")?;
     for (name, kind) in &input.related {
@@ -60,6 +60,11 @@ pub fn shape(input: &DirectShape) -> Result<(), CoreError> {
     {
         return Err(invalid(Sentence::DirectTask));
     }
+    Ok(())
+}
+
+pub fn shape(input: &DirectShape) -> Result<(), CoreError> {
+    arguments(input)?;
     if input.target_containers {
         return Err(
             invalid(Sentence::DirectMultilabel).with_field("target", Detail::text(&input.target))
@@ -143,12 +148,22 @@ pub fn scored(
     supports: fn(Stype, Dtype) -> bool,
 ) -> Result<(), CoreError> {
     for (name, dtype) in shape.predict.columns.iter().zip(arriving) {
+        scored_column(table, flags, name, Some(*dtype), supports)?;
+    }
+    scored_complete(shape, table)
+}
+
+pub fn scored_column(
+    table: &DescribedTable, flags: &[ColumnFlags], name: &str,
+    arriving: Option<Dtype>, supports: fn(Stype, Dtype) -> bool,
+) -> Result<(), CoreError> {
+    if let Some(dtype) = arriving {
         if let Some(column) = table.columns.iter().find(|column| &column.name == name) {
             let flags = flags.iter().find(|flags| &flags.name == name);
             if flags.is_some_and(|flags| flags.untyped && !flags.stype_declared) {
-                continue;
+                return Ok(());
             }
-            if !supports(column.stype, *dtype) {
+            if !supports(column.stype, dtype) {
                 return Err(invalid(Sentence::DirectScored)
                     .with_field("arriving", Detail::text(dtype.wire_name()))
                     .with_field("column", Detail::text(name))
@@ -158,6 +173,10 @@ pub fn scored(
             }
         }
     }
+    Ok(())
+}
+
+pub fn scored_complete(shape: &DirectShape, table: &DescribedTable) -> Result<(), CoreError> {
     let missing: Vec<_> = shape
         .context
         .columns

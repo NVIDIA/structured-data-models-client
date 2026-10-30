@@ -10,6 +10,11 @@ use crate::ops::{Dtype, HeldSchema, Stype};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+pub mod storage;
+pub mod cell;
+pub mod dtype;
+pub mod schema;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum FloatStorage {
@@ -42,6 +47,16 @@ pub struct DirectInference {
 pub enum PrimitiveOption {
     Integer(String),
     Value(Scalar),
+    Array(Vec<PrimitiveOption>),
+    Object(Vec<(String, PrimitiveOption)>),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct DirectOptionObservation {
+    pub integer: Option<String>,
+    pub repeated: bool,
+    pub depth: usize,
 }
 
 pub const DIRECT_RESPONSE_VERSION: u32 = 2;
@@ -238,6 +253,18 @@ pub struct DirectFrames {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+pub struct DirectColumnInput { pub input: AttachmentId, pub values: AttachmentId }
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct DirectColumnEncoding { pub column: DirectHeader, pub dtype: Dtype }
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct EncodedDirectColumn { pub values: Vec<Scalar> }
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct DirectValue {
     pub value: AttachmentId,
 }
@@ -369,6 +396,7 @@ pub enum DirectPrediction {
         body: EncodedDirectBody,
         inference: DirectInference,
     },
+
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -424,6 +452,27 @@ pub struct LayoutDirect {
 pub struct ResolvedTabular {
     pub bound: BoundDirectCall,
     pub columns: TabularColumns,
+}
+
+/// Separately resolved wire types and the live schema after native observation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ObservedTabularInput {
+    pub input: TabularInput,
+    pub dtypes: Vec<(String, Dtype)>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct DirectDtypeDeclarations { pub dtypes: Vec<(String, Option<Dtype>)> }
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ObservedKeyPair {
+    pub context: DirectHeader,
+    pub predict: DirectHeader,
+    pub target: String,
+    pub scoring_rows: usize,
 }
 
 /// Live post-advice observations paired with already-resolved wire metadata.

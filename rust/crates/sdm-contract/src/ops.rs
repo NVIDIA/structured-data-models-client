@@ -38,6 +38,17 @@ use crate::types::ColumnType;
 pub enum Operation {
     ValidateQuery(ValidateQuery),
     CheckDirectShape(crate::direct::DirectInput),
+    CheckDirectCell(crate::direct::DirectInput),
+    CheckDirectOption(crate::direct::DirectInput),
+    ObserveDirectDtype(crate::direct::DirectInput),
+    ObserveDirectSchema(crate::direct::DirectInput),
+    CheckDirectPreparation(crate::direct::DirectInput),
+    ResolveDirectDtype(crate::direct::DirectInput),
+    ResolveObservedTabular(crate::direct::DirectInput),
+    InspectObservedKeys(crate::direct::DirectFrames),
+    EncodeDirectColumn(crate::direct::DirectColumnInput),
+    InferDirectColumn(crate::direct::DirectColumnInput),
+    InferDirectTimeStart(crate::direct::DirectColumnInput),
     BindDirect(crate::direct::DirectInput),
     CheckDirectRows(crate::direct::DirectInput),
     InterpretDirectJson(crate::direct::DirectInput),
@@ -76,6 +87,17 @@ impl Operation {
         match self {
             Operation::ValidateQuery(_) => "validate_query",
             Operation::CheckDirectShape(_) => "check_direct_shape",
+            Operation::CheckDirectCell(_) => "check_direct_cell",
+            Operation::CheckDirectOption(_) => "check_direct_option",
+            Operation::ObserveDirectDtype(_) => "observe_direct_dtype",
+            Operation::ObserveDirectSchema(_) => "observe_direct_schema",
+            Operation::CheckDirectPreparation(_) => "check_direct_preparation",
+            Operation::ResolveDirectDtype(_) => "resolve_direct_dtype",
+            Operation::ResolveObservedTabular(_) => "resolve_observed_tabular",
+            Operation::InspectObservedKeys(_) => "inspect_observed_keys",
+            Operation::EncodeDirectColumn(_) => "encode_direct_column",
+            Operation::InferDirectColumn(_) => "infer_direct_column",
+            Operation::InferDirectTimeStart(_) => "infer_direct_time_start",
             Operation::BindDirect(_) => "bind_direct",
             Operation::CheckDirectRows(_) => "check_direct_rows",
             Operation::InterpretDirectJson(_) => "interpret_direct_json",
@@ -101,13 +123,22 @@ impl Operation {
     pub fn attachments(&self) -> Vec<(AttachmentId, AttachmentKind)> {
         use AttachmentKind::{Arrow, Bytes};
         match self {
+            Operation::EncodeDirectColumn(v) | Operation::InferDirectColumn(v) | Operation::InferDirectTimeStart(v) => vec![(v.input, Bytes), (v.values, Arrow)],
             Operation::CheckDirectShape(v)
+            | Operation::CheckDirectCell(v)
+            | Operation::CheckDirectOption(v)
+            | Operation::ObserveDirectDtype(v)
+            | Operation::ObserveDirectSchema(v)
+            | Operation::CheckDirectPreparation(v)
+            | Operation::ResolveDirectDtype(v)
+            | Operation::ResolveObservedTabular(v)
             | Operation::BindDirect(v)
             | Operation::CheckDirectRows(v)
             | Operation::InterpretDirectJson(v)
             | Operation::SelectDirectMember(v)
             | Operation::AttributeDirectRow(v) => vec![(v.input, Bytes)],
             Operation::PrepareDirect(v)
+            | Operation::InspectObservedKeys(v)
             | Operation::InspectDirectPair(v)
             | Operation::ResolveTabular(v)
             | Operation::EncodeTabular(v) => {
@@ -1531,6 +1562,42 @@ pub struct Predicted {
 #[derive(JsonSchema)]
 #[schemars(deny_unknown_fields)]
 pub struct Attachments {
+    #[schemars(rename = "CheckDirectCell.input")]
+    pub checkdirectcell_input: crate::direct::cell::DirectCellInput,
+    #[schemars(rename = "CheckDirectOption.input")]
+    pub checkdirectoption_input: crate::direct::DirectOptionObservation,
+    #[schemars(rename = "ObserveDirectDtype.input")]
+    pub observedirectdtype_input: crate::direct::dtype::DtypeObservation,
+    #[schemars(rename = "ObserveDirectSchema.input")]
+    pub observedirectschema_input: crate::direct::schema::SchemaObservation,
+    #[schemars(rename = "DirectValue.observed_schema")]
+    pub directvalue_observed_schema: crate::direct::schema::ObservedSchema,
+    #[schemars(rename = "CheckDirectPreparation.input")]
+    pub checkdirectpreparation_input: crate::direct::schema::PreparationObservation,
+    #[schemars(rename = "ResolveDirectDtype.input")]
+    pub resolvedirectdtype_input: crate::direct::dtype::DtypeResolutionObservation,
+    #[schemars(rename = "DirectValue.dtype_resolution")]
+    pub directvalue_dtype_resolution: crate::direct::dtype::DtypeResolution,
+    #[schemars(rename = "DirectValue.dtype_declarations")]
+    pub directvalue_dtype_declarations: crate::direct::DirectDtypeDeclarations,
+    #[schemars(rename = "ResolveObservedTabular.input")]
+    pub resolveobservedtabular_input: crate::direct::ObservedTabularInput,
+    #[schemars(rename = "InspectObservedKeys.input")]
+    pub inspectobservedkeys_input: crate::direct::ObservedKeyPair,
+    #[schemars(rename = "EncodeDirectColumn.input")]
+    pub encodedirectcolumn_input: crate::direct::DirectColumnEncoding,
+    #[schemars(rename = "InferDirectColumn.input")]
+    pub inferdirectcolumn_input: crate::direct::DirectHeader,
+    #[schemars(rename = "InferDirectTimeStart.input")]
+    pub inferdirecttimestart_input: crate::direct::DirectHeader,
+    #[schemars(rename = "DirectValue.time_start")]
+    pub directvalue_time_start: crate::direct::schema::TimeStart,
+    #[schemars(rename = "DirectValue.encoded_column")]
+    pub directvalue_encoded_column: crate::direct::EncodedDirectColumn,
+    #[schemars(rename = "DirectValue.dtype_finding")]
+    pub directvalue_dtype_finding: crate::direct::dtype::DtypeFinding,
+    #[schemars(rename = "DirectValue.checked_cell")]
+    pub directvalue_checked_cell: crate::direct::cell::CheckedDirectCell,
     #[schemars(rename = "CheckDirectShape.input")]
     pub checkdirectshape_input: crate::direct::DirectShape,
     #[schemars(rename = "PrepareDirect.input")]

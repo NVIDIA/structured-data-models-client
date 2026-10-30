@@ -273,6 +273,8 @@ pub fn template(sentence: Sentence) -> Template {
         ),
         S::DirectNativeFailure => said(r#"native {stage} conversion failed"#),
         S::DirectNullableCast => said(r#"{host.direct_nullable_cast}"#),
+        S::DirectOptionCycle => said(r#"this value refers back to itself, so it cannot be sent as JSON"#),
+        S::DirectOptionDepth => said(r#"this value nests more than {limit} levels deep, or refers back to itself, so it cannot be sent as JSON"#),
         S::DirectOptionInteger => said(
             r#"value {digits} cannot be sent as a JSON number without losing precision, since a float64 does not hold it exactly; pass it as a string if the model accepts one"#,
         ),
@@ -319,6 +321,21 @@ pub fn template(sentence: Sentence) -> Template {
         S::DirectUnknownModel => said(
             r#"Unknown model {model!r}; this client can send: {known_models!r}. The Universal TFM contract declares these as a closed set, so a new model id has to be added to the contract and the bindings regenerated before it can be sent."#,
         ),
+        S::DirectNativeMissingKey => said(r#"{table}.{column} identifies a row, but {count:,} row(s) have no value for it. Those rows cannot be scored and the model will not see them; fill or drop them, or name a different primary key."#),
+        S::DirectDatesAsText => said(r#"{table}.{column} holds dates but is stored as text, so it is not the time column and no temporal query can use it. Convert it before inferring: frame[{column!r}] = pd.to_datetime(frame[{column!r}]{host.direct_date_arguments}), or set schema[{table!r}][{column!r}].stype = 'timestamp' afterwards."#),
+        S::DirectKeyRepeated => said(r#"{table}.{column} identifies a row {count:,} time(s) it has already been used, e.g. {host.direct_key_example!r}. Those rows are indistinguishable to the model. Name a different primary key if this column is a foreign key rather than an identifier."#),
+        S::DirectKeyMissing => said(r#"{table}.{column} has {count:,} row(s) with no value, in {column!r}, so those rows cannot be identified; fill or drop them before using it as a primary key"#),
+        S::DirectKeyMissingPart => said(r#"{table}.{column} has {count:,} row(s) with no value in part of it, so those rows cannot be identified; fill or drop them before using it as a primary key"#),
+        S::DirectKeyNotUnique => said(r#"{table}.{column} is not unique enough to identify a row: {count:,} of {rows:,} rows repeat a value already used, e.g. {host.direct_key_example!r}"#),
+        S::DirectKeyComposite => said(r#"{table}.{column} identifies a row {count:,} time(s) it has already been used, e.g. {host.direct_key_example!r}. Those rows are indistinguishable to the model. {column!r} is unique together with {host.direct_key_companions}, which is what a composite key looks like; pass that as the primary key if so."#),
+        S::DirectKeyNoComposite => said(r#"{table}.{column} identifies a row {count:,} time(s) it has already been used, e.g. {host.direct_key_example!r}. Those rows are indistinguishable to the model. They differ only by {distinguishing!l}, which a primary key cannot be made of, so there is no composite key to name here: keep one row per {column!r} if the model should see one, or name a different primary key."#),
+        S::DirectCategoricalPopulation => said(r#"{table}.{column} holds {distinct} distinct values in the {present} rows that have one, so the rows ran out before the values did and the count is a measure of the frame rather than of the column. It is read as categorical here because {distinct} is at most 64; on more rows the same column could pass that and be read as text, which the models treat differently. If this frame is a sample, say what the column is with schema[{table!r}][{column!r}].stype = 'categorical' (or 'text'), so that it does not change under a larger one."#),
+        S::DirectNativeFraction => said(r#"value {host.direct_cell!r} cannot be sent as {dtype} without losing its fractional part"#),
+        S::DirectNativeNonFinite => said(r#"value {host.direct_cell!r} is not JSON-representable; replace non-finite numbers with a finite value or a null"#),
+        S::DirectNativeRange => said(r#"value {host.direct_cell!r} is outside the range {dtype} represents; send the column as strings to keep it exact"#),
+        S::DirectNativePrecision => said(r#"value {host.direct_cell!r} cannot be sent as {dtype} without losing precision; send the column as strings to keep it exact"#),
+        S::DirectNativeBytes => said(r#"column {column!r} holds raw bytes ({native_type}), and the contract has no cell that carries them. Decode the column to text, or leave it out of the schema"#),
+        S::DirectNativeContainer => said(r#"column {column!r} holds {shape} ({native_type}), and a nested column is not something this client can send. Multi-label targets are not supported by these models; for a feature, give one value per row"#),
         S::DirectWireFraction => {
             said(r#"value {value!r} cannot be sent as {dtype} without losing its fractional part"#)
         }

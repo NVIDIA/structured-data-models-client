@@ -44,6 +44,12 @@ Source-backed materialization -> existing Phase 3 path (unchanged)
   Preserve conversion failures, owner lifetimes and mutation effects; combine pure Rust steps only when no observable work separates them.
 - Use existing attachments for input-sized columns and response data, explicit tagged alternatives for direct versus gathered requests, and canonical generators for message changes.
   Reject mixed alternatives; preserve existing gathered-call behavior.
+  Direct Arrow fields carry small native storage observations under the versioned `sdm.direct.storage.v1` metadata key, defined and validated in `sdm-contract`.
+  Capture these facts during reached conversion, preserve them across batches, and reject malformed or incompatible metadata; warehouse consumers do not use this contract.
+  The next connected increment will handle direct inference options that require native transport encoding through a closed deferred-options alternative.
+  Rust constructs the logical envelope and its fixed inference slot; Python binds the retained native value at send time and calls the existing native transport.
+  For this alternative, native transport owns serialization, endpoint wrapping and wrapped-size enforcement, preserving open-check/error order and custom transport behavior.
+  Ordinary byte calls and warehouse paths remain unchanged; response attribution still belongs to Rust and uses the encoded row layout.
 - Later PQL selection preserves scoring-key expansion/exclusion and known-target filtering.
   If reduction is needed, sample with fresh seed 42, then sort the sampled index labels; otherwise do not read/sort the index.
   Infer task from selected context, then use the same generic Request construction.

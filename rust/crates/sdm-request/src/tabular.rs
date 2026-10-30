@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! Declared-type numeric tabular encoding, independent of gathered envelopes.
+//! Declared-type tabular encoding, independent of gathered envelopes.
 
 use crate::predict::{self, Entity};
 use arrow_array::cast::AsArray;
@@ -13,12 +13,15 @@ use sdm_contract::direct::{
     ColumnFlags, DirectInference, EncodedDirectBody, EncodedTableShape, FloatStorage,
     PrimitiveOption, TabularColumn, TabularColumns,
 };
+use sdm_contract::direct::storage;
 use sdm_contract::ops::{DescribedTable, Dtype, SourceDescription, Stype};
 use sdm_contract::{CoreError, CoreWarning, Detail, Scalar, Sentence};
 use sdm_wire::json::Value;
 use std::collections::BTreeMap;
 
 pub mod response;
+pub mod cell;
+mod decimal;
 
 fn text(value: impl Into<String>) -> Value {
     Value::Text(value.into())
@@ -64,6 +67,22 @@ fn widened(a: Dtype, b: Dtype) -> Dtype {
     }
 }
 
+pub fn resolve_dtype(input: sdm_contract::direct::dtype::DtypeResolutionObservation) -> Result<sdm_contract::direct::dtype::DtypeResolution, CoreError> {
+    use sdm_contract::direct::dtype::{DtypeResolution, DtypeResolutionObservation as O};
+    let dtype = match input {
+        O::NullableInteger { declared, equal } => {
+            if !matches!(declared, Dtype::Int32 | Dtype::Int64) {
+                return Err(CoreError::protocol(Sentence::InvalidMessage, "nullable integer retention has a noninteger declaration"));
+            }
+            equal.then_some(declared)
+        }
+        O::Widen { before, arriving, untyped } => {
+            if untyped { before } else { Some(before.map_or(arriving, |before| widened(before, arriving))) }
+        }
+    };
+    Ok(DtypeResolution { dtype })
+}
+
 fn raw(array: &ArrayRef, row: usize) -> Result<Scalar, CoreError> {
     if array.is_null(row) {
         return Ok(Scalar::Null);
@@ -92,6 +111,16 @@ fn raw(array: &ArrayRef, row: usize) -> Result<Scalar, CoreError> {
         }
         DataType::Float64 => Scalar::Float64(array.as_primitive::<Float64Type>().value(row)),
         DataType::Boolean => Scalar::Bool(array.as_boolean().value(row)),
+        DataType::Utf8 => Scalar::Utf8(array.as_string::<i32>().value(row).to_owned()),
+        DataType::LargeUtf8 => Scalar::Utf8(array.as_string::<i64>().value(row).to_owned()),
+        DataType::Decimal128(precision, scale) => Scalar::Decimal128 {
+            precision: *precision, scale: *scale,
+            value: array.as_primitive::<Decimal128Type>().value(row),
+        },
+        DataType::Decimal256(precision, scale) => Scalar::Decimal256 {
+            precision: *precision, scale: *scale,
+            value: array.as_primitive::<Decimal256Type>().value(row),
+        },
         _ => return Err(crate::predict::not_yet("direct_numeric_storage")),
     })
 }
@@ -105,8 +134,14 @@ fn cell(
     if matches!(value, Scalar::Null) || matches!(value,Scalar::Float64(v) if v.is_nan()) {
         return Ok(Value::Null);
     }
+    match value {
+        Scalar::Decimal128 { value, scale, .. } => return decimal::encode(&value.to_string(), scale, dtype, column),
+        Scalar::Decimal256 { value, scale, .. } => return decimal::encode(&value.to_string(), scale, dtype, column),
+        _ => {}
+    }
     if dtype == Dtype::String {
         return Ok(text(match value {
+            Scalar::Utf8(v) => v,
             Scalar::Int64(v) => v.to_string(),
             Scalar::UInt64(v) => v.to_string(),
             Scalar::Float64(v) => float_text(v),
@@ -172,6 +207,46 @@ fn cell(
     crate::payload::int_cell(number, column)
 }
 
+fn encoded_cell(
+    batch: &RecordBatch,
+    at: usize,
+    row: usize,
+    native: Option<&storage::DirectStorage>,
+    dtype: Dtype,
+    column: &str,
+    float_text: fn(f64) -> String,
+) -> Result<Value, CoreError> {
+    if let Some(storage::DirectStorage::Encoded { dtype: encoded_dtype }) = native {
+        if *encoded_dtype != dtype {
+            return Err(CoreError::protocol(Sentence::InvalidMessage, "encoded cell dtype disagrees with resolved wire dtype"));
+        }
+        let Scalar::Utf8(encoded) = raw(batch.column(at), row)? else {
+            return Err(CoreError::protocol(Sentence::InvalidMessage, "encoded cell lacks its scalar representation"));
+        };
+        return Ok(match sdm_contract::direct::cell::encoded_scalar(&encoded)? {
+            Scalar::Null => Value::Null,
+            Scalar::Bool(v) => Value::Bool(v),
+            Scalar::Utf8(v) => text(v),
+            Scalar::Int64(v) => Value::Number(v.to_string()),
+            Scalar::Float64(v) if v.is_finite() => crate::payload::float_cell(v, column)?,
+            _ => return Err(CoreError::protocol(Sentence::InvalidMessage, "encoded cell is not a model JSON scalar")),
+        });
+    }
+    if let Some(storage::DirectStorage::Timestamp { unit, .. }) = native
+    {
+        let value = raw(batch.column(at), row)?;
+        if matches!(value, Scalar::Null) { return Ok(Value::Null); }
+        if !matches!(dtype, Dtype::Date | Dtype::Time) {
+            return Err(crate::predict::not_yet("direct_native_timestamp_conversion"));
+        }
+        let Scalar::Int64(count) = value else {
+            return Err(CoreError::protocol(Sentence::InvalidMessage, "timestamp count is not int64"));
+        };
+        return Ok(text(crate::payload::iso_microsecond_count(unit.microseconds(count))));
+    }
+    cell(raw(batch.column(at), row)?, dtype, column, float_text)
+}
+
 fn nullable_whole(
     batches: &[RecordBatch],
     at: usize,
@@ -205,6 +280,30 @@ fn nullable_whole(
         }
         _ => false,
     }))
+}
+
+/// Finish a proven-passive column before the host observes the next column.
+pub fn encode_column(batches: &[RecordBatch], dtype: Dtype, float_text: fn(f64) -> String) -> Result<Vec<Scalar>, CoreError> {
+    let mut values = Vec::new();
+    for batch in batches {
+        if batch.num_columns() != 1 {
+            return Err(CoreError::protocol(Sentence::InvalidMessage, "direct column encoding requires exactly one column"));
+        }
+        let schema = batch.schema();
+        let native = storage::read(schema.field(0))?;
+        for row in 0..batch.num_rows() {
+            let cell = encoded_cell(batch, 0, row, native.as_ref(), dtype, schema.field(0).name(), float_text)?;
+            values.push(match cell {
+                Value::Null => Scalar::Null,
+                Value::Bool(value) => Scalar::Bool(value),
+                Value::Text(value) => Scalar::Utf8(value),
+                Value::Number(value) if matches!(dtype, Dtype::Int32 | Dtype::Int64) => Scalar::Int64(value.parse().map_err(|_| CoreError::protocol(Sentence::InvalidMessage, "encoded integer is not int64"))?),
+                Value::Number(value) => Scalar::Float64(value.parse().map_err(|_| CoreError::protocol(Sentence::InvalidMessage, "encoded number is not a float"))?),
+                _ => return Err(CoreError::protocol(Sentence::InvalidMessage, "encoded column contains a nonscalar value")),
+            });
+        }
+    }
+    Ok(values)
 }
 
 fn widths(
@@ -250,8 +349,7 @@ fn widths(
     Ok(dtypes)
 }
 
-fn primitive_inference(inference: DirectInference) -> Result<Value, CoreError> {
-    let integer = |digits: String| -> Result<Value, CoreError> {
+fn json_integer(digits: String) -> Result<Value, CoreError> {
         let body = digits.strip_prefix('-').unwrap_or(&digits);
         if body.is_empty()
             || !body.bytes().all(|b| b.is_ascii_digit())
@@ -262,6 +360,11 @@ fn primitive_inference(inference: DirectInference) -> Result<Value, CoreError> {
                 "a direct inference integer has noncanonical digits",
             ));
         }
+        Ok(Value::Number(digits))
+}
+
+fn option_integer(digits: String) -> Result<Value, CoreError> {
+        json_integer(digits.clone())?;
         let exact = digits
             .parse::<f64>()
             .ok()
@@ -273,30 +376,43 @@ fn primitive_inference(inference: DirectInference) -> Result<Value, CoreError> {
             );
         }
         Ok(Value::Number(digits))
-    };
+}
+
+pub fn check_option(input: &sdm_contract::direct::DirectOptionObservation) -> Result<(), CoreError> {
+    if let Some(integer) = &input.integer { option_integer(integer.clone())?; }
+    if input.repeated { return Err(invalid(Sentence::DirectOptionCycle)); }
+    if input.depth > 100 {
+        return Err(invalid(Sentence::DirectOptionDepth).with_field("limit", Detail::Scalar(Scalar::UInt64(100))));
+    }
+    Ok(())
+}
+
+fn option_value(value: PrimitiveOption) -> Result<Value, CoreError> {
+    Ok(match value {
+        // The reached native integer coercion was checked before traversal
+        // continued. Its JSON spelling can differ for a native subclass;
+        // validating that spelling must not repeat the coercion policy.
+        PrimitiveOption::Integer(digits) => json_integer(digits)?,
+        PrimitiveOption::Value(Scalar::Int64(v)) => option_integer(v.to_string())?,
+        PrimitiveOption::Value(Scalar::UInt64(v)) => option_integer(v.to_string())?,
+        PrimitiveOption::Value(Scalar::Null) => Value::Null,
+        PrimitiveOption::Value(Scalar::Bool(v)) => Value::Bool(v),
+        PrimitiveOption::Value(Scalar::Utf8(v)) => Value::Text(v),
+        PrimitiveOption::Value(Scalar::Float64(v)) => Value::float(v).ok_or_else(|| {
+            CoreError::protocol(Sentence::InvalidMessage, "direct inference floats must be finite")
+        })?,
+        PrimitiveOption::Array(values) => Value::Array(values.into_iter().map(option_value).collect::<Result<_, _>>()?),
+        PrimitiveOption::Object(fields) => Value::Object(fields.into_iter().map(|(name, value)| {
+            Ok((name, option_value(value)?))
+        }).collect::<Result<_, CoreError>>()?),
+        _ => return Err(CoreError::protocol(Sentence::InvalidMessage, "direct inference holds a value outside the JSON family")),
+    })
+}
+
+fn primitive_inference(inference: DirectInference) -> Result<Value, CoreError> {
     let mut fields = Vec::new();
     for (name, value) in inference.entries {
-        let value = match value {
-            PrimitiveOption::Integer(digits) => integer(digits)?,
-            PrimitiveOption::Value(Scalar::Int64(v)) => integer(v.to_string())?,
-            PrimitiveOption::Value(Scalar::UInt64(v)) => integer(v.to_string())?,
-            PrimitiveOption::Value(Scalar::Null) => Value::Null,
-            PrimitiveOption::Value(Scalar::Bool(v)) => Value::Bool(v),
-            PrimitiveOption::Value(Scalar::Utf8(v)) => Value::Text(v),
-            PrimitiveOption::Value(Scalar::Float64(v)) => Value::float(v).ok_or_else(|| {
-                CoreError::protocol(
-                    Sentence::InvalidMessage,
-                    "direct inference floats must be finite",
-                )
-            })?,
-            _ => {
-                return Err(CoreError::protocol(
-                    Sentence::InvalidMessage,
-                    "direct inference holds a value outside the primitive family",
-                ));
-            }
-        };
-        fields.push((name, value));
+        fields.push((name, option_value(value)?));
     }
     Ok(Value::Object(fields))
 }
@@ -322,8 +438,22 @@ pub fn envelope(
         .ok_or_else(|| {
             invalid(Sentence::DirectSchemaMissing).with_field("name", Detail::text(entity))
         })?;
+    let dtypes = widths(table, Some(native_schema), scoring, arriving, storage)?;
+    schema_columns(table, native_schema, context_names, dtypes, target, kind, supports)
+}
+
+/// Adapter meaning with wire dtypes already resolved at their native boundaries.
+#[allow(clippy::too_many_arguments)]
+pub fn schema_columns(
+    table: &DescribedTable,
+    native_schema: &[ColumnFlags],
+    context_names: &[String],
+    dtypes: BTreeMap<String, Dtype>,
+    target: &str,
+    kind: &str,
+    supports: fn(Stype, Dtype) -> bool,
+) -> Result<(TabularColumns, Vec<CoreWarning>), CoreError> {
     let native = Some(native_schema);
-    let dtypes = widths(table, native, scoring, arriving, storage)?;
     let missing: Vec<String> = context_names
         .iter()
         .filter(|n| !dtypes.contains_key(*n))
@@ -359,7 +489,9 @@ pub fn envelope(
                 .and_then(|t| t.iter().find(|c| &c.name == name))
                 .is_some_and(|c| c.stype_declared)
         {
-            stype = if matches!(
+            stype = if matches!(dtype, Dtype::Date | Dtype::Time) {
+                Stype::Timestamp
+            } else if matches!(
                 dtype,
                 Dtype::Int32 | Dtype::Int64 | Dtype::Float32 | Dtype::Float64
             ) {
@@ -406,12 +538,7 @@ fn instance_schema(plan: &TabularColumns, primary_key: &[String]) -> Value {
                     ("dtype", text(column.dtype.wire_name())),
                     (
                         "stype",
-                        text(match column.stype {
-                            Stype::Id => "ID",
-                            Stype::Numerical => "numerical",
-                            Stype::Text => "text",
-                            _ => "categorical",
-                        }),
+                        text(crate::direct::stype_name(column.stype)),
                     ),
                 ]),
             )
@@ -464,9 +591,10 @@ pub fn body(
             })?;
             let mut position = 0;
             for batch in batches {
+                let native = storage::read(batch.schema().field(at))?;
                 for row in 0..batch.num_rows() {
-                    rows[position].push(cell(
-                        raw(batch.column(at), row)?,
+                    rows[position].push(encoded_cell(
+                        batch, at, row, native.as_ref(),
                         dtype,
                         name,
                         float_text,
@@ -610,7 +738,7 @@ pub fn check_body(
                 let dtype = dtypes.get(name.as_str()).ok_or_else(protocol)?;
                 let valid = matches!(cell, Value::Null)
                     || match (dtype, cell) {
-                        (Dtype::Bool, Value::Bool(_)) | (Dtype::String, Value::Text(_)) => true,
+                        (Dtype::Bool, Value::Bool(_)) | (Dtype::String | Dtype::Date | Dtype::Time, Value::Text(_)) => true,
                         (
                             Dtype::Int32 | Dtype::Int64,
                             Value::Number(token) | Value::Text(token),
@@ -685,6 +813,7 @@ pub fn overlap(
     let context_schema = context.first()?.schema();
     let scoring_schema = scoring.first()?.schema();
     let target_at = context_schema.index_of(target).ok()?;
+    let target_storage = storage::floats(context_schema.field(target_at)).ok()?;
     let context_at: Vec<_> = key
         .iter()
         .map(|name| context_schema.index_of(name).ok())
@@ -693,6 +822,10 @@ pub fn overlap(
         .iter()
         .map(|name| scoring_schema.index_of(name).ok())
         .collect::<Option<_>>()?;
+    let context_native = context_at.iter().map(|at| storage::read(context_schema.field(*at)))
+        .collect::<Result<Vec<_>, _>>().ok()?;
+    let scoring_native = scoring_at.iter().map(|at| storage::read(scoring_schema.field(*at)))
+        .collect::<Result<Vec<_>, _>>().ok()?;
     let mut key_table = table.clone();
     key_table
         .columns
@@ -705,19 +838,17 @@ pub fn overlap(
     let storage: Vec<_> = scoring_schema
         .fields()
         .iter()
-        .map(|field| {
-            matches!(field.data_type(), DataType::Float32 | DataType::Float64)
-                .then_some(FloatStorage::NanMissing)
-        })
-        .collect();
+        .map(|field| storage::floats(field))
+        .collect::<Result<Vec<_>, _>>().ok()?;
     let dtypes = widths(&key_table, Some(flags), scoring, &key_arriving, &storage).ok()?;
     let encode_key = |batch: &RecordBatch,
                       row: usize,
-                      positions: &[usize]|
+                      positions: &[usize],
+                      native: &[Option<storage::DirectStorage>]|
      -> Result<Option<Vec<u8>>, CoreError> {
         let mut values = Vec::new();
-        for (name, at) in key.iter().zip(positions) {
-            let value = cell(raw(batch.column(*at), row)?, dtypes[name], name, float_text)?;
+        for ((name, at), native) in key.iter().zip(positions).zip(native) {
+            let value = encoded_cell(batch, *at, row, native.as_ref(), dtypes[name], name, float_text)?;
             if matches!(value, Value::Null) {
                 return Ok(None);
             }
@@ -738,11 +869,13 @@ pub fn overlap(
     for batch in context {
         for row in 0..batch.num_rows() {
             let target = raw(batch.column(target_at), row).ok()?;
-            if matches!(target, Scalar::Null) || matches!(target, Scalar::Float64(v) if v.is_nan())
+            if matches!(target, Scalar::Null)
+                || (target_storage != Some(FloatStorage::ValidityMasked)
+                    && matches!(target, Scalar::Float64(v) if v.is_nan()))
             {
                 continue;
             }
-            if let Some(key) = encode_key(batch, row, &context_at).ok()? {
+            if let Some(key) = encode_key(batch, row, &context_at, &context_native).ok()? {
                 answered.insert(key);
             }
         }
@@ -750,7 +883,7 @@ pub fn overlap(
     let mut shown = 0u64;
     for batch in scoring {
         for row in 0..batch.num_rows() {
-            if encode_key(batch, row, &scoring_at)
+            if encode_key(batch, row, &scoring_at, &scoring_native)
                 .ok()?
                 .is_some_and(|key| answered.contains(&key))
             {
@@ -772,4 +905,46 @@ pub fn overlap(
         )
         .with_field("target", Detail::text(target))
     })
+}
+
+/// Compare keys whose native conversions have already been reached in order.
+pub fn observed_overlap(
+    context: &[RecordBatch], scoring: &[RecordBatch], target: &str, scoring_rows: usize,
+) -> Result<Option<CoreWarning>, CoreError> {
+    let protocol = || CoreError::protocol(Sentence::InvalidMessage, "observed keys do not share one encoded column layout");
+    let (Some(left), Some(right)) = (context.first(), scoring.first()) else { return Ok(None); };
+    if left.schema() != right.schema() { return Err(protocol()); }
+    if left.num_columns() == 0 { return Ok(None); }
+    let native = left.schema().fields().iter().map(|field| storage::read(field)).collect::<Result<Vec<_>, _>>()?;
+    let dtypes = native.iter().map(|value| match value {
+        Some(storage::DirectStorage::Encoded { dtype }) => Ok(*dtype),
+        _ => Err(protocol()),
+    }).collect::<Result<Vec<_>, _>>()?;
+    let keys = |batches: &[RecordBatch]| -> Result<Vec<Option<Vec<u8>>>, CoreError> {
+        let mut keys = Vec::new();
+        for batch in batches {
+            for row in 0..batch.num_rows() {
+                let mut values = Vec::new();
+                let mut missing = false;
+                for (at, dtype) in dtypes.iter().enumerate() {
+                    let value = encoded_cell(batch, at, row, native[at].as_ref(), *dtype,
+                        batch.schema().field(at).name(), |v| v.to_string())?;
+                    if matches!(value, Value::Null) { missing = true; }
+                    let value = match value {
+                        Value::Number(ref number) if number.parse::<f64>().ok() == Some(0.0) => Value::Number("0".into()),
+                        other => other,
+                    };
+                    values.push(value);
+                }
+                keys.push((!missing).then(|| Value::Array(values).to_bytes()));
+            }
+        }
+        Ok(keys)
+    };
+    let answers: std::collections::BTreeSet<_> = keys(context)?.into_iter().flatten().collect();
+    let shown = keys(scoring)?.into_iter().flatten().filter(|key| answers.contains(key)).count();
+    Ok((shown > 0).then(|| CoreWarning::new(Sentence::DirectOverlap, "scoring rows carry their answers in context")
+        .with_field("shown", Detail::Scalar(Scalar::UInt64(shown as u64)))
+        .with_field("rows", Detail::Scalar(Scalar::UInt64(scoring_rows as u64)))
+        .with_field("target", Detail::text(target))))
 }
