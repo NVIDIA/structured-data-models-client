@@ -65,14 +65,21 @@ Pure total comparisons with monotonic or distinct keys can finish without a NumP
 When ties or comparison failures need the producer, Python binds the retained facts and retries once without rereading native owners.
 The older scalar producer bindings landed at `b719a516`, with frozen public receipts selected by the actual runtime rather than reusing another NumPy version's tie order.
 
-The next connected increment retains exact NumPy integer and floating scalar owners inside object indexes.
+The increment landed at `6e78eb1` retains exact NumPy integer and floating scalar owners inside object indexes.
 Its `ScalarObject` facts carry a source-bound comparison-semantics tag independently of the sorting profile.
 NumPy 1.23 legacy, NumPy 1.26 legacy and audited NumPy 2.5 weak-scalar comparisons differ; NumPy 1.26's promotion mode is observed rather than inferred from its binary.
 The engine uses generic object comparison and sorting for these facts, without claiming a total order or applying the profile-free unique-key shortcut to mixed-precision comparisons.
 Reached integer-to-float overflow has a closed result; native warning-handler effects remain an explicit unfinished obligation.
+Its public parity passed 379 cases in each of the prepared NumPy 1.23.5, 1.26.4 and 2.5.4 runtimes.
+
+The next runtime increment binds the official NumPy 2.1.3 and 2.3.4 deployment wheels.
+The former requires unconditional four- and eight-lane SIMD entry profiles; only the original-array sorted shortcut differs, while the outer monotonic check remains unchanged.
+Frozen public materialization confirms a tie-order difference at 320 sampled rows with sorted duplicate present keys and a missing label.
+Compiler/source evidence supports the existing GNU fallback family, and receipt identity includes effective AVX2 and AVX512 dispatch groups.
+The current host provides live AVX2 evidence; source compatibility does not claim live AVX512 execution.
 This increment still requires exact-source reviews, canonical generation, installed-wheel parity and handoff before landing.
 
-Full PQL completion remains pending for custom comparison-label ownership, Decimal context signals, NumPy numeric scalar object labels, additional temporal owners, broader producer bindings, and remaining native frame/count effects.
+Full PQL completion remains pending for custom comparison-label ownership, Decimal context signals, remaining numeric promotion modes and effects, additional temporal owners, broader producer bindings, and remaining native frame/count effects.
 These are retained obligations, not silently unsupported public inputs or an expansion of the approved custom-sort exception.
 The development route remains opt-in; existing defaults and warehouse paths are unchanged.
 A frozen public custom-label comparison witness has been presented for an owner decision; no broader fallback is implemented.
