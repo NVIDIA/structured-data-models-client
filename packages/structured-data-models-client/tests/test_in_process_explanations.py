@@ -15,12 +15,14 @@ from __future__ import annotations
 import copy
 import json
 import math
+import warnings
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
 from sample_tables import graph, people
 from test_relational_explanations import ROWS, TABLES, gathered
+from test_tabular_explanations import CHURN, tabular_asked
 
 from sdm_client import (
     KumoRelational,
@@ -855,3 +857,41 @@ def test_a_relational_answer_explains_each_entity_and_its_rows(relational):
             'probability',
             'probability',
         ]
+
+
+def test_in_process_tabular_explains(tabular):
+    """An `EXPLAIN` query answered in process carries an explanation per row.
+
+    Assumptions:
+    - A small random-weight tabular model.
+    """
+    with SDMClient.in_process(tabular) as client:
+        result = client.predict(
+            tabular_asked(f'EXPLAIN {CHURN}'), model=KumoTabular()
+        )
+
+    assert len(result.explanations) == len(result) == 2
+    assert {item.explanation['format'] for item in result} == {
+        'sdm_gradient_v1'
+    }
+
+
+def test_in_process_relational_explains(relational):
+    """An `EXPLAIN` query gathered by the engine and answered in process
+    carries an explanation per entity.
+
+    Assumptions:
+    - A small random-weight relational model; a binary question over two
+      entities of the sample graph.
+    """
+    request = PredictiveQuery(
+        'EXPLAIN PREDICT COUNT(orders.*, 0, 30, days) > 2 '
+        'FOR EACH users.user_id',
+        graph(),
+    ).materialize(indices=[0, 1])
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        with SDMClient.in_process(relational) as client:
+            result = client.predict(request, model=KumoRelational())
+
+    assert len(result.explanations) == len(result) == 2
