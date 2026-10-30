@@ -151,7 +151,11 @@ pub enum TabularSortProfile {
     Unbound,
     Scalar,
     Avx2Gnu14,
+    /// Same four-lane algorithm without the original-input sorted shortcut.
+    Avx2Gnu14Unconditional,
     Avx512Gnu14,
+    /// Same eight-lane algorithm without the original-input sorted shortcut.
+    Avx512Gnu14Unconditional,
     Stable,
 }
 

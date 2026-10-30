@@ -155,6 +155,9 @@ fn present_nan_sorts_before_masked_null() {
     for profile in [
         TabularSortProfile::Scalar,
         TabularSortProfile::Avx2Gnu14,
+        TabularSortProfile::Avx512Gnu14,
+        TabularSortProfile::Avx2Gnu14Unconditional,
+        TabularSortProfile::Avx512Gnu14Unconditional,
         TabularSortProfile::Stable,
     ] {
         let mut index = facts(
@@ -504,4 +507,33 @@ fn unbound_validation_precedes_monotonic_shortcuts() {
         )))
         .is_err()
     );
+}
+
+#[test]
+fn unconditional_simd_entry_does_not_disable_outer_index_monotonic_shortcut() {
+    for profile in [
+        TabularSortProfile::Avx2Gnu14Unconditional,
+        TabularSortProfile::Avx512Gnu14Unconditional,
+    ] {
+        let mut index = facts(
+            TabularIndexValues::Signed {
+                values: vec![7; 320],
+                width: 8,
+            },
+            vec![false; 320],
+        );
+        index.profile = profile;
+        check(index.clone(), (0..320).collect(), true);
+        index.missing[0] = true;
+        let OrderedSampledTabularRows::Sorted {
+            positions,
+            already_ordered,
+        } = order_sampled(&index).unwrap()
+        else {
+            panic!("expected ordered positions")
+        };
+        assert!(!already_ordered);
+        assert_eq!(positions.last(), Some(&0));
+        assert_ne!(&positions[..319], &(1..320).collect::<Vec<_>>());
+    }
 }

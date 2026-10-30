@@ -13,19 +13,25 @@
 mod gnu;
 
 /// Explicit lane/store semantics and depth fallback, without runtime dispatch.
+/// Gnu14 names the verified algorithm family, not the producer compiler version;
+/// the relevant GNU 10 and GNU 14 fallback function bodies are identical.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SimdArgsortProfile {
     /// Four lanes, reversed right partition groups, GNU 14 sort fallback.
     Avx2Gnu14,
+    /// Four lanes with unconditional entry to the same recursive algorithm.
+    Avx2Gnu14Unconditional,
     /// Eight lanes, increasing right partition groups, GNU 14 sort fallback.
     Avx512Gnu14,
+    /// Eight lanes with unconditional entry to the same recursive algorithm.
+    Avx512Gnu14Unconditional,
 }
 
 impl SimdArgsortProfile {
     fn lanes(self) -> usize {
         match self {
-            Self::Avx2Gnu14 => 4,
-            Self::Avx512Gnu14 => 8,
+            Self::Avx2Gnu14 | Self::Avx2Gnu14Unconditional => 4,
+            Self::Avx512Gnu14 | Self::Avx512Gnu14Unconditional => 8,
         }
     }
 }
@@ -74,12 +80,16 @@ impl SimdKey for f64 {
 /// Sort an initially identity index permutation using one explicit algorithm.
 ///
 /// This is a source component, not a native-profile classifier. It implements
-/// the source's original-array sorted shortcut and the full depth fallback.
+/// each profile's original-array entry policy and the full depth fallback.
 /// Callers must exclude NaNs and prove their native producer uses this profile.
 /// It does not choose missing placement, selected-subset shortcuts or row ids.
 pub fn simd_argsort<T: SimdKey>(values: &[T], profile: SimdArgsortProfile) -> Vec<usize> {
     let mut indices: Vec<usize> = (0..values.len()).collect();
-    if values.len() > 1 && values.windows(2).any(|pair| pair[1] < pair[0]) {
+    let unconditional = matches!(
+        profile,
+        SimdArgsortProfile::Avx2Gnu14Unconditional | SimdArgsortProfile::Avx512Gnu14Unconditional
+    );
+    if values.len() > 1 && (unconditional || values.windows(2).any(|pair| pair[1] < pair[0])) {
         // The source casts log2(n) to size_t before doubling. This conversion
         // concerns only the range length, never a key or an index label.
         let depth = 2 * (values.len() as f64).log2() as u32;
@@ -266,7 +276,10 @@ impl<T: SimdKey> Partition<'_, T> {
                 upper.push(index);
             }
         }
-        if self.profile == SimdArgsortProfile::Avx2Gnu14 {
+        if matches!(
+            self.profile,
+            SimdArgsortProfile::Avx2Gnu14 | SimdArgsortProfile::Avx2Gnu14Unconditional
+        ) {
             upper.reverse();
             let packed: Vec<usize> = lower.iter().chain(&upper).copied().collect();
             // AVX2 stores the entire rearranged vector twice. The overwrite

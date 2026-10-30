@@ -134,3 +134,44 @@ fn all_native_scalar_threshold_sentinel_and_width_controls_match_exactly() {
         }
     }
 }
+
+#[test]
+fn unconditional_entry_preserves_lanes_but_reorders_partition_sized_sorted_ties() {
+    for (modern, unconditional) in [
+        (
+            SimdArgsortProfile::Avx2Gnu14,
+            SimdArgsortProfile::Avx2Gnu14Unconditional,
+        ),
+        (
+            SimdArgsortProfile::Avx512Gnu14,
+            SimdArgsortProfile::Avx512Gnu14Unconditional,
+        ),
+    ] {
+        for constant in [false, true] {
+            let values: Vec<i64> = (0..319).map(|i| if constant { 7 } else { i / 9 }).collect();
+            let identity: Vec<_> = (0..values.len()).collect();
+            assert_eq!(simd_argsort(&values, modern), identity);
+            let order = simd_argsort(&values, unconditional);
+            assert_ne!(order, identity);
+            assert!(
+                order
+                    .windows(2)
+                    .all(|pair| values[pair[0]] <= values[pair[1]])
+            );
+            let mut seen = order;
+            seen.sort_unstable();
+            assert_eq!(seen, identity);
+        }
+        // Empty/singleton handling precedes recursion and its logarithm.
+        assert_eq!(simd_argsort::<i64>(&[], unconditional), Vec::<usize>::new());
+        assert_eq!(simd_argsort(&[7_i64], unconditional), vec![0]);
+        for n in [2, 3, 4, 7, 8, 9, 15, 16, 17, 255, 256, 257, 319] {
+            let values: Vec<i64> = (0..n).map(|i| ((i * 17 + 3) % 11) as i64).collect();
+            // Unsorted entry takes identical lane/store/partition paths.
+            assert_eq!(
+                simd_argsort(&values, unconditional),
+                simd_argsort(&values, modern)
+            );
+        }
+    }
+}

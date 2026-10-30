@@ -70,7 +70,13 @@ impl<T: PartialOrd> PartialOrd for MissingLast<T> {
 fn numeric<T: SimdKey>(values: &[T], profile: Profile) -> Vec<usize> {
     if values.iter().any(|v| v.partial_cmp(v).is_none()) {
         let ordered: Vec<_> = values.iter().copied().map(MissingLast).collect();
-        if matches!(profile, Profile::Avx2Gnu14 | Profile::Avx512Gnu14) {
+        if matches!(
+            profile,
+            Profile::Avx2Gnu14
+                | Profile::Avx512Gnu14
+                | Profile::Avx2Gnu14Unconditional
+                | Profile::Avx512Gnu14Unconditional
+        ) {
             let mut positions: Vec<_> = (0..values.len()).collect();
             super::gnu::sort(&ordered, &mut positions);
             return positions;
@@ -93,6 +99,12 @@ fn numeric<T: SimdKey>(values: &[T], profile: Profile) -> Vec<usize> {
         }
         Profile::Avx2Gnu14 => simd_argsort(values, SimdArgsortProfile::Avx2Gnu14),
         Profile::Avx512Gnu14 => simd_argsort(values, SimdArgsortProfile::Avx512Gnu14),
+        Profile::Avx2Gnu14Unconditional => {
+            simd_argsort(values, SimdArgsortProfile::Avx2Gnu14Unconditional)
+        }
+        Profile::Avx512Gnu14Unconditional => {
+            simd_argsort(values, SimdArgsortProfile::Avx512Gnu14Unconditional)
+        }
     }
 }
 
