@@ -30,6 +30,13 @@ NUMPY_MIXTURES = (
     'float32_pythonfloat_24',
     'float64_huge_pythonint',
     'int64_huge_pythonint',
+    'mixed_precision_triplet',
+    'missing_numeric_owners',
+)
+NUMPY_PROMOTION_PAIRS = tuple(
+    (integer, floating)
+    for integer in NUMPY_WIDTHS[:8]
+    for floating in NUMPY_WIDTHS[8:]
 )
 
 LABEL_FAMILIES = (
@@ -51,6 +58,10 @@ LABEL_FAMILIES = (
         'numpy_' + name + '_' + direction
         for name in NUMPY_MIXTURES
         for direction in ('forward', 'reverse')
+    )
+    + tuple(
+        'numpy_pair_' + integer + '_' + floating
+        for integer, floating in NUMPY_PROMOTION_PAIRS
     )
 )
 
@@ -110,10 +121,32 @@ def label_frame(family: str) -> pd.DataFrame:
         'float32_pythonfloat_24': [np.float32(2**24), float(2**24 + 1)],
         'float64_huge_pythonint': [np.float64(1), 10**400],
         'int64_huge_pythonint': [np.int64(1), 10**400],
+        'mixed_precision_triplet': [
+            np.float32(2**24),
+            float(2**24 + 1),
+            np.int64(2**24 + 1),
+        ],
+        'missing_numeric_owners': [
+            np.float32(2),
+            None,
+            np.int16(-1),
+            np.float64(float('nan')),
+        ],
     }
     for name, pair in mixtures.items():
         patterns['numpy_' + name + '_forward'] = pair
         patterns['numpy_' + name + '_reverse'] = pair[::-1]
+    for integer, floating in NUMPY_PROMOTION_PAIRS:
+        integer_type = getattr(np, integer)
+        float_type = getattr(np, floating)
+        exponent = {'float16': 12, 'float32': 25, 'float64': 54}[floating]
+        boundary = min(int(np.iinfo(integer_type).max) - 1, 2**exponent)
+        patterns['numpy_pair_' + integer + '_' + floating] = [
+            integer_type(boundary + 1),
+            float_type(boundary),
+            integer_type(0),
+            float_type(0),
+        ]
     pattern = patterns[family]
     labels = [pattern[i % len(pattern)] for i in range(81)]
     if family in ('complex64', 'complex128'):
