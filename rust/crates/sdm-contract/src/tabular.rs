@@ -13,8 +13,14 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum TabularKey {
-    Text { value: String },
-    Integer { value: i128 },
+    Text {
+        value: String,
+    },
+    Integer {
+        #[serde(with = "integer_text")]
+        #[schemars(with = "String")]
+        value: i128,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -278,4 +284,23 @@ pub enum SelectedTabularRows {
     Missing {
         ordinals: Vec<usize>,
     },
+}
+
+// Integer observations use canonical decimal text like the other exact scalars.
+// Internally tagged enum deserialization cannot carry a bare i128 JSON number.
+mod integer_text {
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S: Serializer>(value: &i128, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&value.to_string())
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<i128, D::Error> {
+        let text = String::deserialize(deserializer)?;
+        let value = text.parse::<i128>().map_err(serde::de::Error::custom)?;
+        if value.to_string() != text {
+            return Err(serde::de::Error::custom("noncanonical tabular integer"));
+        }
+        Ok(value)
+    }
 }

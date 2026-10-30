@@ -20,7 +20,7 @@ from sdm_client.request import Request
 
 
 def _integer(value: int) -> dict[str, Any]:
-    return {'kind': 'integer', 'value': value}
+    return {'kind': 'integer', 'value': str(value)}
 
 
 def _expand(source: pd.Series, indices: list[Any], entity: str) -> list[int]:
