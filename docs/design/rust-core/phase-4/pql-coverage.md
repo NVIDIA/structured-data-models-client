@@ -109,15 +109,23 @@ Its existing partition and GNU depth fallback remain shared; the host alone sele
 Independent vectors are transcribed from the pinned upstream network headers and cover ordinary duplicates, maximum/infinity keys and nonzero-index subranges.
 Those vectors establish network behavior, not native AVX512 public execution; live AVX512 evidence is still absent on this host.
 
-Object-held Timestamp support is the next connected temporal increment.
+Object-held Timestamp support landed at `87ca02c27` with contract 42.
 Frozen public witnesses distinguish instant comparison from mixed Timestamp/datetime wall-clock comparison, including timezone identity, fold, submicrosecond precision and years outside Python datetime range.
 Native tick values and resolution preserve wide instants without forcing nanoseconds into int64 or eagerly calling range-sensitive timezone methods.
 The core must preserve separate LT/GT/EQ outcomes and reached year-range refusals; a total-order shortcut is not valid for ambiguous mixed temporal owners.
-Standard pandas 2 pytz and pandas 3 ZoneInfo owners are part of the planned coverage; arbitrary custom timezone callbacks remain unresolved.
+Standard pandas 2 pytz and pandas 3 ZoneInfo owners are covered; arbitrary custom timezone callbacks remain unresolved.
 
 Temporal MultiIndex acceptance must cover three distinct boundaries, verified through frozen public calls on pandas 2 and 3.
 First, ordered used codes can return before sorting an unused level containing a wide Timestamp and datetime; forcing normalization with alternating secondary codes reaches the year-range ValueError.
 Second, reached level errors carry a level path plus operand positions, so Python presents the error from the retained level owners rather than indexing top-level tuples.
 Third, mixed ambiguous-time owners can be ordering ties without being equal; expanded-value stable lexsort can preserve alternating sampled codes that distinct integer ranks would reorder.
 The native object stable-sort helper family is identical across the audited NumPy 1.23.5, 1.26.4, 2.1.3, 2.3.4 and 2.5.4 sources.
-This source evidence establishes the implementation target, not candidate validation or a completed temporal landing.
+Native stable-order controls agree across NumPy 1.23.5, 1.26.4 and 2.5.4; public parity covers six prepared runtimes and seven frozen-reference receipts containing 277 journeys each.
+The initial 584-case public runs found a standard pytz attribute-slot admission error, corrected and verified through targeted reruns in all six runtimes.
+Both whole-source reviews, the Rust contract/engine suites, strict Clippy and the required handoff passed before verified landing.
+Generated test-only constants retain the independent sorting expectations without runtime file reads or exceptions to production lint rules.
+
+The next connected increment preserves native numeric conversion effects through the existing suspended Run.
+Rust retains comparison policy, operands and sorting progress; Python retains exact scalar owners and performs only reached native observations or conversions.
+Early source review requires distinct NumPy 1.26 weak and NumPy 2.1 legacy policies, plus integer-width conversion support where the former reaches it.
+This work does not authorize native comparison callbacks, warning-attribution differences or broader custom-owner fallback.
