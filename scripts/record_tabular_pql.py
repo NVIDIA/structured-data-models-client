@@ -62,6 +62,9 @@ def main() -> None:
     parser.add_argument(
         '--output-dir', type=Path, default=TESTS / 'data/tabular_pql_reference'
     )
+    parser.add_argument(
+        '--group', choices=('labels', 'counts'), default='labels'
+    )
     args = parser.parse_args()
     reference = args.reference_checkout.resolve()
     assert reference != ROOT, (
@@ -95,6 +98,48 @@ def main() -> None:
     assert Path(sdm_client.__file__).resolve().is_relative_to(reference), (
         sdm_client.__file__
     )
+    if args.group == 'counts':
+        from tabular_pql_count_cases import CASES, observe_case
+
+        assert (
+            args.output_dir.resolve()
+            != (TESTS / 'data/tabular_pql_reference').resolve()
+        ), 'count receipts require a separate --output-dir'
+        runtime = runtime_identity()
+        receipt = {
+            'format': 1,
+            'generated_by': 'scripts/record_tabular_pql.py',
+            'group': 'counts',
+            'reference': {
+                'revision': revision,
+                'client_module': str(
+                    Path(sdm_client.__file__).resolve().relative_to(reference)
+                ),
+            },
+            'runtime': runtime,
+            'cases': {name: observe_case(name) for name in CASES},
+        }
+        args.output_dir.mkdir(parents=True, exist_ok=True)
+        output = args.output_dir / (runtime['fingerprint'] + '.json')
+        if output.exists():
+            previous = json.loads(output.read_text())
+            assert previous['reference']['revision'] == revision
+            assert previous['group'] == 'counts'
+        output.write_text(
+            json.dumps(receipt, indent=2, sort_keys=True, allow_nan=False)
+            + '\n'
+        )
+        print(
+            json.dumps(
+                {
+                    'receipt': str(output),
+                    'journeys': len(CASES),
+                    'runtime': runtime['identity'],
+                },
+                indent=2,
+            )
+        )
+        return
     cases: dict[str, Any] = {}
     for group, families, builder in [
         ('indices', INDEX_FAMILIES, indexed_frame),
