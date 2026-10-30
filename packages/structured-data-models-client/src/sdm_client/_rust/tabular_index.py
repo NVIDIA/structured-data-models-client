@@ -261,7 +261,14 @@ def _array(values: Any, missing: list[bool], profile: str) -> dict[str, Any]:
             ):
                 if absent:
                     if value is None or value is pd.NA or value is pd.NaT:
-                        atoms[position] = {'kind': 'native_missing'}
+                        atoms[position] = {
+                            'kind': 'native_missing',
+                            'owner': 'none'
+                            if value is None
+                            else 'pandas_na'
+                            if value is pd.NA
+                            else 'pandas_nat',
+                        }
                     elif type(value) in (
                         float,
                         np.float16,
