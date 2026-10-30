@@ -345,7 +345,6 @@ fn partition<T: SimdKey>(
     (state.left, state.smallest, state.biggest)
 }
 
-
 mod scalar;
 mod selected;
 pub use selected::order_sampled;

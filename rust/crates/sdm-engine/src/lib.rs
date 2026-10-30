@@ -42,3 +42,9 @@ pub fn not_yet(rule: &'static str) -> CoreError {
     .with_field("operation", Detail::text("materialize"))
     .with_field("rule", Detail::text(rule))
 }
+
+/// In-memory single-table row selection.
+pub mod tabular;
+
+/// Sampled-index ordering for verified native producer profiles.
+pub mod index_sort;

@@ -288,6 +288,26 @@ class PredictiveQuery:
                 **options,
             )
 
+        if (
+            not relational
+            and _routing.route(
+                _routing.TABULAR_FRAME
+                if predict is not None
+                else _routing.TABULAR_INDICES
+            )
+            == 'core'
+        ):
+            from sdm_client._rust.tabular_materialize import materialize
+
+            return materialize(
+                self.schema,
+                asked,
+                indices=indices,
+                predict=predict,
+                num_context_samples=num_context_samples,
+                task=task,
+            )
+
         if predict is not None:
             return self._tabular_materializer.table(
                 query=asked,

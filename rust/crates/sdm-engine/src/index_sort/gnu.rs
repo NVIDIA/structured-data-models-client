@@ -8,7 +8,6 @@
 //! median ties, recursion order, insertion threshold and heap-child ties.
 //! Its presence does not establish a producer's toolchain/profile binding.
 
-
 pub(super) fn sort<T: PartialOrd>(keys: &[T], indices: &mut [usize]) {
     if indices.is_empty() {
         return;

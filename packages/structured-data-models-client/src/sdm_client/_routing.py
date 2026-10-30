@@ -431,6 +431,13 @@ DIRECT_CONSTRUCTORS = (
 )
 DIRECT_PREDICT = ('client.predict/tabular/frames',)
 DIRECT_CONSUMERS = DIRECT_CONSTRUCTORS + DIRECT_PREDICT
+TABULAR_INDICES = (
+    'query.materialize/indices-binary/frames',
+    'query.materialize/indices-multiclass/frames',
+    'query.materialize/indices-regression/frames',
+)
+TABULAR_FRAME = ('query.materialize/predict-frame/frames',)
+TABULAR_MATERIALIZERS = TABULAR_INDICES + TABULAR_FRAME
 
 CORE_ROUTED = frozenset(
     S0
@@ -493,7 +500,11 @@ def forced() -> frozenset[str]:
     for path in sorted(named):
         if path not in ROUTES:
             raise RouteError(f'{ENVIRONMENT} names an unknown path {path!r}')
-        if path not in CORE_ROUTED and path not in DIRECT_CONSUMERS:
+        if (
+            path not in CORE_ROUTED
+            and path not in DIRECT_CONSUMERS
+            and path not in TABULAR_MATERIALIZERS
+        ):
             raise RouteError(
                 f'{ENVIRONMENT} forces {path!r} onto the core, which has no '
                 f'route for it in this build'
