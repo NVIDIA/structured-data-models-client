@@ -302,6 +302,9 @@ def test_attrs_copy_effect_is_not_moved_after_target_filter(route: str) -> None:
     data = frame()
     scoring = data.iloc[[10]].drop(columns=['target'])
     asked = query(data)
+    # A public write refreshes columns cached during schema construction on
+    # older pandas, so the first attribute copy occurs on the entity read.
+    data['target'] = data['target']
     fired = []
 
     class OnCopy:
@@ -314,7 +317,17 @@ def test_attrs_copy_effect_is_not_moved_after_target_filter(route: str) -> None:
     data.attrs['owner'] = OnCopy()
     request = asked.materialize(predict=scoring, task='regression')
     assert fired
-    assert 1 not in request.context.instance_table['id'].tolist()
+    assert request.context.instance_table['id'].tolist() == [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+    ]
 
 
 @pytest.mark.parametrize(
