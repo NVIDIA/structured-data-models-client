@@ -16,10 +16,12 @@ PAIRS = (
     (
         ENGINE / 'tests/data/legacy_network64_controls.json',
         ENGINE / 'src/index_sort/network64_fixture.rs',
+        ('cases',),
     ),
     (
         ROOT / 'rust/testdata/temporal-stable.json',
         ENGINE / 'src/index_sort/selected/object_stable_fixture.rs',
+        ('atoms', 'cases'),
     ),
 )
 
@@ -28,10 +30,14 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--check', action='store_true')
     args = parser.parse_args()
-    for source, target in PAIRS:
+    for source, target, fields in PAIRS:
         raw = source.read_bytes()
+        recorded = json.loads(raw)
+        # Provenance stays in the original receipt and its hash below; the
+        # domain test consumes only neutral values and expected positions.
+        payload = {name: recorded[name] for name in fields}
         literal = json.dumps(
-            json.dumps(json.loads(raw), separators=(',', ':')),
+            json.dumps(payload, separators=(',', ':')),
             ensure_ascii=False,
         )
         expected = (
