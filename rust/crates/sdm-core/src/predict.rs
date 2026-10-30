@@ -493,7 +493,11 @@ pub(crate) async fn call_answer(
         (Reply::Model(ModelResult::TransportError { kind, retryable }), _) => {
             return Err(CoreError::transport(kind, retryable));
         }
-        (Reply::Fetch(_), _) => return Err(internal("a model call was answered as a fetch")),
+        (Reply::Fetch(_) | Reply::Numeric { .. }, _) => {
+            return Err(internal(
+                "a model call was answered as a different observation",
+            ));
+        }
     };
     Ok(answer)
 }

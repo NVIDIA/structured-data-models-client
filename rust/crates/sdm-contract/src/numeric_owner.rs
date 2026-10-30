@@ -68,6 +68,8 @@ pub enum NumericOwnerRequest {
     ConvertOwner {
         owner: OwnerId,
         destination: NumericDestination,
+        /// Selected narrowing can dispatch the native overflow handler.
+        overflow_possible: bool,
     },
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

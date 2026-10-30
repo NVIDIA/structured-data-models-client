@@ -203,6 +203,14 @@ pub fn start(
                 )
             })
         }
+        Operation::OrderNumericOwners(request) => {
+            let input: sdm_contract::numeric_owner::OrderNumericOwners =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                let result = crate::tabular_selection::order_numeric(input, asker.clone()).await?;
+                crate::direct::value(&asker, &result)
+            })
+        }
         Operation::OrderSampledTabularRows(request) => {
             let input: sdm_contract::tabular::OrderSampledTabularRows =
                 take_json(&mut attachments, request.input)?;

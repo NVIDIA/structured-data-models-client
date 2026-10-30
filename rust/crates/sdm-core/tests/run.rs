@@ -688,3 +688,72 @@ fn a_page_s_provider_error_is_the_fetch_s() {
     };
     assert_eq!(diagnostics[0].code, "FAILED");
 }
+
+#[test]
+fn numeric_observation_rejects_wrong_action_without_consuming_pending_reply() {
+    use sdm_contract::numeric_owner::{
+        NumericOwnerOutcome as Outcome, NumericOwnerRequest as Request, OwnerId,
+    };
+    use sdm_contract::tabular::{NumericComparisonProfile, TabularIndexScalar};
+    let mut run = Run::new(|asker| async move {
+        let reply = asker
+            .numeric_owner(Request::LoadProbeOwner { position: 0 })
+            .await;
+        assert!(matches!(
+            reply,
+            Reply::Numeric {
+                outcome: Outcome::ProbeOwner { .. },
+                ..
+            }
+        ));
+        Ok(done(vec![]))
+    });
+    let Step::NumericOwner(step) = run.next().unwrap() else {
+        panic!("numeric observation expected")
+    };
+    assert!(
+        run.submit_numeric(
+            step.id,
+            Outcome::ComparisonEnvironment {
+                policy: NumericComparisonProfile::WeakScalars
+            },
+            Default::default()
+        )
+        .is_err()
+    );
+    assert_eq!(run.state(), RunState::AwaitingNumeric(step.id));
+    assert!(run.submit_model(step.id, answered(200, b"{}")).is_err());
+    run.submit_numeric(
+        step.id,
+        Outcome::ProbeOwner {
+            owner: OwnerId(1),
+            fact: TabularIndexScalar::Integer { value: "1".into() },
+        },
+        Default::default(),
+    )
+    .unwrap();
+    assert!(matches!(run.next().unwrap(), Step::Done { .. }));
+}
+
+#[test]
+fn cancelling_a_numeric_observation_drops_its_retained_future() {
+    use sdm_contract::numeric_owner::NumericOwnerRequest;
+    struct Retained(Arc<AtomicBool>);
+    impl Drop for Retained {
+        fn drop(&mut self) {
+            self.0.store(true, Ordering::SeqCst);
+        }
+    }
+    let dropped = Arc::new(AtomicBool::new(false));
+    let retained = Retained(Arc::clone(&dropped));
+    let mut run = Run::new(move |asker| async move {
+        let _retained = retained;
+        asker
+            .numeric_owner(NumericOwnerRequest::CaptureSortOwners)
+            .await;
+        Ok(done(vec![]))
+    });
+    assert!(matches!(run.next().unwrap(), Step::NumericOwner(_)));
+    run.cancel().unwrap();
+    assert!(dropped.load(Ordering::SeqCst));
+}

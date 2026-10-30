@@ -16,7 +16,7 @@ use std::cmp::Ordering;
 use super::object_sort;
 
 #[derive(Clone, Copy)]
-enum Owner {
+pub(super) enum Owner {
     Missing(NativeMissingOwner),
     UnboundedInteger,
     Binary64,
@@ -25,18 +25,18 @@ enum Owner {
     Floating { width: u8 },
 }
 #[derive(Clone, Copy)]
-enum Number<'a> {
+pub(super) enum Number<'a> {
     Missing,
     Integer(&'a str),
     Floating(f64),
 }
 #[derive(Clone, Copy)]
-struct Key<'a> {
-    owner: Owner,
-    number: Number<'a>,
+pub(super) struct Key<'a> {
+    pub(super) owner: Owner,
+    pub(super) number: Number<'a>,
 }
 
-fn observe(value: &Atom, missing: bool) -> Result<Key<'_>, CoreError> {
+pub(super) fn observe(value: &Atom, missing: bool) -> Result<Key<'_>, CoreError> {
     let key = match value {
         Atom::NativeMissing { owner } if missing => Key {
             owner: Owner::Missing(*owner),
@@ -122,7 +122,7 @@ fn integer_dtype(key: Key<'_>) -> Option<(bool, u8)> {
         _ => None,
     }
 }
-fn as_double(key: Key<'_>) -> Result<f64, Error> {
+pub(super) fn as_double(key: Key<'_>) -> Result<f64, Error> {
     match key.number {
         Number::Missing => unreachable!("missing owners stop before numeric conversion"),
         Number::Floating(value) => Ok(value),
@@ -176,7 +176,11 @@ fn mixed_width(integer: Owner, float: Owner, semantics: Semantics) -> u8 {
         _ => unreachable!(),
     }
 }
-fn compare(a: Key<'_>, b: Key<'_>, semantics: Semantics) -> Result<Option<Ordering>, Error> {
+pub(super) fn compare(
+    a: Key<'_>,
+    b: Key<'_>,
+    semantics: Semantics,
+) -> Result<Option<Ordering>, Error> {
     match (a.number, b.number) {
         (Number::Missing, _) | (_, Number::Missing) => Ok(None),
         (Number::Integer(av), Number::Integer(bv)) => {

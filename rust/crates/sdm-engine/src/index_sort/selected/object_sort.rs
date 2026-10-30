@@ -4,9 +4,27 @@
 
 //! Guarded object-index quicksort with terminal comparison outcomes.
 
+/// Pure callers drive the same suspendable algorithm with immediately ready comparisons.
 pub(super) fn argsort<E>(
     num: usize,
     mut less: impl FnMut(usize, usize) -> Result<bool, E>,
+) -> Result<Vec<usize>, E> {
+    use std::future::Future;
+    use std::task::{Context, Poll, Waker};
+    let future = argsort_async(num, async |left, right| less(left, right));
+    let mut future = std::pin::pin!(future);
+    match future
+        .as_mut()
+        .poll(&mut Context::from_waker(Waker::noop()))
+    {
+        Poll::Ready(result) => result,
+        Poll::Pending => unreachable!("pure comparison cannot suspend"),
+    }
+}
+
+pub(super) async fn argsort_async<E>(
+    num: usize,
+    mut less: impl AsyncFnMut(usize, usize) -> Result<bool, E>,
 ) -> Result<Vec<usize>, E> {
     const SMALL_QUICKSORT: usize = 16;
     let mut t: Vec<usize> = (0..num).collect();
@@ -18,17 +36,17 @@ pub(super) fn argsort<E>(
     let mut cdepth = 2 * i64::from(usize::BITS - 1 - num.leading_zeros());
     loop {
         if cdepth < 0 {
-            heap(&mut t[pl..=pr], &mut less)?;
+            heap(&mut t[pl..=pr], &mut less).await?;
         } else {
             while pr - pl > SMALL_QUICKSORT - 1 {
                 let pm = pl + ((pr - pl) >> 1);
-                if less(t[pm], t[pl])? {
+                if less(t[pm], t[pl]).await? {
                     t.swap(pm, pl);
                 }
-                if less(t[pr], t[pm])? {
+                if less(t[pr], t[pm]).await? {
                     t.swap(pr, pm);
                 }
-                if less(t[pm], t[pl])? {
+                if less(t[pm], t[pl]).await? {
                     t.swap(pm, pl);
                 }
                 let vp = t[pm];
@@ -37,11 +55,11 @@ pub(super) fn argsort<E>(
                 t.swap(pm, pj);
                 loop {
                     pi += 1;
-                    while less(t[pi], vp)? && pi < pj {
+                    while less(t[pi], vp).await? && pi < pj {
                         pi += 1;
                     }
                     pj -= 1;
-                    while less(vp, t[pj])? && pi < pj {
+                    while less(vp, t[pj]).await? && pi < pj {
                         pj -= 1;
                     }
                     if pi >= pj {
@@ -64,7 +82,7 @@ pub(super) fn argsort<E>(
                 let vi = t[pi];
                 let vp = vi;
                 let mut pj = pi;
-                while pj > pl && less(vp, t[pj - 1])? {
+                while pj > pl && less(vp, t[pj - 1]).await? {
                     t[pj] = t[pj - 1];
                     pj -= 1;
                 }
@@ -82,9 +100,9 @@ pub(super) fn argsort<E>(
 }
 
 /// The generic object's depth fallback retains its native comparison order.
-fn heap<E>(
+async fn heap<E>(
     a: &mut [usize],
-    less: &mut impl FnMut(usize, usize) -> Result<bool, E>,
+    less: &mut impl AsyncFnMut(usize, usize) -> Result<bool, E>,
 ) -> Result<(), E> {
     let n = a.len();
     if n < 2 {
@@ -97,10 +115,10 @@ fn heap<E>(
         let tmp = at(a, l);
         let (mut i, mut j) = (l, l << 1);
         while j <= n {
-            if j < n && less(at(a, j), at(a, j + 1))? {
+            if j < n && less(at(a, j), at(a, j + 1)).await? {
                 j += 1;
             }
-            if less(tmp, at(a, j))? {
+            if less(tmp, at(a, j)).await? {
                 a[i - 1] = at(a, j);
                 i = j;
                 j += j;
@@ -118,10 +136,10 @@ fn heap<E>(
         n -= 1;
         let (mut i, mut j) = (1usize, 2usize);
         while j <= n {
-            if j < n && less(at(a, j), at(a, j + 1))? {
+            if j < n && less(at(a, j), at(a, j + 1)).await? {
                 j += 1;
             }
-            if less(tmp, at(a, j))? {
+            if less(tmp, at(a, j)).await? {
                 a[i - 1] = at(a, j);
                 i = j;
                 j += j;

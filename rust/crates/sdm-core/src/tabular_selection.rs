@@ -118,3 +118,51 @@ pub(crate) fn select(input: SelectTabularRows) -> Result<SelectedTabularRows, Co
         context,
     })
 }
+
+struct NumericObserver(crate::run::Asker);
+impl sdm_engine::index_sort::numeric_owner::Observer for NumericObserver {
+    fn observe(
+        &mut self,
+        request: sdm_contract::numeric_owner::NumericOwnerRequest,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<sdm_engine::index_sort::numeric_owner::Observation, CoreError>,
+                > + Send
+                + '_,
+        >,
+    > {
+        Box::pin(async move {
+            use sdm_contract::numeric_owner::NumericOwnerOutcome;
+            use sdm_engine::index_sort::numeric_owner::Observation;
+            let crate::run::Reply::Numeric {
+                outcome,
+                mut attachments,
+            } = self.0.numeric_owner(request).await
+            else {
+                return Err(CoreError::protocol(
+                    Sentence::WrongReply,
+                    "numeric observation requires its own reply",
+                ));
+            };
+            match outcome {
+                NumericOwnerOutcome::SortOwners {
+                    owners_and_facts,
+                    source_positions,
+                    missing_positions,
+                } => Ok(Observation::Captured {
+                    owners: crate::attached::take_json(&mut attachments, owners_and_facts)?,
+                    positions: crate::attached::take_json(&mut attachments, source_positions)?,
+                    missing: crate::attached::take_json(&mut attachments, missing_positions)?,
+                }),
+                other => Ok(Observation::Control(other)),
+            }
+        })
+    }
+}
+pub(crate) async fn order_numeric(
+    input: sdm_contract::numeric_owner::OrderNumericOwners,
+    asker: crate::run::Asker,
+) -> Result<sdm_contract::numeric_owner::OrderedNumericOwners, CoreError> {
+    sdm_engine::index_sort::numeric_owner::order(input, NumericObserver(asker)).await
+}
