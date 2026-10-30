@@ -4,6 +4,8 @@
 
 """Native callback origin must survive the host protocol-error boundary."""
 
+import sys
+
 import numpy as np
 import pandas as pd
 
@@ -26,6 +28,14 @@ def test_callback_codec_error_remains_a_native_value_error() -> None:
     try:
         np.seterrcall(callback)
         with np.errstate(over='call'):
+            native = np.empty((), dtype=np.float32)
+            native_error = None
+            try:
+                native[()] = values[0]
+            except CodecError as error:
+                native_error = error
+            native_events = list(events)
+            events.clear()
             loaded, _ = owners({'kind': 'load_probe_owner', 'position': 0})
             outcome, attached = owners(
                 {
@@ -35,10 +45,20 @@ def test_callback_codec_error_remains_a_native_value_error() -> None:
                     'overflow_possible': True,
                 }
             )
-        assert events == [('overflow', 2)]
-        assert outcome['kind'] == 'raised'
-        assert outcome['class'] == 'value_error'
-        assert owners.exceptions[outcome['exception']] is original
+        assert events == native_events
+        if native_error is not None:
+            assert native_error is original
+            assert events == [('overflow', 2)]
+            assert outcome['kind'] == 'raised'
+            assert outcome['class'] == 'value_error'
+            assert owners.exceptions[outcome['exception']] is original
+        else:
+            # Older native setters do not dispatch this overflow callback.
+            assert events == []
+            assert outcome == {
+                'kind': 'converted',
+                'bits': int.from_bytes(native.tobytes(), sys.byteorder),
+            }
         assert attached == {}
     finally:
         np.seterrcall(previous)
