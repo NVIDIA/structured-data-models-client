@@ -72,12 +72,13 @@ The engine uses generic object comparison and sorting for these facts, without c
 Reached integer-to-float overflow has a closed result; native warning-handler effects remain an explicit unfinished obligation.
 Its public parity passed 379 cases in each of the prepared NumPy 1.23.5, 1.26.4 and 2.5.4 runtimes.
 
-The next runtime increment binds the official NumPy 2.1.3 and 2.3.4 deployment wheels.
+The increment landed at `b5c8a403` binds the official NumPy 2.1.3 and 2.3.4 deployment wheels.
 The former requires unconditional four- and eight-lane SIMD entry profiles; only the original-array sorted shortcut differs, while the outer monotonic check remains unchanged.
 Frozen public materialization confirms a tie-order difference at 320 sampled rows with sorted duplicate present keys and a missing label.
 Compiler/source evidence supports the existing GNU fallback family, and receipt identity includes effective AVX2 and AVX512 dispatch groups.
 The current host provides live AVX2 evidence; source compatibility does not claim live AVX512 execution.
-This increment still requires exact-source reviews, canonical generation, installed-wheel parity and handoff before landing.
+Two independent exact-source reviews, canonical contract 40 generation and the required handoff passed before verified landing.
+Installed-wheel public parity passed 394 cases in each of the current, NumPy 2.1.3 and NumPy 2.3.4 runtimes; six runtime-specific frozen receipts contain 183 journeys each.
 
 Full PQL completion remains pending for custom comparison-label ownership, Decimal context signals, remaining numeric promotion modes and effects, additional temporal owners, broader producer bindings, and remaining native frame/count effects.
 These are retained obligations, not silently unsupported public inputs or an expansion of the approved custom-sort exception.
@@ -88,3 +89,9 @@ The ordinary integer-key/primitive-target path uses one `SelectTabularRows` comp
 That operation composes expansion or key exclusion, known-target filtering and capacity policy in Rust.
 Only native-effect paths retain staged key/mask observations; sampling stays after warning delivery for both.
 Forced frame routes explicitly refuse relational materialization until its separate core consumer exists, avoiding a silent legacy route.
+
+The Python 3.14 runtime increment binds the official NumPy 2.5.4 cp314 binary to the existing audited sorting and comparison profiles.
+Frozen reference recording uses Python 3.14.8, pandas 3.1.0 and Arrow 26.0.0.
+Date/datetime comparison refusals retain Rust-selected operand positions; Python presents the native exception for that exact admitted pair because the diagnostic changed in Python 3.13.
+This single failure-presentation operation does not provide a sorting callback or broaden custom-owner admission.
+The increment remains pending review, installed-wheel parity and landing.

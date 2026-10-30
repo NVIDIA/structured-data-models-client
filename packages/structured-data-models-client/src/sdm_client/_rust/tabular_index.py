@@ -25,6 +25,12 @@ from sdm_client._routing import RouteError
 # Scalar argsort predates the numeric SIMD dispatch; AVX2 alone does not select
 # it in NumPy 1.26. Acquisition and source receipts are in the producer audit.
 _PRODUCERS = {
+    # Official NumPy 2.5.4 CPython 3.14 wheel, same audited source/toolchain.
+    'ffdecbe5382f6499d77fbb3fd034fbf3c0ac5a5516be76044610bb41f9934e04': (
+        'x86_v3_v4',
+        'weak_scalars',
+        None,
+    ),
     'ceec5ba13ab88318632307fdd2df74f317fa293ce77be559c4298ddd1f4306b0': (
         'x86_v3_v4',
         'weak_scalars',

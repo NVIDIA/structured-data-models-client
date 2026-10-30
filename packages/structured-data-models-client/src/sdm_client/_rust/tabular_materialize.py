@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import warnings
+from datetime import date, datetime
 from typing import Any
 
 import numpy as np
@@ -273,7 +274,16 @@ def _context(
                 'this NumPy comparison effect is not yet represented by the core'
             )
         if ordering['reason'] == 'date_time_mismatch':
-            raise TypeError("can't compare datetime.datetime to datetime.date")
+            # Rust selected the failing pair. Exact native owners present the
+            # interpreter's diagnostic, which changed in Python 3.13.
+            left_owner = subset.index[ordering['left']]
+            right_owner = subset.index[ordering['right']]
+            if {type(left_owner), type(right_owner)} != {date, datetime}:
+                raise AssertionError(
+                    'date comparison refusal has invalid owners'
+                )
+            _ = left_owner < right_owner
+            raise AssertionError('date comparison refusal did not raise')
         if ordering['reason'] == 'naive_aware_datetime':
             raise TypeError(
                 "can't compare offset-naive and offset-aware datetimes"
