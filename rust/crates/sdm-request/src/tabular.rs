@@ -1169,31 +1169,46 @@ pub fn coherent_meaning(
 pub fn decide_materialized_task(
     input: sdm_contract::tabular::DecideTabularTask,
 ) -> sdm_contract::tabular::TabularTaskDecision {
-    use sdm_contract::tabular::{TabularTaskDecision as D, TabularTaskError as E};
-    if !matches!(input.target_stype.as_str(), "categorical" | "numerical") {
+    use sdm_contract::tabular::{
+        DecideTabularTask as I, TabularTaskDecision as D, TabularTaskError as E,
+    };
+    let (target_stype, stated, binary_whole) = match input {
+        I::Target { target_stype } => {
+            return if matches!(target_stype.as_str(), "categorical" | "numerical") {
+                D::TargetSupported
+            } else {
+                D::Refused {
+                    reason: E::UnsupportedTarget,
+                }
+            };
+        }
+        I::Kind {
+            target_stype,
+            stated,
+            binary_whole,
+        } => (target_stype, stated, binary_whole),
+    };
+    if !matches!(target_stype.as_str(), "categorical" | "numerical") {
         return D::Refused {
             reason: E::UnsupportedTarget,
         };
     }
-    if let Some(stated) = input.stated {
-        return if matches!(stated.as_str(), "classification" | "regression") {
-            D::Task {
-                kind: stated,
-                warn_binary: false,
-            }
+    if let Some(valid) = stated {
+        return if valid {
+            D::Explicit
         } else {
             D::Refused {
                 reason: E::UnsupportedTask,
             }
         };
     }
-    if input.target_stype == "categorical" {
+    if target_stype == "categorical" {
         return D::Task {
             kind: "classification".into(),
             warn_binary: false,
         };
     }
-    match input.binary_whole {
+    match binary_whole {
         None => D::InspectTarget,
         Some(binary) => D::Task {
             kind: if binary {

@@ -108,11 +108,17 @@ pub struct ObservedTabularMembership {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct DecideTabularTask {
-    pub target_stype: String,
-    pub stated: Option<String>,
-    pub binary_whole: Option<bool>,
+#[serde(tag = "stage", rename_all = "snake_case", deny_unknown_fields)]
+pub enum DecideTabularTask {
+    Target {
+        target_stype: String,
+    },
+    Kind {
+        target_stype: String,
+        /// None means absent; Some is reached native type/membership validity.
+        stated: Option<bool>,
+        binary_whole: Option<bool>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -125,6 +131,8 @@ pub enum TabularTaskError {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "decision", rename_all = "snake_case", deny_unknown_fields)]
 pub enum TabularTaskDecision {
+    TargetSupported,
+    Explicit,
     Task { kind: String, warn_binary: bool },
     InspectTarget,
     Refused { reason: TabularTaskError },
@@ -202,8 +210,14 @@ pub struct OrderSampledTabularRows {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum OrderedSampledTabularRows {
-    Sorted { positions: Vec<usize> },
-    Refused { reason: TabularOrderError },
+    Sorted {
+        positions: Vec<usize>,
+    },
+    Refused {
+        reason: TabularOrderError,
+        left: usize,
+        right: usize,
+    },
 }
 
 /// A comparison outcome, not a new public exception or diagnostic wording.
