@@ -265,9 +265,9 @@ def _array(values: Any, missing: list[bool], profile: str) -> dict[str, Any]:
                             'kind': 'native_missing',
                             'owner': 'none'
                             if value is None
-                            else 'pandas_na'
+                            else 'ambiguous'
                             if value is pd.NA
-                            else 'pandas_nat',
+                            else 'temporal',
                         }
                     elif type(value) in (
                         float,
