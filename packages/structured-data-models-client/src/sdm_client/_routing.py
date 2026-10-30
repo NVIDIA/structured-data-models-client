@@ -425,6 +425,13 @@ PREDICT = {
 CAPABILITIES = ('client.capabilities/capabilities/any',)
 
 #: The paths this build can run on the core.
+DIRECT_CONSTRUCTORS = (
+    'request.tabular/classification/frames',
+    'request.tabular/regression/frames',
+)
+DIRECT_PREDICT = ('client.predict/tabular/frames',)
+DIRECT_CONSUMERS = DIRECT_CONSTRUCTORS + DIRECT_PREDICT
+
 CORE_ROUTED = frozenset(
     S0
     + CAPABILITIES
@@ -486,7 +493,7 @@ def forced() -> frozenset[str]:
     for path in sorted(named):
         if path not in ROUTES:
             raise RouteError(f'{ENVIRONMENT} names an unknown path {path!r}')
-        if path not in CORE_ROUTED:
+        if path not in CORE_ROUTED and path not in DIRECT_CONSUMERS:
             raise RouteError(
                 f'{ENVIRONMENT} forces {path!r} onto the core, which has no '
                 f'route for it in this build'

@@ -25,3 +25,6 @@ pub mod payload;
 pub mod predict;
 pub mod ranking;
 pub mod serving;
+
+pub mod direct;
+pub mod tabular;

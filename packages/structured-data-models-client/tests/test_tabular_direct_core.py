@@ -9,13 +9,20 @@ from __future__ import annotations
 import builtins
 import dataclasses
 import json
+import warnings
 from typing import Any
 
 import numpy as np
 import pandas as pd
 import pytest
 
-from sdm_client import KumoTabular, Request, Schema, SDMClient, StructuredDataError
+from sdm_client import (
+    KumoTabular,
+    Request,
+    Schema,
+    SDMClient,
+    StructuredDataError,
+)
 
 DIRECT = ','.join(
     (
@@ -87,7 +94,10 @@ def route(request: Any, monkeypatch: pytest.MonkeyPatch) -> str:
     return str(request.param)
 
 
-@pytest.mark.parametrize('dtype', ['int8', 'int16', 'int32', 'int64', 'uint8', 'uint16', 'uint32', 'uint64'])
+@pytest.mark.parametrize(
+    'dtype',
+    ['int8', 'int16', 'int32', 'int64', 'uint8', 'uint16', 'uint32', 'uint64'],
+)
 def test_direct_columns_and_typed_results(route: str, dtype: str) -> None:
     context, scoring = frames(dtype)
     request = Request(context, scoring, target='target', task='classification')
@@ -97,14 +107,23 @@ def test_direct_columns_and_typed_results(route: str, dtype: str) -> None:
     endpoint = Endpoint()
     result = client(endpoint).predict(request, model=KumoTabular())
     payload = endpoint.calls[0]
-    assert payload['context']['instance_table']['rows'] == context.values.tolist()
-    assert payload['task']['target']['dtype'] == payload['schema']['instance_table']['columns']['target']['dtype']
-    assert [(item.row_index, item.id, item.prediction) for item in result.items] == [(1, 91, 1), (0, 90, 0)]
+    assert (
+        payload['context']['instance_table']['rows'] == context.values.tolist()
+    )
+    assert (
+        payload['task']['target']['dtype']
+        == payload['schema']['instance_table']['columns']['target']['dtype']
+    )
+    assert [
+        (item.row_index, item.id, item.prediction) for item in result.items
+    ] == [(1, 91, 1), (0, 90, 0)]
     assert list(result.to_pandas()['row_index']) == [0, 1]
 
 
 def test_boolean_features_and_target(route: str) -> None:
-    context = pd.DataFrame({'feature': [True, False, True], 'target': [False, True, False]})
+    context = pd.DataFrame(
+        {'feature': [True, False, True], 'target': [False, True, False]}
+    )
     scoring = pd.DataFrame({'feature': [False, True]})
     request = Request(context, scoring, target='target', task='classification')
     endpoint = Endpoint()
@@ -120,13 +139,24 @@ def test_direct_indexes_do_not_affect_model_rows(route: str, kind: str) -> None:
     context.index = {
         'duplicates': pd.Index(['same'] * 4),
         'nonmonotonic': pd.Index(['z', 'a', 'x', 'b']),
-        'multi': pd.MultiIndex.from_tuples([('b', 2), ('a', 1), ('a', 1), ('c', 0)]),
+        'multi': pd.MultiIndex.from_tuples(
+            [('b', 2), ('a', 1), ('a', 1), ('c', 0)]
+        ),
     }[kind]
     scoring.index = pd.Index([object(), object()])
     endpoint = Endpoint()
-    client(endpoint).predict(Request(context, scoring, target='target', task='classification'), model='kumo-tabular')
-    assert endpoint.calls[0]['predict']['instance_table']['columns'] == ['row_id', 'feature']
-    assert endpoint.calls[0]['context']['instance_table']['rows'] == context.values.tolist()
+    client(endpoint).predict(
+        Request(context, scoring, target='target', task='classification'),
+        model='kumo-tabular',
+    )
+    assert endpoint.calls[0]['predict']['instance_table']['columns'] == [
+        'row_id',
+        'feature',
+    ]
+    assert (
+        endpoint.calls[0]['context']['instance_table']['rows']
+        == context.values.tolist()
+    )
 
 
 def test_uint64_values_travel_as_exact_text(route: str) -> None:
@@ -138,14 +168,19 @@ def test_uint64_values_travel_as_exact_text(route: str) -> None:
     request = Request(context, scoring, target='target', task='regression')
     client(endpoint).predict(request, model='kumo-tabular')
     payload = endpoint.calls[0]
-    assert payload['schema']['instance_table']['columns']['feature']['dtype'] == 'string'
+    assert (
+        payload['schema']['instance_table']['columns']['feature']['dtype']
+        == 'string'
+    )
     assert payload['predict']['instance_table']['rows'][0][1] == str(large + 9)
 
 
 def test_supplied_schema_and_live_frames_keep_their_owners(route: str) -> None:
     context, scoring = frames()
     schema = Schema.from_data({'instance': context}, relationships=())
-    request = Request(context, scoring, target='target', task='regression', schema=schema)
+    request = Request(
+        context, scoring, target='target', task='regression', schema=schema
+    )
     assert request.schema is schema
     scoring.loc[0, 'feature'] = 700
     request.task = dataclasses.replace(request.task, kind='classification')
@@ -156,14 +191,32 @@ def test_supplied_schema_and_live_frames_keep_their_owners(route: str) -> None:
 
 
 def test_zero_column_scoring_retains_nonzero_row_count(route: str) -> None:
-    request = Request(pd.DataFrame({'target': [0, 1, 0]}), pd.DataFrame(index=['x', 'x']), target='target', task='classification')
+    request = Request(
+        pd.DataFrame({'target': [0, 1, 0]}),
+        pd.DataFrame(index=['x', 'x']),
+        target='target',
+        task='classification',
+    )
     endpoint = Endpoint()
     client(endpoint).predict(request, model='kumo-tabular')
-    assert endpoint.calls[0]['predict']['instance_table'] == {'format': 'arrays', 'columns': [], 'rows': [[], []]}
+    assert endpoint.calls[0]['predict']['instance_table'] == {
+        'format': 'arrays',
+        'columns': [],
+        'rows': [[], []],
+    }
 
 
-@pytest.mark.parametrize('model, outputs, task', [('absent', None, 'classification'), ('kumo-tabular', [], 'classification'), ('kumo-tabular', None, 'binary_classification')])
-def test_model_preflight_precedes_empty_no_send(route: str, model: str, outputs: Any, task: str) -> None:
+@pytest.mark.parametrize(
+    'model, outputs, task',
+    [
+        ('absent', None, 'classification'),
+        ('kumo-tabular', [], 'classification'),
+        ('kumo-tabular', None, 'binary_classification'),
+    ],
+)
+def test_model_preflight_precedes_empty_no_send(
+    route: str, model: str, outputs: Any, task: str
+) -> None:
     context, scoring = frames()
     request = Request(context, scoring.iloc[:0], target='target', task=task)
     endpoint = Endpoint()
@@ -174,25 +227,57 @@ def test_model_preflight_precedes_empty_no_send(route: str, model: str, outputs:
 
 def test_empty_call_skips_late_inference_conversion(route: str) -> None:
     context, scoring = frames()
-    request = Request(context, scoring.iloc[:0], target='target', task='classification', inference={'opaque': object()})
+    request = Request(
+        context,
+        scoring.iloc[:0],
+        target='target',
+        task='classification',
+        inference={'opaque': object()},
+    )
     endpoint = Endpoint()
     result = client(endpoint).predict(request, model='kumo-tabular')
-    assert result.items == []
+    assert result.items == ()
     assert endpoint.calls == []
 
 
 def test_constructor_guard_order(route: str) -> None:
     context, scoring = frames()
     with pytest.raises(StructuredDataError, match='task must'):
-        Request(context.iloc[:0], scoring.assign(target=0), target='absent', task='absent')
+        Request(
+            context.iloc[:0],
+            scoring.assign(target=0),
+            target='absent',
+            task='absent',
+        )
     with pytest.raises(StructuredDataError, match='no rows'):
-        Request(context.iloc[:0], scoring.assign(target=0), target='absent', task='regression')
+        Request(
+            context.iloc[:0],
+            scoring.assign(target=0),
+            target='absent',
+            task='regression',
+        )
     with pytest.raises(StructuredDataError, match='no target column'):
-        Request(context, scoring.assign(target=0), target='absent', task='regression')
+        Request(
+            context,
+            scoring.assign(target=0),
+            target='absent',
+            task='regression',
+        )
 
 
-@pytest.mark.parametrize('change, fragment', [('missing', 'missing a row_index'), ('bounds', 'names row_index'), ('duplicate', 'more than once'), ('unanswered', 'unanswered'), ('wrong_key', 'pairs row_index')])
-def test_response_attribution_failures(route: str, change: str, fragment: str) -> None:
+@pytest.mark.parametrize(
+    'change, fragment',
+    [
+        ('missing', "missing required field 'row_index'"),
+        ('bounds', 'names row_index'),
+        ('duplicate', 'more than once'),
+        ('unanswered', 'unanswered'),
+        ('wrong_key', 'pairs row_index'),
+    ],
+)
+def test_response_attribution_failures(
+    route: str, change: str, fragment: str
+) -> None:
     reply = answer()
     rows = reply['predictions']
     if change == 'missing':
@@ -207,19 +292,27 @@ def test_response_attribution_failures(route: str, change: str, fragment: str) -
         rows[0]['id'] = '[90]'
     context, scoring = frames()
     with pytest.raises(StructuredDataError, match=fragment):
-        client(Endpoint(reply)).predict(Request(context, scoring, target='target', task='classification'), model='kumo-tabular')
+        client(Endpoint(reply)).predict(
+            Request(context, scoring, target='target', task='classification'),
+            model='kumo-tabular',
+        )
 
 
 def test_native_literal_and_opaque_ids(route: str) -> None:
     reply = answer()
-    reply['predictions'][0]['id'] = "[+91]"
+    reply['predictions'][0]['id'] = '[+91]'
     reply['predictions'][1]['id'] = 'service-generated'
     context, scoring = frames()
-    result = client(Endpoint(reply)).predict(Request(context, scoring, target='target', task='classification'), model='kumo-tabular')
+    result = client(Endpoint(reply)).predict(
+        Request(context, scoring, target='target', task='classification'),
+        model='kumo-tabular',
+    )
     assert [item.id for item in result.items] == [91, 90]
 
 
-def test_direct_core_does_not_import_legacy_inference(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_direct_core_does_not_import_legacy_inference(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv('SDM_CORE_ROUTES', DIRECT)
     original = builtins.__import__
 
@@ -232,3 +325,208 @@ def test_direct_core_does_not_import_legacy_inference(monkeypatch: pytest.Monkey
     context, scoring = frames()
     request = Request(context, scoring, target='target', task='classification')
     client(Endpoint()).predict(request, model='kumo-tabular')
+
+
+def test_current_scoring_dtype_is_reconciled_at_prediction(route: str) -> None:
+    context, scoring = frames()
+    request = Request(context, scoring, target='target', task='regression')
+    scoring['feature'] = np.array([20.5, 21.5], dtype='float64')
+    endpoint = Endpoint()
+    client(endpoint).predict(request, model='kumo-tabular')
+    payload = endpoint.calls[0]
+    assert (
+        payload['schema']['instance_table']['columns']['feature']['dtype']
+        == 'float64'
+    )
+    assert payload['predict']['instance_table']['rows'][0][1] == 20.5
+
+
+def test_direct_context_limit_never_samples(route: str) -> None:
+    context = pd.DataFrame(
+        {'feature': np.arange(10001), 'target': np.arange(10001) % 2}
+    )
+    scoring = pd.DataFrame({'feature': [30, 31]})
+    request = Request(context, scoring, target='target', task='classification')
+    endpoint = Endpoint()
+    with pytest.raises(StructuredDataError, match='reads at most 10,000'):
+        client(endpoint).predict(request, model='kumo-tabular')
+    assert endpoint.calls == []
+
+
+def test_target_container_guard_is_immediate(route: str) -> None:
+    with pytest.raises(StructuredDataError, match='multi-label target'):
+        Request(
+            pd.DataFrame({'target': [[1], [2]]}),
+            pd.DataFrame(index=[0]),
+            target='target',
+            task='classification',
+        )
+
+
+def test_request_can_be_reused_with_another_model_and_keep_its_task(
+    route: str,
+) -> None:
+    context, scoring = frames()
+    request = Request(
+        context, scoring, target='target', task='binary_classification'
+    )
+    with pytest.raises(
+        StructuredDataError, match='does not serve the task kind'
+    ):
+        client(Endpoint()).predict(request, model='kumo-tabular')
+    assert request.task.kind == 'binary_classification'
+    with pytest.raises(StructuredDataError, match='has to be gathered first'):
+        client(Endpoint()).predict(request, model='kumo-relational')
+
+
+def test_bad_earlier_row_prevents_later_native_literal_effects(
+    route: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import ast
+
+    reply = answer()
+    reply['predictions'][0]['row_index'] = 9
+    reply['predictions'][1]['id'] = '[+90]'
+    visited = []
+    original = ast.literal_eval
+
+    def observed(text: str) -> Any:
+        visited.append(text)
+        return original(text)
+
+    monkeypatch.setattr(ast, 'literal_eval', observed)
+    context, scoring = frames()
+    with pytest.raises(StructuredDataError, match='names row_index'):
+        client(Endpoint(reply)).predict(
+            Request(context, scoring, target='target', task='classification'),
+            model='kumo-tabular',
+        )
+    assert visited == []
+
+
+def test_constant_target_warning_preserves_live_schema_read(
+    route: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    context, scoring = frames()
+    context['target'] = 1
+    schema = Schema.from_data({'instance': context}, relationships=())
+
+    def observe(message: Any, *args: Any, **kwargs: Any) -> None:
+        if 'every context row' in str(message).lower():
+            schema['instance']['target'].dtype = 'float64'
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('always')
+        monkeypatch.setattr(warnings, 'showwarning', observe)
+        request = Request(
+            context, scoring, target='target', task='regression', schema=schema
+        )
+    assert request.task.target.dtype == 'float64'
+
+
+def test_direct_overlap_warning_precedes_send(route: str) -> None:
+    from sdm_client.core.warnings import SDMWarning
+
+    context, scoring = frames()
+    scoring['row_id'] = [0, 1]
+    request = Request(context, scoring, target='target', task='classification')
+    endpoint = Endpoint()
+    with warnings.catch_warnings():
+        warnings.simplefilter('error', SDMWarning)
+        with pytest.raises(SDMWarning, match='also in context'):
+            client(endpoint).predict(request, model=KumoTabular())
+    assert endpoint.calls == []
+
+
+def test_text_warning_precedes_live_row_encoding(
+    route: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    context = pd.DataFrame(
+        {
+            'feature': np.arange(65, dtype='uint64') + np.uint64(2**63),
+            'target': np.arange(65, dtype='int64') % 2,
+        }
+    )
+    scoring = pd.DataFrame({'feature': np.array([2**63], dtype='uint64')})
+    request = Request(context, scoring, target='target', task='classification')
+    endpoint = Endpoint(
+        {
+            'model': 'kumo-tabular',
+            'id': 'answer',
+            'metadata': {},
+            'predictions': [{'row_index': 0, 'prediction': 1}],
+        }
+    )
+
+    def observe(message: Any, *args: Any, **kwargs: Any) -> None:
+        if 'cannot read a text column' in str(message):
+            scoring.iloc[0, 0] = np.uint64(2**63 + 7)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('always')
+        monkeypatch.setattr(warnings, 'showwarning', observe)
+        client(endpoint).predict(request, model=KumoTabular())
+    assert endpoint.calls[0]['predict']['instance_table']['rows'] == [
+        [str(2**63 + 7)]
+    ]
+
+
+def test_overlap_matches_signed_zero_after_live_frame_mutation(
+    route: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    context, scoring = frames()
+    request = Request(context, scoring, target='target', task='classification')
+    scoring['row_id'] = [-0.0, 1.5]
+    observed = []
+
+    def observe(message: Any, *args: Any, **kwargs: Any) -> None:
+        if 'also in context' in str(message):
+            observed.append(str(message))
+            scoring['feature'] = [700, 701]
+
+    endpoint = Endpoint(
+        {
+            'model': 'kumo-tabular',
+            'id': 'answer',
+            'metadata': {},
+            'predictions': [
+                {'row_index': 0, 'prediction': 0},
+                {'row_index': 1, 'prediction': 1},
+            ],
+        }
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter('always')
+        monkeypatch.setattr(warnings, 'showwarning', observe)
+        client(endpoint).predict(request, model=KumoTabular())
+    assert len(observed) == 1
+    assert [
+        row[1] for row in endpoint.calls[0]['predict']['instance_table']['rows']
+    ] == [700, 701]
+
+
+def test_missing_reply_index_fails_before_native_id_parsing(
+    route: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import ast
+
+    parsed = []
+    original = ast.literal_eval
+
+    def observe(value: Any) -> Any:
+        parsed.append(value)
+        return original(value)
+
+    monkeypatch.setattr(ast, 'literal_eval', observe)
+    reply = answer()
+    reply['predictions'][0]['id'] = '[+91]'
+    reply['predictions'][1].pop('row_index')
+    context, scoring = frames()
+    with pytest.raises(
+        StructuredDataError, match="missing required field 'row_index'"
+    ):
+        client(Endpoint(reply)).predict(
+            Request(context, scoring, target='target', task='classification'),
+            model=KumoTabular(),
+        )
+    assert parsed == []

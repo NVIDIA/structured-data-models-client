@@ -22,6 +22,7 @@
 
 pub mod catalog;
 pub mod data;
+pub mod direct;
 pub mod error;
 pub mod facts;
 pub mod ops;
@@ -47,7 +48,7 @@ pub use scalar::Scalar;
 pub use types::{ColumnType, Field, Unit};
 
 /// The contract version this build speaks.
-pub const CONTRACT_VERSION: u32 = 30;
+pub const CONTRACT_VERSION: u32 = 31;
 
 /// The JSON Schema of [`ControlMessage`], as committed: pretty-printed, with
 /// a trailing newline. Its `$defs` hold [`ops::Attachments`] too, the JSON

@@ -4,6 +4,9 @@
 
 # Phase 4 restart: tabular, then relational
 
+The concise [implementation boundaries](boundaries.md) narrow this plan after the architecture audit.
+Warehouse push-down and its provider fallback remain unchanged; shared prediction reuse must preserve their behavior.
+
 The restart base is the completed Phase 3 commit `38071e0fb3e5f89c9ca5b74c72bec55ba32c6190`.
 The first delivery target is the complete supported tabular client journey.
 Relational in-memory graph construction and sampling follow tabular.

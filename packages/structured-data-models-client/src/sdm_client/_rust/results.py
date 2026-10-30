@@ -36,6 +36,8 @@ __all__ = [
     'CoreRequest',
     'Described',
     'Diagnostic',
+    'DirectValue',
+    'DecodedDirectResponse',
     'Edited',
     'Gathered',
     'GatheredState',
@@ -487,6 +489,20 @@ class Predicted:
     unscored_candidates: tuple[int, ...]
 
 
+@dataclasses.dataclass(frozen=True)
+class DirectValue:
+    """A core-owned typed direct description, call or row value."""
+
+    value: int
+
+
+@dataclasses.dataclass(frozen=True)
+class DecodedDirectResponse:
+    """Decoded model data before reached native ID conversion."""
+
+    value: int
+
+
 def _predicted(read: dict[str, Any]) -> Predicted:
     return Predicted(
         result=_int(read['result'], 'result'),
@@ -522,6 +538,16 @@ _RESULTS: dict[str, tuple[tuple[str, ...], tuple[str, ...], Any]] = {
             ),
         ),
     ),
+    'direct_value': (
+        ('value',),
+        (),
+        lambda read: DirectValue(_int(read['value'], 'value')),
+    ),
+    'decoded_direct_response': (
+        ('value',),
+        (),
+        lambda read: DecodedDirectResponse(_int(read['value'], 'value')),
+    ),
     'predict': (
         ('result', 'model', 'request_id', 'metadata', 'outputs'),
         ('unscored_candidates',),
@@ -532,7 +558,15 @@ _RESULTS: dict[str, tuple[tuple[str, ...], tuple[str, ...], Any]] = {
 
 def decode(
     result: Any,
-) -> Validated | Described | Edited | Gathered | Predicted:
+) -> (
+    Validated
+    | Described
+    | Edited
+    | Gathered
+    | Predicted
+    | DirectValue
+    | DecodedDirectResponse
+):
     r"""The result a ``done`` step carries, decoded once.
 
     Raises:
@@ -551,11 +585,28 @@ def decode(
         required,
         optional,
     )
-    built: Validated | Described | Edited | Gathered | Predicted = build(read)
+    built: (
+        Validated
+        | Described
+        | Edited
+        | Gathered
+        | Predicted
+        | DirectValue
+        | DecodedDirectResponse
+    ) = build(read)
     return built
 
 
-_T = TypeVar('_T', Validated, Described, Edited, Gathered, Predicted)
+_T = TypeVar(
+    '_T',
+    Validated,
+    Described,
+    Edited,
+    Gathered,
+    Predicted,
+    DirectValue,
+    DecodedDirectResponse,
+)
 
 
 def expect(result: Any, kind: type[_T]) -> _T:

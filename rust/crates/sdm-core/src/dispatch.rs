@@ -61,6 +61,95 @@ pub fn start(
     let mut attachments = attachments;
     let facts = start.facts;
     Ok(match start.operation {
+        Operation::CheckDirectShape(request) => {
+            let input: sdm_contract::direct::DirectShape =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                sdm_request::direct::shape(&input)?;
+                crate::direct::value(&asker, &input)
+            })
+        }
+        Operation::PrepareDirect(request) => {
+            Run::new(
+                move |asker| async move { crate::direct::prepare(&asker, request, attachments) },
+            )
+        }
+        Operation::BindDirect(request) => {
+            let input: sdm_contract::direct::DirectCallFacts =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(&asker, &sdm_request::direct::bind(input)?)
+            })
+        }
+        Operation::InspectDirectPair(request) => Run::new(move |asker| async move {
+            crate::direct::inspect_pair(&asker, request, attachments)
+        }),
+        Operation::ResolveTabular(request) => {
+            Run::new(
+                move |asker| async move { crate::direct::resolve(&asker, request, attachments) },
+            )
+        }
+        Operation::EncodeTabular(request) => {
+            Run::new(
+                move |asker| async move { crate::direct::encode(&asker, request, attachments) },
+            )
+        }
+        Operation::LayoutDirect(request) => {
+            Run::new(
+                move |asker| async move { crate::direct::layout(&asker, request, attachments) },
+            )
+        }
+        Operation::CheckDirectRows(request) => {
+            let input: sdm_contract::direct::DirectRowsInput =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(
+                    &asker,
+                    &sdm_request::tabular::response::check_rows(
+                        input.scope,
+                        input.rows,
+                        crate::pql::float_text,
+                    )?,
+                )
+            })
+        }
+        Operation::InterpretDirectJson(request) => {
+            let input: sdm_contract::direct::DirectJsonInput =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(
+                    &asker,
+                    &sdm_request::tabular::response::interpret_json(input.checked, input.json)?,
+                )
+            })
+        }
+        Operation::SelectDirectMember(request) => {
+            let input: sdm_contract::direct::DirectMemberInput =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(
+                    &asker,
+                    &sdm_request::tabular::response::select_member(
+                        input.interpreted,
+                        input.literal,
+                    )?,
+                )
+            })
+        }
+        Operation::AttributeDirectRow(request) => {
+            let input: sdm_contract::direct::DirectAttributionInput =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(
+                    &asker,
+                    &sdm_request::tabular::response::attribute(
+                        input.selected,
+                        input.string,
+                        crate::pql::float_text,
+                    )?,
+                )
+            })
+        }
         Operation::ValidateQuery(request) => {
             let query: String = take_json(&mut attachments, request.query)?;
             let schema: QuerySchema = take_json(&mut attachments, request.schema)?;
@@ -108,6 +197,11 @@ pub fn start(
             false,
         )?,
         Operation::Predict(request) => {
+            if request.direct.is_some() {
+                return Ok(Run::new(move |asker| {
+                    crate::direct::predict(asker, request, attachments)
+                }));
+            }
             // What predict asks: the state `materialize` answered, or a
             // request the core did not materialize, rebuilt from what the
             // host holds of it (T3.26).

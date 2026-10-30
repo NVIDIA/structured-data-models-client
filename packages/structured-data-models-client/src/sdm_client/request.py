@@ -369,6 +369,24 @@ class Request:
                 from ``context``, or ``predict`` carries the target column.
             UnsupportedRequestError: If ``related_tables`` is given.
         """
+        from sdm_client import _routing
+
+        if _routing.route(_routing.DIRECT_CONSTRUCTORS) == 'core':
+            from sdm_client._rust.direct import construct
+
+            construct(
+                self,
+                context,
+                predict,
+                target=target,
+                task=task,
+                related_tables=related_tables,
+                schema=schema,
+                entity_table=entity_table,
+                inference=inference,
+                task_options=task_options,
+            )
+            return
         context = _require_frame(context, 'context')
         predict = _require_frame(predict, 'predict')
         related = {

@@ -241,6 +241,101 @@ pub struct DatabaseNames {
 pub fn template(sentence: Sentence) -> Template {
     use Sentence as S;
     match sentence {
+        S::DirectColumnNames => {
+            said(r#"table {table!r} column names must be strings; got {columns!r}"#)
+        }
+        S::DirectConstantClass => said(
+            r#"every context row has the same {target}, so a classification needs at least two classes to learn from, and the answer will be that one class at probability 1.0. If the rows being scored are the ones that differ, score fewer of them; if {target} is constant in the whole table, there is no context that answers this question."#,
+        ),
+        S::DirectConstantRegression => said(
+            r#"every context row has the same {target}, so nothing in the context distinguishes one answer from another, so the answer cannot say much. If the rows being scored are the ones that differ, score fewer of them; if {target} is constant in the whole table, there is no context that answers this question."#,
+        ),
+        S::DirectDuplicateColumns => {
+            said(r#"table {table!r} has duplicate column name(s) {columns!r}"#)
+        }
+        S::DirectEmpty => said(
+            r#"context has no rows, so there is nothing for the model to learn the answer from"#,
+        ),
+        S::DirectExtra => said(
+            r#"predict has column(s) {columns!r} that context does not; the model is shown context first, so it cannot score a feature it has never been given"#,
+        ),
+        S::DirectFloatPrecision => said(
+            r#"value {value!r} cannot be sent as {dtype} without losing precision, because it is outside the range a {dtype} represents exactly; give the column the same integer dtype in every frame, or convert it to strings"#,
+        ),
+        S::DirectFrame => {
+            said(r#"{parameter} must be a pandas DataFrame, got {native_type}{hint}"#)
+        }
+        S::DirectKnownTarget => {
+            said(r#"context must contain at least one row with a known target"#)
+        }
+        S::DirectMissing => said(
+            r#"predict is missing column(s) {columns!r} that context carries. Every feature the model is shown has to be supplied for the rows being scored; drop them from context, or supply them"#,
+        ),
+        S::DirectNativeFailure => said(r#"native {stage} conversion failed"#),
+        S::DirectNullableCast => said(r#"{host.direct_nullable_cast}"#),
+        S::DirectOptionInteger => said(
+            r#"value {digits} cannot be sent as a JSON number without losing precision, since a float64 does not hold it exactly; pass it as a string if the model accepts one"#,
+        ),
+        S::DirectRelated => said(
+            r#"related_tables {tables!r} makes this a relational request, and no model can be sent one built from frames: the relational model is sent tables gathered around each entity, and the tabular model reads a single table. Gather it with PredictiveQuery(...).materialize(indices=[...], model='kumo-relational'), whose schema holds the related tables and the relationships that reach them."#,
+        ),
+        S::DirectSchemaColumns => said(r#"schema does not describe context column(s) {columns!r}"#),
+        S::DirectSchemaMissing => said(r#"{name}"#),
+        S::DirectScored => said(
+            r#"the rows being scored hold {arriving!r} in column {column!r}, and the schema declares it {dtype!r} meaning {stype!r}, which {arriving!r} cannot mean. Sent, the column would be described as both at once and answered with numbers that are wrong without saying so. Convert it before scoring: predict[{column!r}] = pd.to_numeric(predict[{column!r}]) or say what the column really is with schema[{table!r}][{column!r}].stype = ..."#,
+        ),
+        S::DirectTargetMissing => {
+            said(r#"context has no target column {target!r}; it has {columns!r}"#)
+        }
+        S::DirectTargetScored => said(
+            r#"predict carries the target column {target!r}. Those are the rows whose answer is being asked for, so the column has to be absent; drop it with predict.drop(columns=[{target!r}])"#,
+        ),
+        S::DirectContextLimit => said(
+            r#"this request carries {context_rows:,} context rows and {model} reads at most {context_rows_max:,}. A request built directly is sent as it was given, so choose the rows you want as context, or gather it with materialize(), which keeps the context under the cap and says how"#,
+        ),
+        S::TabularMissingRowIndex => said(
+            r#"kumo-tabular returned a response that does not match the contract: PredictionItem response is missing required field 'row_index'"#,
+        ),
+        S::DirectMultilabel => said(
+            r#"{target!r} holds a list per row, which is a multi-label target. These models predict one value per row, and the contract has no form for a set of labels, so this cannot be asked or answered"#,
+        ),
+        S::DirectRelationalFrames => said(
+            r#"a relational request has to be gathered first, and this one was not. Build it with PredictiveQuery(...).materialize(indices=[...], model='kumo-relational'). A schema of one table is gathered for the tabular model unless the relational one is named, rather than with Request(context=..., predict=...), which is the single-table form"#,
+        ),
+        S::DirectNameEmpty => said(r#"The name {name!r} must be a non-empty string."#),
+        S::DirectNameCharacters => {
+            said(r#"The name {name!r} contains one or more invalid characters: {characters!r}."#)
+        }
+        S::DirectTask => said(
+            r#"task must be one of ['classification', 'binary_classification', 'multiclass_classification', 'regression', 'forecasting', 'temporal_link_prediction', 'ranking'], got {host.direct_task!r}"#,
+        ),
+        S::DirectOverlap => said(
+            r#"{shown} of the {rows} rows being scored are also in context, carrying the {target!r} being asked for, so the model is being shown the answers to rows it is being asked about. Drop them from context, or gather the request with materialize(), which leaves the rows it scores out of the context it sends."#,
+        ),
+        S::DirectTextCategorical => said(
+            r#"kumo-tabular cannot read a text column, so {columns!c} travel(s) as categorical instead. "#,
+        ),
+        S::DirectUnfinished => said(r#"the partial direct request requires {family}"#),
+        S::DirectUnknownModel => said(
+            r#"Unknown model {model!r}; this client can send: {known_models!r}. The Universal TFM contract declares these as a closed set, so a new model id has to be added to the contract and the bindings regenerated before it can be sent."#,
+        ),
+        S::DirectWireFraction => {
+            said(r#"value {value!r} cannot be sent as {dtype} without losing its fractional part"#)
+        }
+        S::DirectWireNonFinite => said(
+            r#"value {value} is not JSON-representable; replace non-finite numbers with a finite value or a null"#,
+        ),
+        S::DirectWireRange => said(
+            r#"value {value!r} is outside the range {dtype} represents (-9223372036854775808 to 9223372036854775807); send the column as strings"#,
+        ),
+        S::TabularIdMismatch => said(
+            r#"the response pairs row_index {index} with id {id!r}, and this batch asked about {expected!r} there"#,
+        ),
+        S::TabularRowBounds => {
+            said(r#"the response names row_index {index}, and this batch asked about {rows} rows"#)
+        }
+        S::TabularRowRepeated => said(r#"the response answers row {index} more than once"#),
+        S::TabularRowsUnanswered => said(r#"the response left row(s) {missing!r} unanswered"#),
         S::Internal => said(r#"the core failed; this is a defect, not a problem with the request"#),
         S::ProviderFailed => said(r#"the data source failed"#),
         S::TransportFailed => said(

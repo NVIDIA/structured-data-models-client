@@ -428,59 +428,7 @@ def predict(
     # core's to check.
     model_id = model if isinstance(model, str) else spec_for(model).model_id
 
-    def model_call(body: bytes) -> bytes:
-        # What failed is noted inside the handlers and raised after them, so
-        # the transport's exception, whose text the endpoint wrote, is not
-        # even the context of what is raised. The part a refusal is said of,
-        # a forecast's step or a ranking's candidate, and how many were
-        # answered before it, are the core's, which it names on its end of
-        # the run (``run``'s ``_carried``).
-        failure: StructuredDataError | None = None
-        unexpected: Exception | None = None
-        transport_failed = False
-        refused: NimRequestError | None = None
-        try:
-            # The core's call, its bytes as written (register PD-2, T1.28a),
-            # through the adapter that explains the endpoint's refusals; the
-            # answer, the bytes the endpoint sent, is the core's to read
-            # (T2.14b).
-            return client._send_body(_adapter(client, model_id), body)
-        except EndpointFailed:
-            # A serving endpoint's failure, which the core names (T3.13).
-            raise
-        except NimRequestError as refusal:
-            refused = refusal
-        except StructuredDataError as failed:
-            if failed.code == 'TRANSPORT_ERROR':
-                transport_failed = True
-            else:
-                failure = StructuredDataError(
-                    'the transport to the model endpoint refused the call',
-                    code=failed.code,
-                )
-        except Exception as other:  # noqa: BLE001 - the reference's own
-            # Any other exception the transport raised (the Databricks
-            # SDK's ValueError for a failed OAuth refresh): the call failed,
-            # and the calls before it were paid for, so the core is told,
-            # carries their answers, and this raises it with them, as the
-            # reference's client does (T2.8c fix 1). An interrupt is no
-            # Exception, and cancels the run as before.
-            unexpected = other
-        if transport_failed:
-            raise TransportFailed
-        raised: StructuredDataError | None = failure
-        if refused is not None:
-            # Built outside the handler, so nothing failing in the copy is
-            # chained to the transport's exception. The core is told the
-            # endpoint's status, so it ends the run carrying the answers of
-            # the calls before this one (T2.8c), which this raises on.
-            raised = _refusal(refused)
-        if raised is not None:
-            raise Refused(
-                raised, None if refused is None else refused.status_code
-            )
-        assert unexpected is not None
-        raise Refused(unexpected)
+    model_call = sender(client, model_id)
 
     operation: dict[str, Any] = {
         'op': 'predict',
@@ -702,3 +650,63 @@ def _carry_the_answers(error: Exception, by_step: bool) -> None:
     if not by_step:
         details['rows_answered'] = rows
     error.details = details  # type: ignore[attr-defined]
+
+
+def sender(client: SDMClient, model_id: str) -> Any:
+    """The existing transport-only callback, after core model selection."""
+
+    def model_call(body: bytes) -> bytes:
+        # What failed is noted inside the handlers and raised after them, so
+        # the transport's exception, whose text the endpoint wrote, is not
+        # even the context of what is raised. The part a refusal is said of,
+        # a forecast's step or a ranking's candidate, and how many were
+        # answered before it, are the core's, which it names on its end of
+        # the run (``run``'s ``_carried``).
+        failure: StructuredDataError | None = None
+        unexpected: Exception | None = None
+        transport_failed = False
+        refused: NimRequestError | None = None
+        try:
+            # The core's call, its bytes as written (register PD-2, T1.28a),
+            # through the adapter that explains the endpoint's refusals; the
+            # answer, the bytes the endpoint sent, is the core's to read
+            # (T2.14b).
+            return client._send_body(_adapter(client, model_id), body)
+        except EndpointFailed:
+            # A serving endpoint's failure, which the core names (T3.13).
+            raise
+        except NimRequestError as refusal:
+            refused = refusal
+        except StructuredDataError as failed:
+            if failed.code == 'TRANSPORT_ERROR':
+                transport_failed = True
+            else:
+                failure = StructuredDataError(
+                    'the transport to the model endpoint refused the call',
+                    code=failed.code,
+                )
+        except Exception as other:  # noqa: BLE001 - the reference's own
+            # Any other exception the transport raised (the Databricks
+            # SDK's ValueError for a failed OAuth refresh): the call failed,
+            # and the calls before it were paid for, so the core is told,
+            # carries their answers, and this raises it with them, as the
+            # reference's client does (T2.8c fix 1). An interrupt is no
+            # Exception, and cancels the run as before.
+            unexpected = other
+        if transport_failed:
+            raise TransportFailed
+        raised: StructuredDataError | None = failure
+        if refused is not None:
+            # Built outside the handler, so nothing failing in the copy is
+            # chained to the transport's exception. The core is told the
+            # endpoint's status, so it ends the run carrying the answers of
+            # the calls before this one (T2.8c), which this raises on.
+            raised = _refusal(refused)
+        if raised is not None:
+            raise Refused(
+                raised, None if refused is None else refused.status_code
+            )
+        assert unexpected is not None
+        raise Refused(unexpected)
+
+    return model_call

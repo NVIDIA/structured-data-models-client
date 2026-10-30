@@ -710,6 +710,7 @@ impl From<WarningCode> for Code {
 }
 
 warning_codes! {
+    FrameSchema = "FRAME_SCHEMA",
     KeyNoValue = "KEY_NO_VALUE",
     KeyRepeats = "KEY_REPEATS",
     KeyDeclined = "KEY_DECLINED",
@@ -747,6 +748,43 @@ warning_codes! {
 }
 
 sentences! {
+    DirectColumnNames = "direct_column_names", E::InvalidRequest;
+    DirectConstantClass = "direct_constant_class", W::FrameSchema;
+    DirectConstantRegression = "direct_constant_regression", W::FrameSchema;
+    DirectDuplicateColumns = "direct_duplicate_columns", E::InvalidRequest;
+    DirectEmpty = "direct_empty", E::InvalidRequest;
+    DirectExtra = "direct_extra", E::InvalidRequest;
+    DirectFloatPrecision = "direct_float_precision", E::InvalidRequest;
+    DirectFrame = "direct_frame", E::InvalidRequest;
+    DirectKnownTarget = "direct_known_target", E::InvalidRequest;
+    DirectMissing = "direct_missing", E::InvalidRequest;
+    DirectNativeFailure = "direct_native_failure", E::InvalidRequest;
+    DirectNullableCast = "direct_nullable_cast", E::InvalidRequest;
+    DirectOptionInteger = "direct_option_integer", E::InvalidRequest;
+    DirectRelated = "direct_related", E::UnsupportedRequest;
+    DirectSchemaColumns = "direct_schema_columns", E::InvalidRequest;
+    DirectSchemaMissing = "direct_schema_missing", E::InvalidRequest;
+    DirectScored = "direct_scored", E::InvalidRequest;
+    DirectTargetMissing = "direct_target_missing", E::InvalidRequest;
+    DirectTargetScored = "direct_target_scored", E::InvalidRequest;
+    DirectContextLimit = "direct_context_limit", E::UnsupportedRequest;
+    TabularMissingRowIndex = "tabular_missing_row_index", E::InvalidResponse;
+    DirectMultilabel = "direct_multilabel", E::UnsupportedRequest;
+    DirectRelationalFrames = "direct_relational_frames", E::UnsupportedRequest;
+    DirectNameEmpty = "direct_name_empty", E::InvalidRequest;
+    DirectNameCharacters = "direct_name_characters", E::InvalidRequest;
+    DirectTask = "direct_task", E::InvalidRequest;
+    DirectOverlap = "direct_overlap", W::FrameSchema;
+    DirectTextCategorical = "direct_text_categorical", W::FrameSchema;
+    DirectUnfinished = "direct_unfinished", E::UnsupportedRequest;
+    DirectUnknownModel = "direct_unknown_model", E::UnknownModel;
+    DirectWireFraction = "direct_wire_fraction", E::InvalidRequest;
+    DirectWireNonFinite = "direct_wire_non_finite", E::InvalidRequest;
+    DirectWireRange = "direct_wire_range", E::InvalidRequest;
+    TabularIdMismatch = "tabular_id_mismatch", E::InvalidResponse;
+    TabularRowBounds = "tabular_row_bounds", E::InvalidResponse;
+    TabularRowRepeated = "tabular_row_repeated", E::InvalidResponse;
+    TabularRowsUnanswered = "tabular_rows_unanswered", E::InvalidResponse;
     Internal = "internal", E::InternalError;
     ProviderFailed = "provider_failed", E::ProviderError;
     TransportFailed = "transport_failed", E::TransportError;

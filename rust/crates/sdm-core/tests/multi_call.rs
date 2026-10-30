@@ -162,6 +162,7 @@ fn predict(state: RequestState, attachments: Attachments) -> Result<Run, CoreErr
             contract: CONTRACT_VERSION,
             facts: facts(),
             operation: Operation::Predict(Predict {
+                direct: None,
                 state: Some(state),
                 held: None,
                 model: "kumo-relational".into(),

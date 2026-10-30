@@ -158,6 +158,7 @@ pub fn messages() -> Vec<ControlMessage> {
             }),
         })),
         start(Operation::Predict(Predict {
+            direct: None,
             state: Some(state.clone()),
             held: None,
             model: "kumo-relational".into(),
@@ -168,6 +169,7 @@ pub fn messages() -> Vec<ControlMessage> {
             model_endpoint: None,
         })),
         start(Operation::Predict(Predict {
+            direct: None,
             state: Some(state.clone()),
             held: None,
             model: "kumo-relational".into(),

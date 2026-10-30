@@ -861,6 +861,12 @@ def _predicts_on_the_core(request: Request) -> Any | None:
     schema = getattr(request, 'schema', None)
     source = getattr(schema, 'source', None)
     if not request.payloads:
+        from sdm_client import _routing
+
+        if _routing.route(_routing.DIRECT_PREDICT) == 'core':
+            from sdm_client._rust import direct
+
+            return direct
         return None
     from sdm_client import _routing
 

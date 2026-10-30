@@ -451,68 +451,14 @@ pub fn prepare(
             Value::Object(members) => !members.is_empty(),
             Value::Bool(true) => true,
         });
-    let temporal = anchored || matches!(kind, "forecasting" | "temporal_link_prediction");
-    let needed = |shape: &str| match shape {
-        "relationships" => linked,
-        "multiple_tables" => tables > 1,
-        "link_prediction" => kind == "temporal_link_prediction",
-        "forecasting" => kind == "forecasting",
-        "temporal" => temporal,
-        "static" => !temporal,
-        _ => false,
-    };
-    let mut lacking: Vec<&str> = SHAPES
-        .into_iter()
-        .filter(|shape| needed(shape) && !spec.shapes.contains(shape))
-        .collect();
-    lacking.sort_unstable();
-    if !lacking.is_empty() {
-        return Err(unsupported(
-            Sentence::ModelLacksShape,
-            spec.id,
-            "the model cannot answer a request of this shape",
-        )
-        .with_field("unsupported", texts(lacking)));
-    }
-    if !spec.tasks.contains(&kind) {
-        return Err(unsupported(
-            Sentence::ModelLacksTask,
-            spec.id,
-            "the model does not serve the task's kind",
-        )
-        .with_field("task", Detail::text(kind))
-        .with_field("supported", texts(sorted(spec.tasks))));
-    }
-    let mut unknown: Vec<&str> = outputs
-        .iter()
-        .map(String::as_str)
-        .filter(|name| !spec.outputs.contains(name))
-        .collect();
-    if !unknown.is_empty() {
-        unknown.sort_unstable();
-        unknown.dedup();
-        return Err(unsupported(
-            Sentence::ModelLacksOutputs,
-            spec.id,
-            "the model does not produce an output asked for",
-        )
-        .with_field("unsupported_outputs", texts(unknown))
-        .with_field("supported_outputs", texts(sorted(spec.outputs))));
-    }
+    check_shapes(spec, kind, anchored, linked, tables)?;
+    check_task_outputs(spec, kind, &outputs, true)?;
     let rows = payloads
         .iter()
         .map(|p| rows_of(p, "context"))
         .max()
         .unwrap_or(0);
-    if spec.id == RELATIONAL && rows > CONTEXT_ROWS_MAX {
-        return Err(unsupported(
-            Sentence::ContextPastModel,
-            spec.id,
-            "the request's context is larger than the model reads",
-        )
-        .with_field("context_rows", count(rows))
-        .with_field("context_rows_max", count(CONTEXT_ROWS_MAX)));
-    }
+    check_capacity(spec, rows, false)?;
     if spec.id == TABULAR {
         // The tabular model takes no relational request this build sends.
         return Err(not_yet("model"));
@@ -1096,12 +1042,17 @@ fn answer_type(payload: &Value) -> Result<AnswerType, CoreError> {
     if !classifies(kind) {
         return Ok(AnswerType::Float);
     }
-    Ok(match target_dtype(payload) {
+    Ok(classification_answer_type(payload))
+}
+
+/// Shared declared-target conversion, after the caller validates its task.
+pub(crate) fn classification_answer_type(payload: &Value) -> AnswerType {
+    match target_dtype(payload) {
         Some(d) if d.starts_with("bool") => AnswerType::Bool,
         Some(d) if d.starts_with("int") => AnswerType::Int,
         Some(d) if d.starts_with("float") => AnswerType::FloatClass,
         _ => AnswerType::Text,
-    })
+    }
 }
 
 /// The spellings a declared boolean is read back from (`_as_bool`).
@@ -1277,7 +1228,16 @@ pub fn layout(
     response: &PredictionResponse,
     float_text: fn(f64) -> String,
 ) -> Result<Part, CoreError> {
-    let answers = answer_type(payload)?;
+    layout_with_answers(payload, response, float_text, answer_type(payload)?)
+}
+
+/// Shared row presentation after route-specific task validation.
+pub(crate) fn layout_with_answers(
+    payload: &Value,
+    response: &PredictionResponse,
+    float_text: fn(f64) -> String,
+    answers: AnswerType,
+) -> Result<Part, CoreError> {
     let (names, rows) = instance_table(payload, "predict").ok_or_else(|| bad_payload("predict"))?;
     let (placed, text_ids) = match names.iter().position(|n| n.starts_with(ENTITY_REF)) {
         Some(reference) => {
@@ -2134,7 +2094,7 @@ fn entity_dtype(payload: &Value) -> Option<String> {
 /// integer, a whole float, or text Python's `int` reads ([`integer_text`]);
 /// a declared float from a number not past a double's range, or text
 /// Python's `float` reads ([`numeric_text`]); any other dtype as written.
-fn entity(value: &Value, dtype: Option<&str>) -> Entity {
+pub(crate) fn entity(value: &Value, dtype: Option<&str>) -> Entity {
     let read = match (dtype, value) {
         (None, _) | (_, Value::Null) => None,
         (Some(d), _) if d.starts_with("bool") => {
@@ -2202,9 +2162,148 @@ fn instance_text(value: &Value, float_text: fn(f64) -> String) -> Option<String>
     })
 }
 
+// Direct frames and gathered payloads share model policy over neutral facts.
+fn check_shapes(
+    spec: &Spec,
+    kind: &str,
+    anchored: bool,
+    linked: bool,
+    tables: usize,
+) -> Result<(), CoreError> {
+    let temporal = anchored || matches!(kind, "forecasting" | "temporal_link_prediction");
+    let needed = |shape: &str| match shape {
+        "relationships" => linked,
+        "multiple_tables" => tables > 1,
+        "link_prediction" => kind == "temporal_link_prediction",
+        "forecasting" => kind == "forecasting",
+        "temporal" => temporal,
+        "static" => !temporal,
+        _ => false,
+    };
+    let mut lacking: Vec<&str> = SHAPES
+        .into_iter()
+        .filter(|shape| needed(shape) && !spec.shapes.contains(shape))
+        .collect();
+    lacking.sort_unstable();
+    if !lacking.is_empty() {
+        return Err(unsupported(
+            Sentence::ModelLacksShape,
+            spec.id,
+            "the model cannot answer a request of this shape",
+        )
+        .with_field("unsupported", texts(lacking)));
+    }
+    Ok(())
+}
+fn check_task_outputs(
+    spec: &Spec,
+    kind: &str,
+    outputs: &[String],
+    deduplicate: bool,
+) -> Result<(), CoreError> {
+    if !spec.tasks.contains(&kind) {
+        return Err(unsupported(
+            Sentence::ModelLacksTask,
+            spec.id,
+            "the model does not serve the task's kind",
+        )
+        .with_field("task", Detail::text(kind))
+        .with_field("supported", texts(sorted(spec.tasks))));
+    }
+    let mut unknown: Vec<&str> = outputs
+        .iter()
+        .map(String::as_str)
+        .filter(|name| !spec.outputs.contains(name))
+        .collect();
+    if !unknown.is_empty() {
+        unknown.sort_unstable();
+        if deduplicate {
+            unknown.dedup();
+        }
+        return Err(unsupported(
+            Sentence::ModelLacksOutputs,
+            spec.id,
+            "the model does not produce an output asked for",
+        )
+        .with_field("unsupported_outputs", texts(unknown))
+        .with_field("supported_outputs", texts(sorted(spec.outputs))));
+    }
+    Ok(())
+}
+fn check_capacity(spec: &Spec, rows: usize, direct: bool) -> Result<(), CoreError> {
+    if (direct || spec.id == RELATIONAL) && rows > CONTEXT_ROWS_MAX {
+        return Err(unsupported(
+            if direct {
+                Sentence::DirectContextLimit
+            } else {
+                Sentence::ContextPastModel
+            },
+            spec.id,
+            "the request's context is larger than the model reads",
+        )
+        .with_field("context_rows", count(rows))
+        .with_field("context_rows_max", count(CONTEXT_ROWS_MAX)));
+    }
+    Ok(())
+}
+
+/// Model preflight for live direct request facts, before conversion or empty handling.
+pub fn bind_direct(
+    input: sdm_contract::direct::DirectCallFacts,
+) -> Result<sdm_contract::direct::BoundDirectCall, CoreError> {
+    let facts = input.clone();
+    let spec = MODELS
+        .iter()
+        .find(|spec| spec.id == input.model)
+        .ok_or_else(|| {
+            let mut known: Vec<_> = MODELS.iter().map(|spec| spec.id).collect();
+            known.sort_unstable();
+            CoreError::new(Sentence::DirectUnknownModel, "the model is unknown")
+                .with_field("model", Detail::text(&input.model))
+                .with_field("known_models", texts(known))
+        })?;
+    let named = input.outputs.is_some();
+    let outputs: Vec<String> = input.outputs.unwrap_or_else(|| {
+        default_outputs(&input.kind)
+            .iter()
+            .map(|name| (*name).to_owned())
+            .collect()
+    });
+    if outputs.is_empty() {
+        return Err(CoreError::new(
+            Sentence::OutputsNone,
+            "outputs must name at least one field",
+        ));
+    }
+    check_shapes(
+        spec,
+        &input.kind,
+        input.anchored,
+        input.relationships,
+        input.tables,
+    )?;
+    check_task_outputs(spec, &input.kind, &outputs, false)?;
+    check_capacity(spec, input.context_rows, true)?;
+    Ok(sdm_contract::direct::BoundDirectCall {
+        facts,
+        model: input.model,
+        outputs,
+        named,
+        kind: input.kind,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn direct_tabular_support_does_not_expand_gathered_body_tasks() {
+        let payload = sdm_wire::json::read(br#"{"task":{"kind":"classification"}}"#).unwrap();
+        let error = body(&payload, RELATIONAL, "request", &[], &[]).unwrap_err();
+        assert_eq!(error.code, ErrorCode::UnsupportedRequest);
+        assert_eq!(error.fields["rule"], Detail::text("problem_type"));
+    }
     use sdm_contract::ErrorCode;
 
     #[test]

@@ -37,6 +37,18 @@ use crate::types::ColumnType;
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Operation {
     ValidateQuery(ValidateQuery),
+    CheckDirectShape(crate::direct::DirectInput),
+    BindDirect(crate::direct::DirectInput),
+    CheckDirectRows(crate::direct::DirectInput),
+    InterpretDirectJson(crate::direct::DirectInput),
+    SelectDirectMember(crate::direct::DirectInput),
+    AttributeDirectRow(crate::direct::DirectInput),
+    PrepareDirect(crate::direct::DirectFrames),
+    InspectDirectPair(crate::direct::DirectFrames),
+    ResolveTabular(crate::direct::DirectFrames),
+    EncodeTabular(crate::direct::DirectFrames),
+    LayoutDirect(crate::direct::LayoutDirect),
+
     DescribeSource(DescribeSource),
     EditSchema(EditSchema),
     Materialize(Materialize),
@@ -63,6 +75,18 @@ impl Operation {
     pub fn name(&self) -> &'static str {
         match self {
             Operation::ValidateQuery(_) => "validate_query",
+            Operation::CheckDirectShape(_) => "check_direct_shape",
+            Operation::BindDirect(_) => "bind_direct",
+            Operation::CheckDirectRows(_) => "check_direct_rows",
+            Operation::InterpretDirectJson(_) => "interpret_direct_json",
+            Operation::SelectDirectMember(_) => "select_direct_member",
+            Operation::AttributeDirectRow(_) => "attribute_direct_row",
+            Operation::PrepareDirect(_) => "prepare_direct",
+            Operation::InspectDirectPair(_) => "inspect_direct_pair",
+            Operation::ResolveTabular(_) => "resolve_tabular",
+            Operation::EncodeTabular(_) => "encode_tabular",
+            Operation::LayoutDirect(_) => "layout_direct",
+
             Operation::DescribeSource(_) => "describe_source",
             Operation::EditSchema(_) => "edit_schema",
             Operation::Materialize(_) => "materialize",
@@ -77,6 +101,21 @@ impl Operation {
     pub fn attachments(&self) -> Vec<(AttachmentId, AttachmentKind)> {
         use AttachmentKind::{Arrow, Bytes};
         match self {
+            Operation::CheckDirectShape(v)
+            | Operation::BindDirect(v)
+            | Operation::CheckDirectRows(v)
+            | Operation::InterpretDirectJson(v)
+            | Operation::SelectDirectMember(v)
+            | Operation::AttributeDirectRow(v) => vec![(v.input, Bytes)],
+            Operation::PrepareDirect(v)
+            | Operation::InspectDirectPair(v)
+            | Operation::ResolveTabular(v)
+            | Operation::EncodeTabular(v) => {
+                vec![(v.input, Bytes), (v.context, Arrow), (v.predict, Arrow)]
+            }
+            Operation::LayoutDirect(v) => {
+                vec![(v.input, Bytes), (v.payload, Bytes), (v.response, Bytes)]
+            }
             Operation::ValidateQuery(v) => vec![(v.query, Bytes), (v.schema, Bytes)],
             Operation::DescribeSource(d) => vec![(d.source, Bytes)],
             Operation::EditSchema(e) => vec![(e.schema, Bytes), (e.edit, Bytes)],
@@ -90,6 +129,10 @@ impl Operation {
             }
             Operation::Predict(p) => {
                 let mut named = Vec::new();
+                if let Some(direct) = &p.direct {
+                    named.push((direct.input, Bytes));
+                    named.extend(direct.payload.map(|id| (id, Bytes)));
+                }
                 if let Some(state) = &p.state {
                     named.push((state.payload, Bytes));
                     named.push((state.query, Bytes));
@@ -132,6 +175,8 @@ impl Operation {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub enum OperationResult {
+    DirectValue(crate::direct::DirectValue),
+    DecodedDirectResponse(crate::direct::DecodedDirectResponse),
     ValidateQuery(QueryValidation),
     DescribeSource(DescribedSource),
     EditSchema(SchemaEdited),
@@ -1341,6 +1386,9 @@ pub struct HeldRanking {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Predict {
+    /// A direct request, mutually exclusive with gathered state/held inputs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub direct: Option<crate::direct::DirectModelInput>,
     /// The request state `materialize` answered, as the host held it since;
     /// absent where the host holds a request the core did not
     /// materialize, which [`Predict::held`] gives instead. A start naming
@@ -1483,6 +1531,51 @@ pub struct Predicted {
 #[derive(JsonSchema)]
 #[schemars(deny_unknown_fields)]
 pub struct Attachments {
+    #[schemars(rename = "CheckDirectShape.input")]
+    pub checkdirectshape_input: crate::direct::DirectShape,
+    #[schemars(rename = "PrepareDirect.input")]
+    pub preparedirect_input: crate::direct::DirectPreparation,
+    #[schemars(rename = "DirectValue.description")]
+    pub directvalue_description: crate::direct::DirectDescription,
+    #[schemars(rename = "BindDirect.input")]
+    pub binddirect_input: crate::direct::DirectCallFacts,
+    #[schemars(rename = "DirectValue.bound")]
+    pub directvalue_bound: crate::direct::BoundDirectCall,
+    #[schemars(rename = "InspectDirectPair.input")]
+    pub inspectdirectpair_input: crate::direct::TabularInput,
+    #[schemars(rename = "ResolveTabular.input")]
+    pub resolvetabular_input: crate::direct::TabularInput,
+    #[schemars(rename = "DirectValue.resolved_tabular")]
+    pub directvalue_resolved_tabular: crate::direct::ResolvedTabular,
+    #[schemars(rename = "EncodeTabular.input")]
+    pub encodetabular_input: crate::direct::TabularEncoding,
+    #[schemars(rename = "DirectValue.encoded")]
+    pub directvalue_encoded: crate::direct::EncodedDirectBody,
+    #[schemars(rename = "Predict.direct.input")]
+    pub predict_direct_input: crate::direct::DirectPrediction,
+    #[schemars(rename = "DecodedDirectResponse.value")]
+    pub decodeddirectresponse_value: crate::direct::DirectResponseData,
+    #[schemars(rename = "DirectResponseData.rows")]
+    pub directresponsedata_rows: Vec<crate::direct::DecodedDirectRow>,
+    #[schemars(rename = "CheckDirectRows.input")]
+    pub checkdirectrows_input: crate::direct::DirectRowsInput,
+    #[schemars(rename = "DirectValue.checked_rows")]
+    pub directvalue_checked_rows: crate::direct::CheckedDirectRows,
+    #[schemars(rename = "InterpretDirectJson.input")]
+    pub interpretdirectjson_input: crate::direct::DirectJsonInput,
+    #[schemars(rename = "DirectValue.interpreted")]
+    pub directvalue_interpreted: crate::direct::InterpretedDirectRow,
+    #[schemars(rename = "SelectDirectMember.input")]
+    pub selectdirectmember_input: crate::direct::DirectMemberInput,
+    #[schemars(rename = "DirectValue.member")]
+    pub directvalue_member: crate::direct::SelectedDirectMember,
+    #[schemars(rename = "AttributeDirectRow.input")]
+    pub attributedirectrow_input: crate::direct::DirectAttributionInput,
+    #[schemars(rename = "DirectValue.attributed")]
+    pub directvalue_attributed: crate::direct::AttributedDirectRow,
+    #[schemars(rename = "LayoutDirect.input")]
+    pub layoutdirect_input: crate::direct::DirectLayoutInput,
+
     #[schemars(rename = "ValidateQuery.query")]
     pub validate_query_query: String,
     #[schemars(rename = "ValidateQuery.schema")]
