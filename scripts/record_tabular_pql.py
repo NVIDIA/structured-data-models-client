@@ -43,7 +43,7 @@ class Endpoint:
         return {
             'model': 'kumo-tabular',
             'id': 'frozen-pql-reference',
-            'predictions': [{'row_index': 0, 'prediction': 1.0}],
+            'predictions': [{'row_index': 0, 'prediction': 0.0}],
             'metadata': {},
         }
 
