@@ -7,7 +7,6 @@
 # Source SHA256: e2ec88a0ecea3c5941f161c30bc5b77a1157f3fcf4062bd7677c4b74c63a5865
 
 import math
-
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any, Final
@@ -181,7 +180,7 @@ def _require_sequence(
     data: Mapping[str, Any], field: str, model: str
 ) -> Any:
     value = _require(data, field, model)
-    if isinstance(value, (str, bytes)) or not hasattr(value, "__iter__"):
+    if isinstance(value, (str, bytes)) or not hasattr(value, '__iter__'):
         raise ResponseContractError(
             f'{model} response field {field!r} is not a sequence'
         )
@@ -208,8 +207,7 @@ def _finite(value: Any) -> float:
     """
     if isinstance(value, bool):
         raise ResponseContractError(
-            f'response carries {value!r} where the contract requires a '
-            f'number'
+            f'response carries {value!r} where the contract requires a number'
         )
     try:
         number = float(value)
@@ -220,8 +218,7 @@ def _finite(value: Any) -> float:
         # raw error from the conversion itself: `float(10**400)`
         # raises OverflowError, which no caller catches.
         raise ResponseContractError(
-            f'response carries {value!r} where the contract requires a '
-            f'number'
+            f'response carries {value!r} where the contract requires a number'
         ) from None
     if not math.isfinite(number):
         raise ResponseContractError(
@@ -236,8 +233,7 @@ def _float_dict(value: Any) -> dict[str, float] | None:
         return None
     if not isinstance(value, Mapping):
         raise ResponseContractError(
-            f'response carries {value!r} where the contract requires '
-            f'an object'
+            f'response carries {value!r} where the contract requires an object'
         )
     return {str(key): _finite(val) for key, val in value.items()}
 
