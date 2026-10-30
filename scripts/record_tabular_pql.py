@@ -14,21 +14,21 @@ from __future__ import annotations
 import argparse
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
+from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 TESTS = ROOT / 'packages/structured-data-models-client/tests'
 sys.path.insert(0, str(TESTS))
 
-from tabular_pql_fixtures import (
+from tabular_pql_fixtures import (  # noqa: E402
     INDEX_FAMILIES,
     LABEL_FAMILIES,
     indexed_frame,
     label_frame,
-)  # noqa: E402
+)
 from tabular_pql_reference import runtime_identity  # noqa: E402
 
 

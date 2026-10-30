@@ -14,8 +14,6 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import pytest
-
-from sdm_client import KumoTabular, PredictiveQuery, SDMClient
 from tabular_pql_fixtures import (
     INDEX_FAMILIES,
     LABEL_FAMILIES,
@@ -23,6 +21,8 @@ from tabular_pql_fixtures import (
     label_frame,
 )
 from tabular_pql_reference import reference_case
+
+from sdm_client import KumoTabular, PredictiveQuery, SDMClient
 
 ROUTES = ','.join(
     (
@@ -477,6 +477,7 @@ def test_legacy_dispatch_does_not_reuse_modern_avx2_or_avx512_profiles(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from types import SimpleNamespace
+
     from sdm_client._routing import RouteError
     from sdm_client._rust import tabular_index
 
