@@ -77,16 +77,17 @@ def test_every_name_imported_from_this_project_is_public(
 
 
 @pytest.mark.parametrize(
-    ('ready_model', 'ready_version', 'accepted'),
+    ('active_model', 'ready_model', 'ready_version', 'accepted'),
     [
-        ('catalog.schema.tabular', '1', True),
-        ('CATALOG.SCHEMA.TABULAR', '1', True),
-        ('catalog.schema.other', '1', False),
-        ('catalog.schema.tabular', '2', False),
+        ('catalog.schema.tabular', 'catalog.schema.tabular', '1', True),
+        ('catalog.schema.other', 'catalog.schema.tabular', '1', True),
+        ('catalog.schema.tabular', 'CATALOG.SCHEMA.TABULAR', '1', True),
+        ('catalog.schema.tabular', 'catalog.schema.other', '1', False),
+        ('catalog.schema.tabular', 'catalog.schema.tabular', '2', False),
     ],
 )
 def test_tabular_notebook_checks_the_model_after_a_pending_update(
-    ready_model: str, ready_version: str, accepted: bool
+    active_model: str, ready_model: str, ready_version: str, accepted: bool
 ) -> None:
     cells = _cells(EXAMPLES / 'kumo_tabular_quickstart.ipynb', 'code')
     deploy = next(
@@ -107,8 +108,8 @@ def test_tabular_notebook_checks_the_model_after_a_pending_update(
 
     workspace = Mock()
     workspace.serving_endpoints.get.return_value = SimpleNamespace(
-        config=config('catalog.schema.tabular', '1'),
-        pending_config=config(ready_model, ready_version),
+        config=config(active_model, '1'),
+        pending_config=config('catalog.schema.tabular', '1'),
     )
     workspace.serving_endpoints.wait_get_serving_endpoint_not_updating.return_value = SimpleNamespace(
         config=config(ready_model, ready_version),
