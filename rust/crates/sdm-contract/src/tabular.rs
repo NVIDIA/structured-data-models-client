@@ -212,6 +212,8 @@ pub struct OrderSampledTabularRows {
 pub enum OrderedSampledTabularRows {
     Sorted {
         positions: Vec<usize>,
+        /// Native sort_index may copy/finalize without taking a permutation.
+        already_ordered: bool,
     },
     Refused {
         reason: TabularOrderError,
