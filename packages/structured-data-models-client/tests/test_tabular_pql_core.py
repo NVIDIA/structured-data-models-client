@@ -327,3 +327,54 @@ def test_forced_tabular_frame_routes_do_not_silently_run_legacy_relational(
         query(frame()).materialize(
             indices=[10], num_context_samples=3, model=KumoRelational()
         )
+
+
+def test_index_take_hook_precedes_target_validity(route: str) -> None:
+    import numpy as np
+
+    data = frame()
+    asked = query(data)
+    fired = []
+
+    class TakingIndex(pd.Index):
+        def take(self, *args: Any, **kwargs: Any) -> pd.Index:
+            if not fired:
+                fired.append(True)
+                data.loc[109, 'target'] = float('nan')
+            return super().take(*args, **kwargs)
+
+    data.index = TakingIndex._simple_new(np.asarray(data.index))
+    request = asked.materialize(
+        indices=[10], num_context_samples=10, task='regression'
+    )
+    assert fired
+    assert request.context.instance_table['id'].tolist() == [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+    ]
+
+
+def test_attrs_copy_effect_is_not_moved_after_target_filter(route: str) -> None:
+    data = frame()
+    scoring = data.iloc[[10]].drop(columns=['target'])
+    asked = query(data)
+    fired = []
+
+    class OnCopy:
+        def __deepcopy__(self, memo: Any) -> Any:
+            if not fired:
+                fired.append(True)
+                data.loc[109, 'target'] = float('nan')
+            return self
+
+    data.attrs['owner'] = OnCopy()
+    request = asked.materialize(predict=scoring, task='regression')
+    assert fired
+    assert 1 not in request.context.instance_table['id'].tolist()

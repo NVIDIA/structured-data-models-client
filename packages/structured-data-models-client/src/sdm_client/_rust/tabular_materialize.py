@@ -55,6 +55,41 @@ def _expand(source: pd.Series, indices: list[Any], entity: str) -> list[int]:
     return result['rows']
 
 
+def _passive_index(index: pd.Index) -> bool:
+    if type(index) is pd.RangeIndex:
+        return True
+    if type(index) is pd.MultiIndex:
+        return all(_passive_index(level) for level in index._levels)
+    if type(index) not in (
+        pd.Index,
+        pd.DatetimeIndex,
+        pd.TimedeltaIndex,
+        pd.PeriodIndex,
+        pd.CategoricalIndex,
+    ):
+        return False
+    # Stored array identity only: do not iterate labels or invoke array hooks.
+    return type(index._data) in (
+        np.ndarray,
+        pd.arrays.IntegerArray,
+        pd.arrays.FloatingArray,
+        pd.arrays.BooleanArray,
+        pd.arrays.StringArray,
+        pd.arrays.DatetimeArray,
+        pd.arrays.TimedeltaArray,
+        pd.arrays.PeriodArray,
+        pd.Categorical,
+    )
+
+
+def _passive_frame(frame: pd.DataFrame) -> bool:
+    return (
+        type(frame) is pd.DataFrame
+        and not frame.attrs
+        and _passive_index(frame._mgr.axes[1])
+    )
+
+
 def _ordinary_selection(
     frame: pd.DataFrame,
     entity: str,
@@ -65,7 +100,7 @@ def _ordinary_selection(
 ) -> dict[str, Any] | None:
     # A bulk read is permitted only where no native user operation separates
     # these observations. Everything else retains the staged native path.
-    if type(frame) is not pd.DataFrame or type(frame.columns) is not pd.Index:
+    if not _passive_frame(frame) or type(frame.columns) is not pd.Index:
         return None
     if not all(type(name) is str for name in frame.columns):
         return None
@@ -94,10 +129,7 @@ def _ordinary_selection(
             'requested': [_integer(int(value)) for value in requested],
         }
     else:
-        if (
-            type(predict) is not pd.DataFrame
-            or type(predict.columns) is not pd.Index
-        ):
+        if not _passive_frame(predict) or type(predict.columns) is not pd.Index:
             return None
         if not all(type(name) is str for name in predict.columns):
             return None
@@ -143,8 +175,9 @@ def _filtered(
     assign: bool = False,
 ) -> pd.DataFrame:
     if (
-        type(frame) is pd.DataFrame
+        _passive_frame(frame)
         and type(known) is pd.Series
+        and not known.attrs
         and known.dtype == np.dtype('bool')
     ):
         selected = _call(
