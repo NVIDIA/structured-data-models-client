@@ -9,8 +9,7 @@ const PROFILE: SimdArgsortProfile = SimdArgsortProfile::Avx512Gnu14Network64;
 #[test]
 fn independently_transcribed_network_vectors_match() {
     // Source-derived expectations, not native AVX512 execution or a candidate oracle.
-    let receipt: serde_json::Value =
-        serde_json::from_str(super::network64_fixture::DATA).unwrap();
+    let receipt: serde_json::Value = serde_json::from_str(super::network64_fixture::DATA).unwrap();
     let cases = receipt["cases"].as_array().unwrap();
     assert_eq!(cases.len(), 40);
     for case in cases {

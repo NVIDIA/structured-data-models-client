@@ -391,6 +391,6 @@ pub use selected::order_sampled;
 pub use scalar::scalar_argsort;
 
 #[cfg(test)]
-mod network64_tests;
-#[cfg(test)]
 mod network64_fixture;
+#[cfg(test)]
+mod network64_tests;
