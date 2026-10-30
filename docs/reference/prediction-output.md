@@ -121,7 +121,9 @@ joined = to_score.reset_index(names='row_index').merge(answers, on='row_index')
 ## Explanations
 
 Ask for one by adding `'explanation'` to `outputs`. There is no row limit:
-every scored row is explained.
+every scored row is explained. A NIM and a client opened with
+`SDMClient.in_process()` both serve it, with the same request and the same
+`result.explanations`.
 
 ```python
 result = client.predict(request, model=KumoRelational(),

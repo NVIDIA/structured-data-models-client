@@ -138,3 +138,4 @@ entity's own table is hop 0.
 
 A ranking refuses an explanation locally, and the shipping endpoint refuses it
 everywhere else, so treat `result.explanations` as possibly empty.
+`SDMClient.in_process()` serves it outside a ranking.

@@ -586,7 +586,8 @@ leaving the document wrong.
 Every scored row is explained, and `result.explanations` maps each row's key
 to its explanation: the `id` it carries in `to_pandas()`, `(id,
 forecast_step)` for a forecast, and `row_index` when the request has no entity
-key. The same rule holds on both models. The shape of an entry is in
+key. The same rule holds on both models. A client opened with
+`SDMClient.in_process()` computes the same record itself. The shape of an entry is in
 [Prediction output](../reference/prediction-output.md#explanations).
 
 **Keys, not positions.** The endpoint locates every explained row by its
