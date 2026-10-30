@@ -362,6 +362,7 @@ pub(super) fn order(
             Ok(sorted(positions, false))
         }
         Err((reason, left, right)) => Ok(Outcome::Refused {
+            levels: Vec::new(),
             reason,
             left,
             right,

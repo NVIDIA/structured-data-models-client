@@ -111,7 +111,8 @@ fn huge_integer_overflow_is_reached_during_monotonic_probe_only_in_weak_mode() {
         Outcome::Refused {
             reason: Error::IntegerToFloatOverflow,
             left: 1,
-            right: 0
+            right: 0,
+            levels: Vec::new(),
         }
     );
     for semantics in [Semantics::CommonType, Semantics::ExactIntegerPairs] {
@@ -140,7 +141,8 @@ fn finite_narrowing_overflow_stays_an_explicit_pending_native_effect() {
             Outcome::Refused {
                 reason: Error::NativeEffectsPending,
                 left: 1,
-                right: 0
+                right: 0,
+                levels: Vec::new(),
             }
         );
     }
@@ -196,7 +198,8 @@ fn masked_owners_keep_distinct_probe_behavior_and_original_suffix_order() {
         Outcome::Refused {
             reason: Error::IntegerToFloatOverflow,
             left: 1,
-            right: 0
+            right: 0,
+            levels: Vec::new(),
         }
     );
 }

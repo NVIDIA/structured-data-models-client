@@ -370,6 +370,9 @@ pub enum OrderedSampledTabularRows {
     },
     Refused {
         reason: TabularOrderError,
+        /// Index-level path containing the left/right owners; empty for rows.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        levels: Vec<usize>,
         left: usize,
         right: usize,
     },

@@ -192,7 +192,7 @@ fn multi(levels: &[Facts], codes: &[Vec<i64>], missing: &[bool]) -> Result<Resul
     let mut ranks = Vec::new();
     let mut incomparable_levels = Vec::new();
     let mut needs_profile = false;
-    for (level, code) in levels.iter().zip(codes) {
+    for (level_no, (level, code)) in levels.iter().zip(codes).enumerate() {
         let n = level.missing.len();
         let permutation = match order_sampled(level)? {
             ResultOrder::Sorted { positions, .. } => {
@@ -204,12 +204,26 @@ fn multi(levels: &[Facts], codes: &[Vec<i64>], missing: &[bool]) -> Result<Resul
                 incomparable_levels.push(false);
                 (0..n).collect()
             }
-            refused @ ResultOrder::Refused {
-                reason:
-                    sdm_contract::tabular::TabularOrderError::IntegerToFloatOverflow
-                    | sdm_contract::tabular::TabularOrderError::NativeEffectsPending,
-                ..
-            } => return Ok(refused),
+            ResultOrder::Refused {
+                reason,
+                left,
+                right,
+                levels: mut path,
+            } if matches!(
+                reason,
+                sdm_contract::tabular::TabularOrderError::IntegerToFloatOverflow
+                    | sdm_contract::tabular::TabularOrderError::NativeEffectsPending
+                    | sdm_contract::tabular::TabularOrderError::TemporalYearOutOfRange
+            ) =>
+            {
+                path.insert(0, level_no);
+                return Ok(ResultOrder::Refused {
+                    reason,
+                    left,
+                    right,
+                    levels: path,
+                });
+            }
             ResultOrder::Refused { .. } => {
                 incomparable_levels.push(true);
                 (0..n).collect()
@@ -462,6 +476,7 @@ pub fn order_sampled(facts: &Facts) -> Result<ResultOrder, CoreError> {
             };
             if let Some((left, right)) = failed.get() {
                 return Ok(ResultOrder::Refused {
+                    levels: Vec::new(),
                     reason: failure_reason(&values[left], &values[right]),
                     left,
                     right,

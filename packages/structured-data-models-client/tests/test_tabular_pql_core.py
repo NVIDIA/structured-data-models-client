@@ -228,7 +228,12 @@ def test_index_family_matches_frozen_public_context(
         else {'predict': data.iloc[[-1]].drop(columns=['target'])}
     )
     if 'error' in expected:
-        with pytest.raises(TypeError) as error:
+        error_type = {
+            'TypeError': TypeError,
+            'ValueError': ValueError,
+            'OverflowError': OverflowError,
+        }[expected['error']['type']]
+        with pytest.raises(error_type) as error:
             asked.materialize(**arguments, task='regression')
         assert type(error.value).__name__ == expected['error']['type']
         assert str(error.value) == expected['error']['message']

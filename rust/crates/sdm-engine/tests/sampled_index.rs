@@ -288,7 +288,8 @@ fn object_failure_reasons_keep_first_reached_comparison_owners() {
             OrderedSampledTabularRows::Refused {
                 reason,
                 left: 1,
-                right: 0
+                right: 0,
+                levels: Vec::new(),
             }
         );
     }

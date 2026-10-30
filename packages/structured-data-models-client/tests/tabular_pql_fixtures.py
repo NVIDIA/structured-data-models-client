@@ -327,6 +327,9 @@ INDEX_FAMILIES = (
     'period',
     'categorical',
     'multi',
+    'multi_temporal_range_forward',
+    'multi_temporal_range_reverse',
+    'multi_temporal_fold',
     'string',
     'object_mixed',
     'nullable_integer',
@@ -417,6 +420,34 @@ def indexed_frame(family: str) -> pd.DataFrame:
             ],
             categories=[str(value) for value in range(16, -1, -1)],
             ordered=False,
+        )
+    elif family == 'multi_temporal_fold':
+        owners = timestamp_pattern('distinct_zone_same_fold')
+        values = np.empty(2, dtype=object)
+        values[:] = owners
+        level = pd.Index(values, dtype=object, copy=False)
+        first_codes = [i % 2 for i in range(n)]
+        sampled = np.random.RandomState(42).choice(
+            n - 1, size=40, replace=False
+        )
+        for at, position in enumerate(sampled):
+            first_codes[position] = int(at >= 20)
+        index = pd.MultiIndex(
+            levels=[level, pd.Index([0])],
+            codes=[first_codes, [0] * n],
+            verify_integrity=False,
+        )
+    elif family.startswith('multi_temporal_range_'):
+        owners = timestamp_pattern('wide_datetime')
+        if family.endswith('_reverse'):
+            owners = owners[::-1]
+        values = np.empty(2, dtype=object)
+        values[:] = owners
+        level = pd.Index(values, dtype=object, copy=False)
+        index = pd.MultiIndex(
+            levels=[level, pd.Index([0, 1])],
+            codes=[[i % 2 for i in range(n)], [(i // 2) % 2 for i in range(n)]],
+            verify_integrity=False,
         )
     elif family == 'multi':
         index = pd.MultiIndex.from_tuples(

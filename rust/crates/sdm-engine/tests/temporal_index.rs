@@ -157,7 +157,8 @@ fn wide_civil_conversion_is_reached_and_preserves_sort_operand_positions() {
         Outcome::Refused {
             reason: TabularOrderError::TemporalYearOutOfRange,
             left: 1,
-            right: 0
+            right: 0,
+            ..
         }
     ));
     assert!(matches!(
@@ -185,4 +186,39 @@ fn malformed_temporal_facts_are_protocol_errors() {
     assert!(order_sampled(&facts(vec![impossible_date])).is_err());
     let inconsistent_local = instant(0, TemporalUnit::Second, 1970, 1, 2, 0, 0);
     assert!(order_sampled(&facts(vec![inconsistent_local])).is_err());
+}
+
+#[test]
+fn multi_level_range_error_propagates_with_level_local_owners() {
+    let wide = instant(316_516_204_800, TemporalUnit::Second, 12000, 1, 1, 0, 0);
+    let civil = Atom::DateTime {
+        ordinal: 737_425,
+        micros: 0,
+        offset_micros: None,
+    };
+    let index = TabularIndexFacts {
+        values: TabularIndexValues::Multi {
+            levels: vec![facts(vec![wide.clone(), civil])],
+            codes: vec![vec![0, 1]],
+        },
+        missing: vec![false; 2],
+        profile: TabularSortProfile::Stable,
+    };
+    assert_eq!(
+        order_sampled(&index).unwrap(),
+        Outcome::Refused {
+            reason: TabularOrderError::TemporalYearOutOfRange,
+            levels: vec![0],
+            left: 1,
+            right: 0,
+        }
+    );
+    let mut type_error = index;
+    if let TabularIndexValues::Multi { levels, .. } = &mut type_error.values {
+        levels[0] = facts(vec![wide, Atom::Date { ordinal: 737_425 }]);
+    }
+    assert!(matches!(
+        order_sampled(&type_error).unwrap(),
+        Outcome::Sorted { .. }
+    ));
 }

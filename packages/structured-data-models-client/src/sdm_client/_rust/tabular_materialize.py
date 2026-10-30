@@ -267,6 +267,16 @@ def _context(
             'order_sampled_tabular_rows', bind_profile(observation)
         )
     if ordering['kind'] == 'refused':
+        owner_index = subset.index
+        for level in ordering.get('levels', []):
+            if (
+                type(owner_index) is not pd.MultiIndex
+                or not 0 <= level < owner_index.nlevels
+            ):
+                raise AssertionError(
+                    'comparison refusal has invalid level address'
+                )
+            owner_index = owner_index.levels[level]
         if ordering['reason'] == 'integer_to_float_overflow':
             raise OverflowError('int too large to convert to float')
         if ordering['reason'] == 'native_effects_pending':
@@ -280,8 +290,8 @@ def _context(
         ):
             # Rust selected the reached failure, including operand order.
             # Exact admitted owners supply only the runtime's diagnostic.
-            left_owner = subset.index[ordering['left']]
-            right_owner = subset.index[ordering['right']]
+            left_owner = owner_index[ordering['left']]
+            right_owner = owner_index[ordering['right']]
             if (
                 type(left_owner) is not pd.Timestamp
                 and type(right_owner) is not pd.Timestamp
@@ -300,8 +310,8 @@ def _context(
         if ordering['reason'] == 'date_time_mismatch':
             # Rust selected the failing pair. Exact native owners present the
             # interpreter's diagnostic, which changed in Python 3.13.
-            left_owner = subset.index[ordering['left']]
-            right_owner = subset.index[ordering['right']]
+            left_owner = owner_index[ordering['left']]
+            right_owner = owner_index[ordering['right']]
             if {type(left_owner), type(right_owner)} != {date, datetime}:
                 raise AssertionError(
                     'date comparison refusal has invalid owners'
@@ -314,7 +324,7 @@ def _context(
             )
 
         def native_name(position: int) -> str:
-            owner = type(subset.index[position])
+            owner = type(owner_index[position])
             # These exact built-in types use a qualified native type name in
             # Python's comparison diagnostic. Custom owners are not admitted.
             if owner.__module__ in ('decimal', 'datetime'):

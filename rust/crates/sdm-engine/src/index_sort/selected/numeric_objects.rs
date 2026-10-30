@@ -263,6 +263,7 @@ pub(super) fn order(
         };
         if let Err(reason) = probe() {
             return Ok(Outcome::Refused {
+                levels: Vec::new(),
                 reason,
                 left: current,
                 right: previous,
@@ -313,6 +314,7 @@ pub(super) fn order(
             Ok(sorted(positions, false))
         }
         Err((reason, left, right)) => Ok(Outcome::Refused {
+            levels: Vec::new(),
             reason,
             left,
             right,
