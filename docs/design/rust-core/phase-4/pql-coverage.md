@@ -6,7 +6,7 @@
 
 The direct-input path landed at `391723fb`.
 This work connects both PQL entrypoints to that path under [boundaries](boundaries.md) and [restart](restart.md).
-Both public entrypoints are connected in the working candidate; candidate validation and landing are pending.
+Both public entrypoints landed in the ordinary-input increment at `60335b57c`.
 The frozen-reference pilot passes five public journeys, and a generated reference fixture records exact sampled contexts or failures for 16 ordinary index families.
 
 | Requirement | Public evidence required |
@@ -57,7 +57,12 @@ The connected ordinary-input increment uses the existing direct prediction path,
 Its candidate requires two independent exact-source reviews, canonical contract generation, installed-wheel parity, regressions and verified landing.
 The recorded index expectations come from the frozen public client through `materialize`, not from candidate sorting kernels.
 
-Full PQL completion remains pending for custom comparison-label ownership, complex/Decimal/object-datetime and NumPy numeric scalar object labels, broader producer bindings, and remaining native frame/count effects.
+The next candidate adds typed complex, finite Decimal/integer, exact date and fixed-offset/naive datetime labels through the existing sampled-index operation.
+Its frozen public evidence covers sampled indices and unreduced supplied frames separately; supplied frames do not accept an explicit context count.
+The host retains exact owners and observes their closed fields, while Rust compares exact coefficients and civil values and reports reached comparison failures.
+This candidate still requires final reviews, canonical contract generation, installed-wheel parity and handoff before landing.
+
+Full PQL completion remains pending for custom comparison-label ownership, Decimal context signals, NumPy numeric scalar object labels, additional temporal owners, broader producer bindings, and remaining native frame/count effects.
 These are retained obligations, not silently unsupported public inputs or an expansion of the approved custom-sort exception.
 The development route remains opt-in; existing defaults and warehouse paths are unchanged.
 A frozen public custom-label comparison witness has been presented for an owner decision; no broader fallback is implemented.

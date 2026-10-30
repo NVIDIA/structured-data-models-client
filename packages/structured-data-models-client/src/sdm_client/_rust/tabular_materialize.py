@@ -260,8 +260,23 @@ def _context(
     )
     ordering = _call('order_sampled_tabular_rows', observe(subset.index))
     if ordering['kind'] == 'refused':
-        left = type(subset.index[ordering['left']]).__name__
-        right = type(subset.index[ordering['right']]).__name__
+        if ordering['reason'] == 'date_time_mismatch':
+            raise TypeError("can't compare datetime.datetime to datetime.date")
+        if ordering['reason'] == 'naive_aware_datetime':
+            raise TypeError(
+                "can't compare offset-naive and offset-aware datetimes"
+            )
+
+        def native_name(position: int) -> str:
+            owner = type(subset.index[position])
+            # These exact built-in types use a qualified native type name in
+            # Python's comparison diagnostic. Custom owners are not admitted.
+            if owner.__module__ in ('decimal', 'datetime'):
+                return f'{owner.__module__}.{owner.__name__}'
+            return owner.__name__
+
+        left = native_name(ordering['left'])
+        right = native_name(ordering['right'])
         raise TypeError(
             f"'<' not supported between instances of '{left}' and '{right}'"
         )

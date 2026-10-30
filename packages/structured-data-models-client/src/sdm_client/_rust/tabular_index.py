@@ -9,6 +9,8 @@ from __future__ import annotations
 import hashlib
 import importlib
 import struct
+from datetime import date, datetime, timezone
+from decimal import Decimal
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -67,6 +69,41 @@ def _scalar(value: Any) -> dict[str, Any]:
         return {'kind': 'floating', 'bits': _bits(value, 8)}
     if type(value) is str:
         return {'kind': 'text', 'points': [ord(char) for char in value]}
+    if type(value) is complex:
+        return {
+            'kind': 'complex',
+            'real_bits': _bits(value.real, 8),
+            'imag_bits': _bits(value.imag, 8),
+        }
+    if type(value) is Decimal and value.is_finite():
+        parts = value.as_tuple()
+        return {
+            'kind': 'decimal',
+            'negative': bool(parts.sign),
+            'digits': ''.join(str(digit) for digit in parts.digits),
+            'exponent': parts.exponent,
+        }
+    if type(value) is date:
+        return {'kind': 'date', 'ordinal': value.toordinal()}
+    if type(value) is datetime and (
+        value.tzinfo is None or type(value.tzinfo) is timezone
+    ):
+        offset = value.utcoffset()
+        return {
+            'kind': 'date_time',
+            'ordinal': value.toordinal(),
+            'micros': (
+                (value.hour * 3600 + value.minute * 60 + value.second)
+                * 1_000_000
+                + value.microsecond
+            ),
+            'offset_micros': (
+                None
+                if offset is None
+                else (offset.days * 86400 + offset.seconds) * 1_000_000
+                + offset.microseconds
+            ),
+        }
     raise RouteError(
         'this object index comparison family is not yet represented by the core'
     )
@@ -98,6 +135,24 @@ def _array(values: Any, missing: list[bool], profile: str) -> dict[str, Any]:
                 for value, absent in zip(values, missing, strict=True)
             ],
         }
+    elif (
+        isinstance(dtype, np.dtype)
+        and dtype.kind == 'c'
+        and dtype.itemsize in (8, 16)
+    ):
+        width = dtype.itemsize // 2
+        result = {
+            'kind': 'complex',
+            'width': width,
+            'real_bits': [
+                0 if absent else _bits(value.real, width)
+                for value, absent in zip(values, missing, strict=True)
+            ],
+            'imag_bits': [
+                0 if absent else _bits(value.imag, width)
+                for value, absent in zip(values, missing, strict=True)
+            ],
+        }
     elif isinstance(dtype, np.dtype) and dtype.kind in 'mM':
         result = {'kind': 'temporal', 'values': values.view('i8').tolist()}
     else:
@@ -106,6 +161,12 @@ def _array(values: Any, missing: list[bool], profile: str) -> dict[str, Any]:
             {'kind': 'integer', 'value': '0'} if absent else _scalar(value)
             for value, absent in zip(values, missing, strict=True)
         ]
+        kinds = {atom['kind'] for atom in atoms}
+        if 'decimal' in kinds and 'floating' in kinds:
+            raise RouteError(
+                'mixed Decimal/float index comparison effects are not yet '
+                'represented by the core'
+            )
         if all(
             absent or atom['kind'] == 'text'
             for atom, absent in zip(atoms, missing, strict=True)

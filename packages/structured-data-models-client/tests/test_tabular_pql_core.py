@@ -7,8 +7,12 @@
 from __future__ import annotations
 
 import json
+from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
+from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -25,6 +29,137 @@ ROUTES = ','.join(
         'client.predict/tabular/frames',
     )
 )
+
+LABEL_FAMILIES = (
+    'complex64',
+    'complex128',
+    'python_complex_objects',
+    'decimal_integer',
+    'naive_datetime_objects',
+    'date_objects',
+    'fixed_offset_datetime_objects',
+    'naive_aware_refusal',
+    'date_datetime_mismatch',
+    'decimal_text',
+    'datetime_integer',
+)
+
+
+def label_frame(family: str) -> pd.DataFrame:
+    fixed = timezone(timedelta(hours=2))
+    patterns: dict[str, list[Any]] = {
+        'complex64': [
+            3 + 2j,
+            1 + 4j,
+            1 - 2j,
+            complex(-0.0, 0),
+            complex(0, -0.0),
+            complex(float('nan'), 1),
+        ],
+        'complex128': [
+            3 + 2j,
+            1 + 4j,
+            1 - 2j,
+            complex(-0.0, 0),
+            complex(0, -0.0),
+            complex(1, float('nan')),
+        ],
+        'python_complex_objects': [complex(2, 1), complex(1, 2)],
+        'decimal_integer': [
+            Decimal('1.00'),
+            Decimal('1.0'),
+            2,
+            Decimal('-3.5'),
+            Decimal('1E+3'),
+        ],
+        'naive_datetime_objects': [
+            datetime(2020, 1, 3),
+            datetime(2020, 1, 1),
+            datetime(2020, 1, 2),
+        ],
+        'date_objects': [date(2020, 1, 3), date(2020, 1, 1), date(2020, 1, 2)],
+        'fixed_offset_datetime_objects': [
+            datetime(2020, 1, 1, 1, tzinfo=fixed, fold=0),
+            datetime(2020, 1, 1, 1, tzinfo=fixed, fold=1),
+            datetime(2020, 1, 1, tzinfo=timezone.utc),
+        ],
+        'naive_aware_refusal': [
+            datetime(2020, 1, 1),
+            datetime(2020, 1, 1, tzinfo=fixed),
+        ],
+        'date_datetime_mismatch': [date(2020, 1, 1), datetime(2020, 1, 1)],
+        'decimal_text': [Decimal('1.1'), 'x'],
+        'datetime_integer': [datetime(2020, 1, 1), 1],
+    }
+    pattern = patterns[family]
+    labels = [pattern[i % len(pattern)] for i in range(81)]
+    if family in ('complex64', 'complex128'):
+        index = pd.Index(np.asarray(labels, dtype=family))
+        assert index.dtype == np.dtype(family)
+    else:
+        values = np.empty(81, dtype=object)
+        for i, label in enumerate(labels):
+            values[i] = label
+        index = pd.Index(values, dtype=object, copy=False)
+        assert all(index._values[i] is labels[i] for i in range(81))
+    data = pd.DataFrame(
+        {
+            'id': range(81),
+            'feature': np.arange(81) * 0.5,
+            'target': np.arange(81) + 100.0,
+        },
+        index=index,
+    )
+    assert data.index is index
+    return data
+
+
+@pytest.mark.parametrize('family', LABEL_FAMILIES)
+@pytest.mark.parametrize('entrypoint', ['indices', 'predict'])
+def test_exact_label_materialization_and_prediction(
+    route: str,
+    family: str,
+    entrypoint: str,
+) -> None:
+    reference = json.loads(
+        (
+            Path(__file__).parent / 'data/tabular_pql_label_reference.json'
+        ).read_text()
+    )[family][entrypoint]
+    data = label_frame(family)
+    arguments = (
+        {'indices': [80], 'num_context_samples': 40}
+        if entrypoint == 'indices'
+        else {'predict': data.iloc[[80]].drop(columns=['target'])}
+    )
+    if 'error' in reference:
+        with pytest.raises(TypeError) as caught:
+            query(data).materialize(
+                **arguments,
+                task='regression',
+            )
+        assert str(caught.value) == reference['error']['message']
+        return
+    request = query(data).materialize(
+        **arguments,
+        task='regression',
+    )
+    assert (
+        request.context.instance_table['id'].tolist()
+        == reference['context_ids']
+    )
+    endpoint = Endpoint(1)
+    client = SDMClient.__new__(SDMClient)
+    client._start(endpoint)
+    try:
+        result = client.predict(request, model=KumoTabular())
+        assert [
+            row[0]
+            for row in endpoint.calls[0]['context']['instance_table']['rows']
+        ] == reference['context_ids']
+        assert len(result.to_pandas()) == 1
+    finally:
+        client.close()
 
 
 @pytest.fixture(params=['old', 'core'])
