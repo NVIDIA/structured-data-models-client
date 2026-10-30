@@ -16,7 +16,10 @@ these packages. All five distributions share one version and one entry.
   is prepared as it is for a NIM and the model run on it directly, the context
   fitted as the NIM fits it. A request the model cannot answer is refused with
   a `StructuredDataError` whose code says why. Install it with the
-  `in-process` extra.
+  `in-process` extra. In-process explanations are written against the released
+  sdm 0.2.1 API: the converter reads a table's numerical columns from
+  `TableTensor.columns` by stype, not the newer `numerical_columns` property.
+  Revisit when the pinned sdm moves past 0.2.1.
 - A Snowflake session the client opens names itself to Snowflake as
   `nvidia/kumo-sdm`, so Snowflake can attribute its queries. An application
   named any other way is kept: an `application` argument, one in the

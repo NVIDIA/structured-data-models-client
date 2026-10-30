@@ -100,7 +100,13 @@ class GradientConverter:
         table: Any, rows: int, count: int
     ) -> tuple[list[str], np.ndarray]:
         r"""A table's numerical columns and gradients ``[output, row, column]``."""
-        columns = list(table.numerical_columns)
+        # By stype, as the NIM reads it: `numerical_columns` is newer than the
+        # released sdm 0.2.1 this must run against (see CHANGELOG).
+        columns: list[str] = []
+        for stype, names in table.columns.items():
+            if getattr(stype, 'value', stype) == 'numerical':
+                columns = list(names)
+                break
         values = table.numerical.detach().float().cpu().numpy()
         if values.ndim < 3 or any(size != 1 for size in values.shape[1:-2]):
             raise StructuredDataError(
