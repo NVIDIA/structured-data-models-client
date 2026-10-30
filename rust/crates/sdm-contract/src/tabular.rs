@@ -156,6 +156,9 @@ pub enum TabularSortProfile {
     Avx512Gnu14,
     /// Same eight-lane algorithm without the original-input sorted shortcut.
     Avx512Gnu14Unconditional,
+    /// Eight lanes, unconditional entry, network cutoff 64 and absolute-zero
+    /// masked index padding; same partition and GNU fallback algorithm.
+    Avx512Gnu14Network64,
     Stable,
 }
 

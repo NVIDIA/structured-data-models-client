@@ -158,6 +158,7 @@ fn present_nan_sorts_before_masked_null() {
         TabularSortProfile::Avx512Gnu14,
         TabularSortProfile::Avx2Gnu14Unconditional,
         TabularSortProfile::Avx512Gnu14Unconditional,
+        TabularSortProfile::Avx512Gnu14Network64,
         TabularSortProfile::Stable,
     ] {
         let mut index = facts(
@@ -514,6 +515,7 @@ fn unconditional_simd_entry_does_not_disable_outer_index_monotonic_shortcut() {
     for profile in [
         TabularSortProfile::Avx2Gnu14Unconditional,
         TabularSortProfile::Avx512Gnu14Unconditional,
+        TabularSortProfile::Avx512Gnu14Network64,
     ] {
         let mut index = facts(
             TabularIndexValues::Signed {

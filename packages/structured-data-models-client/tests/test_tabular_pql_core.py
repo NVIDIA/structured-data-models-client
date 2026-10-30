@@ -498,7 +498,6 @@ def test_legacy_dispatch_does_not_reuse_modern_avx2_or_avx512_profiles(
 ) -> None:
     from types import SimpleNamespace
 
-    from sdm_client._routing import RouteError
     from sdm_client._rust import tabular_index
 
     native = SimpleNamespace(
@@ -518,8 +517,7 @@ def test_legacy_dispatch_does_not_reuse_modern_avx2_or_avx512_profiles(
     )
     assert tabular_index._profile() == 'scalar'
     native.__cpu_features__['AVX512_SKX'] = True
-    with pytest.raises(RouteError, match='AVX512 argsort producer'):
-        tabular_index._profile()
+    assert tabular_index._profile() == 'avx512_gnu14_network64'
 
 
 @pytest.mark.parametrize(

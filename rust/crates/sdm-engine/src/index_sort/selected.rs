@@ -76,6 +76,7 @@ fn numeric<T: SimdKey>(values: &[T], profile: Profile) -> Vec<usize> {
                 | Profile::Avx512Gnu14
                 | Profile::Avx2Gnu14Unconditional
                 | Profile::Avx512Gnu14Unconditional
+                | Profile::Avx512Gnu14Network64
         ) {
             let mut positions: Vec<_> = (0..values.len()).collect();
             super::gnu::sort(&ordered, &mut positions);
@@ -104,6 +105,9 @@ fn numeric<T: SimdKey>(values: &[T], profile: Profile) -> Vec<usize> {
         }
         Profile::Avx512Gnu14Unconditional => {
             simd_argsort(values, SimdArgsortProfile::Avx512Gnu14Unconditional)
+        }
+        Profile::Avx512Gnu14Network64 => {
+            simd_argsort(values, SimdArgsortProfile::Avx512Gnu14Network64)
         }
     }
 }

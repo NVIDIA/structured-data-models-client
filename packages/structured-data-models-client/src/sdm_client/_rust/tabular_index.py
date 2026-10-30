@@ -135,10 +135,7 @@ def _profile() -> str:
         return 'scalar'
     if family == 'avx512_skx_or_scalar':
         if features.get('AVX512_SKX', False):
-            raise RouteError(
-                'this NumPy AVX512 argsort producer has not yet been bound '
-                'to a core profile'
-            )
+            return 'avx512_gnu14_network64'
         return 'scalar'
     if features.get('X86_V4', False):
         return 'avx512_gnu14'

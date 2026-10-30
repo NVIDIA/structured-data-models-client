@@ -25,14 +25,41 @@ pub enum SimdArgsortProfile {
     Avx512Gnu14,
     /// Eight lanes with unconditional entry to the same recursive algorithm.
     Avx512Gnu14Unconditional,
+    /// Eight lanes, unconditional entry, networks through 64, zero index padding.
+    Avx512Gnu14Network64,
 }
 
 impl SimdArgsortProfile {
     fn lanes(self) -> usize {
         match self {
             Self::Avx2Gnu14 | Self::Avx2Gnu14Unconditional => 4,
-            Self::Avx512Gnu14 | Self::Avx512Gnu14Unconditional => 8,
+            Self::Avx512Gnu14 | Self::Avx512Gnu14Unconditional | Self::Avx512Gnu14Network64 => 8,
         }
+    }
+
+    fn network_cutoff(self) -> usize {
+        if self == Self::Avx512Gnu14Network64 {
+            64
+        } else {
+            256
+        }
+    }
+
+    fn padding_index(self) -> usize {
+        if self == Self::Avx512Gnu14Network64 {
+            0
+        } else {
+            usize::MAX
+        }
+    }
+
+    fn unconditional(self) -> bool {
+        matches!(
+            self,
+            Self::Avx2Gnu14Unconditional
+                | Self::Avx512Gnu14Unconditional
+                | Self::Avx512Gnu14Network64
+        )
     }
 }
 
@@ -85,11 +112,9 @@ impl SimdKey for f64 {
 /// It does not choose missing placement, selected-subset shortcuts or row ids.
 pub fn simd_argsort<T: SimdKey>(values: &[T], profile: SimdArgsortProfile) -> Vec<usize> {
     let mut indices: Vec<usize> = (0..values.len()).collect();
-    let unconditional = matches!(
-        profile,
-        SimdArgsortProfile::Avx2Gnu14Unconditional | SimdArgsortProfile::Avx512Gnu14Unconditional
-    );
-    if values.len() > 1 && (unconditional || values.windows(2).any(|pair| pair[1] < pair[0])) {
+    if values.len() > 1
+        && (profile.unconditional() || values.windows(2).any(|pair| pair[1] < pair[0]))
+    {
         // The source casts log2(n) to size_t before doubling. This conversion
         // concerns only the range length, never a key or an index label.
         let depth = 2 * (values.len() as f64).log2() as u32;
@@ -109,8 +134,8 @@ fn sort_recursive<T: SimdKey>(
         gnu::sort(values, indices);
         return;
     }
-    if indices.len() <= 256 {
-        network(values, indices, profile.lanes());
+    if indices.len() <= profile.network_cutoff() {
+        network(values, indices, profile);
         return;
     }
     let lanes = profile.lanes();
@@ -196,14 +221,15 @@ fn exchange<T: SimdKey>(registers: &mut [Vec<Lane<T>>], a: usize, b: usize) {
     }
 }
 
-fn network<T: SimdKey>(values: &[T], indices: &mut [usize], lanes: usize) {
-    let mut count = 256 / lanes;
+fn network<T: SimdKey>(values: &[T], indices: &mut [usize], profile: SimdArgsortProfile) {
+    let lanes = profile.lanes();
+    let mut count = profile.network_cutoff() / lanes;
     while count > 1 && 2 * indices.len() <= count * lanes {
         count /= 2;
     }
     let padding = Lane {
         key: T::MAX_SENTINEL,
-        index: usize::MAX,
+        index: profile.padding_index(),
     };
     let mut registers = vec![vec![padding; lanes]; count];
     for (i, &index) in indices.iter().enumerate() {
@@ -363,3 +389,6 @@ mod selected;
 pub use selected::order_sampled;
 
 pub use scalar::scalar_argsort;
+
+#[cfg(test)]
+mod network64_tests;
