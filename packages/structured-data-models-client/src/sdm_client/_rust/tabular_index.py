@@ -244,6 +244,16 @@ def _array(values: Any, missing: list[bool], profile: str) -> dict[str, Any]:
                 'represented by the core'
             )
         if kinds & {'numpy_integer', 'numpy_floating'}:
+            if not kinds <= {
+                'integer',
+                'floating',
+                'boolean',
+                'numpy_integer',
+                'numpy_floating',
+            }:
+                raise RouteError(
+                    'this mixed NumPy object comparison family is not yet represented by the core'
+                )
             result = {
                 'kind': 'numpy_object',
                 'values': atoms,
