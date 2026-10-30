@@ -63,6 +63,10 @@ Source-backed materialization -> existing Phase 3 path (unchanged)
 - Later PQL selection preserves scoring-key expansion/exclusion and known-target filtering.
   If reduction is needed, sample with fresh seed 42, then sort the sampled index labels; otherwise do not read/sort the index.
   Infer task from selected context, then use the same generic Request construction.
+  Object-label numeric facts distinguish unbounded integers, binary64 values and fixed-width integer/floating values, without passing a Python or NumPy dtype to the engine.
+  Closed comparison profiles define promotion, exact-integer fallback and reached overflow behavior separately from sorting policy.
+  The host binds audited producer versions and mutable promotion modes to those profiles; the engine implements the documented numeric rules and source-bound generic ordering algorithm.
+  Library provenance remains explicit in the dependency register and reference receipts; neutral names do not authorize arbitrary native callback emulation.
 - Later relational work extends existing frame graph/task/reference owners to plans/contexts where justified.
   Preserve adjacency order, continuing RNG and failure progression; do not change provider `fallback.rs`.
 

@@ -66,7 +66,7 @@ When ties or comparison failures need the producer, Python binds the retained fa
 The older scalar producer bindings landed at `b719a516`, with frozen public receipts selected by the actual runtime rather than reusing another NumPy version's tie order.
 
 The next connected increment retains exact NumPy integer and floating scalar owners inside object indexes.
-Its `NumpyObject` facts carry a source-bound comparison-semantics tag independently of the sorting profile.
+Its `ScalarObject` facts carry a source-bound comparison-semantics tag independently of the sorting profile.
 NumPy 1.23 legacy, NumPy 1.26 legacy and audited NumPy 2.5 weak-scalar comparisons differ; NumPy 1.26's promotion mode is observed rather than inferred from its binary.
 The engine uses generic object comparison and sorting for these facts, without claiming a total order or applying the profile-free unique-key shortcut to mixed-precision comparisons.
 Reached integer-to-float overflow has a closed result; native warning-handler effects remain an explicit unfinished obligation.

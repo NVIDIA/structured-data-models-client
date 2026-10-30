@@ -27,19 +27,19 @@ from sdm_client._routing import RouteError
 _PRODUCERS = {
     'ceec5ba13ab88318632307fdd2df74f317fa293ce77be559c4298ddd1f4306b0': (
         'x86_v3_v4',
-        'numpy25_weak',
+        'weak_scalars',
     ),
     'b185dfe64b07180bedc7c15fb2735b0d0f4f4e09eb9c15bd8e67f74568aebcbf': (
         'x86_v3_v4',
-        'numpy25_weak',
+        'weak_scalars',
     ),
     'c535a00761735b19153a71e1702f66482838421c78f96ecc3fe2c8d060662fd9': (
         'scalar',
-        'numpy123_legacy',
+        'common_type',
     ),
     '6a650810a8735cbdb988f74729973740a337645dd1585fef696e73e2dbc65beb': (
         'avx512_skx_or_scalar',
-        'numpy126_legacy',
+        'exact_integer_pairs',
     ),
 }
 
@@ -66,8 +66,9 @@ def _comparison_semantics() -> str:
         )
     semantics = families[1]
     # These families identify audited binaries, not arbitrary version strings.
-    if semantics == 'numpy126_legacy':
-        if getattr(np, '_get_promotion_state')() != 'legacy':
+    if semantics == 'exact_integer_pairs':
+        promotion = getattr(np, '_get_promotion_state', None)
+        if promotion is None or promotion() != 'legacy':
             raise RouteError(
                 'this NumPy scalar promotion mode is not yet represented by the core'
             )
@@ -129,14 +130,14 @@ def _scalar(value: Any) -> dict[str, Any]:
         np.ulonglong,
     ):
         return {
-            'kind': 'numpy_integer',
+            'kind': 'fixed_integer',
             'signed': value.dtype.kind == 'i',
             'width': value.dtype.itemsize,
             'value': str(int(value)),
         }
     if type(value) in (np.float16, np.float32, np.float64):
         return {
-            'kind': 'numpy_floating',
+            'kind': 'fixed_floating',
             'width': value.dtype.itemsize,
             'bits': int.from_bytes(value.tobytes(), sys.byteorder),
         }
@@ -252,13 +253,13 @@ def _array(values: Any, missing: list[bool], profile: str) -> dict[str, Any]:
             absent and type(value) in (np.float16, np.float32, np.float64)
             for value, absent in zip(values, missing, strict=True)
         )
-        if kinds & {'numpy_integer', 'numpy_floating'} or has_numpy_missing:
+        if kinds & {'fixed_integer', 'fixed_floating'} or has_numpy_missing:
             if not kinds <= {
                 'integer',
                 'floating',
                 'boolean',
-                'numpy_integer',
-                'numpy_floating',
+                'fixed_integer',
+                'fixed_floating',
             }:
                 raise RouteError(
                     'this mixed NumPy object comparison family is not yet represented by the core'
@@ -288,7 +289,7 @@ def _array(values: Any, missing: list[bool], profile: str) -> dict[str, Any]:
                             'this missing NumPy companion owner is not yet represented by the core'
                         )
             result = {
-                'kind': 'numpy_object',
+                'kind': 'scalar_object',
                 'values': atoms,
                 'semantics': _comparison_semantics(),
             }
@@ -420,7 +421,7 @@ def bind_profile(observation: dict[str, Any]) -> dict[str, Any]:
         values = facts['values']
         selected = facts['profile']
         if selected == 'unbound':
-            if values['kind'] == 'numpy_object':
+            if values['kind'] == 'scalar_object':
                 # Object argsort uses the generic scalar implementation even
                 # when this binary dispatches numeric arrays to SIMD kernels.
                 selected = 'scalar'
