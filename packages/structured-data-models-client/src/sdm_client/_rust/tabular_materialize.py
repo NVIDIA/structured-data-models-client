@@ -55,6 +55,86 @@ def _expand(source: pd.Series, indices: list[Any], entity: str) -> list[int]:
     return result['rows']
 
 
+def _ordinary_selection(
+    frame: pd.DataFrame,
+    entity: str,
+    target: str,
+    requested: list[Any] | None,
+    predict: pd.DataFrame | None,
+    count: Any,
+) -> dict[str, Any] | None:
+    # A bulk read is permitted only where no native user operation separates
+    # these observations. Everything else retains the staged native path.
+    if type(frame) is not pd.DataFrame or type(frame.columns) is not pd.Index:
+        return None
+    if not all(type(name) is str for name in frame.columns):
+        return None
+    if not all(type(block.values) is np.ndarray for block in frame._mgr.blocks):
+        return None
+    if count is not None and (
+        type(count) is not int or not 0 <= count <= np.iinfo(np.intp).max
+    ):
+        return None
+    if entity not in frame.columns or target not in frame.columns:
+        return None
+    keys, labels = frame[entity], frame[target]
+    if keys.dtype.kind not in 'iu' or labels.dtype.kind not in 'biuf':
+        return None
+    source = [_integer(value) for value in keys.tolist()]
+    if predict is None:
+        assert requested is not None
+        if not all(
+            type(value) in (int, bool) and -(2**127) <= value < 2**127
+            for value in requested
+        ):
+            return None
+        mode = {
+            'kind': 'indices',
+            'source': source,
+            'requested': [_integer(int(value)) for value in requested],
+        }
+    else:
+        if (
+            type(predict) is not pd.DataFrame
+            or type(predict.columns) is not pd.Index
+        ):
+            return None
+        if not all(type(name) is str for name in predict.columns):
+            return None
+        if entity not in predict.columns or not all(
+            type(block.values) is np.ndarray for block in predict._mgr.blocks
+        ):
+            return None
+        scoring = predict[entity]
+        if scoring.dtype != keys.dtype:
+            return None
+        mode = {
+            'kind': 'supplied',
+            'source': source,
+            'scoring': [_integer(value) for value in scoring.tolist()],
+        }
+    return _call(
+        'select_tabular_rows',
+        {
+            'mode': mode,
+            'known': labels.notna().tolist(),
+            'requested_context': count,
+        },
+    )
+
+
+def _missing(indices: list[Any], ordinals: list[int], entity: str) -> None:
+    values = [indices[ordinal] for ordinal in ordinals]
+    shown = values[:10]
+    tail = '' if len(values) == len(shown) else ', ...'
+    raise StructuredDataError(
+        f'{len(values)} of the {len(indices)} indices are not in '
+        f'{entity}: {shown}{tail}. Pass predict=<frame> '
+        f'to score rows not present in the table',
+        code='INVALID_REQUEST',
+    )
+
+
 def _filtered(
     frame: pd.DataFrame,
     known: Any,
@@ -87,30 +167,38 @@ def _filtered(
 
 
 def _context(
-    candidates: pd.DataFrame, wanted: int | None, table: str, remedy: str
+    candidates: pd.DataFrame,
+    wanted: int | None,
+    table: str,
+    remedy: str,
+    decision: dict[str, Any] | None = None,
 ) -> pd.DataFrame:
     from sdm_client._rust.tabular_index import observe
     from sdm_client.models import TABULAR_LIMITS
 
     limit = TABULAR_LIMITS['context_rows_max']
-    over_limit = wanted is not None and bool(wanted > limit)
-    accepted = _call('check_tabular_cap', {'over_limit': over_limit})[
-        'accepted'
-    ]
-    if not accepted:
+    if decision is None:
+        over_limit = wanted is not None and bool(wanted > limit)
+        accepted = _call('check_tabular_cap', {'over_limit': over_limit})[
+            'accepted'
+        ]
+        if not accepted:
+            decision = {'kind': 'refused'}
+        else:
+            count = int(wanted) if isinstance(wanted, np.integer) else wanted
+            decision = _call(
+                'decide_tabular_context',
+                {
+                    'population': len(candidates),
+                    'requested': count,
+                },
+            )
+    if decision['kind'] == 'refused':
         raise StructuredDataError(
             f'num_context_samples is {wanted:,}, and the '
             f'endpoint accepts at most {limit:,} context rows',
             code='UNSUPPORTED_REQUEST',
         )
-    count = int(wanted) if isinstance(wanted, np.integer) else wanted
-    decision = _call(
-        'decide_tabular_context',
-        {
-            'population': len(candidates),
-            'requested': count,
-        },
-    )
     if not decision['reduced']:
         return candidates
     if decision['advise_default_reduction']:
@@ -242,27 +330,50 @@ def materialize(
         if predict is None:
             return original.indices(query, indices, num_context_samples, task)
         return original.table(query=query, predict=predict, task=task)
+    requested = list(indices) if predict is None else None
+    selected = _ordinary_selection(
+        frame, entity, target, requested, predict, num_context_samples
+    )
+    decision = None
+    if selected is not None:
+        if selected['kind'] == 'missing':
+            assert requested is not None
+            _missing(requested, selected['ordinals'], query.entity_column)
+        decision = selected['context']
     if predict is None:
-        requested = list(indices)
-        scored = _expand(frame[entity], requested, query.entity_column)
-        predict = frame.iloc[scored].drop(columns=[target])
-        candidates = _filtered(
-            frame, frame[target].notna(), scored, assign=True
+        assert requested is not None
+        scored = (
+            selected['scored']
+            if selected is not None
+            else _expand(frame[entity], requested, query.entity_column)
         )
+        predict = frame.iloc[scored].drop(columns=[target])
+        if selected is None:
+            candidates = _filtered(
+                frame, frame[target].notna(), scored, assign=True
+            )
+        else:
+            mask = np.zeros(len(frame), dtype=bool)
+            mask[selected['candidates']] = True
+            candidates = frame[mask]
         remedy = 'Pass num_context_samples to choose how many, or select the rows yourself.'
     else:
         candidates = frame
-        if entity in frame.columns and entity in predict.columns:
+        if selected is not None:
+            mask = np.zeros(len(frame), dtype=bool)
+            mask[selected['candidates']] = True
+            candidates = frame[mask]
+        elif entity in frame.columns and entity in predict.columns:
             keys = set(predict[entity])
             if keys:
                 candidates = _filtered(frame, ~frame[entity].isin(keys), [])
-        if target in candidates:
+        if selected is None and target in candidates:
             candidates = _filtered(candidates, candidates[target].notna(), [])
         remedy = (
             'This route takes no num_context_samples, so choose the '
             'context by building the schema from the rows you want.'
         )
-    context = _context(candidates, num_context_samples, table, remedy)
+    context = _context(candidates, num_context_samples, table, remedy, decision)
     return _asking(
         Request(
             context=context,

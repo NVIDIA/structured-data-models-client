@@ -251,6 +251,15 @@ class PredictiveQuery:
         # whether it is asked as several questions is a property of the query
         # and the profile answers what the query is allowed to be.
         asked = self._resolve(RELATIONAL if relational else TABULAR)
+        if (
+            relational
+            and not in_place
+            and _routing.forced().intersection(_routing.TABULAR_INDICES)
+        ):
+            raise _routing.RouteError(
+                'forced frame indices routes currently support only '
+                'tabular materialization; relational frames have no core route'
+            )
         if on_the_core:
             # The call's own checks first, as for any relational query.
             if task is not None:

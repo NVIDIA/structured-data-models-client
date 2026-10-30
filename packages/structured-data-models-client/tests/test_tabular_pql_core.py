@@ -306,3 +306,24 @@ def test_index_family_matches_frozen_public_context(
         row[0] for row in endpoint.calls[0]['context']['instance_table']['rows']
     ] == expected['context_ids']
     assert len(result.to_pandas()) == 1
+
+
+def test_forced_tabular_frame_routes_do_not_silently_run_legacy_relational(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from sdm_client import KumoRelational
+    from sdm_client._routing import RouteError
+    from sdm_client.materializers.relational import RelationalMaterializer
+
+    monkeypatch.setenv('SDM_CORE_ROUTES', ROUTES)
+
+    def unexpected(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError('legacy relational materialization was reached')
+
+    monkeypatch.setattr(RelationalMaterializer, 'materialize', unexpected)
+    with pytest.raises(
+        RouteError, match='relational frames have no core route'
+    ):
+        query(frame()).materialize(
+            indices=[10], num_context_samples=3, model=KumoRelational()
+        )

@@ -61,3 +61,8 @@ Full PQL completion remains pending for custom comparison-label ownership, compl
 These are retained obligations, not silently unsupported public inputs or an expansion of the approved custom-sort exception.
 The development route remains opt-in; existing defaults and warehouse paths are unchanged.
 A frozen public custom-label comparison witness has been presented for an owner decision; no broader fallback is implemented.
+
+The ordinary integer-key/primitive-target path uses one `SelectTabularRows` composition for both entrypoints.
+That operation composes expansion or key exclusion, known-target filtering and capacity policy in Rust.
+Only native-effect paths retain staged key/mask observations; sampling stays after warning delivery for both.
+Forced frame routes explicitly refuse relational materialization until its separate core consumer exists, avoiding a silent legacy route.

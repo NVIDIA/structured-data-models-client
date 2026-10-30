@@ -84,7 +84,7 @@ fn numeric<T: SimdKey>(values: &[T], profile: Profile) -> Vec<usize> {
                     .is_none()
                     .cmp(&values[*b].partial_cmp(&values[*b]).is_none()),
             });
-            return Ok(sorted(positions, monotonic));
+            positions
         }
         Profile::Avx2Gnu14 => simd_argsort(values, SimdArgsortProfile::Avx2Gnu14),
         Profile::Avx512Gnu14 => simd_argsort(values, SimdArgsortProfile::Avx512Gnu14),
