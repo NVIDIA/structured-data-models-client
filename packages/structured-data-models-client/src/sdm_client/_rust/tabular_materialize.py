@@ -260,12 +260,18 @@ def _context(
     subset = candidates.take(
         np.asarray(sampled['offsets'], dtype=np.intp), axis=sampling_axis
     )
-    observation = observe(subset.index)
-    ordering = _call('order_sampled_tabular_rows', observation)
-    if ordering['kind'] == 'needs_profile':
-        ordering = _call(
-            'order_sampled_tabular_rows', bind_profile(observation)
-        )
+    from .tabular_numeric_owners import eligible, order
+
+    sampled_index = subset.index
+    if eligible(sampled_index):
+        ordering = order(sampled_index)
+    else:
+        observation = observe(sampled_index)
+        ordering = _call('order_sampled_tabular_rows', observation)
+        if ordering['kind'] == 'needs_profile':
+            ordering = _call(
+                'order_sampled_tabular_rows', bind_profile(observation)
+            )
     if ordering['kind'] == 'refused':
         owner_index = subset.index
         for level in ordering.get('levels', []):

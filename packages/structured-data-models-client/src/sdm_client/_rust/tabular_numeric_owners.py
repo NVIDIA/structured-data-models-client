@@ -161,7 +161,13 @@ class NumericOwners:
         destination = request['destination']
         kind, width = destination['kind'], destination['width']
         widths = (2, 4, 8) if kind == 'binary_float' else (1, 2, 4, 8)
-        if owner not in self.owners or width not in widths:
+        if (
+            type(owner) is not int
+            or owner not in self.owners
+            or type(width) is not int
+            or width not in widths
+            or type(request['overflow_possible']) is not bool
+        ):
             raise codec.CodecError('invalid numeric owner conversion request')
         prefix = {
             'signed_integer': 'i',
@@ -170,6 +176,12 @@ class NumericOwners:
         }.get(kind)
         if prefix is None:
             raise codec.CodecError('invalid numeric conversion destination')
+        if request['overflow_possible'] and np.geterr()['over'] == 'warn':
+            # Rust determines the reached conversion's possible effect. Native
+            # warning attribution remains an unresolved compatibility boundary.
+            raise RouteError(
+                'this NumPy comparison effect is not yet represented by the core'
+            )
         storage = np.empty((), dtype=np.dtype(prefix + str(width)))
         try:
             storage[()] = self.owners[owner]
