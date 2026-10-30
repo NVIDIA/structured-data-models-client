@@ -244,7 +244,7 @@ def test_the_entity_key_is_carried_when_the_model_has_one():
 
 def test_an_explanation_is_absent_rather_than_a_different_return_type():
     result = result_with({'row_index': 0, 'prediction': 1})
-    assert result.explanations == {}
+    assert result.explanations.gradients == {}
     assert isinstance(result.to_pandas(), pd.DataFrame)
 
 
@@ -284,7 +284,7 @@ def test_the_deprecated_explanation_keyword_is_accepted_and_read_back():
         )
     with pytest.warns(DeprecationWarning):
         assert result.explanation == _RAW
-    assert result.explanations == {}
+    assert result.explanations.gradients == {}
 
 
 def test_quantiles_are_spread_under_a_readable_prefix():

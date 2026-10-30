@@ -118,7 +118,7 @@ def test_result_carries_explanation(gradient_explanation):
     result = TabularAdapter().normalize(
         response(explanation=explanation), EXPLAIN
     )
-    assert result.explanations == {
+    assert result.explanations.gradients == {
         0: {
             'outputs': [{'kind': 'prediction', 'statistic': 'mean'}],
             'instance': {'columns': ['x'], 'gradients': [[0.5]]},
@@ -134,7 +134,7 @@ def test_result_without_explanation():
     - The record carries no explanation field.
     """
     result = TabularAdapter().normalize(response(), ('prediction',))
-    assert result.explanations == {}
+    assert result.explanations.gradients == {}
 
 
 def answered(request, gradient_explanation, *, keyed=True, outputs=None):
@@ -187,8 +187,10 @@ def test_every_row_is_explained_under_its_id(
     """
     result = answered(tabular_request(rows=2), gradient_explanation)
 
-    assert sorted(result.explanations) == [90, 91]
-    assert sorted(result.explanations) == sorted(result.to_pandas()['id'])
+    assert sorted(result.explanations.gradients) == [90, 91]
+    assert sorted(result.explanations.gradients) == sorted(
+        result.to_pandas()['id']
+    )
 
 
 def test_each_row_keeps_its_own_gradients(
@@ -201,11 +203,14 @@ def test_each_row_keeps_its_own_gradients(
     """
     result = answered(tabular_request(rows=2), gradient_explanation)
 
-    assert result.explanations[90]['instance'] == {
+    assert result.explanations.gradients[90]['instance'] == {
         'columns': ['age'],
         'gradients': [[-1.0], [1.0]],
     }
-    assert result.explanations[91]['instance']['gradients'] == [[-2.0], [2.0]]
+    assert result.explanations.gradients[91]['instance']['gradients'] == [
+        [-2.0],
+        [2.0],
+    ]
 
 
 def test_rows_without_a_key_are_explained_under_their_row_index(
@@ -220,8 +225,11 @@ def test_rows_without_a_key_are_explained_under_their_row_index(
         tabular_request(rows=3, keyed=False), gradient_explanation, keyed=False
     )
 
-    assert sorted(result.explanations) == [0, 1, 2]
-    assert result.explanations[2]['instance']['gradients'] == [[-3.0], [3.0]]
+    assert sorted(result.explanations.gradients) == [0, 1, 2]
+    assert result.explanations.gradients[2]['instance']['gradients'] == [
+        [-3.0],
+        [3.0],
+    ]
 
 
 def test_rows_whose_ids_repeat_are_explained_under_their_row_index(
@@ -243,9 +251,15 @@ def test_rows_whose_ids_repeat_are_explained_under_their_row_index(
 
     result = answered(request, gradient_explanation)
 
-    assert sorted(result.explanations) == [0, 1]
-    assert result.explanations[1]['instance']['gradients'] == [[-2.0], [2.0]]
-    assert list(result.explanations.to_pandas().columns)[0] == 'row_index'
+    assert sorted(result.explanations.gradients) == [0, 1]
+    assert result.explanations.gradients[1]['instance']['gradients'] == [
+        [-2.0],
+        [2.0],
+    ]
+    assert (
+        list(result.explanations.gradients.to_pandas().columns)[0]
+        == 'row_index'
+    )
 
 
 def test_a_tabular_entry_has_no_related_tables(
@@ -258,7 +272,7 @@ def test_a_tabular_entry_has_no_related_tables(
     """
     result = answered(tabular_request(rows=2), gradient_explanation)
 
-    for entry in result.explanations.values():
+    for entry in result.explanations.gradients.values():
         assert set(entry) == {'outputs', 'instance'}
 
 
@@ -279,8 +293,8 @@ def test_outputs_and_columns_are_passed_through(
         tabular_request(rows=1), gradient_explanation, outputs=outputs
     )
 
-    assert result.explanations[90]['outputs'] == outputs
-    assert result.explanations[90]['instance']['columns'] == ['age']
+    assert result.explanations.gradients[90]['outputs'] == outputs
+    assert result.explanations.gradients[90]['instance']['columns'] == ['age']
 
 
 def test_the_flat_table_has_a_line_per_row_output_and_column(
@@ -294,7 +308,7 @@ def test_the_flat_table_has_a_line_per_row_output_and_column(
     """
     result = answered(tabular_request(rows=2), gradient_explanation)
 
-    flat = result.explanations.to_pandas()
+    flat = result.explanations.gradients.to_pandas()
 
     assert list(flat.columns) == [
         'id',
@@ -326,7 +340,7 @@ def test_the_flat_table_names_a_keyless_row_by_its_row_index(
         tabular_request(rows=2, keyed=False), gradient_explanation, keyed=False
     )
 
-    flat = result.explanations.to_pandas()
+    flat = result.explanations.gradients.to_pandas()
 
     assert list(flat.columns)[0] == 'row_index'
     assert sorted(set(flat['row_index'])) == [0, 1]
@@ -380,7 +394,7 @@ def test_the_flat_table_names_each_output_as_the_frame_does(
         envelope,
     )
 
-    named = result.explanations.to_pandas()['output']
+    named = result.explanations.gradients.to_pandas()['output']
 
     assert len(set(named)) == len(outputs)
     assert set(named) <= set(result.to_pandas().columns)
@@ -430,7 +444,7 @@ def test_each_class_is_named_by_the_frames_column_for_it(
         envelope,
     )
 
-    named = set(result.explanations.to_pandas()['output'])
+    named = set(result.explanations.gradients.to_pandas()['output'])
 
     assert named == columns
     assert named <= set(result.to_pandas().columns)
@@ -470,7 +484,7 @@ def test_a_regressions_outputs_keep_their_names(
         envelope,
     )
 
-    named = set(result.explanations.to_pandas()['output'])
+    named = set(result.explanations.gradients.to_pandas()['output'])
 
     assert named == {'prediction', 'quantile_0.1', 'quantile_0.9'}
 
@@ -507,7 +521,7 @@ def test_a_boolean_class_keeps_its_spelling_in_outputs(
         envelope,
     )
 
-    assert result.explanations[90]['outputs'] == outputs
+    assert result.explanations.gradients[90]['outputs'] == outputs
 
 
 def test_the_flat_table_of_no_explanation_is_empty_with_its_columns(
@@ -521,7 +535,7 @@ def test_the_flat_table_of_no_explanation_is_empty_with_its_columns(
     """
     result = TabularAdapter().normalize(response(), ('prediction',))
 
-    flat = result.explanations.to_pandas()
+    flat = result.explanations.gradients.to_pandas()
 
     assert isinstance(flat, pd.DataFrame)
     assert flat.empty
@@ -608,7 +622,7 @@ def test_tabular_asks_for_explanation(tabular_endpoint, fields_sent):
     )
 
     assert fields_sent(endpoint.sent) == [[*DEFAULTS, 'explanation']]
-    assert len(result.explanations) == len(result) == 2
+    assert len(result.explanations.gradients) == len(result) == 2
 
 
 @pytest.mark.parametrize(
@@ -690,7 +704,7 @@ def test_session_explains_when_asked(tabular_endpoint, fields_sent):
     result = fitted.predict(tabular_asked(f'EXPLAIN {CHURN}'))
 
     assert fields_sent(endpoint.sent) == [[*DEFAULTS, 'explanation']]
-    assert len(result.explanations) == 2
+    assert len(result.explanations.gradients) == 2
 
 
 def test_session_keeps_its_question(tabular_endpoint, fields_sent):
@@ -721,7 +735,7 @@ def test_explain_fit_pins_explanation(tabular_endpoint, fields_sent):
     result = fitted.predict(tabular_asked(CHURN))
 
     assert fields_sent(endpoint.sent) == [[*DEFAULTS, 'explanation']]
-    assert len(result.explanations) == 2
+    assert len(result.explanations.gradients) == 2
 
 
 @pytest.mark.parametrize('prefix', ['', 'EXPLAIN '], ids=['plain', 'explain'])

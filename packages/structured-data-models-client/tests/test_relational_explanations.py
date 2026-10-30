@@ -293,8 +293,10 @@ def test_every_entity_is_explained_under_its_id(explained):
     Assumptions:
     - The call scores users 5 and 7, and the NIM explains both.
     """
-    assert sorted(explained.explanations) == [5, 7]
-    assert sorted(explained.explanations) == sorted(explained.to_pandas()['id'])
+    assert sorted(explained.explanations.gradients) == [5, 7]
+    assert sorted(explained.explanations.gradients) == sorted(
+        explained.to_pandas()['id']
+    )
 
 
 def test_the_engines_question_row_is_not_an_entrys_block(explained):
@@ -304,7 +306,7 @@ def test_the_engines_question_row_is_not_an_entrys_block(explained):
     Assumptions:
     - The NIM explains every record's ``instance_table`` as well.
     """
-    for entry in explained.explanations.values():
+    for entry in explained.explanations.gradients.values():
         assert set(entry) == {'outputs', 'related'}
 
 
@@ -314,7 +316,7 @@ def test_an_entity_has_a_block_for_every_related_table(explained):
     Assumptions:
     - The NIM sends one block per related table for every record.
     """
-    for entry in explained.explanations.values():
+    for entry in explained.explanations.gradients.values():
         assert set(entry['related']) == set(TABLES)
 
 
@@ -326,7 +328,7 @@ def test_related_rows_are_the_entitys_own_values_as_sent(explained):
     - The rows of the two entities are interleaved in every table, so a
       position read as the wrong row names the other entity's.
     """
-    related = explained.explanations[5]['related']
+    related = explained.explanations.gradients[5]['related']
 
     assert related['users']['rows'] == [{'user_id': 5, 'tenure_days': 30.0}]
     assert related['orders']['rows'] == [
@@ -337,9 +339,9 @@ def test_related_rows_are_the_entitys_own_values_as_sent(explained):
         {'user_id': 5, 'kind': 'login', 'seconds': 41},
         {'user_id': 5, 'kind': 'login', 'seconds': 42},
     ]
-    assert explained.explanations[7]['related']['products']['rows'] == [
-        {'product_id': 77, 'price': 4.5}
-    ]
+    assert explained.explanations.gradients[7]['related']['products'][
+        'rows'
+    ] == [{'product_id': 77, 'price': 4.5}]
 
 
 def test_a_keyed_table_gives_each_row_its_key_as_declared(explained):
@@ -350,16 +352,18 @@ def test_a_keyed_table_gives_each_row_its_key_as_declared(explained):
     - ``orders.order_id`` is declared int64, and user 7's order id is past
       2**53, so it travels as text.
     """
-    orders_7 = explained.explanations[7]['related']['orders']
+    orders_7 = explained.explanations.gradients[7]['related']['orders']
 
-    assert explained.explanations[5]['related']['orders']['keys'] == [
+    assert explained.explanations.gradients[5]['related']['orders']['keys'] == [
         9003,
         9004,
     ]
     assert orders_7['keys'] == [WIDE]
     assert isinstance(orders_7['keys'][0], int)
     assert orders_7['rows'][0]['order_id'] == str(WIDE)
-    assert explained.explanations[5]['related']['users']['keys'] == [5]
+    assert explained.explanations.gradients[5]['related']['users']['keys'] == [
+        5
+    ]
 
 
 def test_a_keyless_table_gives_rows_without_keys(explained):
@@ -368,7 +372,7 @@ def test_a_keyless_table_gives_rows_without_keys(explained):
     Assumptions:
     - ``events`` has no key of its own; the engine numbers its rows.
     """
-    events = explained.explanations[5]['related']['events']
+    events = explained.explanations.gradients[5]['related']['events']
 
     assert 'keys' not in events
     assert all('__node_id' not in row for row in events['rows'])
@@ -382,7 +386,7 @@ def test_related_gradients_are_aligned_with_rows(explained):
     - The NIM explains each related row by its numerical column ``v`` as
       ``[-v, v]``, so a gradient names the row it belongs to.
     """
-    for entry in explained.explanations.values():
+    for entry in explained.explanations.gradients.values():
         for name, block in entry['related'].items():
             column = TABLES[name][1]
             values = [row[column] for row in block['rows']]
@@ -400,7 +404,7 @@ def test_outputs_and_columns_are_passed_through(explained):
     - The NIM names its outputs and preprocessed columns; the client does not
       read or rename them.
     """
-    entry = explained.explanations[5]
+    entry = explained.explanations.gradients[5]
 
     assert entry['outputs'] == CLASSES
     assert entry['related']['events']['columns'] == ['seconds']
@@ -422,7 +426,7 @@ def test_no_explanation_asked_for_leaves_explanations_empty(
 
     result = RelationalAdapter().normalize(answer, ('prediction',), payload)
 
-    assert result.explanations == {}
+    assert result.explanations.gradients == {}
 
 
 # --- a request sent in several calls ----------------------------------------
@@ -448,14 +452,17 @@ def test_a_split_request_reads_each_call_against_its_own_rows(
         )
 
     assert len(transport.sent) == 2
-    assert sorted(result.explanations) == [5, 7]
-    seven = result.explanations[7]['related']
+    assert sorted(result.explanations.gradients) == [5, 7]
+    seven = result.explanations.gradients[7]['related']
     assert seven['users']['keys'] == [7]
     assert seven['orders']['keys'] == [WIDE]
     assert seven['events']['rows'] == [
         {'user_id': 7, 'kind': 'logout', 'seconds': 71}
     ]
-    assert result.explanations[5]['related']['orders']['keys'] == [9003, 9004]
+    assert result.explanations.gradients[5]['related']['orders']['keys'] == [
+        9003,
+        9004,
+    ]
 
 
 def test_a_split_request_whose_calls_repeat_an_id_keys_by_row_index(
@@ -477,9 +484,12 @@ def test_a_split_request_whose_calls_repeat_an_id_keys_by_row_index(
             split((5,), (5,)), model=KumoRelational(), outputs=list(EXPLAIN)
         )
 
-    assert sorted(result.explanations) == [0, 1]
-    assert result.explanations[1]['related']['users']['keys'] == [5]
-    assert list(result.explanations.to_pandas().columns)[0] == 'row_index'
+    assert sorted(result.explanations.gradients) == [0, 1]
+    assert result.explanations.gradients[1]['related']['users']['keys'] == [5]
+    assert (
+        list(result.explanations.gradients.to_pandas().columns)[0]
+        == 'row_index'
+    )
 
 
 def test_a_split_request_keeps_row_index_keys_apart(gradient_explanation):
@@ -527,9 +537,14 @@ def test_a_split_request_keeps_row_index_keys_apart(gradient_explanation):
 
     merged = PredictionResult.merge(_numbered_across_calls(calls, answer))
 
-    assert sorted(merged.explanations) == [0, 1, 2, 3]
-    assert merged.explanations[2]['instance']['gradients'] == [[-12.0], [12.0]]
-    assert sorted(merged.explanations) == list(merged.to_pandas()['row_index'])
+    assert sorted(merged.explanations.gradients) == [0, 1, 2, 3]
+    assert merged.explanations.gradients[2]['instance']['gradients'] == [
+        [-12.0],
+        [12.0],
+    ]
+    assert sorted(merged.explanations.gradients) == list(
+        merged.to_pandas()['row_index']
+    )
 
 
 def _entry(gradient: float) -> dict:
@@ -559,8 +574,8 @@ def test_hand_built_parts_with_unique_ids_merge_under_their_ids(
         ]
     )
 
-    assert sorted(merged.explanations) == ['u5', 'u7']
-    assert list(merged.explanations.to_pandas().columns)[0] == 'id'
+    assert sorted(merged.explanations.gradients) == ['u5', 'u7']
+    assert list(merged.explanations.gradients.to_pandas().columns)[0] == 'id'
 
 
 def test_hand_built_parts_repeating_an_id_merge_by_row_index(
@@ -583,10 +598,15 @@ def test_hand_built_parts_repeating_an_id_merge_by_row_index(
         ]
     )
 
-    assert sorted(merged.explanations) == list(merged.to_pandas()['row_index'])
-    assert sorted(merged.explanations) == [0, 1]
-    assert merged.explanations[1]['instance']['gradients'] == [[2.0]]
-    assert list(merged.explanations.to_pandas().columns)[0] == 'row_index'
+    assert sorted(merged.explanations.gradients) == list(
+        merged.to_pandas()['row_index']
+    )
+    assert sorted(merged.explanations.gradients) == [0, 1]
+    assert merged.explanations.gradients[1]['instance']['gradients'] == [[2.0]]
+    assert (
+        list(merged.explanations.gradients.to_pandas().columns)[0]
+        == 'row_index'
+    )
 
 
 def test_hand_built_forecast_parts_repeating_an_id_merge_by_row_and_step(
@@ -609,8 +629,8 @@ def test_hand_built_forecast_parts_repeating_an_id_merge_by_row_and_step(
         ]
     )
 
-    assert sorted(merged.explanations) == [(0, 1), (1, 1)]
-    flat = merged.explanations.to_pandas()
+    assert sorted(merged.explanations.gradients) == [(0, 1), (1, 1)]
+    flat = merged.explanations.gradients.to_pandas()
     assert list(flat.columns)[:2] == ['row_index', 'forecast_step']
 
 
@@ -682,10 +702,15 @@ def test_a_forecast_is_explained_under_id_and_step(gradient_explanation):
     """
     result = forecast(gradient_explanation)
 
-    assert sorted(result.explanations) == [(5, 1), (5, 2), (7, 1), (7, 2)]
-    assert 'by_forecast_step' not in result.explanations
+    assert sorted(result.explanations.gradients) == [
+        (5, 1),
+        (5, 2),
+        (7, 1),
+        (7, 2),
+    ]
+    assert 'by_forecast_step' not in result.explanations.gradients
     frame = result.to_pandas()
-    assert sorted(result.explanations) == sorted(
+    assert sorted(result.explanations.gradients) == sorted(
         zip(frame['id'], frame['forecast_step'], strict=True)
     )
 
@@ -697,7 +722,7 @@ def test_a_forecasts_flat_table_names_the_step(gradient_explanation):
     Assumptions:
     - Two steps, each explained.
     """
-    flat = forecast(gradient_explanation).explanations.to_pandas()
+    flat = forecast(gradient_explanation).explanations.gradients.to_pandas()
 
     assert list(flat.columns)[:3] == ['id', 'forecast_step', 'table']
     assert sorted(set(flat['forecast_step'])) == [1, 2]
@@ -807,7 +832,7 @@ def test_relational_asks_for_explanation(
     )
 
     assert fields_sent(endpoint.sent) == [[*DEFAULTS, 'explanation']]
-    assert sorted(result.explanations) == [5, 7]
+    assert sorted(result.explanations.gradients) == [5, 7]
 
 
 def test_ranking_refused_before_sending(monkeypatch, relational_endpoint):
@@ -849,7 +874,12 @@ def test_forecast_explains_every_step(
     )
 
     assert fields_sent(endpoint.sent) == [['prediction', 'explanation']] * 2
-    assert sorted(result.explanations) == [(5, 1), (5, 2), (7, 1), (7, 2)]
+    assert sorted(result.explanations.gradients) == [
+        (5, 1),
+        (5, 2),
+        (7, 1),
+        (7, 2),
+    ]
 
 
 def test_forecast_names_an_unexplained_step(monkeypatch, relational_endpoint):
@@ -898,7 +928,7 @@ def test_the_flat_table_has_the_documented_columns(explained):
     Assumptions:
     - The entities are keyed by id.
     """
-    assert list(explained.explanations.to_pandas().columns) == [
+    assert list(explained.explanations.gradients.to_pandas().columns) == [
         'id',
         'table',
         'hop',
@@ -917,7 +947,7 @@ def test_the_flat_table_has_a_line_per_row_table_output_and_column(explained):
     - Each block has one column and two outputs. User 5 has 1 + 2 + 2 + 2
       related rows and user 7 has 1 + 1 + 1 + 1; the question row is dropped.
     """
-    flat = explained.explanations.to_pandas()
+    flat = explained.explanations.gradients.to_pandas()
 
     assert len(flat) == 2 * 7 + 2 * 4
     assert len(flat[(flat['id'] == 5) & (flat['table'] == 'orders')]) == 4
@@ -931,7 +961,7 @@ def test_the_flat_table_counts_hops_from_the_entity(explained):
     - ``users`` holds the entity, ``orders`` and ``events`` link
       to ``users``, and ``products`` is linked from ``orders``.
     """
-    flat = explained.explanations.to_pandas()
+    flat = explained.explanations.gradients.to_pandas()
     linked = flat[(flat['id'] == 5) & (flat['key'] != 88)]
 
     hops = linked.groupby('table')['hop'].unique()
@@ -950,7 +980,7 @@ def test_the_flat_table_leaves_the_hop_of_an_unlinked_row_empty(explained):
     Assumptions:
     - Product 88 is sampled for user 5, and no order of theirs names it.
     """
-    flat = explained.explanations.to_pandas()
+    flat = explained.explanations.gradients.to_pandas()
 
     unlinked = flat[(flat['table'] == 'products') & (flat['key'] == 88)]
 
@@ -965,7 +995,7 @@ def test_the_flat_table_names_rows_by_key_and_position(explained):
     Assumptions:
     - User 5 has two orders and two keyless events.
     """
-    flat = explained.explanations.to_pandas()
+    flat = explained.explanations.gradients.to_pandas()
     five = flat[flat['id'] == 5]
 
     orders = five[five['table'] == 'orders']
@@ -989,7 +1019,7 @@ def test_the_flat_table_names_each_output_as_the_frame_does(explained):
     Assumptions:
     - The NIM explains both class probabilities and returns them.
     """
-    named = set(explained.explanations.to_pandas()['output'])
+    named = set(explained.explanations.gradients.to_pandas()['output'])
 
     assert named == {'probability_no', 'probability_yes'}
     assert named <= set(explained.to_pandas().columns)
@@ -1019,7 +1049,7 @@ def test_a_boolean_class_is_named_by_the_frames_column_for_it(
             output['class'] = name
     result = RelationalAdapter().normalize(answer, EXPLAIN, payload)
 
-    named = set(result.explanations.to_pandas()['output'])
+    named = set(result.explanations.gradients.to_pandas()['output'])
 
     assert named == {'probability_False', 'probability_True'}
     assert named <= set(result.to_pandas().columns)

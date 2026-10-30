@@ -459,7 +459,7 @@ def test_an_explanation_is_answered_in_this_process(request, model):
             asked, model=handle, outputs=['prediction', 'explanation']
         )
 
-    assert len(result.explanations) == len(result) > 0
+    assert len(result.explanations.gradients) == len(result) > 0
 
 
 def test_an_output_the_model_does_not_produce_is_refused_before_it_loads(
