@@ -71,7 +71,7 @@ anything that comes back red is something that used to be broken.
 
 | Suite | Probes |
 |---|---|
-| `probe_tabular.py` | 24 |
+| `probe_tabular.py` | 25 |
 | `probe_relational.py` | 27 |
 | `probe_connectors.py` | 29 |
 | `probe_edges.py` | 27 |

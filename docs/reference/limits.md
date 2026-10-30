@@ -27,8 +27,6 @@ Both endpoints enforce sizes, and most of these are the relational one's.
 | calls a question asked in parts makes | relational | 200, one per candidate or step | at `materialize()`, as `sdm_client.decompose.MOST_PARTS` |
 | request body | relational | 30 MiB per call | at `materialize()` |
 | request body | relational, through Databricks model serving | 16 MB per call, the gateway's own decimal limit | before sending, on the wrapped envelope |
-| an explanation | relational | exactly one entity | before sending |
-| an explanation | relational | only within the 1,000-row context budget | before sending |
 | hops | relational | 6 | at `materialize()` |
 | tables | relational | 15 | against the graph the request carries, not the schema it was built from |
 
@@ -37,6 +35,9 @@ since this client checks it. A NIM also has limits of its own, which each
 deployment sets, such as the longest string a cell may hold or the most
 distinct values a column may have. Those protect a shared server, and are
 not applied when the model runs in your own process.
+
+**An explanation has no row limit of its own.** Every scored row is
+explained, on either model.
 
 A relational request for more entities than one call scores is not refused.
 `materialize()` gathers it in batches of at most that many, each with a

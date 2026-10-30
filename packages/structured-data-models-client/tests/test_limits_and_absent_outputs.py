@@ -130,13 +130,13 @@ class FakeItem:
             setattr(self, name, value)
 
 
-def result(outputs=(), explanation=None, **fields) -> PredictionResult:
+def result(outputs=(), explanations=None, **fields) -> PredictionResult:
     return PredictionResult(
         model='kumo-tabular',
         request_id='r1',
         items=[FakeItem(row_index=0, **fields)],
         outputs=outputs,
-        explanation=explanation,
+        explanations=explanations,
     )
 
 
@@ -167,14 +167,14 @@ def test_a_repeated_request_is_reported_once():
 
 def test_explanation_is_looked_for_where_it_lives():
     assert result(prediction=1.0).absent(['explanation']) == ('explanation',)
-    assert result(prediction=1.0, explanation=None).absent(['explanation']) == (
+    assert result(prediction=1.0, explanations={}).absent(['explanation']) == (
         'explanation',
     )
     carried = PredictionResult(
         model='m',
         request_id='r',
         items=[FakeItem(row_index=0)],
-        explanation={'feature_importance': {}},
+        explanations={0: {'outputs': []}},
     )
     assert carried.absent(['explanation']) == ()
 
@@ -324,24 +324,29 @@ def explanation_plan(request):
     )
 
 
-def test_an_explanation_is_refused_on_the_mode_the_endpoint_refuses_it_on():
-    """A graph that supplies 120 rows for a request of 1,500 still selects the
-    larger-context mode, and that is what the endpoint gates explaining on."""
-    with pytest.raises(StructuredDataError) as raised:
-        explanation_plan(gathered(context_rows=120, run_mode='best'))
-    assert 'num_context_samples' in str(raised.value)
+def test_explains_larger_context():
+    """An explanation is sent under the larger-context run mode.
+
+    Assumptions:
+    - The Kumo Relational SDM NIM explains under either context budget.
+    - The payload scores one entity.
+    """
+    assert explanation_plan(gathered(context_rows=120, run_mode='best'))
 
 
 def test_a_small_context_asked_for_smally_still_explains():
     assert explanation_plan(gathered(context_rows=120, run_mode='fast'))
 
 
-def test_a_payload_naming_no_mode_is_judged_on_the_rows_it_carries():
-    """Nothing the engine gathers arrives without a run_mode, but a hand-built
-    payload can, and the rows are then all there is to read."""
+def test_explains_without_mode():
+    """An explanation is sent whatever the context size when no run mode is
+    named.
+
+    Assumptions:
+    - The payload scores one entity and names no run_mode.
+    """
     assert explanation_plan(gathered(context_rows=120, run_mode=None))
-    with pytest.raises(StructuredDataError):
-        explanation_plan(gathered(context_rows=1_001, run_mode=None))
+    assert explanation_plan(gathered(context_rows=1_001, run_mode=None))
 
 
 # --- a context that teaches nothing, on both routes -------------------------
@@ -553,19 +558,3 @@ def test_a_session_scoring_call_is_not_judged_on_a_context_it_discards():
 
     sent = list(adapter.session_prediction_plan(request, ('prediction',)))
     assert sent and 'context' not in sent[0]
-
-
-def test_pinning_a_context_is_not_judged_on_rows_it_does_not_send():
-    """A session payload carries no predict rows, so the one-entity
-    explanation rule has nothing to count."""
-    from sdm_client.adapters.relational import RelationalAdapter
-
-    adapter = RelationalAdapter()
-    request = gathered(context_rows=50, run_mode='fast', predict_rows=3)
-    request.query = None
-
-    with pytest.raises(StructuredDataError, match='exactly 1 entity'):
-        list(adapter.prediction_plan(request, ('prediction', 'explanation')))
-
-    pinned = adapter.session_plan(request, ('prediction', 'explanation'))
-    assert 'predict' not in pinned

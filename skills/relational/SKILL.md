@@ -52,7 +52,8 @@ So ask for an explanation, catch the refusal, and fall back. Do not build a
 flow that assumes one arrives. Do not assume one never does either: another
 relational deployment serves `explanation`, and the same code gets a parsed
 one back there, so the refusal belongs to the deployment and not to the
-request.
+request. `SDMClient.in_process()` serves `explanation` too, with the same
+`result.explanations` as a NIM.
 
 The task is not an argument. It follows from the query: see
 [`pql.md`](pql.md).
@@ -159,7 +160,6 @@ would break rather than letting the endpoint return a 500.
 | context rows, with `num_context_samples` | `10,000` |
 | rows scored at once | `10,000` |
 | rows scored for a link prediction | `200` |
-| rows scored with an explanation | `1` |
 | tables in the gathered graph | `15` |
 | hops gathered | `6` |
 | classes | `10` |
@@ -181,15 +181,30 @@ many calls.
 
 **The table limit is on the graph a request carries, not on the schema.** A
 schema may describe far more than fifteen tables; what counts is how many the
-query actually reaches. An explanation has a second limit besides its one row:
-it must fit the 1,000-row context budget.
+query actually reaches.
 
 ## Asking for more than one answer each
 
 A ranking is a call per candidate and a forecast a call per step; an
-explanation is an output, over one scored row. Each has limits and refusals of
-its own, and they are in
+explanation is an output, over every scored row. Each has limits and refusals
+of its own, and they are in
 [`references/beyond-one-answer.md`](references/beyond-one-answer.md).
+
+An explanation is kept out of `to_pandas()`, on `result.explanations`, a
+mapping from each row's key to its explanation: the entity's `id`, or
+`(id, forecast_step)` on a forecast. One entry covers the entity's own row
+and every related row gathered for it, each under its table's name in
+`related`:
+
+```python
+entry = result.explanations['user_5']  # the entity whose id is 'user_5'
+entry['related']['users']              # the entity's own row, hop 0
+orders = entry['related']['orders']    # one block per related table
+entry['related']['users']['keys']      # present only when a relationship joins on the table's key column
+orders['rows']                         # each row's values as sent
+orders['gradients']                    # [output][row][column]
+result.explanations.to_pandas()        # one line per (row, output, column), with its hop; the entity's users line is hop 0
+```
 
 ## Asking the same context more than once
 
@@ -273,6 +288,6 @@ change. The ones worth knowing:
 | more than 100,000 entities at once | every batch is built before any is sent; ask about fewer at a time |
 | more than 100 calls at once | a context is gathered per call; ask about fewer entities, or raise `rows_per_call` if you lowered it |
 | more entities than one call scores, on a ranking or a forecast | each candidate or step is already a call, and batching one would send that many times as many; ask about fewer at a time |
-| an output this question cannot give | `rankings` on a regression, `explanation` on a ranking or on more than one row |
+| an output this question cannot give | `rankings` on a regression, `explanation` on a ranking |
 | `422 UNSUPPORTED_OUTPUT` | the client sent an output the deployment does not serve, such as `explanation` |
 | an aggregation the model does not answer | `COUNT_DISTINCT`, `FIRST`, `LAST`, or any aggregation of a category |

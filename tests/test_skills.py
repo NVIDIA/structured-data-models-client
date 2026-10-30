@@ -2291,7 +2291,6 @@ LIMIT_ROWS = {
     'rows scored for a link prediction': (
         'predict_rows_temporal_link_prediction'
     ),
-    'rows scored with an explanation': 'explanation_predict_rows',
     'tables in the gathered graph': 'tables_max',
     'hops gathered': 'hops_max',
     'classes': 'classes_max',
@@ -2415,15 +2414,15 @@ def test_the_tabular_outputs_narrow_by_task_as_the_skill_says():
 #: fails here rather than making the skill quietly wrong.
 SERVED = {
     'COUNT(orders.*, 0, 30, days)': (
-        ('prediction', 'quantiles'),
+        ('prediction', 'quantiles', 'explanation'),
         tuple(f'quantile_0.{one}' for one in range(1, 10)),
     ),
     'COUNT(orders.*, 0, 30, days) > 2': (
-        ('prediction', 'probabilities'),
+        ('prediction', 'probabilities', 'explanation'),
         ('probability_False', 'probability_True'),
     ),
     'users.segment': (
-        ('prediction', 'probabilities'),
+        ('prediction', 'probabilities', 'explanation'),
         ('probability_a', 'probability_b', 'probability_c'),
     ),
 }
@@ -2476,21 +2475,43 @@ def test_the_relational_endpoint_serves_the_matrix_the_skill_gives(
     reason='set SDM_RELATIONAL_URL to a kumo-relational NIM',
 )
 @pytest.mark.parametrize('target', sorted(SERVED), ids=lambda v: v[:30])
-def test_the_relational_endpoint_refuses_an_explanation(target, schema):
-    """The gap the skill leads with: the client sends it, the endpoint will
-    not serve it. If a deployment starts serving one, this fails and the
-    skill is the thing to change."""
+def test_the_relational_endpoint_explains_every_entity(target, schema):
+    """What the skill shows of an explanation: one per entity asked about,
+    under its id, with the entity's own table among its related ones and no
+    block for the engine's question row. Keys come back only for a join
+    column, so only ``users`` is keyed; other blocks carry rows alone. If a deployment stops serving one,
+    this fails and the skill is the thing to change."""
     from sdm_client import KumoRelational, SDMClient
-    from sdm_client.errors import StructuredDataError
 
     request = resolve(f'PREDICT {target} FOR EACH users.user_id', schema)
     with SDMClient(url=RELATIONAL_URL, timeout=600) as client:
-        with pytest.raises(StructuredDataError, match='explanation'):
-            client.predict(
-                request,
-                model=KumoRelational(),
-                outputs=['prediction', 'explanation'],
-            )
+        result = client.predict(
+            request,
+            model=KumoRelational(),
+            outputs=['prediction', 'explanation'],
+        )
+    # `resolve` asks about users 1 and 2.
+    asked = [1, 2]
+    assert sorted(int(one) for one in result.to_pandas()['id']) == asked
+    assert sorted(int(key) for key in result.explanations) == asked, (
+        f'{target} explained {sorted(result.explanations)}, asked {asked}'
+    )
+    for key, entry in result.explanations.items():
+        assert set(entry) == {'outputs', 'related'}, (
+            f'{target} gave {key} the blocks {sorted(entry)}'
+        )
+        assert entry['outputs'], f'{target} explained no output of {key}'
+        own = entry['related'].get('users')
+        assert own is not None, f'{target} gave {key} no block of its own'
+        assert [int(one) for one in own['keys']] == [int(key)]
+        for name, block in entry['related'].items():
+            # Only `users` is joined on its key; other blocks need no keys.
+            assert block['rows'], f'{name} came back with no rows'
+            assert len(block['gradients']) == len(entry['outputs'])
+            for by_row in block['gradients']:
+                assert len(by_row) == len(block['rows']), (
+                    f'{name} gradients do not line up with its rows'
+                )
 
 
 @pytest.mark.live_nim

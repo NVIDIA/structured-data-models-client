@@ -40,6 +40,7 @@ from sdm_client.errors import (
     StructuredDataError,
     UnsupportedRequestError,
 )
+from sdm_client.explanations import GradientDecoder
 from sdm_client.models import (
     DEFAULT_PREDICTION_STATISTIC,
     KUMO_RELATIONAL,
@@ -126,7 +127,7 @@ class RelationalAdapter:
         sends: frozenset[str] = _SENDS_EVERYTHING,
     ) -> Iterator[dict[str, Any]]:
         payloads = self._payloads(request)
-        self._preflight(payloads, outputs, request.query, sends)
+        self._preflight(payloads, request.query, sends)
         for payload in payloads:
             envelope = dict(payload)
             envelope['model'] = self.spec.model_id
@@ -282,16 +283,16 @@ class RelationalAdapter:
         request_id: str = '',
         metadata: Mapping[str, Any] | None = None,
     ) -> PredictionResult:
-        explanation = next(
-            (item.explanation for item in items if item.explanation), None
-        )
+        named = as_declared_target(_named_entities(items, payload), payload)
         return PredictionResult(
             model=model,
             request_id=request_id,
-            items=as_declared_target(_named_entities(items, payload), payload),
+            items=named,
             metadata=dict(metadata or {}),
             outputs=outputs,
-            explanation=explanation,
+            # Read against this call's own tables, whose positions restart at
+            # 0 in every call of a split request.
+            explanations=GradientDecoder(payload or {}).decode(named),
         )
 
     def explain_error(
@@ -358,15 +359,10 @@ class RelationalAdapter:
     def _preflight(
         self,
         payloads: tuple[dict[str, Any], ...],
-        outputs: tuple[str, ...],
         asked: str | None = None,
         sends: frozenset[str] = _SENDS_EVERYTHING,
     ) -> None:
         """Refuse what the endpoint enforces, before spending the round trip.
-
-        An explanation is the narrow case: the model explains one entity at a
-        time, and only in the mode the smaller context budget selects. Sending
-        more gets a 500 that names neither limit, so both are checked here.
 
         `sends` names the halves this call puts on the wire. A session pins its
         context at `fit()` and a scoring call carries only rows, so judging the
@@ -379,37 +375,6 @@ class RelationalAdapter:
             self._check_context_is_not_empty(payloads)
             self._check_class_count(payloads, limits)
             self._check_target_varies(payloads, asked)
-        if 'explanation' not in outputs:
-            return
-
-        scored = sum(
-            len(
-                payload.get('predict', {})
-                .get('instance_table', {})
-                .get('rows', [])
-            )
-            for payload in payloads
-        )
-        allowed = limits['explanation_predict_rows']
-        if 'predict' in sends and scored != allowed:
-            raise UnsupportedRequestError(
-                f'an explanation covers exactly {allowed} entity, and this '
-                f'request scores {scored}; ask for one at a time',
-                details={'model': self.spec.model_id, 'scored': scored},
-            )
-
-        cap = limits['context_rows_fast']
-        if 'context' in sends and _asks_for_the_larger_context(payloads, cap):
-            raise UnsupportedRequestError(
-                f'an explanation is only produced in the mode the smaller '
-                f'context budget selects, and this request was gathered with '
-                f'num_context_samples above {cap:,}. Re-materialize with '
-                f'num_context_samples={cap} or fewer',
-                details={
-                    'model': self.spec.model_id,
-                    'context_rows_fast': cap,
-                },
-            )
 
     def _check_class_count(
         self, payloads: tuple[dict[str, Any], ...], limits: Mapping[str, int]
@@ -630,41 +595,6 @@ def _columns_over(payload: Mapping[str, Any], limit: int) -> list[str]:
             dict(payload), limit
         )
     ]
-
-
-def _asks_for_the_larger_context(
-    payloads: tuple[dict[str, Any], ...], cap: int
-) -> bool:
-    r"""Whether this request selected the mode that will not explain.
-
-    The endpoint gates explaining on ``inference.run_mode``, which the client
-    derives from the *requested* ``num_context_samples``. Counting the gathered
-    rows instead misses every graph that supplies less context than was asked
-    for: 120 rows gathered under a request for 1,500 passed this guard and the
-    endpoint's refusal escaped, naming a knob the caller never set.
-
-    A payload the engine did not gather carries no ``run_mode``, and for that
-    one the rows are all there is to read.
-    """
-    modes = {
-        str(payload['inference']['run_mode'])
-        for payload in payloads
-        if isinstance(payload.get('inference'), Mapping)
-        and payload['inference'].get('run_mode') is not None
-    }
-    if modes:
-        return modes != {'fast'}
-    return (
-        sum(
-            len(
-                payload.get('context', {})
-                .get('instance_table', {})
-                .get('rows', [])
-            )
-            for payload in payloads
-        )
-        > cap
-    )
 
 
 _WIRE_TARGET = 'TARGET'

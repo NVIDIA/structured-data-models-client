@@ -500,7 +500,7 @@ result = client.predict(
 )
 
 result.to_pandas()  # always a DataFrame
-result.explanation  # None unless you asked for it
+result.explanations  # empty unless you asked for them
 ```
 
 Explanations are an **output field**, not a method. Ask for one with
@@ -537,7 +537,7 @@ It is not what any one deployment answers; see below.
 | `scores` | ✅ | ❌ |
 | `rankings` | ✅ | ❌ |
 | `embeddings` | ✅ | ❌ |
-| `explanation` | ✅ | ❌ |
+| `explanation` | ✅ | ✅ |
 
 Asking a model for a field it does not declare fails client-side, naming what
 it does declare.
@@ -564,7 +564,7 @@ So `scores`, `rankings`, `embeddings` and `explanation` are declared by the
 client and refused by that deployment on every task. That is a fact about this
 build, not about the fields: `explanation` has been measured working against
 another relational deployment, which returns an explanation the client parses
-and hands back on `PredictionResult.explanation`. A deployment that refuses it is
+and hands back on `PredictionResult.explanations`. A deployment that refuses it is
 narrower than the model family, not the client declaring something nothing
 serves.
 
@@ -580,6 +580,49 @@ served either — a forecast is sent as a regression per step, and a bare
 `tests/test_skills.py` asks the endpoint for every one of these on every task,
 so a deployment that gains or loses an output fails the suite rather than
 leaving the document wrong.
+
+### Explanations are keyed by row, off the frame
+
+Every scored row is explained, and `result.explanations` maps each row's key
+to its explanation: the `id` it carries in `to_pandas()`, `(id,
+forecast_step)` for a forecast, and `row_index` when the request has no entity
+key. The same rule holds on both models. A client opened with
+`SDMClient.in_process()` computes the same record itself. The shape of an entry is in
+[Prediction output](../reference/prediction-output.md#explanations).
+
+**Keys, not positions.** The endpoint locates every explained row by its
+position in the tables as submitted. The caller never sees those tables: the
+related ones are gathered by this client, and a keyless one is identified on
+the wire only by the engine's own synthetic node id. So the client turns each
+position back into what the caller can recognise. The predicted row's position
+is dropped, since the mapping's key already names it. A related row always
+carries its values as sent; `keys` is present when the table's key column is
+one the model receives, i.e. a column a relationship joins on; otherwise rows
+are identified by their values.
+
+**Translated per call, before merging.** A request split across several calls
+numbers its positions from zero in each call. Read after merging, the second
+call's rows would point into the first call's tables. Each call's explanations
+are translated while that call's own tables are still at hand, and only then
+merged.
+
+**Kept off the frame.** An entry is nested: outputs by columns for the row
+itself, and outputs by rows by columns for each related table. `to_pandas()`
+stays one row per answer, as the task decides, and the explanations sit beside
+it on the result. `result.explanations.to_pandas()` flattens them into a table
+of their own when one is wanted, with each related row's `hop` from the entity
+worked out from the relationships and foreign-key values the client sent.
+
+**The engine's question row is dropped.** The engine sends a question row
+of its own, the entity key and anchor time with no caller columns, beside the
+entity's own table, and the endpoint explains both. The client drops that
+row's block when it reads the reply, because nothing in it is the caller's, so
+a `kumo-relational` entry is only `related`, with the entity's own table at
+hop 0.
+
+A forecast is explained a step at a time, under `(id, forecast_step)`, rather
+than aggregated across steps: each step is its own row in `to_pandas()`, and
+its explanation is keyed the same way.
 
 ---
 

@@ -11,12 +11,15 @@ these packages. All five distributions share one version and one entry.
 
 - `SDMClient.in_process()` runs `kumo-tabular` and `kumo-relational` in this
   Python process with structured-data-models, through the same calls as a NIM:
-  predictions, fitted sessions, rankings and forecasts. It loads each model
+  predictions, fitted sessions, rankings, forecasts and explanations. It loads each model
   from its published weights on first use, or uses one passed in. The request
   is prepared as it is for a NIM and the model run on it directly, the context
   fitted as the NIM fits it. A request the model cannot answer is refused with
   a `StructuredDataError` whose code says why. Install it with the
-  `in-process` extra.
+  `in-process` extra. In-process explanations are written against the released
+  sdm 0.2.1 API: the converter reads a table's numerical columns from
+  `TableTensor.columns` by stype, not the newer `numerical_columns` property.
+  Revisit when the pinned sdm moves past 0.2.1.
 - A Snowflake session the client opens names itself to Snowflake as
   `nvidia/kumo-sdm`, so Snowflake can attribute its queries. An application
   named any other way is kept: an `application` argument, one in the
@@ -29,6 +32,17 @@ these packages. All five distributions share one version and one entry.
   installs on a laptop rather than on Linux only. The engine ships no source
   distribution, so those wheels remain the full set of platforms it supports:
   `structured-data-models-client` itself is pure Python and stays broader.
+- `kumo-tabular` accepts `explanation` in `outputs`.
+- `result.explanations` maps each explained row's key to its explanation: the
+  row's `id`, `(id, forecast_step)` on a forecast, or `row_index` when the
+  request has no entity id. Each entry is a plain dict of `outputs` and, on
+  `kumo-tabular`, the row's own columns under `instance`, or, on
+  `kumo-relational`, every table, the entity's own included, under `related`,
+  whose rows always carry their values as sent; `keys` is present when the
+  table's key column is one the model receives, i.e. a column a relationship
+  joins on; otherwise rows are identified by their values. It is kept out of
+  `result.to_pandas()`; `result.explanations.to_pandas()` flattens it into one
+  line per row, output and column, with each row's `hop` from the entity.
 
 ### Changed
 
@@ -42,6 +56,25 @@ these packages. All five distributions share one version and one entry.
   value that cannot be read as its type, such as a `run_mode` that is not
   text, is refused with `INVALID_REQUEST` before sending, where a NIM
   answered `422 VALIDATION_FAILED`.
+- A `kumo-relational` explanation is no longer refused above the 1,000-row
+  context budget. That limit belonged to an earlier deployment; the Kumo
+  Relational SDM NIM explains under either budget.
+- An explanation covers every scored row, on both models. A `kumo-tabular`
+  explanation over more than one row and a `kumo-relational` one over more
+  than one entity are no longer refused before sending. This needs a NIM newer
+  than the shipping releases (Relational 1.1.0, Tabular 1.0.0), which refuse
+  `explanation`. The first release that serves it will be named here when it
+  is cut.
+
+### Deprecated
+
+- `result.explanation` and `PredictionResult(explanation=...)` are deprecated
+  in favour of `result.explanations` and `explanations=`, warn with
+  `DeprecationWarning`, and will be removed in 2.0.0. To upgrade, read a row's
+  explanation as `result.explanations[key]`, under the key naming that row in
+  `result.to_pandas()`. `result.explanation` returns the first record's raw
+  explanation only; the `{'by_forecast_step': ...}` it held for a forecast is
+  gone.
 
 ### Fixed
 

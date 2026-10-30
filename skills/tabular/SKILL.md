@@ -29,16 +29,16 @@ with SDMClient(url='http://localhost:8000') as client:
 | | `kumo-tabular` |
 |---|---|
 | Tasks | `classification`, `regression` |
-| Outputs | `prediction`, `probabilities`, `quantiles` |
+| Outputs | `prediction`, `probabilities`, `quantiles`, `explanation` |
 | Several tables | no |
 | Relationships | no |
-| Explanations | no |
+| Explanations | yes |
 | Sessions | yes |
 | Context rows | 10,000 |
 
 Anything outside that list belongs to the relational model. Asking for
-`rankings`, an `explanation`, or a forecast here is refused before a request
-is sent.
+`rankings` or a forecast here is refused before a request is sent. An
+`explanation` covers every scored row: see [Explanations](#explanations).
 
 Outputs narrow again by task, and that narrowing happens at the endpoint rather
 than in the client: `probabilities` on a classification, `quantiles` on a
@@ -197,6 +197,30 @@ A session pins the context into one process's memory on the endpoint, so a
 deployment behind several replicas needs requests for one session to reach the
 same one.
 
+## Explanations
+
+Add `'explanation'` to `outputs` and every scored row is explained. There is no
+row limit. The explanations are kept out of `to_pandas()`, on
+`result.explanations`, a mapping from each row's key to its explanation: the
+row's `id` when the request has one, otherwise its `row_index`. A NIM and
+`SDMClient.in_process()` both serve it, with the same `result.explanations`.
+
+```python
+entry = result.explanations[0]       # the row scored at row_index 0
+entry['outputs']                     # the explained scores, in order
+entry['instance']['columns']         # the model's preprocessed numerical columns
+entry['instance']['gradients']       # [output][column]
+result.explanations.to_pandas()      # one line per (row, output, column)
+```
+
+An entry here has no `related` key: this model reads one table. `columns` are
+the columns as the model sees them, not as you sent them. Categoricals and
+datetimes may appear as derived columns, and a table without numerical
+features gives an empty list. A gradient is the change in that output score
+per unit change in that column: a diagnostic, not a causal effect or a
+feature-importance ranking. The whole shape is under Explanations in
+[`docs/reference/prediction-output.md`](../../docs/reference/prediction-output.md).
+
 ## When it refuses
 
 Every refusal is a `StructuredDataError` or one of its subclasses, and each
@@ -205,7 +229,7 @@ names what to change.
 | Refusal | Cause |
 |---|---|
 | a task the model does not serve | `forecasting`, `temporal_link_prediction` and the rest are relational |
-| an output it does not produce | `rankings`, `explanation`, `embeddings`, `scores` |
+| an output it does not produce | `rankings`, `embeddings`, `scores` |
 | a context above the cap | more than 10,000 labelled rows in a direct `Request` |
 | relationships | this model reads one table; use `kumo-relational` |
 

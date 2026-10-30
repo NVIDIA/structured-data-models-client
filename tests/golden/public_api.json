@@ -113,6 +113,7 @@
     "__all__": [
       "Column",
       "FittedModel",
+      "GradientExplanations",
       "KumoRelational",
       "KumoTabular",
       "MissingExtraError",
@@ -161,6 +162,17 @@
           "predict": "(self, request: 'Request') -> 'PredictionResult'"
         },
         "signature": "() -> 'None'"
+      },
+      "GradientExplanations": {
+        "bases": [
+          "builtins.dict"
+        ],
+        "kind": "class",
+        "public_attributes": [],
+        "public_methods": {
+          "to_pandas": "(self) -> 'pd.DataFrame'"
+        },
+        "signature": "(entries: 'Mapping[Any, dict[str, Any]] | None' = None, *, keyed_by: 'tuple[str, ...]' = ('id',), hops: 'Mapping[Any, Mapping[str, Sequence[int | None]]] | None' = None) -> 'None'"
       },
       "KumoRelational": {
         "bases": [
@@ -227,6 +239,7 @@
         "kind": "class",
         "public_attributes": [
           "explanation",
+          "explanations",
           "unscored_candidates"
         ],
         "public_methods": {
@@ -234,7 +247,7 @@
           "merge": "(parts: 'Sequence[PredictionResult]') -> 'PredictionResult'",
           "to_pandas": "(self) -> 'pd.DataFrame'"
         },
-        "signature": "(*, model: 'str', request_id: 'str', items: 'Sequence[PredictionItem]', metadata: 'dict[str, Any] | None' = None, explanation: 'dict[str, Any] | None' = None, outputs: 'Sequence[str]' = (), unscored_candidates: 'Sequence[Any]' = ()) -> 'None'"
+        "signature": "(*, model: 'str', request_id: 'str', items: 'Sequence[PredictionItem]', metadata: 'dict[str, Any] | None' = None, explanations: 'Mapping[Any, dict[str, Any]] | None' = None, outputs: 'Sequence[str]' = (), unscored_candidates: 'Sequence[Any]' = (), explanation: 'dict[str, Any] | None' = None) -> 'None'"
       },
       "PredictiveQuery": {
         "bases": [],

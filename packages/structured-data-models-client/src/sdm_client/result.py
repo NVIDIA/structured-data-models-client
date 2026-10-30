@@ -11,7 +11,14 @@ union. Here an explanation is an output field like any other:
 >>> result = client.predict(request, model=KumoRelational(),
 ...                         outputs=['prediction', 'explanation'])
 >>> result.to_pandas()       # always a frame
->>> result.explanation       # None unless you asked for it
+>>> result.explanations      # {} unless you asked for them
+>>> result.explanations['user_5']          # one row's explanation
+>>> result.explanations[('user_5', 3)]     # a forecast's, at step 3
+>>> result.explanations.to_pandas()        # every gradient, one per line
+
+Each explained row is under the key that names it in ``to_pandas()``: its
+``id``, ``(id, forecast_step)`` for a forecast, and its ``row_index`` when the
+request has no entity key.
 
 The frame's shape depends on the **task**, not the model. Classification and
 multiclass both give one row per entity. Multiclass carries a probability per
@@ -29,13 +36,15 @@ it is there, otherwise on** ``row_index``, **and never on row order.**
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
+import warnings
+from collections.abc import Iterator, Mapping, Sequence
 from typing import Any
 
 import pandas as pd
 from sdm_api.generated.tfm_api import PredictionItem
 
 from sdm_client.errors import StructuredDataError
+from sdm_client.explanations import GradientExplanations
 
 # Emitted as columns when present on an item, in this order. ``row_index``
 # leads because it is the one field the contract always requires.
@@ -80,10 +89,19 @@ class PredictionResult:
         request_id: str,
         items: Sequence[PredictionItem],
         metadata: dict[str, Any] | None = None,
-        explanation: dict[str, Any] | None = None,
+        explanations: Mapping[Any, dict[str, Any]] | None = None,
         outputs: Sequence[str] = (),
         unscored_candidates: Sequence[Any] = (),
+        explanation: dict[str, Any] | None = None,
     ) -> None:
+        if explanation is not None:
+            warnings.warn(
+                'PredictionResult(explanation=...) is deprecated; pass '
+                'explanations=. It will be removed in 2.0.0',
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        self._explanation = explanation
         self.model = model
         self.request_id = request_id
         self.items = tuple(items)
@@ -96,7 +114,11 @@ class PredictionResult:
         # about. Set where a forecast is assembled, for the same reason.
         self._names_its_step = False
         self.metadata = dict(metadata or {})
-        self._explanation = explanation
+        self._explanations = (
+            explanations
+            if isinstance(explanations, GradientExplanations)
+            else GradientExplanations(explanations)
+        )
         self._unscored_candidates = tuple(unscored_candidates)
 
     def absent(self, requested: Sequence[str]) -> tuple[str, ...]:
@@ -128,7 +150,7 @@ class PredictionResult:
         was refused before the request was sent.
         """
         if name == 'explanation':
-            return self._explanation is not None
+            return bool(self._explanations)
         if name not in _ITEM_FIELDS:
             return True
         return any(
@@ -137,12 +159,34 @@ class PredictionResult:
         )
 
     @property
-    def explanation(self) -> dict[str, Any] | None:
-        r"""The explanation, when asked for and the model produced one.
+    def explanations(self) -> GradientExplanations:
+        r"""Each explained row's explanation, under the key naming that row.
 
-        ``None`` otherwise, rather than a different return type.
+        The key is the one ``to_pandas()`` names the row by: its ``id``,
+        ``(id, forecast_step)`` for a forecast, and ``row_index`` when the
+        request has no entity key. Kept out of the frame, because an entry is
+        nested and the frame is flat. ``explanations.to_pandas()`` flattens
+        them.
+
+        Empty when not asked for, rather than a different return type.
         """
-        return self._explanation
+        return self._explanations
+
+    @property
+    def explanation(self) -> dict[str, Any] | None:
+        r"""Deprecated: the first record's raw explanation; use ``explanations``."""
+        warnings.warn(
+            'result.explanation is deprecated; use result.explanations. '
+            'It will be removed in 2.0.0',
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        if self._explanation is not None:
+            return self._explanation
+        return next(
+            (item.explanation for item in self.items if item.explanation),
+            None,
+        )
 
     @property
     def unscored_candidates(self) -> tuple[Any, ...]:
@@ -272,8 +316,9 @@ class PredictionResult:
         # would otherwise survive. That is the one you do not have when a
         # later batch is the one that misbehaved.
         metadata['batch_request_ids'] = [part.request_id for part in parts]
-        explanation = next(
-            (part.explanation for part in parts if part.explanation), None
+        explanations = GradientExplanations._merged(
+            [part.explanations for part in parts],
+            [part.items for part in parts],
         )
         # Every part answers one slice of the same request, so they were asked
         # for the same fields. If they were not, the merged result cannot
@@ -300,7 +345,7 @@ class PredictionResult:
             request_id=first.request_id,
             items=items,
             metadata=metadata,
-            explanation=explanation,
+            explanations=explanations,
             outputs=first.outputs,
             unscored_candidates=unscored,
         )
@@ -315,7 +360,7 @@ class PredictionResult:
         return iter(self.items)
 
     def __repr__(self) -> str:
-        explained = ', explained' if self._explanation is not None else ''
+        explained = ', explained' if self._explanations else ''
         left_out = len(self._unscored_candidates)
         unscored = (
             f', {left_out} candidate{"s" if left_out > 1 else ""} unscored'
