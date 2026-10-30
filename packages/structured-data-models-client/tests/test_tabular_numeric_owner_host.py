@@ -15,7 +15,7 @@ from sdm_client._rust.tabular_numeric_owners import NumericOwners
 
 def test_callback_codec_error_remains_a_native_value_error() -> None:
     values = np.empty(1, dtype=object)
-    values[0] = float(1e100)
+    values[0] = 1e100
     owners = NumericOwners(pd.Index(values, dtype=object), 'fixed_weak_scalars')
     original = CodecError('raised by the user callback')
     events = []

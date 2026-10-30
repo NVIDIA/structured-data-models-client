@@ -91,7 +91,7 @@ def observe_case(
         if action == 'signed_overflow'
         else [np.uint8(1), -1]
         if action == 'unsigned_overflow'
-        else [np.float32(1), float(1e100)]
+        else [np.float32(1), 1e100]
     )
     if direction == 'reverse':
         owners.reverse()

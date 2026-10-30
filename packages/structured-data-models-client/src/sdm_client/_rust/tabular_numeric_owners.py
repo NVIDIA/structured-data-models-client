@@ -108,6 +108,7 @@ class NumericOwners:
         return {'owner': owner, 'fact': _fact(value)}
 
     def _environment(self) -> dict[str, Any]:
+        policy: str | None
         if self.source_rules == 'common_type_only':
             policy = 'common_type'
         elif self.source_rules == 'fixed_weak_scalars':
@@ -125,7 +126,11 @@ class NumericOwners:
                     'weak': 'weak_scalars',
                 },
             }
-            policy = policies[self.source_rules].get(mode)
+            policy = (
+                policies[self.source_rules].get(mode)
+                if isinstance(mode, str)
+                else None
+            )
             if policy is None:
                 raise RouteError(
                     'this live numeric promotion mode is not yet represented by the core'
