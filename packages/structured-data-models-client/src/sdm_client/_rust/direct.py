@@ -41,16 +41,6 @@ def _call(op: str, value: dict[str, Any]) -> dict[str, Any]:
     return json.loads(finished.take(answer.value))
 
 
-def _kind(value: Any) -> dict[str, Any]:
-    if isinstance(value, pd.DataFrame):
-        return {'kind': 'frame'}
-    if isinstance(value, dict):
-        return {'kind': 'dict'}
-    if isinstance(value, pd.Series):
-        return {'kind': 'series'}
-    return {'kind': 'other', 'native_type': type(value).__name__}
-
-
 def _header(frame: Any) -> dict[str, Any]:
     if not isinstance(frame, pd.DataFrame):
         return {'rows': 0, 'columns': []}
@@ -200,7 +190,7 @@ def _flags(schema: Any, entity: str) -> list[dict[str, Any]]:
 
 def _native_encoding(frame: pd.DataFrame) -> bool:
     """Whether this frame needs reached scalar conversions during encoding."""
-    if type(frame) is not pd.DataFrame:
+    if type(frame) is not pd.DataFrame or any(type(name) is not str for name in frame.columns):
         return True
     for at, dtype in enumerate(frame.dtypes):
         if not DirectOperations.passive_owner(frame.iloc[:, at]):
@@ -319,6 +309,7 @@ def construct(
     # Custom producers enter the ordered path without a header or dtype probe.
     native = type(context) is not pd.DataFrame or type(predict) is not pd.DataFrame
     if schema is None:
+        direct_admission.table_entry_name(entity_table, _call)
         direct_admission.names(context, entity_table, _call)
     if not native:
         native = any(type(name) is not str for name in context.columns) or any(
@@ -437,14 +428,14 @@ def predict(
         if direct_schema.requires(
             request.context.instance_table
         ) or direct_schema.requires(request.predict.instance_table):
-            table, context, scoring, resolved = direct_prediction.resolve(
+            table, context, scoring, resolved, native_dtypes = direct_prediction.resolve(
                 request,
                 bound,
                 _native_calls,
                 _flags,
-                _header,
             )
         else:
+            native_dtypes = None
             # Capture the actual live owners and their dtypes at the adapter boundary.
             schema = request.schema
             table = schema[request.entity_table]
@@ -477,22 +468,23 @@ def predict(
             [] if not key else [key] if isinstance(key, str) else list(key)
         )
         kind = request.task.kind
-        context_header = _header(context)
         native_encoding = _native_encoding(context) or _native_encoding(scoring)
         if native_encoding:
             from sdm_client._rust.direct_cells import table as native_table
 
-            dtypes = dict(resolved['columns']['dtypes'])
+            dtypes = native_dtypes if native_dtypes is not None else dict(resolved['columns']['dtypes'])
             # Finish context before observing scoring values. In particular,
             # a failing context conversion prevents later native side effects.
             context_values = native_table(
                 context, 'context', dtypes, _native_calls
             )
-            scoring_header = _header(scoring)
+            context_header = {'rows': context_values.num_rows if context_values.column_names else len(context), 'columns': context_values.column_names}
             scoring_values = native_table(
                 scoring, 'predict', dtypes, _native_calls
             )
+            scoring_header = {'rows': scoring_values.num_rows if scoring_values.column_names else len(scoring), 'columns': scoring_values.column_names}
         else:
+            context_header = _header(context)
             context_values = _table(context)
             scoring_header = _header(scoring)
             scoring_values = _table(scoring)

@@ -241,6 +241,10 @@ pub struct DatabaseNames {
 pub fn template(sentence: Sentence) -> Template {
     use Sentence as S;
     match sentence {
+        S::DirectNativeSchemaColumns => said(r#"schema does not describe context column(s) {host.direct_columns!r}"#),
+        S::DirectNativeTableEntryName => said(r#"table names must be non-empty strings; got {host.direct_name!r}"#),
+        S::DirectNativeNameEmpty => said(r#"The name {host.direct_name!r} must be a non-empty string."#),
+        S::DirectNativeNameCharacters => said(r#"The name {host.direct_name!r} contains one or more invalid characters: {host.direct_characters!r}."#),
         S::DirectNativeConstantRegression => said(r#"every context row has the same {host.direct_target}, so nothing in the context distinguishes one answer from another, so the answer cannot say much. If the rows being scored are the ones that differ, score fewer of them; if {host.direct_target} is constant in the whole table, there is no context that answers this question."#),
         S::DirectNativeConstantClass => said(r#"every context row has the same {host.direct_target}, so a classification needs at least two classes to learn from, and the answer will be that one class at probability 1.0. If the rows being scored are the ones that differ, score fewer of them; if {host.direct_target} is constant in the whole table, there is no context that answers this question."#),
         S::DirectNativeRelated => said(r#"related_tables {host.direct_tables!r} makes this a relational request, and no model can be sent one built from frames: the relational model is sent tables gathered around each entity, and the tabular model reads a single table. Gather it with PredictiveQuery(...).materialize(indices=[...], model='kumo-relational'), whose schema holds the related tables and the relationships that reach them."#),

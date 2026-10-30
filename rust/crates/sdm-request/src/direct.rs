@@ -215,6 +215,13 @@ pub fn stype_name(value: Stype) -> &'static str {
 pub fn admission(input: sdm_contract::direct::schema::AdmissionObservation) -> Result<(), CoreError> {
     use sdm_contract::direct::schema::AdmissionObservation as A;
     let refusal = match input {
+        A::SchemaColumns { missing } => missing.then_some(Sentence::DirectNativeSchemaColumns),
+        A::TableEntryName { valid } => (!valid).then_some(Sentence::DirectNativeTableEntryName),
+        A::NameKind { valid } => (!valid).then_some(Sentence::DirectNativeNameEmpty),
+        A::NameCharacters { present } => {
+            if present.len() != 4 { return Err(CoreError::protocol(Sentence::InvalidMessage, "four native invalid-name membership observations are required")); }
+            present.iter().any(|value| *value).then_some(Sentence::DirectNativeNameCharacters)
+        },
         A::Frame { valid, row_hint, parameter, native_type } => {
             if valid { return Ok(()); }
             return Err(invalid(Sentence::DirectFrame)

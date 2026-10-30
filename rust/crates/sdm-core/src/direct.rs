@@ -303,6 +303,16 @@ pub(crate) fn check_preparation(
 ) -> Result<OperationResult, CoreError> {
     use sdm_contract::direct::schema::PreparationObservation as P;
     match input {
+        P::TabularMeaning { inferred, different, classification } => {
+            return value(asker, &sdm_contract::direct::schema::MeaningResult {
+                stype: Some(tabular::observed_meaning(inferred, different, classification)?),
+            });
+        }
+        P::CoherentMeaning { inferred, dtype, declared } => {
+            return value(asker, &sdm_contract::direct::schema::MeaningResult {
+                stype: tabular::coherent_meaning(inferred, dtype, declared, crate::edit::supports),
+            });
+        }
         P::ConstancyPopulation { empty, diverse } => {
             let reached = match (empty, diverse) {
                 (Some(empty), None) => !empty,
@@ -486,33 +496,16 @@ pub(crate) fn resolve_observed(
     asker: &Asker,
     observed: ObservedTabularInput,
 ) -> Result<OperationResult, CoreError> {
-    let input = observed.input;
+    let input = observed;
     sdm_request::direct::bound(&input.bound)?;
     if input.bound.model != predict::TABULAR {
         return Err(invalid(Sentence::DirectRelationalFrames)
             .with_field("model", Detail::text(&input.bound.model)));
     }
-    let read = schema(&input.schema)?;
-    let table = read
-        .description
-        .tables
-        .iter()
-        .find(|t| t.name == input.entity_table)
-        .ok_or_else(|| {
-            invalid(Sentence::DirectSchemaMissing)
-                .with_field("name", Detail::text(&input.entity_table))
-        })?;
-    let (columns, warnings) = tabular::schema_columns(
-        table,
-        &input.flags,
-        &input.context.columns,
-        observed.dtypes.into_iter().collect(),
-        &input.target,
-        &input.kind,
-        crate::edit::supports,
-    )?;
-    for warning in warnings {
-        asker.warn(warning);
+    let columns = TabularColumns { dtypes: input.dtypes, columns: input.columns, target: input.target };
+    if !input.text_columns.is_empty() {
+        asker.warn(CoreWarning::new(Sentence::DirectTextCategorical, "tabular text is categorical")
+            .with_field("columns", texts(input.text_columns)));
     }
     value(
         asker,

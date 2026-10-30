@@ -470,7 +470,10 @@ pub struct ResolvedTabular {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ObservedTabularInput {
-    pub input: TabularInput,
+    pub bound: BoundDirectCall,
+    pub target: String,
+    pub columns: Vec<TabularColumn>,
+    pub text_columns: Vec<String>,
     pub dtypes: Vec<(String, Dtype)>,
 }
 

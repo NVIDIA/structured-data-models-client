@@ -203,3 +203,74 @@ def test_string_subclass_column_label_retains_schema_owner(
         assert column.name is label
         assert request.context.instance_table is context
         assert request.predict.instance_table is scoring
+
+
+def test_empty_entity_name_precedes_duplicate_column_refusal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    outcomes = []
+    for route in ('', DIRECT):
+        monkeypatch.setenv('SDM_CORE_ROUTES', route)
+        context = pd.DataFrame([[1, 2, 0], [3, 4, 1]], columns=[7, 7, 'target'])
+        scoring = pd.DataFrame([[5]], columns=[7])
+        with pytest.raises(StructuredDataError) as caught:
+            Request(context, scoring, target='target', task='classification',
+                    entity_table='')
+        assert 'table names must be non-empty strings' in str(caught.value)
+        outcomes.append((type(caught.value), caught.value.code))
+    assert outcomes[0] == outcomes[1]
+
+
+def test_string_subclass_label_keeps_native_name_truthiness(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class EmptyName(str):
+        def __bool__(self) -> bool:
+            return False
+
+    outcomes = []
+    for route in ('', DIRECT):
+        monkeypatch.setenv('SDM_CORE_ROUTES', route)
+        label = EmptyName('feature')
+        context = pd.DataFrame({'feature': [1, 2], 'target': [0, 1]})
+        context.columns = pd.Index([label, 'target'], dtype=object)
+        assert context.columns[0] is label
+        with pytest.raises(StructuredDataError) as caught:
+            Request(context, pd.DataFrame({'feature': [3]}), target='target',
+                    task='classification')
+        assert "The name 'feature' must be a non-empty string" in str(caught.value)
+        outcomes.append((type(caught.value), caught.value.code))
+    assert outcomes[0] == outcomes[1]
+
+
+def test_date_advice_reads_original_string_subclass_label(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class NativeLabel(str):
+        pass
+
+    class LabelFrame(pd.DataFrame):
+        def __getitem__(self, key: Any) -> Any:
+            label = self.__dict__.get('_native_label')
+            if label is not None and isinstance(key, str) and str.__eq__(key, label):
+                if key is not label:
+                    raise AssertionError('native frame read with reconstructed label')
+            return super().__getitem__(key)
+
+    outcomes = []
+    for route in ('', DIRECT):
+        monkeypatch.setenv('SDM_CORE_ROUTES', route)
+        label = NativeLabel('event')
+        context = LabelFrame({
+            'event': pd.Series(['2020-01-01', '2020-02-01', '2020-03-01'], dtype=object),
+            'target': [0, 1, 0],
+        })
+        context.columns = pd.Index([label, 'target'], dtype=object)
+        object.__setattr__(context, '_native_label', label)
+        scoring = pd.DataFrame({'event': ['2020-04-01']})
+        scoring.columns = pd.Index([label], dtype=object)
+        with pytest.warns(UserWarning, match='holds dates but is stored as text'):
+            request = Request(context, scoring, target='target', task='classification')
+        assert request.schema[request.entity_table][label].name is label
+        outcomes.append(request.schema[request.entity_table].time_column)
+    assert outcomes[0] == outcomes[1]

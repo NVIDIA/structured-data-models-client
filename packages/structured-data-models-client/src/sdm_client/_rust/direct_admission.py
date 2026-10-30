@@ -113,3 +113,19 @@ def constancy(context: Any, target: Any, task: Any, call: Callable[..., Any]) ->
         call('check_direct_preparation', {
             'kind': 'constancy_notice', 'classification': task in _CLASSIFICATION_KINDS,
         })
+
+
+def table_entry_name(entity: Any, call: Callable[..., Any]) -> None:
+    with errors.holding(direct_name=lambda fields: entity):
+        observe(call, 'table_entry_name', valid=isinstance(entity, str) and bool(entity))
+
+
+def name(value: Any, call: Callable[..., Any]) -> None:
+    from sdm_client.schema import _INVALID_NAME_CHARS
+
+    with errors.holding(direct_name=lambda fields: value):
+        observe(call, 'name_kind', valid=isinstance(value, str) and bool(value))
+        present = [char in value for char in _INVALID_NAME_CHARS]
+        characters = [char for char, found in zip(_INVALID_NAME_CHARS, present, strict=True) if found]
+        with errors.holding(direct_characters=lambda fields: characters):
+            observe(call, 'name_characters', present=present)

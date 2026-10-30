@@ -144,6 +144,8 @@ pub enum ObservedSchema {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum PreparationObservation {
+    TabularMeaning { inferred: Stype, different: Option<bool>, classification: Option<bool> },
+    CoherentMeaning { inferred: Stype, dtype: Dtype, declared: Option<bool> },
     ConstancyPopulation { empty: Option<bool>, diverse: Option<bool> },
     ConstancyKind { classification: bool, regression: Option<bool> },
     ConstancyNotice { classification: bool },
@@ -193,6 +195,10 @@ pub enum PreparationObservation {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AdmissionObservation {
+    SchemaColumns { missing: bool },
+    TableEntryName { valid: bool },
+    NameKind { valid: bool },
+    NameCharacters { present: Vec<bool> },
     Frame { valid: bool, row_hint: bool, parameter: String, native_type: String },
     Related { present: bool },
     Task { accepted: bool },
@@ -206,3 +212,8 @@ pub enum AdmissionObservation {
     ColumnTypes { non_strings: bool },
     MissingFeatures { present: bool },
 }
+
+/// A selected meaning, or a request for the reached native declaration flag.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct MeaningResult { pub stype: Option<Stype> }

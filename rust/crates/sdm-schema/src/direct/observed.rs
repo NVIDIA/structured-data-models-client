@@ -93,7 +93,6 @@ pub fn observe(input: SchemaObservation) -> Result<(ObservedSchema, Vec<CoreWarn
                     }
                 }
             };
-            super::check_name(&name)?;
             ObservedSchema::Column {
                 column: ObservedColumn {
                     name,

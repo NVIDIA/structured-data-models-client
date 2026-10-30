@@ -1577,6 +1577,8 @@ pub struct Predicted {
 #[derive(JsonSchema)]
 #[schemars(deny_unknown_fields)]
 pub struct Attachments {
+    #[schemars(rename = "DirectValue.meaning")]
+    pub directvalue_meaning: crate::direct::schema::MeaningResult,
     #[schemars(rename = "ObserveDirectOutputs.input")]
     pub observedirectoutputs_input: crate::direct::native_response::NativeOutputQuery,
     #[schemars(rename = "RestoreDirectResponse.input")]

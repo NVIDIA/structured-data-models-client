@@ -11,7 +11,7 @@ from typing import Any
 
 import pandas as pd
 
-from sdm_client._rust import direct_cells, direct_dtypes, spec
+from sdm_client._rust import direct_admission, direct_cells, direct_dtypes, errors, spec
 
 
 def raw_dtype(
@@ -137,8 +137,7 @@ def resolve(
     bound: dict[str, Any],
     call: Callable[..., Any],
     flags: Callable[..., Any],
-    header: Callable[..., Any],
-) -> tuple[Any, Any, Any, dict[str, Any]]:
+) -> tuple[Any, Any, Any, dict[str, Any], dict[str, str]]:
     call(
         'check_direct_preparation',
         {'kind': 'consistent', 'schema': spec.held_schema(request.schema)},
@@ -147,38 +146,51 @@ def resolve(
     table = schema[request.entity_table]
     context = request.context.instance_table
     scoring = request.predict.instance_table
-    declarations = call(
-        'check_direct_preparation',
-        {
-            'kind': 'declarations',
-            'columns': [
-                (name, column.dtype, column.untyped)
-                for name, column in table.columns.items()
-            ],
-        },
-    )
-    dtypes = dict(declarations['dtypes'])
+    dtypes = {}
+    for name, column in table.columns.items():
+        declared = None if column.untyped else column.dtype
+        dtypes[name] = declared
     for name in scoring.columns:
         if name in dtypes:
             dtypes[name] = widen(
                 dtypes[name], raw_dtype(scoring[name], dtypes[name], call), call
             )
+    dtypes = {name: dtype or 'string' for name, dtype in dtypes.items()}
+    target = request.task.target.column_name
+    missing = [name for name in context.columns if name not in dtypes]
+    with errors.holding(direct_columns=lambda fields: missing):
+        direct_admission.observe(call, 'schema_columns', missing=bool(missing))
+    columns = {}
+    as_text = []
+    for name in context.columns:
+        declared = table[name].stype
+        if declared == 'text':
+            as_text.append(name)
+        wire_dtype = dtypes[name]
+        different = None if declared == 'text' else bool(name != request.task.target.column_name)
+        classification = request.task.is_classification if different is False else None
+        selected = call('check_direct_preparation', {
+            'kind': 'tabular_meaning', 'inferred': declared,
+            'different': different, 'classification': classification,
+        })['stype']
+        actual_dtype = dtypes[name]
+        column = table[name]
+        coherent = call('check_direct_preparation', {
+            'kind': 'coherent_meaning', 'inferred': selected,
+            'dtype': actual_dtype, 'declared': None,
+        })['stype']
+        if coherent is None:
+            coherent = call('check_direct_preparation', {
+                'kind': 'coherent_meaning', 'inferred': selected,
+                'dtype': actual_dtype, 'declared': bool(column.stype_declared),
+            })['stype']
+        columns[name] = {'name': name, 'dtype': wire_dtype, 'stype': coherent}
     resolved = call(
         'resolve_observed_tabular',
         {
-            'input': {
-                'bound': bound,
-                'schema': spec.held_schema(schema),
-                'flags': flags(schema, request.entity_table),
-                'entity_table': request.entity_table,
-                'target': request.task.target.column_name,
-                'kind': request.task.kind,
-                'context': header(context),
-                'predict': header(scoring),
-            },
-            'dtypes': [
-                (name, dtype or 'string') for name, dtype in dtypes.items()
-            ],
+            'bound': bound, 'target': target,
+            'columns': list(columns.values()), 'text_columns': as_text,
+            'dtypes': list(dtypes.items()),
         },
     )
-    return table, context, scoring, resolved
+    return table, context, scoring, resolved, dtypes

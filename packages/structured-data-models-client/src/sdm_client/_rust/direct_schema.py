@@ -117,7 +117,9 @@ def date_advice(
             'empty': frame.empty,
         },
     )
-    for name in candidates['names']:
+    native_names = {str.__str__(column['name']): column['name'] for column in columns}
+    for selected in candidates['names']:
+        name = native_names[selected]
         present = frame[name].dropna()
         if not dates.looks_unambiguous(present):
             continue
@@ -238,7 +240,7 @@ def preparation_requires(frame: pd.DataFrame) -> bool:
 
 
 def requires(frame: pd.DataFrame) -> bool:
-    if type(frame) is not pd.DataFrame:
+    if type(frame) is not pd.DataFrame or any(type(name) is not str for name in frame.columns):
         return True
     import pyarrow as pa
 
@@ -299,6 +301,7 @@ def prepare(
     if not admission_complete:
         direct_admission.population(context, scoring, target, call)
         if schema is None:
+            direct_admission.table_entry_name(entity, call)
             direct_admission.names(context, entity, call)
     if schema is None:
         for name in context.columns:
@@ -336,15 +339,9 @@ def prepare(
             for column in native_columns.values()
         ]
         native_names = {str.__str__(column.name): column.name for column in native_columns.values()}
-        call(
-            'observe_direct_schema',
-            {'kind': 'table_names', 'table': entity, 'columns': []},
-        )
+        direct_admission.name(entity, call)
         for name in context.columns:
-            call(
-                'observe_direct_schema',
-                {'kind': 'table_names', 'table': entity, 'columns': [name]},
-            )
+            direct_admission.name(name, call)
             direct_cells.admit(context[name], 'context', 'string', call)
         candidates = call(
             'observe_direct_schema',

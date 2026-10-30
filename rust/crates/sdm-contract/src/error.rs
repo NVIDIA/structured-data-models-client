@@ -758,6 +758,10 @@ sentences! {
     DirectExtra = "direct_extra", E::InvalidRequest;
     DirectFloatPrecision = "direct_float_precision", E::InvalidRequest;
     DirectFrame = "direct_frame", E::InvalidRequest;
+    DirectNativeTableEntryName = "direct_native_table_entry_name", E::InvalidRequest;
+    DirectNativeNameEmpty = "direct_native_name_empty", E::InvalidRequest;
+    DirectNativeNameCharacters = "direct_native_name_characters", E::InvalidRequest;
+    DirectNativeSchemaColumns = "direct_native_schema_columns", E::InvalidRequest;
     DirectNativeRelated = "direct_native_related", E::UnsupportedRequest;
     DirectNativeMultilabel = "direct_native_multilabel", E::UnsupportedRequest;
     DirectNativeTargetMissing = "direct_native_target_missing", E::InvalidRequest;
