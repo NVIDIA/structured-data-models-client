@@ -1039,7 +1039,7 @@
           "type": "object",
           "properties": {
             "content": {
-              "type": "string"
+              "$ref": "#/$defs/ObjectContent"
             },
             "kind": {
               "type": "string",
@@ -1065,6 +1065,22 @@
           ],
           "additionalProperties": false
         }
+      ]
+    },
+    "ObjectContent": {
+      "description": "Closed observed scalar families, independent of the host library's labels.",
+      "type": "string",
+      "enum": [
+        "empty",
+        "decimal",
+        "integer",
+        "floating",
+        "mixed_integer_float",
+        "boolean",
+        "date",
+        "date_time",
+        "timestamp",
+        "other"
       ]
     },
     "DtypeFinding": {

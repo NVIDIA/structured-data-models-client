@@ -4,7 +4,9 @@
 
 //! Direct-column meaning from reached native storage and range facts.
 
-use sdm_contract::direct::dtype::{DtypeFinding, DtypeObservation, DtypePopulation, DtypeStorage, ObjectContent};
+use sdm_contract::direct::dtype::{
+    DtypeFinding, DtypeObservation, DtypePopulation, DtypeStorage, ObjectContent,
+};
 use sdm_contract::ops::Dtype;
 use sdm_contract::{CoreError, Sentence};
 
@@ -93,9 +95,13 @@ pub fn observe(input: DtypeObservation) -> Result<DtypeFinding, CoreError> {
                 ObjectContent::Empty => finding(Dtype::String, Declared, true),
                 ObjectContent::Decimal => finding(Dtype::Int64, Decimals, false),
                 ObjectContent::Integer => finding(Dtype::Int64, WholeNumbers, false),
-                ObjectContent::Floating | ObjectContent::MixedIntegerFloat => finding(Dtype::Float64, Declared, false),
+                ObjectContent::Floating | ObjectContent::MixedIntegerFloat => {
+                    finding(Dtype::Float64, Declared, false)
+                }
                 ObjectContent::Boolean => finding(Dtype::Bool, Declared, false),
-                ObjectContent::Date | ObjectContent::DateTime | ObjectContent::Timestamp => finding(Dtype::Time, Declared, false),
+                ObjectContent::Date | ObjectContent::DateTime | ObjectContent::Timestamp => {
+                    finding(Dtype::Time, Declared, false)
+                }
                 ObjectContent::Other => finding(Dtype::String, Declared, false),
             },
             DtypeStorage::Other => finding(Dtype::String, Declared, false),
