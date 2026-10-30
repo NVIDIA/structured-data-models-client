@@ -5,17 +5,30 @@
 """Asking ``kumo-tabular`` for an explanation.
 
 The endpoint explains every scored row, and the client hands each row's
-explanation back under the key naming that row.
+explanation back under the key naming that row. A query that starts with
+`EXPLAIN` is answered as if `outputs` named ``'explanation'``.
 """
 
 from __future__ import annotations
 
+import warnings
+from collections.abc import Callable
+
 import pandas as pd
 import pytest
+from sample_tables import people
 
-from sdm_client import Request
+from sdm_client import (
+    KumoTabular,
+    PredictiveQuery,
+    Request,
+    Schema,
+    SDMClient,
+)
 from sdm_client.adapters.tabular import TabularAdapter
 from sdm_client.base import check_request_against_model
+from sdm_client.core.backend import NimBackend
+from sdm_client.errors import StructuredDataError
 from sdm_client.models import KUMO_TABULAR
 
 EXPLAIN = ('prediction', 'explanation')
@@ -23,6 +36,9 @@ CLASSES = [
     {'kind': 'probability', 'class': '0'},
     {'kind': 'probability', 'class': '1'},
 ]
+CHURN = 'PREDICT people.churn FOR EACH people.person_id'
+#: What a classification asks for when the caller names nothing.
+DEFAULTS = ['prediction', 'probabilities']
 
 
 def response(**record) -> dict:
@@ -510,3 +526,218 @@ def test_the_flat_table_of_no_explanation_is_empty_with_its_columns(
     assert isinstance(flat, pd.DataFrame)
     assert flat.empty
     assert 'gradient' in flat.columns
+
+
+# --- a query asked with `EXPLAIN` -------------------------------------------
+
+
+def tabular_asked(text: str) -> Request:
+    """``text`` over ``people``, scoring persons 50 and 51."""
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_data(
+            {'people': people()}, primary_keys={'people': 'person_id'}
+        )
+    return PredictiveQuery(text, schema).materialize(
+        indices=[50, 51], model=KumoTabular(), task='classification'
+    )
+
+
+class TabularEndpoint:
+    """Answers ``kumo-tabular`` calls, explaining each row when asked;
+    records every scoring payload."""
+
+    def __init__(self, gradient_explanation: Callable[..., dict]) -> None:
+        self.build = gradient_explanation
+        self.sent: list[dict] = []
+
+    def predict(self, payload: dict) -> dict:
+        self.sent.append(payload)
+        explain = 'explanation' in payload['output']['fields']
+        records = []
+        for index, _ in enumerate(payload['predict']['instance_table']['rows']):
+            record = {
+                'row_index': index,
+                'prediction': 1,
+                'probabilities': {'0': 0.4, '1': 0.6},
+            }
+            if explain:
+                record['explanation'] = self.build(
+                    outputs=CLASSES,
+                    row=index,
+                    columns=['age'],
+                    gradients=[[-1.0], [1.0]],
+                )
+            records.append(record)
+        return {
+            'id': 'r',
+            'model': 'kumo-tabular',
+            'predictions': records,
+            'metadata': {},
+        }
+
+    def create_session(self, payload: dict) -> dict:
+        return {'session_id': 's1'}
+
+    def session_predict(self, session_id: str, payload: dict) -> dict:
+        return self.predict(payload)
+
+    def delete_session(self, session_id: str) -> None:
+        return None
+
+
+@pytest.fixture
+def tabular_endpoint(gradient_explanation) -> tuple[SDMClient, TabularEndpoint]:
+    client = SDMClient(url='http://localhost:8000')
+    endpoint = TabularEndpoint(gradient_explanation)
+    client._backend = NimBackend(endpoint)
+    return client, endpoint
+
+
+def test_tabular_asks_for_explanation(tabular_endpoint, fields_sent):
+    """An `EXPLAIN` query materialized for tabular asks for the defaults and
+    ``'explanation'``, and its answer carries one per row.
+
+    Assumptions:
+    - Two persons scored; the endpoint explains when asked.
+    """
+    client, endpoint = tabular_endpoint
+
+    result = client.predict(
+        tabular_asked(f'EXPLAIN {CHURN}'), model=KumoTabular()
+    )
+
+    assert fields_sent(endpoint.sent) == [[*DEFAULTS, 'explanation']]
+    assert len(result.explanations) == len(result) == 2
+
+
+@pytest.mark.parametrize(
+    ('outputs', 'expected'),
+    [
+        (None, [*DEFAULTS, 'explanation']),
+        (['prediction'], ['prediction', 'explanation']),
+        (['explanation'], ['explanation']),
+        (['prediction', 'explanation'], ['prediction', 'explanation']),
+    ],
+    ids=['defaults', 'appended', 'already named', 'named among others'],
+)
+def test_explain_adds_explanation(
+    tabular_endpoint, fields_sent, outputs, expected
+):
+    """`EXPLAIN` adds ``'explanation'`` to the defaults or the caller's list,
+    once.
+
+    Assumptions:
+    - A tabular classification, whose defaults are prediction and
+      probabilities.
+    """
+    client, endpoint = tabular_endpoint
+
+    client.predict(
+        tabular_asked(f'EXPLAIN {CHURN}'), model=KumoTabular(), outputs=outputs
+    )
+
+    assert fields_sent(endpoint.sent) == [expected]
+
+
+@pytest.mark.parametrize(
+    ('outputs', 'expected'),
+    [(None, DEFAULTS), (['prediction'], ['prediction'])],
+    ids=['defaults', 'named'],
+)
+def test_no_prefix_changes_nothing(
+    tabular_endpoint, fields_sent, outputs, expected
+):
+    """Without `EXPLAIN` the call asks for exactly what it did before.
+
+    Assumptions:
+    - A tabular classification, whose defaults are prediction and
+      probabilities.
+    """
+    client, endpoint = tabular_endpoint
+
+    client.predict(tabular_asked(CHURN), model=KumoTabular(), outputs=outputs)
+
+    assert fields_sent(endpoint.sent) == [expected]
+
+
+def test_empty_outputs_still_refused(tabular_endpoint):
+    """`EXPLAIN` does not turn ``outputs=[]`` into a request; it is refused
+    as before, and nothing is sent.
+
+    Assumptions:
+    - A tabular classification.
+    """
+    client, endpoint = tabular_endpoint
+
+    with pytest.raises(StructuredDataError, match='at least one field'):
+        client.predict(
+            tabular_asked(f'EXPLAIN {CHURN}'), model=KumoTabular(), outputs=[]
+        )
+    assert endpoint.sent == []
+
+
+def test_session_explains_when_asked(tabular_endpoint, fields_sent):
+    """A session fitted without `EXPLAIN` accepts the same question asked
+    with it, and that call asks for ``'explanation'``.
+
+    Assumptions:
+    - The session pinned the plain question with the default outputs.
+    """
+    client, endpoint = tabular_endpoint
+    fitted = client.fit(tabular_asked(CHURN), model=KumoTabular())
+
+    result = fitted.predict(tabular_asked(f'EXPLAIN {CHURN}'))
+
+    assert fields_sent(endpoint.sent) == [[*DEFAULTS, 'explanation']]
+    assert len(result.explanations) == 2
+
+
+def test_session_keeps_its_question(tabular_endpoint, fields_sent):
+    """After an `EXPLAIN` call, a plain call on the same session is accepted
+    and asks for the defaults only.
+
+    Assumptions:
+    - The session pinned the plain question with the default outputs.
+    """
+    client, endpoint = tabular_endpoint
+    fitted = client.fit(tabular_asked(CHURN), model=KumoTabular())
+    fitted.predict(tabular_asked(f'EXPLAIN {CHURN}'))
+
+    fitted.predict(tabular_asked(CHURN))
+
+    assert fields_sent(endpoint.sent)[-1] == DEFAULTS
+
+
+def test_explain_fit_pins_explanation(tabular_endpoint, fields_sent):
+    """A session fitted with `EXPLAIN` explains a later plain call.
+
+    Assumptions:
+    - No outputs were named at fit.
+    """
+    client, endpoint = tabular_endpoint
+    fitted = client.fit(tabular_asked(f'EXPLAIN {CHURN}'), model=KumoTabular())
+
+    result = fitted.predict(tabular_asked(CHURN))
+
+    assert fields_sent(endpoint.sent) == [[*DEFAULTS, 'explanation']]
+    assert len(result.explanations) == 2
+
+
+@pytest.mark.parametrize('prefix', ['', 'EXPLAIN '], ids=['plain', 'explain'])
+def test_session_refuses_another_question(tabular_endpoint, prefix):
+    """A different question is refused, `EXPLAIN` or not, before it is
+    sent.
+
+    Assumptions:
+    - The session pinned the churn question; the other asks about segment.
+    """
+    client, endpoint = tabular_endpoint
+    fitted = client.fit(tabular_asked(CHURN), model=KumoTabular())
+    other = tabular_asked(
+        f'{prefix}PREDICT people.segment FOR EACH people.person_id'
+    )
+
+    with pytest.raises(StructuredDataError, match='pinned a different'):
+        fitted.predict(other)
+    assert endpoint.sent == []

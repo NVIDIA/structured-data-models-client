@@ -129,6 +129,16 @@ def gradient_explanation() -> Callable[..., dict[str, Any]]:
 
 
 @pytest.fixture
+def fields_sent() -> Callable[[list[dict]], list[list[str]]]:
+    """Read the output fields each recorded call asked for, in order."""
+
+    def read(sent: list[dict]) -> list[list[str]]:
+        return [payload['output']['fields'] for payload in sent]
+
+    return read
+
+
+@pytest.fixture
 def hand_built_result() -> Callable[..., Any]:
     """Build a ``PredictionResult`` by hand, its explanations a plain dict.
 

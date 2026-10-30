@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import copy
 import dataclasses
+import re
 import warnings
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from types import TracebackType
@@ -181,8 +182,12 @@ class FittedModel:
         asked = getattr(request, '_question', None)
         if self._question is not None and asked is not None:
             _refuse_a_question_the_session_did_not_pin(self._question, asked)
+        outputs = _explained_if_asked(
+            request, self._named_outputs, lambda: self._outputs
+        )
+        fields = self._outputs if outputs is None else tuple(outputs)
         if request.nothing_to_score:
-            return _empty_answer(self.model, self._outputs, request)
+            return _empty_answer(self.model, fields, request)
         _warn_scoring_what_was_pinned(
             request,
             self._pinned_keys,
@@ -191,13 +196,13 @@ class FittedModel:
         )
         parts = _numbered_across_calls(
             self._adapter.session_prediction_plan(
-                request, self._outputs, self._pinned
+                request, fields, self._pinned
             ),
             lambda payload: self._client._backend.session_predict(
                 self._adapter,
                 self._session_id,
                 payload,
-                self._outputs,
+                fields,
                 self._pinned,
             ),
         )
@@ -207,7 +212,7 @@ class FittedModel:
                 code='INVALID_REQUEST',
             )
         return _report_absent(
-            PredictionResult.merge(parts), self._named_outputs, self.model
+            PredictionResult.merge(parts), outputs, self.model
         )
 
     def close(self) -> None:
@@ -484,6 +489,9 @@ class SDMClient:
         """
         _require_a_request(request)
         _require_output_names(outputs)
+        outputs = _explained_if_asked(
+            request, outputs, lambda: self._default_outputs(request, model)
+        )
         if request.parts is not None:
             return self._answer_in_parts(request, model, outputs)
         adapter, fields = self._prepare(request, model, outputs)
@@ -698,6 +706,9 @@ class SDMClient:
         _require_a_request(request)
         _require_output_names(outputs)
         _refuse_to_pin_a_rewritten_question(request)
+        outputs = _explained_if_asked(
+            request, outputs, lambda: self._default_outputs(request, model)
+        )
         adapter, fields = self._prepare(request, model, outputs)
         payload = adapter.session_plan(request, fields)
         held = _held_back(payload, holdout)
@@ -740,11 +751,7 @@ class SDMClient:
         _require_a_request(request)
         _require_output_names(outputs)
         spec = self._spec(model)
-        adapter = self._adapters.get(spec.model_id)
-        if adapter is None:
-            adapter = _adapter_for(spec)
-            self._adapters[spec.model_id] = adapter
-
+        adapter = self._adapter(model)
         fields = (
             tuple(outputs)
             if outputs is not None
@@ -763,6 +770,24 @@ class SDMClient:
             )
         check_request_against_model(request, spec, fields)
         return adapter, fields
+
+    def _adapter(self, model: str | Model) -> ModelAdapter:
+        r"""The adapter for ``model``, made on first use and kept."""
+        spec = self._spec(model)
+        adapter = self._adapters.get(spec.model_id)
+        if adapter is None:
+            adapter = _adapter_for(spec)
+            self._adapters[spec.model_id] = adapter
+        return adapter
+
+    def _default_outputs(
+        self, request: Request, model: str | Model
+    ) -> Sequence[str]:
+        r"""What ``request`` is answered with when the caller names nothing."""
+        rewritten = request._decomposition
+        if rewritten is not None and rewritten.kind == RANKING:
+            return _RANKING_OUTPUTS
+        return self._adapter(model).default_output(request)
 
     @staticmethod
     def _spec(model: str | Model) -> ModelSpec:
@@ -1317,6 +1342,38 @@ def _by_step(
     return built
 
 
+_AN_EXPLAIN = re.compile(r'^\s*EXPLAIN\s+', re.IGNORECASE)
+
+
+def _explained_if_asked(
+    request: Request,
+    outputs: Sequence[str] | None,
+    defaults: Callable[[], Sequence[str]],
+) -> Sequence[str] | None:
+    r"""``outputs`` with ``'explanation'`` added when the query began `EXPLAIN`.
+
+    Added to the defaults when the caller named nothing, so the call goes on
+    exactly as if the caller had named them. Read from what was asked, since
+    the parts of a ranking or forecast are rebuilt without the prefix.
+    """
+    asked = request.asked if request.asked is not None else request.query
+    if asked is None or not _AN_EXPLAIN.match(asked):
+        return outputs
+    named = defaults() if outputs is None else outputs
+    if not named or 'explanation' in named:
+        return outputs
+    return (*named, 'explanation')
+
+
+def _apart_from_explain(question: Question) -> Question:
+    r"""``question`` with a leading `EXPLAIN` taken off its query."""
+    if question.query is None:
+        return question
+    return dataclasses.replace(
+        question, query=_AN_EXPLAIN.sub('', question.query, count=1)
+    )
+
+
 _WHAT_DIFFERS = (
     ('query', 'the query'),
     ('kind', 'the task kind'),
@@ -1332,8 +1389,10 @@ def _refuse_a_question_the_session_did_not_pin(
     r"""Require a scoring call to use the pinned question.
 
     Said field by field: the rest of the request is identical, so printing both
-    whole does not show which one differs.
+    whole does not show which one differs. A leading `EXPLAIN` asks for an
+    output, not a different question, so it is not compared.
     """
+    pinned, asked = _apart_from_explain(pinned), _apart_from_explain(asked)
     if pinned == asked:
         return
     for field_name, described in _WHAT_DIFFERS:

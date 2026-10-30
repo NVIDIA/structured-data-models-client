@@ -204,6 +204,8 @@ row limit. The explanations are kept out of `to_pandas()`, on
 `result.explanations`, a mapping from each row's key to its explanation: the
 row's `id` when the request has one, otherwise its `row_index`. A NIM and
 `SDMClient.in_process()` both serve it, with the same `result.explanations`.
+`EXPLAIN PREDICT …` means the same as `outputs=['explanation']`; passing both
+is allowed and redundant.
 
 ```python
 entry = result.explanations[0]       # the row scored at row_index 0

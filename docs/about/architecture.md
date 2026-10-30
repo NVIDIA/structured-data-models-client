@@ -504,7 +504,8 @@ result.explanations  # empty unless you asked for them
 ```
 
 Explanations are an **output field**, not a method. Ask for one with
-`outputs=[..., "explanation"]`; there is no `explain=` argument. That is the
+`outputs=[..., "explanation"]`, or prefix the query with `EXPLAIN`, which
+means the same; there is no `explain=` argument. That is the
 shape of the call — whether a deployment answers it is a separate question,
 and the shipping relational build does not. See [What a deployment actually
 serves](#what-a-deployment-actually-serves).

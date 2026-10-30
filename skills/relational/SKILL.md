@@ -53,7 +53,8 @@ flow that assumes one arrives. Do not assume one never does either: another
 relational deployment serves `explanation`, and the same code gets a parsed
 one back there, so the refusal belongs to the deployment and not to the
 request. `SDMClient.in_process()` serves `explanation` too, with the same
-`result.explanations` as a NIM.
+`result.explanations` as a NIM. `EXPLAIN PREDICT …` means the same as
+`outputs=['explanation']`; passing both is allowed and redundant.
 
 The task is not an argument. It follows from the query: see
 [`pql.md`](pql.md).
