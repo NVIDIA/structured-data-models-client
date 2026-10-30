@@ -5,16 +5,16 @@
 # Direct Tabular input coverage
 
 This extends the existing [boundaries](boundaries.md) and [restart contracts](restart.md).
-The landed numeric/Boolean pilot is the baseline; the rows below are implementation obligations, not completion claims.
-Independent datatype and native-contract review precedes implementation.
+The numeric/Boolean pilot, broader datatype conversion, and native options/response increments are landed.
+The public-input admission and ownership increment is implemented and independently reviewed; final handoff and landing remain pending.
+All listed families now have connected constructor/prediction paths and recorded parity cases.
+The consolidated installed-wheel run passes 320 public/shared-regression tests, with 12 environment-dependent skips.
+The frozen-reference evidence includes 74 datatype observations, 22 native options/response cases, and 17 public-input/ownership cases.
+The full Rust contract, schema, request and host suites pass 463 tests; strict Clippy passes.
+These results establish the listed coverage, not exhaustive behavior of every possible user-written extension.
+PQL sampling, fitted Tabular use, file/result/state journeys, live acceptance and the default-route switch remain separate follow-on work.
 
-The datatype, constructor and encoding increment is landed.
-The current implementation increment connects native-only inference options and custom decoded-response ownership through the existing native transport.
-Its source and executable validation remain pending; this is not a completion claim.
-Remaining public-input boundaries, including subclass owners and ordered native argument/name validation, still follow this connected increment.
-The full direct-input goal remains incomplete until all coverage obligations are implemented, verified and landed.
-
-| Input family | Remaining coverage and decisive parity cases |
+| Input family | Implemented coverage and decisive parity cases |
 | --- | --- |
 | NumPy float32/64 | Construction, declared widths, NaN versus null, infinities, signed zero and mixed-width context/scoring. |
 | Nullable and Arrow-backed numeric/Boolean | Validity masks, present NaN, typed-empty columns and lossless widening. |
