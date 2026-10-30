@@ -1,0 +1,214 @@
+// SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+// All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+
+//! Reached frame-backed Tabular selection facts, carried in byte attachments.
+//! Native owners, missing-key diagnostics and sampled index labels stay separate.
+
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+
+/// Only admitted native-equivalent primitive keys. Null and custom keys are not
+/// represented here. Signed/unsigned native integers share one exact domain.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum TabularKey {
+    Text { value: String },
+    Integer { value: i128 },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ExpandTabularKeys {
+    pub source: Vec<TabularKey>,
+    pub requested: Vec<TabularKey>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ExpandedTabularKeys {
+    pub rows: Vec<usize>,
+    /// Ordinals in the original requested sequence, including repeated misses.
+    pub missing: Vec<usize>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FilterTabularRows {
+    pub known: Vec<bool>,
+    pub excluded: Vec<usize>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FilteredTabularRows {
+    pub positions: Vec<usize>,
+}
+
+/// Count admission is separate from native custom count operations.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct DecideTabularContext {
+    pub population: usize,
+    pub requested: Option<usize>,
+}
+
+/// Domain results let the host render the original reached native diagnostic.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum TabularCountError {
+    Zero,
+    AboveLimit,
+    AbovePopulation,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum TabularContextDecision {
+    Selected {
+        wanted: usize,
+        reduced: bool,
+        advise_default_reduction: bool,
+    },
+    Refused {
+        reason: TabularCountError,
+    },
+}
+
+/// Observe this population after any default-reduction warning was delivered.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SampleTabularRows {
+    pub population: usize,
+    pub wanted: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum SampledTabularRows {
+    /// Candidate-frame offsets in draw order, not sorted source positions.
+    Sampled {
+        offsets: Vec<usize>,
+    },
+    Refused {
+        reason: TabularCountError,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ObserveTabularMembership {
+    pub present: Vec<bool>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ObservedTabularMembership {
+    pub missing: Vec<usize>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct DecideTabularTask {
+    pub target_stype: String,
+    pub stated: Option<String>,
+    pub binary_whole: Option<bool>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum TabularTaskError {
+    UnsupportedTarget,
+    UnsupportedTask,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "decision", rename_all = "snake_case", deny_unknown_fields)]
+pub enum TabularTaskDecision {
+    Task { kind: String, warn_binary: bool },
+    InspectTarget,
+    Refused { reason: TabularTaskError },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum TabularSortProfile {
+    Scalar,
+    Avx2Gnu14,
+    Avx512Gnu14,
+    Stable,
+}
+
+/// Only ordinary native index producers admitted by the host are represented.
+/// Missing values have inert payload slots. Unicode carries Python code points.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TabularIndexFacts {
+    pub values: TabularIndexValues,
+    pub missing: Vec<bool>,
+    pub profile: TabularSortProfile,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum TabularIndexValues {
+    Signed {
+        values: Vec<i64>,
+        width: u8,
+    },
+    Unsigned {
+        values: Vec<u64>,
+        width: u8,
+    },
+    Floating {
+        bits: Vec<u64>,
+        width: u8,
+    },
+    Temporal {
+        values: Vec<i64>,
+    },
+    Unicode {
+        values: Vec<Vec<u32>>,
+    },
+    Categorical {
+        codes: Vec<i64>,
+        width: u8,
+    },
+    /// Each codes vector corresponds to one level, in sampled row order.
+    Multi {
+        levels: Vec<TabularIndexFacts>,
+        codes: Vec<Vec<i64>>,
+    },
+    Object {
+        values: Vec<TabularIndexScalar>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum TabularIndexScalar {
+    Integer { value: String },
+    Floating { bits: u64 },
+    Text { points: Vec<u32> },
+    Boolean { value: bool },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct OrderSampledTabularRows {
+    pub index: TabularIndexFacts,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum OrderedSampledTabularRows {
+    Sorted { positions: Vec<usize> },
+    Refused { reason: TabularOrderError },
+}
+
+/// A comparison outcome, not a new public exception or diagnostic wording.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum TabularOrderError {
+    Incomparable,
+}

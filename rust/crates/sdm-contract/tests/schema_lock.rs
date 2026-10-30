@@ -447,6 +447,62 @@ fn unaccounted(schema: &Value) -> Result<(), String> {
 /// The fields whose attachment is JSON of the contract's, with the entry of
 /// `$defs/Attachments` that locks it.
 const JSON: &[(&str, &str)] = &[
+    (
+        "Operation/observe_tabular_membership.input",
+        "ObserveTabularMembership.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.observe_tabular_membership",
+    ),
+    (
+        "Operation/decide_tabular_task.input",
+        "DecideTabularTask.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.decide_tabular_task",
+    ),
+    (
+        "Operation/order_sampled_tabular_rows.input",
+        "OrderSampledTabularRows.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.order_sampled_tabular_rows",
+    ),
+    (
+        "Operation/expand_tabular_keys.input",
+        "ExpandTabularKeys.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.expand_tabular_keys",
+    ),
+    (
+        "Operation/filter_tabular_rows.input",
+        "FilterTabularRows.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.filter_tabular_rows",
+    ),
+    (
+        "Operation/decide_tabular_context.input",
+        "DecideTabularContext.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.decide_tabular_context",
+    ),
+    (
+        "Operation/sample_tabular_rows.input",
+        "SampleTabularRows.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.sample_tabular_rows",
+    ),
     ("OperationResult/direct_value.value", "DirectValue.meaning"),
     (
         "Operation/observe_direct_outputs.input",

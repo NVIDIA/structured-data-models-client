@@ -158,6 +158,58 @@ pub fn start(
                 crate::direct::value(&asker, &sdm_request::tabular::cell::check(input)?)
             })
         }
+        Operation::ExpandTabularKeys(request) => {
+            let input: sdm_contract::tabular::ExpandTabularKeys =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(&asker, &crate::tabular_selection::expand(input))
+            })
+        }
+        Operation::FilterTabularRows(request) => {
+            let input: sdm_contract::tabular::FilterTabularRows =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(&asker, &crate::tabular_selection::filter(input)?)
+            })
+        }
+        Operation::DecideTabularContext(request) => {
+            let input: sdm_contract::tabular::DecideTabularContext =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(&asker, &crate::tabular_selection::decide(input))
+            })
+        }
+        Operation::SampleTabularRows(request) => {
+            let input: sdm_contract::tabular::SampleTabularRows =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(&asker, &crate::tabular_selection::sample(input))
+            })
+        }
+        Operation::ObserveTabularMembership(request) => {
+            let input: sdm_contract::tabular::ObserveTabularMembership =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(&asker, &crate::tabular_selection::membership(input))
+            })
+        }
+        Operation::DecideTabularTask(request) => {
+            let input: sdm_contract::tabular::DecideTabularTask =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(
+                    &asker,
+                    &sdm_request::tabular::decide_materialized_task(input),
+                )
+            })
+        }
+        Operation::OrderSampledTabularRows(request) => {
+            let input: sdm_contract::tabular::OrderSampledTabularRows =
+                take_json(&mut attachments, request.input)?;
+            Run::new(move |asker| async move {
+                crate::direct::value(&asker, &crate::tabular_selection::order(input)?)
+            })
+        }
         Operation::CheckDirectShape(request) => {
             let input: sdm_contract::direct::DirectShape =
                 take_json(&mut attachments, request.input)?;

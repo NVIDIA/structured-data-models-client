@@ -37,6 +37,13 @@ use crate::types::ColumnType;
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Operation {
     ValidateQuery(ValidateQuery),
+    ExpandTabularKeys(crate::direct::DirectInput),
+    FilterTabularRows(crate::direct::DirectInput),
+    DecideTabularContext(crate::direct::DirectInput),
+    SampleTabularRows(crate::direct::DirectInput),
+    ObserveTabularMembership(crate::direct::DirectInput),
+    DecideTabularTask(crate::direct::DirectInput),
+    OrderSampledTabularRows(crate::direct::DirectInput),
     CheckDirectShape(crate::direct::DirectInput),
     CheckDirectCell(crate::direct::DirectInput),
     CheckDirectOption(crate::direct::DirectInput),
@@ -90,6 +97,13 @@ impl Operation {
     pub fn name(&self) -> &'static str {
         match self {
             Operation::ValidateQuery(_) => "validate_query",
+            Operation::ExpandTabularKeys(_) => "expand_tabular_keys",
+            Operation::FilterTabularRows(_) => "filter_tabular_rows",
+            Operation::DecideTabularContext(_) => "decide_tabular_context",
+            Operation::SampleTabularRows(_) => "sample_tabular_rows",
+            Operation::ObserveTabularMembership(_) => "observe_tabular_membership",
+            Operation::DecideTabularTask(_) => "decide_tabular_task",
+            Operation::OrderSampledTabularRows(_) => "order_sampled_tabular_rows",
             Operation::CheckDirectShape(_) => "check_direct_shape",
             Operation::CheckDirectCell(_) => "check_direct_cell",
             Operation::CheckDirectOption(_) => "check_direct_option",
@@ -134,7 +148,14 @@ impl Operation {
             Operation::EncodeDirectColumn(v)
             | Operation::InferDirectColumn(v)
             | Operation::InferDirectTimeStart(v) => vec![(v.input, Bytes), (v.values, Arrow)],
-            Operation::CheckDirectShape(v)
+            Operation::ExpandTabularKeys(v)
+            | Operation::FilterTabularRows(v)
+            | Operation::DecideTabularContext(v)
+            | Operation::SampleTabularRows(v)
+            | Operation::ObserveTabularMembership(v)
+            | Operation::DecideTabularTask(v)
+            | Operation::OrderSampledTabularRows(v)
+            | Operation::CheckDirectShape(v)
             | Operation::CheckDirectCell(v)
             | Operation::CheckDirectOption(v)
             | Operation::CheckDirectResponseField(v)
@@ -1577,6 +1598,36 @@ pub struct Predicted {
 #[derive(JsonSchema)]
 #[schemars(deny_unknown_fields)]
 pub struct Attachments {
+    #[schemars(rename = "ObserveTabularMembership.input")]
+    pub observe_tabular_membership_input: crate::tabular::ObserveTabularMembership,
+    #[schemars(rename = "DirectValue.observe_tabular_membership")]
+    pub observe_tabular_membership_output: crate::tabular::ObservedTabularMembership,
+    #[schemars(rename = "DecideTabularTask.input")]
+    pub decide_tabular_task_input: crate::tabular::DecideTabularTask,
+    #[schemars(rename = "DirectValue.decide_tabular_task")]
+    pub decide_tabular_task_output: crate::tabular::TabularTaskDecision,
+    #[schemars(rename = "OrderSampledTabularRows.input")]
+    pub order_sampled_tabular_rows_input: crate::tabular::OrderSampledTabularRows,
+    #[schemars(rename = "DirectValue.order_sampled_tabular_rows")]
+    pub order_sampled_tabular_rows_output: crate::tabular::OrderedSampledTabularRows,
+
+    #[schemars(rename = "ExpandTabularKeys.input")]
+    pub expand_tabular_keys_input: crate::tabular::ExpandTabularKeys,
+    #[schemars(rename = "DirectValue.expand_tabular_keys")]
+    pub expand_tabular_keys_output: crate::tabular::ExpandedTabularKeys,
+    #[schemars(rename = "FilterTabularRows.input")]
+    pub filter_tabular_rows_input: crate::tabular::FilterTabularRows,
+    #[schemars(rename = "DirectValue.filter_tabular_rows")]
+    pub filter_tabular_rows_output: crate::tabular::FilteredTabularRows,
+    #[schemars(rename = "DecideTabularContext.input")]
+    pub decide_tabular_context_input: crate::tabular::DecideTabularContext,
+    #[schemars(rename = "DirectValue.decide_tabular_context")]
+    pub decide_tabular_context_output: crate::tabular::TabularContextDecision,
+    #[schemars(rename = "SampleTabularRows.input")]
+    pub sample_tabular_rows_input: crate::tabular::SampleTabularRows,
+    #[schemars(rename = "DirectValue.sample_tabular_rows")]
+    pub sample_tabular_rows_output: crate::tabular::SampledTabularRows,
+
     #[schemars(rename = "DirectValue.meaning")]
     pub directvalue_meaning: crate::direct::schema::MeaningResult,
     #[schemars(rename = "ObserveDirectOutputs.input")]

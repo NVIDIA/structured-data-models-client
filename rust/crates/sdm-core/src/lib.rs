@@ -26,6 +26,7 @@ pub mod profiles;
 mod ranking;
 pub mod run;
 mod subgraph;
+mod tabular_selection;
 #[cfg(feature = "test-ops")]
 mod test_ops;
 pub mod view;

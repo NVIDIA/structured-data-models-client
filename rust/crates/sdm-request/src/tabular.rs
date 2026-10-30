@@ -1163,3 +1163,46 @@ pub fn coherent_meaning(
         }
     })
 }
+
+/// Task policy for the final selected Tabular context; only a numerical,
+/// unstated task reaches the native two-whole-values observation.
+pub fn decide_materialized_task(
+    input: sdm_contract::tabular::DecideTabularTask,
+) -> sdm_contract::tabular::TabularTaskDecision {
+    use sdm_contract::tabular::{TabularTaskDecision as D, TabularTaskError as E};
+    if !matches!(input.target_stype.as_str(), "categorical" | "numerical") {
+        return D::Refused {
+            reason: E::UnsupportedTarget,
+        };
+    }
+    if let Some(stated) = input.stated {
+        return if matches!(stated.as_str(), "classification" | "regression") {
+            D::Task {
+                kind: stated,
+                warn_binary: false,
+            }
+        } else {
+            D::Refused {
+                reason: E::UnsupportedTask,
+            }
+        };
+    }
+    if input.target_stype == "categorical" {
+        return D::Task {
+            kind: "classification".into(),
+            warn_binary: false,
+        };
+    }
+    match input.binary_whole {
+        None => D::InspectTarget,
+        Some(binary) => D::Task {
+            kind: if binary {
+                "classification"
+            } else {
+                "regression"
+            }
+            .into(),
+            warn_binary: binary,
+        },
+    }
+}
