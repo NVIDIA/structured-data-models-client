@@ -1374,11 +1374,11 @@
               }
             },
             "semantics": {
-              "$ref": "#/$defs/NumpyScalarSemantics"
+              "$ref": "#/$defs/NumericComparisonProfile"
             },
             "kind": {
               "type": "string",
-              "const": "numpy_object"
+              "const": "scalar_object"
             }
           },
           "additionalProperties": false,
@@ -1411,6 +1411,7 @@
           ]
         },
         {
+          "description": "Canonical integer value; width is one, two, four or eight bytes.",
           "type": "object",
           "properties": {
             "signed": {
@@ -1427,7 +1428,7 @@
             },
             "kind": {
               "type": "string",
-              "const": "numpy_integer"
+              "const": "fixed_integer"
             }
           },
           "additionalProperties": false,
@@ -1439,6 +1440,7 @@
           ]
         },
         {
+          "description": "Raw IEEE bits; width is two (binary16), four or eight bytes.",
           "type": "object",
           "properties": {
             "width": {
@@ -1454,7 +1456,7 @@
             },
             "kind": {
               "type": "string",
-              "const": "numpy_floating"
+              "const": "fixed_floating"
             }
           },
           "additionalProperties": false,
@@ -1653,13 +1655,24 @@
         "temporal"
       ]
     },
-    "NumpyScalarSemantics": {
-      "description": "Scalar comparison rules are independent of index sorting's tie algorithm.",
-      "type": "string",
-      "enum": [
-        "numpy123_legacy",
-        "numpy126_legacy",
-        "numpy25_weak"
+    "NumericComparisonProfile": {
+      "description": "Closed numeric-owner comparison policies, independent of sorting's tie policy.\nThe host binds a verified producer and its actual promotion mode to a policy;\nneither a sorting profile nor a producer major version establishes this choice.\n\nAll policies preserve fixed floating widths and use the wider width for two\nfixed floating owners. Fixed integer/floating pairs compare at the floating\nwidth for one-byte integers, at least binary32 for two-byte integers, and\nbinary64 for four/eight-byte integers. Integer signedness does not alter that\ntable. Boolean owners contribute exact zero or one. Plain binary64 pairs and\nunbounded-integer/plain-binary64 pairs retain exact scalar comparisons.\nUnordered floating comparisons still perform reached conversions first.",
+      "oneOf": [
+        {
+          "description": "Use common fixed types for mixed scalar owners. A signed integer paired\nwith an unsigned eight-byte integer compares through binary64, including\nits rounding. An unbounded integer that fits signed64 or unsigned64\ncontributes that type; one outside both ranges takes the object fallback,\ncomparing exactly against another integer or the floating owner's value.\nPlain binary64/fixed-floating pairs use binary64, as do representable\nunbounded-integer/fixed-floating pairs. This mode does not weakly narrow\nplain binary64 operands to the other owner's floating width.",
+          "type": "string",
+          "const": "common_type"
+        },
+        {
+          "description": "Use CommonType floating rules and its out-of-range unbounded-integer\nfallback, but compare every integer/integer pair exactly, including the\nsigned64/unsigned64 boundary. This policy must be bound to the producer's\ncommon-type promotion mode, not a weak or warning-producing mode.",
+          "type": "string",
+          "const": "exact_integer_pairs"
+        },
+        {
+          "description": "Compare integer pairs exactly. A plain binary64 operand paired with a\nfixed floating owner is narrowed to that owner's width; an unbounded\ninteger paired with a fixed floating owner converts through binary64 and\nthen that width. Failure to convert the integer to finite binary64 yields\nIntegerToFloatOverflow. Finite narrowing to infinity yields the explicit\nNativeEffectsPending outcome because warning/handler effects are not yet\nrepresented; already-infinite input does not take that overflow branch.\nFixed-integer/plain-binary64 pairs compare in binary64, including rounding.",
+          "type": "string",
+          "const": "weak_scalars"
+        }
       ]
     },
     "TabularSortProfile": {
