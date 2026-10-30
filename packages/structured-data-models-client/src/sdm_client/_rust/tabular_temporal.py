@@ -4,7 +4,7 @@
 
 """Inert facts for exact civil/instant index owners, never comparison policy."""
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone, tzinfo
 from inspect import getattr_static
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -43,7 +43,7 @@ def _pytz_offset(zone: Any) -> int:
         base, field = StaticTzInfo, '_utcoffset'
     else:
         raise RouteError('this temporal timezone owner is not represented')
-    if getattr_static(zone, '__getattribute__') is not object.__getattribute__:
+    if getattr_static(zone, '__getattribute__') is not tzinfo.__getattribute__:
         raise RouteError('custom timezone attribute access is not represented')
     for name in ('utcoffset', 'dst'):
         if getattr_static(zone, name) is not base.__dict__[name]:
