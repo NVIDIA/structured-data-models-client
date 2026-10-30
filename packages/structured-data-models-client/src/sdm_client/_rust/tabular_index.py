@@ -85,7 +85,7 @@ def _producer(path: str) -> str | None:
     return None if families is None else families[0]
 
 
-def _comparison_semantics() -> str:
+def _comparison_family() -> tuple[str, str, str | None]:
     namespace = (
         'numpy.core' if np.__version__.startswith('1.') else 'numpy._core'
     )
@@ -95,6 +95,26 @@ def _comparison_semantics() -> str:
         raise RouteError(
             'this native scalar comparison producer has not been bound to core semantics'
         )
+    return families
+
+
+def _numeric_source_rules() -> str:
+    _, semantics, required_mode = _comparison_family()
+    if semantics == 'common_type':
+        return 'common_type_only'
+    if semantics == 'exact_integer_pairs':
+        return 'mutable_fixed_integer_pairs'
+    if semantics == 'weak_scalars':
+        return (
+            'mutable_exact_unbounded_integers'
+            if required_mode is not None
+            else 'fixed_weak_scalars'
+        )
+    raise RouteError('this numeric comparison source has no owner policy')
+
+
+def _comparison_semantics() -> str:
+    families = _comparison_family()
     semantics = families[1]
     # These families identify audited binaries, not arbitrary version strings.
     required_mode = families[2]

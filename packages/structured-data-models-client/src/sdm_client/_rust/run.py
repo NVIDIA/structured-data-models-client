@@ -64,6 +64,12 @@ from sdm_client.errors import StructuredDataError
 #: endpoint's answer.
 Model = Callable[[bytes], bytes]
 
+# An operation-local handler for closed numeric owner observations. It returns
+# facts or a retained exception ID, never comparison or sorting decisions.
+NumericOwner = Callable[
+    [dict[str, Any]], tuple[dict[str, Any], Mapping[int, Any]]
+]
+
 
 class Page:
     r"""One page of a provider's answer to a fetch, more following:
@@ -184,6 +190,7 @@ def run(
     *,
     provider: Provider | None = None,
     model: Model | None = None,
+    numeric_owner: NumericOwner | None = None,
     quiet: frozenset[str] = frozenset(),
     given: set[str] | None = None,
     kept: list[dict[str, Any]] | None = None,
@@ -234,7 +241,18 @@ def run(
             state.pop('held', None)
         errors.raise_from_core(refused.control, refused.attachments)
     try:
-        return _steps(core, handle, provider, model, quiet, given, kept)
+        return _steps(
+            core, handle, provider, model, quiet, given, kept, numeric_owner
+        )
+    except BaseException:
+        if numeric_owner is not None:
+            try:
+                handle.cancel()
+            except core.CoreError:
+                # A terminal run has already released its suspended body.
+                # Preserve the original native or protocol exception.
+                pass
+        raise
     finally:
         if state is not None:
             _keep(core, handle, state)
@@ -279,6 +297,7 @@ def _steps(
     quiet: frozenset[str],
     given: set[str] | None,
     kept: list[dict[str, Any]] | None = None,
+    numeric_owner: NumericOwner | None = None,
 ) -> Finished:
     r"""The run's steps, each answered, to its result."""
     driver_class: str | None = None
@@ -311,6 +330,9 @@ def _steps(
             )
         if step['step'] == 'done':
             return Finished(step['result'], handle)
+        if step['step'] == 'numeric_owner' and numeric_owner is not None:
+            _numeric(core, handle, step, numeric_owner)
+            continue
         if step['step'] == 'call_model' and model is not None:
             refused = _call(core, handle, step, model)
             continue
@@ -365,6 +387,24 @@ def _steps(
                     refused.attachments,
                     driver_class=driver_class,
                 )
+
+
+def _numeric(
+    core: Any, handle: Any, step: dict[str, Any], handler: NumericOwner
+) -> None:
+    """Answer one reached observation without provider or transport wrapping."""
+    outcome, attached = handler(step['request'])
+    reply = codec.encode(
+        {
+            'message': 'numeric_owner_reply',
+            'id': step['id'],
+            'outcome': outcome,
+        }
+    )
+    try:
+        handle.reply(reply, attached)
+    except core.CoreError as failed:
+        errors.raise_from_core(failed.control, failed.attachments)
 
 
 def _call(
