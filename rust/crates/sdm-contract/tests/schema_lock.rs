@@ -448,6 +448,26 @@ fn unaccounted(schema: &Value) -> Result<(), String> {
 /// `$defs/Attachments` that locks it.
 const JSON: &[(&str, &str)] = &[
     (
+        "Operation/order_numeric_owners.input",
+        "OrderNumericOwners.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.order_numeric_owners",
+    ),
+    (
+        "NumericOwnerOutcome/sort_owners.owners_and_facts",
+        "NumericOwnerReply.owners_and_facts",
+    ),
+    (
+        "NumericOwnerOutcome/sort_owners.source_positions",
+        "NumericOwnerReply.positions",
+    ),
+    (
+        "NumericOwnerOutcome/sort_owners.missing_positions",
+        "NumericOwnerReply.positions",
+    ),
+    (
         "Operation/select_tabular_rows.input",
         "SelectTabularRows.input",
     ),
