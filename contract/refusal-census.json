@@ -498,7 +498,7 @@
       "until": "from_source"
     },
     {
-      "site": "rust/crates/sdm-request/src/predict.rs::prepare::predict::unsupported#1",
+      "site": "rust/crates/sdm-request/src/predict.rs::check_shapes::predict::unsupported#1",
       "why": "a multi-table request to the tabular model",
       "input": {
         "base": "shop",
@@ -515,7 +515,7 @@
       "model": "KumoTabular"
     },
     {
-      "site": "rust/crates/sdm-request/src/predict.rs::prepare::predict::unsupported#2",
+      "site": "rust/crates/sdm-request/src/predict.rs::check_task_outputs::predict::unsupported#1",
       "why": "a task kind the model does not serve; the relational model serves every kind this build sends, so not reached here",
       "input": {
         "base": "shop",
@@ -531,7 +531,7 @@
       "until": "predict"
     },
     {
-      "site": "rust/crates/sdm-request/src/predict.rs::prepare::predict::unsupported#3",
+      "site": "rust/crates/sdm-request/src/predict.rs::check_task_outputs::predict::unsupported#2",
       "why": "an output the model does not produce; the public calls ask none here, so not reached",
       "input": {
         "base": "shop",
@@ -547,7 +547,7 @@
       "until": "predict"
     },
     {
-      "site": "rust/crates/sdm-request/src/predict.rs::prepare::predict::unsupported#4",
+      "site": "rust/crates/sdm-request/src/predict.rs::check_capacity::predict::unsupported#1",
       "why": "more context rows than the relational model reads; num_context_samples past the limit is refused first, so not reached this way",
       "input": {
         "base": "shop",
@@ -774,6 +774,175 @@
         }
       },
       "until": "materialize"
+    },
+    {
+      "site": "rule:direct_native_decimal_conversion",
+      "why": "A decimal feature requests a conversion outside the supported native decimal conversions. This recorder constructs warehouse-backed Schema.from_source inputs only; it cannot reach this direct-input site. Its outcome records the warehouse attempt, not coverage of that site; reachability remains unmeasured.",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT users.age FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        },
+        "setup": [
+          "ALTER TABLE users ADD COLUMN decimal_feature DECIMAL(12, 2)",
+          "UPDATE users SET decimal_feature = 1.25"
+        ]
+      },
+      "until": "predict",
+      "model": "KumoTabular"
+    },
+    {
+      "site": "rule:direct_native_timestamp_conversion",
+      "why": "A timestamp feature requests a non-date/time native conversion. This recorder constructs warehouse-backed Schema.from_source inputs only; it cannot reach this direct-input site. Its outcome records the warehouse attempt, not coverage of that site; reachability remains unmeasured.",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT users.age FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        },
+        "setup": [
+          "ALTER TABLE users ADD COLUMN timestamp_feature TIMESTAMP",
+          "UPDATE users SET timestamp_feature = TIMESTAMP '2024-01-01'"
+        ]
+      },
+      "until": "predict",
+      "model": "KumoTabular"
+    },
+    {
+      "site": "rule:direct_numeric_storage",
+      "why": "An unsupported physical numeric storage reaches the direct encoder. This recorder constructs warehouse-backed Schema.from_source inputs only; it cannot reach this direct-input site. Its outcome records the warehouse attempt, not coverage of that site; reachability remains unmeasured.",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT users.age FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "predict",
+      "model": "KumoTabular"
+    },
+    {
+      "site": "packages/structured-data-models-client/src/sdm_client/_rust/direct_response.py::response#1",
+      "why": "A direct prediction receives a response that violates the contract. Separate public response-refusal coverage: test_tabular_direct_core.py::test_response_attribution_failures; this warehouse probe does not inject malformed responses. This recorder constructs warehouse-backed Schema.from_source inputs only; it cannot reach this direct-input site. Its outcome records the warehouse attempt, not coverage of that site; reachability remains unmeasured.",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT users.age FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "predict",
+      "model": "KumoTabular"
+    },
+    {
+      "site": "packages/structured-data-models-client/src/sdm_client/_rust/tabular_materialize.py::_expand#1",
+      "why": "Native-key expansion diagnoses absent requested keys. Separate ordinary-key public behavior coverage: test_tabular_pql_core.py::test_missing_key_diagnostic_keeps_repetitions; that fixture does not establish native-key branch reachability. This recorder constructs warehouse-backed Schema.from_source inputs only; it cannot reach this in-memory frame materialization site. Its outcome records the warehouse attempt, not coverage of that site; reachability remains unmeasured.",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT users.age FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            999999,
+            0,
+            999999
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize",
+      "model": "KumoTabular"
+    },
+    {
+      "site": "packages/structured-data-models-client/src/sdm_client/_rust/tabular_materialize.py::_missing#1",
+      "why": "Ordinary-key selection diagnoses absent requested keys. Separate public behavior coverage: test_tabular_pql_core.py::test_missing_key_diagnostic_keeps_repetitions. This recorder constructs warehouse-backed Schema.from_source inputs only; it cannot reach this in-memory frame materialization site. Its outcome records the warehouse attempt, not coverage of that site; reachability remains unmeasured.",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT users.age FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            999999,
+            0,
+            999999
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize",
+      "model": "KumoTabular"
+    },
+    {
+      "site": "packages/structured-data-models-client/src/sdm_client/_rust/tabular_materialize.py::_context#1",
+      "why": "Tabular context sampling refuses a requested count above the model limit. This recorder constructs warehouse-backed Schema.from_source inputs only; it cannot reach this in-memory frame materialization site. Its outcome records the warehouse attempt, not coverage of that site; reachability remains unmeasured.",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT users.age FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize",
+      "model": "KumoTabular",
+      "options": {
+        "num_context_samples": 15000
+      }
+    },
+    {
+      "site": "packages/structured-data-models-client/src/sdm_client/_rust/tabular_materialize.py::_task#1",
+      "why": "Tabular task inference refuses an unsupported target semantic type. This recorder constructs warehouse-backed Schema.from_source inputs only; it cannot reach this in-memory frame materialization site. Its outcome records the warehouse attempt, not coverage of that site; reachability remains unmeasured.",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT users.age FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize",
+      "model": "KumoTabular"
+    },
+    {
+      "site": "packages/structured-data-models-client/src/sdm_client/_rust/tabular_materialize.py::_task#2",
+      "why": "Tabular materialization refuses an explicitly unsupported task kind. This recorder constructs warehouse-backed Schema.from_source inputs only; it cannot reach this in-memory frame materialization site. Its outcome records the warehouse attempt, not coverage of that site; reachability remains unmeasured.",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT users.age FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize",
+      "model": "KumoTabular",
+      "options": {
+        "task": "link_prediction"
+      }
     }
   ]
 }
