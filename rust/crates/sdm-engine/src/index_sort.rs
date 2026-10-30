@@ -392,3 +392,5 @@ pub use scalar::scalar_argsort;
 
 #[cfg(test)]
 mod network64_tests;
+#[cfg(test)]
+mod network64_fixture;

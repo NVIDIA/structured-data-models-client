@@ -20,6 +20,8 @@ mod object_sort;
 mod object_stable;
 #[cfg(test)]
 mod object_stable_tests;
+#[cfg(test)]
+mod object_stable_fixture;
 mod temporal;
 mod temporal_multi;
 use atoms::{compare_atom, failure_reason, pure_total_family, validate_atom};

@@ -7,16 +7,10 @@ use super::{SimdArgsortProfile, network, simd_argsort, sort_recursive};
 const PROFILE: SimdArgsortProfile = SimdArgsortProfile::Avx512Gnu14Network64;
 
 #[test]
-#[expect(
-    clippy::disallowed_methods,
-    reason = "test-only fixture loading; production core performs no I/O"
-)]
 fn independently_transcribed_network_vectors_match() {
     // Source-derived expectations, not native AVX512 execution or a candidate oracle.
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/data/legacy_network64_controls.json");
     let receipt: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        serde_json::from_str(super::network64_fixture::DATA).unwrap();
     let cases = receipt["cases"].as_array().unwrap();
     assert_eq!(cases.len(), 40);
     for case in cases {
