@@ -29,8 +29,8 @@ class Tabular:
 
     model_id = 'kumo-tabular'
     outputs = {
-        'classification': ('prediction', 'probabilities'),
-        'regression': ('prediction', 'quantiles'),
+        'classification': ('prediction', 'probabilities', 'explanation'),
+        'regression': ('prediction', 'quantiles', 'explanation'),
     }
 
     @staticmethod

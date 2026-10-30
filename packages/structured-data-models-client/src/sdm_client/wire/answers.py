@@ -13,6 +13,7 @@ than with one of them.
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from sdm_client.wire.dtypes import as_declared
@@ -41,11 +42,8 @@ def as_declared_target(items: list[Any], payload: dict[str, Any] | None):
     The same labels key `probabilities` and are restored there too.
     """
 
-    task = (payload or {}).get('task', {})
-    if 'classification' not in str(task.get('kind', '')):
-        return items
-    dtype = task.get('target', {}).get('dtype')
-    if not dtype or not dtype.startswith(('int', 'float', 'bool')):
+    dtype = _restored_dtype(payload)
+    if dtype is None:
         return items
     read = []
     for item in items:
@@ -61,6 +59,32 @@ def as_declared_target(items: list[Any], payload: dict[str, Any] | None):
                 changed['probabilities'] = keyed
         read.append(dataclasses.replace(item, **changed) if changed else item)
     return read
+
+
+def class_labels(
+    classes: Sequence[Any], payload: Mapping[str, Any] | None
+) -> dict[Any, str]:
+    r"""Each class as the NIM spells it, to the label its frame column carries.
+
+    The rule `as_declared_target` keys `probabilities` by, so an explanation
+    can name the column `probability_<label>` that holds the score it moves.
+    """
+    dtype = _restored_dtype(payload)
+    if dtype is None:
+        return {}
+    spelled = _as_the_column_spells_them(dict.fromkeys(classes), dtype)
+    return dict(zip(classes, spelled, strict=True))
+
+
+def _restored_dtype(payload: Mapping[str, Any] | None) -> str | None:
+    r"""The target's dtype when its class labels are restored, else ``None``."""
+    task = (payload or {}).get('task', {})
+    if 'classification' not in str(task.get('kind', '')):
+        return None
+    dtype = task.get('target', {}).get('dtype')
+    if not dtype or not dtype.startswith(('int', 'float', 'bool')):
+        return None
+    return dtype
 
 
 def _as_the_column_spells_them(

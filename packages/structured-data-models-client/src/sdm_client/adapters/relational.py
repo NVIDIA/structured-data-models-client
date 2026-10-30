@@ -40,6 +40,7 @@ from sdm_client.errors import (
     StructuredDataError,
     UnsupportedRequestError,
 )
+from sdm_client.explanations import GradientDecoder
 from sdm_client.models import (
     DEFAULT_PREDICTION_STATISTIC,
     KUMO_RELATIONAL,
@@ -49,7 +50,6 @@ from sdm_client.request import Request
 from sdm_client.result import PredictionResult
 from sdm_client.wire import as_declared
 from sdm_client.wire.answers import as_declared_target
-from sdm_client.wire.explanations import GradientDecoder
 from sdm_client.wire.inference import typed_inference
 
 # What to ask for when the caller named nothing, by task kind. Asking for

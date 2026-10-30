@@ -2,14 +2,17 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""Decode ``sdm_gradient_v1`` explanation records against their own call."""
+r"""``sdm_gradient_v1`` records decoded per call into GradientExplanations."""
 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from sdm_client.result import GradientExplanations
+from sdm_api.generated.tfm_api import PredictionItem
+
+from sdm_client.explanations.explanations import GradientExplanations
+from sdm_client.wire.answers import class_labels
 from sdm_client.wire.dtypes import as_declared
 
 
@@ -18,18 +21,25 @@ class GradientDecoder:
 
     Takes the call's payload for kumo-relational, to map related-row positions
     back to keys and values; kumo-tabular needs none, its explanation is about
-    the record's own row.
+    the record's own row. ``labelled_by`` is the payload whose target names
+    each class as the frame does; it defaults to ``payload``.
     """
 
     #: Engine transport columns, not the caller's; stripped from related rows.
     INSTANCE_ID = 'instance_id'
     SYNTHETIC_KEY = '__node_id'
 
-    def __init__(self, payload: Mapping[str, Any] | None = None) -> None:
+    def __init__(
+        self,
+        payload: Mapping[str, Any] | None = None,
+        *,
+        labelled_by: Mapping[str, Any] | None = None,
+    ) -> None:
         self._payload = payload
+        self._labelled_by = payload if labelled_by is None else labelled_by
         self._hops: dict[str, list[int | None]] | None = None
 
-    def decode(self, items: Sequence[Any]) -> GradientExplanations:
+    def decode(self, items: Sequence[PredictionItem]) -> GradientExplanations:
         r"""Each explained item's entry, by ``id`` if those are unique, else ``row_index``."""
         explained = [item for item in items if item.explanation]
         if not explained:
@@ -41,7 +51,7 @@ class GradientDecoder:
         hops: dict[Any, dict[str, list[int | None]]] = {}
         for item in explained:
             key = item.id if by_id else item.row_index
-            details = item.explanation.get('details') or {}
+            details = (item.explanation or {}).get('details') or {}
             entry: dict[str, Any] = {
                 'outputs': list(details.get('outputs') or [])
             }
@@ -60,27 +70,37 @@ class GradientDecoder:
                     self._payload, details.get('related_tables') or {}
                 )
             entries[key] = entry
-        return GradientExplanations(
+        classes = [
+            output['class']
+            for entry in entries.values()
+            for output in entry['outputs']
+            if output.get('kind') == 'probability' and 'class' in output
+        ]
+        labels = class_labels(list(dict.fromkeys(classes)), self._labelled_by)
+        decoded = GradientExplanations(
             entries,
             keyed_by=('id',) if by_id else ('row_index',),
             hops=hops,
-        )._with_rows(
-            {
-                item.id if by_id else item.row_index: item.row_index
-                for item in explained
-            }
         )
+        decoded._rows = {
+            item.id if by_id else item.row_index: item.row_index
+            for item in explained
+        }
+        decoded._labels = dict(labels)
+        return decoded
 
     def _read_related(
-        self, payload: Mapping[str, Any], blocks: Mapping[str, Any]
-    ) -> tuple[dict[str, Any], dict[str, list[int | None]]]:
+        self,
+        payload: Mapping[str, Any],
+        blocks: Mapping[str, Mapping[str, Any]],
+    ) -> tuple[dict[str, dict[str, Any]], dict[str, list[int | None]]]:
         r"""A record's related blocks as keys and row values, with each row's hops."""
         schema = payload.get('schema') or {}
         sent = (payload.get('predict') or {}).get('related_tables') or {}
         if self._hops is None:
             self._hops = self._hops_from_entity(payload)
         hops = self._hops
-        related: dict[str, Any] = {}
+        related: dict[str, dict[str, Any]] = {}
         away: dict[str, list[int | None]] = {}
         for name, block in blocks.items():
             table = sent.get(name) or {}

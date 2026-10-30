@@ -37,6 +37,7 @@ from sdm_api.generated.tfm_api import (
 from sdm_client.base import ModelSpec
 from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.errors import StructuredDataError, UnsupportedRequestError
+from sdm_client.explanations import GradientDecoder
 from sdm_client.models import KUMO_RELATIONAL, KUMO_TABULAR
 from sdm_client.request import Request
 from sdm_client.result import PredictionResult
@@ -50,7 +51,6 @@ from sdm_client.wire import (
     widen_tfm_dtype,
 )
 from sdm_client.wire.answers import as_declared_target
-from sdm_client.wire.explanations import GradientDecoder
 from sdm_client.wire.inference import typed_inference
 
 # Output fields to ask for when the caller named none, by task kind. Asking for
@@ -172,7 +172,7 @@ class TabularAdapter:
             metadata=dict(metadata or {}),
             outputs=outputs,
             # One table, so an entry has no related rows to name.
-            explanations=GradientDecoder().decode(named),
+            explanations=GradientDecoder(labelled_by=payload).decode(named),
         )
 
     def explain_error(
