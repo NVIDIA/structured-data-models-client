@@ -416,13 +416,17 @@ fn unaccounted(schema: &Value) -> Result<(), String> {
         .map(String::as_str)
         .collect();
     let mut known: Vec<&str> = OTHER.iter().map(|(field, _)| *field).collect();
-    for (field, attachment) in JSON {
+    for &(field, attachment) in JSON {
         if !listed.contains(&attachment) {
             return Err(format!("{field}'s JSON ({attachment}) is not in the lock"));
         }
         known.push(field);
     }
-    if listed.len() != JSON.len() {
+    // Several typed direct results share one physical DirectValue.value slot.
+    // Compare the distinct locked shapes, not the number of field mappings.
+    let accounted: std::collections::BTreeSet<_> =
+        JSON.iter().map(|(_, attachment)| *attachment).collect();
+    if listed.len() != accounted.len() {
         return Err("the lock lists an attachment no field names".into());
     }
     for field in &found {
@@ -442,7 +446,159 @@ fn unaccounted(schema: &Value) -> Result<(), String> {
 
 /// The fields whose attachment is JSON of the contract's, with the entry of
 /// `$defs/Attachments` that locks it.
-const JSON: [(&str, &str); 26] = [
+const JSON: &[(&str, &str)] = &[
+    (
+        "Operation/observe_direct_outputs.input",
+        "ObserveDirectOutputs.input",
+    ),
+    (
+        "Operation/restore_direct_response.input",
+        "RestoreDirectResponse.input",
+    ),
+    (
+        "Operation/check_direct_response_field.input",
+        "CheckDirectResponseField.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.checked_response_field",
+    ),
+    (
+        "OperationResult/prepared_direct_call.value",
+        "PreparedDirectCall.value",
+    ),
+    (
+        "Operation/layout_native_direct.input",
+        "LayoutNativeDirect.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.native_layout",
+    ),
+    ("Operation/check_direct_cell.input", "CheckDirectCell.input"),
+    (
+        "Operation/check_direct_option.input",
+        "CheckDirectOption.input",
+    ),
+    (
+        "Operation/observe_direct_dtype.input",
+        "ObserveDirectDtype.input",
+    ),
+    (
+        "Operation/observe_direct_schema.input",
+        "ObserveDirectSchema.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.observed_schema",
+    ),
+    (
+        "Operation/check_direct_preparation.input",
+        "CheckDirectPreparation.input",
+    ),
+    (
+        "Operation/resolve_direct_dtype.input",
+        "ResolveDirectDtype.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.dtype_resolution",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.dtype_declarations",
+    ),
+    (
+        "Operation/resolve_observed_tabular.input",
+        "ResolveObservedTabular.input",
+    ),
+    (
+        "Operation/inspect_observed_keys.input",
+        "InspectObservedKeys.input",
+    ),
+    (
+        "Operation/encode_direct_column.input",
+        "EncodeDirectColumn.input",
+    ),
+    (
+        "Operation/infer_direct_column.input",
+        "InferDirectColumn.input",
+    ),
+    (
+        "Operation/infer_direct_time_start.input",
+        "InferDirectTimeStart.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.time_start",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.encoded_column",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.dtype_finding",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.checked_cell",
+    ),
+    (
+        "Operation/check_direct_shape.input",
+        "CheckDirectShape.input",
+    ),
+    ("Operation/prepare_direct.input", "PrepareDirect.input"),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.description",
+    ),
+    ("Operation/bind_direct.input", "BindDirect.input"),
+    ("OperationResult/direct_value.value", "DirectValue.bound"),
+    (
+        "Operation/inspect_direct_pair.input",
+        "InspectDirectPair.input",
+    ),
+    ("Operation/resolve_tabular.input", "ResolveTabular.input"),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.resolved_tabular",
+    ),
+    ("Operation/encode_tabular.input", "EncodeTabular.input"),
+    ("OperationResult/direct_value.value", "DirectValue.encoded"),
+    ("DirectModelInput.input", "Predict.direct.input"),
+    (
+        "OperationResult/decoded_direct_response.value",
+        "DecodedDirectResponse.value",
+    ),
+    ("DirectResponseData.rows", "DirectResponseData.rows"),
+    ("Operation/check_direct_rows.input", "CheckDirectRows.input"),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.checked_rows",
+    ),
+    (
+        "Operation/interpret_direct_json.input",
+        "InterpretDirectJson.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.interpreted",
+    ),
+    (
+        "Operation/select_direct_member.input",
+        "SelectDirectMember.input",
+    ),
+    ("OperationResult/direct_value.value", "DirectValue.member"),
+    (
+        "Operation/attribute_direct_row.input",
+        "AttributeDirectRow.input",
+    ),
+    (
+        "OperationResult/direct_value.value",
+        "DirectValue.attributed",
+    ),
+    ("Operation/layout_direct.input", "LayoutDirect.input"),
     ("Operation/validate_query.query", "ValidateQuery.query"),
     ("Operation/validate_query.schema", "ValidateQuery.schema"),
     ("Operation/describe_source.source", "DescribeSource.source"),
@@ -475,7 +631,54 @@ const JSON: [(&str, &str); 26] = [
 ];
 
 /// The other fields naming an attachment, and why the lock needs no entry.
-const OTHER: [(&str, &str); 10] = [
+const OTHER: &[(&str, &str)] = &[
+    ("NativeDirectCall.payload", "the endpoint's bytes"),
+    ("EncodedDirectBody.payload", "the endpoint's bytes"),
+    ("DirectResponseData.payload", "the endpoint's bytes"),
+    ("DirectResponseData.response", "the endpoint's bytes"),
+    ("DirectModelInput.payload", "the endpoint's bytes"),
+    ("Operation/layout_direct.payload", "the endpoint's bytes"),
+    ("Operation/layout_direct.response", "the endpoint's bytes"),
+    (
+        "Operation/inspect_observed_keys.context",
+        "Arrow, with its schema",
+    ),
+    (
+        "Operation/inspect_observed_keys.predict",
+        "Arrow, with its schema",
+    ),
+    ("Operation/prepare_direct.context", "Arrow, with its schema"),
+    ("Operation/prepare_direct.predict", "Arrow, with its schema"),
+    (
+        "Operation/inspect_direct_pair.context",
+        "Arrow, with its schema",
+    ),
+    (
+        "Operation/inspect_direct_pair.predict",
+        "Arrow, with its schema",
+    ),
+    (
+        "Operation/resolve_tabular.context",
+        "Arrow, with its schema",
+    ),
+    (
+        "Operation/resolve_tabular.predict",
+        "Arrow, with its schema",
+    ),
+    ("Operation/encode_tabular.context", "Arrow, with its schema"),
+    ("Operation/encode_tabular.predict", "Arrow, with its schema"),
+    (
+        "Operation/encode_direct_column.values",
+        "Arrow, with its schema",
+    ),
+    (
+        "Operation/infer_direct_column.values",
+        "Arrow, with its schema",
+    ),
+    (
+        "Operation/infer_direct_time_start.values",
+        "Arrow, with its schema",
+    ),
     (
         "ControlMessage/attached.attachment",
         "a control message: the root schema",
@@ -530,6 +733,31 @@ fn the_lock_accounts_for_every_attachment_a_message_names() {
         .unwrap()
         .remove("DescribeSource.source");
     assert!(unaccounted(&lost).unwrap_err().contains("not in the lock"));
+    // A shared result slot still locks every individual JSON shape.
+    let mut lost = generated();
+    lost["$defs"]["Attachments"]["properties"]
+        .as_object_mut()
+        .unwrap()
+        .remove("DirectValue.checked_response_field");
+    assert!(unaccounted(&lost).unwrap_err().contains("not in the lock"));
+    // Nor may the shared physical slot disappear while its shapes remain.
+    let mut lost = generated();
+    let variants = lost["$defs"]["OperationResult"]["oneOf"]
+        .as_array_mut()
+        .unwrap();
+    let direct = variants
+        .iter_mut()
+        .find(|variant| variant["properties"]["op"]["const"] == "direct_value")
+        .unwrap();
+    direct["properties"]
+        .as_object_mut()
+        .unwrap()
+        .remove("value");
+    assert!(
+        unaccounted(&lost)
+            .unwrap_err()
+            .contains("not in the schema")
+    );
 }
 
 #[test]
