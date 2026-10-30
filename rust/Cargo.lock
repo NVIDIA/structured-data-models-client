@@ -1669,6 +1669,7 @@ version = "1.0.0"
 dependencies = [
  "arrow-array",
  "arrow-schema",
+ "half",
  "jiff",
  "sdm-contract",
  "sdm-schema",
