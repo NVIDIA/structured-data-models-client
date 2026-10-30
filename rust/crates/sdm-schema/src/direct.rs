@@ -50,7 +50,7 @@ pub fn storage_dtypes(schema: &Schema, batches: &[RecordBatch]) -> Result<Vec<Dt
                     )
                     .with_field(
                         "family",
-                        sdm_contract::Detail::text("NumPy numeric or Boolean columns"),
+                        sdm_contract::Detail::text("primitive numeric or Boolean columns"),
                     ));
                 }
             })

@@ -191,7 +191,10 @@ def construct(
         'context': _header(context),
         'predict': _header(predict),
     }
-    with errors.holding(direct_task=lambda fields: task):
+    with errors.holding(
+        direct_task=lambda fields: task,
+        direct_frame=lambda fields: 'pandas DataFrame',
+    ):
         _call('check_direct_shape', shape)
     converted_context = _table(context, constructor=True)
     converted_predict = _table(predict, constructor=True)

@@ -263,7 +263,7 @@ pub fn template(sentence: Sentence) -> Template {
             r#"value {value!r} cannot be sent as {dtype} without losing precision, because it is outside the range a {dtype} represents exactly; give the column the same integer dtype in every frame, or convert it to strings"#,
         ),
         S::DirectFrame => {
-            said(r#"{parameter} must be a pandas DataFrame, got {native_type}{hint}"#)
+            said(r#"{parameter} must be a {host.direct_frame}, got {native_type}{hint}"#)
         }
         S::DirectKnownTarget => {
             said(r#"context must contain at least one row with a known target"#)
