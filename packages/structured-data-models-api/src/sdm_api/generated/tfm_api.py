@@ -87,7 +87,9 @@ class PredictionItem:
         return cls(
             id=_str_or_none(data.get('id'), 'id', 'prediction'),
             row_index=_require_int(data, 'row_index', 'PredictionItem'),
-            forecast_step=_int_or_none(data.get('forecast_step'), 'forecast_step', 'prediction'),
+            forecast_step=_int_or_none(
+                data.get('forecast_step'), 'forecast_step', 'prediction'
+            ),
             prediction=data.get('prediction'),
             probabilities=_float_dict(data.get('probabilities')),
             scores=_float_tuple(data.get('scores')),
@@ -118,7 +120,9 @@ class PredictionResponse:
                     data, 'predictions', 'PredictionResponse'
                 )
             ),
-            metadata=dict(_require_mapping(data, 'metadata', 'PredictionResponse')),
+            metadata=dict(
+                _require_mapping(data, 'metadata', 'PredictionResponse')
+            ),
         )
 
 
@@ -176,9 +180,7 @@ def _require_int(data: Mapping[str, Any], field: str, model: str) -> int:
     return _whole(value, field, model)
 
 
-def _require_sequence(
-    data: Mapping[str, Any], field: str, model: str
-) -> Any:
+def _require_sequence(data: Mapping[str, Any], field: str, model: str) -> Any:
     value = _require(data, field, model)
     if isinstance(value, (str, bytes)) or not hasattr(value, '__iter__'):
         raise ResponseContractError(
