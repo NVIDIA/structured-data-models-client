@@ -609,8 +609,9 @@ def _response_model_lines(schemas: dict[str, Any]) -> list[str]:
             "_int_or_none(data.get('row_index'), 'row_index', 'prediction')"
         ),
         'forecast_step': (
-            "_int_or_none(data.get('forecast_step'), 'forecast_step', "
-            "'prediction')"
+            "_int_or_none(\n"
+            "                data.get('forecast_step'), 'forecast_step', "
+            "'prediction'\n            )"
         ),
         'prediction': "data.get('prediction')",
         'probabilities': "_float_dict(data.get('probabilities'))",
@@ -665,7 +666,9 @@ def _response_model_lines(schemas: dict[str, Any]) -> list[str]:
         (
             'metadata',
             'dict[str, Any]',
-            "dict(_require_mapping(data, 'metadata', 'PredictionResponse'))",
+            "dict(\n"
+            "                _require_mapping(data, 'metadata', "
+            "'PredictionResponse')\n            )",
         ),
     )
     response_optional_reader = {
@@ -757,9 +760,7 @@ def _response_model_lines(schemas: dict[str, Any]) -> list[str]:
         '    return _whole(value, field, model)',
         '',
         '',
-        'def _require_sequence(',
-        '    data: Mapping[str, Any], field: str, model: str',
-        ') -> Any:',
+        'def _require_sequence(data: Mapping[str, Any], field: str, model: str) -> Any:',
         '    value = _require(data, field, model)',
         "    if isinstance(value, (str, bytes)) or not hasattr(value, '__iter__'):",
         '        raise ResponseContractError(',
