@@ -618,3 +618,36 @@ def test_tied_sort_binds_retained_facts_without_native_rereads(
     assert orders[1]['profile'] != 'unbound'
     assert orders[0]['values'] is orders[1]['values']
     assert orders[0]['missing'] is orders[1]['missing']
+
+
+def test_sampled_present_nan_is_reconstructed_instead_of_shallow_copied(
+    route: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data = frame().iloc[:4].copy()
+    data.index = pd.Index(
+        pd.arrays.FloatingArray(np.full(4, np.nan), np.zeros(4, dtype=bool))
+    )
+    sampled = []
+    original_take = pd.DataFrame.take
+
+    def take(
+        self: pd.DataFrame, indices: Any, axis: int = 0, **kwargs: Any
+    ) -> pd.DataFrame:
+        result = original_take(self, indices, axis=axis, **kwargs)
+        if axis == 0 and len(self) == 3 and len(indices) == 1:
+            sampled.append(result)
+        return result
+
+    monkeypatch.setattr(pd.DataFrame, 'take', take)
+    request = query(data).materialize(
+        indices=[3],
+        num_context_samples=1,
+        task='regression',
+    )
+    assert len(sampled) == 1
+    context = request.context.instance_table
+    assert context.index is not sampled[0].index
+    assert not np.shares_memory(
+        context['id'].to_numpy(), sampled[0]['id'].to_numpy()
+    )
