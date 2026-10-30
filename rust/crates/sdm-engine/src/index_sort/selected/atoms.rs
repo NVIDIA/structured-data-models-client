@@ -178,9 +178,11 @@ pub(super) fn validate_atom(value: &Atom) -> Result<(), CoreError> {
             true
         }
         Atom::Floating { bits } => !f64::from_bits(*bits).is_nan(),
-        Atom::NativeMissing { .. } | Atom::FixedInteger { .. } | Atom::FixedFloating { .. } => {
-            false
-        }
+        Atom::Timestamp { .. }
+        | Atom::ZonedDateTime { .. }
+        | Atom::NativeMissing { .. }
+        | Atom::FixedInteger { .. }
+        | Atom::FixedFloating { .. } => false,
         Atom::Text { points } => points.iter().all(|p| *p <= 0x10ffff),
         Atom::Boolean { .. } | Atom::Complex { .. } => true,
         Atom::Decimal { digits, .. } => {
@@ -245,7 +247,9 @@ pub(super) fn pure_total_family<'a>(values: impl Iterator<Item = &'a Atom>) -> b
                 offset_micros: Some(_),
                 ..
             } => 4,
-            Atom::NativeMissing { .. }
+            Atom::Timestamp { .. }
+            | Atom::ZonedDateTime { .. }
+            | Atom::NativeMissing { .. }
             | Atom::Complex { .. }
             | Atom::FixedInteger { .. }
             | Atom::FixedFloating { .. } => return false,

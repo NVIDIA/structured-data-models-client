@@ -7,6 +7,7 @@
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import numpy as np
 import pandas as pd
@@ -49,6 +50,118 @@ NUMPY_PROMOTION_PAIRS = tuple(
     for floating in NUMPY_WIDTHS[8:]
 )
 
+TIMESTAMP_FAMILIES = (
+    'naive_ns',
+    'fixed',
+    'fold',
+    'mixed_datetime',
+    'mixed_date',
+    'same_zone_fold',
+    'distinct_zone_same_fold',
+    'distinct_zone_other_fold',
+    'out_of_ns',
+    'naive_aware',
+    'wide_year',
+    'wide_zoneinfo',
+    'wide_datetime',
+    'zero_year_datetime',
+    'wide_date',
+    'pytz_fold_timestamp',
+    'pytz_mixed_datetime',
+    'pytz_static',
+    'pytz_utc',
+    'named_default',
+)
+
+
+def timestamp_pattern(name: str) -> list[Any]:
+    zone = ZoneInfo('America/New_York')
+    other = ZoneInfo.no_cache('America/New_York')
+    early = datetime(2020, 11, 1, 1, 30, tzinfo=zone, fold=0)
+    late = early.replace(fold=1)
+    if name.startswith('pytz_'):
+        import pytz
+
+        if name == 'pytz_static':
+            zone_p = pytz.timezone('Etc/GMT-2')
+            return [
+                pd.Timestamp(datetime(2020, 1, 1, tzinfo=zone_p)),
+                datetime(2020, 1, 2, tzinfo=zone_p),
+            ]
+        if name == 'pytz_utc':
+            return [
+                pd.Timestamp(datetime(2020, 1, 1, tzinfo=pytz.UTC)),
+                datetime(2020, 1, 2, tzinfo=pytz.UTC),
+            ]
+        zone_p = pytz.timezone('America/New_York')
+        first = zone_p.localize(datetime(2020, 11, 1, 1, 30), is_dst=True)
+        second = zone_p.localize(datetime(2020, 11, 1, 1, 30), is_dst=False)
+        return [
+            pd.Timestamp(first),
+            pd.Timestamp(second) if name == 'pytz_fold_timestamp' else second,
+        ]
+
+    def wide() -> pd.Timestamp:
+        return pd.Timestamp(np.datetime64('12000-01-01', 's'))
+
+    patterns = {
+        'naive_ns': lambda: [
+            pd.Timestamp('2020-01-01 00:00:00.000000001'),
+            pd.Timestamp('2020-01-01 00:00:00.000000002'),
+        ],
+        'fixed': lambda: [
+            pd.Timestamp(
+                datetime(2020, 1, 1, tzinfo=timezone(timedelta(hours=2)))
+            ),
+            pd.Timestamp(datetime(2020, 1, 1, tzinfo=timezone.utc)),
+        ],
+        'fold': lambda: [pd.Timestamp(early), pd.Timestamp(late)],
+        'named_default': lambda: [
+            pd.Timestamp('2020-01-01', tz='America/New_York'),
+            pd.Timestamp('2020-01-02', tz='America/New_York'),
+        ],
+        'mixed_datetime': lambda: [
+            pd.Timestamp('2020-01-01 00:00:00.000000001'),
+            datetime(2020, 1, 1),
+        ],
+        'mixed_date': lambda: [pd.Timestamp('2020-01-01'), date(2020, 1, 1)],
+        'same_zone_fold': lambda: [pd.Timestamp(early), late],
+        'distinct_zone_same_fold': lambda: [
+            pd.Timestamp(early),
+            early.replace(tzinfo=other),
+        ],
+        'distinct_zone_other_fold': lambda: [
+            pd.Timestamp(early),
+            late.replace(tzinfo=other),
+        ],
+        'out_of_ns': lambda: [
+            pd.Timestamp(datetime(2500, 1, 1)),
+            pd.Timestamp(datetime(2500, 1, 2)),
+        ],
+        'naive_aware': lambda: [
+            pd.Timestamp('2020-01-01'),
+            pd.Timestamp('2020-01-01', tz='UTC'),
+        ],
+        'wide_year': lambda: [
+            wide(),
+            pd.Timestamp(np.datetime64('12001-01-01', 's')),
+        ],
+        'wide_zoneinfo': lambda: [
+            wide().tz_localize('UTC').tz_convert(ZoneInfo('UTC')),
+            pd.Timestamp(np.datetime64('12001-01-01', 's'))
+            .tz_localize('UTC')
+            .tz_convert(ZoneInfo('UTC')),
+        ],
+        'wide_datetime': lambda: [wide(), datetime(2020, 1, 1)],
+        'zero_year_datetime': lambda: [
+            pd.Timestamp(np.datetime64('0000-01-01', 's')),
+            datetime(2020, 1, 1),
+        ],
+        'wide_date': lambda: [wide(), date(2020, 1, 1)],
+    }
+    return patterns[name]()
+
+
 LABEL_FAMILIES = (
     (
         'complex64',
@@ -62,6 +175,11 @@ LABEL_FAMILIES = (
         'date_datetime_mismatch',
         'decimal_text',
         'datetime_integer',
+    )
+    + tuple(
+        'timestamp_' + name + '_' + direction
+        for name in TIMESTAMP_FAMILIES
+        for direction in ('forward', 'reverse')
     )
     + tuple('numpy_' + name for name in NUMPY_WIDTHS)
     + ('numpy_longlong', 'numpy_ulonglong')
@@ -168,7 +286,13 @@ def label_frame(family: str) -> pd.DataFrame:
             integer_type(0),
             float_type(0),
         ]
-    pattern = patterns[family]
+    if family.startswith('timestamp_'):
+        name, direction = family.removeprefix('timestamp_').rsplit('_', 1)
+        pattern = timestamp_pattern(name)
+        if direction == 'reverse':
+            pattern = pattern[::-1]
+    else:
+        pattern = patterns[family]
     labels = [pattern[i % len(pattern)] for i in range(81)]
     if family in ('complex64', 'complex128'):
         index = pd.Index(np.asarray(labels, dtype=family))

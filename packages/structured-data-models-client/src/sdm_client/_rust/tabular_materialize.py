@@ -273,6 +273,30 @@ def _context(
             raise RouteError(
                 'this NumPy comparison effect is not yet represented by the core'
             )
+        if ordering['reason'] in (
+            'timestamp_date_mismatch',
+            'timestamp_awareness_mismatch',
+            'temporal_year_out_of_range',
+        ):
+            # Rust selected the reached failure, including operand order.
+            # Exact admitted owners supply only the runtime's diagnostic.
+            left_owner = subset.index[ordering['left']]
+            right_owner = subset.index[ordering['right']]
+            if (
+                type(left_owner) is not pd.Timestamp
+                and type(right_owner) is not pd.Timestamp
+            ):
+                raise AssertionError('temporal refusal has invalid owners')
+            if ordering['reason'] == 'temporal_year_out_of_range':
+                timestamp = (
+                    left_owner
+                    if type(left_owner) is pd.Timestamp
+                    else right_owner
+                )
+                timestamp.to_pydatetime()
+            else:
+                _ = left_owner < right_owner
+            raise AssertionError('temporal comparison refusal did not raise')
         if ordering['reason'] == 'date_time_mismatch':
             # Rust selected the failing pair. Exact native owners present the
             # interpreter's diagnostic, which changed in Python 3.13.

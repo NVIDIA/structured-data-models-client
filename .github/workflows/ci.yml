@@ -2915,7 +2915,7 @@ jobs:
           PQL_RUNTIME_PINS: ${{ matrix.pins }}
         run: |
           read -ra pins <<< "$PQL_RUNTIME_PINS"
-          python -m pip install --only-binary=:all: "${pins[@]}" pytest \
+          python -m pip install --only-binary=:all: "${pins[@]}" pytest pytz \
             ./packages/structured-data-models-api ./packages/structured-data-models-pql native/*.whl
       - name: Frozen public receipt then installed candidate parity
         run: |

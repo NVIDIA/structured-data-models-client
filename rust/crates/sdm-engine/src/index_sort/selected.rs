@@ -17,6 +17,7 @@ use std::cmp::Ordering;
 mod atoms;
 mod numeric_objects;
 mod object_sort;
+mod temporal;
 use atoms::{compare_atom, failure_reason, pure_total_family, validate_atom};
 
 fn invalid() -> CoreError {
@@ -252,6 +253,9 @@ fn multi(levels: &[Facts], codes: &[Vec<i64>], missing: &[bool]) -> Result<Resul
                 let compared = if incomparable_levels[level_no] {
                     match &level.values {
                         Values::Object { values } => compare_atom(&values[left], &values[right]),
+                        Values::TemporalObject { values } => {
+                            temporal::rank_comparison(&values[left], &values[right])
+                        }
                         _ => None,
                     }
                 } else {
@@ -384,6 +388,9 @@ pub fn order_sampled(facts: &Facts) -> Result<ResultOrder, CoreError> {
             order(values, mask, profile, |v| scalar(v, profile))?
         }
         Values::Multi { levels, codes } => return multi(levels, codes, mask),
+        Values::TemporalObject { values } => {
+            return temporal::order(values, mask, profile);
+        }
         Values::ScalarObject { values, semantics } => {
             return numeric_objects::order(values, mask, profile, *semantics);
         }

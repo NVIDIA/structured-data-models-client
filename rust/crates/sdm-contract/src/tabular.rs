@@ -211,10 +211,24 @@ pub enum TabularIndexValues {
     Object {
         values: Vec<TabularIndexScalar>,
     },
+    /// Closed civil/instant owners with separate ordering and equality semantics.
+    TemporalObject {
+        values: Vec<TabularIndexScalar>,
+    },
     ScalarObject {
         values: Vec<TabularIndexScalar>,
         semantics: NumericComparisonProfile,
     },
+}
+
+/// Native instant storage resolution; scaling takes place in widened arithmetic.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum TemporalUnit {
+    Second,
+    Millisecond,
+    Microsecond,
+    Nanosecond,
 }
 
 /// Built-in missing-owner self-comparison behavior.
@@ -310,6 +324,27 @@ pub enum TabularIndexScalar {
         micros: u64,
         offset_micros: Option<i64>,
     },
+    /// Exact instant owner with wide civil fields. Timezone IDs name identities,
+    /// not zone names; alternate offset is needed only in the civil year range.
+    Timestamp {
+        ticks: i64,
+        unit: TemporalUnit,
+        year: i64,
+        month: u8,
+        day: u8,
+        micros: u64,
+        nanosecond: u16,
+        timezone: Option<u64>,
+        alternate_offset_micros: Option<i64>,
+    },
+    /// Exact civil owner with a trusted variable-offset timezone.
+    ZonedDateTime {
+        ordinal: i32,
+        micros: u64,
+        timezone: u64,
+        offset_micros: i64,
+        alternate_offset_micros: i64,
+    },
     /// Object complex labels retain their unordered native comparison behavior.
     Complex {
         real_bits: u64,
@@ -349,6 +384,9 @@ pub enum TabularOrderError {
     NaiveAwareDatetime,
     IntegerToFloatOverflow,
     NativeEffectsPending,
+    TimestampDateMismatch,
+    TimestampAwarenessMismatch,
+    TemporalYearOutOfRange,
 }
 
 /// Reached native comparison against the model cap, before frame length reads.

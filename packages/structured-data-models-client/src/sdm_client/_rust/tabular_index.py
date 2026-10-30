@@ -274,6 +274,26 @@ def _array(values: Any, missing: list[bool], profile: str) -> dict[str, Any]:
     elif isinstance(dtype, np.dtype) and dtype.kind in 'mM':
         result = {'kind': 'temporal', 'values': values.view('i8').tolist()}
     else:
+        if any(
+            not absent
+            and (
+                type(value) is pd.Timestamp
+                or type(value) is datetime
+                and value.tzinfo is not None
+                and type(value.tzinfo) is not timezone
+            )
+            for value, absent in zip(values, missing, strict=True)
+        ):
+            from .tabular_temporal import observe as temporal_observe
+
+            return {
+                'values': {
+                    'kind': 'temporal_object',
+                    'values': temporal_observe(values, missing),
+                },
+                'missing': missing,
+                'profile': profile,
+            }
         # Read object values only after their native missingness observation.
         atoms: list[dict[str, Any]] = [
             {'kind': 'integer', 'value': '0'} if absent else _scalar(value)
@@ -457,7 +477,7 @@ def bind_profile(observation: dict[str, Any]) -> dict[str, Any]:
         values = facts['values']
         selected = facts['profile']
         if selected == 'unbound':
-            if values['kind'] == 'scalar_object':
+            if values['kind'] in ('scalar_object', 'temporal_object'):
                 # Object argsort uses the generic scalar implementation even
                 # when this binary dispatches numeric arrays to SIMD kernels.
                 selected = 'scalar'

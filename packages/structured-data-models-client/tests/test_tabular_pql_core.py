@@ -53,9 +53,11 @@ def test_exact_label_materialization_and_prediction(
         else {'predict': data.iloc[[80]].drop(columns=['target'])}
     )
     if 'error' in reference:
-        error_type = {'TypeError': TypeError, 'OverflowError': OverflowError}[
-            reference['error']['type']
-        ]
+        error_type = {
+            'TypeError': TypeError,
+            'OverflowError': OverflowError,
+            'ValueError': ValueError,
+        }[reference['error']['type']]
         with pytest.raises(error_type) as caught:
             query(data).materialize(
                 **arguments,
@@ -577,3 +579,34 @@ def test_required_promotion_mode_is_observed_on_each_call(
         tabular_index._comparison_semantics()
     state[0] = 'weak'
     assert tabular_index._comparison_semantics() == 'weak_scalars'
+
+
+def test_temporal_observation_does_not_invoke_custom_timezone_methods() -> None:
+    from datetime import datetime, timedelta, tzinfo
+
+    from sdm_client._routing import RouteError
+    from sdm_client._rust.tabular_temporal import observe
+
+    calls: list[str] = []
+
+    class CustomZone(tzinfo):
+        def utcoffset(self, dt):
+            calls.append('utcoffset')
+            return timedelta(0)
+
+        def dst(self, dt):
+            calls.append('dst')
+            return timedelta(0)
+
+    owner = datetime(2020, 1, 1, tzinfo=CustomZone())
+    with pytest.raises(RouteError, match='timezone owner'):
+        observe([owner], [False])
+    assert calls == []
+
+
+def test_temporal_facts_do_not_admit_numeric_companions() -> None:
+    from sdm_client._routing import RouteError
+    from sdm_client._rust.tabular_temporal import observe
+
+    with pytest.raises(RouteError, match='mixed temporal'):
+        observe([pd.Timestamp('2020-01-01'), np.float32(1)], [False, False])
