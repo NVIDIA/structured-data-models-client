@@ -1,0 +1,150 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+"""Public parity for native-only direct options and retained response owners."""
+
+from __future__ import annotations
+
+from typing import Any
+
+import numpy as np
+import pandas as pd
+import pytest
+from test_tabular_direct_core import DIRECT, Endpoint, client
+
+from sdm_client import KumoTabular, Request, StructuredDataError
+
+
+def test_option_integer_coercion_is_separate_from_json_spelling(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from sdm_client.adapters import tabular
+
+    outcomes = []
+    for route in ('', DIRECT):
+        monkeypatch.setenv('SDM_CORE_ROUTES', route)
+        events: list[str] = []
+
+        class NativeInteger(int):
+            def __int__(self, observed: list[str] = events) -> int:
+                observed.append('integer')
+                return 7
+
+        def request_id(observed: list[str] = events) -> str:
+            observed.append('request_id')
+            return 'native-order'
+
+        monkeypatch.setattr(tabular, '_request_id', request_id)
+        request = Request(
+            pd.DataFrame({'feature': [1, 2], 'target': [0, 1]}),
+            pd.DataFrame({'feature': [3]}),
+            target='target', task='classification',
+            inference={'seed': NativeInteger(2**53 + 1)},
+        )
+        endpoint = Endpoint({
+            'model': 'kumo-tabular', 'id': 'answer', 'metadata': {},
+            'predictions': [{'row_index': 0, 'prediction': 0}],
+        })
+        client(endpoint).predict(request, model=KumoTabular())
+        outcomes.append((events, endpoint.calls[0]['inference']))
+    assert outcomes[0] == outcomes[1]
+    assert outcomes[0] == (['request_id', 'integer'], {'seed': 2**53 + 1})
+
+
+@pytest.mark.parametrize('closed', [False, True])
+@pytest.mark.parametrize('option', [object(), float('nan'), float('inf'), {('bad',): 1}])
+def test_native_options_preserve_transport_refusal(
+    closed: bool, option: Any, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from sdm_client.core.transport import Transport
+
+    outcomes = []
+    for route in ('', DIRECT):
+        monkeypatch.setenv('SDM_CORE_ROUTES', route)
+        transport = Transport('https://nim.example')
+        if closed:
+            transport.close()
+
+        def unexpected_send(*args: Any, **kwargs: Any) -> Any:
+            raise AssertionError('invalid options must fail before sending')
+
+        monkeypatch.setattr(transport, '_post_raw', unexpected_send)
+        request = Request(
+            pd.DataFrame({'feature': [1, 2], 'target': [0, 1]}),
+            pd.DataFrame({'feature': [3]}), target='target',
+            task='classification', inference={'option': option},
+        )
+        try:
+            with pytest.raises(StructuredDataError) as caught:
+                client(transport).predict(request, model=KumoTabular())
+            error = caught.value
+            outcomes.append((type(error), error.code, str(error), type(error.__cause__)))
+        finally:
+            transport.close()
+    assert outcomes[0] == outcomes[1]
+
+
+def test_deferred_options_reach_custom_transport_without_json_coercion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    outcomes = []
+    retained = object()
+
+    class NativeEndpoint:
+        url = 'http://localhost'
+
+        def __init__(self) -> None:
+            self.seen: Any = None
+
+        def predict(self, payload: dict[str, Any]) -> dict[str, Any]:
+            self.seen = payload['inference']['native']
+            return {
+                'model': 'kumo-tabular', 'id': 'answer', 'metadata': {},
+                'predictions': [{'row_index': 0, 'prediction': 1}],
+            }
+
+        def close(self) -> None:
+            pass
+
+    for route in ('', DIRECT):
+        monkeypatch.setenv('SDM_CORE_ROUTES', route)
+        endpoint = NativeEndpoint()
+        request = Request(
+            pd.DataFrame({'feature': [1, 2], 'target': [0, 1]}),
+            pd.DataFrame({'feature': [3]}), target='target',
+            task='classification', inference={'native': retained},
+        )
+        result = client(endpoint).predict(request, model=KumoTabular())
+        assert endpoint.seen is retained
+        outcomes.append(result.items)
+    assert outcomes[0] == outcomes[1]
+
+
+def test_deferred_native_regression_response_retains_prediction_owner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    prediction = np.int64(7)
+
+    class NativeEndpoint:
+        url = 'http://localhost'
+
+        def predict(self, payload: dict[str, Any]) -> dict[str, Any]:
+            return {
+                'model': 'kumo-tabular', 'id': 'answer', 'metadata': {},
+                'predictions': [{'row_index': 0, 'prediction': prediction}],
+            }
+
+        def close(self) -> None:
+            pass
+
+    for route in ('', DIRECT):
+        monkeypatch.setenv('SDM_CORE_ROUTES', route)
+        request = Request(
+            pd.DataFrame({'feature': [1, 2], 'target': [0.5, 1.5]}),
+            pd.DataFrame({'feature': [3]}), target='target',
+            task='regression', inference={'native': object()},
+        )
+        result = client(NativeEndpoint()).predict(request, model=KumoTabular())
+        assert result.items[0].prediction is prediction
+
