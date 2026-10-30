@@ -24,7 +24,34 @@
 use serde_json::Value;
 
 /// The attachments the core reads from a `start`, by the lock's names.
-const READ: [&str; 15] = [
+const READ: &[&str] = &[
+    "ResolveDirectDtype.input",
+    "ResolveObservedTabular.input",
+    "ObserveDirectSchema.input",
+    "CheckDirectPreparation.input",
+    "ObserveDirectDtype.input",
+    "ObserveDirectOutputs.input",
+    "RestoreDirectResponse.input",
+    "CheckDirectResponseField.input",
+    "LayoutNativeDirect.input",
+    "CheckDirectOption.input",
+    "CheckDirectCell.input",
+    "ExpandTabularKeys.input",
+    "FilterTabularRows.input",
+    "DecideTabularContext.input",
+    "SampleTabularRows.input",
+    "ObserveTabularMembership.input",
+    "DecideTabularTask.input",
+    "OrderNumericOwners.input",
+    "OrderSampledTabularRows.input",
+    "SelectTabularRows.input",
+    "CheckTabularCap.input",
+    "CheckDirectShape.input",
+    "BindDirect.input",
+    "CheckDirectRows.input",
+    "InterpretDirectJson.input",
+    "SelectDirectMember.input",
+    "AttributeDirectRow.input",
     "ValidateQuery.query",
     "ValidateQuery.schema",
     "DescribeSource.source",
@@ -53,6 +80,33 @@ const HOLDERS: [(&str, &str); 7] = [
     ("held_part.", "HeldPart"),
     ("held_ranking.", "HeldRanking"),
 ];
+
+/// Schema definitions use the final Rust type name, not its module path.
+/// Retain supported containers recursively; reject unfamiliar syntax instead
+/// of accepting a decode whose actual locked shape was not established.
+fn canonical_type(ty: &str) -> Result<String, String> {
+    let ty = ty.trim();
+    if let Some((container, inner)) = ty.split_once('<') {
+        let inner = inner
+            .strip_suffix('>')
+            .ok_or_else(|| format!("unclosed decoded type: {ty}"))?;
+        if canonical_type(container)? != "Vec" {
+            return Err(format!("unsupported decoded container: {ty}"));
+        }
+        return Ok(format!("Vec<{}>", canonical_type(inner)?));
+    }
+    let parts: Vec<_> = ty.split("::").collect();
+    if parts
+        .iter()
+        .any(|part| part.is_empty() || !part.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'))
+    {
+        return Err(format!("unsupported decoded type: {ty}"));
+    }
+    Ok(parts
+        .last()
+        .expect("split has at least one member")
+        .to_string())
+}
 
 /// Each `take_json` of `source` (dispatch's text) as the lock's name of the
 /// attachment it reads and the Rust type it decodes: the operation is the
@@ -117,7 +171,7 @@ fn decodes(source: &str) -> Result<Vec<(String, String)>, String> {
             ),
             (None, None) => return Err(format!("a take_json of no known value: {line}")),
         };
-        found.push((name, decoded));
+        found.push((name, canonical_type(&decoded)?));
     }
     Ok(found)
 }
@@ -153,7 +207,7 @@ fn mismatches(source: &str) -> Vec<String> {
             None => problems.push(format!("{name}: decoded by dispatch, not in the lock")),
         }
     }
-    for name in READ {
+    for &name in READ {
         if !found.iter().any(|(n, _)| n == name) {
             problems.push(format!("{name}: in the lock, not decoded by dispatch"));
         }
@@ -217,5 +271,37 @@ fn a_retyped_or_dropped_decode_fails() {
     assert_eq!(
         mismatches(&dropped),
         ["ForecastStep.query: in the lock, not decoded by dispatch"]
+    );
+}
+
+#[test]
+fn qualified_decode_types_keep_their_locked_shape() {
+    assert_eq!(
+        canonical_type("sdm_contract::numeric_owner::OrderNumericOwners").unwrap(),
+        "OrderNumericOwners"
+    );
+    assert_eq!(
+        canonical_type("Vec<sdm_contract::ops::GivenCandidate>").unwrap(),
+        "Vec<GivenCandidate>"
+    );
+    assert!(canonical_type("Option<sdm_contract::ops::GivenCandidate>").is_err());
+    let source = dispatch();
+    let original = "let input: sdm_contract::numeric_owner::OrderNumericOwners =";
+    let retyped = source.replace(
+        original,
+        "let input: sdm_contract::tabular::OrderSampledTabularRows =",
+    );
+    assert_ne!(retyped, source);
+    assert_eq!(
+        mismatches(&retyped),
+        [
+            "OrderNumericOwners.input: dispatch decodes OrderSampledTabularRows, the lock OrderNumericOwners"
+        ]
+    );
+    let dropped=source.replace("let input: sdm_contract::numeric_owner::OrderNumericOwners =\n                take_json(&mut attachments, request.input)?;", "");
+    assert_ne!(dropped, source);
+    assert_eq!(
+        mismatches(&dropped),
+        ["OrderNumericOwners.input: in the lock, not decoded by dispatch"]
     );
 }
