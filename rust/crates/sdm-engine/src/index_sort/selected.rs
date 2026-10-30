@@ -15,6 +15,7 @@ use std::cell::Cell;
 use std::cmp::Ordering;
 
 mod atoms;
+mod numpy;
 use atoms::{compare_atom, failure_reason, pure_total_family, validate_atom};
 
 fn invalid() -> CoreError {
@@ -185,6 +186,12 @@ fn multi(levels: &[Facts], codes: &[Vec<i64>], missing: &[bool]) -> Result<Resul
                 incomparable_levels.push(false);
                 (0..n).collect()
             }
+            refused @ ResultOrder::Refused {
+                reason:
+                    sdm_contract::tabular::TabularOrderError::IntegerToFloatOverflow
+                    | sdm_contract::tabular::TabularOrderError::NativeEffectsPending,
+                ..
+            } => return Ok(refused),
             ResultOrder::Refused { .. } => {
                 incomparable_levels.push(true);
                 (0..n).collect()
@@ -360,6 +367,9 @@ pub fn order_sampled(facts: &Facts) -> Result<ResultOrder, CoreError> {
             order(values, mask, profile, |v| scalar(v, profile))?
         }
         Values::Multi { levels, codes } => return multi(levels, codes, mask),
+        Values::NumpyObject { values, semantics } => {
+            return numpy::order(values, mask, profile, *semantics);
+        }
         Values::Object { values } => {
             if values.len() != mask.len() {
                 return Err(invalid());

@@ -8,7 +8,7 @@ use sdm_contract::CoreError;
 use sdm_contract::tabular::{TabularIndexScalar as Atom, TabularOrderError};
 use std::cmp::Ordering;
 
-fn integer(value: &str) -> Result<(&str, bool), CoreError> {
+pub(super) fn integer(value: &str) -> Result<(&str, bool), CoreError> {
     let (digits, negative) = value
         .strip_prefix('-')
         .map_or((value, false), |v| (v, true));
@@ -21,7 +21,7 @@ fn integer(value: &str) -> Result<(&str, bool), CoreError> {
     }
     Ok((digits, negative))
 }
-fn compare_integer(a: &str, b: &str) -> Ordering {
+pub(super) fn compare_integer(a: &str, b: &str) -> Ordering {
     let (a, na) = integer(a).expect("validated integer");
     let (b, nb) = integer(b).expect("validated integer");
     if na != nb {
@@ -34,7 +34,7 @@ fn compare_integer(a: &str, b: &str) -> Ordering {
     let result = a.len().cmp(&b.len()).then_with(|| a.cmp(b));
     if na { result.reverse() } else { result }
 }
-fn integer_float(a: &str, b: f64) -> Ordering {
+pub(super) fn integer_float(a: &str, b: f64) -> Ordering {
     if b == f64::INFINITY {
         return Ordering::Less;
     }
@@ -178,6 +178,9 @@ pub(super) fn validate_atom(value: &Atom) -> Result<(), CoreError> {
             true
         }
         Atom::Floating { bits } => !f64::from_bits(*bits).is_nan(),
+        Atom::NativeMissing { .. } | Atom::NumpyInteger { .. } | Atom::NumpyFloating { .. } => {
+            false
+        }
         Atom::Text { points } => points.iter().all(|p| *p <= 0x10ffff),
         Atom::Boolean { .. } | Atom::Complex { .. } => true,
         Atom::Decimal { digits, .. } => {
@@ -242,7 +245,10 @@ pub(super) fn pure_total_family<'a>(values: impl Iterator<Item = &'a Atom>) -> b
                 offset_micros: Some(_),
                 ..
             } => 4,
-            Atom::Complex { .. } => return false,
+            Atom::NativeMissing { .. }
+            | Atom::Complex { .. }
+            | Atom::NumpyInteger { .. }
+            | Atom::NumpyFloating { .. } => return false,
         };
         if family.is_some_and(|previous| previous != current) || decimal && floating {
             return false;

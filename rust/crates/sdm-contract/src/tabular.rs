@@ -204,11 +204,46 @@ pub enum TabularIndexValues {
     Object {
         values: Vec<TabularIndexScalar>,
     },
+    NumpyObject {
+        values: Vec<TabularIndexScalar>,
+        semantics: NumpyScalarSemantics,
+    },
+}
+
+/// Built-in missing-owner self-comparison behavior.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum NativeMissingOwner {
+    None,
+    Ambiguous,
+    Temporal,
+}
+
+/// Scalar comparison rules are independent of index sorting's tie algorithm.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum NumpyScalarSemantics {
+    Numpy123Legacy,
+    Numpy126Legacy,
+    Numpy25Weak,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum TabularIndexScalar {
+    /// A masked built-in missing owner whose reached comparison stops probing.
+    NativeMissing {
+        owner: NativeMissingOwner,
+    },
+    NumpyInteger {
+        signed: bool,
+        width: u8,
+        value: String,
+    },
+    NumpyFloating {
+        width: u8,
+        bits: u64,
+    },
     Integer {
         value: String,
     },
@@ -273,6 +308,8 @@ pub enum TabularOrderError {
     Incomparable,
     DateTimeMismatch,
     NaiveAwareDatetime,
+    IntegerToFloatOverflow,
+    NativeEffectsPending,
 }
 
 /// Reached native comparison against the model cap, before frame length reads.
