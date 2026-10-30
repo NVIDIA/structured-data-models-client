@@ -43,6 +43,8 @@ these packages. All five distributions share one version and one entry.
   joins on; otherwise rows are identified by their values. It is kept out of
   `result.to_pandas()`; `result.explanations.to_pandas()` flattens it into one
   line per row, output and column, with each row's `hop` from the entity.
+- The `EXPLAIN` query prefix: `EXPLAIN PREDICT …` means the same as
+  `outputs=['explanation']`. A ranking refuses it; a forecast explains each step.
 
 ### Changed
 

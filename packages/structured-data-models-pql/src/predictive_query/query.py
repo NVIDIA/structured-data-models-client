@@ -73,7 +73,7 @@ class ParsedPredictiveQuery:
     rfm_entity_ids: Condition | None = None
     num_forecasts: int = 1
     evaluate: bool = False  # TODO: deprecate
-    explain: bool = False  # TODO: deprecate
+    explain: bool = False
 
     def __post_init__(self) -> None:
         if self.problem_type is not None and not isinstance(
