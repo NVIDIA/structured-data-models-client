@@ -226,3 +226,16 @@ pub enum OrderedSampledTabularRows {
 pub enum TabularOrderError {
     Incomparable,
 }
+
+/// Reached native comparison against the model cap, before frame length reads.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CheckTabularCap {
+    pub over_limit: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CheckedTabularCap {
+    pub accepted: bool,
+}

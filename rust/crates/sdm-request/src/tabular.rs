@@ -1221,3 +1221,13 @@ pub fn decide_materialized_task(
         },
     }
 }
+
+/// Select the cap refusal from a reached native comparison, without coercing
+/// its original count owner or reading the candidate frame population.
+pub fn check_materialized_cap(
+    input: sdm_contract::tabular::CheckTabularCap,
+) -> sdm_contract::tabular::CheckedTabularCap {
+    sdm_contract::tabular::CheckedTabularCap {
+        accepted: !input.over_limit,
+    }
+}
