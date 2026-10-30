@@ -16,7 +16,23 @@ pub enum DtypeStorage {
     Integer { may_exceed_i64: bool },
     Floating { bytes: usize },
     Decimal { precision: Option<u8>, scale: i8 },
-    Object { content: String },
+    Object { content: ObjectContent },
+    Other,
+}
+
+/// Closed observed scalar families, independent of the host library's labels.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ObjectContent {
+    Empty,
+    Decimal,
+    Integer,
+    Floating,
+    MixedIntegerFloat,
+    Boolean,
+    Date,
+    DateTime,
+    Timestamp,
     Other,
 }
 

@@ -4,7 +4,7 @@
 
 //! Direct-column meaning from reached native storage and range facts.
 
-use sdm_contract::direct::dtype::{DtypeFinding, DtypeObservation, DtypePopulation, DtypeStorage};
+use sdm_contract::direct::dtype::{DtypeFinding, DtypeObservation, DtypePopulation, DtypeStorage, ObjectContent};
 use sdm_contract::ops::Dtype;
 use sdm_contract::{CoreError, Sentence};
 
@@ -89,14 +89,14 @@ pub fn observe(input: DtypeObservation) -> Result<DtypeFinding, CoreError> {
                     finding(Dtype::Int64, Decimals, false)
                 }
             }
-            DtypeStorage::Object { content } => match content.as_str() {
-                "empty" => finding(Dtype::String, Declared, true),
-                "decimal" => finding(Dtype::Int64, Decimals, false),
-                "integer" => finding(Dtype::Int64, WholeNumbers, false),
-                "floating" | "mixed-integer-float" => finding(Dtype::Float64, Declared, false),
-                "boolean" => finding(Dtype::Bool, Declared, false),
-                "date" | "datetime" | "datetime64" => finding(Dtype::Time, Declared, false),
-                _ => finding(Dtype::String, Declared, false),
+            DtypeStorage::Object { content } => match content {
+                ObjectContent::Empty => finding(Dtype::String, Declared, true),
+                ObjectContent::Decimal => finding(Dtype::Int64, Decimals, false),
+                ObjectContent::Integer => finding(Dtype::Int64, WholeNumbers, false),
+                ObjectContent::Floating | ObjectContent::MixedIntegerFloat => finding(Dtype::Float64, Declared, false),
+                ObjectContent::Boolean => finding(Dtype::Bool, Declared, false),
+                ObjectContent::Date | ObjectContent::DateTime | ObjectContent::Timestamp => finding(Dtype::Time, Declared, false),
+                ObjectContent::Other => finding(Dtype::String, Declared, false),
             },
             DtypeStorage::Other => finding(Dtype::String, Declared, false),
         },

@@ -48,9 +48,20 @@ def observe(
                 'precision': None if scale > 0 else declared.precision,
             }
         elif pd.api.types.is_object_dtype(dtype):
+            content = pd.api.types.infer_dtype(series, skipna=True)
             storage = {
                 'kind': 'object',
-                'content': pd.api.types.infer_dtype(series, skipna=True),
+                'content': {
+                    'empty': 'empty',
+                    'decimal': 'decimal',
+                    'integer': 'integer',
+                    'floating': 'floating',
+                    'mixed-integer-float': 'mixed_integer_float',
+                    'boolean': 'boolean',
+                    'date': 'date',
+                    'datetime': 'date_time',
+                    'datetime64': 'timestamp',
+                }.get(content, 'other'),
             }
         else:
             storage = {'kind': 'other'}
