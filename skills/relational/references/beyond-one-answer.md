@@ -114,7 +114,10 @@ labels come from, so a ranking and a forecast are asked with `predict()` and
 
 An explanation is asked for as an output, `outputs=[..., 'explanation']`, never
 an `explain=` argument, and read from `result.explanations`. It covers every
-scored row, with no row limit. `result.explanations` maps each row's key to its
+scored row, with no row limit. `EXPLAIN PREDICT …` means the same as that
+output; passing both is allowed and redundant. On a forecast each step is
+explained; a ranking refuses it, since a ranking is assembled from
+per-candidate classifications and has no explanation of its own. `result.explanations` maps each row's key to its
 explanation, the same key that identifies the row in `to_pandas()`: the
 entity's `id`, or `(id, forecast_step)` on a forecast, since a forecast is
 keyed by the pair. It is kept out of `to_pandas()` itself.
