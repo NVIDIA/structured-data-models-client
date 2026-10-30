@@ -78,7 +78,7 @@ def test_native_options_preserve_transport_refusal(
         def unexpected_send(*args: Any, **kwargs: Any) -> Any:
             raise AssertionError('invalid options must fail before sending')
 
-        monkeypatch.setattr(transport, '_post_raw', unexpected_send)
+        monkeypatch.setattr(transport._session, 'post', unexpected_send)
         request = Request(
             pd.DataFrame({'feature': [1, 2], 'target': [0, 1]}),
             pd.DataFrame({'feature': [3]}),
