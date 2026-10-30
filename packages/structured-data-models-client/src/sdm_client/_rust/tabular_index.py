@@ -67,7 +67,7 @@ def _comparison_semantics() -> str:
     semantics = families[1]
     # These families identify audited binaries, not arbitrary version strings.
     if semantics == 'numpy126_legacy':
-        if np._get_promotion_state() != 'legacy':
+        if getattr(np, '_get_promotion_state')() != 'legacy':
             raise RouteError(
                 'this NumPy scalar promotion mode is not yet represented by the core'
             )
@@ -80,7 +80,10 @@ def _profile() -> str:
     )
     native = importlib.import_module(f'{namespace}._multiarray_umath')
 
-    family = _producer(native.__file__)
+    path = native.__file__
+    if path is None:
+        raise RouteError('this native index sort producer has no binary path')
+    family = _producer(path)
     if family is None:
         raise RouteError(
             'this native index sort producer has not been bound to a core profile'
