@@ -6,6 +6,10 @@ use super::{object_stable, temporal};
 use sdm_contract::tabular::TabularIndexScalar;
 
 #[test]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "test-only fixture loading; production core performs no I/O"
+)]
 fn native_stable_vectors_preserve_non_total_temporal_order() {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../testdata/temporal-stable.json");

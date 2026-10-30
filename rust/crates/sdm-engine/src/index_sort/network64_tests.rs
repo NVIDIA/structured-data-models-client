@@ -7,6 +7,10 @@ use super::{SimdArgsortProfile, network, simd_argsort, sort_recursive};
 const PROFILE: SimdArgsortProfile = SimdArgsortProfile::Avx512Gnu14Network64;
 
 #[test]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "test-only fixture loading; production core performs no I/O"
+)]
 fn independently_transcribed_network_vectors_match() {
     // Source-derived expectations, not native AVX512 execution or a candidate oracle.
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
