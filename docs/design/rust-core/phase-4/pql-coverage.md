@@ -114,3 +114,10 @@ Frozen public witnesses distinguish instant comparison from mixed Timestamp/date
 Native tick values and resolution preserve wide instants without forcing nanoseconds into int64 or eagerly calling range-sensitive timezone methods.
 The core must preserve separate LT/GT/EQ outcomes and reached year-range refusals; a total-order shortcut is not valid for ambiguous mixed temporal owners.
 Standard pandas 2 pytz and pandas 3 ZoneInfo owners are part of the planned coverage; arbitrary custom timezone callbacks remain unresolved.
+
+Temporal MultiIndex acceptance must cover three distinct boundaries, verified through frozen public calls on pandas 2 and 3.
+First, ordered used codes can return before sorting an unused level containing a wide Timestamp and datetime; forcing normalization with alternating secondary codes reaches the year-range ValueError.
+Second, reached level errors carry a level path plus operand positions, so Python presents the error from the retained level owners rather than indexing top-level tuples.
+Third, mixed ambiguous-time owners can be ordering ties without being equal; expanded-value stable lexsort can preserve alternating sampled codes that distinct integer ranks would reorder.
+The native object stable-sort helper family is identical across the audited NumPy 1.23.5, 1.26.4, 2.1.3, 2.3.4 and 2.5.4 sources.
+This source evidence establishes the implementation target, not candidate validation or a completed temporal landing.
