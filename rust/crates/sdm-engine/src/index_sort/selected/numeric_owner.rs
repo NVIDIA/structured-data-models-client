@@ -59,7 +59,7 @@ impl<O: Observer> OrderingRun<O> {
         if owner.0 == 0 {
             return Err(invalid().into());
         }
-        numeric::observe(&fact, matches!(fact, Atom::NativeMissing { .. }))?;
+        numeric::observe(&fact, true)?;
         if let Some(previous) = self.owners.get(&owner) {
             if previous != &fact {
                 return Err(invalid().into());
@@ -109,7 +109,7 @@ impl<O: Observer> OrderingRun<O> {
         value: &NumericOwnerFact,
         destination: NumericDestination,
     ) -> Result<Atom, Failure> {
-        let key = numeric::observe(&value.fact, false)?;
+        let key = numeric::observe(&value.fact, true)?;
         let overflow_possible = if let NumericDestination::BinaryFloat { width } = destination {
             numeric::as_double(key).is_ok_and(|v| {
                 v.is_finite()
@@ -159,7 +159,7 @@ impl<O: Observer> OrderingRun<O> {
         if width < 8 && bits >> (u32::from(width) * 8) != 0 {
             return Err(invalid().into());
         }
-        numeric::observe(&atom, false)?;
+        numeric::observe(&atom, true)?;
         Ok(atom)
     }
     async fn compare(
@@ -168,11 +168,8 @@ impl<O: Observer> OrderingRun<O> {
         right: &NumericOwnerFact,
     ) -> Result<Option<Ordering>, Failure> {
         let policy = self.policy().await?;
-        let a = numeric::observe(&left.fact, matches!(left.fact, Atom::NativeMissing { .. }))?;
-        let b = numeric::observe(
-            &right.fact,
-            matches!(right.fact, Atom::NativeMissing { .. }),
-        )?;
+        let a = numeric::observe(&left.fact, true)?;
+        let b = numeric::observe(&right.fact, true)?;
         let weak = matches!(policy, Policy::WeakScalars | Policy::WeakFixedIntegerPairs);
         let mut left_atom = left.fact.clone();
         let mut right_atom = right.fact.clone();
@@ -215,11 +212,8 @@ impl<O: Observer> OrderingRun<O> {
             other => other,
         };
         numeric::compare(
-            numeric::observe(&left_atom, matches!(left_atom, Atom::NativeMissing { .. }))?,
-            numeric::observe(
-                &right_atom,
-                matches!(right_atom, Atom::NativeMissing { .. }),
-            )?,
+            numeric::observe(&left_atom, true)?,
+            numeric::observe(&right_atom, true)?,
             effective,
         )
         .map_err(|_| Failure::Protocol(invalid()))
@@ -231,11 +225,16 @@ impl<O: Observer> OrderingRun<O> {
             return Ok(true);
         }
         let mut previous = self.load(0).await?;
+        let self_equal = if let Atom::NativeMissing { owner } = previous.fact {
+            owner == sdm_contract::tabular::NativeMissingOwner::None
+        } else {
+            self.compare(&previous, &previous).await? == Some(Ordering::Equal)
+        };
+        if !self_equal {
+            return Ok(false);
+        }
         if self.input.length == 1 {
-            if let Atom::NativeMissing { owner } = previous.fact {
-                return Ok(owner == sdm_contract::tabular::NativeMissingOwner::None);
-            }
-            return Ok(self.compare(&previous, &previous).await? == Some(Ordering::Equal));
+            return Ok(true);
         }
         let (mut increasing, mut decreasing) = (true, true);
         for position in 1..self.input.length {
@@ -395,6 +394,12 @@ mod tests {
                 input(2),
                 Script(VecDeque::from([
                     (NumericOwnerRequest::LoadProbeOwner { position: 0 }, first),
+                    (
+                        NumericOwnerRequest::ObserveComparisonEnvironment,
+                        Observation::Control(NumericOwnerOutcome::ComparisonEnvironment {
+                            policy: Policy::WeakScalars
+                        })
+                    ),
                     (NumericOwnerRequest::LoadProbeOwner { position: 1 }, second)
                 ]))
             )
@@ -415,6 +420,49 @@ mod tests {
             run(input(1), script).unwrap(),
             OrderedNumericOwners::Propagate { exception }
         );
+    }
+    #[test]
+    fn leading_nan_stops_probe_before_loading_the_next_owner() {
+        for fact in [
+            Atom::Floating {
+                bits: f64::NAN.to_bits(),
+            },
+            Atom::FixedFloating {
+                width: 4,
+                bits: u64::from(f32::NAN.to_bits()),
+            },
+        ] {
+            let script = Script(VecDeque::from([
+                (
+                    NumericOwnerRequest::LoadProbeOwner { position: 0 },
+                    Observation::Control(NumericOwnerOutcome::ProbeOwner {
+                        owner: OwnerId(1),
+                        fact,
+                    }),
+                ),
+                (
+                    NumericOwnerRequest::ObserveComparisonEnvironment,
+                    Observation::Control(NumericOwnerOutcome::ComparisonEnvironment {
+                        policy: Policy::WeakScalars,
+                    }),
+                ),
+                (
+                    NumericOwnerRequest::CaptureSortOwners,
+                    Observation::Captured {
+                        owners: vec![],
+                        positions: vec![],
+                        missing: vec![0, 1],
+                    },
+                ),
+            ]));
+            assert_eq!(
+                run(input(2), script).unwrap(),
+                OrderedNumericOwners::Sorted {
+                    positions: vec![0, 1],
+                    already_ordered: false
+                }
+            );
+        }
     }
     #[test]
     fn empty_input_performs_no_native_observations() {
