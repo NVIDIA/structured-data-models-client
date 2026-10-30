@@ -12,6 +12,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from sdm_client._routing import RouteError
 from sdm_client._rust.direct import _call
 from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.errors import StructuredDataError
@@ -265,6 +266,12 @@ def _context(
             'order_sampled_tabular_rows', bind_profile(observation)
         )
     if ordering['kind'] == 'refused':
+        if ordering['reason'] == 'integer_to_float_overflow':
+            raise OverflowError('int too large to convert to float')
+        if ordering['reason'] == 'native_effects_pending':
+            raise RouteError(
+                'this NumPy comparison effect is not yet represented by the core'
+            )
         if ordering['reason'] == 'date_time_mismatch':
             raise TypeError("can't compare datetime.datetime to datetime.date")
         if ordering['reason'] == 'naive_aware_datetime':

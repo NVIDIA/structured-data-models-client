@@ -60,10 +60,17 @@ The recorded index expectations come from the frozen public client through `mate
 Typed complex, finite Decimal/integer, exact date and fixed-offset/naive datetime labels landed at `b62256b51` through the existing sampled-index operation.
 Its frozen public evidence covers sampled indices and unreduced supplied frames separately; supplied frames do not accept an explicit context count.
 The host retains exact owners and observes their closed fields, while Rust compares exact coefficients and civil values and reports reached comparison failures.
-The current candidate delays producer binding until Rust reports that the sampled facts require it.
+The increment landed at `795dba504` delays producer binding until Rust reports that the sampled facts require it.
 Pure total comparisons with monotonic or distinct keys can finish without a NumPy binary binding; stable Arrow paths keep their own profile.
 When ties or comparison failures need the producer, Python binds the retained facts and retries once without rereading native owners.
-This candidate still requires final reviews, canonical contract generation, installed-wheel parity and handoff before landing.
+The older scalar producer bindings landed at `b719a516`, with frozen public receipts selected by the actual runtime rather than reusing another NumPy version's tie order.
+
+The next connected increment retains exact NumPy integer and floating scalar owners inside object indexes.
+Its `NumpyObject` facts carry a source-bound comparison-semantics tag independently of the sorting profile.
+NumPy 1.23 legacy, NumPy 1.26 legacy and audited NumPy 2.5 weak-scalar comparisons differ; NumPy 1.26's promotion mode is observed rather than inferred from its binary.
+The engine uses generic object comparison and sorting for these facts, without claiming a total order or applying the profile-free unique-key shortcut to mixed-precision comparisons.
+Reached integer-to-float overflow has a closed result; native warning-handler effects remain an explicit unfinished obligation.
+This increment still requires exact-source reviews, canonical generation, installed-wheel parity and handoff before landing.
 
 Full PQL completion remains pending for custom comparison-label ownership, Decimal context signals, NumPy numeric scalar object labels, additional temporal owners, broader producer bindings, and remaining native frame/count effects.
 These are retained obligations, not silently unsupported public inputs or an expansion of the approved custom-sort exception.

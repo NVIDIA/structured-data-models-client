@@ -43,6 +43,9 @@ def runtime_identity() -> dict[str, Any]:
             for key in ('X86_V3', 'X86_V4', 'AVX512_SKX')
         },
     }
+    promotion = getattr(np, '_get_promotion_state', None)
+    if promotion is not None:
+        identity['promotion_state'] = promotion()
     fingerprint = hashlib.sha256(
         json.dumps(identity, sort_keys=True).encode()
     ).hexdigest()

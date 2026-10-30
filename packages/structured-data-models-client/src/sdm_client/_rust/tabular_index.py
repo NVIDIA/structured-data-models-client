@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import importlib
 import struct
+import sys
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from functools import lru_cache
@@ -24,16 +25,53 @@ from sdm_client._routing import RouteError
 # Scalar argsort predates the numeric SIMD dispatch; AVX2 alone does not select
 # it in NumPy 1.26. Acquisition and source receipts are in the producer audit.
 _PRODUCERS = {
-    'ceec5ba13ab88318632307fdd2df74f317fa293ce77be559c4298ddd1f4306b0': 'x86_v3_v4',
-    'b185dfe64b07180bedc7c15fb2735b0d0f4f4e09eb9c15bd8e67f74568aebcbf': 'x86_v3_v4',
-    'c535a00761735b19153a71e1702f66482838421c78f96ecc3fe2c8d060662fd9': 'scalar',
-    '6a650810a8735cbdb988f74729973740a337645dd1585fef696e73e2dbc65beb': 'avx512_skx_or_scalar',
+    'ceec5ba13ab88318632307fdd2df74f317fa293ce77be559c4298ddd1f4306b0': (
+        'x86_v3_v4',
+        'numpy25_weak',
+    ),
+    'b185dfe64b07180bedc7c15fb2735b0d0f4f4e09eb9c15bd8e67f74568aebcbf': (
+        'x86_v3_v4',
+        'numpy25_weak',
+    ),
+    'c535a00761735b19153a71e1702f66482838421c78f96ecc3fe2c8d060662fd9': (
+        'scalar',
+        'numpy123_legacy',
+    ),
+    '6a650810a8735cbdb988f74729973740a337645dd1585fef696e73e2dbc65beb': (
+        'avx512_skx_or_scalar',
+        'numpy126_legacy',
+    ),
 }
 
 
 @lru_cache(maxsize=4)
-def _producer(path: str) -> str | None:
+def _producer_families(path: str) -> tuple[str, str] | None:
     return _PRODUCERS.get(hashlib.sha256(Path(path).read_bytes()).hexdigest())
+
+
+def _producer(path: str) -> str | None:
+    families = _producer_families(path)
+    return None if families is None else families[0]
+
+
+def _comparison_semantics() -> str:
+    namespace = (
+        'numpy.core' if np.__version__.startswith('1.') else 'numpy._core'
+    )
+    native = importlib.import_module(f'{namespace}._multiarray_umath')
+    families = _producer_families(native.__file__)
+    if families is None:
+        raise RouteError(
+            'this native scalar comparison producer has not been bound to core semantics'
+        )
+    semantics = families[1]
+    # These families identify audited binaries, not arbitrary version strings.
+    if semantics == 'numpy126_legacy':
+        if np._get_promotion_state() != 'legacy':
+            raise RouteError(
+                'this NumPy scalar promotion mode is not yet represented by the core'
+            )
+    return semantics
 
 
 def _profile() -> str:
@@ -75,6 +113,28 @@ def _bits(value: Any, width: int) -> int:
 def _scalar(value: Any) -> dict[str, Any]:
     # Preserve comparison semantics: numeric native scalars inside object arrays
     # may round mixed comparisons differently from Python integer owners.
+    if type(value) in (
+        np.int8,
+        np.int16,
+        np.int32,
+        np.int64,
+        np.uint8,
+        np.uint16,
+        np.uint32,
+        np.uint64,
+    ):
+        return {
+            'kind': 'numpy_integer',
+            'signed': value.dtype.kind == 'i',
+            'width': value.dtype.itemsize,
+            'value': str(int(value)),
+        }
+    if type(value) in (np.float16, np.float32, np.float64):
+        return {
+            'kind': 'numpy_floating',
+            'width': value.dtype.itemsize,
+            'bits': int.from_bytes(value.tobytes(), sys.byteorder),
+        }
     if type(value) in (np.bool_, np.str_):
         value = value.item()
     if type(value) is bool:
@@ -183,7 +243,13 @@ def _array(values: Any, missing: list[bool], profile: str) -> dict[str, Any]:
                 'mixed Decimal/float index comparison effects are not yet '
                 'represented by the core'
             )
-        if all(
+        if kinds & {'numpy_integer', 'numpy_floating'}:
+            result = {
+                'kind': 'numpy_object',
+                'values': atoms,
+                'semantics': _comparison_semantics(),
+            }
+        elif all(
             absent or atom['kind'] == 'text'
             for atom, absent in zip(atoms, missing, strict=True)
         ):
@@ -304,16 +370,25 @@ def observe(index: pd.Index) -> dict[str, Any]:
 
 def bind_profile(observation: dict[str, Any]) -> dict[str, Any]:
     """Bind retained facts only after the core requests a native sort profile."""
-    profile = _profile()
+    profile: str | None = None
 
     def bind(facts: dict[str, Any]) -> dict[str, Any]:
+        nonlocal profile
+        values = facts['values']
+        selected = facts['profile']
+        if selected == 'unbound':
+            if values['kind'] == 'numpy_object':
+                # Object argsort uses the generic scalar implementation even
+                # when this binary dispatches numeric arrays to SIMD kernels.
+                selected = 'scalar'
+            else:
+                if profile is None:
+                    profile = _profile()
+                selected = profile
         result = {
             **facts,
-            'profile': profile
-            if facts['profile'] == 'unbound'
-            else facts['profile'],
+            'profile': selected,
         }
-        values = facts['values']
         if values['kind'] == 'multi':
             result['values'] = {
                 **values,

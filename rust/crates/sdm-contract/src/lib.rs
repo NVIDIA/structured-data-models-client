@@ -49,7 +49,7 @@ pub use scalar::Scalar;
 pub use types::{ColumnType, Field, Unit};
 
 /// The contract version this build speaks.
-pub const CONTRACT_VERSION: u32 = 38;
+pub const CONTRACT_VERSION: u32 = 39;
 
 /// The JSON Schema of [`ControlMessage`], as committed: pretty-printed, with
 /// a trailing newline. Its `$defs` hold [`ops::Attachments`] too, the JSON

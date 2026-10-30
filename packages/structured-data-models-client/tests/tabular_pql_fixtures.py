@@ -11,18 +11,47 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+NUMPY_WIDTHS = (
+    'int8',
+    'int16',
+    'int32',
+    'int64',
+    'uint8',
+    'uint16',
+    'uint32',
+    'uint64',
+    'float16',
+    'float32',
+    'float64',
+)
+NUMPY_MIXTURES = (
+    'signed_unsigned_63',
+    'int64_float64_53',
+    'float32_pythonfloat_24',
+    'float64_huge_pythonint',
+    'int64_huge_pythonint',
+)
+
 LABEL_FAMILIES = (
-    'complex64',
-    'complex128',
-    'python_complex_objects',
-    'decimal_integer',
-    'naive_datetime_objects',
-    'date_objects',
-    'fixed_offset_datetime_objects',
-    'naive_aware_refusal',
-    'date_datetime_mismatch',
-    'decimal_text',
-    'datetime_integer',
+    (
+        'complex64',
+        'complex128',
+        'python_complex_objects',
+        'decimal_integer',
+        'naive_datetime_objects',
+        'date_objects',
+        'fixed_offset_datetime_objects',
+        'naive_aware_refusal',
+        'date_datetime_mismatch',
+        'decimal_text',
+        'datetime_integer',
+    )
+    + tuple('numpy_' + name for name in NUMPY_WIDTHS)
+    + tuple(
+        'numpy_' + name + '_' + direction
+        for name in NUMPY_MIXTURES
+        for direction in ('forward', 'reverse')
+    )
 )
 
 
@@ -72,6 +101,19 @@ def label_frame(family: str) -> pd.DataFrame:
         'decimal_text': [Decimal('1.1'), 'x'],
         'datetime_integer': [datetime(2020, 1, 1), 1],
     }
+    for name in NUMPY_WIDTHS:
+        scalar = getattr(np, name)
+        patterns['numpy_' + name] = [scalar(2), scalar(0), scalar(1), scalar(2)]
+    mixtures = {
+        'signed_unsigned_63': [np.int64(2**63 - 1), np.uint64(2**63)],
+        'int64_float64_53': [np.int64(2**53 + 1), np.float64(2**53)],
+        'float32_pythonfloat_24': [np.float32(2**24), float(2**24 + 1)],
+        'float64_huge_pythonint': [np.float64(1), 10**400],
+        'int64_huge_pythonint': [np.int64(1), 10**400],
+    }
+    for name, pair in mixtures.items():
+        patterns['numpy_' + name + '_forward'] = pair
+        patterns['numpy_' + name + '_reverse'] = pair[::-1]
     pattern = patterns[family]
     labels = [pattern[i % len(pattern)] for i in range(81)]
     if family in ('complex64', 'complex128'):

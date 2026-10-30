@@ -52,7 +52,10 @@ def test_exact_label_materialization_and_prediction(
         else {'predict': data.iloc[[80]].drop(columns=['target'])}
     )
     if 'error' in reference:
-        with pytest.raises(TypeError) as caught:
+        error_type = {'TypeError': TypeError, 'OverflowError': OverflowError}[
+            reference['error']['type']
+        ]
+        with pytest.raises(error_type) as caught:
             query(data).materialize(
                 **arguments,
                 task='regression',
