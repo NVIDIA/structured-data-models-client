@@ -44,6 +44,30 @@ struct OrderingRun<O> {
     owners: BTreeMap<OwnerId, Atom>,
     input: OrderNumericOwners,
 }
+/// Own the captured copy while lending one comparison to the shared sorter.
+struct SortComparator<'a, O> {
+    run: &'a mut OrderingRun<O>,
+    owners: Vec<NumericOwnerFact>,
+}
+impl<O: Observer> object_sort::Comparator<Failure> for SortComparator<'_, O> {
+    async fn less(&mut self, left: usize, right: usize) -> Result<bool, Failure> {
+        if self
+            .run
+            .compare(&self.owners[left], &self.owners[right])
+            .await?
+            == Some(Ordering::Less)
+        {
+            return Ok(true);
+        }
+        let _ = self
+            .run
+            .compare(&self.owners[left], &self.owners[right])
+            .await?
+            == Some(Ordering::Greater);
+        Ok(false)
+    }
+}
+
 impl<O: Observer> OrderingRun<O> {
     async fn ask(&mut self, request: NumericOwnerRequest) -> Result<Observation, Failure> {
         let result = self.observer.observe(request).await?;
@@ -307,14 +331,8 @@ impl<O: Observer> OrderingRun<O> {
             }
             self.retain(owner.owner, owner.fact.clone())?;
         }
-        let permutation = object_sort::argsort_async(owners.len(), async |left, right| {
-            if self.compare(&owners[left], &owners[right]).await? == Some(Ordering::Less) {
-                return Ok(true);
-            }
-            let _ = self.compare(&owners[left], &owners[right]).await? == Some(Ordering::Greater);
-            Ok::<_, Failure>(false)
-        })
-        .await?;
+        let permutation =
+            object_sort::argsort_async(owners.len(), SortComparator { run: self, owners }).await?;
         let mut result: Vec<_> = permutation.into_iter().map(|i| positions[i]).collect();
         result.extend(missing);
         Ok(OrderedNumericOwners::Sorted {
