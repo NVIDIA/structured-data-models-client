@@ -66,9 +66,7 @@ STATE = Path(
 FORECAST = 'docs/design/rust-core/phase-3/forecast.yaml'
 LANE = re.compile(r'[a-z0-9]{1,16}')
 GH_TIMEOUT = 120
-RUN_FIELDS = (
-    'databaseId,headBranch,headSha,conclusion,status,createdAt,url,event'
-)
+RUN_FIELDS = 'databaseId,headBranch,headSha,conclusion,status,createdAt,url,event,displayTitle'
 #: The events of a nightly run: the schedule's, or its dispatch.
 NIGHTLY_EVENTS = ('schedule', 'workflow_dispatch')
 #: A run's conclusion that is red.
@@ -258,7 +256,12 @@ def nightly(
         )  # fmt: skip
     except (RuntimeError, ValueError) as error:
         return [f'WATCHDOG gh failed: {error}']
-    ours = [r for r in runs if r.get('event') in NIGHTLY_EVENTS]
+    ours = [
+        r
+        for r in runs
+        if r.get('event') in NIGHTLY_EVENTS
+        and r.get('displayTitle') != 'Targeted Arm PQL acceptance (not full CI)'
+    ]
     lines = []
     if dispatch and not any(
         now - _time(str(r.get('createdAt'))) < dt.timedelta(hours=24)

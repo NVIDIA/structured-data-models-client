@@ -282,3 +282,31 @@ def test_a_red_nightly_is_one_fix_item_and_a_missing_one_is_dispatched(
         '-f',
         'fresh=true',
     ] in calls
+
+
+def test_targeted_pql_success_does_not_replace_a_full_nightly(tmp_path):
+    calls = []
+
+    def gh(args):
+        calls.append(list(args))
+        if list(args[:2]) == ['run', 'list']:
+            return json.dumps(
+                [
+                    {
+                        'event': 'workflow_dispatch',
+                        'displayTitle': 'Targeted Arm PQL acceptance (not full CI)',
+                        'status': 'completed',
+                        'conclusion': 'success',
+                        'createdAt': NOW,
+                    }
+                ]
+            )
+        if list(args[:2]) == ['workflow', 'run']:
+            return ''
+        raise AssertionError(args)
+
+    lines = watchdog.nightly(
+        PHASE, gh, tmp_path / 'items.md', watchdog._time(NOW), dispatch=True
+    )
+    assert f'NIGHTLY {PHASE}: dispatched (none in 24 h)' in lines
+    assert any(call[:2] == ['workflow', 'run'] for call in calls)

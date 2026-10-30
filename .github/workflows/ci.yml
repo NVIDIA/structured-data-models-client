@@ -9,6 +9,7 @@
 # bindings are pinned by SHA-256 in PROVENANCE.json either way, and a drifted
 # copy fails the build it ships in.
 name: CI
+run-name: ${{ github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only && 'Targeted Arm PQL acceptance (not full CI)' || 'CI' }}
 
 # CI is off the landing path (the owner's "2026-10-22 evening: CI off the
 # landing path"): a package lands on its handoff stamp and two reviews, so
@@ -33,6 +34,10 @@ on:
     - cron: '17 2 * * *'
   workflow_dispatch:
     inputs:
+      pql_runtime_only:
+        description: 'Only native Arm PQL floor/newest evidence; not full CI or a phase-end gate'
+        type: boolean
+        default: false
       fresh:
         description: 'Resolve dependencies fresh (the nightly): cargo update before the Rust jobs build'
         type: boolean
@@ -66,7 +71,7 @@ permissions:
 # condition reads the phase branch alike, and fails by name on a name
 # this lets through that is no phase branch.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.ref }}${{ github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only && '-pql-runtime' || '' }}
   cancel-in-progress: ${{ !(startsWith(github.ref_name, 'rust-core-phase-') && !endsWith(github.ref_name, 'core-phase-') && !(contains(github.ref_name, 'phase-0') && !endsWith(github.ref_name, 'core-phase-0')) && !(contains(github.ref_name, 'b') || contains(github.ref_name, 'd') || contains(github.ref_name, 'f') || contains(github.ref_name, 'g') || contains(github.ref_name, 'i') || contains(github.ref_name, 'j') || contains(github.ref_name, 'k') || contains(github.ref_name, 'l') || contains(github.ref_name, 'm') || contains(github.ref_name, 'n') || contains(github.ref_name, 'q') || contains(github.ref_name, 'v') || contains(github.ref_name, 'w') || contains(github.ref_name, 'x') || contains(github.ref_name, 'y') || contains(github.ref_name, 'z') || contains(github.ref_name, '.') || contains(github.ref_name, '_') || contains(github.ref_name, '/') || startsWith(github.ref_name, 'rust-core-phase--') || startsWith(github.ref_name, 'rust-core-phase-a') || startsWith(github.ref_name, 'rust-core-phase-c') || startsWith(github.ref_name, 'rust-core-phase-e') || startsWith(github.ref_name, 'rust-core-phase-h') || startsWith(github.ref_name, 'rust-core-phase-o') || startsWith(github.ref_name, 'rust-core-phase-p') || startsWith(github.ref_name, 'rust-core-phase-r') || startsWith(github.ref_name, 'rust-core-phase-s') || startsWith(github.ref_name, 'rust-core-phase-t') || startsWith(github.ref_name, 'rust-core-phase-u') || contains(github.ref_name, '0-') || contains(github.ref_name, '0a') || contains(github.ref_name, '0c') || contains(github.ref_name, '0e') || contains(github.ref_name, '0h') || contains(github.ref_name, '0o') || contains(github.ref_name, '0p') || contains(github.ref_name, '0r') || contains(github.ref_name, '0s') || contains(github.ref_name, '0t') || contains(github.ref_name, '0u') || contains(github.ref_name, '1-') || contains(github.ref_name, '1a') || contains(github.ref_name, '1c') || contains(github.ref_name, '1e') || contains(github.ref_name, '1h') || contains(github.ref_name, '1o') || contains(github.ref_name, '1p') || contains(github.ref_name, '1r') || contains(github.ref_name, '1s') || contains(github.ref_name, '1t') || contains(github.ref_name, '1u') || contains(github.ref_name, '2-') || contains(github.ref_name, '2a') || contains(github.ref_name, '2c') || contains(github.ref_name, '2e') || contains(github.ref_name, '2h') || contains(github.ref_name, '2o') || contains(github.ref_name, '2p') || contains(github.ref_name, '2r') || contains(github.ref_name, '2s') || contains(github.ref_name, '2t') || contains(github.ref_name, '2u') || contains(github.ref_name, '3-') || contains(github.ref_name, '3a') || contains(github.ref_name, '3c') || contains(github.ref_name, '3e') || contains(github.ref_name, '3h') || contains(github.ref_name, '3o') || contains(github.ref_name, '3p') || contains(github.ref_name, '3r') || contains(github.ref_name, '3s') || contains(github.ref_name, '3t') || contains(github.ref_name, '3u') || contains(github.ref_name, '4-') || contains(github.ref_name, '4a') || contains(github.ref_name, '4c') || contains(github.ref_name, '4e') || contains(github.ref_name, '4h') || contains(github.ref_name, '4o') || contains(github.ref_name, '4p') || contains(github.ref_name, '4r') || contains(github.ref_name, '4s') || contains(github.ref_name, '4t') || contains(github.ref_name, '4u') || contains(github.ref_name, '5-') || contains(github.ref_name, '5a') || contains(github.ref_name, '5c') || contains(github.ref_name, '5e') || contains(github.ref_name, '5h') || contains(github.ref_name, '5o') || contains(github.ref_name, '5p') || contains(github.ref_name, '5r') || contains(github.ref_name, '5s') || contains(github.ref_name, '5t') || contains(github.ref_name, '5u') || contains(github.ref_name, '6-') || contains(github.ref_name, '6a') || contains(github.ref_name, '6c') || contains(github.ref_name, '6e') || contains(github.ref_name, '6h') || contains(github.ref_name, '6o') || contains(github.ref_name, '6p') || contains(github.ref_name, '6r') || contains(github.ref_name, '6s') || contains(github.ref_name, '6t') || contains(github.ref_name, '6u') || contains(github.ref_name, '7-') || contains(github.ref_name, '7a') || contains(github.ref_name, '7c') || contains(github.ref_name, '7e') || contains(github.ref_name, '7h') || contains(github.ref_name, '7o') || contains(github.ref_name, '7p') || contains(github.ref_name, '7r') || contains(github.ref_name, '7s') || contains(github.ref_name, '7t') || contains(github.ref_name, '7u') || contains(github.ref_name, '8-') || contains(github.ref_name, '8a') || contains(github.ref_name, '8c') || contains(github.ref_name, '8e') || contains(github.ref_name, '8h') || contains(github.ref_name, '8o') || contains(github.ref_name, '8p') || contains(github.ref_name, '8r') || contains(github.ref_name, '8s') || contains(github.ref_name, '8t') || contains(github.ref_name, '8u') || contains(github.ref_name, '9-') || contains(github.ref_name, '9a') || contains(github.ref_name, '9c') || contains(github.ref_name, '9e') || contains(github.ref_name, '9h') || contains(github.ref_name, '9o') || contains(github.ref_name, '9p') || contains(github.ref_name, '9r') || contains(github.ref_name, '9s') || contains(github.ref_name, '9t') || contains(github.ref_name, '9u'))) }}
 
 env:
@@ -288,7 +293,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: landing
-    if: needs.landing.outputs.skip != 'true'
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) && (needs.landing.outputs.skip != 'true') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -302,7 +307,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: landing
-    if: needs.landing.outputs.skip != 'true'
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) && (needs.landing.outputs.skip != 'true') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -318,7 +323,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     needs: landing
-    if: needs.landing.outputs.skip != 'true'
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) && (needs.landing.outputs.skip != 'true') }}
     defaults:
       run:
         working-directory: rust
@@ -398,7 +403,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: landing
-    if: needs.landing.outputs.skip != 'true'
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) && (needs.landing.outputs.skip != 'true') }}
     defaults:
       run:
         working-directory: rust
@@ -416,7 +421,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     needs: landing
-    if: needs.landing.outputs.skip != 'true'
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) && (needs.landing.outputs.skip != 'true') }}
     defaults:
       run:
         working-directory: rust
@@ -685,7 +690,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: landing
-    if: needs.landing.outputs.skip != 'true'
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) && (needs.landing.outputs.skip != 'true') }}
     env:
       NATIVE_ARGS: --out native
       JAVA_NATIVE: shipped
@@ -769,7 +774,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: landing
-    if: needs.landing.outputs.skip != 'true'
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) && (needs.landing.outputs.skip != 'true') }}
     # The pinned PostgreSQL service, required (H26), for the Postgres
     # provider's own test (tests_test_ops/test_the_postgres_provider.py:
     # L4 executed on Postgres, key sets bound as the dialect binds them),
@@ -840,15 +845,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - build: shipped
-            args: --out native
-            artifact: native-wheel-aarch64
-            java: shipped
-          - build: test-ops
-            args: --out native --test-ops
-            artifact: native-wheel-test-ops-aarch64
-            java: ''
+        include: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only && '[{"build":"shipped","args":"--out native","artifact":"native-wheel-aarch64","java":""}]' || '[{"build":"shipped","args":"--out native","artifact":"native-wheel-aarch64","java":"shipped"},{"build":"test-ops","args":"--out native --test-ops","artifact":"native-wheel-test-ops-aarch64","java":""}]') }}
     env:
       MANYLINUX: ghcr.io/nvidia/structured-data-models-client/manylinux2014_aarch64:2026.09.14-1@sha256:d4c40df238d6ec0ee91213f4797ad26f05d7d82947bcb61c40d1fdc13d0e16d5
       NATIVE_ARGS: ${{ matrix.args }}
@@ -882,6 +879,7 @@ jobs:
   # The binding's tests on the wheel that ships, at the E16 floor: the file
   # any build passes.
   binding:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: native-wheel
@@ -916,6 +914,7 @@ jobs:
   # resolved environments, reports and environment.json are its artifact,
   # uploaded whether it passed or not.
   wheel-smoke:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
     name: wheel-smoke (${{ matrix.lane }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -960,6 +959,7 @@ jobs:
   # wheel for each architecture, of one distribution and version, so a set
   # missing an architecture fails here.
   wheel-smoke-aarch64:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
     name: wheel-smoke (${{ matrix.lane }})
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 20
@@ -1000,6 +1000,7 @@ jobs:
           path: wheel-smoke/
 
   typecheck:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: native-wheel
@@ -1038,6 +1039,7 @@ jobs:
   # internal pipeline runs one of them, so a defect specific to any other
   # reached a release through a promise nothing checked.
   test:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
     runs-on: ubuntu-latest
     # 90, not 60: the job reached 58 minutes on GitHub's runners as Phase 2's
     # three-database corpus grew (T2.1o); the cause is being cut separately.
@@ -1118,6 +1120,7 @@ jobs:
           key: ${{ steps.pip-cache.outputs.cache-primary-key }}
 
   engine:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
     runs-on: ubuntu-latest
     # 60 again (P2-T2.16-14, P2-T2.1o-1): it reached its 60-minute limit on
     # two runs in Phase 2 (T2.11), and since T3.0's split, which runs the
@@ -1216,6 +1219,7 @@ jobs:
   # cell, sharing its steps: replay_jobs.py substitutes no matrix value but
   # the Python version.
   contract-python-ref-pandas3:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
     name: contract-python (ref-pandas3, duckdb)
     runs-on: ubuntu-latest
     # 120: the job took 80 to 90 minutes on Phase 2's last candidates and
@@ -1363,7 +1367,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     needs: [landing, native-wheel, native-test-ops]
-    if: needs.landing.outputs.skip != 'true' && needs.landing.outputs.tooling != 'false'
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) && (needs.landing.outputs.skip != 'true' && needs.landing.outputs.tooling != 'false') }}
     env:
       CELL: ref-pandas3
       CELL_PINS: pandas==3.0.6 pyarrow==25.0.1 numpy==2.5.3
@@ -1384,7 +1388,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     needs: [landing, native-wheel]
-    if: needs.landing.outputs.skip != 'true' && needs.landing.outputs.tooling != 'false'
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) && (needs.landing.outputs.skip != 'true' && needs.landing.outputs.tooling != 'false') }}
     services:
       postgres: *postgres-service
     env:
@@ -1438,7 +1442,7 @@ jobs:
     # Its own !cancelled() would run it on a landing commit, whose jobs
     # are left out (E131), so it says so itself.
     needs: [landing, rust-test, contract-python-ref-pandas3]
-    if: ${{ !cancelled() && needs.landing.outputs.skip != 'true' }}
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) && (!cancelled() && needs.landing.outputs.skip != 'true') }}
     env:
       SDM_PUSH_BASE: ${{ needs.landing.outputs.base }}
     steps:
@@ -1485,6 +1489,7 @@ jobs:
             cross-host/python-core.jsonl cross-host/rust-host.jsonl
 
   contract-python-dbr17-pandas2:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
     name: contract-python (dbr17-pandas2, duckdb)
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -1503,6 +1508,7 @@ jobs:
       - *contract-gate
 
   contract-python-floor-pandas2-2:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
     name: contract-python (floor-pandas2.2, duckdb)
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -1540,6 +1546,7 @@ jobs:
   # cell's jobs hand python-core's observations, and on Postgres the
   # answers to its fetches, to cross-host (<database>) and l4-goldens.
   contract-python-ref-pandas3-sqlite:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
     name: contract-python (ref-pandas3, sqlite)
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -1625,6 +1632,7 @@ jobs:
           if-no-files-found: error
 
   contract-python-ref-pandas3-postgres:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
     name: contract-python (ref-pandas3, postgres)
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -1681,6 +1689,7 @@ jobs:
           if-no-files-found: error
 
   contract-python-dbr17-pandas2-sqlite:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
     name: contract-python (dbr17-pandas2, sqlite)
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -1700,6 +1709,7 @@ jobs:
       - *contract-database
 
   contract-python-dbr17-pandas2-postgres:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
     name: contract-python (dbr17-pandas2, postgres)
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -1725,6 +1735,7 @@ jobs:
       - *contract-database
 
   contract-python-floor-pandas2-2-sqlite:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
     name: contract-python (floor-pandas2.2, sqlite)
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -1744,6 +1755,7 @@ jobs:
       - *contract-database
 
   contract-python-floor-pandas2-2-postgres:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
     name: contract-python (floor-pandas2.2, postgres)
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -1787,7 +1799,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: [landing, rust-test, contract-python-ref-pandas3-sqlite]
-    if: ${{ !cancelled() && needs.landing.outputs.skip != 'true' }}
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) && (!cancelled() && needs.landing.outputs.skip != 'true') }}
     env:
       SDM_PUSH_BASE: ${{ needs.landing.outputs.base }}
       DATABASE: sqlite
@@ -1849,7 +1861,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: [landing, rust-test, contract-python-ref-pandas3-postgres]
-    if: ${{ !cancelled() && needs.landing.outputs.skip != 'true' }}
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) && (!cancelled() && needs.landing.outputs.skip != 'true') }}
     env:
       SDM_PUSH_BASE: ${{ needs.landing.outputs.base }}
       DATABASE: postgres
@@ -1900,7 +1912,7 @@ jobs:
       - contract-python-ref-pandas3
       - contract-python-ref-pandas3-sqlite
       - contract-python-ref-pandas3-postgres
-    if: ${{ !cancelled() && needs.landing.outputs.skip != 'true' }}
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) && (!cancelled() && needs.landing.outputs.skip != 'true') }}
     strategy:
       fail-fast: false
       matrix:
@@ -1945,6 +1957,7 @@ jobs:
   # host is presented by to_pandas() as the presentation table says for
   # this pandas major. pytz is for DuckDB's own read of a TIMESTAMPTZ.
   l5-conversion:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
     name: l5-conversion (${{ matrix.cell }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -1990,6 +2003,7 @@ jobs:
             -q -s -p no:cacheprovider
 
   build:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: native-wheel
@@ -2063,7 +2077,7 @@ jobs:
     # T3.0), nor the runtime cells after it.
     timeout-minutes: 60
     needs: [landing, build]
-    if: needs.landing.outputs.skip != 'true' && needs.landing.outputs.full != 'false'
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) && (needs.landing.outputs.skip != 'true' && needs.landing.outputs.full != 'false') }}
     strategy:
       fail-fast: false
       matrix:
@@ -2149,6 +2163,7 @@ jobs:
   # of `packages.find`, a `py.typed` that never shipped. This runs from a
   # directory where the source tree is not importable.
   installed-wheel:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: build
@@ -2217,7 +2232,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: build
-    if: github.event_name == 'workflow_dispatch' && inputs.fresh
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) && (github.event_name == 'workflow_dispatch' && inputs.fresh) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -2254,6 +2269,7 @@ jobs:
   # no Databricks workspace, and only x86_64 (the live job matrix, both
   # architectures, re-runs on the epic before it merges, KO2-38).
   runtime-install:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
     name: runtime-install (${{ matrix.runtime }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -2362,6 +2378,7 @@ jobs:
   # own supply chain, covering every connector extra that resolves without a
   # native toolchain.
   sbom:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: build
@@ -2410,7 +2427,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
     needs: landing
-    if: needs.landing.outputs.skip != 'true' && needs.landing.outputs.full != 'false'
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) && (needs.landing.outputs.skip != 'true' && needs.landing.outputs.full != 'false') }}
     strategy:
       fail-fast: false
       matrix:
@@ -2452,7 +2469,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: [landing, native-wheel, native-wheel-aarch64, java-native]
-    if: needs.landing.outputs.skip != 'true' && needs.landing.outputs.full != 'false'
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) && (needs.landing.outputs.skip != 'true' && needs.landing.outputs.full != 'false') }}
     env:
       SDM_REQUIRE_JAVA: '1'
     steps:
@@ -2501,7 +2518,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: [landing, native-test-ops]
-    if: needs.landing.outputs.skip != 'true' && needs.landing.outputs.full != 'false'
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) && (needs.landing.outputs.skip != 'true' && needs.landing.outputs.full != 'false') }}
     services:
       postgres: *postgres-service
     strategy:
@@ -2554,7 +2571,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 15
     needs: [landing, java-jar]
-    if: needs.landing.outputs.skip != 'true' && needs.landing.outputs.full != 'false'
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) && (needs.landing.outputs.skip != 'true' && needs.landing.outputs.full != 'false') }}
     container: ${{ matrix.image }}
     strategy:
       fail-fast: false
@@ -2613,7 +2630,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
     needs: [landing, java-jar]
-    if: needs.landing.outputs.skip != 'true' && needs.landing.outputs.full != 'false'
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) && (needs.landing.outputs.skip != 'true' && needs.landing.outputs.full != 'false') }}
     strategy:
       fail-fast: false
       matrix:
@@ -2711,7 +2728,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     needs: [landing, java-jar, native-wheel, native-wheel-aarch64, native-test-ops]
-    if: needs.landing.outputs.skip != 'true' && needs.landing.outputs.full != 'false'
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) && (needs.landing.outputs.skip != 'true' && needs.landing.outputs.full != 'false') }}
     services:
       postgres: *postgres-service
     strategy:
@@ -2836,7 +2853,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: [landing, lint, hygiene, rust-lint, rust-deny, rust-test, native-wheel, native-test-ops, native-wheel-aarch64, binding, wheel-smoke, wheel-smoke-aarch64, typecheck, test, engine, contract-python-ref-pandas3, tooling-contract, tooling-root, cross-host, contract-python-dbr17-pandas2, contract-python-floor-pandas2-2, contract-python-ref-pandas3-sqlite, contract-python-ref-pandas3-postgres, contract-python-dbr17-pandas2-sqlite, contract-python-dbr17-pandas2-postgres, contract-python-floor-pandas2-2-sqlite, contract-python-floor-pandas2-2-postgres, cross-host-sqlite, cross-host-postgres, l4-goldens, l5-conversion, build, engine-wheels, installed-wheel, runtime-install, sbom, java-native, java-jar, java-test, java-load, java, java-db]
-    if: ${{ !cancelled() && needs.landing.outputs.skip != 'true' }}
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) && (!cancelled() && needs.landing.outputs.skip != 'true') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -2862,3 +2879,53 @@ jobs:
           path: ci-timing
           if-no-files-found: warn
           retention-days: 30
+
+  pql-runtime-aarch64:
+    name: targeted PQL (${{ matrix.lane }}, aarch64)
+    if: github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only
+    needs: native-wheel-aarch64
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - lane: floor
+            python: '3.10'
+            pins: 'numpy==1.23.5 pandas==2.2.2 pyarrow==14.0.1'
+          - lane: newest
+            python: '3.14'
+            pins: 'numpy==2.5.4 pandas==3.1.0 pyarrow==26.0.0'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: 43e55f4f58924384c3cb52f67c8ed2e73ba45fa1
+          path: frozen-reference
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: native-wheel-aarch64
+          path: native
+      - name: Install the shipped wheel and concrete runtime
+        env:
+          PQL_RUNTIME_PINS: ${{ matrix.pins }}
+        run: |
+          read -ra pins <<< "$PQL_RUNTIME_PINS"
+          python -m pip install --only-binary=:all: "${pins[@]}" pytest \
+            ./packages/structured-data-models-api ./packages/structured-data-models-pql native/*.whl
+      - name: Frozen public receipt then installed candidate parity
+        run: |
+          wheels=(native/*.whl)
+          test "${#wheels[@]}" -eq 1
+          python scripts/rust_core/pql_runtime.py --wheel "${wheels[0]}" \
+            --reference frozen-reference --out "$RUNNER_TEMP/pql-runtime"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() }}
+        with:
+          name: pql-runtime-aarch64-${{ matrix.lane }}
+          path: ${{ runner.temp }}/pql-runtime/
+          if-no-files-found: error
