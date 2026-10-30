@@ -7,19 +7,19 @@ use super::atoms::{compare_integer, integer, integer_float};
 use super::{invalid, sorted};
 use sdm_contract::CoreError;
 use sdm_contract::tabular::{
-    NativeMissingOwner, NumpyScalarSemantics as Semantics, OrderedSampledTabularRows as Outcome,
-    TabularIndexScalar as Atom, TabularOrderError as Error, TabularSortProfile as Profile,
+    NativeMissingOwner, NumericComparisonProfile as Semantics,
+    OrderedSampledTabularRows as Outcome, TabularIndexScalar as Atom, TabularOrderError as Error,
+    TabularSortProfile as Profile,
 };
 use std::cmp::Ordering;
 
-#[path = "object_sort.rs"]
-mod object_sort;
+use super::object_sort;
 
 #[derive(Clone, Copy)]
 enum Owner {
     Missing(NativeMissingOwner),
-    PythonInteger,
-    PythonFloat,
+    UnboundedInteger,
+    Binary64,
     Boolean,
     Integer { signed: bool, width: u8 },
     Floating { width: u8 },
@@ -45,7 +45,7 @@ fn observe(value: &Atom, missing: bool) -> Result<Key<'_>, CoreError> {
         Atom::Integer { value } => {
             integer(value)?;
             Key {
-                owner: Owner::PythonInteger,
+                owner: Owner::UnboundedInteger,
                 number: Number::Integer(value),
             }
         }
@@ -54,10 +54,10 @@ fn observe(value: &Atom, missing: bool) -> Result<Key<'_>, CoreError> {
             number: Number::Integer(if *value { "1" } else { "0" }),
         },
         Atom::Floating { bits } => Key {
-            owner: Owner::PythonFloat,
+            owner: Owner::Binary64,
             number: Number::Floating(f64::from_bits(*bits)),
         },
-        Atom::NumpyInteger {
+        Atom::FixedInteger {
             signed,
             width,
             value,
@@ -84,7 +84,7 @@ fn observe(value: &Atom, missing: bool) -> Result<Key<'_>, CoreError> {
                 number: Number::Integer(value),
             }
         }
-        Atom::NumpyFloating { width, bits } => {
+        Atom::FixedFloating { width, bits } => {
             let value = match width {
                 2 => half::f16::from_bits(u16::try_from(*bits).map_err(|_| invalid())?).to_f64(),
                 4 => f64::from(f32::from_bits(u32::try_from(*bits).map_err(|_| invalid())?)),
@@ -107,7 +107,7 @@ fn integer_dtype(key: Key<'_>) -> Option<(bool, u8)> {
     match key.owner {
         Owner::Integer { signed, width } => Some((signed, width)),
         Owner::Boolean => Some((false, 0)),
-        Owner::PythonInteger => {
+        Owner::UnboundedInteger => {
             let Number::Integer(value) = key.number else {
                 unreachable!()
             };
@@ -158,15 +158,15 @@ fn float_width(owner: Owner) -> u8 {
         _ => 8,
     }
 }
-fn numpy_owner(owner: Owner) -> bool {
+fn fixed_width_owner(owner: Owner) -> bool {
     matches!(owner, Owner::Integer { .. } | Owner::Floating { .. })
 }
 fn mixed_width(integer: Owner, float: Owner, semantics: Semantics) -> u8 {
     let floating = float_width(float);
     match integer {
         Owner::Boolean => floating,
-        Owner::PythonInteger if semantics == Semantics::Numpy25Weak => floating,
-        Owner::PythonInteger => 8,
+        Owner::UnboundedInteger if semantics == Semantics::WeakScalars => floating,
+        Owner::UnboundedInteger => 8,
         Owner::Integer { width, .. } => match width {
             1 => floating,
             2 => floating.max(4),
@@ -180,8 +180,8 @@ fn compare(a: Key<'_>, b: Key<'_>, semantics: Semantics) -> Result<Option<Orderi
     match (a.number, b.number) {
         (Number::Missing, _) | (_, Number::Missing) => Ok(None),
         (Number::Integer(av), Number::Integer(bv)) => {
-            if semantics == Semantics::Numpy123Legacy
-                && (numpy_owner(a.owner) || numpy_owner(b.owner))
+            if semantics == Semantics::CommonType
+                && (fixed_width_owner(a.owner) || fixed_width_owner(b.owner))
                 && let (Some((signed_a, width_a)), Some((signed_b, width_b))) =
                     (integer_dtype(a), integer_dtype(b))
                 && signed_a != signed_b
@@ -198,9 +198,9 @@ fn compare(a: Key<'_>, b: Key<'_>, semantics: Semantics) -> Result<Option<Orderi
         (Number::Integer(integer), Number::Floating(float)) => {
             // Legacy object fallback converts the floating owner to its Python
             // value when a Python integer cannot be represented by an integer dtype.
-            if !numpy_owner(a.owner) && !numpy_owner(b.owner)
-                || matches!(a.owner, Owner::PythonInteger)
-                    && semantics != Semantics::Numpy25Weak
+            if !fixed_width_owner(a.owner) && !fixed_width_owner(b.owner)
+                || matches!(a.owner, Owner::UnboundedInteger)
+                    && semantics != Semantics::WeakScalars
                     && integer_dtype(a).is_none()
             {
                 return Ok(if float.is_nan() {
@@ -215,9 +215,9 @@ fn compare(a: Key<'_>, b: Key<'_>, semantics: Semantics) -> Result<Option<Orderi
         (Number::Floating(_), Number::Floating(_)) => {
             let width = match (a.owner, b.owner) {
                 (Owner::Floating { width: a }, Owner::Floating { width: b }) => a.max(b),
-                (Owner::Floating { width }, Owner::PythonFloat)
-                | (Owner::PythonFloat, Owner::Floating { width })
-                    if semantics == Semantics::Numpy25Weak =>
+                (Owner::Floating { width }, Owner::Binary64)
+                | (Owner::Binary64, Owner::Floating { width })
+                    if semantics == Semantics::WeakScalars =>
                 {
                     width
                 }

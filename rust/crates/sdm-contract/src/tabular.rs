@@ -204,9 +204,9 @@ pub enum TabularIndexValues {
     Object {
         values: Vec<TabularIndexScalar>,
     },
-    NumpyObject {
+    ScalarObject {
         values: Vec<TabularIndexScalar>,
-        semantics: NumpyScalarSemantics,
+        semantics: NumericComparisonProfile,
     },
 }
 
@@ -219,13 +219,43 @@ pub enum NativeMissingOwner {
     Temporal,
 }
 
-/// Scalar comparison rules are independent of index sorting's tie algorithm.
+/// Closed numeric-owner comparison policies, independent of sorting's tie policy.
+/// The host binds a verified producer and its actual promotion mode to a policy;
+/// neither a sorting profile nor a producer major version establishes this choice.
+///
+/// All policies preserve fixed floating widths and use the wider width for two
+/// fixed floating owners. Fixed integer/floating pairs compare at the floating
+/// width for one-byte integers, at least binary32 for two-byte integers, and
+/// binary64 for four/eight-byte integers. Integer signedness does not alter that
+/// table. Boolean owners contribute exact zero or one. Plain binary64 pairs and
+/// unbounded-integer/plain-binary64 pairs retain exact scalar comparisons.
+/// Unordered floating comparisons still perform reached conversions first.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
-pub enum NumpyScalarSemantics {
-    Numpy123Legacy,
-    Numpy126Legacy,
-    Numpy25Weak,
+pub enum NumericComparisonProfile {
+    /// Use common fixed types for mixed scalar owners. A signed integer paired
+    /// with an unsigned eight-byte integer compares through binary64, including
+    /// its rounding. An unbounded integer that fits signed64 or unsigned64
+    /// contributes that type; one outside both ranges takes the object fallback,
+    /// comparing exactly against another integer or the floating owner's value.
+    /// Plain binary64/fixed-floating pairs use binary64, as do representable
+    /// unbounded-integer/fixed-floating pairs. This mode does not weakly narrow
+    /// plain binary64 operands to the other owner's floating width.
+    CommonType,
+    /// Use CommonType floating rules and its out-of-range unbounded-integer
+    /// fallback, but compare every integer/integer pair exactly, including the
+    /// signed64/unsigned64 boundary. This policy must be bound to the producer's
+    /// common-type promotion mode, not a weak or warning-producing mode.
+    ExactIntegerPairs,
+    /// Compare integer pairs exactly. A plain binary64 operand paired with a
+    /// fixed floating owner is narrowed to that owner's width; an unbounded
+    /// integer paired with a fixed floating owner converts through binary64 and
+    /// then that width. Failure to convert the integer to finite binary64 yields
+    /// IntegerToFloatOverflow. Finite narrowing to infinity yields the explicit
+    /// NativeEffectsPending outcome because warning/handler effects are not yet
+    /// represented; already-infinite input does not take that overflow branch.
+    /// Fixed-integer/plain-binary64 pairs compare in binary64, including rounding.
+    WeakScalars,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -235,12 +265,14 @@ pub enum TabularIndexScalar {
     NativeMissing {
         owner: NativeMissingOwner,
     },
-    NumpyInteger {
+    /// Canonical integer value; width is one, two, four or eight bytes.
+    FixedInteger {
         signed: bool,
         width: u8,
         value: String,
     },
-    NumpyFloating {
+    /// Raw IEEE bits; width is two (binary16), four or eight bytes.
+    FixedFloating {
         width: u8,
         bits: u64,
     },

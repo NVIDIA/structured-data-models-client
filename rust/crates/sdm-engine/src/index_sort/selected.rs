@@ -15,7 +15,8 @@ use std::cell::Cell;
 use std::cmp::Ordering;
 
 mod atoms;
-mod numpy;
+mod numeric_objects;
+mod object_sort;
 use atoms::{compare_atom, failure_reason, pure_total_family, validate_atom};
 
 fn invalid() -> CoreError {
@@ -367,8 +368,8 @@ pub fn order_sampled(facts: &Facts) -> Result<ResultOrder, CoreError> {
             order(values, mask, profile, |v| scalar(v, profile))?
         }
         Values::Multi { levels, codes } => return multi(levels, codes, mask),
-        Values::NumpyObject { values, semantics } => {
-            return numpy::order(values, mask, profile, *semantics);
+        Values::ScalarObject { values, semantics } => {
+            return numeric_objects::order(values, mask, profile, *semantics);
         }
         Values::Object { values } => {
             if values.len() != mask.len() {

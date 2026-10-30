@@ -178,7 +178,7 @@ pub(super) fn validate_atom(value: &Atom) -> Result<(), CoreError> {
             true
         }
         Atom::Floating { bits } => !f64::from_bits(*bits).is_nan(),
-        Atom::NativeMissing { .. } | Atom::NumpyInteger { .. } | Atom::NumpyFloating { .. } => {
+        Atom::NativeMissing { .. } | Atom::FixedInteger { .. } | Atom::FixedFloating { .. } => {
             false
         }
         Atom::Text { points } => points.iter().all(|p| *p <= 0x10ffff),
@@ -247,8 +247,8 @@ pub(super) fn pure_total_family<'a>(values: impl Iterator<Item = &'a Atom>) -> b
             } => 4,
             Atom::NativeMissing { .. }
             | Atom::Complex { .. }
-            | Atom::NumpyInteger { .. }
-            | Atom::NumpyFloating { .. } => return false,
+            | Atom::FixedInteger { .. }
+            | Atom::FixedFloating { .. } => return false,
         };
         if family.is_some_and(|previous| previous != current) || decimal && floating {
             return false;
