@@ -209,8 +209,8 @@ fn multi_level_range_error_propagates_with_level_local_owners() {
         Outcome::Refused {
             reason: TabularOrderError::TemporalYearOutOfRange,
             levels: vec![0],
-            left: 1,
-            right: 0,
+            left: 0,
+            right: 1,
         }
     );
     let mut type_error = index;

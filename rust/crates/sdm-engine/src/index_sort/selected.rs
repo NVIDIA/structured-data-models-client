@@ -17,7 +17,11 @@ use std::cmp::Ordering;
 mod atoms;
 mod numeric_objects;
 mod object_sort;
+mod object_stable;
+#[cfg(test)]
+mod object_stable_tests;
 mod temporal;
+mod temporal_multi;
 use atoms::{compare_atom, failure_reason, pure_total_family, validate_atom};
 
 fn invalid() -> CoreError {
@@ -188,6 +192,12 @@ impl PartialOrd for Object<'_> {
 fn multi(levels: &[Facts], codes: &[Vec<i64>], missing: &[bool]) -> Result<ResultOrder, CoreError> {
     if levels.len() != codes.len() || codes.iter().any(|c| c.len() != missing.len()) {
         return Err(invalid());
+    }
+    if levels
+        .iter()
+        .any(|level| matches!(&level.values, Values::TemporalObject { .. }))
+    {
+        return temporal_multi::order(levels, codes, missing);
     }
     let mut ranks = Vec::new();
     let mut incomparable_levels = Vec::new();

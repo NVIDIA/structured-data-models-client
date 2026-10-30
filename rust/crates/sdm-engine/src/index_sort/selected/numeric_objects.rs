@@ -228,6 +228,19 @@ fn compare(a: Key<'_>, b: Key<'_>, semantics: Semantics) -> Result<Option<Orderi
     }
 }
 
+pub(super) fn sort_comparison(
+    a: &Atom,
+    b: &Atom,
+    a_missing: bool,
+    b_missing: bool,
+    semantics: Semantics,
+) -> Result<Ordering, Error> {
+    // The caller has already validated the closed facts through order().
+    let a = observe(a, a_missing).expect("validated scalar owner");
+    let b = observe(b, b_missing).expect("validated scalar owner");
+    compare(a, b, semantics).map(|result| result.unwrap_or(Ordering::Equal))
+}
+
 pub(super) fn order(
     values: &[Atom],
     missing: &[bool],

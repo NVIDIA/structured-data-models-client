@@ -273,6 +273,44 @@ fn compare(a: &Atom, b: &Atom) -> Result<Compared, Error> {
     }
 }
 
+pub(super) fn sort_comparison(a: &Atom, b: &Atom) -> Result<Ordering, Error> {
+    compare(a, b).map(|result| result.ordering)
+}
+
+pub(super) fn monotonic(
+    values: &[Atom],
+    missing: &[bool],
+    positions: &[usize],
+) -> Result<bool, CoreError> {
+    if values.len() != missing.len() || positions.iter().any(|i| *i >= values.len()) {
+        return Err(invalid());
+    }
+    for (value, absent) in values.iter().zip(missing) {
+        if !absent {
+            validate(value)?;
+        }
+    }
+    if positions.iter().any(|i| missing[*i]) {
+        return Ok(false);
+    }
+    let (mut increasing, mut decreasing) = (true, true);
+    for pair in positions.windows(2) {
+        match compare(&values[pair[1]], &values[pair[0]]) {
+            Ok(result) if result.ordering == Ordering::Less => increasing = false,
+            Ok(result) if result.ordering == Ordering::Greater => decreasing = false,
+            Ok(result) if result.equal => {}
+            _ => {
+                increasing = false;
+                decreasing = false;
+            }
+        }
+        if !increasing && !decreasing {
+            break;
+        }
+    }
+    Ok(increasing)
+}
+
 /// Equality-aware observation for existing incomparable MultiIndex level handling.
 pub(super) fn rank_comparison(a: &Atom, b: &Atom) -> Option<Ordering> {
     compare(a, b).ok().and_then(|result| {
@@ -297,26 +335,7 @@ pub(super) fn order(
     if profile == Profile::Unbound {
         return Ok(Outcome::NeedsProfile);
     }
-    let mut increasing = !missing.iter().any(|v| *v);
-    let mut decreasing = increasing;
-    if increasing {
-        for current in 1..values.len() {
-            let result = compare(&values[current], &values[current - 1]);
-            match result {
-                Ok(result) if result.ordering == Ordering::Less => increasing = false,
-                Ok(result) if result.ordering == Ordering::Greater => decreasing = false,
-                Ok(result) if result.equal => {}
-                // All closed temporal failures here are probe-suppressed TypeError/ValueError.
-                _ => {
-                    increasing = false;
-                    decreasing = false;
-                }
-            }
-            if !increasing && !decreasing {
-                break;
-            }
-        }
-    }
+    let increasing = monotonic(values, missing, &(0..values.len()).collect::<Vec<_>>())?;
     if increasing {
         return Ok(sorted((0..values.len()).collect(), true));
     }
@@ -325,23 +344,13 @@ pub(super) fn order(
         .enumerate()
         .filter_map(|(i, m)| (!m).then_some(i))
         .collect();
-    let mut first_error = None;
     let ordered = if profile == Profile::Stable {
         let mut order: Vec<_> = (0..present.len()).collect();
-        order.sort_by(|a, b| {
-            if first_error.is_some() {
-                return Ordering::Equal;
-            }
-            let (left, right) = (present[*a], present[*b]);
-            match compare(&values[left], &values[right]) {
-                Ok(result) => result.ordering,
-                Err(reason) => {
-                    first_error = Some((reason, left, right));
-                    Ordering::Equal
-                }
-            }
-        });
-        first_error.map_or(Ok(order), Err)
+        super::object_stable::sort(&mut order, |a, b| {
+            let (left, right) = (present[a], present[b]);
+            sort_comparison(&values[left], &values[right]).map_err(|reason| (reason, left, right))
+        })
+        .map(|()| order)
     } else {
         object_sort::argsort(present.len(), |a, b| {
             let (left, right) = (present[a], present[b]);
