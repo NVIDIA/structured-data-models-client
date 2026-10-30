@@ -90,8 +90,10 @@ That operation composes expansion or key exclusion, known-target filtering and c
 Only native-effect paths retain staged key/mask observations; sampling stays after warning delivery for both.
 Forced frame routes explicitly refuse relational materialization until its separate core consumer exists, avoiding a silent legacy route.
 
-The Python 3.14 runtime increment binds the official NumPy 2.5.4 cp314 binary to the existing audited sorting and comparison profiles.
+The increment landed at `a4f7295d8` binds the official NumPy 2.5.4 cp314 binary and the Arm floor/newest binaries to existing audited sorting and comparison profiles.
 Frozen reference recording uses Python 3.14.8, pandas 3.1.0 and Arrow 26.0.0.
 Date/datetime comparison refusals retain Rust-selected operand positions; Python presents the native exception for that exact admitted pair because the diagnostic changed in Python 3.13.
 This single failure-presentation operation does not provide a sorting callback or broaden custom-owner admission.
-The increment remains pending review, installed-wheel parity and landing.
+Two independent source reviews and handoff passed before verified landing.
+Installed-wheel parity passed 394 cases each on current x86, Python 3.14 x86, Arm floor and Arm newest; both native Arm lanes ran on the exact candidate `fa9b13d25`.
+The targeted Arm run is PQL evidence and does not replace full CI.
