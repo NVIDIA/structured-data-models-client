@@ -20,8 +20,8 @@ use sdm_wire::json::Value;
 use std::collections::BTreeMap;
 
 pub mod cell;
-pub mod native_response;
 mod decimal;
+pub mod native_response;
 pub mod response;
 
 fn text(value: impl Into<String>) -> Value {

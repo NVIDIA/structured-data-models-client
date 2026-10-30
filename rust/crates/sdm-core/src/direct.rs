@@ -696,18 +696,27 @@ pub(crate) async fn predict(
                 bound.outputs,
             );
         }
-        DirectPrediction::DeferredOptions { body, inference_present } => {
+        DirectPrediction::DeferredOptions {
+            body,
+            inference_present,
+        } => {
             sdm_request::direct::bound(&body.bound)?;
             if direct.payload != Some(body.payload) {
-                return Err(CoreError::protocol(Sentence::InvalidMessage, "deferred body differs from its attachment"));
+                return Err(CoreError::protocol(
+                    Sentence::InvalidMessage,
+                    "deferred body differs from its attachment",
+                ));
             }
             let Some(Attachment::Bytes(bytes)) = attached.remove(&body.payload) else {
                 return Err(internal("a deferred direct body is absent"));
             };
             let payload = crate::predict::payload(&bytes)?;
             tabular::check_body(&payload, &body, &body.bound.outputs)?;
-            let mut payload = tabular::complete_body(payload, &request.request_id, DirectInference::default())?;
-            if inference_present { payload.set("inference", Value::Null); }
+            let mut payload =
+                tabular::complete_body(payload, &request.request_id, DirectInference::default())?;
+            if inference_present {
+                payload.set("inference", Value::Null);
+            }
             (body.bound, payload, true)
         }
         DirectPrediction::Encoded { body, inference } => {
@@ -740,8 +749,12 @@ pub(crate) async fn predict(
         use sdm_contract::direct::native_response::{NativeDirectCall, PreparedDirectCall};
         let payload = asker.attach(Attachment::Bytes(payload.to_bytes()))?;
         let call = NativeDirectCall { bound, payload };
-        let value = asker.attach(Attachment::Bytes(serde_json::to_vec(&call).map_err(|_| internal("prepared call does not serialize"))?))?;
-        return Ok(OperationResult::PreparedDirectCall(PreparedDirectCall { value }));
+        let value = asker.attach(Attachment::Bytes(
+            serde_json::to_vec(&call).map_err(|_| internal("prepared call does not serialize"))?,
+        ))?;
+        return Ok(OperationResult::PreparedDirectCall(PreparedDirectCall {
+            value,
+        }));
     }
     let answer =
         crate::predict::call_answer(&asker, payload.to_bytes(), request.model_endpoint.as_ref())
@@ -823,20 +836,36 @@ pub(crate) fn layout(
 }
 
 pub(crate) fn native_outputs(
-    asker: &Asker, input: sdm_contract::direct::native_response::NativeOutputQuery,
+    asker: &Asker,
+    input: sdm_contract::direct::native_response::NativeOutputQuery,
 ) -> Result<OperationResult, CoreError> {
     sdm_request::direct::bound(&input.bound)?;
-    let names: Vec<_> = input.bound.outputs.iter().filter(|name| {
-        input.rows > 0 && input.bound.named && predict::LOOKED_FOR.contains(&name.as_str())
-    }).cloned().collect();
+    let names: Vec<_> = input
+        .bound
+        .outputs
+        .iter()
+        .filter(|name| {
+            input.rows > 0 && input.bound.named && predict::LOOKED_FOR.contains(&name.as_str())
+        })
+        .cloned()
+        .collect();
     if let Some(present) = input.present {
         if present.iter().map(|(name, _)| name).ne(names.iter()) {
-            return Err(CoreError::protocol(Sentence::InvalidMessage, "native output observations differ from requested fields"));
+            return Err(CoreError::protocol(
+                Sentence::InvalidMessage,
+                "native output observations differ from requested fields",
+            ));
         }
-        let missing: Vec<_> = present.into_iter().filter_map(|(name, present)| (!present).then_some(name)).collect();
+        let missing: Vec<_> = present
+            .into_iter()
+            .filter_map(|(name, present)| (!present).then_some(name))
+            .collect();
         if !missing.is_empty() {
             let notice = predict::absent_notice(&input.bound.model, &missing);
-            asker.warn(CoreWarning::new(Sentence::DirectOutputsAbsent, notice.message).with_fields(notice.fields));
+            asker.warn(
+                CoreWarning::new(Sentence::DirectOutputsAbsent, notice.message)
+                    .with_fields(notice.fields),
+            );
         }
     }
     value(asker, &names)

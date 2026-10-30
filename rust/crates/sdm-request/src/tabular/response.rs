@@ -159,7 +159,11 @@ fn row_index(scope: &ResponseScope, row: &DecodedDirectRow) -> Result<usize, Cor
     {
         return Err(protocol("decoded row ordinal is incoherent"));
     }
-    let at = validate_position(&row.row_index, scope.scoring_rows, row.prior_ordinal.is_some())?;
+    let at = validate_position(
+        &row.row_index,
+        scope.scoring_rows,
+        row.prior_ordinal.is_some(),
+    )?;
     if let Some(key) = &row.key {
         entity(key)?;
     }
@@ -569,10 +573,7 @@ pub(crate) fn validate_position(index: &str, rows: usize, prior: bool) -> Result
         .ok_or_else(|| {
             invalid(Sentence::TabularRowBounds)
                 .with_field("index", Detail::text(index))
-                .with_field(
-                    "rows",
-                    Detail::Scalar(Scalar::UInt64(rows as u64)),
-                )
+                .with_field("rows", Detail::Scalar(Scalar::UInt64(rows as u64)))
         })?;
     if prior {
         return Err(invalid(Sentence::TabularRowRepeated)

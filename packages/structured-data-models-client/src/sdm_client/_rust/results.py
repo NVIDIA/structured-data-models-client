@@ -552,7 +552,8 @@ _RESULTS: dict[str, tuple[tuple[str, ...], tuple[str, ...], Any]] = {
         lambda read: DirectValue(_int(read['value'], 'value')),
     ),
     'prepared_direct_call': (
-        ('value',), (),
+        ('value',),
+        (),
         lambda read: PreparedDirectCall(_int(read['value'], 'value')),
     ),
     'decoded_direct_response': (

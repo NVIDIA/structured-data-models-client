@@ -527,18 +527,31 @@ def predict(
             if inference_present
             else {}
         )
-        from sdm_client.core.databricks_serving import DatabricksServingTransport
+        from sdm_client.core.databricks_serving import (
+            DatabricksServingTransport,
+        )
         from sdm_client.core.transport import Transport
 
-        byte_transport = type(client._transport) in (Transport, DatabricksServingTransport)
-        if byte_transport and direct_options.can_encode(observed_options) and (not inference_present or observed_options):
+        byte_transport = type(client._transport) in (
+            Transport,
+            DatabricksServingTransport,
+        )
+        if (
+            byte_transport
+            and direct_options.can_encode(observed_options)
+            and (not inference_present or observed_options)
+        ):
             data = {
                 'kind': 'encoded',
                 'body': body,
                 'inference': direct_options.encode(observed_options),
             }
         else:
-            data = {'kind': 'deferred_options', 'body': body, 'inference_present': inference_present}
+            data = {
+                'kind': 'deferred_options',
+                'body': body,
+                'inference_present': inference_present,
+            }
         direct = {'input': 1, 'payload': 2}
     operation = {
         'op': 'predict',
@@ -560,7 +573,10 @@ def predict(
         from sdm_client._rust import direct_response
 
         return direct_response.finish(
-            finished, client, model_id, observed_options,
+            finished,
+            client,
+            model_id,
+            observed_options,
             _call,
         )
     if finished.result['op'] == 'decoded_direct_response':
@@ -758,7 +774,9 @@ def _response(finished: Finished) -> Finished:
     )
 
 
-def _attribute_rows(scope: dict[str, Any], rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _attribute_rows(
+    scope: dict[str, Any], rows: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
     accepted = []
     at = 0
     while at < len(rows):

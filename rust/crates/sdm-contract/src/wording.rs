@@ -271,7 +271,9 @@ pub fn template(sentence: Sentence) -> Template {
         S::DirectMissing => said(
             r#"predict is missing column(s) {columns!r} that context carries. Every feature the model is shown has to be supplied for the rows being scored; drop them from context, or supply them"#,
         ),
-        S::DirectNativeIdMismatch => said(r#"the response pairs row_index {index} with id {host.direct_response_id!r}, and this batch asked about {host.direct_response_key!r} there"#),
+        S::DirectNativeIdMismatch => said(
+            r#"the response pairs row_index {index} with id {host.direct_response_id!r}, and this batch asked about {host.direct_response_key!r} there"#,
+        ),
         S::DirectNativeFailure => said(r#"native {stage} conversion failed"#),
         S::DirectNullableCast => said(r#"{host.direct_nullable_cast}"#),
         S::DirectOptionCycle => {

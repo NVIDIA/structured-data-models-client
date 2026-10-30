@@ -109,25 +109,38 @@ pub fn start(
             })
         }
         Operation::ObserveDirectOutputs(request) => {
-            let input: sdm_contract::direct::native_response::NativeOutputQuery = take_json(&mut attachments, request.input)?;
+            let input: sdm_contract::direct::native_response::NativeOutputQuery =
+                take_json(&mut attachments, request.input)?;
             Run::new(move |asker| async move { crate::direct::native_outputs(&asker, input) })
         }
         Operation::RestoreDirectResponse(request) => {
-            let input: sdm_contract::direct::native_response::RestorationObservation = take_json(&mut attachments, request.input)?;
+            let input: sdm_contract::direct::native_response::RestorationObservation =
+                take_json(&mut attachments, request.input)?;
             Run::new(move |asker| async move {
-                crate::direct::value(&asker, &sdm_request::tabular::native_response::restore(input))
+                crate::direct::value(
+                    &asker,
+                    &sdm_request::tabular::native_response::restore(input),
+                )
             })
         }
         Operation::CheckDirectResponseField(request) => {
-            let input: sdm_contract::direct::native_response::NativeResponseField = take_json(&mut attachments, request.input)?;
+            let input: sdm_contract::direct::native_response::NativeResponseField =
+                take_json(&mut attachments, request.input)?;
             Run::new(move |asker| async move {
-                crate::direct::value(&asker, &sdm_request::tabular::native_response::check(input)?)
+                crate::direct::value(
+                    &asker,
+                    &sdm_request::tabular::native_response::check(input)?,
+                )
             })
         }
         Operation::LayoutNativeDirect(request) => {
-            let input: sdm_contract::direct::native_response::NativeLayoutInput = take_json(&mut attachments, request.input)?;
+            let input: sdm_contract::direct::native_response::NativeLayoutInput =
+                take_json(&mut attachments, request.input)?;
             Run::new(move |asker| async move {
-                crate::direct::value(&asker, &sdm_request::tabular::native_response::layout(input)?)
+                crate::direct::value(
+                    &asker,
+                    &sdm_request::tabular::native_response::layout(input)?,
+                )
             })
         }
         Operation::CheckDirectOption(request) => {

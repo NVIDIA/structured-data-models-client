@@ -397,7 +397,10 @@ pub struct EncodedDirectBody {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum DirectPrediction {
-    DeferredOptions { body: EncodedDirectBody, inference_present: bool },
+    DeferredOptions {
+        body: EncodedDirectBody,
+        inference_present: bool,
+    },
     Empty {
         bound: BoundDirectCall,
         target_dtype: String,
