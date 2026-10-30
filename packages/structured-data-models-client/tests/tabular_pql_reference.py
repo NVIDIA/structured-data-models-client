@@ -40,7 +40,7 @@ def runtime_identity() -> dict[str, Any]:
         ).hexdigest(),
         'dispatch_features': {
             key: features.get(key, False)
-            for key in ('X86_V3', 'X86_V4', 'AVX512_SKX')
+            for key in ('X86_V3', 'X86_V4', 'AVX2', 'AVX512_SKX')
         },
     }
     promotion = getattr(np, '_get_promotion_state', None)

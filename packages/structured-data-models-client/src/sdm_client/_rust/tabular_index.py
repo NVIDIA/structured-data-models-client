@@ -28,24 +28,38 @@ _PRODUCERS = {
     'ceec5ba13ab88318632307fdd2df74f317fa293ce77be559c4298ddd1f4306b0': (
         'x86_v3_v4',
         'weak_scalars',
+        None,
     ),
     'b185dfe64b07180bedc7c15fb2735b0d0f4f4e09eb9c15bd8e67f74568aebcbf': (
         'x86_v3_v4',
         'weak_scalars',
+        None,
     ),
     'c535a00761735b19153a71e1702f66482838421c78f96ecc3fe2c8d060662fd9': (
         'scalar',
         'common_type',
+        None,
     ),
     '6a650810a8735cbdb988f74729973740a337645dd1585fef696e73e2dbc65beb': (
         'avx512_skx_or_scalar',
         'exact_integer_pairs',
+        'legacy',
+    ),
+    'a94d3fe5be076987c4fa70d063f06364933b7d3c96edb0d92fff3750551d30fe': (
+        'avx2_skx_unconditional',
+        'weak_scalars',
+        'weak',
+    ),
+    '0fe30aa3f45af934d5cceb7adb574358a90c5359b8c491b4f54f9a1b15c918da': (
+        'avx2_skx',
+        'weak_scalars',
+        None,
     ),
 }
 
 
 @lru_cache(maxsize=4)
-def _producer_families(path: str) -> tuple[str, str] | None:
+def _producer_families(path: str) -> tuple[str, str, str | None] | None:
     return _PRODUCERS.get(hashlib.sha256(Path(path).read_bytes()).hexdigest())
 
 
@@ -66,9 +80,10 @@ def _comparison_semantics() -> str:
         )
     semantics = families[1]
     # These families identify audited binaries, not arbitrary version strings.
-    if semantics == 'exact_integer_pairs':
+    required_mode = families[2]
+    if required_mode is not None:
         promotion = getattr(np, '_get_promotion_state', None)
-        if promotion is None or promotion() != 'legacy':
+        if promotion is None or promotion() != required_mode:
             raise RouteError(
                 'this NumPy scalar promotion mode is not yet represented by the core'
             )
@@ -92,6 +107,13 @@ def _profile() -> str:
     # These are this producer's actual dispatched groups, not CPU-name guesses.
     # Disabling AVX2 alone does not necessarily disable its X86_V3 dispatcher.
     features = native.__cpu_features__
+    if family in ('avx2_skx', 'avx2_skx_unconditional'):
+        suffix = '_unconditional' if family == 'avx2_skx_unconditional' else ''
+        if features.get('AVX512_SKX', False):
+            return 'avx512_gnu14' + suffix
+        if features.get('AVX2', False):
+            return 'avx2_gnu14' + suffix
+        return 'scalar'
     if family == 'scalar':
         return 'scalar'
     if family == 'avx512_skx_or_scalar':

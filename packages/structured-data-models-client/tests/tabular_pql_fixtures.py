@@ -11,6 +11,11 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+INDEX_SAMPLE_COUNTS = {
+    'sampled_sorted_duplicates_missing': 320,
+    'sampled_constant_missing': 320,
+    'sampled_present_nan': 320,
+}
 NUMPY_WIDTHS = (
     'int8',
     'int16',
@@ -203,11 +208,15 @@ INDEX_FAMILIES = (
     'nullable_integer',
     'arrow_integer',
     'arrow_string',
-)
+) + tuple(INDEX_SAMPLE_COUNTS)
 
 
 def indexed_frame(family: str) -> pd.DataFrame:
-    n = 81
+    n = (
+        2 * INDEX_SAMPLE_COUNTS[family] + 1
+        if family in INDEX_SAMPLE_COUNTS
+        else 81
+    )
     data = pd.DataFrame(
         {
             'id': range(n),
@@ -216,7 +225,26 @@ def indexed_frame(family: str) -> pd.DataFrame:
         }
     )
     labels = [(i * 13) % 17 for i in range(n)]
-    if family == 'range':
+    if family in INDEX_SAMPLE_COUNTS:
+        sampled = np.random.RandomState(42).choice(
+            n - 1, size=INDEX_SAMPLE_COUNTS[family], replace=False
+        )
+        values = np.arange(n, dtype='float64') + 100000
+        for order, position in enumerate(sampled):
+            values[position] = (
+                order // 3
+                if family == 'sampled_sorted_duplicates_missing'
+                else 1.0
+            )
+        if family == 'sampled_present_nan':
+            values[sampled[::5]] = float('nan')
+            index = pd.Index(
+                pd.arrays.FloatingArray(values, np.zeros(n, dtype=bool))
+            )
+        else:
+            values[sampled[0]] = float('nan')
+            index = pd.Index(values)
+    elif family == 'range':
         index = pd.RangeIndex(n, 0, -1)
     elif family == 'signed_duplicates':
         index = pd.Index(labels, dtype='int64')

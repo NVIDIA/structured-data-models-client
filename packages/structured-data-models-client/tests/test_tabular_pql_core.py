@@ -16,6 +16,7 @@ import pandas as pd
 import pytest
 from tabular_pql_fixtures import (
     INDEX_FAMILIES,
+    INDEX_SAMPLE_COUNTS,
     LABEL_FAMILIES,
     indexed_frame,
     label_frame,
@@ -217,9 +218,12 @@ def test_index_family_matches_frozen_public_context(
     data = indexed_frame(family)
     asked = query(data)
     arguments = (
-        {'indices': [80], 'num_context_samples': 40}
+        {
+            'indices': [len(data) - 1],
+            'num_context_samples': INDEX_SAMPLE_COUNTS.get(family, 40),
+        }
         if entrypoint == 'indices'
-        else {'predict': data.iloc[[80]].drop(columns=['target'])}
+        else {'predict': data.iloc[[-1]].drop(columns=['target'])}
     )
     if 'error' in expected:
         with pytest.raises(TypeError) as error:
@@ -516,3 +520,62 @@ def test_legacy_dispatch_does_not_reuse_modern_avx2_or_avx512_profiles(
     native.__cpu_features__['AVX512_SKX'] = True
     with pytest.raises(RouteError, match='AVX512 argsort producer'):
         tabular_index._profile()
+
+
+@pytest.mark.parametrize(
+    'family,suffix',
+    [('avx2_skx', ''), ('avx2_skx_unconditional', '_unconditional')],
+)
+def test_older_dispatch_reads_its_effective_groups(
+    monkeypatch: pytest.MonkeyPatch, family: str, suffix: str
+) -> None:
+    from types import SimpleNamespace
+
+    from sdm_client._rust import tabular_index
+
+    features = {
+        'X86_V3': True,
+        'X86_V4': True,
+        'AVX2': False,
+        'AVX512_SKX': False,
+    }
+    native = SimpleNamespace(__file__='producer.so', __cpu_features__=features)
+    monkeypatch.setattr(
+        tabular_index.importlib, 'import_module', lambda name: native
+    )
+    monkeypatch.setattr(tabular_index, '_producer', lambda path: family)
+    assert tabular_index._profile() == 'scalar'
+    features['AVX2'] = True
+    assert tabular_index._profile() == 'avx2_gnu14' + suffix
+    features['AVX512_SKX'] = True
+    assert tabular_index._profile() == 'avx512_gnu14' + suffix
+
+
+def test_required_promotion_mode_is_observed_on_each_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+
+    from sdm_client._routing import RouteError
+    from sdm_client._rust import tabular_index
+
+    monkeypatch.setattr(
+        tabular_index.importlib,
+        'import_module',
+        lambda name: SimpleNamespace(__file__='producer.so'),
+    )
+    monkeypatch.setattr(
+        tabular_index,
+        '_producer_families',
+        lambda path: ('avx2_skx_unconditional', 'weak_scalars', 'weak'),
+    )
+    state = ['weak']
+    monkeypatch.setattr(
+        np, '_get_promotion_state', lambda: state[0], raising=False
+    )
+    assert tabular_index._comparison_semantics() == 'weak_scalars'
+    state[0] = 'legacy'
+    with pytest.raises(RouteError, match='promotion mode'):
+        tabular_index._comparison_semantics()
+    state[0] = 'weak'
+    assert tabular_index._comparison_semantics() == 'weak_scalars'

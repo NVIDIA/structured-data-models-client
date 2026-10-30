@@ -25,6 +25,7 @@ sys.path.insert(0, str(TESTS))
 
 from tabular_pql_fixtures import (  # noqa: E402
     INDEX_FAMILIES,
+    INDEX_SAMPLE_COUNTS,
     LABEL_FAMILIES,
     indexed_frame,
     label_frame,
@@ -105,9 +106,14 @@ def main() -> None:
             for entrypoint in ('indices', 'predict'):
                 frame = builder(family)
                 arguments = (
-                    {'indices': [80], 'num_context_samples': 40}
+                    {
+                        'indices': [len(frame) - 1],
+                        'num_context_samples': INDEX_SAMPLE_COUNTS.get(
+                            family, 40
+                        ),
+                    }
                     if entrypoint == 'indices'
-                    else {'predict': frame.iloc[[80]].drop(columns=['target'])}
+                    else {'predict': frame.iloc[[-1]].drop(columns=['target'])}
                 )
                 endpoint = Endpoint()
                 try:
