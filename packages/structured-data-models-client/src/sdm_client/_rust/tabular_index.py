@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
 import struct
 from functools import lru_cache
 from pathlib import Path
@@ -31,7 +32,7 @@ def _producer(path: str) -> bool:
 
 
 def _profile() -> str:
-    from numpy._core import _multiarray_umath as native
+    native = importlib.import_module('numpy._core._multiarray_umath')
 
     if not _producer(native.__file__):
         raise RouteError(
@@ -73,6 +74,7 @@ def _scalar(value: Any) -> dict[str, Any]:
 
 def _array(values: Any, missing: list[bool], profile: str) -> dict[str, Any]:
     dtype = values.dtype
+    result: dict[str, Any]
     if isinstance(dtype, np.dtype) and dtype.kind in 'biu':
         unsigned = dtype.kind in 'bu'
         result = {
@@ -100,7 +102,7 @@ def _array(values: Any, missing: list[bool], profile: str) -> dict[str, Any]:
         result = {'kind': 'temporal', 'values': values.view('i8').tolist()}
     else:
         # Read object values only after their native missingness observation.
-        atoms = [
+        atoms: list[dict[str, Any]] = [
             {'kind': 'integer', 'value': '0'} if absent else _scalar(value)
             for value, absent in zip(values, missing, strict=True)
         ]
@@ -232,8 +234,12 @@ def has_custom_sorter(frame: pd.DataFrame) -> bool:
             method = inspect.getattr_static(owner, name, None)
             if method is None:
                 continue
-            module = getattr(method, '__module__', None) or getattr(
-                getattr(method, '__objclass__', None), '__module__', ''
+            module = (
+                getattr(method, '__module__', None)
+                or getattr(
+                    getattr(method, '__objclass__', None), '__module__', ''
+                )
+                or ''
             )
             if not (
                 module == 'numpy' or module.startswith(('pandas.', 'numpy.'))
