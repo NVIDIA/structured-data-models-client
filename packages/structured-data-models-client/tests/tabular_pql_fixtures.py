@@ -330,6 +330,10 @@ INDEX_FAMILIES = (
     'multi_temporal_range_forward',
     'multi_temporal_range_reverse',
     'multi_temporal_fold',
+    'multi_temporal_fold_alternating_forward',
+    'multi_temporal_fold_alternating_reverse',
+    'multi_temporal_unused_ordered',
+    'multi_temporal_unused_normalized',
     'string',
     'object_mixed',
     'nullable_integer',
@@ -421,8 +425,10 @@ def indexed_frame(family: str) -> pd.DataFrame:
             categories=[str(value) for value in range(16, -1, -1)],
             ordered=False,
         )
-    elif family == 'multi_temporal_fold':
+    elif family.startswith('multi_temporal_fold'):
         owners = timestamp_pattern('distinct_zone_same_fold')
+        if family.endswith('_reverse'):
+            owners = owners[::-1]
         values = np.empty(2, dtype=object)
         values[:] = owners
         level = pd.Index(values, dtype=object, copy=False)
@@ -431,10 +437,28 @@ def indexed_frame(family: str) -> pd.DataFrame:
             n - 1, size=40, replace=False
         )
         for at, position in enumerate(sampled):
-            first_codes[position] = int(at >= 20)
+            first_codes[position] = (
+                at % 2 if '_alternating_' in family else int(at >= 20)
+            )
         index = pd.MultiIndex(
             levels=[level, pd.Index([0])],
             codes=[first_codes, [0] * n],
+            verify_integrity=False,
+        )
+    elif family.startswith('multi_temporal_unused_'):
+        values = np.empty(2, dtype=object)
+        values[:] = timestamp_pattern('wide_datetime')
+        level = pd.Index(values, dtype=object, copy=False)
+        # The unused datetime must not be sorted when the used codes already
+        # permit the native early return. Only secondary codes vary here.
+        second_codes = (
+            [i % 2 for i in range(n)]
+            if family.endswith('_normalized')
+            else [0] * n
+        )
+        index = pd.MultiIndex(
+            levels=[level, pd.Index([0, 1])],
+            codes=[[0] * n, second_codes],
             verify_integrity=False,
         )
     elif family.startswith('multi_temporal_range_'):
