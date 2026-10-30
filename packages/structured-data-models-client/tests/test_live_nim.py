@@ -273,9 +273,9 @@ def test_every_scored_row_is_explained_under_its_id(client):
     result = explained_by_tabular(client)
     frame = result.to_pandas()
 
-    assert sorted(result.explanations) == sorted(frame['id'])
-    assert sorted(result.explanations) == [900, 901, 902]
-    for entry in result.explanations.values():
+    assert sorted(result.explanations.gradients) == sorted(frame['id'])
+    assert sorted(result.explanations.gradients) == [900, 901, 902]
+    for entry in result.explanations.gradients.values():
         assert_instance_only(entry)
     assert 'explanation' not in frame.columns
 
@@ -290,12 +290,12 @@ def test_the_flat_explanation_table_holds_each_rows_own_block(client):
     """
     result = explained_by_tabular(client)
     frame = result.to_pandas()
-    flat = result.explanations.to_pandas()
+    flat = result.explanations.gradients.to_pandas()
 
     assert list(flat.columns) == ['id', *FLAT_COLUMNS]
     assert len(flat) == sum(
         len(entry['outputs']) * len(entry['instance']['columns'])
-        for entry in result.explanations.values()
+        for entry in result.explanations.gradients.values()
     )
     assert set(flat['table']) == {'instance'}
     assert (flat['hop'] == 0).all()
@@ -317,13 +317,13 @@ def test_rows_without_a_key_are_explained_under_their_row_index(client):
     result = explained_by_tabular(client, keyed=False)
     frame = result.to_pandas()
 
-    assert sorted(result.explanations) == list(frame['row_index'])
-    assert sorted(result.explanations) == [0, 1, 2]
-    for entry in result.explanations.values():
+    assert sorted(result.explanations.gradients) == list(frame['row_index'])
+    assert sorted(result.explanations.gradients) == [0, 1, 2]
+    for entry in result.explanations.gradients.values():
         assert_instance_only(entry)
     assert 'explanation' not in frame.columns
 
-    flat = result.explanations.to_pandas()
+    flat = result.explanations.gradients.to_pandas()
     assert list(flat.columns) == ['row_index', *FLAT_COLUMNS]
     assert set(flat['row_index']) == {0, 1, 2}
     assert set(flat['table']) == {'instance'}

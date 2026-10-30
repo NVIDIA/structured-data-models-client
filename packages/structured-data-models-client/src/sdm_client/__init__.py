@@ -30,7 +30,7 @@ from sdm_client.errors import (
     UnknownModelError,
     UnsupportedRequestError,
 )
-from sdm_client.explanations import GradientExplanations
+from sdm_client.explanations import Explanations, GradientExplanations
 from sdm_client.models import KumoRelational, KumoTabular, Model
 from sdm_client.query import PredictiveQuery
 from sdm_client.request import Request, Split, Target, Task
@@ -46,6 +46,7 @@ from sdm_client.schema import (
 __all__ = [
     'SDMWarning',
     'Column',
+    'Explanations',
     'FittedModel',
     'GradientExplanations',
     'KumoRelational',

@@ -387,13 +387,13 @@ def assert_explained_as_sent(result, asked):
     keyless = {name: sent_tables[name] for name in KEYLESS}
     frame = result.to_pandas()
     assert 'explanation' not in frame.columns
-    ids = {int(key): key for key in result.explanations}
-    assert len(ids) == len(result.explanations)
+    ids = {int(key): key for key in result.explanations.gradients}
+    assert len(ids) == len(result.explanations.gradients)
     assert sorted(ids) == sorted(asked)
     assert sorted(ids) == sorted(int(value) for value in frame['id'])
 
     for entity, key in ids.items():
-        entry = result.explanations[key]
+        entry = result.explanations.gradients[key]
         assert set(entry) == {'outputs', 'related'}
         outputs = len(entry['outputs'])
         # Both class probabilities of a binary target.
@@ -428,7 +428,7 @@ def assert_explained_as_sent(result, asked):
                 assert row['segment'] == sent['segment']
         assert [int(one) for one in related['users']['keys']] == [entity]
 
-    flat = result.explanations.to_pandas()
+    flat = result.explanations.gradients.to_pandas()
     assert list(flat.columns) == [
         'id',
         'table',
