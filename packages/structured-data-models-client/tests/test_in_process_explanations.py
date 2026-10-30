@@ -849,7 +849,8 @@ def test_a_relational_answer_explains_each_entity_and_its_rows(relational):
     }
     assert len(result.explanations) == 2
     for entry in result.explanations.values():
-        assert set(entry) >= {'outputs', 'instance', 'related'}
+        assert set(entry) == {'outputs', 'related'}
+        assert 'users' in entry['related']
         assert [output['kind'] for output in entry['outputs']] == [
             'probability',
             'probability',
