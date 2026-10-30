@@ -63,7 +63,9 @@ def main() -> None:
         '--output-dir', type=Path, default=TESTS / 'data/tabular_pql_reference'
     )
     parser.add_argument(
-        '--group', choices=('labels', 'counts'), default='labels'
+        '--group',
+        choices=('labels', 'counts', 'numeric-effects'),
+        default='labels',
     )
     args = parser.parse_args()
     reference = args.reference_checkout.resolve()
@@ -98,18 +100,21 @@ def main() -> None:
     assert Path(sdm_client.__file__).resolve().is_relative_to(reference), (
         sdm_client.__file__
     )
-    if args.group == 'counts':
-        from tabular_pql_count_cases import CASES, observe_case
+    if args.group in ('counts', 'numeric-effects'):
+        if args.group == 'counts':
+            from tabular_pql_count_cases import CASES, observe_case
+        else:
+            from tabular_numeric_effects_cases import CASES, observe_case
 
         assert (
             args.output_dir.resolve()
             != (TESTS / 'data/tabular_pql_reference').resolve()
-        ), 'count receipts require a separate --output-dir'
+        ), 'additional receipt groups require a separate --output-dir'
         runtime = runtime_identity()
         receipt = {
             'format': 1,
             'generated_by': 'scripts/record_tabular_pql.py',
-            'group': 'counts',
+            'group': args.group,
             'reference': {
                 'revision': revision,
                 'client_module': str(
@@ -124,7 +129,7 @@ def main() -> None:
         if output.exists():
             previous = json.loads(output.read_text())
             assert previous['reference']['revision'] == revision
-            assert previous['group'] == 'counts'
+            assert previous['group'] == args.group
         output.write_text(
             json.dumps(receipt, indent=2, sort_keys=True, allow_nan=False)
             + '\n'
