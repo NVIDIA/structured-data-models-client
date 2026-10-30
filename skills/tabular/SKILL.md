@@ -202,7 +202,8 @@ same one.
 Add `'explanation'` to `outputs` and every scored row is explained. There is no
 row limit. The explanations are kept out of `to_pandas()`, on
 `result.explanations`, a mapping from each row's key to its explanation: the
-row's `id` when the request has one, otherwise its `row_index`.
+row's `id` when the request has one, otherwise its `row_index`. A NIM and
+`SDMClient.in_process()` both serve it, with the same `result.explanations`.
 
 ```python
 entry = result.explanations[0]       # the row scored at row_index 0

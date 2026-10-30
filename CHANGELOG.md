@@ -11,7 +11,7 @@ these packages. All five distributions share one version and one entry.
 
 - `SDMClient.in_process()` runs `kumo-tabular` and `kumo-relational` in this
   Python process with structured-data-models, through the same calls as a NIM:
-  predictions, fitted sessions, rankings and forecasts. It loads each model
+  predictions, fitted sessions, rankings, forecasts and explanations. It loads each model
   from its published weights on first use, or uses one passed in. The request
   is prepared as it is for a NIM and the model run on it directly, the context
   fitted as the NIM fits it. A request the model cannot answer is refused with
