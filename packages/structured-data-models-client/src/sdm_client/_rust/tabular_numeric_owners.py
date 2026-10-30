@@ -171,7 +171,12 @@ class NumericOwners:
         if prefix is None:
             raise codec.CodecError('invalid numeric conversion destination')
         storage = np.empty((), dtype=np.dtype(prefix + str(width)))
-        storage[()] = self.owners[owner]
+        try:
+            storage[()] = self.owners[owner]
+        except Exception as error:  # noqa: BLE001 - callback exceptions are native outcomes
+            # A callback may itself raise our CodecError (a ValueError).
+            # Classify by this native origin before the protocol-error guard.
+            return self._raised(error)
         return {
             'kind': 'converted',
             'bits': int.from_bytes(storage.tobytes(), sys.byteorder),
@@ -202,22 +207,25 @@ class NumericOwners:
         except (RouteError, codec.CodecError):
             raise
         except Exception as error:  # noqa: BLE001 - retain the original native exception
-            identity = len(self.exceptions) + 1
-            self.exceptions[identity] = error
-            classification = (
-                'type_error'
-                if isinstance(error, TypeError)
-                else 'value_error'
-                if isinstance(error, ValueError)
-                else 'decimal_invalid_operation'
-                if isinstance(error, InvalidOperation)
-                else 'other'
-            )
-            return {
-                'kind': 'raised',
-                'exception': identity,
-                'class': classification,
-            }, {}
+            return self._raised(error), {}
+
+    def _raised(self, error: Exception) -> dict[str, Any]:
+        identity = len(self.exceptions) + 1
+        self.exceptions[identity] = error
+        classification = (
+            'type_error'
+            if isinstance(error, TypeError)
+            else 'value_error'
+            if isinstance(error, ValueError)
+            else 'decimal_invalid_operation'
+            if isinstance(error, InvalidOperation)
+            else 'other'
+        )
+        return {
+            'kind': 'raised',
+            'exception': identity,
+            'class': classification,
+        }
 
 
 def order(index: pd.Index) -> dict[str, Any]:
