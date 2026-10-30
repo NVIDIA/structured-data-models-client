@@ -126,3 +126,41 @@ def gradient_explanation() -> Callable[..., dict[str, Any]]:
         }
 
     return build
+
+
+@pytest.fixture
+def hand_built_result() -> Callable[..., Any]:
+    """Build a ``PredictionResult`` by hand, its explanations a plain dict.
+
+    ``rows`` is ``(row_index, id)`` per item, or ``(row_index, id, step)``
+    for a forecast; ``explanations`` maps each key to its entry as given.
+    Nothing records the rows' positions, as ``predict()`` would.
+    """
+    from sdm_api.generated.tfm_api import PredictionItem
+
+    from sdm_client import PredictionResult
+
+    def build(
+        rows: Sequence[tuple[Any, ...]],
+        explanations: Mapping[Any, dict[str, Any]],
+    ) -> PredictionResult:
+        items = [
+            PredictionItem.from_dict(
+                {
+                    'row_index': row[0],
+                    'id': row[1],
+                    'prediction': 1.0,
+                    **({'forecast_step': row[2]} if len(row) > 2 else {}),
+                }
+            )
+            for row in rows
+        ]
+        return PredictionResult(
+            model='kumo-tabular',
+            request_id='r',
+            items=items,
+            explanations=dict(explanations),
+            outputs=('prediction', 'explanation'),
+        )
+
+    return build

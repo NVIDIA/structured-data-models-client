@@ -11,6 +11,8 @@ from typing import Any
 
 import pandas as pd
 
+from sdm_client.errors import StructuredDataError
+
 # The columns of `GradientExplanations.to_pandas()` after the ones naming the row.
 _GRADIENT_COLUMNS = (
     'table',
@@ -161,9 +163,47 @@ class GradientExplanations(dict[Any, dict[str, Any]]):
         stepped._labels = dict(self._labels)
         return stepped
 
+    def _positioned(self, items: Sequence[Any]) -> GradientExplanations:
+        r"""These, with each key's row position read off ``items`` where none is recorded."""
+        if all(key in self._rows for key in self):
+            return self
+        found: dict[Any, list[Any]] = {}
+        for item in items:
+            found.setdefault(item.id, []).append(item.row_index)
+            if item.forecast_step is not None:
+                found.setdefault((item.id, item.forecast_step), []).append(
+                    (item.row_index, item.forecast_step)
+                )
+        rows = dict(self._rows)
+        for key in self:
+            at = [rows[key]] if key in rows else found.get(key, [])
+            if len(at) == 1:
+                rows[key] = at[0]
+        stepped = {isinstance(row, tuple) for row in rows.values()}
+        if any(key not in rows for key in self) or len(stepped) > 1:
+            raise StructuredDataError(
+                'these parts share entity ids and these explanations carry '
+                'no row positions, so they cannot be told apart; merge '
+                'results produced by predict(), or key the explanations by '
+                "row yourself (keyed_by=('row_index',))",
+                code='INVALID_REQUEST',
+            )
+        positioned = GradientExplanations(
+            self,
+            keyed_by=('id', 'forecast_step')
+            if stepped == {True}
+            else self._keyed_by,
+            hops=self._hops,
+        )
+        positioned._rows = rows
+        positioned._labels = dict(self._labels)
+        return positioned
+
     @classmethod
     def _merged(
-        cls, parts: Sequence[GradientExplanations]
+        cls,
+        parts: Sequence[GradientExplanations],
+        items: Sequence[Sequence[Any]] | None = None,
     ) -> GradientExplanations:
         r"""The explanations of several calls, as one; by ``row_index`` if ids repeat."""
         explained = [part for part in parts if part]
@@ -172,6 +212,15 @@ class GradientExplanations(dict[Any, dict[str, Any]]):
         keys = [key for part in explained for key in part]
         mixed = len({part._keyed_by for part in explained}) > 1
         if mixed or len(set(keys)) < len(keys):
+            # Hand-built parts record no positions: read them off their items.
+            if items is not None:
+                explained = [
+                    part
+                    if part._keyed_by[0] == 'row_index'
+                    else part._positioned(rows)
+                    for part, rows in zip(parts, items, strict=True)
+                    if part
+                ]
             # Ids repeat or the parts disagree: every part falls back to its
             # rows' positions, which are unique across the whole result.
             by_row = []

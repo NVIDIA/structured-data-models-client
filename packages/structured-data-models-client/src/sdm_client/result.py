@@ -317,7 +317,8 @@ class PredictionResult:
         # later batch is the one that misbehaved.
         metadata['batch_request_ids'] = [part.request_id for part in parts]
         explanations = GradientExplanations._merged(
-            [part.explanations for part in parts]
+            [part.explanations for part in parts],
+            [part.items for part in parts],
         )
         # Every part answers one slice of the same request, so they were asked
         # for the same fields. If they were not, the merged result cannot
